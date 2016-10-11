@@ -1,0 +1,6 @@
+*~
+.*.sw[nmop]
+*.pyc
+.tox
+__pycache__
+rerun
