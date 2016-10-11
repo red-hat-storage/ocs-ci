@@ -15,6 +15,7 @@ A simple test suite wrapper that executes tests based on yaml test configuration
 
  Usage:
   run.py --rhbuild BUILD --global-conf FILE --suite FILE [--use-cdn ]
+        [--osp-cred <file>]
         [--rhs-con-repo <repo> --rhs-ceph-repo <repo>]
         [--add-repo <repo>]
         [--store]
@@ -30,6 +31,7 @@ Options:
   -f <tests> --filter <tests>       filter tests based on the patter
                                     eg: -f 'rbd' will run tests that have 'rbd'
   --global-conf <file>              global configuration file
+  --osp-cred <file>                 openstack credentials as separate file
   --rhbuild <1.3.0>                 ceph downstream version
                                     eg: 1.3.0, 2.0, 2.1 etc
   --use-cdn                         whether to use cdn or not [deafult: false]
@@ -54,10 +56,10 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 ch.setFormatter(formatter)
 root.addHandler(ch)
 
-def create_nodes(global_yaml):
+def create_nodes(global_yaml, osp_cred):
     logger.info("Creating ceph nodes")
-    cleanup_ceph_nodes(global_yaml)
-    ceph_vmnodes = create_ceph_nodes(global_yaml)
+    cleanup_ceph_nodes(osp_cred)
+    ceph_vmnodes = create_ceph_nodes(global_yaml, osp_cred)
     logger.info("Running test")
     ceph_nodes = []
     for node_key in ceph_vmnodes.iterkeys():
@@ -98,6 +100,7 @@ def print_results(tc):
 
 def run(args):
     glb_file = args['--global-conf']
+    osp_cred = args['--osp-cred']
     suite_file = args['--suite']
     store = args.get('--store', False)
     reuse = args.get('--reuse', None)
@@ -109,7 +112,7 @@ def run(args):
     suites = os.path.abspath(suite_file)
     skip_setup=args.get('--skip-cluster', False)
     if reuse is None:
-        ceph_nodes = create_nodes(g_yaml)
+        ceph_nodes = create_nodes(glb_file, osp_cred)
     else:
         ceph_store_nodes = open(reuse, 'rb')
         ceph_nodes = pickle.load(ceph_store_nodes)
@@ -173,9 +176,9 @@ def run(args):
         if test.get('destroy-cluster') is True:
                 (nodename,uid, node_num,_,_) = ceph_nodes[0].hostname.split('-')
                 cleanup_name = nodename + "-" + uid 
-                cleanup_ceph_nodes(g_yaml, name=cleanup_name)
+                cleanup_ceph_nodes(osp_cred, name=cleanup_name)
         if test.get('recreate-cluster') is True:
-                ceph_nodes = create_nodes(g_yaml)
+                ceph_nodes = create_nodes(glb_file, osp_cred)
         tcs.append(tc)
                 
     print_results(tcs)

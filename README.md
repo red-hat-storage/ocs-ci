@@ -61,8 +61,11 @@ Usage of run wrapper is:
 A simple test suite wrapper that executes tests based on yaml test configuration
 
 ```
+A simple test suite wrapper that executes tests based on yaml test configuration
+
  Usage:
   run.py --rhbuild BUILD --global-conf FILE --suite FILE [--use-cdn ]
+        [--osp-cred <file>]
         [--rhs-con-repo <repo> --rhs-ceph-repo <repo>]
         [--add-repo <repo>]
         [--store]
@@ -78,6 +81,7 @@ Options:
   -f <tests> --filter <tests>       filter tests based on the patter
                                     eg: -f 'rbd' will run tests that have 'rbd'
   --global-conf <file>              global configuration file
+  --osp-cred <file>                 openstack credentials
   --rhbuild <1.3.0>                 ceph downstream version
                                     eg: 1.3.0, 2.0, 2.1 etc
   --use-cdn                         whether to use cdn or not [deafult: false]
@@ -90,12 +94,9 @@ Options:
   --reuse <file>                    use the stored vm state for rerun
   --skip-cluster                    skip cluster creation from ansible/ceph-deploy
 
-
 ```
 
-global-conf describes the test bed configuration and also has openstack
-credentials to create/destroy resources.
-
+global-conf describes the test bed configuration 
 The image-name insde globals: define what image is used to clone ceph-nodes(
 mon, osd, mds etc), The role maps to ceph role that the node will take
 and osd generally attach 3 additional volumes with disk-size as specified in
@@ -109,7 +110,7 @@ globals:
     ceph-cluster:
        name: ceph
        create: true
-       image-name: rhel72_qa
+       image-name: rhel-7.3-server-x86_64-latest
        vm-size: m1.medium
        node1:
          role: mon
@@ -131,6 +132,12 @@ globals:
          role: ceph-installer
          image-name: rhel72_qa
     cloud-data: conf/cloud-data.yaml
+```
+
+osp-cred.yaml file has openstack credentials details to create/destroy resources.
+
+```
+globals:
     openstack-credentials:
         username: 'vakulkar'
         password: 'xxxxx'
@@ -142,15 +149,16 @@ globals:
         
 ```
 
-
 eg runs:
 
 ```
 python run.py --rhbuild 2.1 --global-conf conf/sanity.yaml
+                             --osp-cred conf/osp-cred.yaml
                             --suite suites/sanity_ceph_ansible.yaml
 
 
 python run.py --rhbuild 2.1 --global-conf conf/sanity.yaml
+     --osp-cred conf/osp-cred.yaml
      --suite suites/sanity_ceph_ansible.yaml
      --add-repo http://file.rdu.redhat.com/~kdreyer/scratch/rhscon-builds-for-rhceph-2.1/rhscon-builds-for-rhceph-2.1.repo
 ```

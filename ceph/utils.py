@@ -11,10 +11,12 @@ from libcloud.compute.providers import get_driver
 
 log = logging.getLogger(__name__)
 
-def create_ceph_nodes(gyaml):
+def create_ceph_nodes(gyaml, osp_cred):
     var = yaml.safe_load(open(gyaml))
     glbs = var.get('globals')
-    os_cred = glbs.get('openstack-credentials')
+    ovar = yaml.safe_load(open(osp_cred))
+    osp_glbs = ovar.get('globals')
+    os_cred = osp_glbs.get('openstack-credentials')
     params = dict()
     params['cloud-data'] = glbs.get('cloud-data')
     params['username'] = os_cred['username']
