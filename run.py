@@ -129,7 +129,7 @@ def run(args):
     tcs=[]
     jenkins_rc=0
     if use_cdn is True:
-         setup_cdn_repos(ceph_nodes=ceph_nodes, build=rhbuild)
+         setup_cdn_repos(ceph_nodes, build=rhbuild)
     for test in tests:
         test = test.get('test')
         tc=dict()

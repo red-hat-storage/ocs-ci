@@ -185,5 +185,5 @@ def setup_cdn_repos(ceph_nodes, build=None):
             repos = repos_20
     for node in ceph_nodes:
         for repo in repos:
-          node.exec_commmand(sudo=True, cmd='subscription-manager repos --enable={r}'.format(r=repo))
+          node.exec_command(sudo=True, cmd='subscription-manager repos --enable={r}'.format(r=repo))
           node.exec_command(sudo=True, cmd='subscription-manager refresh')
