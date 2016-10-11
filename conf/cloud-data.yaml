@@ -1,0 +1,32 @@
+#cloud-config
+
+ssh_pwauth: True
+
+groups:
+    - cephuser
+    
+users:
+  - name: cephuser
+    primary-group: cephuser
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+
+chpasswd:
+  list: |
+    root:passwd
+    cephuser: pass123
+  expire: False
+
+runcmd:
+  - touch /ceph-qa-ready
+  - sed -i -e 's/^Defaults\s\+requiretty/# \0/' /etc/sudoers
+  - rpm -Uvh http://download.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-8.noarch.rpm
+  - yum install -y python-pip
+  - pip install nose
+  - yum install -y wget
+  - yum install -y git
+  - yum install -y redhat-lsb
+  - systemctl stop firewalld
+
+        
+final_message: "Ready for ceph qa testing"
