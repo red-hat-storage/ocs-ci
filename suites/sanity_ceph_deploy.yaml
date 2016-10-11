@@ -1,0 +1,38 @@
+tests:
+   - test:
+      name: ceph deploy
+      module: test_ceph_deploy.py
+      config:
+        base_url: 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/auto/ceph-2-rhel-7-compose/latest-RHCEPH-2-RHEL-7/'
+        installer_url: 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/auto/rhscon-2-rhel-7-compose/latest-RHSCON-2-RHEL-7/'
+      desc: test cluster setup using ceph-deploy
+      destroy-cluster: False
+      abort-on-fail: True
+   - test:
+      name: rados workunit
+      module: test_workunit.py
+      config:
+            test_name: rados/test_python.sh
+            branch: jewel
+      desc: Test rados python api
+   - test:
+      name: rados workunit
+      module: test_workunit.py
+      config:
+            test_name: rbd/test_librbd_python.sh
+            branch: jewel
+      desc: Test librbd unit tests
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+            cmd: ceph -s
+            sudo: True
+      desc: Check for ceph health debug info
+   - test:
+      name: rados_bench_test
+      module: radosbench.py
+      config:
+            pg_num: '128'
+            pool_type: 'normal'
+      desc: run rados bench for 360 - normal profile
