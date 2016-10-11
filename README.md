@@ -26,6 +26,8 @@ upgrade_13x_20.yaml
 The tests inside the suites are described in yaml format
 
 for eg:
+
+```
 tests:
    - test:
       name: ceph deploy
@@ -44,7 +46,7 @@ tests:
             test_name: rados/test_python.sh
             branch: hammer
       desc: Test rados python api
-  
+```
 
 The above snippet describes 2 tests and the module is the name of the python
 script that is executed to verify the test, every module can take a config
@@ -56,6 +58,7 @@ Usage of run wrapper is:
 
 A simple test suite wrapper that executes tests based on yaml test configuration
 
+```
  Usage:
   run.py --rhbuild BUILD --global-conf FILE --suite FILE [--use-cdn ]
         [--rhs-con-repo <repo> --rhs-ceph-repo <repo>]
@@ -86,6 +89,7 @@ Options:
   --skip-cluster                    skip cluster creation from ansible/ceph-deploy
 
 
+```
 
 global-conf describes the test bed configuration and also has openstack
 credentials to create/destroy resources.
@@ -98,6 +102,7 @@ config.
 cloud-data file is important to setup the prerequisites on the node before
 testing
 
+```
 globals:
     ceph-cluster:
        name: ceph
@@ -133,8 +138,12 @@ globals:
         service-region: 'regionOne'
         keypair: 'vasu-lp'
         
-        
+```
+
+
 eg runs:
+
+```
 python run.py --rhbuild 2.1 --global-conf conf/sanity.yaml
                             --suite suites/sanity_ceph_ansible.yaml
 
@@ -142,3 +151,4 @@ python run.py --rhbuild 2.1 --global-conf conf/sanity.yaml
 python run.py --rhbuild 2.1 --global-conf conf/sanity.yaml
      --suite suites/sanity_ceph_ansible.yaml
      --add-repo http://file.rdu.redhat.com/~kdreyer/scratch/rhscon-builds-for-rhceph-2.1/rhscon-builds-for-rhceph-2.1.repo
+```
