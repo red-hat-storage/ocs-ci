@@ -98,6 +98,7 @@ def cleanup_ceph_nodes(gyaml, name=''):
             log.info("Volume has no name, skipping")
         elif volume.name.startswith(name):
              log.info("Removing volume %s", volume.name)
+             time.sleep(5)
              volume.destroy()
              
 def keep_alive(ceph_nodes):
