@@ -124,5 +124,6 @@ def run(**kw):
             ceph1.exec_command(
                 cmd='cd cd; ceph-deploy admin ' + cnode.shortname
             )
-        return ceph1.exit_status
+    
+    return 0
 
