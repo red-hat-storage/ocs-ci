@@ -75,9 +75,10 @@ def get_openstack_driver(yaml):
             )
     return driver
 
-def cleanup_ceph_nodes(gyaml, name=''):
+def cleanup_ceph_nodes(gyaml, name=None):
     user = os.getlogin()
-    name = 'ceph-' + user
+    if name is None:
+        name = 'ceph-' + user
     var = yaml.safe_load(open(gyaml))
     driver = get_openstack_driver(var)
     for node in driver.list_nodes():
