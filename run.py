@@ -21,6 +21,7 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--store]
         [--reuse <file>]
         [--skip-cluster]
+        [--cleanup <name>]
 
 
 Options:
@@ -40,6 +41,8 @@ Options:
   --rhs-ceph-repo <repo>            location of rhs-ceph repo
                                     Top level location of compose
   --add-repo <repo>                 Any additional repo's need to be enabled
+  --cleanup <name>                  cleanup nodes on OSP with names that start
+                                    with 'name' , returns after node cleanup
   --store                           store the current vm state for reuse
   --reuse <file>                    use the stored vm state for rerun
   --skip-cluster                    skip cluster creation from ansible/ceph-deploy
@@ -111,6 +114,10 @@ def run(args):
     g_yaml = os.path.abspath(glb_file)
     suites = os.path.abspath(suite_file)
     skip_setup=args.get('--skip-cluster', False)
+    cleanup_name = args.get('--cleanup', None)
+    if cleanup_name is not None:
+        cleanup_ceph_nodes(osp_cred, cleanup_name)
+        return 0
     if reuse is None:
         ceph_nodes = create_nodes(glb_file, osp_cred)
     else:
