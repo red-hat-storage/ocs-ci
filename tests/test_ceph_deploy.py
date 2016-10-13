@@ -5,7 +5,7 @@ import sys
 import requests
 import time
 
-from ceph.utils import keep_alive
+from ceph.utils import keep_alive, setup_deb_repos
 from ceph.utils import setup_repos, generate_repo_file, create_ceph_conf
 
 logger = logging.getLogger(__name__)
@@ -17,6 +17,8 @@ def run(**kw):
     log.info("Running test")
     ceph_nodes = kw.get('ceph_nodes')
     config = kw.get('config')
+    if config.get('ubuntu_repo'):
+        ubuntu_repo = config.get('ubuntu_repo')
     if config.get('base_url'):
         base_url = config.get('base_url')
     else:
@@ -67,10 +69,17 @@ def run(**kw):
 
     for ceph in ceph_nodes:
         if config.get('use_cdn') is False:
-            setup_repos(ceph, base_url, installer_url)
+            if ceph.pkg_type == 'deb':
+                setup_deb_repos(ceph, ubuntu_repo)
+                # install python2 on xenial
+                ceph.exec_command(cmd='sudo apt-get install -y python')
+            else:
+                setup_repos(ceph, base_url, installer_url)
         else:
             log.info("Using the cdn repo for the test")
-        ceph.exec_command(sudo=True, cmd='yum update metadata')
+        log.info("Updating metadata")
+        if ceph.pkg_type == 'rpm':
+            ceph.exec_command(sudo=True, cmd='yum update metadata')
 
     ceph1.exec_command(cmd='mkdir cd')
     ceph1.exec_command(sudo=True, cmd='cd cd; yum install -y ceph-deploy')

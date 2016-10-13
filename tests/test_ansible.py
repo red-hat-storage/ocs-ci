@@ -6,7 +6,7 @@ import requests
 import time
 import json
 
-from ceph.utils import keep_alive
+from ceph.utils import keep_alive, setup_deb_repos
 from ceph.utils import setup_repos, generate_repo_file, create_ceph_conf
 
 logger = logging.getLogger(__name__)
@@ -18,6 +18,8 @@ def run(**kw):
     ceph_nodes = kw.get('ceph_nodes')
     log.info("Running ceph ansible test")
     config = kw.get('config')
+    if config.get('ubuntu_repo'):
+        ubuntu_repo = config.get('ubuntu_repo')
     if config.get('base_url'):
         base_url = config.get('base_url')
     else:
@@ -29,7 +31,7 @@ def run(**kw):
         log.info("Skipping setup of ceph cluster")
         return 0
     for node in ceph_nodes:
-        if node.role == 'mon':
+        if node.role == 'installer':
             ceph_installer = node
             break
     ceph1 = ceph_nodes[0]
@@ -82,11 +84,17 @@ def run(**kw):
 
     for ceph in ceph_nodes:
         if config.get('use_cdn') is False:
-            setup_repos(ceph, base_url, installer_url)
+            if ceph.pkg_type == 'deb':
+                setup_deb_repos(ceph, ubuntu_repo)
+                # install python2 on xenial
+                ceph.exec_command(cmd='sudo apt-get install -y python')
+            else:
+                setup_repos(ceph, base_url, installer_url)
         else:
             log.info("Using the cdn repo for the test")
         log.info("Updating metadata")
-        ceph.exec_command(sudo=True, cmd='yum update metadata')
+        if ceph.pkg_type == 'rpm':
+            ceph.exec_command(sudo=True, cmd='yum update metadata')
     ceph_installer.exec_command(
         sudo=True, cmd='cd cd; yum install -y ceph-ansible ; sleep 4')
     ceph_installer.exec_command(cmd='cp -R /usr/share/ceph-ansible ~/ ; sleep 2')

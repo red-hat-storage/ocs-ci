@@ -25,13 +25,17 @@ def create_ceph_nodes(gyaml, osp_cred):
     params['auth-version'] = os_cred['auth-version']
     params['tenant-name'] = os_cred['tenant-name']
     params['service-region'] = os_cred['service-region']
-    params['keypair'] = os_cred['keypair']
+    params['keypair'] = os_cred.get('keypair', None)
     ceph_cluster = glbs.get('ceph-cluster')
     ceph_nodes = dict()
     if ceph_cluster.get('create'):
         params['image-name'] = ceph_cluster.get('image-name')
         params['cluster-name'] = ceph_cluster.get('name')
         params['vm-size'] = ceph_cluster.get('vm-size')
+        if params.get('root-login') is False:
+            params['root-login'] = False
+        else:
+            params['root-login'] = True
         for node in range(1,100):
             node = "node" + str(node)
             if not ceph_cluster.get(node):
@@ -50,6 +54,8 @@ def create_ceph_nodes(gyaml, osp_cred):
                 params['size-of-disks'] = node_dict.get('disk-size')
             if node_dict.get('image-name'):
                 params['image-name'] = node_dict.get('image-name')
+            if node_dict.get('cloud-data'):
+                params['cloud-data'] = node_dict.get('cloud-data')
             print params
             ceph_nodes[node] = CephVMNode(**params)
     log.info("Done creating nodes")
@@ -167,6 +173,24 @@ def create_ceph_conf(fsid, mon_hosts, pg_num='128', pgp_num='128', size='2',
     conf = conf + fsid + mon_init_memb + mon_host + public_network + auth + \
         size + jsize + pgnum + pgpnum
     return conf
+
+
+def setup_deb_repos(node, ubuntu_repo):
+    node.exec_command(cmd='sudo rm -f /etc/apt/sources.list.d/*')
+    repos = ['MON', 'OSD', 'Tools']
+    for repo in repos:
+        cmd = 'sudo echo deb ' + ubuntu_repo + '/{0}'.format(repo) + \
+              ' $(lsb_release -sc) main'
+        node.exec_command(cmd= cmd + ' > ' +  "/tmp/{0}.list".format(repo))
+        node.exec_command(cmd='sudo cp /tmp/{0}.list'.format(repo) + 
+                         ' /etc/apt/sources.list.d/')
+    ds_keys = ['https://www.redhat.com/security/897da07a.txt',
+               'https://www.redhat.com/security/f21541eb.txt']
+
+    for key in ds_keys:
+        wget_cmd = 'sudo wget -O - ' + key + ' | sudo apt-key add -'
+        node.exec_command(cmd=wget_cmd)
+    node.exec_command(cmd='sudo apt-get update')
 
 
 def setup_cdn_repos(ceph_nodes, build=None):

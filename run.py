@@ -70,6 +70,7 @@ def create_nodes(global_yaml, osp_cred):
         ceph = CephNode(username='cephuser',
                         password='cephuser',
                         root_password='passwd',
+                        root_login=node.root_login,
                         role=node.role,
                         no_of_volumes=node.no_of_volumes,
                         ip_address=node.ip_address,

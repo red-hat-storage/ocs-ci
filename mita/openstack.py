@@ -51,6 +51,7 @@ class CephVMNode(object):
         self.tenant_name = kw['tenant-name']
         self.service_region = kw['service-region']
         self.keypair = kw['keypair']
+        self.root_login = kw['root-login']
         self.create_node()
         sleep(10)
 
