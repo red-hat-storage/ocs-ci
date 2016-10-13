@@ -113,14 +113,9 @@ class CephNode(object):
         """
         set the eth interface to eth0 or en0
         """
-        o, e = self.exec_command(sudo=True, cmd="ip link show | grep 'eth\|en'")
-        eth_con = o.read()
-        self.eth_interface = 'eth0'
-        if 'eth0' in eth_con:
-            self.eth_interface='eth0'
-        elif 'en0' in eth_con:
-            self.eth_interface='en0'
-    
+        o, e = self.exec_command(sudo=True, cmd='ls /sys/class/net | grep -v lo')
+        eth_con = o.read().strip()
+        self.eth_interface = eth_con
 
     def generate_id_rsa(self):
         """
