@@ -56,7 +56,6 @@ def create_ceph_nodes(gyaml, osp_cred):
                 params['image-name'] = node_dict.get('image-name')
             if node_dict.get('cloud-data'):
                 params['cloud-data'] = node_dict.get('cloud-data')
-            print params
             ceph_nodes[node] = CephVMNode(**params)
     log.info("Done creating nodes")
     return ceph_nodes
