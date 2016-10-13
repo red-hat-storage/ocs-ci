@@ -88,6 +88,8 @@ def run(**kw):
                 setup_deb_repos(ceph, ubuntu_repo)
                 # install python2 on xenial
                 ceph.exec_command(cmd='sudo apt-get install -y python')
+                ceph.exec_command(cmd='sudo apt-get install -y python-pip')
+                ceph.exec_command(cmd='sudo pip install nose')
             else:
                 setup_repos(ceph, base_url, installer_url)
         else:
