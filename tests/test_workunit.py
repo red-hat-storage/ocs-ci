@@ -47,7 +47,7 @@ def run(**kw):
     if config.get('timeout'):
         tout = config.get('timeout')
     cmd1  = 'mkdir cephtest ; cd cephtest ; {git_cmd}'.format(git_cmd=git_cmd)
-    client.exec_command('rm -rf cephtest')
+    client.exec_command(cmd='rm -rf cephtest', timeout=60)
     out, err = client.exec_command(cmd=cmd1, timeout=600)
     log.info(out.read())
     if client.exit_status != 0:
