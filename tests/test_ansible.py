@@ -185,20 +185,26 @@ def run(**kw):
     
     #Add all clients
     for node in ceph_nodes:
+        if node.role == 'mon':
+            ceph_mon = node
+            break
+    for node in ceph_nodes:
         if node.role == 'client':
             if node.pkg_type == 'rpm':
                 node.exec_command(cmd='sudo yum install -y ceph-common')
-                out, err = ceph_installer.exec_command(sudo=True, cmd='cat /etc/ceph/ceph.conf')
-                ceph_conf = out.read()
-                out, err = ceph_installer.exec_command(sudo=True, cmd='cat /etc/ceph/ceph.client.admin.keyring')
-                ceph_keyring = out.read()
-                conf_file = node.write_file(sudo=True, file_name='/etc/ceph/ceph.conf', file_mode='w')
-                key_file = node.write_file(sudo=True, file_name='/etc/ceph/ceph.keyring', file_mode='w')
-                conf_file.write(ceph_conf)
-                key_file.write(ceph_keyring)
-                conf_file.flush()
-                key_file.flush()
-                node.exec_command(cmd='sudo chown ceph:ceph /etc/ceph/ceph*')
-                node.exec_command(cmd='sudo chmod u+rw /etc/ceph/ceph.keyring')
-                node.exec_command(cmd='sudo chmod ugo+rw /etc/ceph/ceph.conf')
+            else:
+                node.exec_command(cmd='sudo apt-get install -y ceph-common')
+            out, err = ceph_mon.exec_command(sudo=True, cmd='cat /etc/ceph/ceph.conf')
+            ceph_conf = out.read()
+            out, err = ceph_mon.exec_command(sudo=True, cmd='cat /etc/ceph/ceph.client.admin.keyring')
+            ceph_keyring = out.read()
+            conf_file = node.write_file(sudo=True, file_name='/etc/ceph/ceph.conf', file_mode='w')
+            key_file = node.write_file(sudo=True, file_name='/etc/ceph/ceph.keyring', file_mode='w')
+            conf_file.write(ceph_conf)
+            key_file.write(ceph_keyring)
+            conf_file.flush()
+            key_file.flush()
+            node.exec_command(cmd='sudo chown ceph:ceph /etc/ceph/ceph*')
+            node.exec_command(cmd='sudo chmod u+rw /etc/ceph/ceph.keyring')
+            node.exec_command(cmd='sudo chmod ugo+rw /etc/ceph/ceph.conf')
     return rc
