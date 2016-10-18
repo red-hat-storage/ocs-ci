@@ -123,10 +123,10 @@ def run(args):
       compose_id = c['COMPOSE_ID']
       compose_url = c['COMPOSE_URL']
       log.info("COMPOSE_URL = %s ", compose_url)
-      if os.environ['BREW_TAG'] == 'ceph-2-rhel-7-compose':
+      if os.environ['PRODUCT'] == 'rhceph':
           # is a rhceph compose
           base_url = compose_url
-      else:
+      elif os.environ['PRODUCT'] == 'rhscon':
           # is a rhcon
           installer_url = compose_url
     rhbuild = args.get('--rhbuild')
