@@ -113,16 +113,17 @@ def run(args):
     base_url = args.get('--rhs-ceph-repo', None)
     installer_url = args.get('--rhs-con-repo', None)
     if os.environ.get('TOOL') is not None:
+      c = json.loads(os.environ['CI_MESSAGE'])
+      compose_id = c['COMPOSE_ID']
+      compose_url = c['COMPOSE_URL']
+      log.info("COMPOSE_URL = %s ", compose_url)
       if os.environ['TOOL'] == 'distill':
           # is a rhel compose
           log.info("trigger on CI RHEL Compose")
       elif os.environ['TOOL'] == 'rhcephcompose':
           # is a ubuntu compose
-        log.info("trigger on CI Ubuntu Compose") 
-      c = json.loads(os.environ['CI_MESSAGE'])
-      compose_id = c['COMPOSE_ID']
-      compose_url = c['COMPOSE_URL']
-      log.info("COMPOSE_URL = %s ", compose_url)
+        log.info("trigger on CI Ubuntu Compose")
+        ubuntu_repo  = compose_url
       if os.environ['PRODUCT'] == 'rhceph':
           # is a rhceph compose
           base_url = compose_url
@@ -173,6 +174,8 @@ def run(args):
         if not config.get('installer_url'):
             config['installer_url'] = installer_url
         config['rhbuild'] = rhbuild
+        if ubuntu_repo in locals():
+            config['ubuntu_repo'] = ubuntu_repo
         if not config.get('use_cdn'):
             config['use_cdn'] = use_cdn
         if skip_setup is True:
