@@ -124,7 +124,7 @@ def run(args):
           # is a ubuntu compose
         log.info("trigger on CI Ubuntu Compose")
         ubuntu_repo  = compose_url
-      if os.environ['PRODUCT'] == 'rhceph':
+      if os.environ['PRODUCT'] == 'ceph':
           # is a rhceph compose
           base_url = compose_url
       elif os.environ['PRODUCT'] == 'rhscon':
