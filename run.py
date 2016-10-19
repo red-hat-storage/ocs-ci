@@ -174,7 +174,7 @@ def run(args):
         if not config.get('installer_url'):
             config['installer_url'] = installer_url
         config['rhbuild'] = rhbuild
-        if ubuntu_repo in locals():
+        if 'ubuntu_repo' in locals():
             config['ubuntu_repo'] = ubuntu_repo
         if not config.get('use_cdn'):
             config['use_cdn'] = use_cdn
