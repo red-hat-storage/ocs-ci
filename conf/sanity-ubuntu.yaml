@@ -13,13 +13,20 @@ globals:
        node3:
         role: osd
         no-of-volumes: 3
-        disk-size: 20
        node4:
-         role: client
+        role: osd
+        no-of-volumes: 3
+        disk-size: 20
        node5:
+         role: client
+       node6:
          image-name: rhel-7.3-server-x86_64-latest
          cloud-data: conf/cloud-data.yaml
          role: installer
+       node7:
+         role: mds
+       node8:
+         role: rgw
     cloud-data: conf/cloud-data-xenial.yaml
     ceph-conf-overrides:
       global:
