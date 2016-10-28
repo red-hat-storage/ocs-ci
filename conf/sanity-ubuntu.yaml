@@ -13,6 +13,7 @@ globals:
        node3:
         role: osd
         no-of-volumes: 3
+        disk-size: 20
        node4:
         role: osd
         no-of-volumes: 3
