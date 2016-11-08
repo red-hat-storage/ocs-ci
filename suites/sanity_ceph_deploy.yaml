@@ -2,9 +2,6 @@ tests:
    - test:
       name: ceph deploy
       module: test_ceph_deploy.py
-      config:
-        base_url: 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/auto/ceph-2-rhel-7-compose/latest-RHCEPH-2-RHEL-7/'
-        installer_url: 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/auto/rhscon-2-rhel-7-compose/latest-RHSCON-2-RHEL-7/'
       desc: test cluster setup using ceph-deploy
       destroy-cluster: False
       abort-on-fail: True

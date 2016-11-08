@@ -3,9 +3,6 @@ tests:
       name: ceph ansible
       module: test_ansible.py
       config:
-        base_url: 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/auto/ceph-2-rhel-7-compose/latest-RHCEPH-2-RHEL-7/'
-        installer_url: 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/auto/rhscon-2-rhel-7-compose/latest-RHSCON-2-RHEL-7/'
-        ubuntu_repo: 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/2/latest-Ceph-2-Ubuntu/'
         ansi_config:
             ceph_test: True
             ceph_origin: distro
