@@ -21,8 +21,6 @@ def run(**kw):
         ubuntu_repo = config.get('ubuntu_repo')
     if config.get('base_url'):
         base_url = config.get('base_url')
-    else:
-        base_url = base_url = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/auto/ceph-2-rhel-7-compose/latest-RHCEPH-2-RHEL-7/'
     installer_url=None
     if config.get('installer_url'):
         installer_url = config.get('installer_url')
