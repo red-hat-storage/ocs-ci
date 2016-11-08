@@ -179,7 +179,7 @@ def run(**kw):
     gvars_file.flush()
 
     out, rc = ceph_installer.exec_command(
-        cmd='cd ceph-ansible ; ansible-playbook -i hosts site.yml', long_running=True)
+        cmd='cd ceph-ansible ; ansible-playbook -vv -i hosts site.yml', long_running=True)
     
     #Add all clients
     for node in ceph_nodes:
