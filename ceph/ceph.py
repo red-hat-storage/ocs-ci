@@ -62,11 +62,19 @@ class CephNode(object):
             return
         self.rssh = paramiko.SSHClient()
         self.rssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self.rssh.connect(self.vmname,
-                          username='root',
-                          password=self.root_passwd,
-                          look_for_keys=False)
-        self.rssh_transport = self.rssh.get_transport()
+        count=0
+        while True:
+            self.rssh.connect(self.vmname,
+                              username='root',
+                              password=self.root_passwd,
+                              look_for_keys=False)
+            self.rssh_transport = self.rssh.get_transport()
+            if not self.rssh_transport.is_active() and count <=3:
+                logger.info("Connect failed, Retrying...")
+                time.sleep(10)
+                count += 1
+            else:
+                break
         stdin, stdout, stderr = self.rssh.exec_command("dmesg")
         self.rssh_transport.set_keepalive(15)
         changepwd = 'echo ' + "'" + self.username + ":" + self.password + "'" \
@@ -79,12 +87,19 @@ class CephNode(object):
         self.rssh.exec_command("echo 20 > /proc/sys/net/ipv4/tcp_keepalive_probes")
         self.ssh = paramiko.SSHClient()
         self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self.ssh.connect(self.vmname,
-                         password=self.password,
-                         username=self.username,
-                         look_for_keys=False)
+        while True:
+            self.ssh.connect(self.vmname,
+                             password=self.password,
+                             username=self.username,
+                             look_for_keys=False)
+            self.ssh_transport = self.ssh.get_transport()
+            if not self.ssh_transport.is_active() and count <=3:
+                logger.info("Connect failed, Retrying...")
+                time.sleep(10)
+                count += 1
+            else:
+                break
         self.exec_command(cmd="ls / ; uptime ; date")
-        self.ssh_transport = self.ssh.get_transport()
         self.ssh_transport.set_keepalive(15)
         out, err = self.exec_command(cmd="hostname")
         self.hostname = out.read().strip()
