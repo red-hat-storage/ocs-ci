@@ -192,7 +192,20 @@ class CephVMNode(object):
         pool = driver.ex_list_floating_ip_pools()[0]
         self.floating_ip = pool.create_floating_ip()
         self.ip_address = self.floating_ip.ip_address
-        host, _, _ = socket.gethostbyaddr(self.ip_address)
+        count = 0 
+        while True:
+            try:
+                count += 1
+                host, _, _ = socket.gethostbyaddr(self.ip_address)
+            except:
+                if count > 3:
+                    logger.info("Failed to get hostbyaddr in 3 retries")
+                    break
+                else:
+                    logger.info("Retrying gethostbyaddr in 10 seconds")
+                    sleep(10)
+            if host is not None:
+                break
         self.hostname = host
         logger.info("ip: %s and hostname: %s", self.ip_address, self.hostname)
         driver.ex_attach_floating_ip_to_node(self.node, self.floating_ip)
