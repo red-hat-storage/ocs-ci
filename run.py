@@ -7,6 +7,7 @@ import logging
 import importlib
 import pickle
 import time
+import thread
 from docopt import docopt
 from ceph.ceph import CephNode, Ceph
 from ceph.utils import create_ceph_nodes, cleanup_ceph_nodes, keep_alive
@@ -111,7 +112,14 @@ def run(args):
     store = args.get('--store', False)
     reuse = args.get('--reuse', None)
     base_url = args.get('--rhs-ceph-repo', None)
+    if base_url is None:
+        base_url = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/auto/ceph-2-rhel-7-compose/latest-RHCEPH-2-RHEL-7/'
     installer_url = args.get('--rhs-con-repo', None)
+    rhbuild = args.get('--rhbuild')
+    ubuntu_repo = None
+    if rhbuild.startswith('2'):
+        if installer_url is None:
+            installer_url = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/auto/rhscon-2-rhel-7-compose/latest-RHSCON-2-RHEL-7/'
     if os.environ.get('TOOL') is not None:
       c = json.loads(os.environ['CI_MESSAGE'])
       compose_id = c['COMPOSE_ID']
@@ -124,13 +132,18 @@ def run(args):
           # is a ubuntu compose
         log.info("trigger on CI Ubuntu Compose")
         ubuntu_repo  = compose_url
+        log.info("using ubuntu repo", ubuntu_repo)
       if os.environ['PRODUCT'] == 'ceph':
           # is a rhceph compose
           base_url = compose_url
+          log.info("using base url", base_url)
       elif os.environ['PRODUCT'] == 'rhscon':
           # is a rhcon
           installer_url = compose_url
-    rhbuild = args.get('--rhbuild')
+          log.info("using console repo", installer_repo)
+    if ubuntu_repo is None:
+        log.info("Using latest ubuntu repo since no default value provided")
+        ubuntu_repo = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/2/latest-Ceph-2-Ubuntu/'
     use_cdn = args.get('--use-cdn', False)
     g_yaml = os.path.abspath(glb_file)
     suites = os.path.abspath(suite_file)
