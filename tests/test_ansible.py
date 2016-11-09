@@ -173,14 +173,14 @@ def run(**kw):
     site_file.flush()
 
     gvar = yaml.dump(config.get('ansi_config'), default_flow_style=False)
-    log.info("global vars", gvar)
+    log.info("global vars " + gvar)
     gvars_file = ceph_installer.write_file(
         file_name='ceph-ansible/group_vars/all', file_mode='w')
     gvars_file.write(gvar)
     gvars_file.flush()
 
     out, rc = ceph_installer.exec_command(cmd='rpm -qa | grep ceph')
-    log.info("Ceph versions", out.read())
+    log.info("Ceph versions " +  out.read())
     out, rc = ceph_installer.exec_command(
         cmd='cd ceph-ansible ; ansible-playbook -vv -i hosts site.yml', long_running=True)
     
