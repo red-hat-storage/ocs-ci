@@ -192,7 +192,8 @@ class CephVMNode(object):
         pool = driver.ex_list_floating_ip_pools()[0]
         self.floating_ip = pool.create_floating_ip()
         self.ip_address = self.floating_ip.ip_address
-        count = 0 
+        count = 0
+        host = None
         while True:
             try:
                 count += 1

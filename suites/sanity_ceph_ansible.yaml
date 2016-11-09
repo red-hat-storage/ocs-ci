@@ -21,6 +21,13 @@ tests:
       destroy-cluster: false
       abort-on-fail: true
    - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+            cmd: ceph -s
+            sudo: True
+      desc: Check for ceph health debug info
+   - test:
       name: rados workunit
       module: test_workunit.py
       config:
