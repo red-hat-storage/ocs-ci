@@ -140,7 +140,7 @@ def run(args):
       elif os.environ['PRODUCT'] == 'rhscon':
           # is a rhcon
           installer_url = compose_url
-          log.info("using console repo", installer_repo)
+          log.info("using console repo", installer_url)
     if ubuntu_repo is None:
         log.info("Using latest ubuntu repo since no default value provided")
         ubuntu_repo = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/2/latest-Ceph-2-Ubuntu/'
