@@ -7,10 +7,9 @@ import logging
 import importlib
 import pickle
 import time
-import thread
 from docopt import docopt
-from ceph.ceph import CephNode, Ceph
-from ceph.utils import create_ceph_nodes, cleanup_ceph_nodes, keep_alive
+from ceph.ceph import CephNode
+from ceph.utils import create_ceph_nodes, cleanup_ceph_nodes
 from ceph.utils import setup_cdn_repos
 
 doc = """
@@ -58,9 +57,11 @@ root.setLevel(logging.INFO)
 
 ch = logging.StreamHandler(sys.stdout)
 ch.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 ch.setFormatter(formatter)
 root.addHandler(ch)
+
 
 def create_nodes(global_yaml, osp_cred):
     logger.info("Creating ceph nodes")
@@ -83,12 +84,13 @@ def create_nodes(global_yaml, osp_cred):
         ceph_nodes.append(ceph)
     return ceph_nodes
 
+
 def print_results(tc):
     header = '{name:<20s}   {desc:50s}   {duration:20s}   {status:>15s}'.format(
-    name='TEST NAME',
-    desc='TEST DESCRIPTION',
-    duration='DURATION',
-    status='STATUS'
+        name='TEST NAME',
+        desc='TEST DESCRIPTION',
+        duration='DURATION',
+        status='STATUS'
     )
     print header
     for test in tc:
@@ -97,11 +99,7 @@ def print_results(tc):
         else:
             dur = '0s'
         line = '{name:<20s}   {desc:50s}   {duration:20s}   {status:>15s}'.format(
-            name=test['name'],
-            desc=test['desc'],
-            duration=dur,
-            status=test['status'],
-        )
+            name=test['name'], desc=test['desc'], duration=dur, status=test['status'], )
         print line
 
 
@@ -121,33 +119,33 @@ def run(args):
         if installer_url is None:
             installer_url = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/auto/rhscon-2-rhel-7-compose/latest-RHSCON-2-RHEL-7/'
     if os.environ.get('TOOL') is not None:
-      c = json.loads(os.environ['CI_MESSAGE'])
-      compose_id = c['COMPOSE_ID']
-      compose_url = c['COMPOSE_URL']
-      log.info("COMPOSE_URL = %s ", compose_url)
-      if os.environ['TOOL'] == 'distill':
-          # is a rhel compose
-          log.info("trigger on CI RHEL Compose")
-      elif os.environ['TOOL'] == 'rhcephcompose':
-          # is a ubuntu compose
-        log.info("trigger on CI Ubuntu Compose")
-        ubuntu_repo  = compose_url
-        log.info("using ubuntu repo", ubuntu_repo)
-      if os.environ['PRODUCT'] == 'ceph':
-          # is a rhceph compose
-          base_url = compose_url
-          log.info("using base url", base_url)
-      elif os.environ['PRODUCT'] == 'rhscon':
-          # is a rhcon
-          installer_url = compose_url
-          log.info("using console repo", installer_url)
+        c = json.loads(os.environ['CI_MESSAGE'])
+        compose_id = c['COMPOSE_ID']
+        compose_url = c['COMPOSE_URL']
+        log.info("COMPOSE_URL = %s ", compose_url)
+        if os.environ['TOOL'] == 'distill':
+            # is a rhel compose
+            log.info("trigger on CI RHEL Compose")
+        elif os.environ['TOOL'] == 'rhcephcompose':
+            # is a ubuntu compose
+            log.info("trigger on CI Ubuntu Compose")
+            ubuntu_repo = compose_url
+            log.info("using ubuntu repo", ubuntu_repo)
+        if os.environ['PRODUCT'] == 'ceph':
+            # is a rhceph compose
+            base_url = compose_url
+            log.info("using base url", base_url)
+        elif os.environ['PRODUCT'] == 'rhscon':
+            # is a rhcon
+            installer_url = compose_url
+            log.info("using console repo", installer_url)
     if ubuntu_repo is None:
         log.info("Using latest ubuntu repo since no default value provided")
         ubuntu_repo = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/2/latest-Ceph-2-Ubuntu/'
     use_cdn = args.get('--use-cdn', False)
     g_yaml = os.path.abspath(glb_file)
     suites = os.path.abspath(suite_file)
-    skip_setup=args.get('--skip-cluster', False)
+    skip_setup = args.get('--skip-cluster', False)
     cleanup_name = args.get('--cleanup', None)
     if cleanup_name is not None:
         cleanup_ceph_nodes(osp_cred, cleanup_name)
@@ -161,7 +159,7 @@ def run(args):
         for node in ceph_nodes:
             node.reconnect()
     if store:
-        (_,_,node_num,_,_) = ceph_nodes[0].hostname.split('-')
+        (_, _, node_num, _, _) = ceph_nodes[0].hostname.split('-')
         ceph_nodes_file = 'rerun/ceph-nodes-' + node_num
         cn = open(ceph_nodes_file, 'wb')
         pickle.dump(ceph_nodes, cn)
@@ -170,13 +168,13 @@ def run(args):
     suites_yaml = yaml.safe_load(open(suites))
     sys.path.append(os.path.abspath('tests'))
     tests = suites_yaml.get('tests')
-    tcs=[]
-    jenkins_rc=0
+    tcs = []
+    jenkins_rc = 0
     if use_cdn is True:
-         setup_cdn_repos(ceph_nodes, build=rhbuild)
+        setup_cdn_repos(ceph_nodes, build=rhbuild)
     for test in tests:
         test = test.get('test')
-        tc=dict()
+        tc = dict()
         tc['name'] = test.get('name')
         tc['desc'] = test.get('desc')
         tc['file'] = test.get('module')
@@ -194,9 +192,9 @@ def run(args):
         if skip_setup is True:
             config['skip_setup'] = True
         if args.get('--add-repo'):
-                repo = args.get('--add-repo')        
-                if repo.startswith('http'):
-                    config['add-repo'] = repo
+            repo = args.get('--add-repo')
+            if repo.startswith('http'):
+                config['add-repo'] = repo
         mod_file_name = os.path.splitext(test_file)[0]
         test_mod = importlib.import_module(mod_file_name)
         log.info("Running test %s", test_file)
@@ -206,24 +204,24 @@ def run(args):
         rc = test_mod.run(ceph_nodes=ceph_nodes, config=config)
         elapsed = (time.time() - start)
         tc['duration'] = elapsed
-        if rc==0:
+        if rc == 0:
             log.info("Test %s passed" % test_mod)
-            tc['status'] =  'Pass'
+            tc['status'] = 'Pass'
         else:
             tc['status'] = 'Failed'
             log.info("Test %s failed" % test_mod)
-            jenkins_rc=1
+            jenkins_rc = 1
             if test.get('abort-on-fail', False):
                 log.info("Aborting on test failure")
                 break
         if test.get('destroy-cluster') is True:
-                (nodename,uid, node_num,_,_) = ceph_nodes[0].hostname.split('-')
-                cleanup_name = nodename + "-" + uid 
-                cleanup_ceph_nodes(osp_cred, name=cleanup_name)
+            (nodename, uid, node_num, _, _) = ceph_nodes[0].hostname.split('-')
+            cleanup_name = nodename + "-" + uid
+            cleanup_ceph_nodes(osp_cred, name=cleanup_name)
         if test.get('recreate-cluster') is True:
-                ceph_nodes = create_nodes(glb_file, osp_cred)
+            ceph_nodes = create_nodes(glb_file, osp_cred)
         tcs.append(tc)
-                
+
     print_results(tcs)
     return jenkins_rc
 
