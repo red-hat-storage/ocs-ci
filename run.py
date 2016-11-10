@@ -121,7 +121,7 @@ def run(args):
     if os.environ.get('TOOL') is not None:
         c = json.loads(os.environ['CI_MESSAGE'])
         compose_id = c['COMPOSE_ID']
-        compose_url = c['COMPOSE_URL']
+        compose_url = c['COMPOSE_URL'] + "/"
         log.info("COMPOSE_URL = %s ", compose_url)
         if os.environ['TOOL'] == 'distill':
             # is a rhel compose
@@ -130,15 +130,15 @@ def run(args):
             # is a ubuntu compose
             log.info("trigger on CI Ubuntu Compose")
             ubuntu_repo = compose_url
-            log.info("using ubuntu repo", ubuntu_repo)
+            log.info("using ubuntu repo" + ubuntu_repo)
         if os.environ['PRODUCT'] == 'ceph':
             # is a rhceph compose
             base_url = compose_url
-            log.info("using base url", base_url)
+            log.info("using base url" + base_url)
         elif os.environ['PRODUCT'] == 'rhscon':
             # is a rhcon
             installer_url = compose_url
-            log.info("using console repo", installer_url)
+            log.info("using console repo" + installer_url)
     if ubuntu_repo is None:
         log.info("Using latest ubuntu repo since no default value provided")
         ubuntu_repo = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/2/latest-Ceph-2-Ubuntu/'
