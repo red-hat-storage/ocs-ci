@@ -3,11 +3,12 @@ import os
 import logging
 import sys
 import requests
-import time
 import json
+import re
 
 from ceph.utils import keep_alive, setup_deb_repos
 from ceph.utils import setup_repos, generate_repo_file, create_ceph_conf
+from time import sleep
 
 logger = logging.getLogger(__name__)
 log = logger
@@ -59,6 +60,8 @@ def run(**kw):
         repo = config['add-repo']
         for ceph in ceph_nodes:
             if ceph.pkg_type == 'rpm':
+                log.info("Remove epel packages if any")
+                ceph.exec_command(sudo=True, cmd='rm -f /etc/yum.repos.d/epel*')
                 log.info("Additing addition repo {repo} to {sn}".format(repo=repo,sn=ceph.shortname))
                 ceph.exec_command(sudo=True,
                                   cmd='wget -O /etc/yum.repos.d/rh_add_repo.repo {repo}'.format(repo=repo))
@@ -102,12 +105,15 @@ def run(**kw):
     osd_hosts = []
     rgw_hosts = []
     mds_hosts = []
+    num_osds = 0
+    num_mons = 0
     for node in ceph_nodes:
         node.set_eth_interface()
         mon_interface = ' monitor_interface=' + node.eth_interface + ' '
         if node.role == 'mon':
             mon_host = node.shortname + ' monitor_interface=' + node.eth_interface
             mon_hosts.append(mon_host)
+            num_mons += 1
         elif node.role == 'osd':
             devices = node.no_of_volumes
             devchar = 98
@@ -116,6 +122,7 @@ def run(**kw):
                 dev = '/dev/vd' + chr(devchar)
                 devs.append(dev)
                 devchar += 1
+                num_osds += 1 
             osd_host = node.shortname + mon_interface + " devices='" + json.dumps(devs) + "'"
             osd_hosts.append(osd_host)
         elif node.role == 'mds':
@@ -189,6 +196,29 @@ def run(**kw):
         if node.role == 'mon':
             ceph_mon = node
             break
+    # check if all osd's are up and in
+    sleep(4)
+    out, err =  ceph_mon.exec_command(cmd='sudo ceph -s')
+    lines = out.read()
+    log.info(lines)
+    m = re.search(r"(\d+)\s+osds:\s+(\d+)\s+up,\s+(\d+)\s+in", lines)
+    all_osds = int(m.group(1))
+    up_osds = m.group(2)
+    in_osds = m.group(3)
+    if num_osds != all_osds:
+        log.info("Not all osd's are up")
+        #return 1
+    if up_osds != in_osds:
+        log.info("Not all osd's are in")
+        #return 1
+    m = re.search(r"(\d+) mons at", lines)
+    all_mons = int(m.group(1))
+    if all_mons != num_mons:
+        log.info("Not all monitors are in cluster")
+        #return 1
+    if "HEALTH_ERR" in lines:
+        log.info("HEALTH in ERROR STATE")
+        #return 1
     for node in ceph_nodes:
         if node.role == 'client':
             if node.pkg_type == 'rpm':
