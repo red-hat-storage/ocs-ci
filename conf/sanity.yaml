@@ -2,7 +2,7 @@ globals:
     ceph-cluster:
        name: ceph
        create: true
-       image-name: rhel-7.3-server-x86_64-latest
+       image-name: rhel-7.3-server-x86_64-released
        vm-size: m1.medium
        node1:
          role: mon
@@ -20,7 +20,7 @@ globals:
         disk-size: 20
        node5:
          role: client
-       node6:
+       node3:
          role: installer
        node7:
          role: mds
