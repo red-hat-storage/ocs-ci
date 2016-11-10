@@ -20,7 +20,7 @@ globals:
         disk-size: 20
        node5:
          role: client
-       node3:
+       node6:
          role: installer
        node7:
          role: mds
