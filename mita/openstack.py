@@ -31,7 +31,7 @@ OpenStack = get_driver(Provider.OPENSTACK)
 
 
 class CephVMNode(object):
-    
+
     def __init__(self, **kw):
         self.image_name = kw['image-name']
         self.node_name = kw['node-name']
@@ -44,7 +44,7 @@ class CephVMNode(object):
         self.cd_file = os.path.abspath(kw['cloud-data'])
         with open(self.cd_file) as cd:
             self.cloud_data = cd.read()
-        self.username =  kw['username']
+        self.username = kw['username']
         self.password = kw['password']
         self.auth_url = kw['auth-url']
         self.auth_version = kw['auth-version']
@@ -55,19 +55,17 @@ class CephVMNode(object):
         self.create_node()
         sleep(10)
 
-
     def get_driver(self, **kw):
         self.driver = OpenStack(
-                self.username,
-                self.password,
-                ex_force_auth_url=self.auth_url,
-                ex_force_auth_version=self.auth_version,
-                ex_tenant_name=self.tenant_name,
-                ex_force_service_region=self.service_region
-            )
+            self.username,
+            self.password,
+            ex_force_auth_url=self.auth_url,
+            ex_force_auth_version=self.auth_version,
+            ex_tenant_name=self.tenant_name,
+            ex_force_service_region=self.service_region
+        )
         return self.driver
-    
-    
+
     def create_node(self, **kw):
         name = self.node_name
         driver = self.get_driver()
@@ -75,15 +73,16 @@ class CephVMNode(object):
         sizes = driver.list_sizes()
         available_sizes = [s for s in sizes if s.name == self.vm_size]
         if not available_sizes:
-            logger.error("provider does not have a matching 'size' for %s", self.vm_size)
+            logger.error(
+                "provider does not have a matching 'size' for %s",
+                self.vm_size)
             logger.error(
                 "no vm will be created. Ensure that '%s' is an available size and that it exists",
-                self.vm_size
-            )
-            return  
+                self.vm_size)
+            return
         vm_size = available_sizes[0]
         image = [i for i in images if i.name == self.image_name][0]
-    
+
         try:
             new_node = driver.create_node(
                 name=name, image=image, size=vm_size,
@@ -91,10 +90,13 @@ class CephVMNode(object):
             )
         except SSLError:
             new_node = None
-            logger.error("failed to connect to provider, probably a timeout was reached")
-    
+            logger.error(
+                "failed to connect to provider, probably a timeout was reached")
+
         if not new_node:
-            logger.error("provider could not create node with details: %s", str(kw))
+            logger.error(
+                "provider could not create node with details: %s",
+                str(kw))
             return
         self.node = new_node
         logger.info("created node: %s", new_node)
@@ -114,14 +116,15 @@ class CephVMNode(object):
                 new_volume = driver.create_volume(size, name)
                 # wait for the new volume to become available
                 logger.info("Waiting for volume %s to become available", name)
-                self._wait_until_volume_available(new_volume, maybe_in_use=True)
+                self._wait_until_volume_available(
+                    new_volume, maybe_in_use=True)
                 logger.info("Attaching volume %s...", name)
-                if driver.attach_volume(new_node, new_volume, device=None) is not True:
+                if driver.attach_volume(
+                        new_node, new_volume, device=None) is not True:
                     raise RuntimeError("Could not attach volume %s" % name)
                 logger.info("Successfully attached volume %s", name)
                 self.volumes.append(new_volume)
-    
-    
+
     def _wait_until_volume_available(self, volume, maybe_in_use=False):
         """
         Wait until a StorageVolume's state is "available".
@@ -147,11 +150,16 @@ class CephVMNode(object):
                 break
             logger.info(' ... %s', volume.state)
         if volume.state != 'available':
-            # OVH uses a non-standard state of 3 to indicate an available volume
-            logger.info('Volume %s is %s (not available)', volume.name, volume.state)
-            logger.info('The volume %s is not available, but will continue anyway...', volume.name)
+            # OVH uses a non-standard state of 3 to indicate an available
+            # volume
+            logger.info(
+                'Volume %s is %s (not available)',
+                volume.name,
+                volume.state)
+            logger.info(
+                'The volume %s is not available, but will continue anyway...',
+                volume.name)
         return True
-
 
     def get_volume(self, name):
         """ Return libcloud.compute.base.StorageVolume """
@@ -161,7 +169,6 @@ class CephVMNode(object):
             return [v for v in volumes if v.name == name][0]
         except IndexError:
             raise RuntimeError("Unable to get volume")
-    
 
     def destroy_node(self):
         """
@@ -176,16 +183,14 @@ class CephVMNode(object):
         sleep(15)
         for volume in self.volumes:
             driver.destroy_volume(volume)
-    
 
     def destroy_volume(self, name):
         driver = self.driver
-        volume = get_volume(name)
+        volume = self.get_volume(name)
         # check to see if this is a valid volume
         if volume.state != "notfound":
             logger.info("Destroying volume %s", name)
             driver.destroy_volume(volume)
-
 
     def attach_floating_ip(self):
         driver = self.driver
@@ -211,4 +216,3 @@ class CephVMNode(object):
         logger.info("ip: %s and hostname: %s", self.ip_address, self.hostname)
         driver.ex_attach_floating_ip_to_node(self.node, self.floating_ip)
         sleep(10)
-
