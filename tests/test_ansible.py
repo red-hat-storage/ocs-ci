@@ -1,13 +1,10 @@
 import yaml
-import os
 import logging
-import sys
-import requests
 import json
 import re
 
-from ceph.utils import keep_alive, setup_deb_repos
-from ceph.utils import setup_repos, generate_repo_file, create_ceph_conf
+from ceph.utils import setup_deb_repos
+from ceph.utils import setup_repos, create_ceph_conf
 from time import sleep
 
 logger = logging.getLogger(__name__)
@@ -23,7 +20,7 @@ def run(**kw):
         ubuntu_repo = config.get('ubuntu_repo')
     if config.get('base_url'):
         base_url = config.get('base_url')
-    installer_url=None
+    installer_url = None
     if config.get('installer_url'):
         installer_url = config.get('installer_url')
     if config.get('skip_setup') is True:
@@ -54,15 +51,17 @@ def run(**kw):
         keys = keys + ceph.id_rsa_pub
         hosts = hosts + ceph.ip_address + "\t" + ceph.hostname \
             + "\t" + ceph.shortname + "\n"
-        
+
     # check to see for any additional repo (test mode)
     if config.get('add-repo'):
         repo = config['add-repo']
         for ceph in ceph_nodes:
             if ceph.pkg_type == 'rpm':
-                log.info("Additing addition repo {repo} to {sn}".format(repo=repo,sn=ceph.shortname))
-                ceph.exec_command(sudo=True,
-                                  cmd='wget -O /etc/yum.repos.d/rh_add_repo.repo {repo}'.format(repo=repo))
+                log.info(
+                    "Additing addition repo {repo} to {sn}".format(
+                        repo=repo, sn=ceph.shortname))
+                ceph.exec_command(
+                    sudo=True, cmd='wget -O /etc/yum.repos.d/rh_add_repo.repo {repo}'.format(repo=repo))
                 ceph.exec_command(cmd='sudo yum update metadata')
     # remove any epel
     for ceph in ceph_nodes:
@@ -70,13 +69,13 @@ def run(**kw):
             log.info("Remove epel packages if any")
             ceph.exec_command(sudo=True, cmd='rm -f /etc/yum.repos.d/epel*')
 
-
     for ceph in ceph_nodes:
         keys_file = ceph.write_file(
             file_name='.ssh/authorized_keys', file_mode='w')
         hosts_file = ceph.write_file(
             sudo=True, file_name='/etc/hosts', file_mode='a')
-        ceph.exec_command(cmd='[ -f ~/.ssh/config ] && chmod 700 ~/.ssh/config')
+        ceph.exec_command(
+            cmd='[ -f ~/.ssh/config ] && chmod 700 ~/.ssh/config')
         ssh_config = ceph.write_file(file_name='.ssh/config', file_mode='a')
         keys_file.write(keys)
         hosts_file.write(hosts)
@@ -104,7 +103,8 @@ def run(**kw):
             ceph.exec_command(sudo=True, cmd='yum update metadata')
     ceph_installer.exec_command(
         sudo=True, cmd='cd cd; yum install -y ceph-ansible ; sleep 4')
-    ceph_installer.exec_command(cmd='cp -R /usr/share/ceph-ansible ~/ ; sleep 2')
+    ceph_installer.exec_command(
+        cmd='cp -R /usr/share/ceph-ansible ~/ ; sleep 2')
     mon_hosts = []
     osd_hosts = []
     rgw_hosts = []
@@ -126,8 +126,9 @@ def run(**kw):
                 dev = '/dev/vd' + chr(devchar)
                 devs.append(dev)
                 devchar += 1
-                num_osds += 1 
-            osd_host = node.shortname + mon_interface + " devices='" + json.dumps(devs) + "'"
+                num_osds += 1
+            osd_host = node.shortname + mon_interface + \
+                " devices='" + json.dumps(devs) + "'"
             osd_hosts.append(osd_host)
         elif node.role == 'mds':
             mds_host = node.shortname + ' monitor_interface=' + node.eth_interface
@@ -159,7 +160,7 @@ def run(**kw):
     host_file.write(hosts_file)
     host_file.flush()
 
-    ansible_cfg="""
+    ansible_cfg = """
 ---
 - become: true
   hosts: mons
@@ -191,18 +192,18 @@ def run(**kw):
     gvars_file.flush()
 
     out, rc = ceph_installer.exec_command(cmd='rpm -qa | grep ceph')
-    log.info("Ceph versions " +  out.read())
+    log.info("Ceph versions " + out.read())
     out, rc = ceph_installer.exec_command(
         cmd='cd ceph-ansible ; ansible-playbook -vv -i hosts site.yml', long_running=True)
-    
-    #Add all clients
+
+    # Add all clients
     for node in ceph_nodes:
         if node.role == 'mon':
             ceph_mon = node
             break
     # check if all osd's are up and in
     sleep(4)
-    out, err =  ceph_mon.exec_command(cmd='sudo ceph -s')
+    out, err = ceph_mon.exec_command(cmd='sudo ceph -s')
     lines = out.read()
     log.info(lines)
     m = re.search(r"(\d+)\s+osds:\s+(\d+)\s+up,\s+(\d+)\s+in", lines)
@@ -211,30 +212,36 @@ def run(**kw):
     in_osds = int(m.group(3))
     if num_osds != all_osds:
         log.info("Not all osd's are up")
-        #return 1
+        return 1
     if up_osds != in_osds:
         log.info("Not all osd's are in")
-        #return 1
+        return 1
     m = re.search(r"(\d+) mons at", lines)
     all_mons = int(m.group(1))
     if all_mons != num_mons:
         log.info("Not all monitors are in cluster")
-        #return 1
+        return 1
     if "HEALTH_ERR" in lines:
         log.info("HEALTH in ERROR STATE")
-        #return 1
+        return 1
     for node in ceph_nodes:
         if node.role == 'client':
             if node.pkg_type == 'rpm':
                 node.exec_command(cmd='sudo yum install -y ceph-common')
             else:
                 node.exec_command(cmd='sudo apt-get install -y ceph-common')
-            out, err = ceph_mon.exec_command(sudo=True, cmd='cat /etc/ceph/ceph.conf')
+            out, err = ceph_mon.exec_command(
+                sudo=True, cmd='cat /etc/ceph/ceph.conf')
             ceph_conf = out.read()
-            out, err = ceph_mon.exec_command(sudo=True, cmd='cat /etc/ceph/ceph.client.admin.keyring')
+            out, err = ceph_mon.exec_command(
+                sudo=True, cmd='cat /etc/ceph/ceph.client.admin.keyring')
             ceph_keyring = out.read()
-            conf_file = node.write_file(sudo=True, file_name='/etc/ceph/ceph.conf', file_mode='w')
-            key_file = node.write_file(sudo=True, file_name='/etc/ceph/ceph.keyring', file_mode='w')
+            conf_file = node.write_file(
+                sudo=True, file_name='/etc/ceph/ceph.conf', file_mode='w')
+            key_file = node.write_file(
+                sudo=True,
+                file_name='/etc/ceph/ceph.keyring',
+                file_mode='w')
             conf_file.write(ceph_conf)
             key_file.write(ceph_keyring)
             conf_file.flush()
