@@ -60,12 +60,16 @@ def run(**kw):
         repo = config['add-repo']
         for ceph in ceph_nodes:
             if ceph.pkg_type == 'rpm':
-                log.info("Remove epel packages if any")
-                ceph.exec_command(sudo=True, cmd='rm -f /etc/yum.repos.d/epel*')
                 log.info("Additing addition repo {repo} to {sn}".format(repo=repo,sn=ceph.shortname))
                 ceph.exec_command(sudo=True,
                                   cmd='wget -O /etc/yum.repos.d/rh_add_repo.repo {repo}'.format(repo=repo))
                 ceph.exec_command(cmd='sudo yum update metadata')
+    # remove any epel
+    for ceph in ceph_nodes:
+        if ceph.pkg_type == 'rpm':
+            log.info("Remove epel packages if any")
+            ceph.exec_command(sudo=True, cmd='rm -f /etc/yum.repos.d/epel*')
+
 
     for ceph in ceph_nodes:
         keys_file = ceph.write_file(
@@ -203,8 +207,8 @@ def run(**kw):
     log.info(lines)
     m = re.search(r"(\d+)\s+osds:\s+(\d+)\s+up,\s+(\d+)\s+in", lines)
     all_osds = int(m.group(1))
-    up_osds = m.group(2)
-    in_osds = m.group(3)
+    up_osds = int(m.group(2))
+    in_osds = int(m.group(3))
     if num_osds != all_osds:
         log.info("Not all osd's are up")
         #return 1
