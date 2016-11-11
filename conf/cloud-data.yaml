@@ -20,13 +20,17 @@ chpasswd:
 runcmd:
   - touch /ceph-qa-ready
   - sed -i -e 's/^Defaults\s\+requiretty/# \0/' /etc/sudoers
-  - rpm -Uvh http://download.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-8.noarch.rpm
+  - sudo subscription-manager --force register --username qa@redhat.com --auto-attach --password NWmfx9m28UWzxuvh
+  - sudo subscription-manager repos --disable=*
+  - sudo subscription-manager repos --enable=rhel-7-server-rpms  --enable=rhel-7-server-optional-rpms --enable=rhel-7-server-extras-rpms
+  - sudo yum install -y  http://download.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-8.noarch.rpm
   - yum install -y python-pip
   - pip install nose
   - yum install -y wget
   - yum install -y git
   - yum install -y redhat-lsb
   - systemctl stop firewalld
+  - sudo yum remove -y epel-release-7-8.noarch
 
         
 final_message: "Ready for ceph qa testing"
