@@ -1,19 +1,14 @@
-import yaml
-import os
 import logging
-import sys
-import requests
 import time
 
 from ceph.utils import keep_alive, setup_deb_repos
-from ceph.utils import setup_repos, generate_repo_file, create_ceph_conf
+from ceph.utils import setup_repos, create_ceph_conf
 
 logger = logging.getLogger(__name__)
 log = logger
 
-#if __name__ == "__main__":
 
-def run(**kw):    
+def run(**kw):
     log.info("Running test")
     ceph_nodes = kw.get('ceph_nodes')
     config = kw.get('config')
@@ -21,7 +16,7 @@ def run(**kw):
         ubuntu_repo = config.get('ubuntu_repo')
     if config.get('base_url'):
         base_url = config.get('base_url')
-    installer_url=None
+    installer_url = None
     if config.get('installer_url'):
         installer_url = config.get('installer_url')
     if config.get('skip_setup') is True:
@@ -54,7 +49,8 @@ def run(**kw):
             file_name='.ssh/authorized_keys', file_mode='w')
         hosts_file = ceph.write_file(
             sudo=True, file_name='/etc/hosts', file_mode='a')
-        ceph.exec_command(cmd='[ -f ~/.ssh/config ] && chmod 700 ~/.ssh/config')
+        ceph.exec_command(
+            cmd='[ -f ~/.ssh/config ] && chmod 700 ~/.ssh/config')
         ssh_config = ceph.write_file(file_name='.ssh/config', file_mode='w')
         keys_file.write(keys)
         hosts_file.write(hosts)
@@ -119,7 +115,7 @@ def run(**kw):
                 # --dmcrypt {device}
                 ceph1.exec_command(
                     cmd='cd cd; ceph-deploy osd prepare {device}'.format(device=device), timeout=300)
-                activate = device = hostname + ':' + '/dev/vd' + chr(dev) + '1'
+                device = hostname + ':' + '/dev/vd' + chr(dev) + '1'
                 ceph1.exec_command(
                     cmd='cd cd; ceph-deploy osd activate {device}'.format(device=device), timeout=60)
                 time.sleep(2)
@@ -131,6 +127,5 @@ def run(**kw):
             ceph1.exec_command(
                 cmd='cd cd; ceph-deploy admin ' + cnode.shortname
             )
-    
-    return 0
 
+    return 0

@@ -2,7 +2,6 @@ import yaml
 import random
 import logging
 import time
-import sys
 import os
 import requests
 from mita.openstack import CephVMNode
@@ -10,6 +9,7 @@ from libcloud.compute.types import Provider
 from libcloud.compute.providers import get_driver
 
 log = logging.getLogger(__name__)
+
 
 def create_ceph_nodes(gyaml, osp_cred):
     var = yaml.safe_load(open(gyaml))
@@ -36,7 +36,7 @@ def create_ceph_nodes(gyaml, osp_cred):
             params['root-login'] = False
         else:
             params['root-login'] = True
-        for node in range(1,100):
+        for node in range(1, 100):
             node = "node" + str(node)
             if not ceph_cluster.get(node):
                 break
@@ -44,11 +44,12 @@ def create_ceph_nodes(gyaml, osp_cred):
             params['role'] = node_dict.get('role')
             role = params['role']
             if params.get('run'):
-                log.info("Using existing run name")     
+                log.info("Using existing run name")
             else:
                 user = os.getlogin()
-                params['run'] = "run" + str(random.randint(10,999)) + "-"
-            params['node-name'] = 'ceph-' + user + '-' + params['run']  + node + '-' + role
+                params['run'] = "run" + str(random.randint(10, 999)) + "-"
+            params['node-name'] = 'ceph-' + user + \
+                '-' + params['run'] + node + '-' + role
             if role == 'osd':
                 params['no-of-volumes'] = node_dict.get('no-of-volumes')
                 params['size-of-disks'] = node_dict.get('disk-size')
@@ -59,6 +60,7 @@ def create_ceph_nodes(gyaml, osp_cred):
             ceph_nodes[node] = CephVMNode(**params)
     log.info("Done creating nodes")
     return ceph_nodes
+
 
 def get_openstack_driver(yaml):
     OpenStack = get_driver(Provider.OPENSTACK)
@@ -71,14 +73,15 @@ def get_openstack_driver(yaml):
     tenant_name = os_cred['tenant-name']
     service_region = os_cred['service-region']
     driver = OpenStack(
-                username,
-                password,
-                ex_force_auth_url=auth_url,
-                ex_force_auth_version=auth_version,
-                ex_tenant_name=tenant_name,
-                ex_force_service_region=service_region
-            )
+        username,
+        password,
+        ex_force_auth_url=auth_url,
+        ex_force_auth_version=auth_version,
+        ex_tenant_name=tenant_name,
+        ex_force_service_region=service_region
+    )
     return driver
+
 
 def cleanup_ceph_nodes(gyaml, name=None):
     user = os.getlogin()
@@ -102,14 +105,15 @@ def cleanup_ceph_nodes(gyaml, name=None):
         if volume.name is None:
             log.info("Volume has no name, skipping")
         elif volume.name.startswith(name):
-             log.info("Removing volume %s", volume.name)
-             time.sleep(5)
-             volume.destroy()
-             
+            log.info("Removing volume %s", volume.name)
+            time.sleep(5)
+            volume.destroy()
+
+
 def keep_alive(ceph_nodes):
     for node in ceph_nodes:
         node.exec_command(cmd='uptime', check_ec=False)
-        
+
 
 def setup_repos(ceph, base_url, installer_url=None):
     repos = ['MON', 'OSD', 'Tools', 'Calamari', 'Installer']
@@ -180,9 +184,9 @@ def setup_deb_repos(node, ubuntu_repo):
     for repo in repos:
         cmd = 'sudo echo deb ' + ubuntu_repo + '/{0}'.format(repo) + \
               ' $(lsb_release -sc) main'
-        node.exec_command(cmd= cmd + ' > ' +  "/tmp/{0}.list".format(repo))
-        node.exec_command(cmd='sudo cp /tmp/{0}.list'.format(repo) + 
-                         ' /etc/apt/sources.list.d/')
+        node.exec_command(cmd=cmd + ' > ' + "/tmp/{0}.list".format(repo))
+        node.exec_command(cmd='sudo cp /tmp/{0}.list'.format(repo) +
+                          ' /etc/apt/sources.list.d/')
     ds_keys = ['https://www.redhat.com/security/897da07a.txt',
                'https://www.redhat.com/security/f21541eb.txt',
                'http://puddle.ceph.redhat.com/keys/RPM-GPG-KEY-redhatbuild']
@@ -195,22 +199,23 @@ def setup_deb_repos(node, ubuntu_repo):
 
 def setup_cdn_repos(ceph_nodes, build=None):
     repos_13x = ['rhel-7-server-rhceph-1.3-mon-rpms',
-             'rhel-7-server-rhceph-1.3-osd-rpms',
-             'rhel-7-server-rhceph-1.3-calamari-rpms',
-             'rhel-7-server-rhceph-1.3-installer-rpms',
-             'rhel-7-server-rhceph-1.3-tools-rpms']
+                 'rhel-7-server-rhceph-1.3-osd-rpms',
+                 'rhel-7-server-rhceph-1.3-calamari-rpms',
+                 'rhel-7-server-rhceph-1.3-installer-rpms',
+                 'rhel-7-server-rhceph-1.3-tools-rpms']
 
     repos_20 = ['rhel-7-server-rhceph-2-mon-rpms',
-             'rhel-7-server-rhceph-2-osd-rpms',
-             'rhel-7-server-rhceph-2-tools-rpms',
-             'rhel-7-server-rhscon-2-agent-rpms',
-             'rhel-7-server-rhscon-2-installer-rpms',
-             'rhel-7-server-rhscon-2-main-rpms']
+                'rhel-7-server-rhceph-2-osd-rpms',
+                'rhel-7-server-rhceph-2-tools-rpms',
+                'rhel-7-server-rhscon-2-agent-rpms',
+                'rhel-7-server-rhscon-2-installer-rpms',
+                'rhel-7-server-rhscon-2-main-rpms']
     if build == '1.3.2':
-            repos = repos_13x
+        repos = repos_13x
     elif build == '2.0':
-            repos = repos_20
+        repos = repos_20
     for node in ceph_nodes:
         for repo in repos:
-          node.exec_command(sudo=True, cmd='subscription-manager repos --enable={r}'.format(r=repo))
-          node.exec_command(sudo=True, cmd='subscription-manager refresh')
+            node.exec_command(
+                sudo=True, cmd='subscription-manager repos --enable={r}'.format(r=repo))
+            node.exec_command(sudo=True, cmd='subscription-manager refresh')
