@@ -26,6 +26,10 @@ globals:
          role: mds
        node8:
          role: rgw
+       node9:
+         role: mon
+       node10:
+         role: mon
     cloud-data: conf/cloud-data.yaml
     ceph-conf-overrides:
       global:

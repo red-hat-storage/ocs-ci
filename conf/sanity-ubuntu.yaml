@@ -20,14 +20,18 @@ globals:
         disk-size: 20
        node5:
          role: client
+       node6:
+         role: mds
+       node7:
+         role: rgw
        node8:
+         role: mon
+       node9:
+         role: mon
+       node10:
          image-name: rhel-7.3-server-x86_64-released
          cloud-data: conf/cloud-data.yaml
          role: installer
-       node7:
-         role: mds
-       node6:
-         role: rgw
     cloud-data: conf/cloud-data-xenial.yaml
     ceph-conf-overrides:
       global:
