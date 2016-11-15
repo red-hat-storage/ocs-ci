@@ -4,12 +4,14 @@ import logging
 import time
 import os
 import requests
+
+from gevent import sleep
 from mita.openstack import CephVMNode
 from libcloud.compute.types import Provider
 from libcloud.compute.providers import get_driver
+from parallel import parallel
 
 log = logging.getLogger(__name__)
-
 
 def create_ceph_nodes(gyaml, osp_cred):
     var = yaml.safe_load(open(gyaml))
@@ -36,31 +38,36 @@ def create_ceph_nodes(gyaml, osp_cred):
             params['root-login'] = False
         else:
             params['root-login'] = True
-        for node in range(1, 100):
-            node = "node" + str(node)
-            if not ceph_cluster.get(node):
-                break
-            node_dict = ceph_cluster.get(node)
-            params['role'] = node_dict.get('role')
-            role = params['role']
-            if params.get('run'):
-                log.info("Using existing run name")
-            else:
-                user = os.getlogin()
-                params['run'] = "run" + str(random.randint(10, 999)) + "-"
-            params['node-name'] = 'ceph-' + user + \
-                '-' + params['run'] + node + '-' + role
-            if role == 'osd':
-                params['no-of-volumes'] = node_dict.get('no-of-volumes')
-                params['size-of-disks'] = node_dict.get('disk-size')
-            if node_dict.get('image-name'):
-                params['image-name'] = node_dict.get('image-name')
-            if node_dict.get('cloud-data'):
-                params['cloud-data'] = node_dict.get('cloud-data')
-            ceph_nodes[node] = CephVMNode(**params)
+        with parallel() as p:
+            for node in range(1, 100):
+                node = "node" + str(node)
+                if not ceph_cluster.get(node):
+                    break
+                node_dict = ceph_cluster.get(node)
+                params['role'] = node_dict.get('role')
+                role = params['role']
+                if params.get('run'):
+                    log.info("Using existing run name")
+                else:
+                    user = os.getlogin()
+                    params['run'] = "run" + str(random.randint(10, 999)) + "-"
+                params['node-name'] = 'ceph-' + user + \
+                    '-' + params['run'] + node + '-' + role
+                if role == 'osd':
+                    params['no-of-volumes'] = node_dict.get('no-of-volumes')
+                    params['size-of-disks'] = node_dict.get('disk-size')
+                if node_dict.get('image-name'):
+                    params['image-name'] = node_dict.get('image-name')
+                if node_dict.get('cloud-data'):
+                    params['cloud-data'] = node_dict.get('cloud-data')
+                #ceph_nodes[node] = CephVMNode(**params)
+                del params['run']
+                p.spawn(setup_vm_node, node, ceph_nodes, **params)
     log.info("Done creating nodes")
     return ceph_nodes
 
+def setup_vm_node(node, ceph_nodes, **params):
+    ceph_nodes[node] = CephVMNode(**params)
 
 def get_openstack_driver(yaml):
     OpenStack = get_driver(Provider.OPENSTACK)
@@ -89,25 +96,28 @@ def cleanup_ceph_nodes(gyaml, name=None):
         name = 'ceph-' + user
     var = yaml.safe_load(open(gyaml))
     driver = get_openstack_driver(var)
-    for node in driver.list_nodes():
-        if node.name.startswith(name):
-            for ip in node.public_ips:
-                log.info("removing ip %s from node %s", ip, node.name)
-                driver.ex_detach_floating_ip_from_node(node, ip)
-            log.info("Destroying node %s", node.name)
-            node.destroy()
-            time.sleep(5)
-    for fips in driver.ex_list_floating_ips():
-        if fips.node_id is None:
-            log.info("Releasing ip %s", fips.ip_address)
-            driver.ex_delete_floating_ip(fips)
-    for volume in driver.list_volumes():
-        if volume.name is None:
-            log.info("Volume has no name, skipping")
-        elif volume.name.startswith(name):
-            log.info("Removing volume %s", volume.name)
-            time.sleep(5)
-            volume.destroy()
+    with parallel() as p:
+        for node in driver.list_nodes():
+            if node.name.startswith(name):
+                for ip in node.public_ips:
+                    log.info("removing ip %s from node %s", ip, node.name)
+                    driver.ex_detach_floating_ip_from_node(node, ip)
+                log.info("Destroying node %s", node.name)
+                p.spawn(node.destroy)
+                sleep(5)
+    with parallel() as p:
+        for fips in driver.ex_list_floating_ips():
+            if fips.node_id is None:
+                log.info("Releasing ip %s", fips.ip_address)
+                driver.ex_delete_floating_ip(fips)
+    with parallel() as p:
+        for volume in driver.list_volumes():
+            if volume.name is None:
+                log.info("Volume has no name, skipping")
+            elif volume.name.startswith(name):
+                log.info("Removing volume %s", volume.name)
+                sleep(5)
+                volume.destroy()
 
 
 def keep_alive(ceph_nodes):
