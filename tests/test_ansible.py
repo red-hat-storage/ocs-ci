@@ -90,6 +90,7 @@ def run(**kw):
         if config.get('use_cdn') is False:
             if ceph.pkg_type == 'deb':
                 setup_deb_repos(ceph, ubuntu_repo)
+                sleep(15)
                 # install python2 on xenial
                 ceph.exec_command(cmd='sudo apt-get install -y python')
                 ceph.exec_command(cmd='sudo apt-get install -y python-pip')
