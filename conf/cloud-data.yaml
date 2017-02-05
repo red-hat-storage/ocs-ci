@@ -4,7 +4,7 @@ ssh_pwauth: True
 
 groups:
     - cephuser
-    
+
 users:
   - name: cephuser
     primary-group: cephuser
@@ -18,19 +18,19 @@ chpasswd:
   expire: False
 
 runcmd:
-  - touch /ceph-qa-ready
   - sed -i -e 's/^Defaults\s\+requiretty/# \0/' /etc/sudoers
   - sudo subscription-manager --force register --username qa@redhat.com --auto-attach --password EC3YWpKxSe524GCK
   - sudo subscription-manager repos --disable=*
   - sudo subscription-manager repos --enable=rhel-7-server-rpms  --enable=rhel-7-server-optional-rpms --enable=rhel-7-server-extras-rpms
-  - sudo yum install -y  http://download.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-8.noarch.rpm
-  - yum install -y python-pip
-  - pip install nose
   - yum install -y wget
   - yum install -y git
   - yum install -y redhat-lsb
   - systemctl stop firewalld
-  - sudo yum remove -y epel-release-7-8.noarch
+  - yum localinstall https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-9.noarch.rpm
+  - yum install -y python-pip
+  - pip install nose
+  - yum remove -y epel-release
+  - touch /ceph-qa-ready
 
-        
+
 final_message: "Ready for ceph qa testing"
