@@ -1,5 +1,9 @@
 tests:
    - test:
+       name: install ceph pre-requisities
+       module: install_prereq.py
+       abort-on-fail: true
+   - test:
       name: ceph ansible
       module: test_ansible.py
       config:

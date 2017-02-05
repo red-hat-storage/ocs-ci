@@ -26,10 +26,6 @@ runcmd:
   - yum install -y git
   - yum install -y redhat-lsb
   - systemctl stop firewalld
-  - yum localinstall https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-9.noarch.rpm
-  - yum install -y python-pip
-  - pip install nose
-  - yum remove -y epel-release
   - touch /ceph-qa-ready
 
 
