@@ -26,6 +26,8 @@ runcmd:
   - yum install -y git
   - yum install -y redhat-lsb
   - systemctl stop firewalld
+  - sudo yum clean metadata
+  - sudo yum clean all
   - touch /ceph-qa-ready
 
 

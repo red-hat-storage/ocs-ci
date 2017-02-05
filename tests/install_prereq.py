@@ -29,10 +29,4 @@ def install_prereq(ceph):
         else:
             ceph.exec_command(cmd='sudo yum install -y ' + rpm_all_pkgs, long_running=True)
             # install epel package
-            ceph.exec_command(cmd='sudo yum localinstall -y ' + epel_rpm, long_running=True)
-            ceph.exec_command(cmd='sudo yum update metadata')
-            ceph.exec_command(cmd='sudo yum install -y python-pip')
-            ceph.exec_command(cmd='sudo pip install --upgrade pip')
-            ceph.exec_command(cmd='sudo pip install nose')
-            ceph.exec_command(cmd='sudo yum remove -y epel-release')
-            ceph.exec_command(cmd='sudo yum update metadata')
+            ceph.exec_command(cmd='sudo yum clean metadata')
