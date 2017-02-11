@@ -38,6 +38,7 @@ def create_ceph_nodes(gyaml, osp_cred):
             params['root-login'] = False
         else:
             params['root-login'] = True
+            run_name = "run" + str(random.randint(10, 999)) + "-"
         with parallel() as p:
             for node in range(1, 100):
                 node = "node" + str(node)
@@ -50,7 +51,7 @@ def create_ceph_nodes(gyaml, osp_cred):
                     log.info("Using existing run name")
                 else:
                     user = os.getlogin()
-                    params['run'] = "run" + str(random.randint(10, 999)) + "-"
+                    params['run'] = run_name
                 params['node-name'] = 'ceph-' + user + \
                     '-' + params['run'] + node + '-' + role
                 if role == 'osd':
@@ -220,12 +221,17 @@ def setup_cdn_repos(ceph_nodes, build=None):
                 'rhel-7-server-rhscon-2-agent-rpms',
                 'rhel-7-server-rhscon-2-installer-rpms',
                 'rhel-7-server-rhscon-2-main-rpms']
-    if build == '1.3.2':
+    if build == '1.3.x':
         repos = repos_13x
-    elif build == '2.0':
+    elif build == '2.x':
         repos = repos_20
-    for node in ceph_nodes:
+    with parallel() as p:
+        for node in ceph_nodes:
+            p.spawn(set_cdn_repo, node, repos)
+
+
+def set_cdn_repo(node, repos):
         for repo in repos:
             node.exec_command(
                 sudo=True, cmd='subscription-manager repos --enable={r}'.format(r=repo))
-            node.exec_command(sudo=True, cmd='subscription-manager refresh')
+        node.exec_command(sudo=True, cmd='subscription-manager refresh')
