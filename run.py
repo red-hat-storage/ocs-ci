@@ -171,7 +171,7 @@ def run(args):
     tests = suites_yaml.get('tests')
     tcs = []
     jenkins_rc = 0
-    if use_cdn is True:
+    if (use_cdn is True and reuse is None):
         setup_cdn_repos(ceph_nodes, build=rhbuild)
     for test in tests:
         test = test.get('test')
