@@ -2,7 +2,7 @@ globals:
     ceph-cluster:
        name: ceph
        create: true
-       image-name: ubuntu16-04
+       image-name: ubuntu-16-04
        vm-size: m1.medium
        node1:
          role: mon
