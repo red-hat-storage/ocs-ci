@@ -27,6 +27,10 @@ def install_prereq(ceph):
         if ceph.pkg_type == 'deb':
             ceph.exec_command(cmd='sudo apt-get install -y ' + deb_all_pkgs, long_running=True)
         else:
+            ceph.exec_command('sudo subscription-manager --force register --username qa@redhat.com --auto-attach --password CZvGMy7TwJpVKW9t')
+            ceph.exec_command('sudo subscription-manager repos --disable=*')
+            ceph.exec_command('sudo subscription-manager repos --enable=rhel-7-server-rpms  --enable=rhel-7-server-optional-rpms --enable=rhel-7-server-extras-rpms')
+            ceph.exec_command(cmd='sudo yum install -y ' + rpm_all_pkgs, long_running=True)
             ceph.exec_command(cmd='sudo yum install -y ' + rpm_all_pkgs, long_running=True)
             # install epel package
             ceph.exec_command(cmd='sudo yum clean metadata')

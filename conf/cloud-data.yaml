@@ -19,7 +19,7 @@ chpasswd:
 
 runcmd:
   - sed -i -e 's/^Defaults\s\+requiretty/# \0/' /etc/sudoers
-  - sudo subscription-manager --force register --username qa@redhat.com --auto-attach --password EC3YWpKxSe524GCK
+  - sudo subscription-manager --force register --username qa@redhat.com --auto-attach --password CZvGMy7TwJpVKW9t
   - sudo subscription-manager repos --disable=*
   - sudo subscription-manager repos --enable=rhel-7-server-rpms  --enable=rhel-7-server-optional-rpms --enable=rhel-7-server-extras-rpms
   - yum install -y wget
