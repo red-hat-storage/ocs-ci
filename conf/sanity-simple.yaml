@@ -16,6 +16,8 @@ globals:
         disk-size: 20
        node4:
          role: installer
+       node5:
+         role: iscsi-gw
     cloud-data: conf/cloud-data.yaml
     ceph-conf-overrides:
       global:
