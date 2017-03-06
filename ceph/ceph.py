@@ -25,6 +25,10 @@ class Ceph(object):
         self.roles = kw['roles']
 
 
+class CommandFailed(Exception):
+    pass
+
+
 class CephNode(object):
 
     def __init__(self, **kw):
@@ -143,7 +147,8 @@ class CephNode(object):
         generate id_rsa key files for the new vm node
         """
         # remove any old files
-        self.exec_command(cmd="test -f ~/.ssh/id_rsa.pub && rm -f ~/.ssh/id*")
+        self.exec_command(cmd="test -f ~/.ssh/id_rsa.pub && rm -f ~/.ssh/id*",
+                          check_ec=False)
         self.exec_command(
             cmd="ssh-keygen -b 2048 -f ~/.ssh/id_rsa -t rsa -q -N ''")
         out1, _ = self.exec_command(cmd="cat ~/.ssh/id_rsa.pub")
@@ -167,7 +172,7 @@ class CephNode(object):
         if kw.get('timeout'):
             timeout = kw['timeout']
         else:
-            timeout = 60
+            timeout = 120
         logger.info("Running command %s on %s", kw['cmd'], self.ip_address)
         stdin = None
         stdout = None
@@ -206,9 +211,9 @@ class CephNode(object):
             if exit_status == 0:
                 logger.info("Command completed successfully")
             else:
-                logger.info("Error during cmd %s", exit_status)
-                self.last_err = stderr.read()
-                logger.info(self.last_err)
+                logger.info("Error during cmd %s, timeout %d", exit_status, timeout)
+                raise CommandFailed(kw['cmd'] + " Error:  " \
+                                    + self.ip_address + stderr.read())
             self.exit_status = exit_status
             return stdout, stderr
         else:
