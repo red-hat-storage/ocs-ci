@@ -75,7 +75,8 @@ def run(**kw):
         hosts_file = ceph.write_file(
             sudo=True, file_name='/etc/hosts', file_mode='a')
         ceph.exec_command(
-            cmd='[ -f ~/.ssh/config ] && chmod 700 ~/.ssh/config')
+            cmd='[ -f ~/.ssh/config ] && chmod 700 ~/.ssh/config',
+            check_ec=False)
         ssh_config = ceph.write_file(file_name='.ssh/config', file_mode='a')
         keys_file.write(keys)
         hosts_file.write(hosts)
@@ -103,9 +104,11 @@ def run(**kw):
         if ceph.pkg_type == 'rpm':
             ceph.exec_command(sudo=True, cmd='yum update metadata')
     ceph_installer.exec_command(
-        sudo=True, cmd='cd cd; yum install -y ceph-ansible ; sleep 4')
+        sudo=True, cmd='cd cd; yum install -y ceph-ansible')
+    sleep(4)
     ceph_installer.exec_command(
-        cmd='cp -R /usr/share/ceph-ansible ~/ ; sleep 2')
+        cmd='cp -R /usr/share/ceph-ansible ~/')
+    sleep(2)
     mon_hosts = []
     osd_hosts = []
     rgw_hosts = []
