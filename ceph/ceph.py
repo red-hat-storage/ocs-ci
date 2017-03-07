@@ -206,15 +206,15 @@ class CephNode(object):
             logger.info("Exception during cmd %s", str(e))
             if 'Timeout openning channel' in str(e):
                 logger.info("channel reset error")
+        exit_status = stdout.channel.recv_exit_status()
+        self.exit_status = exit_status
         if kw.get('check_ec', True):
-            exit_status = stdout.channel.recv_exit_status()
             if exit_status == 0:
                 logger.info("Command completed successfully")
             else:
                 logger.info("Error during cmd %s, timeout %d", exit_status, timeout)
                 raise CommandFailed(kw['cmd'] + " Error:  " \
                                     + self.ip_address + stderr.read())
-            self.exit_status = exit_status
             return stdout, stderr
         else:
             # logger.info(stdout.readlines())
