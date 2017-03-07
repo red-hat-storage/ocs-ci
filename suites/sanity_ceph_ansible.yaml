@@ -61,3 +61,45 @@ tests:
             pg_num: '128'
             pool_type: 'normal'
       desc: run rados bench for 360 - normal profile
+   - test:
+       name: MbucketNobjects
+       desc: test M buckets with N Objects
+       module: rgw_system.py
+       config:
+           script-name: test_Mbuckets_with_Nobjects.py
+           timeout: 300
+   - test:
+       name: bucketdelete
+       desc: rgw bucket delete test
+       module: rgw_system.py
+       config:
+           script-name:  test_bucket_with_delete.py
+           timeout: 300
+   - test:
+       name: multipart-upload
+       desc: test multipart upload and download
+       module: rgw_system.py
+       config:
+           script-name:  test_multipart_upload_download.py
+           timeout: 300
+   - test:
+       name: rgw-acls
+       desc: test rgw acls
+       module: rgw_system.py
+       config:
+           script-name:  test_acls.py
+           timeout: 500
+   - test:
+       name: acls-copyobj
+       desc: test rgw acls copy object
+       module: rgw_system.py
+       config:
+           script-name:  test_acls_copy_obj.py
+           timeout: 500
+   - test:
+       name: rgw-version-revert
+       desc: test rgw version with revert
+       module: rgw_system.py
+       config:
+           script-name:  test_version_with_revert.py
+           timeout: 400
