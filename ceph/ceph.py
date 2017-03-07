@@ -117,7 +117,7 @@ class CephNode(object):
                     self.shortname)
         self.set_internal_ip()
         self.exec_command(cmd="echo 'TMOUT=600' >> ~/.bashrc")
-        self.exec_command(cmd='[ -f /etc/redhat-release ]')
+        self.exec_command(cmd='[ -f /etc/redhat-release ]', check_ec=False)
         if self.exit_status == 0:
             self.pkg_type = 'rpm'
         else:
