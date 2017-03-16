@@ -17,7 +17,7 @@ globals:
        node4:
          role: installer
        node5:
-         role: iscsi-gw
+         role: rgw
     cloud-data: conf/cloud-data.yaml
     ceph-conf-overrides:
       global:

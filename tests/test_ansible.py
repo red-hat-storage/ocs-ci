@@ -229,7 +229,7 @@ def run(**kw):
         log.info("HEALTH in ERROR STATE")
         return 1
     for node in ceph_nodes:
-        if node.role == 'client' or node.role == 'rgw':
+        if node.role == 'client':
             if node.pkg_type == 'rpm':
                 node.exec_command(cmd='sudo yum install -y ceph-common')
             else:
