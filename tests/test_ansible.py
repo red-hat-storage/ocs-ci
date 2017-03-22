@@ -101,8 +101,9 @@ def run(**kw):
         else:
             log.info("Using the cdn repo for the test")
         log.info("Updating metadata")
+        sleep(15)
         if ceph.pkg_type == 'rpm':
-            ceph.exec_command(sudo=True, cmd='yum update metadata')
+            ceph.exec_command(cmd='sudo yum update metadata')
     ceph_installer.exec_command(
         sudo=True, cmd='cd cd; yum install -y ceph-ansible')
     sleep(4)
