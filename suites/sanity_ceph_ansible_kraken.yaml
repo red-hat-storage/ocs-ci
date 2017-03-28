@@ -18,6 +18,8 @@ tests:
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
             ceph_conf_overrides:
+                mon:
+                  mon_allow_pool_delete: true
                 global:
                   osd_pool_default_pg_num: 128
                   osd_default_pool_size: 2
