@@ -254,4 +254,15 @@ def run(**kw):
             node.exec_command(cmd='sudo chown ceph:ceph /etc/ceph/ceph*')
             node.exec_command(cmd='sudo chmod u+rw /etc/ceph/ceph.keyring')
             node.exec_command(cmd='sudo chmod ugo+rw /etc/ceph/ceph.conf')
+        elif node.role == 'rgw':
+            out, err = ceph_mon.exec_command(
+                sudo=True, cmd='cat /etc/ceph/ceph.client.admin.keyring')
+            ceph_keyring = out.read()
+            key_file = node.write_file(
+                sudo=True,
+                file_name='/etc/ceph/ceph.keyring',
+                file_mode='w')
+            key_file.write(ceph_keyring)
+            key_file.flush()
+            node.exec_command(cmd='sudo chmod u+rw /etc/ceph/ceph.keyring')
     return rc
