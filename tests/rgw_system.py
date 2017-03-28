@@ -11,9 +11,10 @@ def run(**kw):
         if node.role == 'rgw':
             rgw_client_nodes.append(node)
     git_url = 'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/ceph-qe-scripts.git'
-
     git_clone = 'git clone -b wip-defaults ' + git_url
     rgw_node = rgw_client_nodes[0]
+    if rgw_node.pkg_type == 'rpm':
+        rgw_node.exec_command(cmd='sudo yum install -y python-virtualenv', timeout=300)
     # cleanup any existing stale test dir
     test_folder = 'rgw-tests'
     rgw_node.exec_command(cmd='rm -rf ' + test_folder)
