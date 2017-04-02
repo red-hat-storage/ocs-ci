@@ -21,6 +21,7 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--osp-cred <file>]
         [--rhs-con-repo <repo> --rhs-ceph-repo <repo>]
         [--add-repo <repo>]
+        [--kernel-repo <repo>]
         [--store]
         [--reuse <file>]
         [--skip-cluster]
@@ -44,6 +45,7 @@ Options:
   --rhs-ceph-repo <repo>            location of rhs-ceph repo
                                     Top level location of compose
   --add-repo <repo>                 Any additional repo's need to be enabled
+  --kernel-repo <repo>              Zstream Kernel Repo location
   --cleanup <name>                  cleanup nodes on OSP with names that start
                                     with 'name' , returns after node cleanup
   --store                           store the current vm state for reuse
@@ -111,6 +113,7 @@ def run(args):
     store = args.get('--store', False)
     reuse = args.get('--reuse', None)
     base_url = args.get('--rhs-ceph-repo', None)
+    kernel_repo = args.get('--kernel-repo', None)
     if base_url is None:
         base_url = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/auto/ceph-2-rhel-7-compose/latest-RHCEPH-2-RHEL-7/'
     installer_url = args.get('--rhs-con-repo', None)
@@ -138,8 +141,9 @@ def run(args):
             log.info("using base url" + base_url)
         elif os.environ['PRODUCT'] == 'rhscon':
             # is a rhcon
-            installer_url = compose_url
+            installer_= compose_url
             log.info("using console repo" + installer_url)
+
     if ubuntu_repo is None:
         log.info("Using latest ubuntu repo since no default value provided")
         ubuntu_repo = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/2/latest-Ceph-2-Ubuntu/'
@@ -196,6 +200,11 @@ def run(args):
             repo = args.get('--add-repo')
             if repo.startswith('http'):
                 config['add-repo'] = repo
+        if kernel_repo is not None:
+            config['kernel-repo'] = kernel_repo
+        # if Kernel Repo is defined in ENV then set the value in config
+        if os.environ.get('KERNEL-REPO-URL') is not None:
+            config['kernel-repo'] = os.environ.get('KERNEL-REPO-URL')
         mod_file_name = os.path.splitext(test_file)[0]
         test_mod = importlib.import_module(mod_file_name)
         log.info("Running test %s", test_file)
