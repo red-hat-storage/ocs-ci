@@ -32,6 +32,8 @@ def run(**kw):
         repo = config.get('repo')
     else:
         repo = 'git://git.ceph.com/ceph.git'
+    if config.get('downstream'):
+        repo = 'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/workunits.git'
 
     if config.get('branch'):
         branch = config.get('branch')
@@ -54,6 +56,9 @@ def run(**kw):
         return 1
     cmd2 = 'CEPH_REF={ref} sudo -E sh cephtest/ceph/qa/workunits/{name}'.format(
         ref=branch, name=test_name)
+    if config.get('downstream'):
+        cmd2 = 'CEPH_REF={ref} sudo -E sh cephtest/workunits/{name}'.format(
+            ref=branch, name=test_name)
     out, err = client.exec_command(cmd=cmd2, check_ec=False)
     running = True
     while running:
