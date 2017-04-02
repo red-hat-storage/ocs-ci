@@ -141,7 +141,7 @@ def run(args):
             log.info("using base url" + base_url)
         elif os.environ['PRODUCT'] == 'rhscon':
             # is a rhcon
-            installer_= compose_url
+            installer_url = compose_url
             log.info("using console repo" + installer_url)
 
     if ubuntu_repo is None:
