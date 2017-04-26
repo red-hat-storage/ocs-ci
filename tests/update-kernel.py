@@ -48,6 +48,7 @@ enabled=1
     kernel_repo.flush()
     o, e = client.exec_command(cmd='uname -a')
     log.info(o.read())
+    client.exec_command(cmd='sudo subscription-manager repos --disable=*', long_running=True)
     client.exec_command(cmd='sudo yum update metadata')
     o, e = client.exec_command(cmd='sudo yum update -y kernel')
     client.exec_command(cmd='sudo reboot', check_ec=False)
