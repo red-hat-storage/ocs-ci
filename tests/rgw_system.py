@@ -18,11 +18,11 @@ def run(**kw):
     rgw_node.exec_command(cmd='rm -rf ' + test_folder)
     rgw_node.exec_command(cmd='mkdir ' + test_folder)
     rgw_node.exec_command(cmd='cd ' + test_folder + ' ; ' + git_clone)
-    rgw_node.exec_command(cmd='cd ' + test_folder + ' ; virtualenv venv ; source venv/bin/activate ; pip install boto names PyYaml ConfigParser')
+    rgw_node.exec_command(cmd='sudo pip install boto names PyYaml ConfigParser')
     config = kw.get('config')
     script_name = config.get('script-name')
     timeout = config.get('timeout', 300)
-    out, err = rgw_node.exec_command(cmd='sudo  python ~/' + test_folder + '/ceph-qe-scripts/rgw/tests/s3/' + script_name,
+    out, err = rgw_node.exec_command(cmd='sudo python ~/' + test_folder + '/ceph-qe-scripts/rgw/tests/s3/' + script_name,
                                      timeout=timeout)
     log.info(out.read())
     return 0
