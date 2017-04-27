@@ -50,7 +50,8 @@ def run(**kw):
         hosts_file = ceph.write_file(
             sudo=True, file_name='/etc/hosts', file_mode='a')
         ceph.exec_command(
-            cmd='[ -f ~/.ssh/config ] && chmod 700 ~/.ssh/config')
+            cmd='[ -f ~/.ssh/config ] && chmod 700 ~/.ssh/config',
+            check_ec=False)
         ssh_config = ceph.write_file(file_name='.ssh/config', file_mode='w')
         keys_file.write(keys)
         hosts_file.write(hosts)
