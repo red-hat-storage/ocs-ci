@@ -25,7 +25,7 @@ def run(**kw):
                     repo = config.get('kernel-repo')
                     log.info("writing " + repo)
                     p.spawn(update_kernel_and_reboot, cnode, repo)
-                elif os.environ['KERNEL-REPO-URL'] is not None:
+                elif os.environ.get('KERNEL-REPO-URL', None) is not None:
                     log.info("writing from ENV " + repo)
                     repo = os.environ['KERNEL-REPO-URL']
                     p.spawn(update_kernel_and_reboot, cnode, repo)
