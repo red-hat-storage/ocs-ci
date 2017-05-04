@@ -74,7 +74,7 @@ def run(**kw):
             log.info("Using the cdn repo for the test")
         log.info("Updating metadata")
         if ceph.pkg_type == 'rpm':
-            ceph.exec_command(sudo='sudo yum update metadata')
+            ceph.exec_command(cmd='sudo yum update metadata')
 
     ceph1.exec_command(cmd='mkdir cd')
     ceph1.exec_command(sudo=True, cmd='cd cd; yum install -y ceph-deploy')
