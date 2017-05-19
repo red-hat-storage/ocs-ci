@@ -1,5 +1,6 @@
 
 import logging
+import time
 from ceph.parallel import parallel
 
 log = logging.getLogger(__name__)
@@ -18,6 +19,7 @@ def run(**kw):
     with parallel() as p:
         for ceph in ceph_nodes:
             p.spawn(install_prereq, ceph)
+            time.sleep(20)
     return 0
 
 def install_prereq(ceph):
@@ -27,9 +29,9 @@ def install_prereq(ceph):
         if ceph.pkg_type == 'deb':
             ceph.exec_command(cmd='sudo apt-get install -y ' + deb_all_pkgs, long_running=True)
         else:
-            #ceph.exec_command(cmd='sudo subscription-manager --force register --username qa@redhat.com --auto-attach --password CZvGMy7TwJpVKW9t', timeout=240)
-            #ceph.exec_command(cmd='sudo subscription-manager repos --disable=*', long_running=True)
-            #ceph.exec_command(cmd='sudo subscription-manager repos --enable=rhel-7-server-rpms  --enable=rhel-7-server-optional-rpms --enable=rhel-7-server-extras-rpms', long_running=True)
+            ceph.exec_command(cmd='sudo subscription-manager --force register --username qa@redhat.com --auto-attach --password uuV4gQrtG7sfMP3q', timeout=240)
+            ceph.exec_command(cmd='sudo subscription-manager repos --disable=*', long_running=True)
+            ceph.exec_command(cmd='sudo subscription-manager repos --enable=rhel-7-server-rpms  --enable=rhel-7-server-optional-rpms --enable=rhel-7-server-extras-rpms', long_running=True)
             ceph.exec_command(cmd='sudo yum install -y ' + rpm_all_pkgs, long_running=True)
             ceph.exec_command(cmd='sudo yum install -y ' + rpm_all_pkgs, long_running=True)
             # install epel package
