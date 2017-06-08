@@ -29,7 +29,7 @@ def install_prereq(ceph):
         if ceph.pkg_type == 'deb':
             ceph.exec_command(cmd='sudo apt-get install -y ' + deb_all_pkgs, long_running=True)
         else:
-            ceph.exec_command(cmd='sudo subscription-manager --force register --username qa@redhat.com --auto-attach --password uuV4gQrtG7sfMP3q', timeout=240)
+            ceph.exec_command(cmd='sudo subscription-manager --force register  --serverurl=subscription.rhsm.stage.redhat.com:443/subscription  --baseurl=https://cdn.redhat.com --username=qa@redhat.com --password=redhatqa --auto-attach', timeout=240)
             ceph.exec_command(cmd='sudo subscription-manager repos --disable=*', long_running=True)
             ceph.exec_command(cmd='sudo subscription-manager repos --enable=rhel-7-server-rpms  --enable=rhel-7-server-optional-rpms --enable=rhel-7-server-extras-rpms', long_running=True)
             ceph.exec_command(cmd='sudo yum install -y ' + rpm_all_pkgs, long_running=True)
