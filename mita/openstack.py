@@ -30,6 +30,10 @@ libcloud.security.VERIFY_SSL_CERT = False
 OpenStack = get_driver(Provider.OPENSTACK)
 
 
+class InvalidHostName(Exception):
+    pass
+
+
 class CephVMNode(object):
 
     def __init__(self, **kw):
@@ -59,6 +63,7 @@ class CephVMNode(object):
         self.driver = OpenStack(
             self.username,
             self.password,
+            secure=False,
             ex_force_auth_url=self.auth_url,
             ex_force_auth_version=self.auth_version,
             ex_tenant_name=self.tenant_name,
@@ -206,7 +211,7 @@ class CephVMNode(object):
             except:
                 if count > 3:
                     logger.info("Failed to get hostbyaddr in 3 retries")
-                    break
+                    raise InvalidHostName("Invalid hostname for " + self.ip_address)
                 else:
                     logger.info("Retrying gethostbyaddr in 10 seconds")
                     sleep(10)
