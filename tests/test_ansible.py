@@ -109,13 +109,16 @@ def run(**kw):
     sleep(4)
     ceph_installer.exec_command(
         cmd='cp -R /usr/share/ceph-ansible ~/')
+    
     sleep(2)
     mon_hosts = []
     osd_hosts = []
     rgw_hosts = []
     mds_hosts = []
+    mgr_hosts = []
     num_osds = 0
     num_mons = 0
+    num_mgrs = 0
     for node in ceph_nodes:
         node.set_eth_interface()
         mon_interface = ' monitor_interface=' + node.eth_interface + ' '
@@ -123,6 +126,10 @@ def run(**kw):
             mon_host = node.shortname + ' monitor_interface=' + node.eth_interface
             mon_hosts.append(mon_host)
             num_mons += 1
+        if node.role == 'mgr':
+            mgr_host = node.shortname + ' monitor_interface=' + node.eth_interface
+            mgr_hosts.append(mgr_host)
+            num_mgrs += 1
         elif node.role == 'osd':
             devices = node.no_of_volumes
             devchar = 98
@@ -147,6 +154,10 @@ def run(**kw):
         mon = '[mons]\n' + '\n'.join(mon_hosts)
         hosts_file += mon + '\n'
         break
+    for hosts in mgr_hosts:
+        mgr = '[mgrs]\n' + '\n'.join(mgr_hosts)
+        hosts_file += mgr + '\n'
+        break
     for hosts in osd_hosts:
         osd = '[osds]\n' + '\n'.join(osd_hosts)
         hosts_file += osd + '\n'
@@ -165,29 +176,9 @@ def run(**kw):
     host_file.write(hosts_file)
     host_file.flush()
 
-    ansible_cfg = """
----
-- become: true
-  hosts: mons
-  roles: [ceph-mon]
-- become: true
-  hosts: osds
-  roles: [ceph-osd]
-- become: true
-  hosts: mdss
-  roles: [ceph-mds]
-- become: true
-  hosts: rgws
-  roles: [ceph-rgw]
-- become: true
-  hosts: client
-  roles: [ceph-common]
-"""
-
-    site_file = ceph_installer.write_file(
-        file_name='ceph-ansible/site.yml', file_mode='w')
-    site_file.write(ansible_cfg)
-    site_file.flush()
+    # use the provided sample file as main site.yml
+    ceph_installer.exec_command(
+        cmd='cp -R /usr/share/ceph-ansible/site.yml.sample ~/ceph-ansible/site.yml')
 
     gvar = yaml.dump(config.get('ansi_config'), default_flow_style=False)
     log.info("global vars " + gvar)
