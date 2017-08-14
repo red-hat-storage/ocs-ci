@@ -36,7 +36,7 @@ tests:
       module: test_workunit.py
       config:
             test_name: rados/test_python.sh
-            branch: jewel
+            branch: luminous
             role: mon
       desc: Test rados python api
    - test:
@@ -44,7 +44,7 @@ tests:
       module: test_workunit.py
       config:
             test_name: rbd/test_librbd_python.sh
-            branch: jewel
+            branch: luminous
             role: mon
       desc: Test librbd unit tests
    - test:

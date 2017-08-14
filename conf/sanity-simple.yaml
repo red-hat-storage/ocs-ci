@@ -18,6 +18,8 @@ globals:
          role: installer
        node5:
          role: rgw
+       node6:
+         role: mgr
     cloud-data: conf/cloud-data.yaml
     ceph-conf-overrides:
       global:
