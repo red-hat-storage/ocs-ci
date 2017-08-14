@@ -91,7 +91,7 @@ class CephVMNode(object):
         try:
             new_node = driver.create_node(
                 name=name, image=image, size=vm_size,
-                ex_userdata=self.cloud_data, ex_keyname=self.keypair
+                ex_userdata=self.cloud_data
             )
         except SSLError:
             new_node = None
