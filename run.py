@@ -114,22 +114,23 @@ def run(args):
     reuse = args.get('--reuse', None)
     base_url = args.get('--rhs-ceph-repo', None)
     kernel_repo = args.get('--kernel-repo', None)
-    if base_url is None:
-        # use latest as default when nothing is specified in cli
-        base_url = 'http://download.eng.bos.redhat.com/composes/auto/ceph-2-rhel-7/latest-RHCEPH-2-RHEL-7/'
-    installer_url = args.get('--rhs-con-repo', None)
     rhbuild = args.get('--rhbuild')
+    if rhbuild.startswith('2'):
+        if base_url is None:
+            # use latest as default when nothing is specified in cli
+            base_url = 'http://download.eng.bos.redhat.com/composes/auto/ceph-2-rhel-7/latest-RHCEPH-2-RHEL-7/'
+    elif rhbuild.startswith('3'):
+        if base_url is None:
+            # default to latest RHCeph build 3.0
+            base_url = 'http://download.eng.bos.redhat.com/composes/auto/ceph-3.0-rhel-7/latest-RHCEPH-3-RHEL-7/'
+            # we dont need installer repo
+            installer_url = None
+    installer_url = args.get('--rhs-con-repo', None)
     ubuntu_repo = None
     if rhbuild.startswith('2'):
         if installer_url is None:
             # default installer repo points to latest
             installer_url = 'http://download.eng.bos.redhat.com/composes/auto/rhscon-2-rhel-7/latest-RHSCON-2-RHEL-7/'
-    if rhbuild.startswith('3'):
-        if base_url is None:
-           # default to latest RHCeph build 3.0
-           base_url = 'http://download.eng.bos.redhat.com/composes/auto/ceph-3.0-rhel-7/latest-RHCEPH-3-RHEL-7/'
-           # we dont need installer repo
-           installer_url = None
     if os.environ.get('TOOL') is not None:
         c = json.loads(os.environ['CI_MESSAGE'])
         compose_id = c['COMPOSE_ID']
