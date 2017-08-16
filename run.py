@@ -133,10 +133,10 @@ def run(args):
             installer_url = 'http://download.eng.bos.redhat.com/composes/auto/rhscon-2-rhel-7/latest-RHSCON-2-RHEL-7/'
     if os.environ.get('TOOL') is not None:
         c = json.loads(os.environ['CI_MESSAGE'])
-        compose_id = c['COMPOSE_ID']
-        compose_url = c['COMPOSE_URL'] + "/"
+        compose_id = c['compose_id']
+        compose_url = c['compose_url'] + "/"
         log.info("COMPOSE_URL = %s ", compose_url)
-        if os.environ['TOOL'] == 'distill':
+        if os.environ['TOOL'] == 'pungi':
             # is a rhel compose
             log.info("trigger on CI RHEL Compose")
         elif os.environ['TOOL'] == 'rhcephcompose':
