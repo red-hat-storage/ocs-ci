@@ -25,7 +25,8 @@ socket.setdefaulttimeout(280)
 # Note: Code like this poses a security risk (MITM attack) and that's the
 # reason why you should never use it for anything else besides testing. You
 # have been warned.
-libcloud.security.VERIFY_SSL_CERT = False
+# signed cert installed : https://projects.engineering.redhat.com/browse/CID-2407
+#libcloud.security.VERIFY_SSL_CERT = False
 
 OpenStack = get_driver(Provider.OPENSTACK)
 
