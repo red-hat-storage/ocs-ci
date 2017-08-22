@@ -5,7 +5,7 @@ from ceph.parallel import parallel
 
 log = logging.getLogger(__name__)
 
-rpm_pkgs = ['wget', 'git', 'redhat-lsb', 'python-virtualenv']
+rpm_pkgs = ['wget', 'git', 'python2-pip', 'redhat-lsb', 'python-virtualenv']
 deb_pkgs = ['wget', 'git', 'python-virtualenv']
 
 epel_rpm = 'https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-9.noarch.rpm'
