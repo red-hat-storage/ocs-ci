@@ -135,6 +135,8 @@ def run(args):
         c = json.loads(os.environ['CI_MESSAGE'])
         compose_id = c['compose_id']
         compose_url = c['compose_url'] + "/"
+        product_name = c['product_name']
+        product_version = c['product_version']
         log.info("COMPOSE_URL = %s ", compose_url)
         if os.environ['TOOL'] == 'pungi':
             # is a rhel compose
@@ -144,11 +146,11 @@ def run(args):
             log.info("trigger on CI Ubuntu Compose")
             ubuntu_repo = compose_url
             log.info("using ubuntu repo" + ubuntu_repo)
-        if os.environ['PRODUCT'] == 'ceph':
+        if product_name == 'ceph':
             # is a rhceph compose
             base_url = compose_url
             log.info("using base url" + base_url)
-        elif os.environ['PRODUCT'] == 'rhscon':
+        elif product_name == 'rhscon':
             # is a rhcon
             installer_url = compose_url
             log.info("using console repo" + installer_url)
