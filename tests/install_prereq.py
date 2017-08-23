@@ -5,7 +5,7 @@ from ceph.parallel import parallel
 
 log = logging.getLogger(__name__)
 
-rpm_pkgs = ['wget', 'git', 'python2-pip', 'redhat-lsb', 'python-virtualenv']
+rpm_pkgs = ['wget', 'git', 'epel-release', 'redhat-lsb', 'python-virtualenv']
 deb_pkgs = ['wget', 'git', 'python-virtualenv']
 
 epel_rpm = 'https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-9.noarch.rpm'
@@ -36,3 +36,5 @@ def install_prereq(ceph):
             ceph.exec_command(cmd='sudo yum install -y ' + rpm_all_pkgs, long_running=True)
             # install epel package
             ceph.exec_command(cmd='sudo yum clean metadata')
+            # finally install python2-pip directly using rpm since its available only in epel
+            ceph.exec_command(cmd='sudo yum install -y http://dl.fedoraproject.org/pub/fedora-secondary/releases/26/Everything/i386/os/Packages/p/python2-pip-9.0.1-9.fc26.noarch.rpm')
