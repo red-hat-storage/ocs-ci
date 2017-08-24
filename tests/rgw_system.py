@@ -11,7 +11,7 @@ def run(**kw):
         if node.role == 'rgw':
             rgw_client_nodes.append(node)
     git_url = 'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/ceph-qe-scripts.git'
-    git_clone = 'git clone -b wip-defaults ' + git_url
+    git_clone = 'git clone ' + git_url
     rgw_node = rgw_client_nodes[0]
     # cleanup any existing stale test dir
     test_folder = 'rgw-tests'
