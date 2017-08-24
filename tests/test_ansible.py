@@ -109,7 +109,7 @@ def run(**kw):
     sleep(4)
     ceph_installer.exec_command(
         cmd='cp -R /usr/share/ceph-ansible ~/')
-    
+
     sleep(2)
     mon_hosts = []
     osd_hosts = []
@@ -212,7 +212,7 @@ def run(**kw):
     if up_osds != in_osds:
         log.info("Not all osd's are in")
         return 1
-    m = re.search(r"(\d+) mons at", lines)
+    m = re.search(r"(\d+) daemons, quorum", lines)
     all_mons = int(m.group(1))
     if all_mons != num_mons:
         log.info("Not all monitors are in cluster")
