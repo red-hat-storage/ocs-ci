@@ -146,7 +146,7 @@ def run(**kw):
             mds_host = node.shortname + ' monitor_interface=' + node.eth_interface
             mds_hosts.append(mds_host)
         elif node.role == 'rgw':
-            rgw_host = node.shortname + ' monitor_interface=' + node.eth_interface
+            rgw_host = node.shortname + ' radosgw_interface=' + node.eth_interface
             rgw_hosts.append(rgw_host)
 
     hosts_file = ''
