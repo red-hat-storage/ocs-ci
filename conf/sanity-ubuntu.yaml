@@ -29,8 +29,6 @@ globals:
        node9:
          role: mon
        node10:
-         image-name: rhel-ceph-7.3
-         cloud-data: conf/cloud-data.yaml
          role: installer
        node11:
          role: mgr
