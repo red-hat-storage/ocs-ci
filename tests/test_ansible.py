@@ -104,8 +104,12 @@ def run(**kw):
         sleep(15)
 #        if ceph.pkg_type == 'rpm':
 #            ceph.exec_command(cmd='sudo yum update metadata')
-    ceph_installer.exec_command(
-        sudo=True, cmd='cd cd; yum install -y ceph-ansible')
+    if ceph_installer.pkg_type == 'deb':
+        ceph_installer.exec_command(
+            sudo=True, cmd='apt-get install -y ceph-ansible')
+    else:
+        ceph_installer.exec_command(
+            sudo=True, cmd='yum install -y ceph-ansible')
     sleep(4)
     ceph_installer.exec_command(
         cmd='cp -R /usr/share/ceph-ansible ~/')
