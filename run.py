@@ -119,12 +119,17 @@ def run(args):
         if base_url is None:
             # use latest as default when nothing is specified in cli
             base_url = 'http://download.eng.bos.redhat.com/composes/auto/ceph-2-rhel-7/latest-RHCEPH-2-RHEL-7/'
+        if ubuntu_repo is None:
+            log.info("Using latest ubuntu repo since no default value provided")
+            ubuntu_repo = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/2/latest-Ceph-2-Ubuntu/'
     elif rhbuild.startswith('3'):
         if base_url is None:
             # default to latest RHCeph build 3.0
             base_url = 'http://download.eng.bos.redhat.com/composes/auto/ceph-3.0-rhel-7/latest-RHCEPH-3-RHEL-7/'
             # we dont need installer repo
             installer_url = None
+        if ubuntu_repo is None:
+            ubuntu_repo = 'http://download.engineering.redhat.com/rcm-guest/ceph-drops/3.0/latest-RHCEPH-3.0-Ubuntu'
     installer_url = args.get('--rhs-con-repo', None)
     ubuntu_repo = None
     if rhbuild.startswith('2'):
@@ -155,9 +160,6 @@ def run(args):
             installer_url = compose_url
             log.info("using console repo" + installer_url)
 
-    if ubuntu_repo is None:
-        log.info("Using latest ubuntu repo since no default value provided")
-        ubuntu_repo = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/2/latest-Ceph-2-Ubuntu/'
     use_cdn = args.get('--use-cdn', False)
     g_yaml = os.path.abspath(glb_file)
     suites = os.path.abspath(suite_file)
