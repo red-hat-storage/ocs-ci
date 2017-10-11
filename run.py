@@ -45,6 +45,7 @@ Options:
   --rhs-ceph-repo <repo>            location of rhs-ceph repo
                                     Top level location of compose
   --add-repo <repo>                 Any additional repo's need to be enabled
+  --ubuntu-repo <repo>              http location of downstream ubuntu repo
   --kernel-repo <repo>              Zstream Kernel Repo location
   --cleanup <name>                  cleanup nodes on OSP with names that start
                                     with 'name' , returns after node cleanup
@@ -113,6 +114,7 @@ def run(args):
     store = args.get('--store', False)
     reuse = args.get('--reuse', None)
     base_url = args.get('--rhs-ceph-repo', None)
+    ubuntu_repo = args.get('--ubuntu-repo', None)
     kernel_repo = args.get('--kernel-repo', None)
     rhbuild = args.get('--rhbuild')
     if rhbuild.startswith('2'):
