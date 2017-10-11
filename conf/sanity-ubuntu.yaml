@@ -32,7 +32,7 @@ globals:
          image-name: rhel-ceph-7.3
          cloud-data: conf/cloud-data.yaml
          role: installer
-       node10:
+       node11:
          role: mgr
     cloud-data: conf/cloud-data-xenial.yaml
     ceph-conf-overrides:
