@@ -120,7 +120,7 @@ def run(args):
     if rhbuild.startswith('2'):
         if base_url is None:
             # use latest as default when nothing is specified in cli
-            base_url = 'http://download.eng.bos.redhat.com/composes/auto/ceph-2-rhel-7/latest-RHCEPH-2-RHEL-7/'
+            base_url = 'http://download.engineering.redhat.com/rcm-guest/ceph-drops/2/latest-RHCEPH-2.4-Ubuntu/'
         if ubuntu_repo is None:
             log.info("Using latest ubuntu repo since no default value provided")
             ubuntu_repo = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/2/latest-Ceph-2-Ubuntu/'
@@ -131,9 +131,8 @@ def run(args):
             # we dont need installer repo
             installer_url = None
         if ubuntu_repo is None:
-            ubuntu_repo = 'http://download.engineering.redhat.com/rcm-guest/ceph-drops/3.0/latest-RHCEPH-3.0-Ubuntu'
+            ubuntu_repo = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/3.0/latest-RHCEPH-3.0-Ubuntu/'
     installer_url = args.get('--rhs-con-repo', None)
-    ubuntu_repo = None
     if rhbuild.startswith('2'):
         if installer_url is None:
             # default installer repo points to latest
