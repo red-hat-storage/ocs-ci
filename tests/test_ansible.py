@@ -191,7 +191,10 @@ def run(**kw):
     gvars_file.write(gvar)
     gvars_file.flush()
 
-    out, rc = ceph_installer.exec_command(cmd='rpm -qa | grep ceph')
+    if ceph_installer.pkg_type == 'rpm':
+        out, rc = ceph_installer.exec_command(cmd='rpm -qa | grep ceph')
+    else:
+        out, rc = ceph_installer.exec_command(cmd='apt-cache search ceph')
     log.info("Ceph versions " + out.read())
     out, rc = ceph_installer.exec_command(
         cmd='cd ceph-ansible ; ansible-playbook -vv -i hosts site.yml', long_running=True)
