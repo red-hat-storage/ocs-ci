@@ -19,9 +19,10 @@ tests:
             public_network: 172.16.0.0/12
             ceph_conf_overrides:
                 global:
-                  osd_pool_default_pg_num: 128
-                  osd_default_pool_size: 3
-                  osd_pool_default_pgp_num: 128
+                  osd_pool_default_pg_num: 64
+                  osd_default_pool_size: 2
+                  osd_pool_default_pgp_num: 64
+                  mon_max_pg_per_osd: 1024
       desc: test cluster setup using ceph-ansible
       destroy-cluster: false
       abort-on-fail: true
