@@ -229,6 +229,9 @@ def run(**kw):
     if "HEALTH_ERR" in lines:
         log.info("HEALTH in ERROR STATE")
         return 1
+    # create rbd pool used by tests/workunits
+    ceph_mon.exec_command(cmd='sudo ceph osd pool create rbd 64 64')
+    ceph_mon.exec_command(cmd='sudo ceph osd pool application enable rbd rbd --yes-i-really-mean-it')
     for node in ceph_nodes:
         if node.role == 'client':
             if node.pkg_type == 'rpm':
