@@ -84,6 +84,9 @@ def create_nodes(global_yaml, osp_cred):
                         ip_address=node.ip_address,
                         hostname=node.hostname,
                         ceph_vmnode=node)
+        logger.info("Waiting for Floating IPs to be available")
+        logger.info("Sleeping 300 Seconds")
+        time.sleep(300)
         ceph.connect()
         ceph_nodes.append(ceph)
     return ceph_nodes
