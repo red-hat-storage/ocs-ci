@@ -2,7 +2,7 @@
 
 groups:
     - cephuser
-    
+
 users:
   - name: cephuser
     primary-group: cephuser
@@ -11,12 +11,14 @@ users:
 
 chpasswd:
   list: |
-    cephuser: pass123
+    root:passwd
+    cephuser: cephuser
   expire: False
+
 
 runcmd:
   - touch /ceph-qa-ready
   - sudo sed -i -e 's/^Defaults\s\+requiretty/# \0/' /etc/sudoers
 
-        
+
 final_message: "Ready for ceph qa testing"
