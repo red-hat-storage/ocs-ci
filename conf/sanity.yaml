@@ -3,7 +3,7 @@ globals:
        name: ceph
        create: true
        image-name: rhel-7.4-server-x86_64-released
-       vm-size: m1.medium
+       vm-size: m1.small
        node1:
          role: mon
        node2:
