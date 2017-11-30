@@ -186,7 +186,9 @@ def run(args):
     if store:
         (_, _, node_num, _, _) = ceph_nodes[0].hostname.split('-')
         ceph_nodes_file = 'rerun/ceph-nodes-' + node_num
-        cn = open(ceph_nodes_file, 'wb')
+        if not os.path.exists(os.path.dirname(ceph_nodes_file)):
+            os.makedirs(os.path.dirname(ceph_nodes_file))
+        cn = open(ceph_nodes_file, 'w+b')
         pickle.dump(ceph_nodes, cn)
         cn.close()
         log.info("ceph_nodes_file %s", ceph_nodes_file)
