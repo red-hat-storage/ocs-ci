@@ -241,6 +241,7 @@ def run(args):
             jenkins_rc = 1
             if test.get('abort-on-fail', False):
                 log.info("Aborting on test failure")
+                tcs.append(tc)
                 break
         if test.get('destroy-cluster') is True:
             (nodename, uid, node_num, _, _) = ceph_nodes[0].hostname.split('-')
