@@ -1,3 +1,4 @@
+import datetime
 import yaml
 import logging
 import json
@@ -71,7 +72,7 @@ def run(**kw):
 
     for ceph in ceph_nodes:
         keys_file = ceph.write_file(
-            file_name='.ssh/authorized_keys', file_mode='w')
+            file_name='.ssh/authorized_keys', file_mode='a')
         hosts_file = ceph.write_file(
             sudo=True, file_name='/etc/hosts', file_mode='a')
         ceph.exec_command(
@@ -144,7 +145,13 @@ def run(**kw):
                 dev = '/dev/vd' + chr(devchar)
                 devs.append(dev)
                 devchar += 1
-                num_osds += 1
+                #num_osds += 1
+            reserved_devs = []
+            if config['ansi_config'].get('osd_scenario') == 'non-collocated':
+                reserved_devs = \
+                    [raw_journal_device for raw_journal_device in set(config['ansi_config'].get('dedicated_devices'))]
+            devs = [dev for dev in devs if dev not in reserved_devs]
+            num_osds = num_osds + len(devs)
             osd_host = node.shortname + mon_interface + \
                 " devices='" + json.dumps(devs) + "'"
             osd_hosts.append(osd_host)
@@ -207,10 +214,17 @@ def run(**kw):
             ceph_mon = node
             break
     # check if all osd's are up and in
-    sleep(4)
-    out, err = ceph_mon.exec_command(cmd='sudo ceph -s')
-    lines = out.read()
-    log.info(lines)
+    timeout = datetime.timedelta(seconds=300)
+    if config.get('timeout'):
+        timeout = datetime.timedelta(seconds=config.get('timeout'))
+    starttime = datetime.datetime.now()
+    while datetime.datetime.now() - starttime <= timeout :
+        out, err = ceph_mon.exec_command(cmd='sudo ceph -s')
+        lines = out.read()
+        log.info(lines)
+        if 'peering' not in lines and 'activating' not in lines and 'creating' not in lines:
+            break
+        sleep(1)
     m = re.search(r"(\d+)\s+osds:\s+(\d+)\s+up,\s+(\d+)\s+in", lines)
     all_osds = int(m.group(1))
     up_osds = int(m.group(2))
