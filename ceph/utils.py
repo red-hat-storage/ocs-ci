@@ -1,3 +1,4 @@
+import re
 import yaml
 import random
 import logging
@@ -164,6 +165,14 @@ def generate_repo_file(base_url, repos):
                 gpgcheck + enabled
     return repo_file
 
+def get_iso_file_url(base_url):
+    iso_file_path = base_url + "compose/Tools/x86_64/iso/"
+    iso_dir_html = requests.get(iso_file_path, timeout=10).content
+    match = re.search('<a href="(.*?)">(.*?)-x86_64-dvd.iso</a>', iso_dir_html)
+    iso_file_name = match.group(1)
+    log.info('Using {}'.format(iso_file_name))
+    iso_file = iso_file_path + iso_file_name
+    return iso_file
 
 def create_ceph_conf(fsid, mon_hosts, pg_num='128', pgp_num='128', size='2',
                      auth='cephx', pnetwork='172.16.0.0/12',

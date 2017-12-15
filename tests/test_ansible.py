@@ -4,7 +4,7 @@ import logging
 import json
 import re
 
-from ceph.utils import setup_deb_repos
+from ceph.utils import setup_deb_repos, get_iso_file_url
 from ceph.utils import setup_repos, create_ceph_conf
 from time import sleep
 
@@ -29,6 +29,7 @@ def run(**kw):
         return 0
     for node in ceph_nodes:
         if node.role == 'installer':
+            log.info("Setting installer node")
             ceph_installer = node
             break
     ceph1 = ceph_nodes[0]
@@ -89,18 +90,25 @@ def run(**kw):
         ceph.exec_command(cmd='chmod 400 ~/.ssh/config')
 
     for ceph in ceph_nodes:
-        if config.get('use_cdn') is False:
-            if ceph.pkg_type == 'deb':
-                setup_deb_repos(ceph, ubuntu_repo)
-                sleep(15)
-                # install python2 on xenial
-                ceph.exec_command(cmd='sudo apt-get install -y python')
-                ceph.exec_command(cmd='sudo apt-get install -y python-pip')
-                ceph.exec_command(cmd='sudo apt-get install -y ntp')
-                ceph.exec_command(cmd='sudo apt-get install -y chrony')
-                ceph.exec_command(cmd='sudo pip install nose')
-            else:
-                setup_repos(ceph, base_url, installer_url)
+        if config.get('ceph_repository_type') != 'cdn':
+            if config['ansi_config'].get('ceph_repository_type') != 'iso' or \
+                    config['ansi_config'].get('ceph_repository_type') == 'iso' and \
+                    (ceph.role == 'installer' or \
+                     ceph.role == 'client'): #TODO remove after client node support is added to ceph-ansible
+                if ceph.pkg_type == 'deb':
+                    setup_deb_repos(ceph, ubuntu_repo)
+                    sleep(15)
+                    # install python2 on xenial
+                    ceph.exec_command(cmd='sudo apt-get install -y python')
+                    ceph.exec_command(cmd='sudo apt-get install -y python-pip')
+                    ceph.exec_command(cmd='sudo apt-get install -y ntp')
+                    ceph.exec_command(cmd='sudo apt-get install -y chrony')
+                    ceph.exec_command(cmd='sudo pip install nose')
+                else:
+                    setup_repos(ceph, base_url, installer_url)
+            if config['ansi_config'].get('ceph_repository_type') == 'iso' and ceph.role == 'installer':
+                iso_file_url = get_iso_file_url(base_url)
+                ceph.exec_command(cmd='mkdir -p ~/ceph-ansible/iso/ && wget -O ~/ceph-ansible/iso/ceph.iso ' + iso_file_url)
         else:
             log.info("Using the cdn repo for the test")
         log.info("Updating metadata")
@@ -116,7 +124,6 @@ def run(**kw):
     sleep(4)
     ceph_installer.exec_command(
         cmd='cp -R /usr/share/ceph-ansible ~/')
-
     sleep(2)
     mon_hosts = []
     osd_hosts = []
