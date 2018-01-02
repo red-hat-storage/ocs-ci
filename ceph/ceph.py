@@ -165,10 +165,14 @@ class CephNode(object):
         check_ec: False will run the command and not wait for exit code
 
         """
+        if not (self.ssh.get_transport().is_active() and self.rssh.get_transport().is_active()):
+            self.reconnect()
+
         if kw.get('sudo'):
             ssh = self.rssh
         else:
             ssh = self.ssh
+
         if kw.get('timeout'):
             timeout = kw['timeout']
         else:
