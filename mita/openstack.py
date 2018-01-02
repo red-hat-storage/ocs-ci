@@ -1,3 +1,4 @@
+import datetime
 import os
 import logging
 import socket
@@ -198,24 +199,25 @@ class CephVMNode(object):
             logger.info("Destroying volume %s", name)
             driver.destroy_volume(volume)
 
-    def attach_floating_ip(self):
+    def attach_floating_ip(self, timeout=120):
         driver = self.driver
         pool = driver.ex_list_floating_ip_pools()[0]
         self.floating_ip = pool.create_floating_ip()
         self.ip_address = self.floating_ip.ip_address
         count = 0
         host = None
+        timeout = datetime.timedelta(seconds=timeout)
+        starttime = datetime.datetime.now()
+        logger.info("Trying gethostbyaddr with {timeout}s timeout".format(timeout=timeout))
         while True:
             try:
-                count += 1
                 host, _, _ = socket.gethostbyaddr(self.ip_address)
             except:
-                if count > 3:
-                    logger.info("Failed to get hostbyaddr in 3 retries")
+                if datetime.datetime.now() - starttime > timeout:
+                    logger.info("Failed to get hostbyaddr in {timeout}s".format(timeout=timeout))
                     raise InvalidHostName("Invalid hostname for " + self.ip_address)
                 else:
-                    logger.info("Retrying gethostbyaddr in 10 seconds")
-                    sleep(10)
+                    sleep(1)
             if host is not None:
                 break
         self.hostname = host
