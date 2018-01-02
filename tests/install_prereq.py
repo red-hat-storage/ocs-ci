@@ -39,3 +39,5 @@ def install_prereq(ceph):
             ceph.exec_command(cmd='sudo yum clean metadata')
             # finally install python2-pip directly using rpm since its available only in epel
             ceph.exec_command(cmd='sudo yum install -y http://dl.fedoraproject.org/pub/fedora-secondary/releases/26/Everything/i386/os/Packages/p/python2-pip-9.0.1-9.fc26.noarch.rpm')
+            #add GPG key
+            ceph.exec_command(cmd='curl --insecure -O -L https://prodsec.redhat.com/keys/00da75f2.txt && sudo rpm --import 00da75f2.txt')
