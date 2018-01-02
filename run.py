@@ -248,9 +248,7 @@ def run(args):
                 tcs.append(tc)
                 break
         if test.get('destroy-cluster') is True:
-            (nodename, uid, node_num, _, _) = ceph_nodes[0].hostname.split('-')
-            cleanup_name = nodename + "-" + uid
-            cleanup_ceph_nodes(osp_cred, name=cleanup_name)
+            cleanup_ceph_nodes(osp_cred)
         if test.get('recreate-cluster') is True:
             ceph_nodes = create_nodes(glb_file, osp_cred)
         tcs.append(tc)
