@@ -71,7 +71,7 @@ def run(**kw):
 
     for ceph in ceph_nodes:
         keys_file = ceph.write_file(
-            file_name='.ssh/authorized_keys', file_mode='w')
+            file_name='.ssh/authorized_keys', file_mode='a')
         hosts_file = ceph.write_file(
             sudo=True, file_name='/etc/hosts', file_mode='a')
         ceph.exec_command(
