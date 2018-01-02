@@ -218,7 +218,7 @@ class CephNode(object):
             else:
                 logger.info("Error during cmd %s, timeout %d", exit_status, timeout)
                 raise CommandFailed(kw['cmd'] + " Error:  " \
-                                    + self.ip_address + stderr.read())
+                                    + str(stderr.read()) + ' ' + str(self.ip_address))
             return stdout, stderr
         else:
             # logger.info(stdout.readlines())
