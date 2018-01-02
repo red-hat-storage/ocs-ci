@@ -112,6 +112,8 @@ def print_results(tc):
 
 
 def run(args):
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     glb_file = args['--global-conf']
     osp_cred = args['--osp-cred']
     suite_file = args['--suite']
