@@ -33,7 +33,7 @@ def run(**kw):
     else:
         repo = 'git://git.ceph.com/ceph.git'
     if config.get('downstream'):
-        repo = 'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/workunits.git'
+        repo = 'http://gitlab.cee.redhat.com/ceph/workunits.git'
 
     if config.get('branch'):
         branch = config.get('branch')
