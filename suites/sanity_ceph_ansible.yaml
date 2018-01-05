@@ -297,6 +297,29 @@ tests:
       abort-on-fail: true
 
    - test:
+      name: librbd workunit
+      module: test_workunit.py
+      config:
+            test_name: rbd/test_librbd_python.sh
+            branch: luminous
+            role: mon
+      desc: Test librbd unit tests
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+            cmd: ceph -s
+            sudo: True
+      desc: Check for ceph health debug info
+   - test:
+      name: rados_bench_test
+      module: radosbench.py
+      config:
+            pg_num: '128'
+            pool_type: 'normal'
+      desc: run rados bench for 360 - normal profile
+
+   - test:
         name: ceph ansible purge
         module: exec_installer.py
         config:
