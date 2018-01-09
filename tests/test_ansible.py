@@ -93,8 +93,7 @@ def run(**kw):
         if config.get('ceph_repository_type') != 'cdn':
             if config['ansi_config'].get('ceph_repository_type') != 'iso' or \
                     config['ansi_config'].get('ceph_repository_type') == 'iso' and \
-                    (ceph.role == 'installer' or \
-                     ceph.role == 'client'): #TODO remove after client node support is added to ceph-ansible
+                    (ceph.role == 'installer'):
                 if ceph.pkg_type == 'deb':
                     setup_deb_repos(ceph, ubuntu_repo)
                     sleep(15)
@@ -113,8 +112,6 @@ def run(**kw):
             log.info("Using the cdn repo for the test")
         log.info("Updating metadata")
         sleep(15)
-#        if ceph.pkg_type == 'rpm':
-#            ceph.exec_command(cmd='sudo yum update metadata')
     if ceph_installer.pkg_type == 'deb':
         ceph_installer.exec_command(
             sudo=True, cmd='apt-get install -y ceph-ansible')
@@ -130,6 +127,7 @@ def run(**kw):
     rgw_hosts = []
     mds_hosts = []
     mgr_hosts = []
+    client_hosts = []
     num_osds = 0
     num_mons = 0
     num_mgrs = 0
@@ -168,6 +166,9 @@ def run(**kw):
         elif node.role == 'rgw':
             rgw_host = node.shortname + ' radosgw_interface=' + node.eth_interface
             rgw_hosts.append(rgw_host)
+        elif node.role == 'client':
+            client_host = node.shortname + ' client_interface=' + node.eth_interface
+            client_hosts.append(client_host)
 
     hosts_file = ''
     for hosts in mon_hosts:
@@ -189,6 +190,10 @@ def run(**kw):
     for hosts in rgw_hosts:
         rgw = '[rgws]\n' + '\n'.join(rgw_hosts)
         hosts_file += rgw + '\n'
+        break
+    for hosts in client_hosts:
+        client = '[clients]\n' + '\n'.join(client_hosts)
+        hosts_file += client + '\n'
         break
 
     host_file = ceph_installer.write_file(
@@ -253,40 +258,4 @@ def run(**kw):
     # create rbd pool used by tests/workunits
     ceph_mon.exec_command(cmd='sudo ceph osd pool create rbd 64 64')
     ceph_mon.exec_command(cmd='sudo ceph osd pool application enable rbd rbd --yes-i-really-mean-it')
-    for node in ceph_nodes:
-        if node.role == 'client':
-            if node.pkg_type == 'rpm':
-                node.exec_command(cmd='sudo yum install -y ceph-common')
-            else:
-                node.exec_command(cmd='sudo apt-get install -y ceph-common')
-            out, err = ceph_mon.exec_command(
-                sudo=True, cmd='cat /etc/ceph/ceph.conf')
-            ceph_conf = out.read()
-            out, err = ceph_mon.exec_command(
-                sudo=True, cmd='cat /etc/ceph/ceph.client.admin.keyring')
-            ceph_keyring = out.read()
-            conf_file = node.write_file(
-                sudo=True, file_name='/etc/ceph/ceph.conf', file_mode='w')
-            key_file = node.write_file(
-                sudo=True,
-                file_name='/etc/ceph/ceph.keyring',
-                file_mode='w')
-            conf_file.write(ceph_conf)
-            key_file.write(ceph_keyring)
-            conf_file.flush()
-            key_file.flush()
-            node.exec_command(cmd='sudo chown ceph:ceph /etc/ceph/ceph*')
-            node.exec_command(cmd='sudo chmod u+rw /etc/ceph/ceph.keyring')
-            node.exec_command(cmd='sudo chmod ugo+rw /etc/ceph/ceph.conf')
-        elif node.role == 'rgw':
-            out, err = ceph_mon.exec_command(
-                sudo=True, cmd='cat /etc/ceph/ceph.client.admin.keyring')
-            ceph_keyring = out.read()
-            key_file = node.write_file(
-                sudo=True,
-                file_name='/etc/ceph/ceph.keyring',
-                file_mode='w')
-            key_file.write(ceph_keyring)
-            key_file.flush()
-            node.exec_command(cmd='sudo chmod u+rw /etc/ceph/ceph.keyring')
     return rc

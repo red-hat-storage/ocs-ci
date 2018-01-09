@@ -19,6 +19,7 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            copy_admin_key: true
             ceph_conf_overrides:
                 global:
                   osd_pool_default_pg_num: 64
@@ -82,6 +83,7 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            copy_admin_key: true
             ceph_conf_overrides:
                 global:
                   osd_pool_default_pg_num: 64
@@ -149,6 +151,7 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            copy_admin_key: true
             ceph_conf_overrides:
                 global:
                   osd_pool_default_pg_num: 64
@@ -216,6 +219,7 @@ tests:
               ceph_stable: True
               ceph_stable_rh_storage: True
               public_network: 172.16.0.0/12
+              copy_admin_key: true
               ceph_conf_overrides:
                   global:
                     osd_pool_default_pg_num: 64
@@ -280,6 +284,7 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            copy_admin_key: true
             ceph_conf_overrides:
                 global:
                   osd_pool_default_pg_num: 64
