@@ -3,6 +3,7 @@ import logging
 import time
 from random import randint
 from ceph.parallel import parallel
+from ceph.utils import update_ca_cert
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +28,8 @@ def install_prereq(ceph):
         log.info("Waiting for cloud config to complete on " + ceph.hostname)
         ceph.exec_command(cmd='while [ ! -f /ceph-qa-ready ]; do sleep 15; done')
         log.info("cloud config to completed on " + ceph.hostname)
+        update_ca_cert(ceph, 'https://password.corp.redhat.com/RH-IT-Root-CA.crt')
+        update_ca_cert(ceph, 'https://password.corp.redhat.com/legacy.crt')
         if ceph.pkg_type == 'deb':
             ceph.exec_command(cmd='sudo apt-get install -y ' + deb_all_pkgs, long_running=True)
         else:

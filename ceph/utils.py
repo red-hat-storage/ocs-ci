@@ -244,3 +244,13 @@ def set_cdn_repo(node, repos):
             node.exec_command(
                 sudo=True, cmd='subscription-manager repos --enable={r}'.format(r=repo))
         node.exec_command(sudo=True, cmd='subscription-manager refresh')
+
+def update_ca_cert(node, cert_url, timeout=120):
+    if node.pkg_type == 'deb':
+        cmd = 'cd /usr/local/share/ca-certificates/ && {{ sudo curl -O {url} ; cd -; }}'.format(url=cert_url)
+        node.exec_command(cmd=cmd, timeout=timeout)
+        node.exec_command(cmd='sudo update-ca-certificates', timeout=timeout)
+    else:
+        cmd = 'cd /etc/pki/ca-trust/source/anchors && {{ sudo curl -O {url} ; cd -; }}'.format(url=cert_url)
+        node.exec_command(cmd=cmd, timeout=timeout)
+        node.exec_command(cmd='sudo update-ca-trust extract', timeout=timeout)
