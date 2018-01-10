@@ -26,6 +26,8 @@ tests:
                   osd_default_pool_size: 2
                   osd_pool_default_pgp_num: 64
                   mon_max_pg_per_osd: 1024
+                mon:
+                  mon_allow_pool_delete: true
       desc: test cluster setup using ceph-ansible
       destroy-cluster: False
       abort-on-fail: true
@@ -38,6 +40,13 @@ tests:
             branch: luminous
             role: mon
       desc: Test librbd unit tests
+   - test:
+      name: rbd cli automation
+      module: rbd_system.py
+      config:
+            test_name: rbd_cli_automation.py
+            branch: master
+      desc: Test rbd cli automation tests
    - test:
       name: check-ceph-health
       module: exec.py
@@ -90,6 +99,8 @@ tests:
                   osd_default_pool_size: 2
                   osd_pool_default_pgp_num: 64
                   mon_max_pg_per_osd: 1024
+                mon:
+                  mon_allow_pool_delete: true
       desc: test cluster with dmcrypt setup using ceph-ansible
       destroy-cluster: False
       abort-on-fail: true
@@ -102,6 +113,13 @@ tests:
             branch: luminous
             role: mon
       desc: Test librbd unit tests
+   - test:
+      name: rbd cli automation
+      module: rbd_system.py
+      config:
+            test_name: rbd_cli_automation.py
+            branch: master
+      desc: Test rbd cli automation tests
    - test:
       name: check-ceph-health
       module: exec.py
@@ -131,7 +149,6 @@ tests:
        module: install_prereq.py
        abort-on-fail: true
 
-
    - test:
       name: ceph ansible raw multi journal
       module: test_ansible.py
@@ -158,6 +175,8 @@ tests:
                   osd_default_pool_size: 2
                   osd_pool_default_pgp_num: 64
                   mon_max_pg_per_osd: 1024
+                mon:
+                  mon_allow_pool_delete: true
       desc: test cluster with raw multi journal setup using ceph-ansible
       destroy-cluster: False
       abort-on-fail: true
@@ -170,6 +189,13 @@ tests:
             branch: luminous
             role: mon
       desc: Test librbd unit tests
+   - test:
+      name: rbd cli automation
+      module: rbd_system.py
+      config:
+            test_name: rbd_cli_automation.py
+            branch: master
+      desc: Test rbd cli automation tests
    - test:
       name: check-ceph-health
       module: exec.py
@@ -226,6 +252,8 @@ tests:
                     osd_default_pool_size: 2
                     osd_pool_default_pgp_num: 64
                     mon_max_pg_per_osd: 1024
+                  mon:
+                    mon_allow_pool_delete: true
         desc: test cluster with dmcrypt dedicated journal setup using ceph-ansible
         destroy-cluster: False
         abort-on-fail: true
@@ -238,6 +266,13 @@ tests:
             branch: luminous
             role: mon
       desc: Test librbd unit tests
+   - test:
+      name: rbd cli automation
+      module: rbd_system.py
+      config:
+            test_name: rbd_cli_automation.py
+            branch: master
+      desc: Test rbd cli automation tests
    - test:
       name: check-ceph-health
       module: exec.py
@@ -291,7 +326,8 @@ tests:
                   osd_default_pool_size: 2
                   osd_pool_default_pgp_num: 64
                   mon_max_pg_per_osd: 1024
-
+                mon:
+                  mon_allow_pool_delete: true
       desc: test cluster setup using ceph-ansible
       destroy-cluster: False
       abort-on-fail: true
@@ -304,6 +340,13 @@ tests:
             branch: luminous
             role: mon
       desc: Test librbd unit tests
+   - test:
+      name: rbd cli automation
+      module: rbd_system.py
+      config:
+            test_name: rbd_cli_automation.py
+            branch: master
+      desc: Test rbd cli automation tests
    - test:
       name: check-ceph-health
       module: exec.py
