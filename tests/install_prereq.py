@@ -1,7 +1,13 @@
 
 import logging
 import time
+import traceback
 from random import randint
+
+import datetime
+
+import itertools
+
 from ceph.parallel import parallel
 
 log = logging.getLogger(__name__)
@@ -23,16 +29,40 @@ def run(**kw):
             time.sleep(20)
     return 0
 
-def install_prereq(ceph):
+
+def install_prereq(ceph, timeout=1800):
         log.info("Waiting for cloud config to complete on " + ceph.hostname)
         ceph.exec_command(cmd='while [ ! -f /ceph-qa-ready ]; do sleep 15; done')
         log.info("cloud config to completed on " + ceph.hostname)
         if ceph.pkg_type == 'deb':
             ceph.exec_command(cmd='sudo apt-get install -y ' + deb_all_pkgs, long_running=True)
         else:
-            time.sleep(randint(1,5))
-            ceph.exec_command(
-                cmd='sudo subscription-manager --force register  --serverurl=subscription.rhsm.stage.redhat.com:443/subscription  --baseurl=https://cdn.stage.redhat.com --username=qa@redhat.com --password=redhatqa --auto-attach && sudo subscription-manager attach --pool=8a85f9823e3d5e43013e3ddd4e9509c4', timeout=720)
+            timeout = datetime.timedelta(seconds=timeout)
+            starttime = datetime.datetime.now()
+            log.info(
+                "Subscribing {ip} host with {timeout} timeout".format(ip=ceph.ip_address, timeout=timeout))
+            while True:
+                try:
+                    ceph.exec_command(
+                        cmd='sudo subscription-manager --force register  --serverurl=subscription.rhsm.stage.redhat.com:443/subscription  --baseurl=https://cdn.stage.redhat.com --username=qa@redhat.com --password=redhatqa --auto-attach && sudo subscription-manager attach --pool=8a85f9823e3d5e43013e3ddd4e9509c4',
+                        timeout=720)
+                    break
+                except:
+                    if datetime.datetime.now() - starttime > timeout:
+                        try:
+                            out, err = ceph.exec_command(
+                                cmd='cat /var/log/rhsm/rhsm.log', timeout=120)
+                            rhsm_log = out.read()
+                        except:
+                            rhsm_log = 'No Log Available'
+
+                        raise RuntimeError(
+                            "Failed to subscribe {ip} with {timeout} timeout:\n {stack_trace}\n\n rhsm.log:\n{log}".format(
+                                ip=ceph.ip_address,
+                                timeout=timeout, stack_trace=traceback.format_exc(), log=rhsm_log))
+                    else:
+                        wait = iter(x for x in itertools.count(1, 10))
+                        time.sleep(next(wait))
             ceph.exec_command(cmd='sudo subscription-manager repos --disable=*', long_running=True)
             ceph.exec_command(cmd='sudo subscription-manager repos --enable=rhel-7-server-rpms  --enable=rhel-7-server-optional-rpms --enable=rhel-7-server-extras-rpms', long_running=True)
             ceph.exec_command(cmd='sudo yum install -y ' + rpm_all_pkgs, long_running=True)
