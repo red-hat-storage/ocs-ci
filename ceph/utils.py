@@ -1,3 +1,6 @@
+import datetime
+import traceback
+
 import re
 import yaml
 import random
@@ -13,6 +16,7 @@ from libcloud.compute.providers import get_driver
 from parallel import parallel
 
 log = logging.getLogger(__name__)
+
 
 def create_ceph_nodes(gyaml, osp_cred):
     var = yaml.safe_load(open(gyaml))
@@ -92,20 +96,34 @@ def get_openstack_driver(yaml):
     return driver
 
 
-def cleanup_ceph_nodes(gyaml, name=None):
+def cleanup_ceph_nodes(gyaml, name=None, timeout=300):
     user = os.getlogin()
     if name is None:
         name = 'ceph-' + user
     var = yaml.safe_load(open(gyaml))
     driver = get_openstack_driver(var)
+    timeout = datetime.timedelta(seconds=timeout)
     with parallel() as p:
         for node in driver.list_nodes():
             if node.name.startswith(name):
                 for ip in node.public_ips:
                     log.info("removing ip %s from node %s", ip, node.name)
                     driver.ex_detach_floating_ip_from_node(node, ip)
-                log.info("Destroying node %s", node.name)
-                p.spawn(node.destroy)
+                starttime = datetime.datetime.now()
+                log.info(
+                    "Destroying node {node_name} with {timeout} timeout".format(node_name=node.name, timeout=timeout))
+                while True:
+                    try:
+                        p.spawn(node.destroy)
+                        break
+                    except AttributeError:
+                        if datetime.datetime.now() - starttime > timeout:
+                            raise RuntimeError(
+                                "Failed to destroy node {node_name} with {timeout} timeout:\n{stack_trace}".format(
+                                    node_name=node.name,
+                                    timeout=timeout, stack_trace=traceback.format_exc()))
+                        else:
+                            sleep(1)
                 sleep(5)
     with parallel() as p:
         for fips in driver.ex_list_floating_ips():
