@@ -2,7 +2,6 @@ import datetime
 import logging
 import random
 import traceback
-
 import os
 import re
 import requests
@@ -11,6 +10,7 @@ from gevent import sleep
 from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
 
+from ceph import RolesContainer
 from mita.openstack import CephVMNode
 from parallel import parallel
 
@@ -49,7 +49,7 @@ def create_ceph_nodes(gyaml, osp_cred):
                 if not ceph_cluster.get(node):
                     break
                 node_dict = ceph_cluster.get(node)
-                params['role'] = node_dict.get('role')
+                params['role'] = RolesContainer(node_dict.get('role'))
                 role = params['role']
                 if params.get('run'):
                     log.info("Using existing run name")
@@ -57,7 +57,7 @@ def create_ceph_nodes(gyaml, osp_cred):
                     user = os.getlogin()
                     params['run'] = run_name
                 params['node-name'] = 'ceph-' + user + \
-                    '-' + params['run'] + node + '-' + role
+                    '-' + params['run'] + node + '-' + '+'.join(role)
                 if role == 'osd':
                     params['no-of-volumes'] = node_dict.get('no-of-volumes')
                     params['size-of-disks'] = node_dict.get('disk-size')
@@ -65,7 +65,6 @@ def create_ceph_nodes(gyaml, osp_cred):
                     params['image-name'] = node_dict.get('image-name')
                 if node_dict.get('cloud-data'):
                     params['cloud-data'] = node_dict.get('cloud-data')
-                #ceph_nodes[node] = CephVMNode(**params)
                 del params['run']
                 p.spawn(setup_vm_node, node, ceph_nodes, **params)
     log.info("Done creating nodes")
@@ -167,7 +166,7 @@ def setup_repos(ceph, base_url, installer_url=None):
         inst_file.flush()
 
 
-def check_ceph_healthly(ceph_mon, num_osds, num_mons, timeout=300):
+def check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container = None, timeout=300):
     """
     Function to check ceph is in healthy state
 
@@ -175,6 +174,7 @@ def check_ceph_healthly(ceph_mon, num_osds, num_mons, timeout=300):
        ceph_mon: monitor node
        num_osds: number of osds in cluster
        num_mons: number of mons in cluster
+       mon_container: monitor container name if monitor is placed in the container
        timeout: 300 seconds(default) max time to check
          if cluster is not healthy within timeout period
                 return 1
@@ -187,12 +187,16 @@ def check_ceph_healthly(ceph_mon, num_osds, num_mons, timeout=300):
     starttime = datetime.datetime.now()
     lines = None
     while datetime.datetime.now() - starttime <= timeout:
-        out, err = ceph_mon.exec_command(cmd='sudo ceph -s')
+        if mon_container:
+            out, err = ceph_mon.exec_command(cmd='sudo docker exec {container} ceph -s'.format(container=mon_container))
+        else:
+            out, err = ceph_mon.exec_command(cmd='sudo ceph -s')
         lines = out.read()
         if 'peering' not in lines and 'activating' not in lines and \
            'creating' not in lines:
             break
         sleep(1)
+    log.info(lines)
     match = re.search(r"(\d+)\s+osds:\s+(\d+)\s+up,\s+(\d+)\s+in", lines)
     all_osds = int(match.group(1))
     up_osds = int(match.group(2))

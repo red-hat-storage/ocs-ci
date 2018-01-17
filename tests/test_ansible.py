@@ -2,7 +2,6 @@ import datetime
 import json
 import logging
 from time import sleep
-
 import yaml
 
 from ceph.utils import setup_deb_repos, get_iso_file_url, setup_cdn_repos
@@ -51,7 +50,7 @@ def run(**kw):
         ceph.generate_id_rsa()
         keys = keys + ceph.id_rsa_pub
         hosts = hosts + ceph.ip_address + "\t" + ceph.hostname \
-            + "\t" + ceph.shortname + "\n"
+                + "\t" + ceph.shortname + "\n"
 
     # check to see for any additional repo (test mode)
     if config.get('add-repo'):
@@ -139,7 +138,7 @@ def run(**kw):
             mgr_host = node.shortname + ' monitor_interface=' + node.eth_interface
             mgr_hosts.append(mgr_host)
             num_mgrs += 1
-        elif node.role == 'osd':
+        if node.role == 'osd':
             devices = node.no_of_volumes
             devchar = 98
             devs = []
@@ -147,7 +146,7 @@ def run(**kw):
                 dev = '/dev/vd' + chr(devchar)
                 devs.append(dev)
                 devchar += 1
-                #num_osds += 1
+                # num_osds += 1
             reserved_devs = []
             if config['ansi_config'].get('osd_scenario') == 'non-collocated':
                 reserved_devs = \
@@ -155,15 +154,15 @@ def run(**kw):
             devs = [dev for dev in devs if dev not in reserved_devs]
             num_osds = num_osds + len(devs)
             osd_host = node.shortname + mon_interface + \
-                " devices='" + json.dumps(devs) + "'"
+                       " devices='" + json.dumps(devs) + "'"
             osd_hosts.append(osd_host)
-        elif node.role == 'mds':
+        if node.role == 'mds':
             mds_host = node.shortname + ' monitor_interface=' + node.eth_interface
             mds_hosts.append(mds_host)
-        elif node.role == 'rgw':
+        if node.role == 'rgw':
             rgw_host = node.shortname + ' radosgw_interface=' + node.eth_interface
             rgw_hosts.append(rgw_host)
-        elif node.role == 'client':
+        if node.role == 'client':
             client_host = node.shortname + ' client_interface=' + node.eth_interface
             client_hosts.append(client_host)
 
@@ -193,14 +192,19 @@ def run(**kw):
         hosts_file += client + '\n'
         break
 
+    log.info('Generated hosts file: \n{file}'.format(file=hosts_file))
     host_file = ceph_installer.write_file(
         file_name='ceph-ansible/hosts', file_mode='w')
     host_file.write(hosts_file)
     host_file.flush()
 
     # use the provided sample file as main site.yml
-    ceph_installer.exec_command(
-        cmd='cp -R /usr/share/ceph-ansible/site.yml.sample ~/ceph-ansible/site.yml')
+    if config.get('ansi_config').get('containerized_deployment') is True:
+        ceph_installer.exec_command(
+            cmd='cp -R /usr/share/ceph-ansible/site-docker.yml.sample ~/ceph-ansible/site.yml')
+    else:
+        ceph_installer.exec_command(
+            cmd='cp -R /usr/share/ceph-ansible/site.yml.sample ~/ceph-ansible/site.yml')
 
     gvar = yaml.dump(config.get('ansi_config'), default_flow_style=False)
     log.info("global vars " + gvar)
@@ -226,17 +230,27 @@ def run(**kw):
         if node.role == 'mon':
             ceph_mon = node
             break
+    mon_container = None
+    if config.get('ansi_config').get('containerized_deployment') is True:
+        mon_container = 'ceph-mon-{host}'.format(host=ceph_mon.hostname)
     # check if all osd's are up and in
     timeout = 300
     if config.get('timeout'):
         timeout = datetime.timedelta(seconds=config.get('timeout'))
-    if check_ceph_healthly(ceph_mon, num_osds, num_mons, timeout) != 0:
+    if (check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container, timeout) != 0):
         return 1
     # add test_data for later use by upgrade test etc
     test_data['ceph-ansible'] = {'num-osds': num_osds, 'num-mons': num_mons, 'rhbuild': build}
 
     # create rbd pool used by tests/workunits
     if not build.startswith('2'):
-        ceph_mon.exec_command(cmd='sudo ceph osd pool create rbd 64 64')
-        ceph_mon.exec_command(cmd='sudo ceph osd pool application enable rbd rbd --yes-i-really-mean-it')
+        if config.get('ansi_config').get('containerized_deployment') is True:
+            ceph_mon.exec_command(
+                cmd='sudo docker exec {container} ceph osd pool create rbd 64 64'.format(container=mon_container))
+            ceph_mon.exec_command(
+                cmd='sudo docker exec {container} ceph osd pool application enable rbd rbd --yes-i-really-mean-it'
+                    .format(container=mon_container))
+        else:
+            ceph_mon.exec_command(cmd='sudo ceph osd pool create rbd 64 64')
+            ceph_mon.exec_command(cmd='sudo ceph osd pool application enable rbd rbd --yes-i-really-mean-it')
     return rc
