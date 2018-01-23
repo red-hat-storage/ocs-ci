@@ -123,7 +123,7 @@ import fcntl
 import subprocess
 import time
 try:
-    f = open('/mnt/xyz/to_test_lock_file1', 'w+')
+    f = open('/mnt/cephfs/to_test_lock_file1', 'w+')
     fcntl.lockf(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
     print "locking file:--------------------------------"
     time.sleep(5)
