@@ -1,0 +1,44 @@
+globals:
+    ceph-cluster:
+       name: ceph
+       create: true
+       image-name: rhel-7.4-server-x86_64-released
+       vm-size: m1.small
+       node1:
+         role: mon
+       node2:
+        role: osd
+        no-of-volumes: 3
+        disk-size: 20
+       node3:
+        role: osd
+        no-of-volumes: 3
+        disk-size: 20
+       node4:
+        role: osd
+        no-of-volumes: 3
+        disk-size: 20
+       node5:
+         role: client
+       node6:
+         role: installer
+       node7:
+         role: mon
+       node8:
+         role: mon
+       node9:
+         role: mgr
+    cloud-data: conf/cloud-data.yaml
+    ceph-conf-overrides:
+      global:
+        osd pool default size: 2
+        osd pool default pg num:  128
+        osd pool default pgp num:  128
+    openstack-credentials:
+        username: 'vakulkar'
+        password: 'XXXXX'
+        auth-url: 'http://10.8.188.11:5000'
+        auth-version: '2.0_password'
+        tenant-name: 'ceph-jenkins'
+        service-region: 'regionOne'
+        keypair: 'vasu-lp'
