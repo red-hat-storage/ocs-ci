@@ -194,6 +194,7 @@ def run(args):
         log.info("ceph_nodes_file %s", ceph_nodes_file)
     suites_yaml = yaml.safe_load(open(suites))
     sys.path.append(os.path.abspath('tests'))
+    sys.path.append(os.path.abspath('tests/rados'))
     tests = suites_yaml.get('tests')
     tcs = []
     jenkins_rc = 0
