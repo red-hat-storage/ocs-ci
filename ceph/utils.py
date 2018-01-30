@@ -281,10 +281,18 @@ def setup_cdn_repos(ceph_nodes, build=None):
                 'rhel-7-server-rhscon-2-agent-rpms',
                 'rhel-7-server-rhscon-2-installer-rpms',
                 'rhel-7-server-rhscon-2-main-rpms']
-    if build == '1.3.x':
+
+    repos_30 = ['rhel-7-server-rhceph-3-mon-rpms',
+                'rhel-7-server-rhceph-3-osd-rpms',
+                'rhel-7-server-rhceph-3-tools-rpms',
+                'rhel-7-server-extras-rpms']
+
+    if build.startswith('1'):
         repos = repos_13x
-    elif build == '2.x':
+    elif build.startswith('2'):
         repos = repos_20
+    elif build.startswith('3'):
+        repos = repos_30
     with parallel() as p:
         for node in ceph_nodes:
             p.spawn(set_cdn_repo, node, repos)
