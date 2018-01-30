@@ -199,6 +199,8 @@ def run(args):
     jenkins_rc = 0
     if (use_cdn is True and reuse is None):
         setup_cdn_repos(ceph_nodes, build=rhbuild)
+    # use ceph_test_data to pass around dynamic data between tests
+    ceph_test_data = dict()
     for test in tests:
         test = test.get('test')
         tc = dict()
@@ -233,7 +235,8 @@ def run(args):
         tc['duration'] = '0s'
         tc['status'] = 'Not Executed'
         start = time.time()
-        rc = test_mod.run(ceph_nodes=ceph_nodes, config=config)
+        rc = test_mod.run(ceph_nodes=ceph_nodes, config=config,
+                          test_data=ceph_test_data)
         elapsed = (time.time() - start)
         tc['duration'] = elapsed
         if rc == 0:
