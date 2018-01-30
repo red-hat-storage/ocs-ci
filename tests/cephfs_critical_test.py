@@ -30,9 +30,9 @@ def run(**kw):
     log.info("Test completed for CEPH-10529:")
 
     if md5sum_list1 == md5sum_list2:
-        log.info(Bcolors.OKGREEN+Bcolors.BOLD+"Data consistancy found, Test case CEPH-10528 passed"+Bcolors.ENDC)
+        log.info("Data consistancy found, Test case CEPH-10528 passed")
     else:
-        log.error(Bcolors.FAIL+Bcolors.BOLD+"Test case CEPH-10528 Failed"+Bcolors.ENDC)
+        log.error("Test case CEPH-10528 Failed")
     print "#####################################################################################################################"
 
     log.info("Test for CEPH-10529 will start:")
@@ -45,10 +45,10 @@ def run(**kw):
 
     if md5sum_file_lock[0] == md5sum_file_lock[1]:
 
-         log.info(Bcolors.OKGREEN+Bcolors.BOLD+"File Locking mechanism is working,data is not corrupted,test case CEPH-10529 passed"+Bcolors.ENDC)
+         log.info("File Locking mechanism is working,data is not corrupted,test case CEPH-10529 passed")
 
     else:
-         log.error(Bcolors.FAIL+Bcolors.BOLD+"File Locking mechanism is failed,data is corruptedtTest case CEPH-10529 Failed"+Bcolors.ENDC)
+         log.error("File Locking mechanism is failed,data is corruptedtTest case CEPH-10529 Failed")
 
     print'Script execution time:------'
     stop = timeit.default_timer()
