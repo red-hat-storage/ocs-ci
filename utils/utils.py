@@ -95,9 +95,8 @@ def KernelMount(mounting_dir, mon_node_ip, kernel_clients):
             out, err = client.exec_command(cmd='sudo ceph auth get-key client.%s' % (client.hostname))
             secret_key = out.read().rstrip('\n')
             mon_node_ip = mon_node_ip.replace(" ", "")
-            client.exec_command(
-                cmd='sudo mount -t ceph %s:6789:/ %s -o name=%s,secret=%s' % (
-                mon_node_ip, mounting_dir, client.hostname, secret_key))
+            client.exec_command(cmd='sudo mount -t ceph %s:6789:/ %s -o name=%s,secret=%s' % (
+            mon_node_ip, mounting_dir, client.hostname, secret_key))
             out, err = client.exec_command(cmd='mount')
             mount_output = out.read()
             mount_output.split()
@@ -178,9 +177,9 @@ finally:
 
 
 # colors for pass and fail status
-class Bcolors:
-    HEADER = '\033[95m'
-    OKGREEN = '\033[92m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
+# class Bcolors:
+#     HEADER = '\033[95m'
+#     OKGREEN = '\033[92m'
+#     FAIL = '\033[91m'
+#     ENDC = '\033[0m'
+#     BOLD = '\033[1m'
