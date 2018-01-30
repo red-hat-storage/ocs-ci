@@ -5,6 +5,8 @@ import logging
 import time
 import os
 import requests
+import re
+import datetime
 
 from gevent import sleep
 from mita.openstack import CephVMNode
@@ -13,6 +15,7 @@ from libcloud.compute.providers import get_driver
 from parallel import parallel
 
 log = logging.getLogger(__name__)
+
 
 def create_ceph_nodes(gyaml, osp_cred):
     var = yaml.safe_load(open(gyaml))
@@ -68,8 +71,10 @@ def create_ceph_nodes(gyaml, osp_cred):
     log.info("Done creating nodes")
     return ceph_nodes
 
+
 def setup_vm_node(node, ceph_nodes, **params):
     ceph_nodes[node] = CephVMNode(**params)
+
 
 def get_openstack_driver(yaml):
     OpenStack = get_driver(Provider.OPENSTACK)
@@ -146,6 +151,52 @@ def setup_repos(ceph, base_url, installer_url=None):
             file_mode='w')
         inst_file.write(inst_repo)
         inst_file.flush()
+
+
+def check_ceph_healthly(ceph_mon, num_osds, num_mons, timeout=300):
+    """
+    Function to check ceph is in healthy state
+
+    Args:
+       ceph_mon: monitor node
+       num_osds: number of osds in cluster
+       num_mons: number of mons in cluster
+       timeout: 300 seconds(default) max time to check
+         if cluster is not healthy within timeout period
+                return 1
+
+    Returns:
+       return 0 when ceph is in healthy state, else 1
+    """
+
+    timeout = datetime.timedelta(seconds=timeout)
+    starttime = datetime.datetime.now()
+    while datetime.datetime.now() - starttime <= timeout:
+        out, err = ceph_mon.exec_command(cmd='sudo ceph -s')
+        lines = out.read()
+        if 'peering' not in lines and 'activating' not in lines and \
+           'creating' not in lines:
+            break
+        sleep(1)
+    m = re.search(r"(\d+)\s+osds:\s+(\d+)\s+up,\s+(\d+)\s+in", lines)
+    all_osds = int(m.group(1))
+    up_osds = int(m.group(2))
+    in_osds = int(m.group(3))
+    if num_osds != all_osds:
+        log.info("Not all osd's are up")
+        return 1
+    if up_osds != in_osds:
+        log.info("Not all osd's are in")
+        return 1
+    m = re.search(r"(\d+) daemons, quorum", lines)
+    all_mons = int(m.group(1))
+    if all_mons != num_mons:
+        log.info("Not all monitors are in cluster")
+        return 1
+    if "HEALTH_ERR" in lines:
+        log.info("HEALTH in ERROR STATE")
+        return 1
+    return 0
 
 
 def generate_repo_file(base_url, repos):
