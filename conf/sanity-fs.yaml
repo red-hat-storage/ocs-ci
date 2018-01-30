@@ -29,15 +29,15 @@ globals:
        node11:
          role: mgr
        node12:
-        role: osd
-        no-of-volumes: 3
-        disk-size: 20
+         role: osd
+         no-of-volumes: 3
+         disk-size: 20
        node13:
-        role: osd
-        no-of-volumes: 3
-        disk-size: 20
+         role: osd
+         no-of-volumes: 3
+         disk-size: 20
        node14:
-	    role: mds
+         role: mds
     cloud-data: conf/cloud-data.yaml
     ceph-conf-overrides:
       global:
