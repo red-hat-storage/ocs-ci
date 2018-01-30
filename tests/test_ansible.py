@@ -91,7 +91,8 @@ def run(**kw):
         ceph.exec_command(cmd='chmod 400 ~/.ssh/config')
 
     for ceph in ceph_nodes:
-        if config.get('ceph_repository_type') != 'cdn':
+        if config.get('ceph_repository_type') != 'cdn' or \
+           config.get('use_cdn', False) is not True:
             if config['ansi_config'].get('ceph_repository_type') != 'iso' or \
                     config['ansi_config'].get('ceph_repository_type') == 'iso' and \
                     (ceph.role == 'installer' or \
@@ -112,6 +113,7 @@ def run(**kw):
                 ceph.exec_command(cmd='mkdir -p ~/ceph-ansible/iso/ && wget -O ~/ceph-ansible/iso/ceph.iso ' + iso_file_url)
         else:
             log.info("Using the cdn repo for the test")
+            setup_cdn_repos(ceph_nodes, build=config.get('build'))
         log.info("Updating metadata")
         sleep(15)
 #        if ceph.pkg_type == 'rpm':
