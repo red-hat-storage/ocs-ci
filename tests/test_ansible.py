@@ -17,6 +17,7 @@ def run(**kw):
     ceph_nodes = kw.get('ceph_nodes')
     log.info("Running ceph ansible test")
     config = kw.get('config')
+    test_data = kw.get('test_data')
     if config.get('ubuntu_repo'):
         ubuntu_repo = config.get('ubuntu_repo')
     if config.get('base_url'):
