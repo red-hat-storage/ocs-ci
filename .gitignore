@@ -4,3 +4,5 @@
 .tox
 __pycache__
 rerun
+ven*
+*egg*
