@@ -5,7 +5,7 @@ import json
 import re
 
 from ceph.utils import setup_deb_repos, get_iso_file_url
-from ceph.utils import setup_repos, create_ceph_conf
+from ceph.utils import setup_repos, create_ceph_conf, check_ceph_healthly
 from time import sleep
 
 logger = logging.getLogger(__name__)
@@ -221,35 +221,13 @@ def run(**kw):
             ceph_mon = node
             break
     # check if all osd's are up and in
-    timeout = datetime.timedelta(seconds=300)
+    timeout = 300
     if config.get('timeout'):
         timeout = datetime.timedelta(seconds=config.get('timeout'))
-    starttime = datetime.datetime.now()
-    while datetime.datetime.now() - starttime <= timeout :
-        out, err = ceph_mon.exec_command(cmd='sudo ceph -s')
-        lines = out.read()
-        log.info(lines)
-        if 'peering' not in lines and 'activating' not in lines and 'creating' not in lines:
-            break
-        sleep(1)
-    m = re.search(r"(\d+)\s+osds:\s+(\d+)\s+up,\s+(\d+)\s+in", lines)
-    all_osds = int(m.group(1))
-    up_osds = int(m.group(2))
-    in_osds = int(m.group(3))
-    if num_osds != all_osds:
-        log.info("Not all osd's are up")
+    if (check_ceph_healthly(ceph_mon, num_osds, num_mons, timeout) != 0):
         return 1
-    if up_osds != in_osds:
-        log.info("Not all osd's are in")
-        return 1
-    m = re.search(r"(\d+) daemons, quorum", lines)
-    all_mons = int(m.group(1))
-    if all_mons != num_mons:
-        log.info("Not all monitors are in cluster")
-        return 1
-    if "HEALTH_ERR" in lines:
-        log.info("HEALTH in ERROR STATE")
-        return 1
+    # add test_data for later use by upgrade test etc
+    test_data['ceph-ansible'] = {'num-osds': num_osds, 'num-mons': num_mons}
     # create rbd pool used by tests/workunits
     ceph_mon.exec_command(cmd='sudo ceph osd pool create rbd 64 64')
     ceph_mon.exec_command(cmd='sudo ceph osd pool application enable rbd rbd --yes-i-really-mean-it')
