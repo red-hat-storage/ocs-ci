@@ -4,7 +4,7 @@ import logging
 import json
 import re
 import random
-
+import install_iscsi_gwcli
 from ceph.utils import setup_deb_repos
 from ceph.utils import setup_repos, create_ceph_conf
 from time import sleep
@@ -15,37 +15,70 @@ logger = logging.getLogger(__name__)
 log = logger
 
 
+
 def run(**kw):
     log.info("Running test")
     ceph_nodes = kw.get('ceph_nodes')
     for node in ceph_nodes:
-        iscsi_initiators=node
-    out, err= iscsi_initiators.exec_command(cmd='sudo cat /etc/iscsi/initiatorname.iscsi')
-    output = out.read()
-    temp = output.split('=')
-    out = temp[1].split(":")
-    name=out[1].rstrip("\n")
+        if node.role=="iscsi-clients":
+            iscsi_initiators=node
+            out, err= iscsi_initiators.exec_command(cmd='sudo cat /etc/iscsi/initiatorname.iscsi',output=False)
+            output = out.read()
+            temp = output.split('=')
+            out = temp[1].split(":")
+            name=out[1].rstrip("\n")
+            break;
     write_chap(name,iscsi_initiators)
+    no_of_luns=install_iscsi_gwcli.no_of_luns
     for node in ceph_nodes:
         if node.role=='osd':
+            osd_to_restart=node
             out,err=node.exec_command(sudo=True,cmd="hostname -I")
             osd=out.read()
             break
-    iscsi_initiators.exec_command(sudo=True,cmd="iscsiadm -m discovery -t sendtargets -p "+osd)
-    iscsi_initiators.exec_command(sudo=True,cmd="iscsiadm -m node -T iqn.2003-01.com.redhat.iscsi-gw:ceph-igw -l",long_running=True)
-    iscsi_initiators.exec_command(sudo=True,cmd="multipath -ll")
-    sleep(20)
-    out,err=iscsi_initiators.exec_command(sudo=True,cmd='sudo ls /dev/mapper/ | grep mpath')
-    output=out.read()
-    output=output.rstrip("\n")
-    device_list=output.split("\n")
+            break
+    t1 = datetime.datetime.now()
+    time_plus_10 = t1 + datetime.timedelta(minutes=10)
+    while (1):
+        t2 = datetime.datetime.now()
+        if (t2 <= time_plus_10):
+            iscsi_initiators.exec_command(sudo=True, cmd="iscsiadm -m discovery -t sendtargets -p " + osd)
+            iscsi_initiators.exec_command(sudo=True, cmd="iscsiadm -m node -T iqn.2003-01.com.redhat.iscsi-gw:ceph-igw -l",
+                                          long_running=True)
+            sleep(10)
+            iscsi_initiators.exec_command(sudo=True, cmd="multipath -ll")
+            sleep(10)
+            out, err = iscsi_initiators.exec_command(sudo=True, cmd='sudo ls /dev/mapper/ | grep mpath', long_running=True)
+            output = out
+            output = output.rstrip("\n")
+            device_list = output.split("\n")
+            sleep(10)
+            if(len(device_list)==no_of_luns):
+                break
+            else:
+                iscsi_initiators.exec_command(sudo=True,cmd="iscsiadm -m node -T iqn.2003-01.com.redhat.iscsi-gw:ceph-igw -u",
+                                              long_running=True)
+                del device_list[:]
+                log.info("less no of luns found retrying it again..")
+        else:
+            break;
+            log.info("less no of luns found and time excited..")
+            return 1
     for i in range(len(device_list)):
         iscsi_initiators.exec_command(sudo=True,cmd="mkdir /mnt/"+device_list[i])
-        iscsi_initiators.exec_command(sudo=True,cmd="mkfs.ext4 /dev/mapper/"+device_list[i],long_running=True)
+        iscsi_initiators.exec_command(sudo=True,cmd="mkfs.ext4 /dev/mapper/"+device_list[i]+" -q",long_running=True,output=False)
         iscsi_initiators.exec_command(sudo=True,cmd="mount /dev/mapper/"+device_list[i]+" /mnt/"+device_list[i],long_running=True)
-        iscsi_initiators.exec_command(sudo=True,cmd="cd /mnt/"+device_list[i])
-        iscsi_initiators.exec_command(sudo=True,cmd="dd if=/dev/zero of=/mnt/"+device_list[i]+"/newfile bs=10M count=10",long_running=True)
-    return  0
+        iscsi_initiators.exec_command(sudo=True,cmd="dd if=/dev/zero of=/mnt/"+device_list[i]+"/newfile bs=10M count=10 2>/dev/null",long_running=True)
+    if len(device_list)==no_of_luns:
+        for i in range(len(device_list)):
+            iscsi_initiators.exec_command(sudo=True,cmd="umount /mnt/"+device_list[i])
+        iscsi_initiators.exec_command(sudo=True, cmd="iscsiadm -m node -T iqn.2003-01.com.redhat.iscsi-gw:ceph-igw -u",long_running=True)
+        iscsi_initiators.exec_command(sudo=True, cmd="systemctl stop multipathd",long_running=True)
+        return 0
+    else:
+        return 1
+
+
 def write_chap(iscsi_name,iscsi_initiators):
     iscsid="""#
 # Open-iSCSI default configuration.
@@ -367,4 +400,3 @@ node.session.scan = auto
                                                  file_name='/etc/iscsi/iscsid.conf', file_mode='w')
     multipath_file.write(iscsid)
     multipath_file.flush()
-
