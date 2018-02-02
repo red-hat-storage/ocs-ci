@@ -15,11 +15,11 @@ def run(**kw):
     log.info("Execution of Test case 11229 started:")
     tc = '11129'
     with parallel() as p:
-        p.spawn(mkdir_pinning,fuse_clients,0,num_of_dirs,0,0)
-        p.spawn(mkdir_pinning,fuse_clients,num_of_dirs,num_of_dirs*2,0)
-        p.spawn(mkdir_pinning,fuse_clients,num_of_dirs*2,num_of_dirs*3,0)
-        p.spawn(mkdir_pinning,fuse_clients,num_of_dirs*3,num_of_dirs*4,0)
-        p.spawn(mkdir_pinning,kernel_clients,num_of_dirs*4,num_of_dirs*5,1)
+        p.spawn(mkdir_pinning,fuse_clients,0,num_of_dirs,'dir',0)
+        p.spawn(mkdir_pinning,fuse_clients,num_of_dirs,num_of_dirs*2,'dir',0)
+        p.spawn(mkdir_pinning,fuse_clients,num_of_dirs*2,num_of_dirs*3,'dir',0)
+        p.spawn(mkdir_pinning,fuse_clients,num_of_dirs*3,num_of_dirs*4,'dir',0)
+        p.spawn(mkdir_pinning,kernel_clients,num_of_dirs*4,num_of_dirs*5,'dir',1)
 
     with parallel() as p:
         p.spawn(pinned_dir_io,kernel_clients,mds_fail_over,1,0,num_of_dirs/2)
@@ -35,8 +35,8 @@ def run(**kw):
     tc = '11128'
 
     with parallel() as p:
-        p.spawn(mkdir_pinning,fuse_clients,num_of_dirs*6,num_of_dirs*11,0)
-        p.spawn(mkdir_pinning,kernel_clients,num_of_dirs*11,num_of_dirs*21,1)
+        p.spawn(mkdir_pinning,fuse_clients,num_of_dirs*6,num_of_dirs*11,'dir',0)
+        p.spawn(mkdir_pinning,kernel_clients,num_of_dirs*11,num_of_dirs*21,'dir',1)
 
 
     with parallel()  as p:
@@ -51,9 +51,9 @@ def run(**kw):
     tc = '11130'
     with parallel() as p:
 
-        p.spawn(mkdir_pinning,fuse_clients,num_of_dirs*21,num_of_dirs*21+25,0)
+        p.spawn(mkdir_pinning,fuse_clients,num_of_dirs*21,num_of_dirs*21+25,'dir',0)
 
-        p.spawn(mkdir_pinning,kernel_clients,num_of_dirs*21+25,num_of_dirs*21+50,1)
+        p.spawn(mkdir_pinning,kernel_clients,num_of_dirs*21+25,num_of_dirs*21+50,'dir',1)
 
     with parallel() as p:
 
@@ -68,7 +68,6 @@ def run(**kw):
     print "###################################################################################"
     print "TESTS completed"
     print "Results:"
-
     for i in output:
         print i
     for i,j in failure.iteritems():
