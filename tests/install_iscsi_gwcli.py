@@ -4,7 +4,6 @@ import logging
 import random
 import json
 import re
-
 from ceph.utils import setup_deb_repos, get_iso_file_url
 from ceph.utils import setup_repos, create_ceph_conf
 from time import sleep
@@ -15,17 +14,18 @@ def run(**kw):
     ceph_nodes = kw.get('ceph_nodes')
     config = kw.get('config')
     ceph_osd = []
+    global no_of_luns
+    no_of_luns = 0
     ceph_iscsi_initiatorname = []
     trusted_ip_list = ''
     if config.get('no_of_gateways'):
         no_of_gateways = int(config.get('no_of_gateways'))
     else:
         no_of_gateways = 2
-
     if config.get('no_of_luns'):
         no_of_luns = int(config.get('no_of_luns'))
     else:
-        no_of_luns = 2
+        no_of_luns = 10
     for ceph in ceph_nodes:
         if ceph.role == 'mon':
             ceph_mon = ceph
@@ -113,7 +113,6 @@ trusted_ip_list = {0}""".format(trusted_ip_list)
                     ceph.exec_command(sudo=True,
                             cmd='systemctl start rbd-target-api')
                     sleep(2)
-
                     check = check + 1
             log.info('Services enabled and started')
             log.info('Starting to create software iscsi')
@@ -188,18 +187,14 @@ trusted_ip_list = {0}""".format(trusted_ip_list)
             iscsi_initiators.exec_command(sudo=True,
                     cmd='systemctl reload multipathd',
                     long_running=True)
-
             for i in range(0, no_of_luns):
                 ceph_osd_nodes.exec_command(sudo=True,
                         cmd='gwcli /iscsi-target/iqn.2003-01.com.redhat.iscsi-gw:ceph-igw/hosts/'
                          + ceph_iscsi_initiatorname[0].rstrip('\n')
                         + ' disk add rbd.' + image_name + str(i))
-
             return 0
         else:
-
             log.error('No_of_gateways excited ' + no_of_gateways
                       + 'gateway node found')
     else:
-
         log.error('gateway nodes must be multiple of 2')
