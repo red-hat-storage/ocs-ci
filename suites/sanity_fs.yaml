@@ -3,7 +3,6 @@ tests:
        name: install ceph pre-requisities
        module: install_prereq.py
        abort-on-fail: true
-
    - test:
       name: ceph ansible
       module: test_ansible.py
@@ -30,9 +29,17 @@ tests:
                   mon_allow_pool_delete: true
       desc: test cluster setup using ceph-ansible
       destroy-cluster: False
-      abort-on-fail: true 
+      abort-on-fail: true
    - test:
-       name: cephfs critical tests
-       module: cephfs_critical_test.py
+       name: multiple clients read/writing io
+       module: cephfs_clientsIO_test.py
+       polarion-id: CEPH-10528,CEPH-10529
        abort-on-fail: true
-
+   - test:
+       name: cephfs_mds_failover
+       module: active_active_mdsfailover_test.py
+       config:
+             num_of_dirs: 1000
+       polarion-id: CEPH-11228,CEPH-11229,CEPH-11230
+       desc: Testing MDSfailover on active-active mdss with client IOs
+       abort-on-fail: true
