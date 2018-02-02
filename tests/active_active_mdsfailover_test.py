@@ -15,7 +15,7 @@ def run(**kw):
     log.info("Execution of Test case 11229 started:")
     tc = '11129'
     with parallel() as p:
-        p.spawn(mkdir_pinning,fuse_clients,0,num_of_dirs,0,mydir)
+        p.spawn(mkdir_pinning,fuse_clients,0,num_of_dirs,0,0)
         p.spawn(mkdir_pinning,fuse_clients,num_of_dirs,num_of_dirs*2,0)
         p.spawn(mkdir_pinning,fuse_clients,num_of_dirs*2,num_of_dirs*3,0)
         p.spawn(mkdir_pinning,fuse_clients,num_of_dirs*3,num_of_dirs*4,0)
