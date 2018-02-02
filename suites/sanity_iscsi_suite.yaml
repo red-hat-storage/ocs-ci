@@ -47,7 +47,7 @@ tests:
       abort-on-fail: true
       config:
             no_of_gateways: 4
-            no_of_luns: 4
+            no_of_luns: 10
 
    - test:
       name: Verify gateways are installed on all the nodes.
@@ -61,5 +61,52 @@ tests:
       module: iscsi_multiple_luns_run_io.py
       abort-on-fail: false
 
+   - test:
+      name: purge cluster
+      module: purge_cluster.py
+      abort-on-fail: true
+
+   - test:
+      name: ceph ansible
+      module: test_ansible.py
+      config:
+        ansi_config:
+            ceph_test: True
+            ceph_origin: distro
+            ceph_stable_release: luminous
+            ceph_repository: rhcs
+            osd_scenario: collocated
+            osd_auto_discovery: False
+            journal_size: 1024
+            ceph_stable: True
+            ceph_stable_rh_storage: True
+            public_network: 172.16.0.0/12
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 64
+                  osd_default_pool_size: 2
+                  osd_pool_default_pgp_num: 64
+                  mon_max_pg_per_osd: 1024
+      desc: test cluster setup using ceph-ansible
+      destroy-cluster: False
+      abort-on-fail: true
+
+   - test:
+      name: Install_prereq_gw
+      module: install_pre_gw.py
+      abort-on-fail: true
+
+   - test:
+      name: Install gwcli iscsi.
+      module: install_iscsi_gwcli.py
+      abort-on-fail: true
+      config:
+            no_of_gateways: 4
+            no_of_luns: 25
+
+   - test:
+      name: verify i/o after restart
+      module: iscsi_verify_io_after_gw_restarted.py
+      abort-on-fail: false
 
 
