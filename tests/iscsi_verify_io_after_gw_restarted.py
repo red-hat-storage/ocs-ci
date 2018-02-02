@@ -36,7 +36,6 @@ def run(**kw):
             out,err=node.exec_command(sudo=True,cmd="hostname -I")
             osd=out.read()
             break
-            break
     t1 = datetime.datetime.now()
     time_plus_10 = t1 + datetime.timedelta(minutes=10)
     while (1):
@@ -64,21 +63,66 @@ def run(**kw):
             break;
             log.info("less no of luns found and time excited..")
             return 1
+    count = random.randint(1, len(device_list)-1)
+    check=1
+    temp_t1=t1
+    temp_t2=datetime.datetime.now()
     for i in range(len(device_list)):
         iscsi_initiators.exec_command(sudo=True,cmd="mkdir /mnt/"+device_list[i])
         iscsi_initiators.exec_command(sudo=True,cmd="mkfs.ext4 /dev/mapper/"+device_list[i]+" -q",long_running=True,output=False)
         iscsi_initiators.exec_command(sudo=True,cmd="mount /dev/mapper/"+device_list[i]+" /mnt/"+device_list[i],long_running=True)
+        iscsi_initiators.exec_command(sudo=True,cmd="cd /mnt/"+device_list[i])
         iscsi_initiators.exec_command(sudo=True,cmd="dd if=/dev/zero of=/mnt/"+device_list[i]+"/newfile bs=10M count=10 2>/dev/null",long_running=True)
-    if len(device_list)==no_of_luns:
-        for i in range(len(device_list)):
-            iscsi_initiators.exec_command(sudo=True,cmd="umount /mnt/"+device_list[i])
-        iscsi_initiators.exec_command(sudo=True, cmd="iscsiadm -m node -T iqn.2003-01.com.redhat.iscsi-gw:ceph-igw -u",long_running=True)
-        iscsi_initiators.exec_command(sudo=True, cmd="systemctl stop multipathd",long_running=True)
+        if (check == count):
+            log.info("Restarting osd "+osd_to_restart.hostname)
+            osd_to_restart.exec_command(cmd='sudo reboot', check_ec=False)
+            sleep(10)
+        check=check+1
+    md5=[]
+    for i in range(len(device_list)):
+        out,err=iscsi_initiators.exec_command(sudo=True,cmd="md5sum /mnt/"+device_list[i]+"/newfile | awk '{ print $1 }'",long_running=True)
+        output=out.rstrip("\n")
+        md5.append(output)
+    md5s=set(md5)
+    uuid = []
+    fstab = ""
+    out, err = iscsi_initiators.exec_command(sudo=True, cmd="cat /etc/fstab")
+    output = out.read()
+    output = output.rstrip("\n")
+    fstab = fstab + output
+    for i in range(len(device_list)):
+        out, err = iscsi_initiators.exec_command(sudo=True,
+                                                 cmd="blkid /dev/mapper/" + device_list[i] + " -s UUID -o value",
+                                                 long_running=True)
+        output = out.rstrip("\n")
+        uuid.append(output)
+    print len(device_list)
+    print len(uuid)
+    ssd = []
+
+    for i in range(no_of_luns):
+        temp = "\nUUID=" + uuid[i] + "\t/mnt/" + device_list[i] + "/\text4\t_netdev\t0 0"
+        fstab += temp
+    fstab_file = iscsi_initiators.write_file(sudo=True,
+                                             file_name='/etc/fstab', file_mode='w')
+    fstab_file.write(fstab)
+    fstab_file.flush()
+    iscsi_initiators.exec_command(sudo=True,cmd="reboot",check_ec=False)
+    sleep(200)
+    iscsi_initiators.reconnect()
+    md5_after_reboot = []
+    for i in range(len(device_list)):
+        out, err = iscsi_initiators.exec_command(sudo=True,
+                                                 cmd="md5sum /mnt/" + device_list[i] + "/newfile | awk '{ print $1 }'",
+                                                 long_running=True)
+        output = out.rstrip("\n")
+        md5_after_reboot.append(output)
+    md5s_after_reboot = set(md5_after_reboot)
+
+    if (md5s == md5s_after_reboot):
         return 0
     else:
         return 1
-
-
 def write_chap(iscsi_name,iscsi_initiators):
     iscsid="""#
 # Open-iSCSI default configuration.
