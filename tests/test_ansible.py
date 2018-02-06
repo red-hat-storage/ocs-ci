@@ -4,7 +4,7 @@ import logging
 import json
 import re
 
-from ceph.utils import setup_deb_repos, get_iso_file_url
+from ceph.utils import setup_deb_repos, get_iso_file_url, setup_cdn_repos
 from ceph.utils import setup_repos, create_ceph_conf, check_ceph_healthly
 from time import sleep
 
