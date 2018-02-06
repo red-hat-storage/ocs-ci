@@ -13,7 +13,7 @@ from ceph.utils import update_ca_cert
 
 log = logging.getLogger(__name__)
 
-rpm_pkgs = ['wget', 'git', 'epel-release', 'redhat-lsb', 'python-virtualenv', 'python-nose']
+rpm_pkgs = ['wget', 'git', 'python-virtualenv', 'python-nose']
 deb_pkgs = ['wget', 'git', 'python-virtualenv']
 
 epel_rpm = 'https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-9.noarch.rpm'
