@@ -1,18 +1,15 @@
-
+import datetime
+import itertools
 import logging
 import time
 import traceback
-from random import randint
-
-import datetime
-
-import itertools
 
 from ceph.parallel import parallel
 from ceph.utils import update_ca_cert
 
 log = logging.getLogger(__name__)
 
+# rpm_pkgs = ['wget', 'git', 'epel-release', 'redhat-lsb', 'python-virtualenv', 'python-nose']
 rpm_pkgs = ['wget', 'git', 'python-virtualenv', 'python-nose']
 deb_pkgs = ['wget', 'git', 'python-virtualenv']
 
@@ -20,6 +17,7 @@ epel_rpm = 'https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-9.no
 epel_pkgs = ['python-pip']
 deb_all_pkgs = " ".join(deb_pkgs)
 rpm_all_pkgs = ' '.join(rpm_pkgs)
+
 
 def run(**kw):
     log.info("Running test")
@@ -73,6 +71,7 @@ def install_prereq(ceph, timeout=1800):
             # install epel package
             ceph.exec_command(cmd='sudo yum clean metadata')
             # finally install python2-pip directly using rpm since its available only in epel
+
             ceph.exec_command(cmd='sudo yum install -y http://dl.fedoraproject.org/pub/fedora-secondary/releases/26/Everything/i386/os/Packages/p/python2-pip-9.0.1-9.fc26.noarch.rpm')
             #add GPG key
             ceph.exec_command(cmd='curl --insecure -O -L https://prodsec.redhat.com/keys/00da75f2.txt && sudo rpm --import 00da75f2.txt')
