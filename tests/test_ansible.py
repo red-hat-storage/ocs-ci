@@ -33,18 +33,6 @@ def run(**kw):
             log.info("Setting installer node")
             ceph_installer = node
             break
-    ceph1 = ceph_nodes[0]
-    out, _ = ceph1.exec_command(cmd='uuidgen')
-    uuid = out.read().strip()
-    ceph_mon_nodes = []
-    mon_names = ''
-    all_nodes = ''
-    for ceph in ceph_nodes:
-        if ceph.role == 'mon':
-            ceph_mon_nodes.append(ceph)
-            mon_names = mon_names + ceph.shortname + ' '
-        all_nodes = all_nodes + ceph.shortname + ' '
-    ceph_conf = create_ceph_conf(fsid=uuid, mon_hosts=ceph_mon_nodes)
     keys = ''
     hosts = ''
     hostkeycheck = 'Host *\n\tStrictHostKeyChecking no\n\tServerAliveInterval 2400\n'
@@ -66,11 +54,6 @@ def run(**kw):
                 ceph.exec_command(
                     sudo=True, cmd='wget -O /etc/yum.repos.d/rh_add_repo.repo {repo}'.format(repo=repo))
                 ceph.exec_command(cmd='sudo yum update metadata')
-    # remove any epel
-    for ceph in ceph_nodes:
-        if ceph.pkg_type == 'rpm':
-            log.info("Remove epel packages if any")
-            ceph.exec_command(sudo=True, cmd='rm -f /etc/yum.repos.d/epel*')
 
     for ceph in ceph_nodes:
         keys_file = ceph.write_file(
