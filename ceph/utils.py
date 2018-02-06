@@ -1,20 +1,17 @@
 import datetime
+import logging
+import random
 import traceback
 
-import re
-import yaml
-import random
-import logging
-import time
 import os
-import requests
 import re
-import datetime
-
+import requests
+import yaml
 from gevent import sleep
-from mita.openstack import CephVMNode
-from libcloud.compute.types import Provider
 from libcloud.compute.providers import get_driver
+from libcloud.compute.types import Provider
+
+from mita.openstack import CephVMNode
 from parallel import parallel
 
 log = logging.getLogger(__name__)
@@ -188,6 +185,7 @@ def check_ceph_healthly(ceph_mon, num_osds, num_mons, timeout=300):
 
     timeout = datetime.timedelta(seconds=timeout)
     starttime = datetime.datetime.now()
+    lines = None
     while datetime.datetime.now() - starttime <= timeout:
         out, err = ceph_mon.exec_command(cmd='sudo ceph -s')
         lines = out.read()
@@ -195,18 +193,22 @@ def check_ceph_healthly(ceph_mon, num_osds, num_mons, timeout=300):
            'creating' not in lines:
             break
         sleep(1)
-    m = re.search(r"(\d+)\s+osds:\s+(\d+)\s+up,\s+(\d+)\s+in", lines)
-    all_osds = int(m.group(1))
-    up_osds = int(m.group(2))
-    in_osds = int(m.group(3))
+    match = re.search(r"(\d+)\s+osds:\s+(\d+)\s+up,\s+(\d+)\s+in", lines)
+    all_osds = int(match.group(1))
+    up_osds = int(match.group(2))
+    in_osds = int(match.group(3))
     if num_osds != all_osds:
-        log.info("Not all osd's are up")
+        log.info("Not all osd's are up. %s / %s" % (num_osds, all_osds))
         return 1
     if up_osds != in_osds:
-        log.info("Not all osd's are in")
+        log.info("Not all osd's are in. %s / %s" % (up_osds, all_osds))
         return 1
-    m = re.search(r"(\d+) daemons, quorum", lines)
-    all_mons = int(m.group(1))
+
+    # attempt luminous pattern first, if it returns none attempt jewel pattern
+    match = re.search(r"(\d+) daemons, quorum", lines)
+    if not match:
+        match = re.search(r"(\d+) mons at", lines)
+    all_mons = int(match.group(1))
     if all_mons != num_mons:
         log.info("Not all monitors are in cluster")
         return 1
@@ -233,6 +235,7 @@ def generate_repo_file(base_url, repos):
                 gpgcheck + enabled
     return repo_file
 
+
 def get_iso_file_url(base_url):
     iso_file_path = base_url + "compose/Tools/x86_64/iso/"
     iso_dir_html = requests.get(iso_file_path, timeout=10).content
@@ -241,6 +244,7 @@ def get_iso_file_url(base_url):
     log.info('Using {}'.format(iso_file_name))
     iso_file = iso_file_path + iso_file_name
     return iso_file
+
 
 def create_ceph_conf(fsid, mon_hosts, pg_num='128', pgp_num='128', size='2',
                      auth='cephx', pnetwork='172.16.0.0/12',
@@ -304,6 +308,7 @@ def setup_cdn_repos(ceph_nodes, build=None):
                 'rhel-7-server-rhceph-3-tools-rpms',
                 'rhel-7-server-extras-rpms']
 
+    repos = None
     if build.startswith('1'):
         repos = repos_13x
     elif build.startswith('2'):
@@ -320,6 +325,7 @@ def set_cdn_repo(node, repos):
             node.exec_command(
                 sudo=True, cmd='subscription-manager repos --enable={r}'.format(r=repo))
         node.exec_command(sudo=True, cmd='subscription-manager refresh')
+
 
 def update_ca_cert(node, cert_url, timeout=120):
     if node.pkg_type == 'deb':

@@ -1,12 +1,12 @@
 import datetime
-import yaml
-import logging
 import json
-import re
+import logging
+from time import sleep
+
+import yaml
 
 from ceph.utils import setup_deb_repos, get_iso_file_url, setup_cdn_repos
 from ceph.utils import setup_repos, create_ceph_conf, check_ceph_healthly
-from time import sleep
 
 logger = logging.getLogger(__name__)
 log = logger
@@ -18,6 +18,7 @@ def run(**kw):
     log.info("Running ceph ansible test")
     config = kw.get('config')
     test_data = kw.get('test_data')
+    ubuntu_repo = None
     if config.get('ubuntu_repo'):
         ubuntu_repo = config.get('ubuntu_repo')
     if config.get('base_url'):
@@ -28,6 +29,15 @@ def run(**kw):
     if config.get('skip_setup') is True:
         log.info("Skipping setup of ceph cluster")
         return 0
+
+    # remove mgr nodes from list if build is 2.x
+    build = config.get('build', '3')
+    if build.startswith('2'):
+        ceph_nodes = [node for node in ceph_nodes if node.role != 'mgr']
+
+    ceph_installer = None
+    ceph_mon = None
+
     for node in ceph_nodes:
         if node.role == 'installer':
             log.info("Setting installer node")
@@ -74,8 +84,8 @@ def run(**kw):
         ceph.exec_command(cmd='chmod 400 ~/.ssh/config')
 
     for ceph in ceph_nodes:
-        if config.get('ceph_repository_type') != 'cdn' or \
-           config.get('use_cdn', False) is not True:
+        # if config.get('ceph_repository_type') != 'cdn' or config.get('use_cdn', False) is not True:
+        if not config.get('use_cdn', False):
             if config['ansi_config'].get('ceph_repository_type') != 'iso' or \
                     config['ansi_config'].get('ceph_repository_type') == 'iso' and \
                     (ceph.role == 'installer'):
@@ -92,7 +102,8 @@ def run(**kw):
                     setup_repos(ceph, base_url, installer_url)
             if config['ansi_config'].get('ceph_repository_type') == 'iso' and ceph.role == 'installer':
                 iso_file_url = get_iso_file_url(base_url)
-                ceph.exec_command(cmd='mkdir -p ~/ceph-ansible/iso/ && wget -O ~/ceph-ansible/iso/ceph.iso ' + iso_file_url)
+                ceph.exec_command(
+                    cmd='mkdir -p ~/ceph-ansible/iso/ && wget -O ~/ceph-ansible/iso/ceph.iso ' + iso_file_url)
         else:
             log.info("Using the cdn repo for the test")
             setup_cdn_repos(ceph_nodes, build=config.get('build'))
@@ -215,11 +226,13 @@ def run(**kw):
     timeout = 300
     if config.get('timeout'):
         timeout = datetime.timedelta(seconds=config.get('timeout'))
-    if (check_ceph_healthly(ceph_mon, num_osds, num_mons, timeout) != 0):
+    if check_ceph_healthly(ceph_mon, num_osds, num_mons, timeout) != 0:
         return 1
     # add test_data for later use by upgrade test etc
-    test_data['ceph-ansible'] = {'num-osds': num_osds, 'num-mons': num_mons}
+    test_data['ceph-ansible'] = {'num-osds': num_osds, 'num-mons': num_mons, 'rhbuild': build}
+
     # create rbd pool used by tests/workunits
-    ceph_mon.exec_command(cmd='sudo ceph osd pool create rbd 64 64')
-    ceph_mon.exec_command(cmd='sudo ceph osd pool application enable rbd rbd --yes-i-really-mean-it')
+    if not build.startswith('2'):
+        ceph_mon.exec_command(cmd='sudo ceph osd pool create rbd 64 64')
+        ceph_mon.exec_command(cmd='sudo ceph osd pool application enable rbd rbd --yes-i-really-mean-it')
     return rc
