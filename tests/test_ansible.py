@@ -217,6 +217,10 @@ def run(**kw):
     out, rc = ceph_installer.exec_command(
         cmd='cd ceph-ansible ; ansible-playbook -vv -i hosts site.yml', long_running=True)
 
+    if rc != 0:
+        log.info("Failed during upgrade")
+        return rc
+
     # Add all clients
     for node in ceph_nodes:
         if node.role == 'mon':
