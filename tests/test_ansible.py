@@ -5,7 +5,6 @@ from time import sleep
 
 import yaml
 
-from ceph.ceph import CommandFailed
 from ceph.utils import setup_deb_repos, get_iso_file_url, setup_cdn_repos
 from ceph.utils import setup_repos, create_ceph_conf, check_ceph_healthly
 
