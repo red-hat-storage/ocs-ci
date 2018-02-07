@@ -5,6 +5,7 @@ from time import sleep
 
 import yaml
 
+from ceph.ceph import CommandFailed
 from ceph.utils import setup_deb_repos, get_iso_file_url, setup_cdn_repos
 from ceph.utils import setup_repos, create_ceph_conf, check_ceph_healthly
 
@@ -216,6 +217,10 @@ def run(**kw):
     log.info("Ceph versions " + out.read())
     out, rc = ceph_installer.exec_command(
         cmd='cd ceph-ansible ; ansible-playbook -vv -i hosts site.yml', long_running=True)
+
+    if rc != 0:
+        log.info("Failed during upgrade")
+        return rc
 
     # Add all clients
     for node in ceph_nodes:
