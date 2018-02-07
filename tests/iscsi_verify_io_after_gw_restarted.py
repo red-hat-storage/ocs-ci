@@ -37,10 +37,10 @@ def run(**kw):
             osd=out.read()
             break
     t1 = datetime.datetime.now()
-    time_plus_10 = t1 + datetime.timedelta(minutes=10)
+    time_plus_5 = t1 + datetime.timedelta(minutes=5)
     while (1):
         t2 = datetime.datetime.now()
-        if (t2 <= time_plus_10):
+        if (t2 <= time_plus_5):
             iscsi_initiators.exec_command(sudo=True, cmd="iscsiadm -m discovery -t sendtargets -p " + osd)
             iscsi_initiators.exec_command(sudo=True, cmd="iscsiadm -m node -T iqn.2003-01.com.redhat.iscsi-gw:ceph-igw -l",
                                           long_running=True)
@@ -60,7 +60,6 @@ def run(**kw):
                 del device_list[:]
                 log.info("less no of luns found retrying it again..")
         else:
-            break;
             log.info("less no of luns found and time excited..")
             return 1
     count = random.randint(1, len(device_list)-1)
