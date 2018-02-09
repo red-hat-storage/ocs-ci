@@ -179,8 +179,9 @@ def run(**kw):
                     [raw_journal_device for raw_journal_device in set(config['ansi_config'].get('dedicated_devices'))]
             devs = [dev for dev in devs if dev not in reserved_devs]
             num_osds = num_osds + len(devs)
+            auto_discovey = config['ansi_config'].get('osd_auto_discovery', False)
             osd_host = node.shortname + mon_interface + \
-                       " devices='" + json.dumps(devs) + "'"
+                       (" devices='" + json.dumps(devs) + "'" if not auto_discovey else '')
             osd_hosts.append(osd_host)
         if node.role == 'mds':
             mds_host = node.shortname + ' monitor_interface=' + node.eth_interface
