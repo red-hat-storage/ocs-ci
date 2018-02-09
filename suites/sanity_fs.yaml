@@ -27,19 +27,40 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
+                mds:
+                  mds_bal_split_size: 100
+                  mds_bal_merge_size: 5
+                  mds_bal_fragment_size_max: 10000
       desc: test cluster setup using ceph-ansible
       destroy-cluster: False
       abort-on-fail: true
    - test:
        name: multiple clients read/writing io
-       module: cephfs_clientsIO_test.py
+       module: CEPH-10528_10529.py
        polarion-id: CEPH-10528,CEPH-10529
+       desc: Testing Single CephFS on multiple clients,performing IOs and checking file locking mechanism
        abort-on-fail: true
    - test:
        name: cephfs_mds_failover
-       module: active_active_mdsfailover_test.py
+       module: CEPH-11228.py
        config:
              num_of_dirs: 1000
-       polarion-id: CEPH-11228,CEPH-11229,CEPH-11230
-       desc: Testing MDSfailover on active-active mdss with client IOs
+       polarion-id: CEPH-11228
+       desc: Testing MDSfailover on active-active mdss,performing client IOs with max:min directory pinning with 2 active mdss
+       abort-on-fail: true
+   - test:
+       name: cephfs_mds_failover
+       module: CEPH-11229.py
+       config:
+             num_of_dirs: 1000
+       polarion-id: CEPH-11229
+       desc: Testing MDSfailover on active-active mdss,performing client IOs with 10:2 directory pinning with 2 active mdss
+       abort-on-fail: true
+   - test:
+       name: cephfs_mds_failover
+       module: CEPH-11230.py
+       config:
+             num_of_dirs: 1000
+       polarion-id: CEPH-11230
+       desc: Testing MDSfailover on active-active mdss,performing client IOs with equal directory pinning with 2 active mdss
        abort-on-fail: true
