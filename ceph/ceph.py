@@ -29,6 +29,49 @@ class CommandFailed(Exception):
     pass
 
 
+class RolesContainer(object):
+    """
+    Container for single or multiple node roles.
+    Can be used as iterable or with equality '==' operator to check if role is present for the node.
+    Note that '==' operator will behave the same way as 'in' operator i.e. check that value is present in the role list.
+    """
+    def __init__(self, role):
+        if hasattr(role, '__iter__'):
+            self.role_list = role
+        else:
+            self.role_list = [str(role)]
+
+    def __eq__(self, role):
+        if role in self.role_list:
+            return True
+        else:
+            return False
+
+    def __ne__(self, role):
+        return not self.__eq__(role)
+
+    def equals(self, other):
+        if getattr(other, 'role_list') == self.role_list:
+            return True
+        else:
+            return False
+
+    def __len__(self):
+        return len(self.role_list)
+
+    def __getitem__(self, key):
+        return self.role_list[key]
+
+    def __setitem__(self, key, value):
+        self.role_list[key] = value
+
+    def __delitem__(self, key):
+        del self.role_list[key]
+
+    def __iter__(self):
+        return iter(self.role_list)
+
+
 class CephNode(object):
 
     def __init__(self, **kw):
@@ -48,7 +91,7 @@ class CephNode(object):
         self.vmname = kw['hostname']
         vmshortname = self.vmname.split('.')
         self.vmshortname = vmshortname[0]
-        self.role = kw['role']
+        self.role = RolesContainer(kw['role'])
         if self.role == 'osd':
             self.no_of_volumes = kw['no_of_volumes']
         if kw.get('ceph_vmnode'):
