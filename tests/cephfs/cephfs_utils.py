@@ -20,9 +20,7 @@ class FsUtils(object):
         self.active_mds_node_2 = ''
 
     def get_clients(self):
-
         log.info("Getting Clients")
-
         for node in self.ceph_nodes:
             if node.role == 'client':
                 self.clients.append(node)
@@ -115,7 +113,6 @@ class FsUtils(object):
         try:
             rand_count = random.randint(1, 10)
             log.info("Performing IOs on fuse-clients")
-            client.exec_command(cmd='sudo pip install crefi')
             client.exec_command(cmd="sudo crefi %s --fop create -n %d --random --min=1M --max=512M -t=sparse" % (
             mounting_dir, rand_count), long_running=True)
 
@@ -125,7 +122,6 @@ class FsUtils(object):
     def kernel_client_io(self,client,mounting_dir):
        rand_count = random.randint(1, 6)
        rand_bs = random.randint(100, 500)
-       client.exec_command(cmd='sudo pip install crefi')
        client.exec_command(cmd="sudo dd if=/dev/zero of=%snewfile_%s bs=%dM count=%d" % (
            mounting_dir, client.hostname, rand_bs, rand_count),
                            long_running=True)
@@ -201,7 +197,6 @@ finally:
         try:
             log.info("Creating Directories and Pinning to MDS %s" % (pin_val))
             for client in clients:
-                client.exec_command(cmd='sudo yum install -y attr')
                 for num in range(range1, range2):
                     out, err = client.exec_command(cmd='sudo mkdir %s%s_%d' % (mounting_dir, dir_name, num))
                     if pin_val != '':
@@ -236,7 +231,6 @@ finally:
             log.error(e)
 
     def get_active_mdss(self,mds_nodes):
-
         for node in mds_nodes:
             out, err = node.exec_command(cmd="sudo ceph mds stat | grep -o -P '(?<=0=).*(?==up:active,)'")
             self.active_mds_1 = out.read().rstrip('\n')
@@ -254,24 +248,22 @@ finally:
 
     def get_info(self,active_mds_node_1,active_mds_node_2):
         try:
-
             out_1,err_1 = active_mds_node_1.exec_command(cmd="sudo ceph --admin-daemon /var/run/ceph/ceph-mds.%s.asok get subtrees | grep path" %(active_mds_node_1.hostname))
-
             out_2,err_2 = active_mds_node_2.exec_command(cmd="sudo ceph --admin-daemon /var/run/ceph/ceph-mds.%s.asok get subtrees | grep path" %(active_mds_node_2.hostname))
 
             return out_1.read().rstrip('\n'),out_2.read().rstrip('\n')
 
         except Exception as e:
-
             log.error(e)
 
-    def stress_io(self,clients,mounting_dir):
+    def stress_io(self,clients,mounting_dir,dir_name):
         try:
             for client in clients:
-                out,err = client.exec_command(cmd='sudo ls %s' %(mounting_dir))
-                client.exec_command(cmd='sudo crefi %s%s --fop create --multi -b 10 -d 50 -n 5 --random --min=1M --max=2M -t=sparse'%(mounting_dir,out.read().rstrip('\n')))
+                n = 5000
+                while n!=0:
+                    client.exec_command(cmd='sudo touch %s%s/file_%d'%(mounting_dir,dir_name,n))
+                    n-=1
                 break
-
         except Exception as e:
             log.error(e)
 
@@ -282,39 +274,28 @@ finally:
                 for num in range(range1, range2):
                     if mds_fail_over != '':
                         mds_fail_over(mds_nodes)
-
                     out, err = client.exec_command(
                         cmd='sudo crefi -n %d %s%s_%d' % (num_of_files, mounting_dir, dir_name, num))
-
                     rc = out.channel.recv_exit_status()
-
                     self.return_counts.append(rc)
-
                     if rc == 0:
                         log.info("Client IO is going on,success")
                     else:
                         log.error("Client IO got interrupted")
-
                         self.failure_info.update({client:err.read()})
                 break
-
             return self.return_counts,self.failure_info
 
         except Exception as e:
             log.error(e)
 
     def rc_verify(self,tc,return_counts):
-
         return_codes_set = set(return_counts)
-
         if len(return_codes_set) == 1:
-
             out = "Test case %s Passed" % (tc)
-
             return out
         else:
             out = "Test case %s Failed" % (tc)
-
             return out
 
     def clean_up(self,fuse_clients,kernel_clients,mounting_dir,umount=None):
@@ -337,4 +318,3 @@ finally:
 
        except Exception as e:
            log.error(e)
-
