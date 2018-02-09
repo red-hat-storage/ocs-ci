@@ -85,6 +85,6 @@ def run(**kw):
     num_osds = test_data['ceph-ansible']['num-osds']
     num_mons = test_data['ceph-ansible']['num-osds']
     if rc != 0:
-        log.info("Failed during upgrade")
+        log.error("Failed during upgrade")
         return rc
     return check_ceph_healthly(ceph_mon, num_osds, num_mons)

@@ -5,7 +5,7 @@ from time import sleep
 import yaml
 
 from ceph.utils import setup_deb_repos, get_iso_file_url, setup_cdn_repos
-from ceph.utils import setup_repos, create_ceph_conf, check_ceph_healthly
+from ceph.utils import setup_repos, check_ceph_healthly
 
 logger = logging.getLogger(__name__)
 log = logger
@@ -110,7 +110,6 @@ def run(**kw):
         ceph.exec_command(cmd='chmod 400 ~/.ssh/config')
 
     for ceph in ceph_nodes:
-        # if config.get('ceph_repository_type') != 'cdn' or config.get('use_cdn', False) is not True:
         if not config.get('use_cdn', False):
             if config['ansi_config'].get('ceph_repository_type') != 'iso' or \
                     config['ansi_config'].get('ceph_repository_type') == 'iso' and \
@@ -249,7 +248,7 @@ def run(**kw):
         cmd='cd ceph-ansible ; ansible-playbook -vv -i hosts site.yml', long_running=True)
 
     if rc != 0:
-        log.info("Failed during upgrade")
+        log.error("Failed during deployment")
         return rc
 
     # Add all clients
@@ -264,7 +263,7 @@ def run(**kw):
     timeout = 300
     if config.get('timeout'):
         timeout = datetime.timedelta(seconds=config.get('timeout'))
-    if (check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container, timeout) != 0):
+    if check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container, timeout) != 0:
         return 1
     # add test_data for later use by upgrade test etc
     test_data['ceph-ansible'] = {'num-osds': num_osds, 'num-mons': num_mons, 'rhbuild': build}
