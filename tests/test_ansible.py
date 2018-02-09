@@ -37,7 +37,34 @@ def run(**kw):
 
     ceph_installer = None
     ceph_mon = None
-
+    for ceph in ceph_nodes:
+        if ceph.role == 'mon':
+            ceph.exec_command(sudo=True,cmd="systemctl enable firewalld")
+            ceph.exec_command(sudo=True,cmd="systemctl start firewalld")
+            ceph.exec_command(sudo=True,cmd="systemctl status firewalld")
+            ceph.exec_command(sudo=True,cmd="firewall-cmd --zone=public --add-port=6789/tcp")
+            ceph.exec_command(sudo=True,cmd="firewall-cmd --zone=public --add-port=6789/tcp --permanent")
+    for ceph in ceph_nodes:
+        if ceph.role == 'osd':
+            ceph.exec_command(sudo=True,cmd="systemctl enable firewalld")
+            ceph.exec_command(sudo=True,cmd="systemctl start firewalld")
+            ceph.exec_command(sudo=True,cmd="systemctl status firewalld")
+            ceph.exec_command(sudo=True,cmd="firewall-cmd --zone=public --add-port=6800-7300/tcp")
+            ceph.exec_command(sudo=True,cmd="firewall-cmd --zone=public --add-port=6800-7300/tcp --permanent")
+    for ceph in ceph_nodes:
+        if ceph.role == 'mgr':
+            ceph.exec_command(sudo=True,cmd="systemctl enable firewalld")
+            ceph.exec_command(sudo=True,cmd="systemctl start firewalld")
+            ceph.exec_command(sudo=True,cmd="systemctl status firewalld")
+            ceph.exec_command(sudo=True,cmd="firewall-cmd --zone=public --add-port=6800-7300/tcp")
+            ceph.exec_command(sudo=True,cmd="firewall-cmd --zone=public --add-port=6800-7300/tcp --permanent")
+    for ceph in ceph_nodes:
+        if ceph.role == 'mds':
+            ceph.exec_command(sudo=True,cmd="systemctl enable firewalld")
+            ceph.exec_command(sudo=True,cmd="systemctl start firewalld")
+            ceph.exec_command(sudo=True,cmd="systemctl status firewalld")
+            ceph.exec_command(sudo=True,cmd="firewall-cmd --zone=public --add-port=6800/tcp")
+            ceph.exec_command(sudo=True,cmd="firewall-cmd --zone=public --add-port=6800/tcp --permanent")
     for node in ceph_nodes:
         if node.role == 'installer':
             log.info("Setting installer node")
