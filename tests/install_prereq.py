@@ -59,7 +59,6 @@ def install_prereq(ceph,timeout=1800):
             ceph.exec_command(cmd='sudo subscription-manager repos --disable=*', long_running=True)
             ceph.exec_command(cmd='sudo subscription-manager repos --enable=rhel-7-server-rpms  --enable=rhel-7-server-optional-rpms --enable=rhel-7-server-extras-rpms', long_running=True)
             ceph.exec_command(cmd='sudo yum install -y ' + rpm_all_pkgs, long_running=True)
-            ceph.exec_command(cmd='sudo yum install -y ' + rpm_all_pkgs, long_running=True)
             if ceph.role == 'client':
                 ceph.exec_command(cmd='sudo yum install -y attr',long_running=True)
                 ceph.exec_command(cmd='sudo pip install crefi', long_running=True)
