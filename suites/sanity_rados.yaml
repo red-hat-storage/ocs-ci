@@ -30,11 +30,19 @@ tests:
       abort-on-fail: true
 
    - test:
-      name: test_9281
+      name: LRCec pool io test_9281
       module: test_9281.py
-      desc: test_9281 
+      polarion-id: CEPH-9281
+      desc: LRCec pool with IO and osd failures
 
    - test:
-      name: test_9322
+      name: Different k,m,l:test_9322
       module: test_9322.py
-      desc: test_9322
+      polarion-id: CEPH-9322
+      desc: LRCec pool with different k,m,l values
+
+   - test:
+      name: corrupt snaps test_9928
+      module: test_9928
+      polarion-id: CEPH-9928
+      desc: corrupt snapset of an object and list-inconsistent-snapset
