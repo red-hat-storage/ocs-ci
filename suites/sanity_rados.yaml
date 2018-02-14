@@ -51,3 +51,8 @@ tests:
       module: test_9929
       polarion-id: CEPH-9929
       desc: corrupt an object in ec pool and list-inconsistent-obj
+   - test:
+      name: Delete snapset of an object test_9939
+      module: test_9939
+      polarion-id: CEPH-9939
+      desc: Delete snapset of an object followed by list-inconsistent-obj
