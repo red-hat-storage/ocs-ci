@@ -46,3 +46,8 @@ tests:
       module: test_9928
       polarion-id: CEPH-9928
       desc: corrupt snapset of an object and list-inconsistent-snapset
+   - test:
+      name: corrupt object in ec pool test_9929
+      module: test_9929
+      polarion-id: CEPH-9929
+      desc: corrupt an object in ec pool and list-inconsistent-obj
