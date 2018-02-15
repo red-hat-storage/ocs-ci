@@ -388,3 +388,75 @@ tests:
               sudo: False
         desc: Purge ceph cluster
         destroy-cluster: True
+
+
+- test:
+      name: ceph ansible
+      module: test_ansible.py
+      config:
+        ansi_config:
+            ceph_test: True
+            ceph_origin: distro
+            ceph_stable_release: luminous
+            ceph_repository: rhcs
+            osd_scenario: collocated
+            dmcrypt: True
+            osd_auto_discovery: True
+            journal_size: 1024
+            ceph_stable: True
+            ceph_stable_rh_storage: True
+            public_network: 172.16.0.0/12
+            ceph_docker_image: rhceph/rhceph-3-rhel7
+            containerized_deployment: true
+            ceph_docker_registry: registry.access.redhat.com
+            copy_admin_key: true
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 64
+                  osd_default_pool_size: 2
+                  osd_pool_default_pgp_num: 64
+                  mon_max_pg_per_osd: 1024
+                mon:
+                  mon_allow_pool_delete: true
+      desc: test cluster setup using ceph-ansible
+      destroy-cluster: False
+      abort-on-fail: true
+
+#   - test:
+#      name: librbd workunit
+#      module: test_workunit.py
+#      config:
+#            test_name: rbd/test_librbd_python.sh
+#            branch: luminous
+#            role: mon
+#      desc: Test librbd unit tests
+#   - test:
+#      name: rbd cli automation
+#      module: rbd_system.py
+#      config:
+#            test_name: rbd_cli_automation.py
+#            branch: master
+#      desc: Test rbd cli automation tests
+#   - test:
+#      name: check-ceph-health
+#      module: exec.py
+#      config:
+#            cmd: ceph -s
+#            sudo: True
+#      desc: Check for ceph health debug info
+#   - test:
+#      name: rados_bench_test
+#      module: radosbench.py
+#      config:
+#            pg_num: '128'
+#            pool_type: 'normal'
+#      desc: run rados bench for 360 - normal profile
+
+   - test:
+        name: ceph ansible purge
+        module: exec_installer.py
+        config:
+              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
+              sudo: False
+        desc: Purge ceph cluster
+        destroy-cluster: True
