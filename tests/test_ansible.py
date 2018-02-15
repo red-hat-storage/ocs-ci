@@ -4,7 +4,7 @@ import logging
 from time import sleep
 import yaml
 
-from ceph.utils import setup_deb_repos, get_iso_file_url, setup_cdn_repos
+from ceph.utils import setup_deb_repos, get_iso_file_url, setup_cdn_repos, write_docker_daemon_json
 from ceph.utils import setup_repos, check_ceph_healthly
 
 logger = logging.getLogger(__name__)
@@ -224,6 +224,13 @@ def run(**kw):
         file_name='ceph-ansible/hosts', file_mode='w')
     host_file.write(hosts_file)
     host_file.flush()
+    if config.get('ansi_config').get('containerized_deployment') and config.get('docker-insecure-registry') and \
+            config.get('ansi_config').get('ceph_docker_registry'):
+        insecure_registry = '{{"insecure-registries" : ["{registry}"]}}'.format(
+            registry=config.get('ansi_config').get('ceph_docker_registry'))
+        log.warn('Adding insecure registry:\n{registry}'.format(registry=insecure_registry))
+        for node in ceph_nodes:
+            write_docker_daemon_json(insecure_registry, node)
 
     # use the provided sample file as main site.yml
     if config.get('ansi_config').get('containerized_deployment') is True:

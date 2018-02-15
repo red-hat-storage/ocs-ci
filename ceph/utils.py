@@ -340,3 +340,11 @@ def update_ca_cert(node, cert_url, timeout=120):
         cmd = 'cd /etc/pki/ca-trust/source/anchors && {{ sudo curl -O {url} ; cd -; }}'.format(url=cert_url)
         node.exec_command(cmd=cmd, timeout=timeout)
         node.exec_command(cmd='sudo update-ca-trust extract', timeout=timeout)
+
+
+def write_docker_daemon_json(json_text, node):
+    node.exec_command(cmd='sudo mkdir -p /etc/docker/ && sudo chown $USER /etc/docker && chmod 755 /etc/docker')
+    docker_daemon = node.write_file(file_name='/etc/docker/daemon.json', file_mode='w')
+    docker_daemon.write(json_text)
+    docker_daemon.flush()
+    docker_daemon.close()

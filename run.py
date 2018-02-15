@@ -26,6 +26,10 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--reuse <file>]
         [--skip-cluster]
         [--cleanup <name>]
+        [--docker-registry <registry>]
+        [--docker-image <image>]  
+        [--docker-tag <tag>] 
+        [--insecure-registry] 
 
 
 Options:
@@ -52,6 +56,10 @@ Options:
   --store                           store the current vm state for reuse
   --reuse <file>                    use the stored vm state for rerun
   --skip-cluster                    skip cluster creation from ansible/ceph-deploy
+  --docker-registry <registry>      Docker registry, deafult value is taken from ansible config
+  --docker-image <image>            Docker image, deafult value is taken from ansible config 
+  --docker-tag <tag>                Docker tag, default value is 'latest'
+  --insecure-registry               Disable security check for docker registry
 """
 
 logger = logging.getLogger(__name__)
@@ -123,6 +131,10 @@ def run(args):
     ubuntu_repo = args.get('--ubuntu-repo', None)
     kernel_repo = args.get('--kernel-repo', None)
     rhbuild = args.get('--rhbuild')
+    docker_registry = args.get('--docker-registry', None)
+    docker_image = args.get('--docker-image', None)
+    docker_tag = args.get('--docker-tag', None)
+    docker_insecure_registry = args.get('--insecure-registry', False)
     if rhbuild.startswith('2'):
         if base_url is None:
             # use latest as default when nothing is specified in cli
@@ -144,11 +156,11 @@ def run(args):
             # default installer repo points to latest
             installer_url = 'http://download.eng.bos.redhat.com/composes/auto/rhscon-2-rhel-7/latest-RHSCON-2-RHEL-7/'
     if os.environ.get('TOOL') is not None:
-        c = json.loads(os.environ['CI_MESSAGE'])
-        compose_id = c['compose_id']
-        compose_url = c['compose_url'] + "/"
-        product_name = c['product_name']
-        product_version = c['product_version']
+        ci_message = json.loads(os.environ['CI_MESSAGE'])
+        compose_id = ci_message['compose_id']
+        compose_url = ci_message['compose_url'] + "/"
+        product_name = ci_message.get('product_name', None)
+        product_version = ci_message.get('product_version', None)
         log.info("COMPOSE_URL = %s ", compose_url)
         if os.environ['TOOL'] == 'pungi':
             # is a rhel compose
@@ -158,6 +170,15 @@ def run(args):
             log.info("trigger on CI Ubuntu Compose")
             ubuntu_repo = compose_url
             log.info("using ubuntu repo" + ubuntu_repo)
+        elif os.environ['TOOL'] == 'bucko':
+            # is a docker compose
+            log.info("Trigger on CI Docker Compose")
+            docker_registry, docker_image_tag = ci_message['repositories'][0].split('/')
+            docker_image, docker_tag = docker_image_tag.split(':')
+            log.info("\nUsing docker registry from ci message: {registry} \nDocker image: {image}\nDocker tag:{tag}" \
+                     .format(registry=docker_registry, image=docker_image, tag=docker_tag))
+            log.warn('Using Docker insecure registry setting')
+            docker_insecure_registry = True
         if product_name == 'ceph':
             # is a rhceph compose
             base_url = compose_url
@@ -226,6 +247,14 @@ def run(args):
             repo = args.get('--add-repo')
             if repo.startswith('http'):
                 config['add-repo'] = repo
+        config['docker-insecure-registry'] = docker_insecure_registry
+        if config and config.get('ansi_config'):
+            if docker_registry:
+                config.get('ansi_config')['ceph_docker_registry'] = str(docker_registry)
+            if docker_image:
+                config.get('ansi_config')['ceph_docker_image'] = str(docker_image)
+            if docker_tag:
+                config.get('ansi_config')['ceph_docker_image_tag'] = str(docker_tag)
         if kernel_repo is not None:
             config['kernel-repo'] = kernel_repo
         # if Kernel Repo is defined in ENV then set the value in config
