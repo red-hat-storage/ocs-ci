@@ -28,7 +28,7 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
-      desc: test cluster setup using ceph-ansible
+      desc: osd with collocated journal
       destroy-cluster: False
       abort-on-fail: true
 
@@ -77,7 +77,7 @@ tests:
        abort-on-fail: true
 
    - test:
-      name: ceph ansible dmcrypt
+      name: ceph ansible
       module: test_ansible.py
       config:
         ansi_config:
@@ -101,7 +101,7 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
-      desc: test cluster with dmcrypt setup using ceph-ansible
+      desc: encrypted osd with collocated journal
       destroy-cluster: False
       abort-on-fail: true
 
@@ -150,7 +150,7 @@ tests:
        abort-on-fail: true
 
    - test:
-      name: ceph ansible raw multi journal
+      name: ceph ansible
       module: test_ansible.py
       config:
         ansi_config:
@@ -177,7 +177,7 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
-      desc: test cluster with raw multi journal setup using ceph-ansible
+      desc: osd with dedicated journal
       destroy-cluster: False
       abort-on-fail: true
 
@@ -226,7 +226,7 @@ tests:
        abort-on-fail: true
 
    - test:
-        name: ceph ansible dmcrypt dedicated journal
+        name: ceph ansible
         module: test_ansible.py
         config:
           ansi_config:
@@ -254,7 +254,7 @@ tests:
                     mon_max_pg_per_osd: 1024
                   mon:
                     mon_allow_pool_delete: true
-        desc: test cluster with dmcrypt dedicated journal setup using ceph-ansible
+        desc: encrypted osd with dedicated journal
         destroy-cluster: False
         abort-on-fail: true
 
@@ -328,7 +328,7 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
-      desc: test cluster setup using ceph-ansible
+      desc: iso source (osd with collocated journal)
       destroy-cluster: False
       abort-on-fail: true
 
@@ -473,7 +473,7 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
-      desc: test cluster setup using ceph-ansible
+      desc: osd with collocated journal and autodiscovery
       destroy-cluster: False
       abort-on-fail: true
 
