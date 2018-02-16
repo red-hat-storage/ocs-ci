@@ -69,9 +69,10 @@ tests:
         name: ceph ansible purge
         module: exec_installer.py
         config:
-              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
+              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-docker-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes -e remove_packages=yes
               sudo: False
         desc: Purge ceph cluster
+### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
         recreate-cluster: True
 
 
@@ -79,6 +80,7 @@ tests:
        name: install ceph pre-requisities
        module: install_prereq.py
        abort-on-fail: true
+###
 
    - test:
       name: containerized ceph ansible
@@ -146,9 +148,10 @@ tests:
         name: ceph ansible purge
         module: exec_installer.py
         config:
-              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
+              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-docker-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes -e remove_packages=yes
               sudo: False
         desc: Purge ceph cluster
+### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
         recreate-cluster: True
 
 
@@ -156,6 +159,7 @@ tests:
        name: install ceph pre-requisities
        module: install_prereq.py
        abort-on-fail: true
+###
 
    - test:
       name: containerized ceph ansible
@@ -171,6 +175,7 @@ tests:
               - /dev/vde
               - /dev/vde
               - /dev/vde
+ #             - /dev/vde  ##https://bugzilla.redhat.com/show_bug.cgi?id=1548526
             osd_auto_discovery: False
             journal_size: 1024
             ceph_stable: True
@@ -226,9 +231,10 @@ tests:
         name: ceph ansible purge
         module: exec_installer.py
         config:
-              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
+              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-docker-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes -e remove_packages=yes
               sudo: False
         desc: Purge ceph cluster
+### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
         recreate-cluster: True
 
 
@@ -236,6 +242,7 @@ tests:
        name: install ceph pre-requisities
        module: install_prereq.py
        abort-on-fail: true
+###
 
    - test:
       name: containerized ceph ansible
@@ -252,6 +259,7 @@ tests:
               - /dev/vde
               - /dev/vde
               - /dev/vde
+#              - /dev/vde ##https://bugzilla.redhat.com/show_bug.cgi?id=1548526
             osd_auto_discovery: False
             journal_size: 1024
             ceph_stable: True
@@ -307,15 +315,17 @@ tests:
         name: ceph ansible purge
         module: exec_installer.py
         config:
-              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
+              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-docker-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes -e remove_packages=yes
               sudo: False
         desc: Purge ceph cluster
+### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
         recreate-cluster: True
 
    - test:
        name: install ceph pre-requisities
        module: install_prereq.py
        abort-on-fail: true
+###
 
    - test:
       name: containerized ceph ansible
@@ -384,10 +394,18 @@ tests:
         name: ceph ansible purge
         module: exec_installer.py
         config:
-              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
+              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-docker-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes -e remove_packages=yes
               sudo: False
         desc: Purge ceph cluster
+### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
         recreate-cluster: True
+
+
+   - test:
+       name: install ceph pre-requisities
+       module: install_prereq.py
+       abort-on-fail: true
+###
 
    - test:
        name: install ceph pre-requisities
@@ -460,7 +478,7 @@ tests:
         name: ceph ansible purge
         module: exec_installer.py
         config:
-              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
+              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-docker-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes -e remove_packages=yes
               sudo: False
         desc: Purge ceph cluster
         destroy-cluster: True
