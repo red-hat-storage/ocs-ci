@@ -48,42 +48,51 @@ def run(**kw):
         if ceph.pkg_type == 'rpm':
             ceph.exec_command(sudo=True, cmd='yum update metadata')
 
-    ceph_installer.exec_command(
-        sudo=True, cmd='cd cd; yum install -y ceph-ansible ; sleep 4')
-    ceph_installer.exec_command(
-        cmd='cp -R /usr/share/ceph-ansible ~/ ; sleep 2')
+    # Backup existing hosts file
+    ansible_dir = '/usr/share/ceph-ansible'
+    ceph_installer.exec_command(cmd='cp {}/hosts /tmp/hosts'.format(ansible_dir))
 
-    # If upgrading from version 2 update all.yml and hosts file
+    # Update ceph-ansible
+    if ceph_installer.pkg_type == 'deb':
+        ceph_installer.exec_command(sudo=True, cmd='apt-get install -y ceph-ansible')
+    else:
+        ceph_installer.exec_command(sudo=True, cmd='yum update -y ceph-ansible')
+
+    # Create all.yml
+    gvar = yaml.dump(config.get('ansi_config'), default_flow_style=False)
+    log.info("global vars {}".format(gvar))
+    gvars_file = ceph_installer.write_file(
+        sudo=True, file_name='{}/group_vars/all.yml'.format(ansible_dir), file_mode='w')
+    gvars_file.write(gvar)
+    gvars_file.flush()
+
+    # Restore hosts file
+    ceph_installer.exec_command(sudo=True, cmd='cp /tmp/hosts {}/hosts'.format(ansible_dir))
+
+    # If upgrading from version 2 update hosts file with mgrs
     if build.startswith('2'):
-        log.info("Upgrading from version 2")
-        gvar = yaml.dump(config.get('ansi_config'), default_flow_style=False)
-        log.info("global vars " + gvar)
-        gvars_file = ceph_installer.write_file(
-            file_name='ceph-ansible/group_vars/all.yml', file_mode='w')
-        gvars_file.write(gvar)
-        gvars_file.flush()
-
         log.info("Adding mons as mgrs in hosts file")
         mon_nodes = [node for node in ceph_nodes if node.role == 'mon']
         mgr_block = '[mgrs]\n'
         for node in mon_nodes:
             mgr_block += node.shortname + ' monitor_interface=' + node.eth_interface + '\n'
 
-        host_file = ceph_installer.write_file(file_name='ceph-ansible/hosts', file_mode='a')
+        host_file = ceph_installer.write_file(sudo=True, file_name='{}/hosts'.format(ansible_dir), file_mode='a')
         host_file.write(mgr_block)
         host_file.flush()
 
         log.info(mgr_block)
 
     # copy rolling update from infrastructure playbook
-    ceph_installer.exec_command(cmd='cd ceph-ansible ; cp infrastructure-playbooks/rolling_update.yml .')
+    ceph_installer.exec_command(
+        sudo=True, cmd='cd {} ; cp infrastructure-playbooks/rolling_update.yml .'.format(ansible_dir))
     out, rc = ceph_installer.exec_command(
-        cmd='cd ceph-ansible ; ansible-playbook -e ireallymeanit=yes -vv -i hosts rolling_update.yml',
+        cmd='cd {} ; ansible-playbook -e ireallymeanit=yes -vv -i hosts rolling_update.yml'.format(ansible_dir),
         long_running=True)
 
     # check if all mon's and osd's are in correct state
     num_osds = test_data['ceph-ansible']['num-osds']
-    num_mons = test_data['ceph-ansible']['num-osds']
+    num_mons = test_data['ceph-ansible']['num-mons']
     if rc != 0:
         log.error("Failed during upgrade")
         return rc

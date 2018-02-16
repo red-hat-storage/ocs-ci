@@ -19,6 +19,8 @@ def run(**kw):
     config = kw.get('config')
     test_data = kw.get('test_data')
     ubuntu_repo = None
+    ansible_dir = '/usr/share/ceph-ansible'
+
     if config.get('ubuntu_repo'):
         ubuntu_repo = config.get('ubuntu_repo')
     if config.get('base_url'):
@@ -39,32 +41,32 @@ def run(**kw):
     ceph_mon = None
     for ceph in ceph_nodes:
         if ceph.role == 'mon':
-            ceph.exec_command(sudo=True,cmd="systemctl enable firewalld")
-            ceph.exec_command(sudo=True,cmd="systemctl start firewalld")
-            ceph.exec_command(sudo=True,cmd="systemctl status firewalld")
-            ceph.exec_command(sudo=True,cmd="firewall-cmd --zone=public --add-port=6789/tcp")
-            ceph.exec_command(sudo=True,cmd="firewall-cmd --zone=public --add-port=6789/tcp --permanent")
+            ceph.exec_command(sudo=True, cmd="systemctl enable firewalld")
+            ceph.exec_command(sudo=True, cmd="systemctl start firewalld")
+            ceph.exec_command(sudo=True, cmd="systemctl status firewalld")
+            ceph.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port=6789/tcp")
+            ceph.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port=6789/tcp --permanent")
     for ceph in ceph_nodes:
         if ceph.role == 'osd':
-            ceph.exec_command(sudo=True,cmd="systemctl enable firewalld")
-            ceph.exec_command(sudo=True,cmd="systemctl start firewalld")
-            ceph.exec_command(sudo=True,cmd="systemctl status firewalld")
-            ceph.exec_command(sudo=True,cmd="firewall-cmd --zone=public --add-port=6800-7300/tcp")
-            ceph.exec_command(sudo=True,cmd="firewall-cmd --zone=public --add-port=6800-7300/tcp --permanent")
+            ceph.exec_command(sudo=True, cmd="systemctl enable firewalld")
+            ceph.exec_command(sudo=True, cmd="systemctl start firewalld")
+            ceph.exec_command(sudo=True, cmd="systemctl status firewalld")
+            ceph.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port=6800-7300/tcp")
+            ceph.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port=6800-7300/tcp --permanent")
     for ceph in ceph_nodes:
         if ceph.role == 'mgr':
-            ceph.exec_command(sudo=True,cmd="systemctl enable firewalld")
-            ceph.exec_command(sudo=True,cmd="systemctl start firewalld")
-            ceph.exec_command(sudo=True,cmd="systemctl status firewalld")
-            ceph.exec_command(sudo=True,cmd="firewall-cmd --zone=public --add-port=6800-7300/tcp")
-            ceph.exec_command(sudo=True,cmd="firewall-cmd --zone=public --add-port=6800-7300/tcp --permanent")
+            ceph.exec_command(sudo=True, cmd="systemctl enable firewalld")
+            ceph.exec_command(sudo=True, cmd="systemctl start firewalld")
+            ceph.exec_command(sudo=True, cmd="systemctl status firewalld")
+            ceph.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port=6800-7300/tcp")
+            ceph.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port=6800-7300/tcp --permanent")
     for ceph in ceph_nodes:
         if ceph.role == 'mds':
-            ceph.exec_command(sudo=True,cmd="systemctl enable firewalld")
-            ceph.exec_command(sudo=True,cmd="systemctl start firewalld")
-            ceph.exec_command(sudo=True,cmd="systemctl status firewalld")
-            ceph.exec_command(sudo=True,cmd="firewall-cmd --zone=public --add-port=6800/tcp")
-            ceph.exec_command(sudo=True,cmd="firewall-cmd --zone=public --add-port=6800/tcp --permanent")
+            ceph.exec_command(sudo=True, cmd="systemctl enable firewalld")
+            ceph.exec_command(sudo=True, cmd="systemctl start firewalld")
+            ceph.exec_command(sudo=True, cmd="systemctl status firewalld")
+            ceph.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port=6800/tcp")
+            ceph.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port=6800/tcp --permanent")
     for node in ceph_nodes:
         if node.role == 'installer':
             log.info("Setting installer node")
@@ -78,7 +80,7 @@ def run(**kw):
         ceph.generate_id_rsa()
         keys = keys + ceph.id_rsa_pub
         hosts = hosts + ceph.ip_address + "\t" + ceph.hostname \
-                + "\t" + ceph.shortname + "\n"
+            + "\t" + ceph.shortname + "\n"
 
     # check to see for any additional repo (test mode)
     if config.get('add-repo'):
@@ -90,7 +92,7 @@ def run(**kw):
                         repo=repo, sn=ceph.shortname))
                 ceph.exec_command(
                     sudo=True, cmd='wget -O /etc/yum.repos.d/rh_add_repo.repo {repo}'.format(repo=repo))
-                ceph.exec_command(cmd='sudo yum update metadata')
+                ceph.exec_command(sudo=True, cmd='yum update metadata')
 
     for ceph in ceph_nodes:
         keys_file = ceph.write_file(
@@ -119,17 +121,17 @@ def run(**kw):
                     setup_deb_repos(ceph, ubuntu_repo)
                     sleep(15)
                     # install python2 on xenial
-                    ceph.exec_command(cmd='sudo apt-get install -y python')
-                    ceph.exec_command(cmd='sudo apt-get install -y python-pip')
-                    ceph.exec_command(cmd='sudo apt-get install -y ntp')
-                    ceph.exec_command(cmd='sudo apt-get install -y chrony')
-                    ceph.exec_command(cmd='sudo pip install nose')
+                    ceph.exec_command(sudo=True, cmd='sudo apt-get install -y python')
+                    ceph.exec_command(sudo=True, cmd='apt-get install -y python-pip')
+                    ceph.exec_command(sudo=True, cmd='apt-get install -y ntp')
+                    ceph.exec_command(sudo=True, cmd='apt-get install -y chrony')
+                    ceph.exec_command(sudo=True, cmd='pip install nose')
                 else:
                     setup_repos(ceph, base_url, installer_url)
             if config['ansi_config'].get('ceph_repository_type') == 'iso' and ceph.role == 'installer':
                 iso_file_url = get_iso_file_url(base_url)
-                ceph.exec_command(
-                    cmd='mkdir -p ~/ceph-ansible/iso/ && wget -O ~/ceph-ansible/iso/ceph.iso ' + iso_file_url)
+                ceph.exec_command(sudo=True, cmd='mkdir -p {}/iso'.format(ansible_dir))
+                ceph.exec_command(sudo=True, cmd='wget -O {}/iso/ceph.iso {}'.format(ansible_dir, iso_file_url))
         else:
             log.info("Using the cdn repo for the test")
             setup_cdn_repos(ceph_nodes, build=config.get('build'))
@@ -142,8 +144,6 @@ def run(**kw):
         ceph_installer.exec_command(
             sudo=True, cmd='yum install -y ceph-ansible')
     sleep(4)
-    ceph_installer.exec_command(
-        cmd='cp -R /usr/share/ceph-ansible ~/')
     sleep(2)
     mon_hosts = []
     osd_hosts = []
@@ -177,7 +177,6 @@ def run(**kw):
                 dev = '/dev/vd' + chr(devchar)
                 devs.append(dev)
                 devchar += 1
-                # num_osds += 1
             reserved_devs = []
             if config['ansi_config'].get('osd_scenario') == 'non-collocated':
                 reserved_devs = \
@@ -199,34 +198,28 @@ def run(**kw):
             client_hosts.append(client_host)
 
     hosts_file = ''
-    for hosts in mon_hosts:
+    if mon_hosts:
         mon = '[mons]\n' + '\n'.join(mon_hosts)
         hosts_file += mon + '\n'
-        break
-    for hosts in mgr_hosts:
+    if mgr_hosts:
         mgr = '[mgrs]\n' + '\n'.join(mgr_hosts)
         hosts_file += mgr + '\n'
-        break
-    for hosts in osd_hosts:
+    if osd_hosts:
         osd = '[osds]\n' + '\n'.join(osd_hosts)
         hosts_file += osd + '\n'
-        break
-    for hosts in mds_hosts:
+    if mds_hosts:
         mds = '[mdss]\n' + '\n'.join(mds_hosts)
         hosts_file += mds + '\n'
-        break
-    for hosts in rgw_hosts:
+    if rgw_hosts:
         rgw = '[rgws]\n' + '\n'.join(rgw_hosts)
         hosts_file += rgw + '\n'
-        break
-    for hosts in client_hosts:
+    if client_hosts:
         client = '[clients]\n' + '\n'.join(client_hosts)
         hosts_file += client + '\n'
-        break
 
     log.info('Generated hosts file: \n{file}'.format(file=hosts_file))
     host_file = ceph_installer.write_file(
-        file_name='ceph-ansible/hosts', file_mode='w')
+        sudo=True, file_name='{}/hosts'.format(ansible_dir), file_mode='w')
     host_file.write(hosts_file)
     host_file.flush()
     if config.get('ansi_config').get('containerized_deployment') and config.get('docker-insecure-registry') and \
@@ -240,15 +233,16 @@ def run(**kw):
     # use the provided sample file as main site.yml
     if config.get('ansi_config').get('containerized_deployment') is True:
         ceph_installer.exec_command(
-            cmd='cp -R /usr/share/ceph-ansible/site-docker.yml.sample ~/ceph-ansible/site.yml')
+            sudo=True,
+            cmd='cp -R {ansible_dir}/site-docker.yml.sample {ansible_dir}/site.yml'.format(ansible_dir=ansible_dir))
     else:
         ceph_installer.exec_command(
-            cmd='cp -R /usr/share/ceph-ansible/site.yml.sample ~/ceph-ansible/site.yml')
+            sudo=True, cmd='cp -R {ansible_dir}/site.yml.sample {ansible_dir}/site.yml'.format(ansible_dir=ansible_dir))
 
     gvar = yaml.dump(config.get('ansi_config'), default_flow_style=False)
     log.info("global vars " + gvar)
     gvars_file = ceph_installer.write_file(
-        file_name='ceph-ansible/group_vars/all', file_mode='w')
+        sudo=True, file_name='{}/group_vars/all.yml'.format(ansible_dir), file_mode='w')
     gvars_file.write(gvar)
     gvars_file.flush()
 
@@ -258,7 +252,7 @@ def run(**kw):
         out, rc = ceph_installer.exec_command(cmd='apt-cache search ceph')
     log.info("Ceph versions " + out.read())
     out, rc = ceph_installer.exec_command(
-        cmd='cd ceph-ansible ; ansible-playbook -vv -i hosts site.yml', long_running=True)
+        cmd='cd {} ; ansible-playbook -vv -i hosts site.yml'.format(ansible_dir), long_running=True)
 
     if rc != 0:
         log.error("Failed during deployment")
@@ -285,11 +279,11 @@ def run(**kw):
     if not build.startswith('2'):
         if config.get('ansi_config').get('containerized_deployment') is True:
             ceph_mon.exec_command(
-                cmd='sudo docker exec {container} ceph osd pool create rbd 64 64'.format(container=mon_container))
+                sudo=True, cmd='docker exec {container} ceph osd pool create rbd 64 64'.format(container=mon_container))
             ceph_mon.exec_command(
-                cmd='sudo docker exec {container} ceph osd pool application enable rbd rbd --yes-i-really-mean-it'
+                sudo=True, cmd='docker exec {container} ceph osd pool application enable rbd rbd --yes-i-really-mean-it'
                     .format(container=mon_container))
         else:
-            ceph_mon.exec_command(cmd='sudo ceph osd pool create rbd 64 64')
-            ceph_mon.exec_command(cmd='sudo ceph osd pool application enable rbd rbd --yes-i-really-mean-it')
+            ceph_mon.exec_command(sudo=True, cmd='ceph osd pool create rbd 64 64')
+            ceph_mon.exec_command(sudo=True, cmd='ceph osd pool application enable rbd rbd --yes-i-really-mean-it')
     return rc

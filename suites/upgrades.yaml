@@ -9,7 +9,7 @@ tests:
       module: test_ansible.py
       config:
         use_cdn: True
-        build: '2.0'
+        build: '2.x'
         ansi_config:
             ceph_test: True
             ceph_rhcs: True
@@ -20,6 +20,7 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            fetch_directory: /home/cephuser/fetch
             ceph_conf_overrides:
                 global:
                   osd_pool_default_pg_num: 128
@@ -34,10 +35,10 @@ tests:
        destroy-cluster: True
        config:
           use_cdn: True
-          build: '3.0'
+          build: '3.x'
           ansi_config:
             ceph_test: True
-            ceph_origin: repository
+            ceph_origin: distro
             ceph_repository: rhcs
             ceph_repository_type: cdn
             ceph_rhcs_version: 3
@@ -45,6 +46,10 @@ tests:
             ceph_repository: rhcs
             upgrade_ceph_packages: True
             radosgw_interface: eth0
+            public_network: 172.16.0.0/12
+            osd_scenario: collocated
+            osd_auto_discovery: False
+            fetch_directory: /home/cephuser/fetch
        desc: test rolling upgrade using ceph-ansible
        destroy-cluster: false
 
