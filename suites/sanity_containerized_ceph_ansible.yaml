@@ -387,10 +387,14 @@ tests:
               cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
               sudo: False
         desc: Purge ceph cluster
-        destroy-cluster: True
+        recreate-cluster: True
 
+   - test:
+       name: install ceph pre-requisities
+       module: install_prereq.py
+       abort-on-fail: true
 
-- test:
+   - test:
       name: ceph ansible
       module: test_ansible.py
       config:
@@ -418,7 +422,7 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
-      desc: test cluster setup using ceph-ansible
+      desc: osd with collocated journal and autodiscovery
       destroy-cluster: False
       abort-on-fail: true
 
