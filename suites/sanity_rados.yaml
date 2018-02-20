@@ -67,3 +67,8 @@ tests:
       module: test_83571453.py
       polarion_id: CEPH-83571453
       desc: Corrupt snapset on a primary osd in ec pool
+   - test:
+      name: LRCec pool local recovery test_9311
+      module: test_9311.py
+      polarion_id: CEPH-9311
+      desc: Trigger recovery from local codes in LRCpool
