@@ -1,0 +1,35 @@
+globals:
+  ceph-cluster:
+    name: ceph
+    create: true
+    image-name: rhel-7.4-server-x86_64-released
+    vm-size: m1.medium
+    node1:
+      role:
+        - installer
+        - mon
+        - mgr
+    node2:
+      role:
+        - osd
+        - mon
+        - mgr
+      no-of-volumes: 3
+      disk-size: 20
+    node3:
+      role:
+        - osd
+        - mon
+        - mgr
+      no-of-volumes: 3
+      disk-size: 20
+    node4:
+      role:
+        - osd
+        - mds
+      no-of-volumes: 3
+      disk-size: 20
+    node5:
+      role:
+        - client
+  cloud-data: conf/cloud-data.yaml
