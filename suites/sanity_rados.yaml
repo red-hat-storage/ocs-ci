@@ -72,3 +72,8 @@ tests:
       module: test_9311.py
       polarion_id: CEPH-9311
       desc: Trigger recovery from local codes in LRCpool
+   - test:
+      name: switch between simple and async messenger test_11538
+      module: test_11538.py
+      polarion_id: CEPH-11538
+      desc: switch between simple and async messenger
