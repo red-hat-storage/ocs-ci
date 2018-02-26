@@ -176,14 +176,11 @@ class CephNode(object):
             cmd="/sbin/ifconfig eth0 | grep 'inet ' | awk '{ print $2}'")
         self.internal_ip = out.read().strip()
 
-    def set_eth_interface(self):
+    def set_eth_interface(self, eth_interface):
         """
-        set the eth interface to eth0 or en0
+        set the eth interface
         """
-        o, e = self.exec_command(
-            sudo=True, cmd='ls /sys/class/net | grep -v lo')
-        eth_con = o.read().strip()
-        self.eth_interface = eth_con
+        self.eth_interface = eth_interface
 
     def generate_id_rsa(self):
         """

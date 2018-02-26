@@ -4,7 +4,8 @@ import logging
 from time import sleep
 import yaml
 
-from ceph.utils import setup_deb_repos, get_iso_file_url, setup_cdn_repos, write_docker_daemon_json
+from ceph.utils import setup_deb_repos, get_iso_file_url, setup_cdn_repos, write_docker_daemon_json, \
+    search_ethernet_interface
 from ceph.utils import setup_repos, check_ceph_healthly
 
 logger = logging.getLogger(__name__)
@@ -154,7 +155,11 @@ def run(**kw):
     num_mons = 0
     num_mgrs = 0
     for node in ceph_nodes:
-        node.set_eth_interface()
+        eth_interface = search_ethernet_interface(node, ceph_nodes)
+        if eth_interface is None:
+            log.error('No suitable interface is found on {node}'.format(node=node.ip_address))
+            return 1
+        node.set_eth_interface(eth_interface)
         mon_interface = ' monitor_interface=' + node.eth_interface + ' '
         if node.role == 'mon':
             mon_host = node.shortname + ' monitor_interface=' + node.eth_interface

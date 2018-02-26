@@ -69,12 +69,12 @@ tests:
               cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
               sudo: False
         desc: Purge ceph cluster
-        recreate-cluster: True
-
-   - test:
-       name: install ceph pre-requisities
-       module: install_prereq.py
-       abort-on-fail: true
+#        recreate-cluster: True
+#
+#   - test:
+#       name: install ceph pre-requisities
+#       module: install_prereq.py
+#       abort-on-fail: true
 
    - test:
       name: ceph ansible
@@ -142,12 +142,12 @@ tests:
               cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
               sudo: False
         desc: Purge ceph cluster
-        recreate-cluster: True
-
-   - test:
-       name: install ceph pre-requisities
-       module: install_prereq.py
-       abort-on-fail: true
+#        recreate-cluster: True
+#
+#   - test:
+#       name: install ceph pre-requisities
+#       module: install_prereq.py
+#       abort-on-fail: true
 
    - test:
       name: ceph ansible
@@ -218,12 +218,12 @@ tests:
               cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
               sudo: False
         desc: Purge ceph cluster
-        recreate-cluster: True
-
-   - test:
-       name: install ceph pre-requisities
-       module: install_prereq.py
-       abort-on-fail: true
+#        recreate-cluster: True
+#
+#   - test:
+#       name: install ceph pre-requisities
+#       module: install_prereq.py
+#       abort-on-fail: true
 
    - test:
         name: ceph ansible
@@ -295,12 +295,12 @@ tests:
               cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
               sudo: False
         desc: Purge ceph cluster
-        recreate-cluster: True
-
-   - test:
-       name: install ceph pre-requisities
-       module: install_prereq.py
-       abort-on-fail: true
+#        recreate-cluster: True
+#
+#   - test:
+#       name: install ceph pre-requisities
+#       module: install_prereq.py
+#       abort-on-fail: true
 
    - test:
       name: ceph ansible
@@ -369,12 +369,12 @@ tests:
               cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
               sudo: False
         desc: Purge ceph cluster
-        recreate-cluster: True
-
-   - test:
-       name: install ceph pre-requisities
-       module: install_prereq.py
-       abort-on-fail: true
+#        recreate-cluster: True
+#
+#   - test:
+#       name: install ceph pre-requisities
+#       module: install_prereq.py
+#       abort-on-fail: true
 
    - test:
       name: ceph ansible
@@ -441,12 +441,12 @@ tests:
               cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
               sudo: False
         desc: Purge ceph cluster
-        recreate-cluster: True
-
-   - test:
-       name: install ceph pre-requisities
-       module: install_prereq.py
-       abort-on-fail: true
+#        recreate-cluster: True
+#
+#   - test:
+#       name: install ceph pre-requisities
+#       module: install_prereq.py
+#       abort-on-fail: true
 
    - test:
       name: ceph ansible

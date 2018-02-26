@@ -348,3 +348,29 @@ def write_docker_daemon_json(json_text, node):
     docker_daemon.write(json_text)
     docker_daemon.flush()
     docker_daemon.close()
+
+
+def search_ethernet_interface(ceph_node, ceph_node_list):
+    """
+    Search interface on the given node node which allows every node in the cluster accesible by it's shortname.
+    :param ceph_node: CephNode object
+    :param ceph_node_list: Ceph cluster as CephNode objects list
+    :return: interface string or None if no sucessfull ping requests for every interface
+    """
+    log.info('Searching suitable ethernet interface on {node}'.format(node=ceph_node.ip_address))
+    ceph_current_node = ceph_node
+    out, err = ceph_current_node.exec_command(cmd='sudo ls /sys/class/net | grep -v lo')
+    eth_interface_list = out.read().strip().split('\n')
+    for eth_interface in eth_interface_list:
+        try:
+            for ceph_node in ceph_node_list:
+                ceph_current_node.exec_command(
+                    cmd='sudo ping -I {interface} -c 3 {ceph_node}'.format(interface=eth_interface,
+                                                                           ceph_node=ceph_node.shortname))
+            log.info('Suitable ethernet interface {eth_interface} found on {node}'.format(eth_interface=eth_interface,
+                                                                                          node=ceph_node.ip_address))
+            return eth_interface
+        except:
+            continue
+    log.info('No suitable ethernet interface found on {node}'.format(node=ceph_node.ip_address))
+    return None
