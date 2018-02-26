@@ -400,7 +400,7 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
-      desc: test cluster setup using ceph-ansible
+      desc: osd with collocated journal and autodiscovery
       destroy-cluster: False
       abort-on-fail: true
 
@@ -473,7 +473,7 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
-      desc: osd with collocated journal and autodiscovery
+      desc: encrypted osd with collocated journal and autodiscovery
       destroy-cluster: False
       abort-on-fail: true
 
