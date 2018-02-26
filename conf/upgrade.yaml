@@ -26,4 +26,8 @@ globals:
          role: mgr
        node8:
          role: installer
+       node9:
+         role: rgw
+       node10:
+         role: client
     cloud-data: conf/cloud-data.yaml

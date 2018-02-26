@@ -328,7 +328,7 @@ def set_cdn_repo(node, repos):
         for repo in repos:
             node.exec_command(
                 sudo=True, cmd='subscription-manager repos --enable={r}'.format(r=repo))
-        node.exec_command(sudo=True, cmd='subscription-manager refresh')
+        # node.exec_command(sudo=True, cmd='subscription-manager refresh')
 
 
 def update_ca_cert(node, cert_url, timeout=120):

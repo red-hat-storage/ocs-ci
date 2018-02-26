@@ -48,23 +48,16 @@ def run(**kw):
         if ceph.pkg_type == 'rpm':
             ceph.exec_command(sudo=True, cmd='yum update metadata')
 
-    # Backup existing hosts file
+    # Backup existing hosts file and ansible config
     ansible_dir = '/usr/share/ceph-ansible'
     ceph_installer.exec_command(cmd='cp {}/hosts /tmp/hosts'.format(ansible_dir))
+    ceph_installer.exec_command(cmd='cp {}/group_vars/all.yml /tmp/all.yml'.format(ansible_dir))
 
     # Update ceph-ansible
     if ceph_installer.pkg_type == 'deb':
         ceph_installer.exec_command(sudo=True, cmd='apt-get install -y ceph-ansible')
     else:
         ceph_installer.exec_command(sudo=True, cmd='yum update -y ceph-ansible')
-
-    # Create all.yml
-    gvar = yaml.dump(config.get('ansi_config'), default_flow_style=False)
-    log.info("global vars {}".format(gvar))
-    gvars_file = ceph_installer.write_file(
-        sudo=True, file_name='{}/group_vars/all.yml'.format(ansible_dir), file_mode='w')
-    gvars_file.write(gvar)
-    gvars_file.flush()
 
     # Restore hosts file
     ceph_installer.exec_command(sudo=True, cmd='cp /tmp/hosts {}/hosts'.format(ansible_dir))
@@ -82,6 +75,25 @@ def run(**kw):
         host_file.flush()
 
         log.info(mgr_block)
+
+        # If a major version upgrade, ignore all.yml backup
+        gvar = yaml.dump(config.get('ansi_config'), default_flow_style=False)
+
+    else:  # Pull all.yml backup if not a major version upgrade
+        all_yml = ceph_installer.write_file(file_name='/tmp/all.yml', file_mode='r')
+        ansi_config = yaml.load(all_yml)
+        # with open('/tmp/all.yml', 'r') as stream:
+        #     ansi_config = yaml.load(stream)
+        for key, value in config.get('ansi_config').iteritems():
+            ansi_config[key] = value
+        gvar = yaml.dump(ansi_config, default_flow_style=False)
+
+    # Create all.yml
+    log.info("global vars {}".format(gvar))
+    gvars_file = ceph_installer.write_file(
+        sudo=True, file_name='{}/group_vars/all.yml'.format(ansible_dir), file_mode='w')
+    gvars_file.write(gvar)
+    gvars_file.flush()
 
     # copy rolling update from infrastructure playbook
     ceph_installer.exec_command(
