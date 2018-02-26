@@ -216,6 +216,7 @@ def run(args):
     suites_yaml = yaml.safe_load(open(suites))
     sys.path.append(os.path.abspath('tests'))
     sys.path.append(os.path.abspath('tests/rados'))
+    sys.path.append(os.path.abspath('tests/rbd'))
     sys.path.append(os.path.abspath('tests/cephfs'))
     tests = suites_yaml.get('tests')
     tcs = []
