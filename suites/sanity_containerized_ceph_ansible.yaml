@@ -175,7 +175,6 @@ tests:
               - /dev/vde
               - /dev/vde
               - /dev/vde
- #             - /dev/vde  ##https://bugzilla.redhat.com/show_bug.cgi?id=1548526
             osd_auto_discovery: False
             journal_size: 1024
             ceph_stable: True
@@ -259,7 +258,6 @@ tests:
               - /dev/vde
               - /dev/vde
               - /dev/vde
-#              - /dev/vde ##https://bugzilla.redhat.com/show_bug.cgi?id=1548526
             osd_auto_discovery: False
             journal_size: 1024
             ceph_stable: True
