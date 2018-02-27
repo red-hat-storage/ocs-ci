@@ -1,0 +1,16 @@
+image: python:2.7
+
+before_script:
+   - python --version
+   - pip --version
+   - pip install tox
+
+stages:
+   - build
+
+tox:
+   stage: build
+   script:
+      - tox
+   tags:
+      - docker
