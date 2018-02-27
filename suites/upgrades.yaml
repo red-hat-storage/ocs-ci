@@ -29,6 +29,7 @@ tests:
                   osd_default_pool_size: 2
                   osd_pool_default_pgp_num: 128
                   mon_max_pg_per_osd: 2048
+                  mon_allow_pool_delete: True
       desc: test cluster setup using ceph-ansible
       destroy-cluster: False
       abort-on-fail: True
@@ -60,6 +61,7 @@ tests:
                   osd_default_pool_size: 2
                   osd_pool_default_pgp_num: 128
                   mon_max_pg_per_osd: 2048
+                  mon_allow_pool_delete: True
        desc: test rolling upgrade using ceph-ansible
        destroy-cluster: False
    - test:
@@ -124,6 +126,7 @@ tests:
                   osd_default_pool_size: 2
                   osd_pool_default_pgp_num: 128
                   mon_max_pg_per_osd: 2048
+                  mon_allow_pool_delete: True
       desc: test cluster setup using ceph-ansible
       destroy-cluster: False
       abort-on-fail: True
@@ -152,6 +155,7 @@ tests:
                   osd_default_pool_size: 2
                   osd_pool_default_pgp_num: 128
                   mon_max_pg_per_osd: 2048
+                  mon_allow_pool_delete: True
        desc: test rolling upgrade using ceph-ansible
        destroy-cluster: False
    - test:
@@ -228,6 +232,7 @@ tests:
                   osd_default_pool_size: 2
                   osd_pool_default_pgp_num: 128
                   mon_max_pg_per_osd: 2048
+                  mon_allow_pool_delete: True
       desc: test cluster setup using ceph-ansible
       destroy-cluster: False
       abort-on-fail: True
