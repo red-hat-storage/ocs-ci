@@ -37,10 +37,9 @@ globals:
       role: mds
     node8:
       role: rgw
-### Disabled because of https://bugzilla.redhat.com/show_bug.cgi?id=1548526
-#    node9:
-#      role: osd
-#      no-of-volumes: 4
-#      disk-size: 15
+    node9:
+      role: osd
+      no-of-volumes: 4
+      disk-size: 15
 
   cloud-data: conf/cloud-data.yaml
