@@ -1,16 +1,8 @@
-import datetime
-import yaml
 import logging
-import json
-import re
-import random
 
-from ceph.utils import setup_deb_repos
-from ceph.utils import setup_repos, create_ceph_conf
 from time import sleep
 
-logger = logging.getLogger(__name__)
-log = logger
+log = logging.getLogger(__name__)
 
 
 def run(**kw):
@@ -29,7 +21,3 @@ def run(**kw):
             sleep(5)
 
     return 0
-
-
-
-

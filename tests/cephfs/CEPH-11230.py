@@ -1,7 +1,11 @@
-from tests.cephfs.cephfs_utils import *
-from ceph.parallel import *
-import timeit
+import logging
 import sys
+import timeit
+
+from ceph.parallel import parallel
+from tests.cephfs.cephfs_utils import FsUtils
+
+log = logging.getLogger(__name__)
 
 
 def run(**kw):
@@ -14,7 +18,7 @@ def run(**kw):
     dir_name = 'dir'
     output = []
     num_of_dirs = num_of_dirs / 5
-    
+
     fs_util = FsUtils(ceph_nodes)
     client_info = fs_util.get_clients()
     fs_util.auth_list(client_info['clients'], client_info['mon_node'])
@@ -43,14 +47,46 @@ def run(**kw):
     fs_util.activate_multiple_mdss(client_info['mds_nodes'])
     log.info("Execution of Test case 11130 started:")
     tc = '11130'
-    
-    with parallel() as p:
-        p.spawn(fs_util.mkdir_pinning,client_info['fuse_clients'],num_of_dirs*21,num_of_dirs*21+25,mounting_dir,dir_name,0)
-        p.spawn(fs_util.mkdir_pinning,client_info['kernel_clients'],num_of_dirs*21+25,num_of_dirs*21+50,mounting_dir,dir_name,1)
 
     with parallel() as p:
-        p.spawn(fs_util.pinned_dir_io,client_info['kernel_clients'],mounting_dir,fs_util.mds_fail_over,client_info['mds_nodes'],10,dir_name,num_of_dirs*21,num_of_dirs*21+25)
-        p.spawn(fs_util.pinned_dir_io,client_info['kernel_clients'],mounting_dir,fs_util.mds_fail_over,client_info['mds_nodes'],20,dir_name,num_of_dirs*21+25,num_of_dirs*21+50)
+        p.spawn(
+            fs_util.mkdir_pinning,
+            client_info['fuse_clients'],
+            num_of_dirs * 21,
+            num_of_dirs * 21 + 25,
+            mounting_dir,
+            dir_name,
+            0)
+        p.spawn(
+            fs_util.mkdir_pinning,
+            client_info['kernel_clients'],
+            num_of_dirs * 21 + 25,
+            num_of_dirs * 21 + 50,
+            mounting_dir,
+            dir_name,
+            1)
+
+    with parallel() as p:
+        p.spawn(
+            fs_util.pinned_dir_io,
+            client_info['kernel_clients'],
+            mounting_dir,
+            fs_util.mds_fail_over,
+            client_info['mds_nodes'],
+            10,
+            dir_name,
+            num_of_dirs * 21,
+            num_of_dirs * 21 + 25)
+        p.spawn(
+            fs_util.pinned_dir_io,
+            client_info['kernel_clients'],
+            mounting_dir,
+            fs_util.mds_fail_over,
+            client_info['mds_nodes'],
+            20,
+            dir_name,
+            num_of_dirs * 21 + 25,
+            num_of_dirs * 21 + 50)
         for op in p:
             return_counts, failure_info = op
 
@@ -65,9 +101,9 @@ def run(**kw):
     if len(failure_info) != 0:
         print "Failure info"
         print failure_info
-        
+
     log.info("Cleaning up!-----")
-    fs_util.clean_up(client_info['fuse_clients'],client_info['kernel_clients'],mounting_dir,umount='doit')
+    fs_util.clean_up(client_info['fuse_clients'], client_info['kernel_clients'], mounting_dir, umount='doit')
     log.info("Cleaning up successfull")
 
     print'Script execution time:------'

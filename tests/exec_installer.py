@@ -3,7 +3,6 @@ import logging
 log = logging.getLogger(__name__)
 
 
-
 def run(**kw):
     log.info("Running exec test")
     ceph_nodes = kw.get('ceph_nodes')
@@ -24,6 +23,7 @@ def run(**kw):
         idx = config['idx']
         client = clients[idx]
 
+    cmd = ""
     if config.get('cmd'):
         cmd = config.get('cmd')
 
@@ -31,10 +31,6 @@ def run(**kw):
         env = config.get('env')
     else:
         env = ''
-
-    tout = 600
-    if config.get('timeout'):
-        tout = config.get('timeout')
 
     if config.get('sudo'):
         sudo = 'sudo -E'
