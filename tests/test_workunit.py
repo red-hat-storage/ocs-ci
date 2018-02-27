@@ -7,7 +7,6 @@ logger = logging.getLogger(__name__)
 log = logger
 
 
-
 def run(**kw):
     log.info("Running workunit test")
     ceph_nodes = kw.get('ceph_nodes')
@@ -44,9 +43,6 @@ def run(**kw):
     if config.get('test_name'):
         test_name = config.get('test_name')
 
-    tout = 600
-    if config.get('timeout'):
-        tout = config.get('timeout')
     cmd1 = 'mkdir cephtest ; cd cephtest ; {git_cmd}'.format(git_cmd=git_cmd)
     client.exec_command(cmd='rm -rf cephtest', timeout=60)
     out, err = client.exec_command(cmd=cmd1, timeout=600)

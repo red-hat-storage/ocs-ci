@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-from gevent import monkey; monkey.patch_all()
+from gevent import monkey
+monkey.patch_all()
 import yaml
 import sys
 import os
@@ -27,9 +28,9 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--skip-cluster]
         [--cleanup <name>]
         [--docker-registry <registry>]
-        [--docker-image <image>]  
-        [--docker-tag <tag>] 
-        [--insecure-registry] 
+        [--docker-image <image>]
+        [--docker-tag <tag>]
+        [--insecure-registry]
 
 
 Options:
@@ -57,7 +58,7 @@ Options:
   --reuse <file>                    use the stored vm state for rerun
   --skip-cluster                    skip cluster creation from ansible/ceph-deploy
   --docker-registry <registry>      Docker registry, deafult value is taken from ansible config
-  --docker-image <image>            Docker image, deafult value is taken from ansible config 
+  --docker-image <image>            Docker image, deafult value is taken from ansible config
   --docker-tag <tag>                Docker tag, default value is 'latest'
   --insecure-registry               Disable security check for docker registry
 """
@@ -149,7 +150,8 @@ def run(args):
             # we dont need installer repo
             installer_url = None
         if ubuntu_repo is None:
-            ubuntu_repo = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/3.0/latest-RHCEPH-3.0-Ubuntu/'
+            ubuntu_repo = \
+                'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/3.0/latest-RHCEPH-3.0-Ubuntu/'
     installer_url = args.get('--rhs-con-repo', None)
     if rhbuild.startswith('2'):
         if installer_url is None:
@@ -175,7 +177,7 @@ def run(args):
             log.info("Trigger on CI Docker Compose")
             docker_registry, docker_image_tag = ci_message['repositories'][0].split('/')
             docker_image, docker_tag = docker_image_tag.split(':')
-            log.info("\nUsing docker registry from ci message: {registry} \nDocker image: {image}\nDocker tag:{tag}" \
+            log.info("\nUsing docker registry from ci message: {registry} \nDocker image: {image}\nDocker tag:{tag}"
                      .format(registry=docker_registry, image=docker_image, tag=docker_tag))
             log.warn('Using Docker insecure registry setting')
             docker_insecure_registry = True
@@ -290,6 +292,7 @@ def run(args):
 
     print_results(tcs)
     return jenkins_rc
+
 
 if __name__ == '__main__':
     args = docopt(doc)

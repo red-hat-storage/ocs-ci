@@ -2,6 +2,7 @@ import logging
 
 log = logging.getLogger(__name__)
 
+
 def run(**kw):
     log.info("Running test")
     ceph_nodes = kw.get('ceph_nodes')
@@ -22,7 +23,8 @@ def run(**kw):
     config = kw.get('config')
     script_name = config.get('script-name')
     timeout = config.get('timeout', 300)
-    out, err = rgw_node.exec_command(cmd='sudo python ~/' + test_folder + '/ceph-qe-scripts/rgw/tests/s3/' + script_name,
-                                     timeout=timeout)
+    out, err = rgw_node.exec_command(
+        cmd='sudo python ~/' + test_folder + '/ceph-qe-scripts/rgw/tests/s3/' + script_name,
+        timeout=timeout)
     log.info(out.read())
     return 0

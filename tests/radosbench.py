@@ -25,9 +25,6 @@ def run(**kw):
         idx = config['idx']
         client = clients[idx]
 
-    if config.get('poo_type'):
-        pool_type = config.get('pool_type')
-
     if config.get('pg_num'):
         pg_num = config.get('pg_num')
     else:

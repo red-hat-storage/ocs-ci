@@ -6,9 +6,11 @@ import gevent.queue
 
 log = logging.getLogger(__name__)
 
+
 class ExceptionHolder(object):
     def __init__(self, exc_info):
         self.exc_info = exc_info
+
 
 def capture_traceback(func, *args, **kwargs):
     """
@@ -20,6 +22,7 @@ def capture_traceback(func, *args, **kwargs):
     except Exception:
         return ExceptionHolder(sys.exc_info())
 
+
 def resurrect_traceback(exc):
     if isinstance(exc, ExceptionHolder):
         exc_info = exc.exc_info
@@ -29,6 +32,7 @@ def resurrect_traceback(exc):
         return
 
     raise exc_info[0], exc_info[1], exc_info[2]
+
 
 class parallel(object):
     """

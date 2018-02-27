@@ -1,8 +1,9 @@
 import logging
-import paramiko
 from select import select
-from paramiko.ssh_exception import SSHException
 from time import sleep
+
+import paramiko
+from paramiko.ssh_exception import SSHException
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class RolesContainer(object):
     Can be used as iterable or with equality '==' operator to check if role is present for the node.
     Note that '==' operator will behave the same way as 'in' operator i.e. check that value is present in the role list.
     """
+
     def __init__(self, role):
         if hasattr(role, '__iter__'):
             self.role_list = role
@@ -257,12 +259,10 @@ class CephNode(object):
                 logger.info("Command completed successfully")
             else:
                 logger.info("Error during cmd %s, timeout %d", exit_status, timeout)
-                raise CommandFailed(kw['cmd'] + " Error:  " \
-                                    + str(stderr.read()) + ' ' + str(self.ip_address))
+                raise CommandFailed(kw['cmd'] + " Error:  " + str(stderr.read()) + ' ' + str(self.ip_address))
             return stdout, stderr
         else:
-            # logger.info(stdout.readlines())
-            return (stdout, stderr)
+            return stdout, stderr
 
     def write_file(self, **kw):
         if kw.get('sudo'):
@@ -277,16 +277,15 @@ class CephNode(object):
 
     def _keep_alive(self):
         while True:
-            o, e = self.exec_command(cmd='uptime', check_ec=False)
+            self.exec_command(cmd='uptime', check_ec=False)
             sleep(60)
 
     def reconnect(self):
-        #self.run_once = False
-        #self.connect()
         self.rssh = paramiko.SSHClient()
         self.rssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.ssh = paramiko.SSHClient()
         self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        count = 0
         while True:
             self.rssh.connect(self.vmname,
                               username='root',
@@ -311,7 +310,6 @@ class CephNode(object):
                 count += 1
             else:
                 break
-
 
     def __getstate__(self):
         d = dict(self.__dict__)

@@ -1,7 +1,12 @@
-from tests.cephfs.cephfs_utils import *
-from ceph.parallel import *
-import timeit
+import logging
 import sys
+import timeit
+
+from ceph.parallel import parallel
+from tests.cephfs.cephfs_utils import FsUtils
+
+log = logging.getLogger(__name__)
+
 
 def run(**kw):
     start = timeit.default_timer()
@@ -13,7 +18,7 @@ def run(**kw):
     dir_name = 'dir'
     output = []
     num_of_dirs = num_of_dirs / 5
-    
+
     fs_util = FsUtils(ceph_nodes)
     client_info = fs_util.get_clients()
     fs_util.auth_list(client_info['clients'], client_info['mon_node'])
@@ -44,21 +49,76 @@ def run(**kw):
     tc = '11129'
     with parallel() as p:
         p.spawn(fs_util.mkdir_pinning, client_info['fuse_clients'], 0, num_of_dirs, mounting_dir, dir_name, 0)
-        p.spawn(fs_util.mkdir_pinning, client_info['fuse_clients'], num_of_dirs, num_of_dirs * 2, mounting_dir, dir_name, 0)
-        p.spawn(fs_util.mkdir_pinning, client_info['fuse_clients'], num_of_dirs * 2, num_of_dirs * 3, mounting_dir, dir_name, 0)
-        p.spawn(fs_util.mkdir_pinning, client_info['fuse_clients'], num_of_dirs * 3, num_of_dirs * 4, mounting_dir, dir_name, 0)
-        p.spawn(fs_util.mkdir_pinning, client_info['kernel_clients'], num_of_dirs * 4, num_of_dirs * 5, mounting_dir, dir_name,1)
+        p.spawn(
+            fs_util.mkdir_pinning,
+            client_info['fuse_clients'],
+            num_of_dirs,
+            num_of_dirs * 2,
+            mounting_dir,
+            dir_name,
+            0)
+        p.spawn(
+            fs_util.mkdir_pinning,
+            client_info['fuse_clients'],
+            num_of_dirs * 2,
+            num_of_dirs * 3,
+            mounting_dir,
+            dir_name,
+            0)
+        p.spawn(
+            fs_util.mkdir_pinning,
+            client_info['fuse_clients'],
+            num_of_dirs * 3,
+            num_of_dirs * 4,
+            mounting_dir,
+            dir_name,
+            0)
+        p.spawn(
+            fs_util.mkdir_pinning,
+            client_info['kernel_clients'],
+            num_of_dirs * 4,
+            num_of_dirs * 5,
+            mounting_dir,
+            dir_name,
+            1)
 
     with parallel() as p:
-        p.spawn(fs_util.pinned_dir_io, client_info['kernel_clients'], mounting_dir, fs_util.mds_fail_over, client_info['mds_nodes'], 1,dir_name, 0, num_of_dirs / 2)
-        p.spawn(fs_util.pinned_dir_io, client_info['kernel_clients'], mounting_dir, fs_util.mds_fail_over, client_info['mds_nodes'], 2,dir_name, num_of_dirs / 2, num_of_dirs)
-        p.spawn(fs_util.pinned_dir_io, client_info['kernel_clients'], mounting_dir, fs_util.mds_fail_over, client_info['mds_nodes'], 1,dir_name, num_of_dirs * 4, num_of_dirs * 4 + 10)
+        p.spawn(
+            fs_util.pinned_dir_io,
+            client_info['kernel_clients'],
+            mounting_dir,
+            fs_util.mds_fail_over,
+            client_info['mds_nodes'],
+            1,
+            dir_name,
+            0,
+            num_of_dirs / 2)
+        p.spawn(
+            fs_util.pinned_dir_io,
+            client_info['kernel_clients'],
+            mounting_dir,
+            fs_util.mds_fail_over,
+            client_info['mds_nodes'],
+            2,
+            dir_name,
+            num_of_dirs / 2,
+            num_of_dirs)
+        p.spawn(
+            fs_util.pinned_dir_io,
+            client_info['kernel_clients'],
+            mounting_dir,
+            fs_util.mds_fail_over,
+            client_info['mds_nodes'],
+            1,
+            dir_name,
+            num_of_dirs * 4,
+            num_of_dirs * 4 + 10)
         for op in p:
-            return_counts,failure_info = op
+            return_counts, failure_info = op
 
     log.info("Execution of Test case 11229 ended:")
     print "Results:"
-    rc_op = fs_util.rc_verify(tc,return_counts)
+    rc_op = fs_util.rc_verify(tc, return_counts)
     output.append(rc_op)
     for i in output:
         print i
@@ -68,9 +128,9 @@ def run(**kw):
         print failure_info
 
     log.info("Cleaning up!-----")
-    fs_util.clean_up(client_info['fuse_clients'],client_info['kernel_clients'],mounting_dir,umount='doit')
+    fs_util.clean_up(client_info['fuse_clients'], client_info['kernel_clients'], mounting_dir, umount='doit')
     log.info("Cleaning up successfull")
-    
+
     print'Script execution time:------'
     stop = timeit.default_timer()
     total_time = stop - start

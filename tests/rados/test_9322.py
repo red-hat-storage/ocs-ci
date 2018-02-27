@@ -1,110 +1,92 @@
 import logging
-import traceback
-import hashlib
-import os
-import time
 import random
+import traceback
 
 from ceph.rados_utils import RadosHelper
-from ceph.parallel import parallel
 
-logger = logging.getLogger(__name__)
-log=logger
+log = logging.getLogger(__name__)
 
 
 def run(**kw):
     """
-     	1. Create a LRC profile and then create a ec pool
-	#ceph osd erasure-code-profile set $profile \
+        1. Create a LRC profile and then create a ec pool
+        #ceph osd erasure-code-profile set $profile \
         plugin=lrc \
         k=  m= l= \
         ruleset-failure-domain=osd
 
-	try different values for k, m and l
- 	# ceph osd pool create $poolname 1 1  erasure $profile	  
+        try different values for k, m and l
+        # ceph osd pool create $poolname 1 1  erasure $profile
 
-	2. perform I/O
+        2. perform I/O
 
         #rados put -p poolname obj /path/
-    """        
+    """
 
     log.info("Running CEPH-9322")
     log.info(run.__doc__)
 
-    ceph_nodes=kw.get('ceph_nodes')
-    config=kw.get('config')
+    ceph_nodes = kw.get('ceph_nodes')
+    config = kw.get('config')
 
-    mons=[]
-    osds=[]
-    
-    role='mon'
+    mons = []
+    osds = []
+
+    role = 'mon'
     for mnode in ceph_nodes:
-        if mnode.role==role:
+        if mnode.role == role:
             mons.append(mnode)
 
-    role='osd'
+    role = 'osd'
     for osd in ceph_nodes:
-        if osd.role==role:
+        if osd.role == role:
             osds.append(osd)
 
-    ctrlr=mons[0]
-    log.info("chosing mon {cmon} as ctrlrmon".format( \
-                        cmon=ctrlr.hostname))
+    ctrlr = mons[0]
+    log.info("chosing mon {cmon} as ctrlrmon".format(
+        cmon=ctrlr.hostname))
 
-    Helper=RadosHelper(ctrlr, config, log)
+    helper = RadosHelper(ctrlr, config, log)
     '''beacause of limited machines resorting to following config'''
-    lrc_config=[(4,2,3), (2,1,3), (2,2,2)]
+    lrc_config = [(4, 2, 3), (2, 1, 3), (2, 2, 2)]
 
     for conf in lrc_config:
-        (k,m,l)=conf
-        suffix="{k}_{m}_{l}".format(k=k,m=m,l=l)
-        prof_name="LRCprofile{suf}".format(suf=suffix)
-        profile="osd erasure-code-profile set {LRC} \
+        (k, m, l) = conf
+        suffix = "{k}_{m}_{l}".format(k=k, m=m, l=l)
+        prof_name = "LRCprofile{suf}".format(suf=suffix)
+        profile = "osd erasure-code-profile set {LRC} \
                 plugin=lrc\
                 k={k} m={m} l={l}\
                 ruleset-failure-domain=osd\
                 crush-failure-domain=osd".format(LRC=prof_name,
-                                        k=k,m=m,l=l)
+                                                 k=k, m=m, l=l)
         try:
-            (out,err)=Helper.raw_cluster_cmd(profile)
-            outbuf=out.read()
+            (out, err) = helper.raw_cluster_cmd(profile)
+            outbuf = out.read()
             log.info(outbuf)
             log.info("created profile {LRC}".format(
-                    LRC=prof_name))
-        except Exception as e:
+                LRC=prof_name))
+        except Exception:
             log.error("LRC profile creation failed")
             log.error(traceback.format_exc())
             return 1
 
         '''create LRC ec pool'''
-        pname="lrcpool{rand}{suf}".format(
-                                rand=random.randint(0,10000),suf=suffix)
+        pname = "lrcpool{rand}{suf}".format(
+            rand=random.randint(0, 10000), suf=suffix)
         try:
-            Helper.create_pool(pname, 1, prof_name)
+            helper.create_pool(pname, 1, prof_name)
             log.info("Pool {pname} created".format(pname=pname))
-        except Exception as e:
+        except Exception:
             log.error("failed to create lrcpool")
             log.error(traceback.format_exc())
             return 1
 
         '''check whether pool exists'''
         try:
-            Helper.get_pool_num(pname)
-        except Exception as e:
+            helper.get_pool_num(pname)
+        except Exception:
             log.error("Unable to find pool")
             log.error(traceback.format_exc())
             return 1
-    return 0        
-          
-
-	
-   
-     
-
-
-
-
-
-     
-
-
+    return 0

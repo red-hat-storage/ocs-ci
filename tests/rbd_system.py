@@ -1,11 +1,7 @@
 import logging
-from time import sleep
-
-import datetime
-
-from ceph.utils import keep_alive
 
 log = logging.getLogger(__name__)
+
 
 def run(**kw):
     log.info("Running rbd tests")

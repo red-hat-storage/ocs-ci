@@ -1,13 +1,12 @@
 import datetime
-import os
 import logging
 import socket
+from ssl import SSLError
 from time import sleep
 
-from libcloud.compute.types import Provider
+import os
 from libcloud.compute.providers import get_driver
-from ssl import SSLError
-import libcloud.security
+from libcloud.compute.types import Provider
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ socket.setdefaulttimeout(280)
 # reason why you should never use it for anything else besides testing. You
 # have been warned.
 # signed cert installed : https://projects.engineering.redhat.com/browse/CID-2407
-#libcloud.security.VERIFY_SSL_CERT = False
+# libcloud.security.VERIFY_SSL_CERT = False
 
 OpenStack = get_driver(Provider.OPENSTACK)
 
@@ -204,7 +203,6 @@ class CephVMNode(object):
         pool = driver.ex_list_floating_ip_pools()[0]
         self.floating_ip = pool.create_floating_ip()
         self.ip_address = self.floating_ip.ip_address
-        count = 0
         host = None
         timeout = datetime.timedelta(seconds=timeout)
         starttime = datetime.datetime.now()
@@ -212,7 +210,7 @@ class CephVMNode(object):
         while True:
             try:
                 host, _, _ = socket.gethostbyaddr(self.ip_address)
-            except:
+            except Exception:
                 if datetime.datetime.now() - starttime > timeout:
                     logger.info("Failed to get hostbyaddr in {timeout}s".format(timeout=timeout))
                     raise InvalidHostName("Invalid hostname for " + self.ip_address)

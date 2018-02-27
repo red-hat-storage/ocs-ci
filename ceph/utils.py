@@ -2,6 +2,7 @@ import datetime
 import logging
 import random
 import traceback
+
 import os
 import re
 import requests
@@ -57,7 +58,7 @@ def create_ceph_nodes(gyaml, osp_cred):
                     user = os.getlogin()
                     params['run'] = run_name
                 params['node-name'] = 'ceph-' + user + \
-                    '-' + params['run'] + node + '-' + '+'.join(role)
+                                      '-' + params['run'] + node + '-' + '+'.join(role)
                 if role == 'osd':
                     params['no-of-volumes'] = node_dict.get('no-of-volumes')
                     params['size-of-disks'] = node_dict.get('disk-size')
@@ -166,7 +167,7 @@ def setup_repos(ceph, base_url, installer_url=None):
         inst_file.flush()
 
 
-def check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container = None, timeout=300):
+def check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container=None, timeout=300):
     """
     Function to check ceph is in healthy state
 
@@ -193,7 +194,7 @@ def check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container = None, time
             out, err = ceph_mon.exec_command(cmd='sudo ceph -s')
         lines = out.read()
         if 'peering' not in lines and 'activating' not in lines and \
-           'creating' not in lines:
+                'creating' not in lines:
             break
         sleep(1)
     log.info(lines)
@@ -282,7 +283,7 @@ def setup_deb_repos(node, ubuntu_repo):
               ' $(lsb_release -sc) main'
         node.exec_command(cmd=cmd + ' > ' + "/tmp/{0}.list".format(repo))
         node.exec_command(cmd='sudo cp /tmp/{0}.list'.format(repo) +
-                          ' /etc/apt/sources.list.d/')
+                              ' /etc/apt/sources.list.d/')
     ds_keys = ['https://www.redhat.com/security/897da07a.txt',
                'https://www.redhat.com/security/f21541eb.txt',
                'http://puddle.ceph.redhat.com/keys/RPM-GPG-KEY-redhatbuild']
@@ -325,10 +326,10 @@ def setup_cdn_repos(ceph_nodes, build=None):
 
 
 def set_cdn_repo(node, repos):
-        for repo in repos:
-            node.exec_command(
-                sudo=True, cmd='subscription-manager repos --enable={r}'.format(r=repo))
-        # node.exec_command(sudo=True, cmd='subscription-manager refresh')
+    for repo in repos:
+        node.exec_command(
+            sudo=True, cmd='subscription-manager repos --enable={r}'.format(r=repo))
+    # node.exec_command(sudo=True, cmd='subscription-manager refresh')
 
 
 def update_ca_cert(node, cert_url, timeout=120):
@@ -370,7 +371,7 @@ def search_ethernet_interface(ceph_node, ceph_node_list):
             log.info('Suitable ethernet interface {eth_interface} found on {node}'.format(eth_interface=eth_interface,
                                                                                           node=ceph_node.ip_address))
             return eth_interface
-        except:
+        except Exception:
             continue
     log.info('No suitable ethernet interface found on {node}'.format(node=ceph_node.ip_address))
     return None
