@@ -2,7 +2,105 @@ tests:
    - test:
        name: install ceph pre-requisities
        module: install_prereq.py
-       abort-on-fail: true
+       abort-on-fail: True
+
+   - test:
+      name: ceph ansible install 2.x
+      module: test_ansible.py
+      config:
+        use_cdn: True
+        build: '2.x'
+        ansi_config:
+            ceph_test: True
+            ceph_rhcs: True
+            ceph_rhcs_cdn_install: True
+            ceph_stable_release: jewel
+            journal_collocation: True
+            osd_auto_discovery: False
+            journal_size: 1024
+            ceph_stable: True
+            ceph_stable_rh_storage: True
+            public_network: 172.16.0.0/12
+            fetch_directory: /home/cephuser/fetch
+            copy_admin_key: True
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 128
+                  osd_default_pool_size: 2
+                  osd_pool_default_pgp_num: 128
+                  mon_max_pg_per_osd: 2048
+                  mon_allow_pool_delete: True
+      desc: test cluster setup using ceph-ansible
+      destroy-cluster: False
+      abort-on-fail: True
+   - test:
+       name: upgrade to 3.0
+       module: test_ansible_upgrade.py
+       destroy-cluster: True
+       config:
+          use_cdn: True
+          build: '3.x'
+          ansi_config:
+            ceph_test: True
+            ceph_origin: distro
+            ceph_repository: rhcs
+            ceph_repository_type: cdn
+            ceph_rhcs_version: 3
+            ceph_stable_release: luminous
+            ceph_repository: rhcs
+            upgrade_ceph_packages: True
+            radosgw_interface: eth0
+            public_network: 172.16.0.0/12
+            osd_scenario: collocated
+            osd_auto_discovery: False
+            fetch_directory: /home/cephuser/fetch
+            copy_admin_key: True
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 128
+                  osd_default_pool_size: 2
+                  osd_pool_default_pgp_num: 128
+                  mon_max_pg_per_osd: 2048
+                  mon_allow_pool_delete: True
+       desc: test rolling upgrade using ceph-ansible
+       destroy-cluster: False
+   - test:
+      name: librbd workunit
+      module: test_workunit.py
+      config:
+         test_name: rbd/test_librbd_python.sh
+         branch: luminous
+         role: mon
+      desc: Test librbd unit tests
+   - test:
+      name: rbd cli automation
+      module: rbd_system.py
+      config:
+         test_name: rbd_cli_automation.py
+         branch: master
+      desc: Test rbd cli automation tests
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+         cmd: ceph -s
+         sudo: True
+      desc: Check for ceph health debug info
+   - test:
+      name: rados_bench_test
+      module: radosbench.py
+      config:
+         pg_num: '128'
+         pool_type: 'normal'
+      desc: run rados bench for 360 - normal profile
+   - test:
+      name: ceph ansible purge
+      module: exec_installer.py
+      config:
+         cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
+         sudo: False
+      desc: Purge ceph cluster
+      recreate-cluster: True
 
    - test:
       name: ceph ansible install 2.x
@@ -20,14 +118,18 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            fetch_directory: /home/cephuser/fetch
+            copy_admin_key: True
             ceph_conf_overrides:
                 global:
                   osd_pool_default_pg_num: 128
                   osd_default_pool_size: 2
                   osd_pool_default_pgp_num: 128
+                  mon_max_pg_per_osd: 2048
+                  mon_allow_pool_delete: True
       desc: test cluster setup using ceph-ansible
-      destroy-cluster: false
-      abort-on-fail: true
+      destroy-cluster: False
+      abort-on-fail: True
    - test:
        name: upgrade to 3.0
        module: test_ansible_upgrade.py
@@ -45,52 +147,17 @@ tests:
             ceph_repository: rhcs
             upgrade_ceph_packages: True
             radosgw_interface: eth0
-       desc: test rolling upgrade using ceph-ansible
-       destroy-cluster: false
-
-   - test:
-      name: ceph ansible install 2.x
-      module: test_ansible.py
-      config:
-        use_cdn: True
-        build: '2.0'
-        ansi_config:
-            ceph_test: True
-            ceph_rhcs: True
-            ceph_rhcs_cdn_install: True
-            journal_collocation: True
-            osd_auto_discovery: False
-            journal_size: 1024
-            ceph_stable: True
-            ceph_stable_rh_storage: True
-            public_network: 172.16.0.0/12
+            fetch_directory: /home/cephuser/fetch
+            copy_admin_key: True
             ceph_conf_overrides:
                 global:
                   osd_pool_default_pg_num: 128
                   osd_default_pool_size: 2
                   osd_pool_default_pgp_num: 128
-      desc: test cluster setup using ceph-ansible
-      destroy-cluster: false
-      abort-on-fail: true
-   - test:
-       name: upgrade to 3.0
-       module: test_ansible_upgrade.py
-       destroy-cluster: True
-       config:
-          use_cdn: True
-          build: '3.0'
-          ansi_config:
-            ceph_test: True
-            ceph_origin: repository
-            ceph_repository: rhcs
-            ceph_repository_type: cdn
-            ceph_rhcs_version: 3
-            ceph_stable_release: luminous
-            ceph_repository: rhcs
-            upgrade_ceph_packages: True
-            radosgw_interface: eth0
+                  mon_max_pg_per_osd: 2048
+                  mon_allow_pool_delete: True
        desc: test rolling upgrade using ceph-ansible
-       destroy-cluster: false
+       destroy-cluster: False
    - test:
        name: upgrade to latest
        module: test_ansible_upgrade.py
@@ -100,6 +167,43 @@ tests:
             ceph_origin: distro
             ceph_stable_release: luminous
             ceph_repository: rhcs
+   - test:
+      name: librbd workunit
+      module: test_workunit.py
+      config:
+         test_name: rbd/test_librbd_python.sh
+         branch: luminous
+         role: mon
+      desc: Test librbd unit tests
+   - test:
+      name: rbd cli automation
+      module: rbd_system.py
+      config:
+         test_name: rbd_cli_automation.py
+         branch: master
+      desc: Test rbd cli automation tests
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+         cmd: ceph -s
+         sudo: True
+      desc: Check for ceph health debug info
+   - test:
+      name: rados_bench_test
+      module: radosbench.py
+      config:
+         pg_num: '128'
+         pool_type: 'normal'
+      desc: run rados bench for 360 - normal profile
+   - test:
+      name: ceph ansible purge
+      module: exec_installer.py
+      config:
+         cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
+         sudo: False
+      desc: Purge ceph cluster
+      recreate-cluster: True
 
    - test:
       name: ceph ansible install 3.0
@@ -120,15 +224,18 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            fetch_directory: /home/cephuser/fetch
+            copy_admin_key: True
             ceph_conf_overrides:
                 global:
-                  osd_pool_default_pg_num: 64
+                  osd_pool_default_pg_num: 128
                   osd_default_pool_size: 2
-                  osd_pool_default_pgp_num: 64
-                  mon_max_pg_per_osd: 1024
+                  osd_pool_default_pgp_num: 128
+                  mon_max_pg_per_osd: 2048
+                  mon_allow_pool_delete: True
       desc: test cluster setup using ceph-ansible
-      destroy-cluster: false
-      abort-on-fail: true
+      destroy-cluster: False
+      abort-on-fail: True
    - test:
        name: upgrade to latest
        module: test_ansible_upgrade.py
@@ -138,3 +245,40 @@ tests:
             ceph_origin: distro
             ceph_stable_release: luminous
             ceph_repository: rhcs
+   - test:
+      name: librbd workunit
+      module: test_workunit.py
+      config:
+         test_name: rbd/test_librbd_python.sh
+         branch: luminous
+         role: mon
+      desc: Test librbd unit tests
+   - test:
+      name: rbd cli automation
+      module: rbd_system.py
+      config:
+         test_name: rbd_cli_automation.py
+         branch: master
+      desc: Test rbd cli automation tests
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+         cmd: ceph -s
+         sudo: True
+      desc: Check for ceph health debug info
+   - test:
+      name: rados_bench_test
+      module: radosbench.py
+      config:
+         pg_num: '128'
+         pool_type: 'normal'
+      desc: run rados bench for 360 - normal profile
+   - test:
+      name: ceph ansible purge
+      module: exec_installer.py
+      config:
+         cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
+         sudo: False
+      desc: Purge ceph cluster
+      recreate-cluster: True
