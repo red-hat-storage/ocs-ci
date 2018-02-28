@@ -375,3 +375,25 @@ def search_ethernet_interface(ceph_node, ceph_node_list):
             continue
     log.info('No suitable ethernet interface found on {node}'.format(node=ceph_node.ip_address))
     return None
+
+
+def open_firewall_port(ceph_node, port, protocol):
+    if ceph_node.pkg_type == 'rpm':
+        ceph_node.exec_command(sudo=True, cmd="systemctl enable firewalld")
+        ceph_node.exec_command(sudo=True, cmd="systemctl start firewalld")
+        ceph_node.exec_command(sudo=True, cmd="systemctl status firewalld")
+        ceph_node.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port={port}/{protocol}"
+                               .format(port=port, protocol=protocol))
+        ceph_node.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port={port}/{protocol} --permanent"
+                               .format(port=port, protocol=protocol))
+    if ceph_node.pkg_type == 'deb':
+        # Ubuntu section stub
+        pass
+        # ceph_node.exec_command(sudo=True, cmd="ufw --force enable")
+        # ceph_node.exec_command(sudo=True, cmd="ufw status")
+        # ceph_node.exec_command(sudo=True, cmd="iptables -I INPUT -p {protocol} --dport {port} -j ACCEPT"
+        #                        .format(port=str(port).replace('-',':'), protocol=protocol))
+        # ceph_node.exec_command(sudo=True, cmd="update-locale LC_ALL=en_US.UTF-8"
+        #                        .format(port=str(port).replace('-', ':'), protocol=protocol))
+        # ceph_node.exec_command(cmd="sudo DEBIAN_FRONTEND=noninteractive apt-get -yq install iptables-persistent",
+        #                        long_running=True)
