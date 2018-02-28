@@ -19,6 +19,7 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
             ceph_docker_image: rhceph/rhceph-3-rhel7
             containerized_deployment: true
             ceph_docker_registry: registry.access.redhat.com
@@ -98,6 +99,7 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
             ceph_docker_image: rhceph/rhceph-3-rhel7
             containerized_deployment: true
             ceph_docker_registry: registry.access.redhat.com
@@ -180,6 +182,7 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
             ceph_docker_image: rhceph/rhceph-3-rhel7
             containerized_deployment: true
             ceph_docker_registry: registry.access.redhat.com
@@ -263,6 +266,7 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
             ceph_docker_image: rhceph/rhceph-3-rhel7
             containerized_deployment: true
             ceph_docker_registry: registry.access.redhat.com
@@ -342,6 +346,7 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
             ceph_docker_image: rhceph/rhceph-3-rhel7
             containerized_deployment: true
             ceph_docker_registry: registry.access.redhat.com
@@ -420,6 +425,7 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
             ceph_docker_image: rhceph/rhceph-3-rhel7
             containerized_deployment: true
             ceph_docker_registry: registry.access.redhat.com
