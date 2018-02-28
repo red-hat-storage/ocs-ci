@@ -5,7 +5,7 @@ from time import sleep
 import yaml
 
 from ceph.utils import setup_deb_repos, get_iso_file_url, setup_cdn_repos, write_docker_daemon_json, \
-    search_ethernet_interface
+    search_ethernet_interface, open_firewall_port
 from ceph.utils import setup_repos, check_ceph_healthly
 
 logger = logging.getLogger(__name__)
@@ -41,32 +41,13 @@ def run(**kw):
     ceph_mon = None
     for ceph in ceph_nodes:
         if ceph.role == 'mon':
-            ceph.exec_command(sudo=True, cmd="systemctl enable firewalld")
-            ceph.exec_command(sudo=True, cmd="systemctl start firewalld")
-            ceph.exec_command(sudo=True, cmd="systemctl status firewalld")
-            ceph.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port=6789/tcp")
-            ceph.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port=6789/tcp --permanent")
-    for ceph in ceph_nodes:
+            open_firewall_port(ceph, port='6789', protocol='tcp')
         if ceph.role == 'osd':
-            ceph.exec_command(sudo=True, cmd="systemctl enable firewalld")
-            ceph.exec_command(sudo=True, cmd="systemctl start firewalld")
-            ceph.exec_command(sudo=True, cmd="systemctl status firewalld")
-            ceph.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port=6800-7300/tcp")
-            ceph.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port=6800-7300/tcp --permanent")
-    for ceph in ceph_nodes:
+            open_firewall_port(ceph, port='6800-7300', protocol='tcp')
         if ceph.role == 'mgr':
-            ceph.exec_command(sudo=True, cmd="systemctl enable firewalld")
-            ceph.exec_command(sudo=True, cmd="systemctl start firewalld")
-            ceph.exec_command(sudo=True, cmd="systemctl status firewalld")
-            ceph.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port=6800-7300/tcp")
-            ceph.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port=6800-7300/tcp --permanent")
-    for ceph in ceph_nodes:
+            open_firewall_port(ceph, port='6800-7300', protocol='tcp')
         if ceph.role == 'mds':
-            ceph.exec_command(sudo=True, cmd="systemctl enable firewalld")
-            ceph.exec_command(sudo=True, cmd="systemctl start firewalld")
-            ceph.exec_command(sudo=True, cmd="systemctl status firewalld")
-            ceph.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port=6800/tcp")
-            ceph.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port=6800/tcp --permanent")
+            open_firewall_port(ceph, port='6800', protocol='tcp')
     for node in ceph_nodes:
         if node.role == 'installer':
             log.info("Setting installer node")
