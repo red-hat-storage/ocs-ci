@@ -1,7 +1,7 @@
 image: python:2.7
 
 before_script:
-   - pip install tox flake8
+   - pip install tox
 
 stages:
    - build
