@@ -67,14 +67,11 @@ tests:
 #      desc: run rados bench for 360 - normal profile
 
    - test:
-        name: ceph ansible purge
-        module: exec_installer.py
-        config:
-              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-docker-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes -e remove_packages=yes
-              sudo: False
-        desc: Purge ceph cluster
+      name: ceph ansible purge
+      module: purge_cluster.py
+      desc: Purge ceph cluster
 ### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
-        recreate-cluster: True
+      recreate-cluster: True
 
 
    - test:
@@ -147,14 +144,11 @@ tests:
 #      desc: run rados bench for 360 - normal profile
 
    - test:
-        name: ceph ansible purge
-        module: exec_installer.py
-        config:
-              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-docker-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes -e remove_packages=yes
-              sudo: False
-        desc: Purge ceph cluster
+      name: ceph ansible purge
+      module: purge_cluster.py
+      desc: Purge ceph cluster
 ### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
-        recreate-cluster: True
+      recreate-cluster: True
 
 
    - test:
@@ -230,14 +224,11 @@ tests:
 #      desc: run rados bench for 360 - normal profile
 
    - test:
-        name: ceph ansible purge
-        module: exec_installer.py
-        config:
-              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-docker-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes -e remove_packages=yes
-              sudo: False
-        desc: Purge ceph cluster
+      name: ceph ansible purge
+      module: purge_cluster.py
+      desc: Purge ceph cluster
 ### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
-        recreate-cluster: True
+      recreate-cluster: True
 
 
    - test:
@@ -314,14 +305,11 @@ tests:
 #      desc: run rados bench for 360 - normal profile
 
    - test:
-        name: ceph ansible purge
-        module: exec_installer.py
-        config:
-              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-docker-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes -e remove_packages=yes
-              sudo: False
-        desc: Purge ceph cluster
+      name: ceph ansible purge
+      module: purge_cluster.py
+      desc: Purge ceph cluster
 ### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
-        recreate-cluster: True
+      recreate-cluster: True
 
    - test:
        name: install ceph pre-requisities
@@ -394,14 +382,11 @@ tests:
 #      desc: run rados bench for 360 - normal profile
 
    - test:
-        name: ceph ansible purge
-        module: exec_installer.py
-        config:
-              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-docker-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes -e remove_packages=yes
-              sudo: False
-        desc: Purge ceph cluster
+      name: ceph ansible purge
+      module: purge_cluster.py
+      desc: Purge ceph cluster
 ### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
-        recreate-cluster: True
+      recreate-cluster: True
 
 
    - test:
@@ -473,10 +458,7 @@ tests:
 #      desc: run rados bench for 360 - normal profile
 
    - test:
-        name: ceph ansible purge
-        module: exec_installer.py
-        config:
-              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-docker-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes -e remove_packages=yes
-              sudo: False
-        desc: Purge ceph cluster
-        destroy-cluster: True
+      name: ceph ansible purge
+      module: purge_cluster.py
+      desc: Purge ceph cluster
+      destroy-cluster: True
