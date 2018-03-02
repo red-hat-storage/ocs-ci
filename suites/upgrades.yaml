@@ -34,7 +34,7 @@ tests:
       destroy-cluster: False
       abort-on-fail: True
    - test:
-       name: upgrade to 3.0
+       name: upgrade to 3.x
        module: test_ansible_upgrade.py
        destroy-cluster: True
        config:
@@ -64,6 +64,7 @@ tests:
                   mon_allow_pool_delete: True
        desc: test rolling upgrade using ceph-ansible
        destroy-cluster: False
+       abort-on-fail: True
    - test:
       name: librbd workunit
       module: test_workunit.py
@@ -95,23 +96,22 @@ tests:
       desc: run rados bench for 360 - normal profile
    - test:
       name: ceph ansible purge
-      module: exec_installer.py
-      config:
-         cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
-         sudo: False
+      module: purge_cluster.py
       desc: Purge ceph cluster
-      recreate-cluster: True
+      destroy-cluster: False
+      abort-on-fail: True
 
    - test:
       name: ceph ansible install 2.x
       module: test_ansible.py
       config:
         use_cdn: True
-        build: '2.0'
+        build: '2.x'
         ansi_config:
             ceph_test: True
             ceph_rhcs: True
             ceph_rhcs_cdn_install: True
+            ceph_stable_release: jewel
             journal_collocation: True
             osd_auto_discovery: False
             journal_size: 1024
@@ -158,6 +158,7 @@ tests:
                   mon_allow_pool_delete: True
        desc: test rolling upgrade using ceph-ansible
        destroy-cluster: False
+       abort-on-fail: True
    - test:
        name: upgrade to latest
        module: test_ansible_upgrade.py
@@ -167,6 +168,7 @@ tests:
             ceph_origin: distro
             ceph_stable_release: luminous
             ceph_repository: rhcs
+       abort-on-fail: True
    - test:
       name: librbd workunit
       module: test_workunit.py
@@ -198,12 +200,10 @@ tests:
       desc: run rados bench for 360 - normal profile
    - test:
       name: ceph ansible purge
-      module: exec_installer.py
-      config:
-         cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
-         sudo: False
+      module: purge_cluster.py
       desc: Purge ceph cluster
-      recreate-cluster: True
+      destroy-cluster: False
+      abort-on-fail: True
 
    - test:
       name: ceph ansible install 3.0
@@ -245,6 +245,7 @@ tests:
             ceph_origin: distro
             ceph_stable_release: luminous
             ceph_repository: rhcs
+       abort-on-fail: True
    - test:
       name: librbd workunit
       module: test_workunit.py
@@ -276,9 +277,6 @@ tests:
       desc: run rados bench for 360 - normal profile
    - test:
       name: ceph ansible purge
-      module: exec_installer.py
-      config:
-         cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
-         sudo: False
+      module: purge_cluster.py
       desc: Purge ceph cluster
-      recreate-cluster: True
+      destroy-cluster: False
