@@ -13,6 +13,7 @@ from docopt import docopt
 from ceph.ceph import CephNode
 from ceph.utils import create_ceph_nodes, cleanup_ceph_nodes
 from ceph.utils import setup_cdn_repos
+from utils.polarion import post_to_polarion
 
 doc = """
 A simple test suite wrapper that executes tests based on yaml test configuration
@@ -31,6 +32,7 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--docker-image <image>]
         [--docker-tag <tag>]
         [--insecure-registry]
+        [--post-results]
 
 
 Options:
@@ -61,6 +63,8 @@ Options:
   --docker-image <image>            Docker image, deafult value is taken from ansible config
   --docker-tag <tag>                Docker tag, default value is 'latest'
   --insecure-registry               Disable security check for docker registry
+  --post-results               Post results to polarion, needs Polarion IDs
+                                    in test suite yamls.
 """
 
 logger = logging.getLogger(__name__)
@@ -136,6 +140,7 @@ def run(args):
     docker_image = args.get('--docker-image', None)
     docker_tag = args.get('--docker-tag', None)
     docker_insecure_registry = args.get('--insecure-registry', False)
+    post_results = args.get('--post-results')
     if rhbuild.startswith('2'):
         if base_url is None:
             # use latest as default when nothing is specified in cli
@@ -233,6 +238,8 @@ def run(args):
         tc['name'] = test.get('name')
         tc['desc'] = test.get('desc')
         tc['file'] = test.get('module')
+        tc['polarion-id'] = test.get('polarion-id')
+        tc['rhbuild'] = rhbuild
         test_file = tc['file']
         config = test.get('config', {})
         if not config.get('base_url'):
@@ -276,10 +283,14 @@ def run(args):
         if rc == 0:
             log.info("Test %s passed" % test_mod)
             tc['status'] = 'Pass'
+            if post_results:
+                post_to_polarion(tc=tc)
         else:
             tc['status'] = 'Failed'
             log.info("Test %s failed" % test_mod)
             jenkins_rc = 1
+            if post_results:
+                post_to_polarion(tc=tc)
             if test.get('abort-on-fail', False):
                 log.info("Aborting on test failure")
                 tcs.append(tc)
