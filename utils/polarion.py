@@ -30,7 +30,7 @@ def post_to_polarion(tc):
             polarion_cred = load(polarion_data)
     except IOError:
         log.error("Please create .polarion.yaml with username/password \
-                    in user home dir for posting results to polarion")
+                    in home dir for posting results to polarion")
         raise
     if tc['polarion-id'] is not None:
         # add polarion attributes
@@ -47,14 +47,14 @@ def post_to_polarion(tc):
             tc['result'] = ''
         else:
             tc['result'] = '<failure message="test failed" type="failure"/>'
+        current_dir += '/templates/'
+        j2_env = Environment(loader=FileSystemLoader(current_dir),
+                             trim_blocks=True)
         for id in ids:
-            tc['test_case_id'] = id
+            tc['polarion-id'] = id
             f = NamedTemporaryFile(delete=False)
-            current_dir += '/templates/'
-            j2_env = Environment(loader=FileSystemLoader(current_dir),
-                                 trim_blocks=True)
             test_results = j2_env.get_template('importer-template.xml').render(tc=tc)
-            log.info("updating results")
+            log.info("updating results for %s " % id)
             f.write(test_results)
             f.close()
             user = polarion_cred.get('username')
