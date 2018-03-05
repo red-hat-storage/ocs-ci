@@ -64,6 +64,8 @@ tests:
    - test:
       name: purge cluster
       module: purge_cluster.py
+      config:
+        ansible-dir: ~/ceph-ansible
       abort-on-fail: true
 
    - test:

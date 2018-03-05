@@ -66,6 +66,8 @@ tests:
    - test:
       name: ceph ansible purge
       module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
       desc: Purge ceph cluster
 #        recreate-cluster: True
 #
@@ -137,6 +139,8 @@ tests:
    - test:
       name: ceph ansible purge
       module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
       desc: Purge ceph cluster
 #        recreate-cluster: True
 #
@@ -211,6 +215,8 @@ tests:
    - test:
       name: ceph ansible purge
       module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
       desc: Purge ceph cluster
 #        recreate-cluster: True
 #
@@ -286,6 +292,8 @@ tests:
    - test:
       name: ceph ansible purge
       module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
       desc: Purge ceph cluster
 #        recreate-cluster: True
 #
@@ -358,6 +366,8 @@ tests:
    - test:
       name: ceph ansible purge
       module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
       desc: Purge ceph cluster
 #        recreate-cluster: True
 #
@@ -428,6 +438,8 @@ tests:
    - test:
       name: ceph ansible purge
       module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
       desc: Purge ceph cluster
 #        recreate-cluster: True
 #
@@ -499,5 +511,7 @@ tests:
    - test:
       name: ceph ansible purge
       module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
       desc: Purge ceph cluster
       destroy-cluster: True
