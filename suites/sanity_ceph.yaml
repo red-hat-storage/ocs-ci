@@ -107,3 +107,10 @@ tests:
        config:
            script-name:  test_version_with_revert.py
            timeout: 400
+   - test:
+       name: s3 tests
+       module: test_s3.py
+       config:
+           branch: ceph-luminous
+       desc: execution of s3 tests against radosgw
+       destroy-cluster: False
