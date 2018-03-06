@@ -1,0 +1,15 @@
+<testsuites>
+    <properties>
+        <property name="polarion-project-id" value="CEPH"/>
+        <property name="polarion-testrun-id" value="{{tc['test_run_id']}}"/>
+        <property name="polarion-group-id" value="ceph-build: {{tc['ceph-build']}}"/>
+    </properties>
+    <testsuite name="{{tc['name']}} test suite" tests="1">
+    <testcase name="{{tc['name']}}">
+     {{tc['result']}}
+    <properties>
+      <property name="polarion-testcase-id" value="{{tc['polarion-id']}}"/>
+    </properties>
+    </testcase>
+    </testsuite>
+</testsuites>
