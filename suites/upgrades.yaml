@@ -96,6 +96,13 @@ tests:
          pool_type: 'normal'
       desc: run rados bench for 360 - normal profile
    - test:
+      name: s3 tests
+      module: test_s3.py
+      config:
+         branch: ceph-luminous
+      desc: execution of s3 tests against radosgw
+      destroy-cluster: False
+   - test:
       name: ceph ansible purge
       module: purge_cluster.py
       desc: Purge ceph cluster
@@ -202,6 +209,13 @@ tests:
          pool_type: 'normal'
       desc: run rados bench for 360 - normal profile
    - test:
+      name: s3 tests
+      module: test_s3.py
+      config:
+         branch: ceph-luminous
+      desc: execution of s3 tests against radosgw
+      destroy-cluster: False
+   - test:
       name: ceph ansible purge
       module: purge_cluster.py
       desc: Purge ceph cluster
@@ -280,6 +294,13 @@ tests:
          pg_num: '128'
          pool_type: 'normal'
       desc: run rados bench for 360 - normal profile
+   - test:
+      name: s3 tests
+      module: test_s3.py
+      config:
+         branch: ceph-luminous
+      desc: execution of s3 tests against radosgw
+      destroy-cluster: False
    - test:
       name: ceph ansible purge
       module: purge_cluster.py
