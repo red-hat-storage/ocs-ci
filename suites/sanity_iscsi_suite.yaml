@@ -26,13 +26,17 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
+            copy_admin_key: true
             ceph_conf_overrides:
                 global:
                   osd_pool_default_pg_num: 64
                   osd_default_pool_size: 2
                   osd_pool_default_pgp_num: 64
                   mon_max_pg_per_osd: 1024
-      desc: test cluster setup using ceph-ansible
+                mon:
+                  mon_allow_pool_delete: true
+      desc: osd with collocated journal
       destroy-cluster: False
       abort-on-fail: true
 
@@ -88,13 +92,17 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
+            copy_admin_key: true
             ceph_conf_overrides:
                 global:
                   osd_pool_default_pg_num: 64
                   osd_default_pool_size: 2
                   osd_pool_default_pgp_num: 64
                   mon_max_pg_per_osd: 1024
-      desc: test cluster setup using ceph-ansible
+                mon:
+                  mon_allow_pool_delete: true
+      desc: osd with collocated journal
       destroy-cluster: False
       abort-on-fail: true
 
@@ -139,13 +147,17 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
+            copy_admin_key: true
             ceph_conf_overrides:
                 global:
                   osd_pool_default_pg_num: 64
                   osd_default_pool_size: 2
                   osd_pool_default_pgp_num: 64
                   mon_max_pg_per_osd: 1024
-      desc: test cluster setup using ceph-ansible
+                mon:
+                  mon_allow_pool_delete: true
+      desc: osd with collocated journal
       destroy-cluster: False
       abort-on-fail: true
 
