@@ -69,6 +69,9 @@ tests:
    - test:
       name: ceph ansible purge
       module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
+            playbook-command: purge-docker-cluster.yml -e ireallymeanit=yes -e remove_packages=yes
       desc: Purge ceph cluster
 ### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
       recreate-cluster: True
@@ -146,6 +149,9 @@ tests:
    - test:
       name: ceph ansible purge
       module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
+            playbook-command: purge-docker-cluster.yml -e ireallymeanit=yes -e remove_packages=yes
       desc: Purge ceph cluster
 ### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
       recreate-cluster: True
@@ -226,6 +232,9 @@ tests:
    - test:
       name: ceph ansible purge
       module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
+            playbook-command: purge-docker-cluster.yml -e ireallymeanit=yes -e remove_packages=yes
       desc: Purge ceph cluster
 ### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
       recreate-cluster: True
@@ -307,6 +316,9 @@ tests:
    - test:
       name: ceph ansible purge
       module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
+            playbook-command: purge-docker-cluster.yml -e ireallymeanit=yes -e remove_packages=yes
       desc: Purge ceph cluster
 ### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
       recreate-cluster: True
@@ -384,6 +396,9 @@ tests:
    - test:
       name: ceph ansible purge
       module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
+            playbook-command: purge-docker-cluster.yml -e ireallymeanit=yes -e remove_packages=yes
       desc: Purge ceph cluster
 ### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
       recreate-cluster: True
@@ -460,5 +475,8 @@ tests:
    - test:
       name: ceph ansible purge
       module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
+            playbook-command: purge-docker-cluster.yml -e ireallymeanit=yes -e remove_packages=yes
       desc: Purge ceph cluster
       destroy-cluster: True
