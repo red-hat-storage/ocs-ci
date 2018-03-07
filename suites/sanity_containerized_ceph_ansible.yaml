@@ -6,6 +6,7 @@ tests:
 
    - test:
       name: containerized ceph ansible
+      polarion-id: CEPH-83571503
       module: test_ansible.py
       config:
         ansi_config:
@@ -68,6 +69,7 @@ tests:
 
    - test:
       name: ceph ansible purge
+      polarion-id: CEPH-83571493
       module: purge_cluster.py
       desc: Purge ceph cluster
 ### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
@@ -82,6 +84,7 @@ tests:
 
    - test:
       name: containerized ceph ansible
+      polarion-id: CEPH-83571502
       module: test_ansible.py
       config:
         ansi_config:
@@ -145,6 +148,7 @@ tests:
 
    - test:
       name: ceph ansible purge
+      polarion-id: CEPH-83571493
       module: purge_cluster.py
       desc: Purge ceph cluster
 ### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
@@ -159,6 +163,7 @@ tests:
 
    - test:
       name: containerized ceph ansible
+      polarion-id: CEPH-83571497
       module: test_ansible.py
       config:
         ansi_config:
@@ -225,6 +230,7 @@ tests:
 
    - test:
       name: ceph ansible purge
+      polarion-id: CEPH-83571493
       module: purge_cluster.py
       desc: Purge ceph cluster
 ### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
@@ -239,6 +245,7 @@ tests:
 
    - test:
       name: containerized ceph ansible
+      polarion-id: CEPH-83571495
       module: test_ansible.py
       config:
         ansi_config:
@@ -306,6 +313,7 @@ tests:
 
    - test:
       name: ceph ansible purge
+      polarion-id: CEPH-83571493
       module: purge_cluster.py
       desc: Purge ceph cluster
 ### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
@@ -319,6 +327,7 @@ tests:
 
    - test:
       name: containerized ceph ansible
+      polarion-id: CEPH-83571501
       module: test_ansible.py
       config:
         ansi_config:
@@ -383,6 +392,7 @@ tests:
 
    - test:
       name: ceph ansible purge
+      polarion-id: CEPH-83571493
       module: purge_cluster.py
       desc: Purge ceph cluster
 ### Section should be removed when https://bugzilla.redhat.com/show_bug.cgi?id=1548529 is fixed
@@ -396,6 +406,7 @@ tests:
 ###
    - test:
       name: ceph ansible
+      polarion-id: CEPH-83571499
       module: test_ansible.py
       config:
         ansi_config:
@@ -459,6 +470,7 @@ tests:
 
    - test:
       name: ceph ansible purge
+      polarion-id: CEPH-83571493
       module: purge_cluster.py
       desc: Purge ceph cluster
       destroy-cluster: True
