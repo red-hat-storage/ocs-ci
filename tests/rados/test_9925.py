@@ -95,7 +95,7 @@ def run(**kw):
     log.info(outbuf)
     cmdout = json.loads(outbuf)
     targt_pg = cmdout['pgid']
-    '''Considering non primary osd where to '''
+    '''taking pg replica on  non primary osd '''
     targt_osd = cmdout['up'][1]
     ctx = helper.get_osd_obj(targt_osd, osds)
     helper.kill_osd(targt_osd, "SIGTERM", osds)
@@ -108,16 +108,17 @@ def run(**kw):
 
     (out, err) = ctx.exec_command(cmd=slist_cmd)
     outbuf = out.read()
+    keylist = outbuf.split()
     log.info(outbuf)
     corrupt_cmd = "sudo ceph-objectstore-tool --data-path \
             /var/lib/ceph/osd/ceph-{id} --journal-path \
             /var/lib/ceph/osd/ceph-{id}/journal \
-            /--pgid {pgid} {obj} set-omap \
-            /{outbuf} {path}".format(id=targt_osd,
-                                     obj=oname,
-                                     pgid=targt_pg,
-                                     outbuf="" + (outbuf) + " ",
-                                     path='/etc/hosts')
+            /--pgid {pgid} {obj} rm-omap \
+            /{outbuf}".format(id=targt_osd,
+                              obj=oname,
+                              pgid=targt_pg,
+                              outbuf=keylist[0],
+                              )
     (out, err) = ctx.exec_command(cmd=corrupt_cmd)
     outbuf = out.read()
     log.info(outbuf)
