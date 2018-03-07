@@ -8,20 +8,24 @@ from ceph.rados_utils import RadosHelper
 
 log = logging.getLogger(__name__)
 
+
 def run(**kw):
 
     log.info("Running CEPH-9924")
     log.info(run.__doc__)
     """
-    CEPH-9925 - [RADOS]: 
-    Rewrite a known omap item of a replica and list-inconsistent-obj	
-    Steps:	
+    CEPH-9925 - [RADOS]:
+    Rewrite a known omap item of a replica and list-inconsistent-obj
+    Steps:
         1. create an object in a replica pool
-        2. add some omap keys and corresponding values to the object	
-        3. chose one of the replica and using ceph-objectstore-rool corrupt omap key or value	
+        2. add some omap keys and corresponding values to the object
+        3. chose one of the replica and using ceph-objectstore-rool corrupt
+         omap key or value
         4. Run deep-scrub  >scrub should report inconsistency
-        5. run rados list-inconsistent-pg <pool> >should list the pg in which object is inconsistent
-        6. Run rados list-inconsistent-obj <pg>	>shud report omap digest mismarch error
+        5. run rados list-inconsistent-pg <pool> >should list the pg in
+        which object is inconsistent
+        6. Run rados list-inconsistent-obj <pg>	>shud report omap
+        digest mismarch error
     """
 
     ceph_nodes = kw.get('ceph_nodes')
@@ -78,7 +82,6 @@ def run(**kw):
         log.info("put {obj}, omap key {keey} value {valu}".format(
             obj=oname, keey="key" + str(i), valu="value" + str(i)))
 
-
     '''
     Goto destination osd, stop the osd service to
     use ceph-objectstore-tool to corrupt
@@ -102,16 +105,20 @@ def run(**kw):
             /var/lib/ceph/osd/ceph-{id} --journal-path \
             /var/lib/ceph/osd/ceph-{id}/journal \
             --pgid {pgid} {obj} list-omap".format(id=targt_osd,
-                                           obj=oname, pgid=targt_pg)
+                                                  obj=oname, pgid=targt_pg)
     (out, err) = ctx.exec_command(cmd=slist_cmd)
-    outbuf= out.read()
+    outbuf = out.read()
+    keylist = outbuf.split()
     log.info(outbuf)
     '''corrupting an omap key by rewriting the omap key with different value'''
     corrupt_cmd = "sudo ceph-objectstore-tool --data-path \
             /var/lib/ceph/osd/ceph-{id} --journal-path \
             /var/lib/ceph/osd/ceph-{id}/journal \
-            --pgid {pgid} {obj} set-omap {outbuf} {path}".format(id=targt_osd, obj=oname, pgid=targt_pg,
-                                                         outbuf=""+(outbuf)+" ",path='/etc/hosts')
+                   --pgid {pgid} {obj} set-omap \
+                   /{outbuf} {path}".format(id=targt_osd,
+                                            obj=oname, pgid=targt_pg,
+                                            outbuf=keylist[0],
+                                            path='/etc/hosts')
     (out, err) = ctx.exec_command(cmd=corrupt_cmd)
     outbuf = out.read()
     log.info(outbuf)
@@ -133,7 +140,8 @@ def run(**kw):
     timeout = 10
     found = 0
     while timeout:
-        incon_pg = "sudo rados list-inconsistent-pg {pname}".format(pname=pname)
+        incon_pg = "sudo rados list-inconsistent-pg {pname}".format(
+            pname=pname)
         (out, err) = ctrlr.exec_command(cmd=incon_pg)
         outbuf = out.read()
         log.info(outbuf)
