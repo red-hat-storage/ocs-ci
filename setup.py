@@ -19,6 +19,7 @@ setup(
         'requests==2.18.3',
         'paramiko==2.2.1',
         'pyyaml==3.12',
+        'jinja2==2.10',
     ],
     zip_safe=True,
     include_package_data=True,
