@@ -1,7 +1,6 @@
 import logging
 
-logger = logging.getLogger(__name__)
-log = logger
+log = logging
 
 
 def run(**kw):
@@ -17,7 +16,8 @@ def run(**kw):
         no_of_gateways = 2
     for ceph in ceph_nodes:
         if ceph.role == 'osd':
-            out, rc = ceph.exec_command(sudo=True, cmd="rpm -qa |grep ceph-iscsi-config")
+            out, rc = ceph.exec_command(
+                sudo=True, cmd="rpm -qa |grep ceph-iscsi-config")
             check = out.read()
             log.info(check)
             if check.find("ceph-iscsi-config") != -1:
@@ -27,7 +27,8 @@ def run(**kw):
     for ceph in ceph_nodes:
         for ceph_gw in range(len(iscsi_gw_nodes)):
             if ceph.role == 'osd' and check_count <= no_of_gateways:
-                out, rc = ceph.exec_command(sudo=True, cmd="rpm -qa |grep ceph-iscsi-config")
+                out, rc = ceph.exec_command(
+                    sudo=True, cmd="rpm -qa |grep ceph-iscsi-config")
                 check = out.read()
                 if check.find("ceph-iscsi-config") != -1:
                     ceph.exec_command(sudo=True, cmd="gwcli ls")
@@ -41,7 +42,8 @@ def run(**kw):
     check_count = 1
     for ceph in ceph_nodes:
         if ceph.role == 'osd' and check_count <= no_of_gateways:
-            out, rc = ceph.exec_command(sudo=True, cmd="rpm -qa |grep ceph-iscsi-config")
+            out, rc = ceph.exec_command(
+                sudo=True, cmd="rpm -qa |grep ceph-iscsi-config")
             check = out.read()
             if check.find("ceph-iscsi-config") != -1:
                 ceph.exec_command(sudo=True, cmd="gwcli ls")
@@ -50,7 +52,8 @@ def run(**kw):
                     log.info("found IQN on" + ceph.hostname)
                     count = count + 1
                 check_count = check_count + 1
-    if count == no_of_gateways:
+    if (count == no_of_gateways):
         return 0
     else:
         return 1
+    log.info("No of IQN found " + str(count))

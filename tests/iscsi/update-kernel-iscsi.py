@@ -1,7 +1,9 @@
 import logging
-import time
 import os
+import time
+
 from ceph.parallel import parallel
+
 logger = logging.getLogger(__name__)
 log = logger
 
@@ -39,9 +41,10 @@ enabled=1
     client.exec_command(
         cmd="sudo wget -O /etc/yum.repos.d/rh_7_nightly.repo "
             "http://file.rdu.redhat.com/~kdreyer/repos/rhel-7-nightly.repo")
-    kernel_repo = client.write_file(sudo=True,
-                                    file_name='/etc/yum.repos.d/rh_kernel.repo',
-                                    file_mode='w')
+    kernel_repo = client.write_file(
+        sudo=True,
+        file_name='/etc/yum.repos.d/rh_kernel.repo',
+        file_mode='w')
     kernel_repo.write(kernel_repo_file)
     kernel_repo.flush()
     o, e = client.exec_command(cmd='uname -a')
@@ -51,6 +54,8 @@ enabled=1
     client.exec_command(cmd='sudo reboot', check_ec=False)
     time.sleep(300)
     client.reconnect()
-    client.exec_command(sudo=True, cmd="rm -f /etc/yum.repos.d/rh_7_nightly.repo")
+    client.exec_command(
+        sudo=True,
+        cmd="rm -f /etc/yum.repos.d/rh_7_nightly.repo")
     o, e = client.exec_command(cmd='uname -a')
     log.info(o.read())
