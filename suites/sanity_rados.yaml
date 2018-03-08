@@ -77,3 +77,13 @@ tests:
       module: test_11538.py
       polarion_id: CEPH-11538
       desc: switch between simple and async messenger
+   - test:
+      name: remove omap key on a replica
+      module: test_9925.py
+      polarion_id: CEPH-9925
+      desc: remove a known omap item of a replica and list-inconsistent-obj
+   - test:
+      name: corrupt omap on a replica
+      module: test_9924.py
+      polarion_id: CEPH-9924
+      desc: rewrite a known omap item of a replica and check list-inconsistent-obj
