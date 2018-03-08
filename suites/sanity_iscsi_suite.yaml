@@ -74,7 +74,7 @@ tests:
       name: purge cluster
       module: purge_cluster.py
       config:
-        ansible-dir: ~/ceph-ansible
+        ansible-dir: /usr/share/ceph-ansible
       abort-on-fail: true
 
    - test:
@@ -129,7 +129,7 @@ tests:
       name: purge cluster
       module: purge_cluster.py
       config:
-        ansible-dir: ~/ceph-ansible
+        ansible-dir: /usr/share/ceph-ansible
       abort-on-fail: true
 
    - test:
