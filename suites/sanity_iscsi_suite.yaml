@@ -44,6 +44,7 @@ tests:
       name: Install_prereq_gw
       module: install_pre_gw.py
       abort-on-fail: true
+      desc: Install the packages required for iscsi-gw
 
    - test:
       name: Install gwcli iscsi.
@@ -52,6 +53,7 @@ tests:
       config:
             no_of_gateways: 4
             no_of_luns: 10
+      desc: Create iscsi gateway using gwcli tool
 
 
    - test:
@@ -76,6 +78,7 @@ tests:
       config:
         ansible-dir: /usr/share/ceph-ansible
       abort-on-fail: true
+      desc: Purge ceph cluster
 
    - test:
       name: ceph ansible
@@ -110,6 +113,7 @@ tests:
       name: Install_prereq_gw
       module: install_pre_gw.py
       abort-on-fail: true
+      desc: Install the packages required for iscsi-gw
 
    - test:
       name: Install gwcli iscsi.
@@ -118,12 +122,14 @@ tests:
       config:
             no_of_gateways: 4
             no_of_luns: 25
+      desc: Create iscsi gateway using gwcli tool
 
    - test:
       name: verify i/o after restart
       module: CEPH-10572_10460_10450.py
       polarion-id: CEPH-10572,CEPH-10460,CEPH-10450
       abort-on-fail: false
+      desc: verify i/o after restart,iscsi-failover-test
 
    - test:
       name: purge cluster
@@ -131,6 +137,7 @@ tests:
       config:
         ansible-dir: /usr/share/ceph-ansible
       abort-on-fail: true
+      desc: Purge ceph cluster
 
    - test:
       name: ceph ansible
@@ -165,6 +172,7 @@ tests:
       name: Install_prereq_gw
       module: install_pre_gw.py
       abort-on-fail: true
+      desc: Install the packages required for iscsi-gw
 
    - test:
       name: Install gwcli iscsi.
@@ -173,10 +181,12 @@ tests:
       config:
             no_of_gateways: 4
             no_of_luns: 25
+      desc: Create iscsi gateway using gwcli tool
 
    - test:
-      name: verify i/o after restart
+      name: Fail an Recover
       module: CEPH-10451.py
       polarion-id: CEPH-10451
       abort-on-fail: false
+      desc: Fail an Recover Active-NonOptimized path
 
