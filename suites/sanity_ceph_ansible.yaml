@@ -6,6 +6,7 @@ tests:
 
    - test:
       name: ceph ansible
+      polarion-id: CEPH-83571467
       module: test_ansible.py
       config:
         ansi_config:
@@ -65,6 +66,7 @@ tests:
 
    - test:
       name: ceph ansible purge
+      polarion-id: CEPH-83571498
       module: purge_cluster.py
       config:
             ansible-dir: /usr/share/ceph-ansible
@@ -78,6 +80,7 @@ tests:
 
    - test:
       name: ceph ansible
+      polarion-id: CEPH-83571492
       module: test_ansible.py
       config:
         ansi_config:
@@ -138,6 +141,7 @@ tests:
 
    - test:
       name: ceph ansible purge
+      polarion-id: CEPH-83571498
       module: purge_cluster.py
       config:
             ansible-dir: /usr/share/ceph-ansible
@@ -151,6 +155,7 @@ tests:
 
    - test:
       name: ceph ansible
+      polarion-id: CEPH-83571465
       module: test_ansible.py
       config:
         ansi_config:
@@ -214,6 +219,7 @@ tests:
 
    - test:
       name: ceph ansible purge
+      polarion-id: CEPH-83571498
       module: purge_cluster.py
       config:
             ansible-dir: /usr/share/ceph-ansible
@@ -227,6 +233,7 @@ tests:
 
    - test:
         name: ceph ansible
+        polarion-id: CEPH-83571468
         module: test_ansible.py
         config:
           ansi_config:
@@ -291,6 +298,7 @@ tests:
 
    - test:
       name: ceph ansible purge
+      polarion-id: CEPH-83571498
       module: purge_cluster.py
       config:
             ansible-dir: /usr/share/ceph-ansible
@@ -304,6 +312,7 @@ tests:
 
    - test:
       name: ceph ansible
+      polarion-id: CEPH-83571500
       module: test_ansible.py
       config:
         ansi_config:
@@ -365,6 +374,7 @@ tests:
 
    - test:
       name: ceph ansible purge
+      polarion-id: CEPH-83571498
       module: purge_cluster.py
       config:
             ansible-dir: /usr/share/ceph-ansible
@@ -378,6 +388,7 @@ tests:
 
    - test:
       name: ceph ansible
+      polarion-id: CEPH-83571494
       module: test_ansible.py
       config:
         ansi_config:
@@ -437,6 +448,7 @@ tests:
 
    - test:
       name: ceph ansible purge
+      polarion-id: CEPH-83571498
       module: purge_cluster.py
       config:
             ansible-dir: /usr/share/ceph-ansible
@@ -450,6 +462,7 @@ tests:
 
    - test:
       name: ceph ansible
+      polarion-id: CEPH-83571496
       module: test_ansible.py
       config:
         ansi_config:
@@ -510,6 +523,7 @@ tests:
 
    - test:
       name: ceph ansible purge
+      polarion-id: CEPH-83571498
       module: purge_cluster.py
       config:
             ansible-dir: /usr/share/ceph-ansible
