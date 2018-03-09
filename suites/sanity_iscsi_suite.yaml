@@ -26,13 +26,17 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
+            copy_admin_key: true
             ceph_conf_overrides:
                 global:
                   osd_pool_default_pg_num: 64
                   osd_default_pool_size: 2
                   osd_pool_default_pgp_num: 64
                   mon_max_pg_per_osd: 1024
-      desc: test cluster setup using ceph-ansible
+                mon:
+                  mon_allow_pool_delete: true
+      desc: osd with collocated journal
       destroy-cluster: False
       abort-on-fail: true
 
@@ -40,6 +44,7 @@ tests:
       name: Install_prereq_gw
       module: install_pre_gw.py
       abort-on-fail: true
+      desc: Install the packages required for iscsi-gw
 
    - test:
       name: Install gwcli iscsi.
@@ -48,25 +53,32 @@ tests:
       config:
             no_of_gateways: 4
             no_of_luns: 10
+      desc: Create iscsi gateway using gwcli tool
+
 
    - test:
       name: Verify gateways are installed on all the nodes.
-      module: iscsi_verify_gateway_installed.py
+      module: CEPH-10365_10367.py
+      polarion-id: CEPH-10365,CEPH-10367
+      desc: Install iSCSI setup with 2 Gateways co-located on the OSDs using ceph-ansible
       abort-on-fail: false
       config:
             no_of_gateways: 4
 
    - test:
       name: Doing some i/o
-      module: iscsi_multiple_luns_run_io.py
+      module: CEPH-10440.py
+      polarion-id: CEPH-10440
+      desc: Configure multiple LUNs(20-30) from a Single Target and discover it on Initiators and run IO on the connected targets from clients
       abort-on-fail: false
 
    - test:
       name: purge cluster
       module: purge_cluster.py
       config:
-        ansible-dir: ~/ceph-ansible
+        ansible-dir: /usr/share/ceph-ansible
       abort-on-fail: true
+      desc: Purge ceph cluster
 
    - test:
       name: ceph ansible
@@ -83,13 +95,17 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
+            copy_admin_key: true
             ceph_conf_overrides:
                 global:
                   osd_pool_default_pg_num: 64
                   osd_default_pool_size: 2
                   osd_pool_default_pgp_num: 64
                   mon_max_pg_per_osd: 1024
-      desc: test cluster setup using ceph-ansible
+                mon:
+                  mon_allow_pool_delete: true
+      desc: osd with collocated journal
       destroy-cluster: False
       abort-on-fail: true
 
@@ -97,6 +113,7 @@ tests:
       name: Install_prereq_gw
       module: install_pre_gw.py
       abort-on-fail: true
+      desc: Install the packages required for iscsi-gw
 
    - test:
       name: Install gwcli iscsi.
@@ -105,10 +122,71 @@ tests:
       config:
             no_of_gateways: 4
             no_of_luns: 25
+      desc: Create iscsi gateway using gwcli tool
 
    - test:
       name: verify i/o after restart
-      module: iscsi_verify_io_after_gw_restarted.py
+      module: CEPH-10572_10460_10450.py
+      polarion-id: CEPH-10572,CEPH-10460,CEPH-10450
       abort-on-fail: false
+      desc: verify i/o after restart,iscsi-failover-test
 
+   - test:
+      name: purge cluster
+      module: purge_cluster.py
+      config:
+        ansible-dir: /usr/share/ceph-ansible
+      abort-on-fail: true
+      desc: Purge ceph cluster
+
+   - test:
+      name: ceph ansible
+      module: test_ansible.py
+      config:
+        ansi_config:
+            ceph_test: True
+            ceph_origin: distro
+            ceph_stable_release: luminous
+            ceph_repository: rhcs
+            osd_scenario: collocated
+            osd_auto_discovery: False
+            journal_size: 1024
+            ceph_stable: True
+            ceph_stable_rh_storage: True
+            public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
+            copy_admin_key: true
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 64
+                  osd_default_pool_size: 2
+                  osd_pool_default_pgp_num: 64
+                  mon_max_pg_per_osd: 1024
+                mon:
+                  mon_allow_pool_delete: true
+      desc: osd with collocated journal
+      destroy-cluster: False
+      abort-on-fail: true
+
+   - test:
+      name: Install_prereq_gw
+      module: install_pre_gw.py
+      abort-on-fail: true
+      desc: Install the packages required for iscsi-gw
+
+   - test:
+      name: Install gwcli iscsi.
+      module: install_iscsi_gwcli.py
+      abort-on-fail: true
+      config:
+            no_of_gateways: 4
+            no_of_luns: 25
+      desc: Create iscsi gateway using gwcli tool
+
+   - test:
+      name: Fail an Recover
+      module: CEPH-10451.py
+      polarion-id: CEPH-10451
+      abort-on-fail: false
+      desc: Fail an Recover Active-NonOptimized path
 
