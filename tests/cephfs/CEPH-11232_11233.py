@@ -1,4 +1,5 @@
-from tests.cephfs.cephfs_utils import FsUtils, MkdirPinning
+import random
+from tests.cephfs.cephfs_utils import FsUtils
 from ceph.parallel import parallel
 import timeit
 from ceph.ceph import CommandFailed
@@ -12,10 +13,7 @@ log = logger
 def run(**kw):
     try:
         start = timeit.default_timer()
-        config = kw.get('config')
-        num_of_dirs = config.get('num_of_dirs')
-        num_of_dirs = num_of_dirs / 5
-        tc = '11228'
+        tc = '11232 and 11233'
         dir_name = 'dir'
         log.info("Running cephfs %s test case" % (tc))
         ceph_nodes = kw.get('ceph_nodes')
@@ -69,6 +67,7 @@ def run(**kw):
             log.info("Activate multiple mdss successfully")
         else:
             raise CommandFailed("Activate multiple mdss failed")
+
         with parallel() as p:
             p.spawn(fs_util.read_write_IO, client1,
                     client_info['mounting_dir'], 'g', 'write')
@@ -91,57 +90,109 @@ def run(**kw):
                 return_counts, rc = op
 
         result = fs_util.rc_verify('', return_counts)
-
-        if result == 'Data validation success':
+        if 'Data validation success' in result:
             print "Data validation success"
-            fs_util.activate_multiple_mdss(client_info['mds_nodes'])
-            pinning_obj1 = MkdirPinning(ceph_nodes, 0)
-            pinning_obj2 = MkdirPinning(ceph_nodes, 1)
-            log.info("Execution of Test case CEPH-%s started:" % (tc))
-            with parallel() as p:
-                p.spawn(
-                    pinning_obj1.mkdir_pinning,
-                    client1,
-                    num_of_dirs * 6,
-                    num_of_dirs * 11,
-                    client_info['mounting_dir'],
-                    dir_name)
-                p.spawn(
-                    pinning_obj2.mkdir_pinning,
-                    client3,
-                    num_of_dirs * 11,
-                    num_of_dirs * 21,
-                    client_info['mounting_dir'],
-                    dir_name)
+            tc = '11232 and 11233'
+            log.info("Execution of Test cases %s started:" % (tc))
+            fs_util.allow_dir_fragmentation(client_info['mds_nodes'])
+            random_choice = [
+                client_info['kernel_clients'],
+                client_info['fuse_clients']]
+            log.info("Creating directory:")
+            for node in random.choice(random_choice):
+                out, rc = node.exec_command(
+                    cmd='sudo mkdir %s%s' %
+                    (client_info['mounting_dir'], dir_name))
+                print out.read()
+                break
+            active_mds_node_1, active_mds_node_2, rc = fs_util.get_active_mdss(
+                client_info['mds_nodes'])
+            if rc == 0:
+                log.info("Got active mdss")
+            else:
+                raise CommandFailed("getting active-mdss failed")
+            node1_before_io, _, rc = fs_util.get_mds_info(
+                active_mds_node_1, active_mds_node_2, info='get subtrees')
+            if rc == 0:
+                log.info("Got mds subtree info")
+            else:
+                raise CommandFailed("Mds info command failed")
 
             with parallel() as p:
                 p.spawn(
-                    fs_util.pinned_dir_io_mdsfailover,
+                    fs_util.stress_io,
                     client1,
                     client_info['mounting_dir'],
                     dir_name,
-                    num_of_dirs * 6,
-                    num_of_dirs * 7,
-                    10,
-                    fs_util.mds_fail_over,
-                    client_info['mds_nodes'])
+                    0,
+                    1000,
+                    iotype='touch')
                 p.spawn(
-                    fs_util.pinned_dir_io_mdsfailover,
+                    fs_util.stress_io,
                     client3,
                     client_info['mounting_dir'],
                     dir_name,
-                    num_of_dirs * 7,
-                    num_of_dirs * 8,
-                    20,
-                    fs_util.mds_fail_over,
-                    client_info['mds_nodes'])
-                for op in p:
-                    return_counts = op
-            return_counts = return_counts[0]
-            log.info("Execution of Test case CEPH-%s ended:" % (tc))
+                    1000,
+                    2000,
+                    iotype='touch')
+                p.spawn(
+                    fs_util.stress_io,
+                    client2,
+                    client_info['mounting_dir'],
+                    dir_name,
+                    2000,
+                    3000,
+                    iotype='touch')
+                p.spawn(
+                    fs_util.stress_io,
+                    client4,
+                    client_info['mounting_dir'],
+                    dir_name,
+                    3000,
+                    4000,
+                    iotype='touch')
+                p.spawn(
+                    fs_util.stress_io,
+                    client3,
+                    client_info['mounting_dir'],
+                    dir_name,
+                    4000,
+                    5000,
+                    iotype='touch')
+
+            node1_after_io, _, rc = fs_util.get_mds_info(
+                active_mds_node_1, active_mds_node_2, info='get subtrees')
+            if rc == 0:
+                log.info("Got mds subtree info")
+            else:
+                raise CommandFailed("Mds info command failed")
+
+            rc = fs_util.client_clean_up(
+                client_info['fuse_clients'],
+                client_info['kernel_clients'],
+                client_info['mounting_dir'])
+            if rc == 0:
+                log.info("Cleaning mount success")
+            else:
+                raise CommandFailed("Cleaning mount failed")
+
+            node1_after_del, _, rc = fs_util.get_mds_info(
+                active_mds_node_1, active_mds_node_2, info='get subtrees')
+            if rc == 0:
+                log.info("Got mds subtree info")
+            else:
+                raise CommandFailed("Mds info command failed")
+
+            log.info("Execution of Test case 11232 and 11233 ended:")
+            f = open('afterdel.txt', 'w+')
+            f.write(node1_after_del)
+            f.close()
             print "Results:"
-            result = fs_util.rc_verify(tc, return_counts)
-            print result
+            if node1_before_io != node1_after_io and \
+                    node1_after_io != node1_after_del:
+                print "Test case %s Passed" % (tc)
+            else:
+                return 1
 
             log.info("Cleaning up!-----")
             fs_util.client_clean_up(
@@ -149,25 +200,28 @@ def run(**kw):
                 client_info['kernel_clients'],
                 client_info['mounting_dir'],
                 'umount')
-            fs_util.mds_cleanup(client_info['mds_nodes'], None)
+            fs_util.mds_cleanup(client_info['mds_nodes'], 'dir_fragmentation')
             log.info("Cleaning up successfull")
-
         else:
+            log.error("Data validation failed")
             log.info("Cleaning up!-----")
             fs_util.client_clean_up(
                 client_info['fuse_clients'],
                 client_info['kernel_clients'],
                 client_info['mounting_dir'],
                 'umount')
-            fs_util.mds_cleanup(client_info['mds_nodes'], None)
+            fs_util.mds_cleanup(client_info['mds_nodes'], 'dir_fragmentation')
             log.info("Cleaning up successfull")
             raise CommandFailed("Data validation failed")
+
         print'Script execution time:------'
         stop = timeit.default_timer()
         total_time = stop - start
         mins, secs = divmod(total_time, 60)
         hours, mins = divmod(mins, 60)
+
         print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
+
         return 0
     except CommandFailed as e:
         log.info(e)

@@ -3,13 +3,16 @@ globals:
        name: ceph
        create: true
        image-name: rhel-7.4-server-x86_64-released
-       vm-size: m1.small
+       vm-size: m1.medium
        node1:
-         role: mon
+         role:
+            - mon
+            - mgr
+            - installer
        node2:
          role: osd
          no-of-volumes: 3
-         disk-size: 20
+         disk-size: 30
        node3:
          role: mds
        node4:
@@ -17,27 +20,27 @@ globals:
        node5:
          role: client
        node6:
-         role: installer
-       node7:
          role: mds
+       node7:
+         role: client
        node8:
          role: client
        node9:
          role: client
        node10:
-         role: client
-       node11:
-         role: mgr
-       node12:
          role: osd
          no-of-volumes: 3
-         disk-size: 20
+         disk-size: 30
+       node11:
+         role: osd
+         no-of-volumes: 3
+         disk-size: 30
+       node12:
+         role: mds
        node13:
          role: osd
          no-of-volumes: 3
-         disk-size: 20
-       node14:
-         role: mds
+         disk-size: 30
     cloud-data: conf/cloud-data.yaml
     ceph-conf-overrides:
       global:
@@ -52,4 +55,3 @@ globals:
         tenant-name: 'ceph-jenkins'
         service-region: 'regionOne'
         keypair: 'vasu-lp'
-

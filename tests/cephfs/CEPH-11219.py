@@ -1,10 +1,10 @@
-from tests.cephfs.cephfs_utils import FsUtils, MkdirPinning
+from tests.cephfs.cephfs_utils import FsUtils
 from ceph.parallel import parallel
 import timeit
 from ceph.ceph import CommandFailed
 import traceback
 import logging
-
+from ceph.utils import check_ceph_healthly
 logger = logging.getLogger(__name__)
 log = logger
 
@@ -12,10 +12,7 @@ log = logger
 def run(**kw):
     try:
         start = timeit.default_timer()
-        config = kw.get('config')
-        num_of_dirs = config.get('num_of_dirs')
-        num_of_dirs = num_of_dirs / 5
-        tc = '11228'
+        tc = '11219'
         dir_name = 'dir'
         log.info("Running cephfs %s test case" % (tc))
         ceph_nodes = kw.get('ceph_nodes')
@@ -33,7 +30,8 @@ def run(**kw):
         client2.append(client_info['fuse_clients'][1])
         client3.append(client_info['kernel_clients'][0])
         client4.append(client_info['kernel_clients'][1])
-
+        cluster_health_beforeIO = check_ceph_healthly(
+            client_info['mon_node'], 12, 1, None, 300)
         rc1 = fs_util.auth_list(client1, client_info['mon_node'])
         rc2 = fs_util.auth_list(client2, client_info['mon_node'])
         rc3 = fs_util.auth_list(client3, client_info['mon_node'])
@@ -91,68 +89,104 @@ def run(**kw):
                 return_counts, rc = op
 
         result = fs_util.rc_verify('', return_counts)
-
         if result == 'Data validation success':
             print "Data validation success"
-            fs_util.activate_multiple_mdss(client_info['mds_nodes'])
-            pinning_obj1 = MkdirPinning(ceph_nodes, 0)
-            pinning_obj2 = MkdirPinning(ceph_nodes, 1)
-            log.info("Execution of Test case CEPH-%s started:" % (tc))
+            dirs, rc = fs_util.mkdir(
+                client1, 0, 3, client_info['mounting_dir'], dir_name)
+            if rc == 0:
+                log.info("Directories created")
+            else:
+                raise CommandFailed("Directory creation failed")
+            dirs = dirs.split('\n')
             with parallel() as p:
                 p.spawn(
-                    pinning_obj1.mkdir_pinning,
+                    fs_util.stress_io,
                     client1,
-                    num_of_dirs * 6,
-                    num_of_dirs * 11,
                     client_info['mounting_dir'],
-                    dir_name)
+                    dirs[0],
+                    0,
+                    1,
+                    iotype='fio')
                 p.spawn(
-                    pinning_obj2.mkdir_pinning,
-                    client3,
-                    num_of_dirs * 11,
-                    num_of_dirs * 21,
+                    fs_util.stress_io,
+                    client1,
                     client_info['mounting_dir'],
-                    dir_name)
+                    dirs[0],
+                    0,
+                    100,
+                    iotype='touch')
+                p.spawn(
+                    fs_util.stress_io,
+                    client2,
+                    client_info['mounting_dir'],
+                    dirs[1],
+                    0,
+                    1,
+                    iotype='dd')
+                p.spawn(
+                    fs_util.stress_io,
+                    client2,
+                    client_info['mounting_dir'],
+                    dirs[2],
+                    0,
+                    1,
+                    iotype='crefi')
+                for op in p:
+                    return_counts, rc = op
 
             with parallel() as p:
                 p.spawn(
-                    fs_util.pinned_dir_io_mdsfailover,
-                    client1,
-                    client_info['mounting_dir'],
-                    dir_name,
-                    num_of_dirs * 6,
-                    num_of_dirs * 7,
-                    10,
-                    fs_util.mds_fail_over,
-                    client_info['mds_nodes'])
-                p.spawn(
-                    fs_util.pinned_dir_io_mdsfailover,
+                    fs_util.stress_io,
                     client3,
                     client_info['mounting_dir'],
-                    dir_name,
-                    num_of_dirs * 7,
-                    num_of_dirs * 8,
-                    20,
-                    fs_util.mds_fail_over,
-                    client_info['mds_nodes'])
+                    dirs[0],
+                    0,
+                    1,
+                    iotype='smallfile_delete')
+                p.spawn(
+                    fs_util.stress_io,
+                    client3,
+                    client_info['mounting_dir'],
+                    dirs[1],
+                    0,
+                    1,
+                    iotype='smallfile_delete')
+                p.spawn(
+                    fs_util.stress_io,
+                    client3,
+                    client_info['mounting_dir'],
+                    dirs[2],
+                    0,
+                    1,
+                    iotype='smallfile_delete')
                 for op in p:
-                    return_counts = op
-            return_counts = return_counts[0]
-            log.info("Execution of Test case CEPH-%s ended:" % (tc))
+                    return_counts, rc = op
+
+            log.info("Cleaning up!-----")
+            rc = fs_util.client_clean_up(
+                client_info['fuse_clients'],
+                client_info['kernel_clients'],
+                client_info['mounting_dir'],
+                'umount')
+            if rc == 0:
+                log.info("client cleaning up successfull")
+
+            rc = fs_util.mds_cleanup(client_info['mds_nodes'], None)
+            if rc == 0:
+                log.info("MDS cleanup successfull")
+
+            cluster_health_afterIO = check_ceph_healthly(
+                client_info['mon_node'], 12, 1, None, 300)
+
+            log.info("Execution of Test case CEPH-%s ended" % (tc))
             print "Results:"
             result = fs_util.rc_verify(tc, return_counts)
-            print result
-
-            log.info("Cleaning up!-----")
-            fs_util.client_clean_up(
-                client_info['fuse_clients'],
-                client_info['kernel_clients'],
-                client_info['mounting_dir'],
-                'umount')
-            fs_util.mds_cleanup(client_info['mds_nodes'], None)
-            log.info("Cleaning up successfull")
-
+            if cluster_health_beforeIO == cluster_health_afterIO:
+                print result
+            else:
+                return 1
         else:
+            log.error("Data consistancy not found")
             log.info("Cleaning up!-----")
             fs_util.client_clean_up(
                 client_info['fuse_clients'],
@@ -161,7 +195,7 @@ def run(**kw):
                 'umount')
             fs_util.mds_cleanup(client_info['mds_nodes'], None)
             log.info("Cleaning up successfull")
-            raise CommandFailed("Data validation failed")
+            return 1
         print'Script execution time:------'
         stop = timeit.default_timer()
         total_time = stop - start
