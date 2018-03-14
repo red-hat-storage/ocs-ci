@@ -70,15 +70,9 @@ class FsUtils(object):
 
                 if 'fio' not in output:
                     node.exec_command(
-                        cmd='sudo yum install -y http://dl.fedoraproject.org/'
-                            'pub/epel/7/x86_64/Packages/f/'
-                            'fio-2.2.8-2.el7.x86_64.rpm')
-                    node.exec_command(
-                        cmd='sudo yum install -y https://'
-                            'kojipkgs.fedoraproject.org//packages/libaio/'
-                            '0.3.110/9.fc27/x86_64/libaio-0.3.110-9.'
-                            'fc27.x86_64.rpm')
-
+                        cmd='sudo yum install -y https://rpmfind.net/linux/'
+                        'mageia/distrib/cauldron/x86_64/media/core'
+                        '/release/fio-3.5-1.mga7.x86_64.rpm')
         self.mounting_dir = ''.join(
             random.choice(
                 string.lowercase +
