@@ -116,8 +116,7 @@ def run(**kw):
             --pgid {pgid} {obj} rm-omap {outbuf}".format(id=targt_osd,
                                                          obj=oname,
                                                          pgid=targt_pg,
-                                                         outbuf=keylist[0],
-                                                        )
+                                                         outbuf=keylist[0])
     (out, err) = ctx.exec_command(cmd=corrupt_cmd)
     outbuf = out.read()
     log.info(outbuf)
