@@ -81,7 +81,7 @@ ch.setFormatter(formatter)
 root.addHandler(ch)
 
 temp_startup_log = os.path.join("/tmp/", "startup-{uuid}.log".format(uuid=uuid.uuid4().hex))
-print("Temporary startup log location: {location}".format(location=temp_startup_log))
+print("Temporary startup log location: {location}\n".format(location=temp_startup_log))
 handler = logging.FileHandler(temp_startup_log)
 handler.setLevel(logging.INFO)
 handler.setFormatter(formatter)
@@ -283,8 +283,8 @@ def run(args):
             config['kernel-repo'] = os.environ.get('KERNEL-REPO-URL')
         mod_file_name = os.path.splitext(test_file)[0]
         test_mod = importlib.import_module(mod_file_name)
-        print("Running test {test_name}".format(test_name=tc['name']))
-        print("Test logfile location: {log_url}".format(log_url=tc['log-link']))
+        print("Running test {test_name}\n".format(test_name=tc['name']))
+        print("Test logfile location: {log_url}\n".format(log_url=tc['log-link']))
         log.info("Running test %s", test_file)
         tc['duration'] = '0s'
         tc['status'] = 'Not Executed'
