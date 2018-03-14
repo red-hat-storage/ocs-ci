@@ -10,7 +10,6 @@ import importlib
 import pickle
 import time
 import uuid
-import random
 import shutil
 from docopt import docopt
 from ceph.ceph import CephNode
@@ -136,7 +135,7 @@ def print_results(tc):
 def run(args):
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    run_id = str(random.randint(10, 999))  # todo: retrieve legitimate run_id
+    run_id = str(int(time.time()))
     glb_file = args['--global-conf']
     osp_cred = args['--osp-cred']
     suite_file = args['--suite']
