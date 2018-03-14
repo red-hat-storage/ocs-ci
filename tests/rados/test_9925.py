@@ -113,12 +113,11 @@ def run(**kw):
     corrupt_cmd = "sudo ceph-objectstore-tool --data-path \
             /var/lib/ceph/osd/ceph-{id} --journal-path \
             /var/lib/ceph/osd/ceph-{id}/journal \
-            /--pgid {pgid} {obj} rm-omap \
-            /{outbuf}".format(id=targt_osd,
-                              obj=oname,
-                              pgid=targt_pg,
-                              outbuf=keylist[0],
-                              )
+            --pgid {pgid} {obj} rm-omap {outbuf}".format(id=targt_osd,
+                                                         obj=oname,
+                                                         pgid=targt_pg,
+                                                         outbuf=keylist[0],
+                                                        )
     (out, err) = ctx.exec_command(cmd=corrupt_cmd)
     outbuf = out.read()
     log.info(outbuf)
@@ -137,7 +136,7 @@ def run(**kw):
     log.info("HEALTH_ERR found as expected")
     log.info("inconsistent found as expected")
 
-    timeout = 10
+    timeout = 100
     found = 0
     while timeout:
         incon_pg = "sudo rados list-inconsistent-pg {pname}".format(
@@ -155,7 +154,7 @@ def run(**kw):
         log.error("pg not listed as inconsistent")
         return 1
 
-    timeout = 10
+    timeout = 100
     found = 0
     while timeout:
         incon_obj = "sudo rados list-inconsistent-obj {pg}".format(pg=targt_pg)
