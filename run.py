@@ -76,6 +76,11 @@ root.setLevel(logging.INFO)
 
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
+ch = logging.StreamHandler(sys.stdout)
+ch.setLevel(logging.ERROR)
+ch.setFormatter(formatter)
+root.addHandler(ch)
+
 temp_startup_log = os.path.join("/tmp/", "startup-{uuid}.log".format(uuid=uuid.uuid4().hex))
 print("Temporary startup log location: {location}".format(location=temp_startup_log))
 handler = logging.FileHandler(temp_startup_log)
@@ -103,8 +108,8 @@ def create_nodes(global_yaml, osp_cred):
                         ceph_vmnode=node)
         ceph_nodes.append(ceph)
     log.info("Waiting for Floating IPs to be available")
-    log.info("Sleeping 150 Seconds")
-    time.sleep(150)
+    log.info("Sleeping 15 Seconds")
+    time.sleep(15)
     for ceph in ceph_nodes:
         ceph.connect()
     return ceph_nodes
@@ -248,7 +253,7 @@ def run(args):
         tc['rhbuild'] = rhbuild
         test_file = tc['file']
         config = test.get('config', {})
-        log_url = configure_logger(tc['name'], run_id)
+        tc['log-link'] = configure_logger(tc['name'], run_id)
         if not config.get('base_url'):
             config['base_url'] = base_url
         if not config.get('installer_url'):
@@ -280,7 +285,7 @@ def run(args):
         mod_file_name = os.path.splitext(test_file)[0]
         test_mod = importlib.import_module(mod_file_name)
         print("Running test {test_name}".format(test_name=tc['name']))
-        print("Test logfile location: {log_url}".format(log_url=log_url))
+        print("Test logfile location: {log_url}".format(log_url=tc['log-link']))
         log.info("Running test %s", test_file)
         tc['duration'] = '0s'
         tc['status'] = 'Not Executed'
@@ -340,7 +345,7 @@ def configure_logger(test_name, run_id, level=logging.INFO):
     full_log_name = "{base_name}_{num}.log".format(base_name=base_name, num=num)
     test_logfile = os.path.join(run_dir, full_log_name)
 
-    _root.handlers = []
+    _root.handlers = [h for h in _root.handlers if not isinstance(h, logging.FileHandler)]
     _handler = logging.FileHandler(test_logfile)
     _handler.setLevel(level)
     _handler.setFormatter(formatter)
