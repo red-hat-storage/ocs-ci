@@ -9,6 +9,8 @@ import logging
 import importlib
 import pickle
 import time
+import uuid
+import shutil
 from docopt import docopt
 from ceph.ceph import CephNode
 from ceph.utils import create_ceph_nodes, cleanup_ceph_nodes
@@ -63,28 +65,34 @@ Options:
   --docker-image <image>            Docker image, deafult value is taken from ansible config
   --docker-tag <tag>                Docker tag, default value is 'latest'
   --insecure-registry               Disable security check for docker registry
-  --post-results               Post results to polarion, needs Polarion IDs
+  --post-results                    Post results to polarion, needs Polarion IDs
                                     in test suite yamls.
 """
 
-logger = logging.getLogger(__name__)
-log = logger
+log = logging.getLogger(__name__)
 root = logging.getLogger()
 root.setLevel(logging.INFO)
 
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
 ch = logging.StreamHandler(sys.stdout)
-ch.setLevel(logging.DEBUG)
-formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+ch.setLevel(logging.ERROR)
 ch.setFormatter(formatter)
 root.addHandler(ch)
 
+temp_startup_log = os.path.join("/tmp/", "startup-{uuid}.log".format(uuid=uuid.uuid4().hex))
+print("Temporary startup log location: {location}".format(location=temp_startup_log))
+handler = logging.FileHandler(temp_startup_log)
+handler.setLevel(logging.INFO)
+handler.setFormatter(formatter)
+root.addHandler(handler)
+
 
 def create_nodes(global_yaml, osp_cred):
-    logger.info("Creating ceph nodes")
+    log.info("Creating ceph nodes")
     cleanup_ceph_nodes(osp_cred)
     ceph_vmnodes = create_ceph_nodes(global_yaml, osp_cred)
-    logger.info("Running test")
+    log.info("Running test")
     ceph_nodes = []
     for node_key in ceph_vmnodes.iterkeys():
         node = ceph_vmnodes[node_key]
@@ -98,9 +106,9 @@ def create_nodes(global_yaml, osp_cred):
                         hostname=node.hostname,
                         ceph_vmnode=node)
         ceph_nodes.append(ceph)
-    logger.info("Waiting for Floating IPs to be available")
-    logger.info("Sleeping 150 Seconds")
-    time.sleep(150)
+    log.info("Waiting for Floating IPs to be available")
+    log.info("Sleeping 15 Seconds")
+    time.sleep(15)
     for ceph in ceph_nodes:
         ceph.connect()
     return ceph_nodes
@@ -127,6 +135,7 @@ def print_results(tc):
 def run(args):
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    run_id = str(int(time.time()))
     glb_file = args['--global-conf']
     osp_cred = args['--osp-cred']
     suite_file = args['--suite']
@@ -229,7 +238,7 @@ def run(args):
     tests = suites_yaml.get('tests')
     tcs = []
     jenkins_rc = 0
-    if (use_cdn is True and reuse is None):
+    if use_cdn is True and reuse is None:
         setup_cdn_repos(ceph_nodes, build=rhbuild)
     # use ceph_test_data to pass around dynamic data between tests
     ceph_test_data = dict()
@@ -243,6 +252,7 @@ def run(args):
         tc['rhbuild'] = rhbuild
         test_file = tc['file']
         config = test.get('config', {})
+        tc['log-link'] = configure_logger(tc['name'], run_id)
         if not config.get('base_url'):
             config['base_url'] = base_url
         if not config.get('installer_url'):
@@ -273,6 +283,8 @@ def run(args):
             config['kernel-repo'] = os.environ.get('KERNEL-REPO-URL')
         mod_file_name = os.path.splitext(test_file)[0]
         test_mod = importlib.import_module(mod_file_name)
+        print("Running test {test_name}".format(test_name=tc['name']))
+        print("Test logfile location: {log_url}".format(log_url=tc['log-link']))
         log.info("Running test %s", test_file)
         tc['duration'] = '0s'
         tc['status'] = 'Not Executed'
@@ -304,6 +316,68 @@ def run(args):
 
     print_results(tcs)
     return jenkins_rc
+
+
+def configure_logger(test_name, run_id, level=logging.INFO):
+    """
+    Configures a new FileHandler for the root logger depending on the run_id and test_name.
+
+    Args:
+        test_name: name of the test being executed. used for naming the logfile
+        run_id: id of the test run. passed through to the directory creation
+        level: logging level
+
+    Returns:
+        URL where the log file can be viewed
+    """
+    _root = logging.getLogger()
+
+    run_dir = create_run_dir(run_id)
+
+    if os.path.exists(temp_startup_log):
+        shutil.move(temp_startup_log, os.path.join(run_dir, "startup.log"))
+
+    base_name = "_".join(test_name.split())
+    num = 0
+    while os.path.exists(os.path.join(run_dir, "{base_name}_{num}.log".format(base_name=base_name, num=num))):
+        num += 1
+    full_log_name = "{base_name}_{num}.log".format(base_name=base_name, num=num)
+    test_logfile = os.path.join(run_dir, full_log_name)
+
+    _root.handlers = [h for h in _root.handlers if not isinstance(h, logging.FileHandler)]
+    _handler = logging.FileHandler(test_logfile)
+    _handler.setLevel(level)
+    _handler.setFormatter(formatter)
+    _root.addHandler(_handler)
+
+    url_base = "http://magna002.redhat.com/cephci-jenkins"
+    run_dir_name = run_dir.split('/')[-1]
+    log_url = "{url_base}/{run_dir}/{log_name}".format(url_base=url_base, run_dir=run_dir_name, log_name=full_log_name)
+
+    log.info("Completed log configuration")
+    return log_url
+
+
+def create_run_dir(run_id):
+    """
+    Create the directory where test logs will be placed.
+
+    Args:
+        run_id: id of the test run. used to name the directory
+
+    Returns:
+        Full path of the created directory
+    """
+    dir_name = "cephci-run-{run_id}".format(run_id=run_id)
+    base_dir = "/ceph/cephci-jenkins"
+    run_dir = os.path.join(base_dir, dir_name)
+    try:
+        os.makedirs(run_dir)
+        log.info("Created run directory: {run_dir}".format(run_dir=run_dir))
+    except OSError:
+        pass
+
+    return run_dir
 
 
 if __name__ == '__main__':

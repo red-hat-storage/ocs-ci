@@ -239,11 +239,11 @@ class CephNode(object):
                 if len(rl) > 0:
                     data = channel.recv(1024)
                     read = read + data
-                    print data
+                    logger.info(data)
                 if len(xl) > 0:
                     data = channel.recv(1024)
                     read = read + data
-                    print data
+                    logger.info(data)
             return read, ec
         try:
             stdin, stdout, stderr = ssh.exec_command(
