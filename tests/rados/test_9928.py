@@ -18,7 +18,7 @@ def run(**kw):
         1. create a replica 3 pool
         2. take few pool snaps with writes on objects b/w every snap
         3. chose primary osd and bring it down
-        4. go to backend and using ceph-object-store tool corrupt the 
+        4. go to backend and using ceph-object-store tool corrupt the
            snapset of the object
         5. run deep-scrub on the pg
         6. check rados list-inconsistent-pg <pool>
