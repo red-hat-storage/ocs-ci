@@ -350,7 +350,7 @@ def configure_logger(test_name, run_id, level=logging.INFO):
     _handler.setFormatter(formatter)
     _root.addHandler(_handler)
 
-    url_base = "http://magna002.redhat.com/cephci-jenkins"
+    url_base = "http://magna002.ceph.redhat.com/cephci-jenkins"
     run_dir_name = run_dir.split('/')[-1]
     log_url = "{url_base}/{run_dir}/{log_name}".format(url_base=url_base, run_dir=run_dir_name, log_name=full_log_name)
 
