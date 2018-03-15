@@ -77,7 +77,7 @@ def run(**kw):
                 fs_util.stress_io,
                 client3,
                 client_info['mounting_dir'],
-                dir_name,
+                '',
                 0,
                 2,
                 iotype='crefi'
