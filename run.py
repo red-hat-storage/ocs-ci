@@ -380,6 +380,7 @@ def create_run_dir(run_id):
 
     return run_dir
 
+
 def close_and_remove_filehandlers(logger=logging.getLogger()):
     """
     Close FileHandlers and then remove them from the loggers handlers list.
