@@ -319,6 +319,7 @@ def run(args):
             ceph_nodes = create_nodes(glb_file, osp_cred)
         tcs.append(tc)
 
+    close_and_remove_filehandlers()
     print_results(tcs)
     return jenkins_rc
 
@@ -349,7 +350,7 @@ def configure_logger(test_name, run_id, level=logging.INFO):
     full_log_name = "{base_name}_{num}.log".format(base_name=base_name, num=num)
     test_logfile = os.path.join(run_dir, full_log_name)
 
-    _root.handlers = [h for h in _root.handlers if not isinstance(h, logging.FileHandler)]
+    close_and_remove_filehandlers()
     _handler = logging.FileHandler(test_logfile)
     _handler.setLevel(level)
     _handler.setFormatter(formatter)
@@ -383,6 +384,23 @@ def create_run_dir(run_id):
         pass
 
     return run_dir
+
+
+def close_and_remove_filehandlers(logger=logging.getLogger()):
+    """
+    Close FileHandlers and then remove them from the loggers handlers list.
+
+    Args:
+        logger: the logger in which to remove the handlers from, defaults to root logger
+
+    Returns:
+        None
+    """
+    handlers = logger.handlers[:]
+    for h in handlers:
+        if isinstance(h, logging.FileHandler):
+            h.close()
+            logger.removeHandler(h)
 
 
 if __name__ == '__main__':
