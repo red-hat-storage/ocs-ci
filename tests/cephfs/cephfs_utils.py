@@ -193,19 +193,18 @@ class FsUtils(object):
                 for arg in args:
                     if arg == 'read':
                         if size == 'g':
-                            for num in range(0, 2):
-                                rand_size = random.randint(1, 5)
-                                client.exec_command(
-                                    cmd=fio_read %
-                                    (rand_size,
-                                     size,
-                                     client.hostname,
-                                     rand_size,
-                                     rand_size,
-                                     num,
-                                     mounting_dir,
-                                     self.dir_name),
-                                    long_running=True)
+                            rand_size = random.randint(1, 5)
+                            client.exec_command(
+                                cmd=fio_read %
+                                (rand_size,
+                                 size,
+                                 client.hostname,
+                                 rand_size,
+                                 rand_size,
+                                 rand_num,
+                                 mounting_dir,
+                                 self.dir_name),
+                                long_running=True)
                             self.return_counts = self.io_verify(client)
                         elif size == 'm':
                             for num in range(0, 10):
@@ -243,19 +242,18 @@ class FsUtils(object):
 
                     elif arg == 'write':
                         if size == 'g':
-                            for num in range(0, 2):
-                                rand_size = random.randint(1, 5)
-                                client.exec_command(
-                                    cmd=fio_write %
-                                    (rand_size,
-                                     size,
-                                     client.hostname,
-                                     rand_size,
-                                     rand_size,
-                                     num,
-                                     mounting_dir,
-                                     self.dir_name),
-                                    long_running=True)
+                            rand_size = random.randint(1, 5)
+                            client.exec_command(
+                                cmd=fio_write %
+                                (rand_size,
+                                 size,
+                                 client.hostname,
+                                 rand_size,
+                                 rand_size,
+                                 rand_num,
+                                 mounting_dir,
+                                 self.dir_name),
+                                long_running=True)
                             self.return_counts = self.io_verify(client)
                             break
 
@@ -295,20 +293,19 @@ class FsUtils(object):
 
                     elif arg == 'readwrite':
                         if size == 'g':
-                            for num in range(0, 2):
-                                rand_size = random.randint(0, 5)
+                            rand_size = random.randint(1, 5)
 
-                                client.exec_command(
-                                    cmd=fio_readwrite %
-                                    (rand_size,
-                                     size,
-                                     client.hostname,
-                                     rand_num,
-                                     rand_num,
-                                     num,
-                                     mounting_dir,
-                                     self.dir_name),
-                                    long_running=True)
+                            client.exec_command(
+                                cmd=fio_readwrite %
+                                (rand_size,
+                                 size,
+                                 client.hostname,
+                                 rand_num,
+                                 rand_num,
+                                 rand_size,
+                                 mounting_dir,
+                                 self.dir_name),
+                                long_running=True)
                             self.return_counts = self.io_verify(client)
                             break
 
@@ -1367,6 +1364,7 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
                 node.exec_command(
                     cmd='sudo ceph fs set cephfs allow_dirfrags 0')
             break
+        time.sleep(120)
         return 0
 
 
