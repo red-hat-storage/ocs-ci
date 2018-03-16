@@ -68,7 +68,7 @@ tests:
    - test:
        name: cephfs_mds_failover
        module: CEPH-11232_11233.py
-       polarion-id: CEPH-11232,CEPH-11233
+       polarion-id: CEPH-11232,11233
        desc: Testing MDSfailover on active-active mdss,performing client IOs with equal directory pinning with 2 active mdss
        abort-on-fail: false
    - test:
@@ -102,4 +102,16 @@ tests:
        module: CEPH-11298.py
        polarion-id: CEPH-11298
        desc: Mount CephFS on multiple clients and rsync files and directories to outside the filesystem and vice-versa
+       abort-on-fail: false
+   - test:
+       name: cephfs_file_layouts
+       module: CEPH-11334.py
+       polarion-id: CEPH-11334
+       desc: Mount CephFS on multiple clients and perform file layout operations
+       abort-on-fail: false
+   - test:
+       name: cephfs_file_layouts
+       module: CEPH-11335.py
+       polarion-id: CEPH-11335
+       desc: Mount CephFS on multiple clients and perform client eviction
        abort-on-fail: false
