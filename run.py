@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from gevent import monkey
 monkey.patch_all()
+import traceback
 import yaml
 import sys
 import os
@@ -289,8 +290,12 @@ def run(args):
         tc['duration'] = '0s'
         tc['status'] = 'Not Executed'
         start = time.time()
-        rc = test_mod.run(ceph_nodes=ceph_nodes, config=config,
-                          test_data=ceph_test_data)
+        try:
+            rc = test_mod.run(ceph_nodes=ceph_nodes, config=config,
+                              test_data=ceph_test_data)
+        except BaseException:
+            log.error(traceback.format_exc())
+            rc = 1
         elapsed = (time.time() - start)
         tc['duration'] = elapsed
         if rc == 0:
