@@ -70,9 +70,7 @@ class FsUtils(object):
 
                 if 'fio' not in output:
                     node.exec_command(
-                        cmd='sudo yum install -y https://rpmfind.net/linux/'
-                        'mageia/distrib/cauldron/x86_64/media/core'
-                        '/release/fio-3.5-1.mga7.x86_64.rpm')
+                        cmd='sudo yum install -y fio')
         self.mounting_dir = ''.join(
             random.choice(
                 string.lowercase +
@@ -523,8 +521,8 @@ finally:
                             rand_bs = random.randint(1, 5)
                             rand_count = random.randint(1, 5)
                             out, rc = client.exec_command(
-                                cmd='sudo dd if=/dev/zero of=%s%s/%s%d.txt '
-                                    'bs=%dM count=%d' %
+                                cmd="sudo dd if=/dev/zero of=%s%s/%s%d.txt "
+                                    "bs=%dM count=%d" %
                                 (mounting_dir, dir_name, client.hostname,
                                  num, rand_bs, rand_count), long_running=True)
                             self.return_counts = self.io_verify(client)
