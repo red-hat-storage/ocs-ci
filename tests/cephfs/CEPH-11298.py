@@ -62,8 +62,8 @@ def run(**kw):
         else:
             raise CommandFailed("kernel mount failed")
         for client in client_info['clients']:
-            client.exec_command(cmd='sudo rm -rf  %s' % (source_dir))
-            client.exec_command(cmd='sudo mkdir %s' % (source_dir))
+            client.exec_command(cmd='sudo rm -rf  %s' % source_dir)
+            client.exec_command(cmd='sudo mkdir %s' % source_dir)
 
         for client in client_info['clients']:
             client.exec_command(
@@ -75,7 +75,7 @@ def run(**kw):
                 fs_util.stress_io,
                 client1,
                 source_dir,
-                '',
+                '/',
                 0,
                 1,
                 iotype='touch')
@@ -83,7 +83,7 @@ def run(**kw):
                 fs_util.stress_io,
                 client2,
                 source_dir,
-                '',
+                '/',
                 0,
                 2,
                 iotype='dd')
@@ -91,7 +91,7 @@ def run(**kw):
                 fs_util.stress_io,
                 client3,
                 source_dir,
-                '',
+                '/',
                 0,
                 3,
                 iotype='crefi')
@@ -99,7 +99,7 @@ def run(**kw):
                 fs_util.stress_io,
                 client4,
                 source_dir,
-                '',
+                '/',
                 0,
                 1,
                 iotype='fio')
@@ -107,13 +107,13 @@ def run(**kw):
                 return_counts1, rc = op
 
         with parallel() as p:
-            p.spawn(fs_util.rsync, client1, source_dir + '/*', '%s%s' %
+            p.spawn(fs_util.rsync, client1, source_dir, '%s%s' %
                     (client_info['mounting_dir'], target_dir))
-            p.spawn(fs_util.rsync, client2, source_dir + '/*', '%s%s' %
+            p.spawn(fs_util.rsync, client2, source_dir, '%s%s' %
                     (client_info['mounting_dir'], target_dir))
-            p.spawn(fs_util.rsync, client3, source_dir + '/*', '%s%s' %
+            p.spawn(fs_util.rsync, client3, source_dir, '%s%s' %
                     (client_info['mounting_dir'], target_dir))
-            p.spawn(fs_util.rsync, client4, source_dir + '/*', '%s%s' %
+            p.spawn(fs_util.rsync, client4, source_dir, '%s%s' %
                     (client_info['mounting_dir'], target_dir))
             for op in p:
                 return_counts2, rc = op
@@ -170,8 +170,7 @@ def run(**kw):
         rc_set = set(rc)
         if len(rc_set) == 1:
             print "Test case CEPH-%s passed" % (tc)
-        else:
-            print("Test case CEPH-%s failed" % (tc))
+
         log.info("Test completed for CEPH-%s" % (tc))
         log.info("Cleaning up!-----")
         rc = fs_util.client_clean_up(
