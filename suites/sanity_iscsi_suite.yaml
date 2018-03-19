@@ -66,7 +66,7 @@ tests:
             no_of_gateways: 4
 
    - test:
-      name: Doing some i/o
+      name: Doing some i-o
       module: CEPH-10440.py
       polarion-id: CEPH-10440
       desc: Configure multiple LUNs(20-30) from a Single Target and discover it on Initiators and run IO on the connected targets from clients
@@ -125,7 +125,7 @@ tests:
       desc: Create iscsi gateway using gwcli tool
 
    - test:
-      name: verify i/o after restart
+      name: verify i-o after restart
       module: CEPH-10572_10460_10450.py
       polarion-id: CEPH-10572,CEPH-10460,CEPH-10450
       abort-on-fail: false
