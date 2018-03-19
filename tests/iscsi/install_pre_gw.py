@@ -23,13 +23,7 @@ def run(**kw):
             ceph.exec_command(
                 cmd='sudo yum install -y device-mapper-multipath')
             ceph.exec_command(
-                cmd="sudo yum install -y https://rpmfind.net/linux/epel"
-                    "/testing/7/x86_64/Packages/f/fio-3.1-1.el7.x86_64.rpm",
-                long_running=True)
-            ceph.exec_command(
-                cmd="sudo yum install -y https://kojipkgs.fedoraproject.org//"
-                    "packages/libaio/0.3.110/9.fc27/x86_64/"
-                    "libaio-0.3.110-9.fc27.x86_64.rpm",
+                cmd="sudo yum install -y fio",
                 long_running=True)
             sleep(5)
     return 0
