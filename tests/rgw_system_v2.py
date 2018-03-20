@@ -13,12 +13,12 @@ def run(**kw):
             rgw_client_nodes.append(node)
     git_url = 'http://gitlab.cee.redhat.com/ceph/ceph-qe-scripts.git'
     branch = ' -b wip-with-boto3'
-    git_clone = 'git clone ' + git_url + branch
+    git_clone = 'sudo git clone ' + git_url + branch
     rgw_node = rgw_client_nodes[0]
     # cleanup any existing stale test dir
     test_folder = 'rgw-tests'
-    rgw_node.exec_command(cmd='rm -rf ' + test_folder)
-    rgw_node.exec_command(cmd='mkdir ' + test_folder)
+    rgw_node.exec_command(cmd='sudo rm -rf ' + test_folder)
+    rgw_node.exec_command(cmd='sudo mkdir ' + test_folder)
     rgw_node.exec_command(cmd='cd ' + test_folder + ' ; ' + git_clone)
     rgw_node.exec_command(cmd='sudo pip install boto3 names PyYaml ConfigParser')
     config = kw.get('config')
