@@ -30,13 +30,13 @@ tests:
       desc: test cluster setup using ceph-ansible
       destroy-cluster: false
       abort-on-fail: true
-#   - test:
-#      name: check-ceph-health
-#      module: exec.py
-#      config:
-#            cmd: ceph -s
-#            sudo: True
-#      desc: Check for ceph health debug info
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+            cmd: ceph -s
+            sudo: True
+      desc: Check for ceph health debug info
    - test:
        name: Mbuckets
        desc: test to create "M" no of buckets
@@ -106,6 +106,6 @@ tests:
        desc: test to suspend versioning without objects
        module: rgw_system_v2.py
        config:
-           script-name: test_versioning_suspend.py
+           script-name: test_versioning_with_objects.py
            config-file-name: test_versioning_objects_suspend.yaml
            timeout: 300
