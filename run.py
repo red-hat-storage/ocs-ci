@@ -14,7 +14,9 @@ import uuid
 import shutil
 import re
 import requests
+import textwrap
 from docopt import docopt
+from reportportal_client import ReportPortalServiceAsync
 from ceph.ceph import CephNode
 from ceph.utils import create_ceph_nodes, cleanup_ceph_nodes
 from ceph.utils import setup_cdn_repos
@@ -38,6 +40,7 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--docker-tag <tag>]
         [--insecure-registry]
         [--post-results]
+        [--report-portal]
 
 
 Options:
@@ -69,9 +72,9 @@ Options:
   --docker-tag <tag>                Docker tag, default value is 'latest'
   --insecure-registry               Disable security check for docker registry
   --post-results                    Post results to polarion, needs Polarion IDs
-                                    in test suite yamls.
+                                    in test suite yamls. Requires config file, see README.
+  --report-portal                   Post results to report portal. Requires config file, see README.
 """
-
 log = logging.getLogger(__name__)
 root = logging.getLogger()
 root.setLevel(logging.INFO)
@@ -270,6 +273,21 @@ def run(args):
         setup_cdn_repos(ceph_nodes, build=rhbuild)
     # use ceph_test_data to pass around dynamic data between tests
     ceph_test_data = dict()
+
+    post_to_report_portal = args.get('--report-portal', False)
+    if post_to_report_portal:
+        log.info("Creating report portal session")
+        service = create_report_portal_session()
+        suite = os.path.basename(suite_file).split(".")[0]
+        launch_name = "{suite} ({distro})".format(suite=suite, distro=distro)
+        launch_desc = textwrap.dedent(
+            """
+            ceph version: {ceph_version}
+            ceph-ansible version: {ceph_ansible_version}
+            """.format(ceph_version=ceph_version, ceph_ansible_version=ceph_ansible_version))
+        service.start_launch(name=launch_name, start_time=timestamp(), description=launch_desc)
+
+    test_names = []
     for test in tests:
         test = test.get('test')
         tc = dict()
@@ -280,7 +298,9 @@ def run(args):
         tc['rhbuild'] = rhbuild
         test_file = tc['file']
         config = test.get('config', {})
-        tc['log-link'] = configure_logger(tc['name'], run_id)
+        unique_test_name = create_unique_test_name(tc['name'], test_names)
+        test_names.append(unique_test_name)
+        tc['log-link'] = configure_logger(unique_test_name, run_id)
         if not config.get('base_url'):
             config['base_url'] = base_url
         if not config.get('installer_url'):
@@ -318,8 +338,11 @@ def run(args):
         tc['status'] = 'Not Executed'
         start = time.time()
         try:
-            rc = test_mod.run(ceph_nodes=ceph_nodes, config=config,
-                              test_data=ceph_test_data)
+            if post_to_report_portal:
+                service.start_test_item(
+                    name=unique_test_name, description=tc['desc'], start_time=timestamp(), item_type="STEP")
+                service.log(time=timestamp(), message="Logfile location: {}".format(tc['log-link']), level="INFO")
+            rc = test_mod.run(ceph_nodes=ceph_nodes, config=config, test_data=ceph_test_data)
         except BaseException:
             log.error(traceback.format_exc())
             rc = 1
@@ -328,12 +351,16 @@ def run(args):
         if rc == 0:
             log.info("Test %s passed" % test_mod)
             tc['status'] = 'Pass'
+            if post_to_report_portal:
+                service.finish_test_item(end_time=timestamp(), status="PASSED")
             if post_results:
                 post_to_polarion(tc=tc)
         else:
             tc['status'] = 'Failed'
             log.info("Test %s failed" % test_mod)
             jenkins_rc = 1
+            if post_to_report_portal:
+                service.finish_test_item(end_time=timestamp(), status="FAILED")
             if post_results:
                 post_to_polarion(tc=tc)
             if test.get('abort-on-fail', False):
@@ -345,8 +372,10 @@ def run(args):
         if test.get('recreate-cluster') is True:
             ceph_nodes = create_nodes(glb_file, osp_cred)
         tcs.append(tc)
-
     close_and_remove_filehandlers()
+    if post_to_report_portal:
+        service.finish_launch(end_time=timestamp())
+        service.terminate()
     print_results(tcs)
     return jenkins_rc
 
@@ -370,11 +399,7 @@ def configure_logger(test_name, run_id, level=logging.INFO):
     if os.path.exists(temp_startup_log):
         shutil.move(temp_startup_log, os.path.join(run_dir, "startup.log"))
 
-    base_name = "_".join(test_name.split())
-    num = 0
-    while os.path.exists(os.path.join(run_dir, "{base_name}_{num}.log".format(base_name=base_name, num=num))):
-        num += 1
-    full_log_name = "{base_name}_{num}.log".format(base_name=base_name, num=num)
+    full_log_name = "{test_name}.log".format(test_name=test_name)
     test_logfile = os.path.join(run_dir, full_log_name)
 
     close_and_remove_filehandlers()
@@ -428,6 +453,65 @@ def close_and_remove_filehandlers(logger=logging.getLogger()):
         if isinstance(h, logging.FileHandler):
             h.close()
             logger.removeHandler(h)
+
+
+def create_report_portal_session():
+    """
+    Configures and creates a session to the Report Portal instance.
+
+    Returns:
+        The session object
+    """
+    home_dir = os.path.expanduser("~")
+    cfg_file = os.path.join(home_dir, ".cephci.yaml")
+    try:
+        with open(cfg_file, "r") as yml:
+            cfg = yaml.load(yml)['report-portal']
+    except IOError:
+        log.error("Please create ~/.cephci.yaml from the cephci.yaml.template. See README for more information.")
+        raise
+
+    return ReportPortalServiceAsync(
+        endpoint=cfg['endpoint'], project=cfg['project'], token=cfg['token'], error_handler=error_handler)
+
+
+def timestamp():
+    """
+    The current epoch timestamp in milliseconds as a string.
+
+    Returns:
+        The timestamp
+    """
+    return str(int(time.time() * 1000))
+
+
+def error_handler(exc_info):
+    """
+    Error handler for the Report Portal session.
+
+    Returns:
+        None
+    """
+    print("Error occurred: {}".format(exc_info[1]))
+    traceback.print_exception(*exc_info)
+
+
+def create_unique_test_name(test_name, name_list):
+    """
+    Creates a unique test name using the actual test name and an increasing integer for each duplicate test name.
+
+    Args:
+        test_name: name of the test
+        name_list: list of names to compare test name against
+
+    Returns:
+        unique name for the test case
+    """
+    base = "_".join(test_name.split())
+    num = 0
+    while "{base}_{num}".format(base=base, num=num) in name_list:
+        num += 1
+    return "{base}_{num}".format(base=base, num=num)
 
 
 if __name__ == '__main__':

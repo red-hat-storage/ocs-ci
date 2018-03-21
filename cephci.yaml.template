@@ -1,0 +1,9 @@
+report-portal:
+  endpoint: http://hostname:port
+  project: project_name
+  token: user_token
+
+polarion:
+  endpoint: some_url
+  username: some_user
+  password: some_password
