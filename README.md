@@ -162,3 +162,11 @@ python run.py --rhbuild 2.1 --global-conf conf/sanity.yaml
      --suite suites/sanity_ceph_ansible.yaml
      --add-repo http://file.rdu.redhat.com/~kdreyer/scratch/rhscon-builds-for-rhceph-2.1/rhscon-builds-for-rhceph-2.1.repo
 ```
+
+Report Portal and Polarion Results
+```
+cp cephci.yaml.template ~/.cephci.yaml
+```
+Posting results to report portal or polarion requires a .cephci.yaml file in your user's home directory.
+The required keys are in the template. Values are placeholders and should be replaced by legitimate values.
+Values are only necessary if you plan on posting to that particular service.
