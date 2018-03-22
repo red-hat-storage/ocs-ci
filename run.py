@@ -12,6 +12,8 @@ import pickle
 import time
 import uuid
 import shutil
+import re
+import requests
 from docopt import docopt
 from ceph.ceph import CephNode
 from ceph.utils import create_ceph_nodes, cleanup_ceph_nodes
@@ -205,8 +207,33 @@ def run(args):
             installer_url = compose_url
             log.info("using console repo" + installer_url)
 
-    use_cdn = args.get('--use-cdn', False)
     g_yaml = os.path.abspath(glb_file)
+    with open(g_yaml, 'r') as yml:
+        conf = yaml.safe_load(yml)
+    image_name = conf.get('globals').get('ceph-cluster').get('image-name')
+    if 'rhel' in image_name:
+        distro = "RHEL"
+        # get COMPOSE ID and ceph version
+        id = requests.get(base_url + "/COMPOSE_ID")
+        compose_id = id.text
+        ceph_pkgs = requests.get(base_url +
+                                 "/compose/Tools/x86_64/os/Packages/")
+        m = re.search(r'ceph-common-(.*?)cp', ceph_pkgs.text)
+        ceph_version = m.group(1)
+        m = re.search(r'ceph-ansible-(.*?)cp', ceph_pkgs.text)
+        ceph_ansible_version = m.group(1)
+        log.info("Compose id is: " + compose_id)
+    else:
+        distro = "Ubuntu"
+        ubuntu_pkgs = requests.get(ubuntu_repo +
+                                   "/Tools/dists/xenial/main/binary-amd64/Packages")
+        m = re.search(r'ceph\nVersion: (.*)', ubuntu_pkgs.text)
+        ceph_version = m.group(1)
+        m = re.search(r'ceph-ansible\nVersion: (.*)', ubuntu_pkgs.text)
+        ceph_ansible_version = m.group(1)
+    log.info("Testing Ceph Version: " + ceph_version)
+    log.info("Testing Ceph Ansible Version: " + ceph_ansible_version)
+    use_cdn = args.get('--use-cdn', False)
     suites = os.path.abspath(suite_file)
     skip_setup = args.get('--skip-cluster', False)
     cleanup_name = args.get('--cleanup', None)
