@@ -93,9 +93,19 @@ handler.setLevel(logging.INFO)
 handler.setFormatter(formatter)
 root.addHandler(handler)
 
+test_names = []
 
-def create_nodes(global_yaml, osp_cred):
+
+def create_nodes(global_yaml, osp_cred, report_portal_session=None):
     log.info("Creating ceph nodes")
+    if report_portal_session:
+        name = create_unique_test_name("ceph node creation", test_names)
+        test_names.append(name)
+        desc = "Ceph cluster creation"
+        report_portal_session.start_test_item(name=name,
+                                              description=desc,
+                                              start_time=timestamp(),
+                                              item_type="STEP")
     cleanup_ceph_nodes(osp_cred)
     ceph_vmnodes = create_ceph_nodes(global_yaml, osp_cred)
     log.info("Running test")
@@ -115,8 +125,16 @@ def create_nodes(global_yaml, osp_cred):
     log.info("Waiting for Floating IPs to be available")
     log.info("Sleeping 15 Seconds")
     time.sleep(15)
+    status = "PASSED"
     for ceph in ceph_nodes:
-        ceph.connect()
+        try:
+            ceph.connect()
+        except BaseException:
+            status = "FAILED"
+            break
+    if report_portal_session:
+        report_portal_session.finish_test_item(end_time=timestamp(), status=status)
+
     return ceph_nodes
 
 
@@ -240,11 +258,26 @@ def run(args):
     suites = os.path.abspath(suite_file)
     skip_setup = args.get('--skip-cluster', False)
     cleanup_name = args.get('--cleanup', None)
+
+    post_to_report_portal = args.get('--report-portal', False)
+    service = None
+    if post_to_report_portal:
+        log.info("Creating report portal session")
+        service = create_report_portal_session()
+        suite = os.path.basename(suite_file).split(".")[0]
+        launch_name = "{suite} ({distro})".format(suite=suite, distro=distro)
+        launch_desc = textwrap.dedent(
+            """
+            ceph version: {ceph_version}
+            ceph-ansible version: {ceph_ansible_version}
+            """.format(ceph_version=ceph_version, ceph_ansible_version=ceph_ansible_version))
+        service.start_launch(name=launch_name, start_time=timestamp(), description=launch_desc)
+
     if cleanup_name is not None:
         cleanup_ceph_nodes(osp_cred, cleanup_name)
         return 0
     if reuse is None:
-        ceph_nodes = create_nodes(glb_file, osp_cred)
+        ceph_nodes = create_nodes(glb_file, osp_cred, service)
     else:
         ceph_store_nodes = open(reuse, 'rb')
         ceph_nodes = pickle.load(ceph_store_nodes)
@@ -274,20 +307,6 @@ def run(args):
     # use ceph_test_data to pass around dynamic data between tests
     ceph_test_data = dict()
 
-    post_to_report_portal = args.get('--report-portal', False)
-    if post_to_report_portal:
-        log.info("Creating report portal session")
-        service = create_report_portal_session()
-        suite = os.path.basename(suite_file).split(".")[0]
-        launch_name = "{suite} ({distro})".format(suite=suite, distro=distro)
-        launch_desc = textwrap.dedent(
-            """
-            ceph version: {ceph_version}
-            ceph-ansible version: {ceph_ansible_version}
-            """.format(ceph_version=ceph_version, ceph_ansible_version=ceph_ansible_version))
-        service.start_launch(name=launch_name, start_time=timestamp(), description=launch_desc)
-
-    test_names = []
     for test in tests:
         test = test.get('test')
         tc = dict()
