@@ -1,4 +1,3 @@
-import random
 from tests.cephfs.cephfs_utils import FsUtils
 from ceph.parallel import parallel
 import timeit
@@ -71,7 +70,7 @@ def run(**kw):
         with parallel() as p:
             p.spawn(fs_util.read_write_IO, client1,
                     client_info['mounting_dir'], 'g', 'write')
-            p.spawn(fs_util.read_write_IO, client2,
+            p.spawn(fs_util.read_write_IO, client3,
                     client_info['mounting_dir'], 'g', 'read')
             p.spawn(
                 fs_util.stress_io,
@@ -95,11 +94,8 @@ def run(**kw):
             tc = '11232 and 11233'
             log.info("Execution of Test cases %s started:" % (tc))
             fs_util.allow_dir_fragmentation(client_info['mds_nodes'])
-            random_choice = [
-                client_info['kernel_clients'],
-                client_info['fuse_clients']]
             log.info("Creating directory:")
-            for node in random.choice(random_choice):
+            for node in client_info['fuse_clients']:
                 out, rc = node.exec_command(
                     cmd='sudo mkdir %s%s' %
                     (client_info['mounting_dir'], dir_name))
@@ -184,36 +180,31 @@ def run(**kw):
                 raise CommandFailed("Mds info command failed")
 
             log.info("Execution of Test case 11232 and 11233 ended:")
-            f = open('afterdel.txt', 'w+')
-            f.write(node1_after_del)
-            f.close()
             print "Results:"
             if node1_before_io != node1_after_io and \
                     node1_after_io != node1_after_del:
-                print "Test case %s Passed" % (tc)
+                log.info("Test case %s Passed" % (tc))
             else:
                 return 1
 
-            log.info("Cleaning up!-----")
-            fs_util.client_clean_up(
-                client_info['fuse_clients'],
-                client_info['kernel_clients'],
-                client_info['mounting_dir'],
-                'umount')
-            fs_util.mds_cleanup(client_info['mds_nodes'], 'dir_fragmentation')
-            log.info("Cleaning up successfull")
-        else:
-            log.error("Data validation failed")
-            log.info("Cleaning up!-----")
-            fs_util.client_clean_up(
-                client_info['fuse_clients'],
-                client_info['kernel_clients'],
-                client_info['mounting_dir'],
-                'umount')
-            fs_util.mds_cleanup(client_info['mds_nodes'], 'dir_fragmentation')
-            log.info("Cleaning up successfull")
-            raise CommandFailed("Data validation failed")
+            if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
+                rc_client = fs_util.client_clean_up(
+                    client_info['fuse_clients'],
+                    client_info['kernel_clients'],
+                    client_info['mounting_dir'],
+                    'umount')
+                rc_mds = fs_util.mds_cleanup(client_info['mds_nodes'], None)
 
+            else:
+                rc_client = fs_util.client_clean_up(
+                    client_info['fuse_clients'], '',
+                    client_info['mounting_dir'], 'umount')
+                rc_mds = fs_util.mds_cleanup(client_info['mds_nodes'], None)
+
+            if rc_client == 0 and rc_mds == 0:
+                log.info('Cleaning up successfull')
+            else:
+                return 1
         print'Script execution time:------'
         stop = timeit.default_timer()
         total_time = stop - start
@@ -226,6 +217,17 @@ def run(**kw):
     except CommandFailed as e:
         log.info(e)
         log.info(traceback.format_exc())
+        log.info('Cleaning up!-----')
+        if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
+            rc = fs_util.client_clean_up(client_info['fuse_clients'],
+                                         client_info['kernel_clients'],
+                                         client_info['mounting_dir'], 'umount')
+        else:
+            rc = fs_util.client_clean_up(client_info['fuse_clients'],
+                                         '',
+                                         client_info['mounting_dir'], 'umount')
+        if rc == 0:
+            log.info('Cleaning up successfull')
         return 1
 
     except Exception as e:
