@@ -58,9 +58,6 @@ def run(**kw):
             log.info("kernel mount passed")
         else:
             raise CommandFailed("kernel mount failed")
-        random_choice = [
-            client_info['kernel_clients'],
-            client_info['fuse_clients']]
         tc1 = '11293'
         tc2 = '11296'
         tc3 = '11297'
@@ -80,7 +77,7 @@ def run(**kw):
         results = []
         return_counts = []
         log.info("Create files and directories of 1000 depth and 1000 breadth")
-        for node in random.choice(random_choice):
+        for node in client_info['fuse_clients']:
             node.exec_command(
                 cmd='sudo mkdir %s%s' %
                 (client_info['mounting_dir'], dir1))
@@ -93,8 +90,8 @@ def run(**kw):
             log.info('Execution of testcase %s started' % tc1)
             out, rc = node.exec_command(
                 cmd='sudo crefi %s%s --fop create --multi -b 1000 -d 1000 '
-                    '-n 1 -T 10 --random --min=1K --max=2K' %
-                (client_info['mounting_dir'], dir1))
+                    '-n 100 -T 10 --random --min=1K --max=10K' %
+                (client_info['mounting_dir'], dir1), long_running=True)
             print out.read()
             log.info('Execution of testcase %s ended' % tc1)
             if node.exit_status == 0:
@@ -124,27 +121,30 @@ def run(**kw):
                 results.append("TC %s passed" % tc3)
             log.info('Execution of testcase %s started' % tc4)
             for client in client_info['clients']:
-                client.exec_command(
-                    cmd='sudo dd if=/dev/zero of=%s%s.txt bs=100M count=5' %
-                    (client_info['mounting_dir'], client.hostname))
-                out1, rc1 = client.exec_command(
-                    cmd='sudo  ls -c -ltd -- %s%s.*' %
-                    (client_info['mounting_dir'], client.hostname))
-                client.exec_command(
-                    cmd='sudo dd if=/dev/zero of=%s%s.txt bs=200M count=5' %
-                    (client_info['mounting_dir'], client.hostname))
-                out2, rc2 = client.exec_command(
-                    cmd='sudo  ls -c -ltd -- %s%s.*' %
-                    (client_info['mounting_dir'], client.hostname))
-                a = out1.read()
-                print "------------"
-                b = out2.read()
-                if a != b:
-                    return_counts.append(out1.channel.recv_exit_status())
-                    return_counts.append(out2.channel.recv_exit_status())
-                else:
-                    raise CommandFailed("Metadata info command failed")
-                break
+                if client.pkg_type != 'deb':
+                    client.exec_command(
+                        cmd='sudo dd if=/dev/zero of=%s%s.txt bs=100M '
+                            'count=5' %
+                        (client_info['mounting_dir'], client.hostname))
+                    out1, rc1 = client.exec_command(
+                        cmd='sudo  ls -c -ltd -- %s%s.*' %
+                        (client_info['mounting_dir'], client.hostname))
+                    client.exec_command(
+                        cmd='sudo dd if=/dev/zero of=%s%s.txt bs=200M '
+                            'count=5' %
+                        (client_info['mounting_dir'], client.hostname))
+                    out2, rc2 = client.exec_command(
+                        cmd='sudo  ls -c -ltd -- %s%s.*' %
+                        (client_info['mounting_dir'], client.hostname))
+                    a = out1.read()
+                    print "------------"
+                    b = out2.read()
+                    if a != b:
+                        return_counts.append(out1.channel.recv_exit_status())
+                        return_counts.append(out2.channel.recv_exit_status())
+                    else:
+                        raise CommandFailed("Metadata info command failed")
+                    break
             log.info('Execution of testcase %s ended' % tc4)
             print return_counts
             rc_set = set(return_counts)
@@ -155,16 +155,19 @@ def run(**kw):
             for res in results:
                 print res
             break
-
-        log.info("Cleaning up-----------------------------")
-        fs_util.client_clean_up(
-            client_info['fuse_clients'],
-            client_info['kernel_clients'],
-            client_info['mounting_dir'],
-            'umount')
-        fs_util.mds_cleanup(client_info['mds_nodes'], None)
-        log.info("Cleaning up successfull")
-
+        log.info('Cleaning up!-----')
+        if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
+            rc = fs_util.client_clean_up(client_info['fuse_clients'],
+                                         client_info['kernel_clients'],
+                                         client_info['mounting_dir'], 'umount')
+        else:
+            rc = fs_util.client_clean_up(client_info['fuse_clients'],
+                                         '',
+                                         client_info['mounting_dir'], 'umount')
+        if rc == 0:
+            log.info('Cleaning up successfull')
+        else:
+            return 1
         print'Script execution time:------'
         stop = timeit.default_timer()
         total_time = stop - start
@@ -176,6 +179,17 @@ def run(**kw):
     except CommandFailed as e:
         log.info(e)
         log.info(traceback.format_exc())
+        log.info('Cleaning up!-----')
+        if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
+            rc = fs_util.client_clean_up(client_info['fuse_clients'],
+                                         client_info['kernel_clients'],
+                                         client_info['mounting_dir'], 'umount')
+        else:
+            rc = fs_util.client_clean_up(client_info['fuse_clients'],
+                                         '',
+                                         client_info['mounting_dir'], 'umount')
+        if rc == 0:
+            log.info('Cleaning up successfull')
         return 1
 
     except Exception as e:
