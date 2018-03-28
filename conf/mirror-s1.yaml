@@ -1,0 +1,84 @@
+globals:
+  - ceph-cluster:
+     name: ceph-rbd1
+     create: true
+     image-name: rhel-7.4-server-x86_64-released
+     vm-size: m1.medium
+     node1:
+       role: installer
+     node2:
+       role: client
+     node3:
+       role: mon
+     node4:
+       role: osd
+       no-of-volumes: 4
+       disk-size: 15
+     node5:
+       role: osd
+       no-of-volumes: 4
+       disk-size: 15
+     node6:
+       role: osd
+       no-of-volumes: 4
+       disk-size: 15
+     node7:
+       role: mon
+     node8:
+       role: mon
+     node9:
+       role: mds
+     node10:
+       role: mds
+     node11:
+       role: rgw
+     node12:
+       role: rgw
+     node13:
+       role: client
+     node14:
+       role: mgr
+
+     cloud-data: conf/cloud-data.yaml
+
+  - ceph-cluster:
+     name: ceph-rbd2
+     create: true
+     image-name: rhel-7.4-server-x86_64-released
+     vm-size: m1.medium
+     node1:
+       role: installer
+     node2:
+       role: client
+     node3:
+       role: mon
+     node4:
+       role: osd
+       no-of-volumes: 4
+       disk-size: 15
+     node5:
+       role: osd
+       no-of-volumes: 4
+       disk-size: 15
+     node6:
+       role: osd
+       no-of-volumes: 4
+       disk-size: 15
+     node7:
+       role: mon
+     node8:
+       role: mon
+     node9:
+       role: mds
+     node10:
+       role: mds
+     node11:
+       role: rgw
+     node12:
+       role: rgw
+     node13:
+       role: client
+     node14:
+       role: mgr
+
+     cloud-data: conf/cloud-data.yaml
