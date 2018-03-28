@@ -12,7 +12,7 @@ def run(**kw):
         if node.role == 'rgw':
             rgw_client_nodes.append(node)
     git_url = 'http://gitlab.cee.redhat.com/ceph/ceph-qe-scripts.git'
-    branch = ' -b wip-with-boto3'
+    branch = ' -b master'
     git_clone = 'sudo git clone ' + git_url + branch
     rgw_node = rgw_client_nodes[0]
     # cleanup any existing stale test dir
