@@ -125,15 +125,15 @@ def create_nodes(global_yaml, osp_cred, report_portal_session=None):
     log.info("Waiting for Floating IPs to be available")
     log.info("Sleeping 15 Seconds")
     time.sleep(15)
-    status = "PASSED"
     for ceph in ceph_nodes:
         try:
             ceph.connect()
         except BaseException:
-            status = "FAILED"
-            break
+            if report_portal_session:
+                report_portal_session.finish_test_item(end_time=timestamp(), status="FAILED")
+            raise
     if report_portal_session:
-        report_portal_session.finish_test_item(end_time=timestamp(), status=status)
+        report_portal_session.finish_test_item(end_time=timestamp(), status="PASSED")
 
     return ceph_nodes
 
@@ -174,6 +174,7 @@ def run(args):
     docker_tag = args.get('--docker-tag', None)
     docker_insecure_registry = args.get('--insecure-registry', False)
     post_results = args.get('--post-results')
+    compose_id = None
     if rhbuild.startswith('2'):
         if base_url is None:
             # use latest as default when nothing is specified in cli
@@ -270,7 +271,10 @@ def run(args):
             """
             ceph version: {ceph_version}
             ceph-ansible version: {ceph_ansible_version}
-            """.format(ceph_version=ceph_version, ceph_ansible_version=ceph_ansible_version))
+            compose-id: {compose_id}
+            """.format(ceph_version=ceph_version,
+                       ceph_ansible_version=ceph_ansible_version,
+                       compose_id=compose_id))
         service.start_launch(name=launch_name, start_time=timestamp(), description=launch_desc)
 
     if cleanup_name is not None:
@@ -361,6 +365,7 @@ def run(args):
                 service.start_test_item(
                     name=unique_test_name, description=tc['desc'], start_time=timestamp(), item_type="STEP")
                 service.log(time=timestamp(), message="Logfile location: {}".format(tc['log-link']), level="INFO")
+                service.log(time=timestamp(), message="Polarion ID: {}".format(tc['polarion-id']), level="INFO")
             rc = test_mod.run(ceph_nodes=ceph_nodes, config=config, test_data=ceph_test_data)
         except BaseException:
             log.error(traceback.format_exc())
