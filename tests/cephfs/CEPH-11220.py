@@ -76,15 +76,22 @@ def run(**kw):
             client3, client_info['mounting_dir'], dir_name=dir_name)
         if rc1 == 0 and rc2 == 0 and rc3 == 0:
             log.info("IOs on clients successfull")
-            log.info("Testcase %s passed")
-            log.info("Cleaning up!-----")
-            fs_util.client_clean_up(
-                client_info['fuse_clients'],
-                client_info['kernel_clients'],
-                client_info['mounting_dir'],
-                'umount')
-            fs_util.mds_cleanup(client_info['mds_nodes'], None)
-
+            log.info("Testcase %s passed" % (tc))
+            log.info('Cleaning up!-----')
+            if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
+                rc = fs_util.client_clean_up(
+                    client_info['fuse_clients'],
+                    client_info['kernel_clients'],
+                    client_info['mounting_dir'],
+                    'umount')
+            else:
+                rc = fs_util.client_clean_up(
+                    client_info['fuse_clients'],
+                    '',
+                    client_info['mounting_dir'],
+                    'umount')
+            if rc == 0:
+                log.info('Cleaning up successfull')
         print'Script execution time:------'
         stop = timeit.default_timer()
         total_time = stop - start
@@ -98,9 +105,21 @@ def run(**kw):
     except CommandFailed as e:
         log.info(e)
         log.info(traceback.format_exc())
+        log.info('Cleaning up!-----')
+        if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
+            fs_util.client_clean_up(client_info['fuse_clients'],
+                                    client_info['kernel_clients'],
+                                    client_info['mounting_dir'], 'umount')
+        else:
+            fs_util.client_clean_up(client_info['fuse_clients'],
+                                    '',
+                                    client_info['mounting_dir'], 'umount')
         return 1
 
     except Exception as e:
+
         log.info(e)
+
         log.info(traceback.format_exc())
+
         return 1
