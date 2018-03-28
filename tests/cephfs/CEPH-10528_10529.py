@@ -73,6 +73,15 @@ def run(**kw):
                 2,
                 iotype='crefi',
             )
+            p.spawn(
+                fs_util.stress_io,
+                client2,
+                client_info['mounting_dir'],
+                '',
+                0,
+                2,
+                iotype='crefi',
+            )
             p.spawn(fs_util.read_write_IO, client4,
                     client_info['mounting_dir'], 'g', 'readwrite')
             p.spawn(fs_util.read_write_IO, client3,
@@ -89,9 +98,9 @@ def run(**kw):
         log.info('Test for CEPH-%s will start:' % tc)
         md5sum_file_lock = []
         with parallel() as p:
-            p.spawn(fs_util.file_locking, client1[0],
+            p.spawn(fs_util.file_locking, client1,
                     client_info['mounting_dir'])
-            p.spawn(fs_util.file_locking, client3[0],
+            p.spawn(fs_util.file_locking, client2,
                     client_info['mounting_dir'])
             for output in p:
                 md5sum_file_lock = output
@@ -103,7 +112,7 @@ def run(**kw):
 
         if len(md5sum_file_lock) == 2:
             log.info('File Locking mechanism is working,data is not corrupted,'
-                     'test case CEPH-%s passed' % (tc))
+                     'test case CEPH-%s passed' % tc)
         else:
             log.error(
                 'File Locking mechanism is failed,data is corrupted,'
@@ -111,9 +120,14 @@ def run(**kw):
 
         log.info('Test completed for CEPH-%s' % (tc))
         log.info('Cleaning up!-----')
-        rc = fs_util.client_clean_up(client1,
-                                     client_info['kernel_clients'],
-                                     client_info['mounting_dir'], 'umount')
+        if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
+            rc = fs_util.client_clean_up(client_info['fuse_clients'],
+                                         client_info['kernel_clients'],
+                                         client_info['mounting_dir'], 'umount')
+        else:
+            rc = fs_util.client_clean_up(client_info['fuse_clients'],
+                                         '',
+                                         client_info['mounting_dir'], 'umount')
         if rc == 0:
             log.info('Cleaning up successfull')
         else:
@@ -127,13 +141,23 @@ def run(**kw):
         print 'Hours:%d Minutes:%d Seconds:%f' % (hours, mins, secs)
 
         return 0
-    except CommandFailed as e:
 
+    except CommandFailed as e:
         log.info(e)
         log.info(traceback.format_exc())
-        return 1
-    except Exception as e:
+        log.info('Cleaning up!-----')
+        if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
+            rc = fs_util.client_clean_up(client_info['fuse_clients'],
+                                         client_info['kernel_clients'],
+                                         client_info['mounting_dir'], 'umount')
+        else:
+            rc = fs_util.client_clean_up(client_info['fuse_clients'],
+                                         '',
+                                         client_info['mounting_dir'], 'umount')
+        if rc == 0:
+            log.info('Cleaning up successfull')
 
+    except Exception as e:
         log.info(e)
         log.info(traceback.format_exc())
         return 1
