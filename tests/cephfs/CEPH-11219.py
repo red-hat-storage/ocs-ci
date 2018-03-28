@@ -162,19 +162,6 @@ def run(**kw):
                 for op in p:
                     return_counts, rc = op
 
-            log.info("Cleaning up!-----")
-            rc = fs_util.client_clean_up(
-                client_info['fuse_clients'],
-                client_info['kernel_clients'],
-                client_info['mounting_dir'],
-                'umount')
-            if rc == 0:
-                log.info("client cleaning up successfull")
-
-            rc = fs_util.mds_cleanup(client_info['mds_nodes'], None)
-            if rc == 0:
-                log.info("MDS cleanup successfull")
-
             cluster_health_afterIO = check_ceph_healthly(
                 client_info['mon_node'], 12, 1, None, 300)
 
@@ -183,19 +170,23 @@ def run(**kw):
             result = fs_util.rc_verify(tc, return_counts)
             if cluster_health_beforeIO == cluster_health_afterIO:
                 print result
+            log.info('Cleaning up!-----')
+            if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
+                rc = fs_util.client_clean_up(
+                    client_info['fuse_clients'],
+                    client_info['kernel_clients'],
+                    client_info['mounting_dir'],
+                    'umount')
             else:
-                return 1
-        else:
-            log.error("Data consistancy not found")
-            log.info("Cleaning up!-----")
-            fs_util.client_clean_up(
-                client_info['fuse_clients'],
-                client_info['kernel_clients'],
-                client_info['mounting_dir'],
-                'umount')
-            fs_util.mds_cleanup(client_info['mds_nodes'], None)
-            log.info("Cleaning up successfull")
-            return 1
+                rc = fs_util.client_clean_up(
+                    client_info['fuse_clients'],
+                    '',
+                    client_info['mounting_dir'],
+                    'umount')
+            if rc == 0:
+                log.info('Cleaning up successfull')
+            else:
+                raise Exception('Cleanup failed')
         print'Script execution time:------'
         stop = timeit.default_timer()
         total_time = stop - start
@@ -203,9 +194,19 @@ def run(**kw):
         hours, mins = divmod(mins, 60)
         print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
         return 0
+
     except CommandFailed as e:
         log.info(e)
         log.info(traceback.format_exc())
+        log.info('Cleaning up!-----')
+        if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
+            rc = fs_util.client_clean_up(client_info['fuse_clients'],
+                                         client_info['kernel_clients'],
+                                         client_info['mounting_dir'], 'umount')
+        else:
+            rc = fs_util.client_clean_up(client_info['fuse_clients'],
+                                         '',
+                                         client_info['mounting_dir'], 'umount')
         return 1
 
     except Exception as e:
