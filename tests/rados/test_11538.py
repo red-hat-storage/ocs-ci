@@ -13,9 +13,8 @@ def get_ms_type(osd, osds, Helper):
     check what's the default messenger
     """
     tosd = Helper.get_osd_obj(osd, osds)
-    probe_ms = "sudo ceph --admin-daemon /var/run/ceph/ceph-osd.{oid}.asok config show --format json".format(
-        oid=osd
-    )
+    probe_ms = "sudo ceph --admin-daemon /var/run/ceph/ceph-osd.{oid}.asok \
+                config show --format json".format(oid=osd)
     (out, err) = tosd.exec_command(cmd=probe_ms)
     outbuf = out.read()
     log.info(outbuf)
@@ -73,8 +72,9 @@ def run(**kw):
 
     '''check what's the default messenger'''
     mstype = get_ms_type(targt_osd, osds, helper)
-    if mstype != "async":
-        log.error("default on luminous should be async but we have {mstype}".format(mstype=mstype))
+    if mstype != "async+posix":
+        log.error("default on luminous should be async but\
+                   we have {mstype}".format(mstype=mstype))
         return 1
 
     '''switch to simple and do IO'''
@@ -92,14 +92,14 @@ def run(**kw):
         return 1
 
     '''change ms_type back to async'''
-    inject_osd = "tell osd.* injectargs --ms_type async"
+    inject_osd = "tell osd.* injectargs --ms_type async+posix"
     (out, err) = helper.raw_cluster_cmd(inject_osd)
     log.info(out.read())
     time.sleep(4)
     '''check whether ms_type changed'''
     mstype = get_ms_type(targt_osd, osds, helper)
-    if "async" == mstype:
-        log.info("successfull changed to async")
+    if "async+posix" == mstype:
+        log.info("successfull changed to async+posix")
     else:
         log.error("failed to change the ms_type to async")
         return 1

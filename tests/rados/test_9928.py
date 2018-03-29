@@ -18,7 +18,8 @@ def run(**kw):
         1. create a replica 3 pool
         2. take few pool snaps with writes on objects b/w every snap
         3. chose primary osd and bring it down
-        4. go to backend and using ceph-object-store tool corrupt the snapset of the object
+        4. go to backend and using ceph-object-store tool corrupt the
+           snapset of the object
         5. run deep-scrub on the pg
         6. check rados list-inconsistent-pg <pool>
         7. rados list-inconsistent-snapset <pg>
@@ -98,7 +99,8 @@ def run(**kw):
     corrupt_cmd = "sudo ceph-objectstore-tool --data-path \
             /var/lib/ceph/osd/ceph-{id} --journal-path \
             /var/lib/ceph/osd/ceph-{id}/journal \
-            {outbuf} clear-snapset corrupt".format(id=targt_osd, outbuf="'" + (outbuf) + "'")
+            {outbuf} clear-snapset \
+            corrupt".format(id=targt_osd, outbuf="'" + (outbuf) + "'")
     (out, err) = ctx.exec_command(cmd=corrupt_cmd)
     outbuf = out.read()
     log.info(outbuf)
@@ -117,10 +119,11 @@ def run(**kw):
     log.info("HEALTH_ERR found as expected")
     log.info("inconsistent foud as expected")
 
-    timeout = 10
+    timeout = 300
     found = 0
     while timeout:
-        incon_pg = "sudo rados list-inconsistent-pg {pname}".format(pname=pname)
+        incon_pg = "sudo rados list-inconsistent-pg \
+                    {pname}".format(pname=pname)
         (out, err) = ctrlr.exec_command(cmd=incon_pg)
         outbuf = out.read()
         log.info(outbuf)
@@ -134,10 +137,11 @@ def run(**kw):
         log.error("pg not listed as inconsistent")
         return 1
 
-    timeout = 10
+    timeout = 300
     found = 0
     while timeout:
-        incon_snap = "sudo rados list-inconsistent-snapset {pg}".format(pg=targt_pg)
+        incon_snap = "sudo rados list-inconsistent-snapset \
+                      {pg}".format(pg=targt_pg)
         (out, err) = ctrlr.exec_command(cmd=incon_snap)
         outbuf = out.read()
         log.info(outbuf)
