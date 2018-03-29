@@ -119,3 +119,40 @@ tests:
            script-name: test_versioning_with_objects.py
            config-file-name: test_versioning_objects_suspend.yaml
            timeout: 300
+   # new tests adding
+   - test:
+       name: Bucket Policy Tests
+       desc: CEPH-11215 Modify existing bucket policy to replace the existing policy
+       polarion-id: CEPH-11215
+       module: rgw_system_v2.py
+       config:
+           script-name: test_bucket_policy_ops.py
+           config-file-name: test_bucket_policy_replace.yaml
+           timeout: 300
+   - test:
+       name: Bucket Policy Tests
+       desc: Delete bucket policy
+       polarion-id: CEPH-11213
+       module: rgw_system_v2.py
+       config:
+           script-name: test_bucket_policy_ops.py
+           config-file-name: test_bucket_policy_delete.yaml
+           timeout: 300
+   - test:
+       name: Bucket Policy Tests
+       desc: Modify existing bucket policy to add a new policy in addition existing policy
+       polarion-id: CEPH-11214
+       module: rgw_system_v2.py
+       config:
+           script-name: test_bucket_policy_ops.py
+           config-file-name: test_bucket_policy_modify.yaml
+           timeout: 300
+   - test:
+       name: Bucket Lifecycle Configuration Tests
+       desc: Read lifecycle configuration on a given bucket
+       polarion-id: CEPH-11181
+       module: rgw_system_v2.py
+       config:
+           script-name: test_bucket_lifecycle_config_ops.py
+           config-file-name: test_bucket_lifecycle_config_read.yaml
+           timeout: 300
