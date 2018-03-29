@@ -5,7 +5,6 @@ import time
 from ceph.ceph import CommandFailed
 import traceback
 import logging
-
 logger = logging.getLogger(__name__)
 log = logger
 
@@ -61,12 +60,32 @@ def run(**kw):
             log.info("kernel mount passed")
         else:
             raise CommandFailed("kernel mount failed")
+        rc = fs_util.activate_multiple_mdss(client_info['mds_nodes'])
+        if rc == 0:
+            log.info("Activate multiple mdss successfully")
+        else:
+            raise CommandFailed("Activate multiple mdss failed")
         active_mds_node_1, active_mds_node_2, rc = fs_util.get_active_mdss(
             client_info['mds_nodes'])
         if rc == 0:
             log.info("Got active mdss")
         else:
             raise CommandFailed("getting active-mdss failed")
+        #
+        with parallel() as p:
+            p.spawn(fs_util.read_write_IO, client1,
+                    client_info['mounting_dir'], 'm', 'write')
+            p.spawn(fs_util.read_write_IO, client2,
+                    client_info['mounting_dir'], 'm', 'read')
+            p.spawn(fs_util.read_write_IO, client4,
+                    client_info['mounting_dir'], 'm', 'readwrite')
+            p.spawn(fs_util.read_write_IO, client3,
+                    client_info['mounting_dir'], 'm', 'readwrite')
+            for op in p:
+                return_counts, rc = op
+
+        result = fs_util.rc_verify('', return_counts)
+        print result
 
         log.info("Performing Auto Eviction:")
         mds1_before_evict, _, rc = fs_util.get_mds_info(
@@ -86,6 +105,51 @@ def run(**kw):
         else:
             raise CommandFailed("Auto eviction Failed")
         print "-------------------------------------------------------"
+        if client3[0].pkg_type == 'deb' and client4[0].pkg_type == 'deb':
+            for client in client_info['fuse_clients']:
+                client.exec_command(
+                    cmd='sudo fusermount -u %s -z' %
+                        (client_info['mounting_dir']))
+                client.exec_command(
+                    cmd='sudo rm -rf %s' %
+                    (client_info['mounting_dir']))
+        else:
+            for client in client_info['fuse_clients']:
+                client.exec_command(
+                    cmd='sudo fusermount -u %s -z' %
+                        (client_info['mounting_dir']))
+                client.exec_command(
+                    cmd='sudo rm -rf %s' %
+                    (client_info['mounting_dir']))
+
+            for client in client_info['kernel_clients']:
+                client.exec_command(
+                    cmd='sudo umount %s -l' %
+                        (client_info['mounting_dir']))
+                client.exec_command(
+                    cmd='sudo rm -rf %s' %
+                    (client_info['mounting_dir']))
+
+        rc1 = fs_util.fuse_mount(client1, client_info['mounting_dir'])
+        rc2 = fs_util.fuse_mount(client2, client_info['mounting_dir'])
+
+        if rc1 == 0 and rc2 == 0:
+            log.info("Fuse mount passed")
+        else:
+            raise CommandFailed("Fuse mount failed")
+
+        rc3 = fs_util.kernel_mount(
+            client3,
+            client_info['mounting_dir'],
+            client_info['mon_node_ip'])
+        rc4 = fs_util.kernel_mount(
+            client4,
+            client_info['mounting_dir'],
+            client_info['mon_node_ip'])
+        if rc3 == 0 and rc4 == 0:
+            log.info("kernel mount passed")
+        else:
+            raise CommandFailed("kernel mount failed")
         with parallel() as p:
             p.spawn(fs_util.read_write_IO, client1,
                     client_info['mounting_dir'], 'm', 'write')
@@ -107,7 +171,6 @@ def run(**kw):
 
         result = fs_util.rc_verify('', return_counts)
         print result
-        log.info("MOunting:")
         log.info("Performing Manual eviction:")
         ip_addr = fs_util.manual_evict(active_mds_node_1, 0)
         mds1_after_evict, _, rc = fs_util.get_mds_info(
@@ -127,8 +190,74 @@ def run(**kw):
         else:
             raise CommandFailed("Removing client from OSD blacklisting Failed")
         print '-' * 10
-        log.info("Performing configuring blacklisting:")
 
+        if client3[0].pkg_type == 'deb' and client4[0].pkg_type == 'deb':
+            for client in client_info['fuse_clients']:
+                client.exec_command(
+                    cmd='sudo fusermount -u %s -z' %
+                        (client_info['mounting_dir']))
+                client.exec_command(
+                    cmd='sudo rm -rf %s' %
+                    (client_info['mounting_dir']))
+        else:
+            for client in client_info['fuse_clients']:
+                client.exec_command(
+                    cmd='sudo fusermount -u %s -z' %
+                        (client_info['mounting_dir']))
+                client.exec_command(
+                    cmd='sudo rm -rf %s' %
+                    (client_info['mounting_dir']))
+
+            for client in client_info['kernel_clients']:
+                client.exec_command(
+                    cmd='sudo umount %s -l' %
+                        (client_info['mounting_dir']))
+                client.exec_command(
+                    cmd='sudo rm -rf %s' %
+                    (client_info['mounting_dir']))
+
+        rc1 = fs_util.fuse_mount(client1, client_info['mounting_dir'])
+        rc2 = fs_util.fuse_mount(client2, client_info['mounting_dir'])
+
+        if rc1 == 0 and rc2 == 0:
+            log.info("Fuse mount passed")
+        else:
+            raise CommandFailed("Fuse mount failed")
+
+        rc3 = fs_util.kernel_mount(
+            client3,
+            client_info['mounting_dir'],
+            client_info['mon_node_ip'])
+        rc4 = fs_util.kernel_mount(
+            client4,
+            client_info['mounting_dir'],
+            client_info['mon_node_ip'])
+        if rc3 == 0 and rc4 == 0:
+            log.info("kernel mount passed")
+        else:
+            raise CommandFailed("kernel mount failed")
+        with parallel() as p:
+            p.spawn(fs_util.read_write_IO, client1,
+                    client_info['mounting_dir'], 'm', 'write')
+            p.spawn(fs_util.read_write_IO, client2,
+                    client_info['mounting_dir'], 'm', 'read')
+            p.spawn(
+                fs_util.stress_io,
+                client3,
+                client_info['mounting_dir'],
+                '',
+                0,
+                1,
+                iotype='crefi'
+            )
+            p.spawn(fs_util.read_write_IO, client4,
+                    client_info['mounting_dir'], 'm', 'readwrite')
+            for op in p:
+                return_counts, rc = op
+
+        result = fs_util.rc_verify('', return_counts)
+        print result
+        log.info("Performing configuring blacklisting:")
         rc = fs_util.config_blacklist_manual_evict(active_mds_node_1, 0)
         if rc == 0:
             log.info("Configure blacklisting for manual evict success")
@@ -150,7 +279,6 @@ def run(**kw):
                     "Configure blacklisting for auto evict failed")
         else:
             raise CommandFailed("Configure blacklisting for auto evict failed")
-
         print 'Script execution time:------'
         stop = timeit.default_timer()
         total_time = stop - start
