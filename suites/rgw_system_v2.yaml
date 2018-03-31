@@ -103,6 +103,15 @@ tests:
            script-name: test_versioning_with_objects.py
            config-file-name: test_versioning_objects_suspend.yaml
            timeout: 300
+   - test:
+       name: Versioning Tests
+       desc: test to delete versioning objects
+       polarion-id: CEPH-14262
+       module: rgw_system_v2.py
+       config:
+           script-name: test_versioning_with_objects.py
+           config-file-name: test_versioning_objects_delete.yaml
+           timeout: 300
    # BucketPolicy Tests
    - test:
        name: Bucket Policy Tests
