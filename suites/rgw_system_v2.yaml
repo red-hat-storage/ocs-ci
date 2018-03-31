@@ -121,6 +121,15 @@ tests:
            script-name: test_versioning_with_objects.py
            config-file-name: test_versioning_objects_delete.yaml
            timeout: 300
+   - test:
+       name: Versioning Tests
+       desc: test to overwrite objects after suspending versioning
+       polarion-id: CEPH-9199
+       module: rgw_system_v2.py
+       config:
+           script-name: test_versioning_with_objects.py
+           config-file-name: test_versioning_objects_suspend_re-upload.yaml
+           timeout: 300
    # BucketPolicy Tests
    - test:
        name: Bucket Policy Tests
