@@ -74,6 +74,15 @@ tests:
            script-name: test_Mbuckets_with_Nobjects.py
            config-file-name: test_Mbuckets_with_Nobjects_download.yaml
            timeout: 300
+   - test:
+       name: Mbuckets_with_Nobjects with sharing enabled
+       desc: test to perform bucket ops with sharding operations
+       module: rgw_system_v2.py
+       polarion-id: CEPH-9245
+       config:
+           script-name: test_Mbuckets_with_Nobjects.py
+           config-file-name: test_Mbuckets_with_Nobjects_sharding.yaml
+           timeout: 300
    # Versioning Tests
    - test:
        name: Versioning Tests
