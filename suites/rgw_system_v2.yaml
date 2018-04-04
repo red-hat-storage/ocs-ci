@@ -37,6 +37,7 @@ tests:
             cmd: ceph -s
             sudo: True
       desc: Check for ceph health debug info
+   # Basic Bucket Operation Tests
    - test:
        name: Mbuckets
        desc: test to create "M" no of buckets
@@ -74,27 +75,28 @@ tests:
            config-file-name: test_Mbuckets_with_Nobjects_download.yaml
            timeout: 300
    - test:
-       name: test versioning enable
-       desc: test to enable versioning
+       name: Mbuckets_with_Nobjects with sharing enabled
+       desc: test to perform bucket ops with sharding operations
        module: rgw_system_v2.py
-       polarion-id: CEPH-10652
+       polarion-id: CEPH-9245
        config:
-           script-name: test_versioning_with_objects.py
-           config-file-name: test_versioning_enable.yaml
+           script-name: test_Mbuckets_with_Nobjects.py
+           config-file-name: test_Mbuckets_with_Nobjects_sharding.yaml
            timeout: 300
+   # Versioning Tests
    - test:
-       name: test versioning enable with objects copy
+       name: Versioning Tests
        desc: test to enable versioning objects copy
-       polarion-id: CEPH-10652
+       polarion-id: CEPH-14264  # also applies to [CEPH-10646]
        module: rgw_system_v2.py
        config:
            script-name: test_versioning_with_objects.py
            config-file-name: test_versioning_objects_copy.yaml
            timeout: 300
    - test:
-       name: test versioning enable with objects
-       desc: test to enable versioning objects
-       polarion-id: CEPH-10652
+       name: Versioning Tests
+       desc: Basic versioning test, also called as test to enable bucket versioning
+       polarion-id: CEPH-14261 # also applies to CEPH-10652
        module: rgw_system_v2.py
        polarion-id:
        config:
@@ -102,24 +104,33 @@ tests:
            config-file-name: test_versioning_objects_enable.yaml
            timeout: 300
    - test:
-       name: test versioning suspend with objects
+       name: Versioning Tests
        desc: test to suspend versioning objects
-       polarion-id: CEPH-14263 # this is a multiste test, but is also applicable for single cluster
+       polarion-id: CEPH-14263
        module: rgw_system_v2.py
        config:
            script-name: test_versioning_with_objects.py
            config-file-name: test_versioning_objects_suspend.yaml
            timeout: 300
    - test:
-       name: test versioning with suspend
-       desc: test to suspend versioning without objects
-       polarion-id: CEPH-14263 # this is a multiste test, but is also applicable for single cluster
+       name: Versioning Tests
+       desc: test to delete versioning objects
+       polarion-id: CEPH-14262
        module: rgw_system_v2.py
        config:
            script-name: test_versioning_with_objects.py
-           config-file-name: test_versioning_objects_suspend.yaml
+           config-file-name: test_versioning_objects_delete.yaml
            timeout: 300
-   # new tests adding
+   - test:
+       name: Versioning Tests
+       desc: test to overwrite objects after suspending versioning
+       polarion-id: CEPH-9199
+       module: rgw_system_v2.py
+       config:
+           script-name: test_versioning_with_objects.py
+           config-file-name: test_versioning_objects_suspend_re-upload.yaml
+           timeout: 300
+   # BucketPolicy Tests
    - test:
        name: Bucket Policy Tests
        desc: CEPH-11215 Modify existing bucket policy to replace the existing policy
@@ -147,6 +158,7 @@ tests:
            script-name: test_bucket_policy_ops.py
            config-file-name: test_bucket_policy_modify.yaml
            timeout: 300
+   # Bucket Lifecycle Tests
    - test:
        name: Bucket Lifecycle Configuration Tests
        desc: Read lifecycle configuration on a given bucket
