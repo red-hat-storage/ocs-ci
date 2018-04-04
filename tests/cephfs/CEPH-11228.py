@@ -76,6 +76,15 @@ def run(**kw):
                     client_info['mounting_dir'], 'g', 'read')
             p.spawn(
                 fs_util.stress_io,
+                client2,
+                client_info['mounting_dir'],
+                '',
+                0,
+                2,
+                iotype='crefi',
+            )
+            p.spawn(
+                fs_util.stress_io,
                 client3,
                 client_info['mounting_dir'],
                 dir_name,
@@ -91,7 +100,6 @@ def run(**kw):
                 return_counts, rc = op
 
         result = fs_util.rc_verify('', return_counts)
-
         if result == 'Data validation success':
             print "Data validation success"
             fs_util.activate_multiple_mdss(client_info['mds_nodes'])
@@ -102,14 +110,14 @@ def run(**kw):
                 p.spawn(
                     pinning_obj1.mkdir_pinning,
                     client1,
-                    num_of_dirs * 6,
-                    num_of_dirs * 11,
+                    num_of_dirs * 1,
+                    num_of_dirs * 10,
                     client_info['mounting_dir'],
                     dir_name)
                 p.spawn(
                     pinning_obj2.mkdir_pinning,
                     client3,
-                    num_of_dirs * 11,
+                    num_of_dirs * 10,
                     num_of_dirs * 21,
                     client_info['mounting_dir'],
                     dir_name)
@@ -120,8 +128,8 @@ def run(**kw):
                     client1,
                     client_info['mounting_dir'],
                     dir_name,
-                    num_of_dirs * 6,
-                    num_of_dirs * 7,
+                    num_of_dirs * 1,
+                    num_of_dirs * 5,
                     10,
                     fs_util.mds_fail_over,
                     client_info['mds_nodes'])
@@ -136,32 +144,30 @@ def run(**kw):
                     fs_util.mds_fail_over,
                     client_info['mds_nodes'])
                 for op in p:
-                    return_counts = op
-            return_counts = return_counts[0]
+                    return_counts, rc = op
             log.info("Execution of Test case CEPH-%s ended:" % (tc))
             print "Results:"
             result = fs_util.rc_verify(tc, return_counts)
             print result
+            log.info('Cleaning up!-----')
+            if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
+                rc_client = fs_util.client_clean_up(
+                    client_info['fuse_clients'],
+                    client_info['kernel_clients'],
+                    client_info['mounting_dir'],
+                    'umount')
+                rc_mds = fs_util.mds_cleanup(client_info['mds_nodes'], None)
 
-            log.info("Cleaning up!-----")
-            fs_util.client_clean_up(
-                client_info['fuse_clients'],
-                client_info['kernel_clients'],
-                client_info['mounting_dir'],
-                'umount')
-            fs_util.mds_cleanup(client_info['mds_nodes'], None)
-            log.info("Cleaning up successfull")
+            else:
+                rc_client = fs_util.client_clean_up(
+                    client_info['fuse_clients'], '',
+                    client_info['mounting_dir'], 'umount')
+                rc_mds = fs_util.mds_cleanup(client_info['mds_nodes'], None)
 
-        else:
-            log.info("Cleaning up!-----")
-            fs_util.client_clean_up(
-                client_info['fuse_clients'],
-                client_info['kernel_clients'],
-                client_info['mounting_dir'],
-                'umount')
-            fs_util.mds_cleanup(client_info['mds_nodes'], None)
-            log.info("Cleaning up successfull")
-            raise CommandFailed("Data validation failed")
+            if rc_client == 0 and rc_mds == 0:
+                log.info('Cleaning up successfull')
+            else:
+                return 1
         print'Script execution time:------'
         stop = timeit.default_timer()
         total_time = stop - start
@@ -169,11 +175,28 @@ def run(**kw):
         hours, mins = divmod(mins, 60)
         print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
         return 0
+
     except CommandFailed as e:
         log.info(e)
         log.info(traceback.format_exc())
-        return 1
+        log.info('Cleaning up!-----')
+        if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
+            rc_client = fs_util.client_clean_up(
+                client_info['fuse_clients'],
+                client_info['kernel_clients'],
+                client_info['mounting_dir'],
+                'umount')
+            rc_mds = fs_util.mds_cleanup(client_info['mds_nodes'], None)
 
+        else:
+            rc_client = fs_util.client_clean_up(
+                client_info['fuse_clients'], '',
+                client_info['mounting_dir'], 'umount')
+            rc_mds = fs_util.mds_cleanup(client_info['mds_nodes'], None)
+
+        if rc_client == 0 and rc_mds == 0:
+            log.info('Cleaning up successfull')
+        return 1
     except Exception as e:
         log.info(e)
         log.info(traceback.format_exc())

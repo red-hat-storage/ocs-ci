@@ -24,6 +24,7 @@ class FsUtils(object):
         self.mounting_dir = ''
         self.dirs = ''
         self.rc_list = []
+        self.mon_node_ip = ''
 
     def get_clients(self):
         log.info("Getting Clients")
@@ -70,15 +71,37 @@ class FsUtils(object):
 
                 if 'fio' not in output:
                     node.exec_command(
-                        cmd='sudo yum install -y http://dl.fedoraproject.org/'
-                            'pub/epel/7/x86_64/Packages/f/'
-                            'fio-2.2.8-2.el7.x86_64.rpm')
-                    node.exec_command(
-                        cmd='sudo yum install -y https://'
-                            'kojipkgs.fedoraproject.org//packages/libaio/'
-                            '0.3.110/9.fc27/x86_64/libaio-0.3.110-9.'
-                            'fc27.x86_64.rpm')
+                        cmd='sudo yum install -y fio')
 
+            elif node.pkg_type == 'deb':
+                node.exec_command(cmd='sudo pip install --upgrade pip')
+                out, rc = node.exec_command(cmd='sudo apt list libattr1-dev')
+                out = out.read().split()
+                if 'libattr1-dev/xenial,now' not in out:
+                    node.exec_command(
+                        cmd='sudo apt-get install -y libattr1-dev')
+                out, rc = node.exec_command(cmd='sudo apt list attr')
+                out = out.read().split()
+                if 'attr/xenial,now' not in out:
+                    node.exec_command(cmd='sudo apt-get install -y attr')
+                out, rc = node.exec_command(cmd='sudo apt list fio')
+                out = out.read().split()
+                if 'fio/xenial,now' not in out:
+                    node.exec_command(cmd='sudo apt-get install -y fio')
+                out, rc = node.exec_command(
+                    cmd='sudo pip list')
+                output = out.read()
+                output.split()
+                if 'crefi' not in output:
+                    node.exec_command(cmd='sudo pip install crefi')
+
+                out, rc = node.exec_command(cmd="sudo ls /home/cephuser")
+                output = out.read()
+                output.split()
+                if 'smallfile' not in output:
+                    node.exec_command(
+                        cmd='git clone '
+                            'https://github.com/bengland2/smallfile.git')
         self.mounting_dir = ''.join(
             random.choice(
                 string.lowercase +
@@ -151,229 +174,239 @@ class FsUtils(object):
 
     def kernel_mount(self, kernel_clients, mounting_dir, mon_node_ip):
         for client in kernel_clients:
-            log.info("Creating mounting dir:")
-            client.exec_command(cmd='sudo mkdir %s' % (mounting_dir))
-            out, rc = client.exec_command(
-                cmd='sudo ceph auth get-key client.%s' %
-                (client.hostname))
-            secret_key = out.read().rstrip('\n')
-            mon_node_ip = mon_node_ip.replace(" ", "")
-            op, rc = client.exec_command(
-                cmd='sudo mount -t ceph %s:6789:/ %s -o name=%s,secret=%s' % (
-                    mon_node_ip, mounting_dir, client.hostname, secret_key))
-            out, rc = client.exec_command(cmd='mount')
-            mount_output = out.read()
-            mount_output.split()
-            log.info("Checking if kernel mount is is passed of failed:")
-            if '%s:6789:/' % (mon_node_ip) in mount_output:
-                return 0
+            if client.pkg_type == 'rpm':
+                log.info("Creating mounting dir:")
+                client.exec_command(cmd='sudo mkdir %s' % (mounting_dir))
+                out, rc = client.exec_command(
+                    cmd='sudo ceph auth get-key client.%s' %
+                        (client.hostname))
+                secret_key = out.read().rstrip('\n')
+                mon_node_ip = mon_node_ip.replace(" ", "")
+                op, rc = client.exec_command(
+                    cmd='sudo mount -t ceph %s:6789:/ '
+                        '%s -o name=%s,secret=%s' % (
+                            mon_node_ip, mounting_dir,
+                            client.hostname, secret_key))
+                out, rc = client.exec_command(cmd='mount')
+                mount_output = out.read()
+                mount_output.split()
+                log.info("Checking if kernel mount is is passed of failed:")
+                if '%s:6789:/' % (mon_node_ip) in mount_output:
+                    return 0
+                else:
+                    return 1
             else:
-                return 1
+                log.info("Kernel mount is not supported for Ubuntu")
+                return 0
 
     def read_write_IO(self, clients, mounting_dir, *args, **kwargs):
         for client in clients:
-            log.info("Performing read and write on clients")
-            rand_num = random.randint(1, 5)
-            fio_read = "sudo fio --name=global --rw=read --size=%d%s " \
-                       "--name=%s_%d_%d_%d --directory=%s%s --runtime=300"
-            fio_write = "sudo fio --name=global --rw=write --size=%d%s " \
-                        "--name=%s_%d_%d_%d --directory=%s%s --runtime=300 " \
-                        "--verify=meta"
-            fio_readwrite = "sudo fio --name=global --rw=readwrite " \
-                            "--size=%d%s" \
-                            " --name=%s_%d_%d_%d --directory=%s%s " \
-                            "--runtime=300 " \
-                            "--verify=meta"
-            if kwargs:
-                for i, j in kwargs.items():
-                    self.dir_name = j
-            else:
-                self.dir_name = ''
-            if args:
-                if 'g' in args:
-                    size = 'g'
-                elif 'm' in args:
-                    size = 'm'
+            out, rc = client.exec_command(cmd='df -h')
+            mount_output = out.read()
+            mount_output.split()
+            if 'ceph-fuse' in mount_output or '%s:6789:/' % (
+                    self.mon_node_ip) in mount_output:
+                log.info("Performing read and write on clients")
+                rand_num = random.randint(1, 5)
+                fio_read = "sudo fio --name=global --rw=read --size=%d%s " \
+                           "--name=%s_%d_%d_%d --directory=%s%s --runtime=300"
+                fio_write = "sudo fio --name=global --rw=write --size=%d%s " \
+                            "--name=%s_%d_%d_%d --directory=%s%s " \
+                            "--runtime=300 --verify=meta"
+                fio_readwrite = "sudo fio --name=global --rw=readwrite " \
+                                "--size=%d%s" \
+                                " --name=%s_%d_%d_%d --directory=%s%s " \
+                                "--runtime=300 " \
+                                "--verify=meta"
+                if kwargs:
+                    for i, j in kwargs.items():
+                        self.dir_name = j
+                else:
+                    self.dir_name = ''
+                if args:
+                    if 'g' in args:
+                        size = 'g'
+                    elif 'm' in args:
+                        size = 'm'
+                    else:
+                        size = 'k'
+                    for arg in args:
+                        if arg == 'read':
+                            if size == 'g':
+                                rand_size = random.randint(1, 5)
+                                client.exec_command(
+                                    cmd=fio_read %
+                                    (rand_size,
+                                     size,
+                                     client.hostname,
+                                     rand_size,
+                                     rand_size,
+                                     rand_num,
+                                     mounting_dir,
+                                     self.dir_name),
+                                    long_running=True)
+                                self.return_counts = self.io_verify(client)
+                            elif size == 'm':
+                                for num in range(0, 10):
+                                    rand_size = random.randint(1, 5)
+                                    client.exec_command(
+                                        cmd=fio_read %
+                                        (rand_size,
+                                         size,
+                                         client.hostname,
+                                         rand_size,
+                                         rand_size,
+                                         num,
+                                         mounting_dir,
+                                         self.dir_name),
+                                        long_running=True)
+                                    self.return_counts = self.io_verify(client)
+                                break
+
+                            else:
+                                for num in range(0, 500):
+                                    rand_size = random.randint(50, 100)
+                                    client.exec_command(
+                                        cmd=fio_read %
+                                        (rand_size,
+                                         size,
+                                         client.hostname,
+                                         rand_size,
+                                         rand_size,
+                                         num,
+                                         mounting_dir,
+                                         self.dir_name),
+                                        long_running=True)
+                                    self.return_counts = self.io_verify(client)
+                                break
+
+                        elif arg == 'write':
+                            if size == 'g':
+                                rand_size = random.randint(1, 5)
+                                client.exec_command(
+                                    cmd=fio_write %
+                                    (rand_size,
+                                     size,
+                                     client.hostname,
+                                     rand_size,
+                                     rand_size,
+                                     rand_num,
+                                     mounting_dir,
+                                     self.dir_name),
+                                    long_running=True)
+                                self.return_counts = self.io_verify(client)
+                                break
+
+                            elif size == 'm':
+                                for num in range(0, 10):
+                                    rand_size = random.randint(1, 5)
+                                    client.exec_command(
+                                        cmd=fio_write %
+                                        (rand_size,
+                                         size,
+                                         client.hostname,
+                                         rand_size,
+                                         rand_size,
+                                         num,
+                                         mounting_dir,
+                                         self.dir_name),
+                                        long_running=True)
+                                    self.return_counts = self.io_verify(client)
+                                break
+
+                            else:
+                                for num in range(0, 500):
+                                    rand_size = random.randint(50, 100)
+                                    client.exec_command(
+                                        cmd=fio_write %
+                                        (rand_size,
+                                         size,
+                                         client.hostname,
+                                         rand_size,
+                                         rand_size,
+                                         num,
+                                         mounting_dir,
+                                         self.dir_name),
+                                        long_running=True)
+                                    self.return_counts = self.io_verify(client)
+                                break
+
+                        elif arg == 'readwrite':
+                            if size == 'g':
+                                rand_size = random.randint(1, 5)
+
+                                client.exec_command(
+                                    cmd=fio_readwrite %
+                                    (rand_size,
+                                     size,
+                                     client.hostname,
+                                     rand_num,
+                                     rand_num,
+                                     rand_size,
+                                     mounting_dir,
+                                     self.dir_name),
+                                    long_running=True)
+                                self.return_counts = self.io_verify(client)
+                                break
+
+                            elif size == 'm':
+                                for num in range(0, 10):
+                                    rand_size = random.randint(50, 100)
+                                    client.exec_command(
+                                        cmd=fio_readwrite %
+                                        (rand_size,
+                                         size,
+                                         client.hostname,
+                                         rand_size,
+                                         num,
+                                         rand_size,
+                                         mounting_dir,
+                                         self.dir_name),
+                                        long_running=True)
+                                    self.return_counts = self.io_verify(client)
+                                break
+
+                            else:
+                                for num in range(0, 500):
+                                    rand_size = random.randint(50, 100)
+                                    client.exec_command(
+                                        cmd=fio_readwrite %
+                                        (rand_size,
+                                         size,
+                                         client.hostname,
+                                         rand_size,
+                                         num,
+                                         mounting_dir,
+                                         self.dir_name))
+                                    self.return_counts = self.io_verify(client)
+                                break
+
                 else:
                     size = 'k'
-                for arg in args:
-                    if arg == 'read':
-                        if size == 'g':
-                            for num in range(0, 2):
-                                rand_size = random.randint(1, 5)
-                                client.exec_command(
-                                    cmd=fio_read %
-                                    (rand_size,
-                                     size,
-                                     client.hostname,
-                                     rand_size,
-                                     rand_size,
-                                     num,
-                                     mounting_dir,
-                                     self.dir_name),
-                                    long_running=True)
-                            self.return_counts = self.io_verify(client)
-                        elif size == 'm':
-                            for num in range(0, 10):
-                                rand_size = random.randint(1, 5)
-                                client.exec_command(
-                                    cmd=fio_read %
-                                    (rand_size,
-                                     size,
-                                     client.hostname,
-                                     rand_size,
-                                     rand_size,
-                                     num,
-                                     mounting_dir,
-                                     self.dir_name),
-                                    long_running=True)
-                                self.return_counts = self.io_verify(client)
-                            break
+                    for num in range(0, 500):
+                        rand_size = random.randint(50, 100)
+                        client.exec_command(
+                            cmd=fio_readwrite %
+                            (rand_size,
+                             size,
+                             client.hostname,
+                             rand_size,
+                             rand_size,
+                             num,
+                             mounting_dir,
+                             self.dir_name),
+                            long_running=True)
+                        client.exec_command(
+                            cmd="sudo touch %s%s_%d" %
+                            (mounting_dir, client.hostname, rand_size))
+                        self.return_counts = self.io_verify(client)
 
-                        else:
-                            for num in range(0, 500):
-                                rand_size = random.randint(50, 100)
-                                client.exec_command(
-                                    cmd=fio_read %
-                                    (rand_size,
-                                     size,
-                                     client.hostname,
-                                     rand_size,
-                                     rand_size,
-                                     num,
-                                     mounting_dir,
-                                     self.dir_name),
-                                    long_running=True)
-                                self.return_counts = self.io_verify(client)
-                            break
-
-                    elif arg == 'write':
-                        if size == 'g':
-                            for num in range(0, 2):
-                                rand_size = random.randint(1, 5)
-                                client.exec_command(
-                                    cmd=fio_write %
-                                    (rand_size,
-                                     size,
-                                     client.hostname,
-                                     rand_size,
-                                     rand_size,
-                                     num,
-                                     mounting_dir,
-                                     self.dir_name),
-                                    long_running=True)
-                            self.return_counts = self.io_verify(client)
-                            break
-
-                        elif size == 'm':
-                            for num in range(0, 10):
-                                rand_size = random.randint(1, 5)
-                                client.exec_command(
-                                    cmd=fio_write %
-                                    (rand_size,
-                                     size,
-                                     client.hostname,
-                                     rand_size,
-                                     rand_size,
-                                     num,
-                                     mounting_dir,
-                                     self.dir_name),
-                                    long_running=True)
-                                self.return_counts = self.io_verify(client)
-                            break
-
-                        else:
-                            for num in range(0, 500):
-                                rand_size = random.randint(50, 100)
-                                client.exec_command(
-                                    cmd=fio_write %
-                                    (rand_size,
-                                     size,
-                                     client.hostname,
-                                     rand_size,
-                                     rand_size,
-                                     num,
-                                     mounting_dir,
-                                     self.dir_name),
-                                    long_running=True)
-                                self.return_counts = self.io_verify(client)
-                            break
-
-                    elif arg == 'readwrite':
-                        if size == 'g':
-                            for num in range(0, 2):
-                                rand_size = random.randint(0, 5)
-
-                                client.exec_command(
-                                    cmd=fio_readwrite %
-                                    (rand_size,
-                                     size,
-                                     client.hostname,
-                                     rand_num,
-                                     rand_num,
-                                     num,
-                                     mounting_dir,
-                                     self.dir_name),
-                                    long_running=True)
-                            self.return_counts = self.io_verify(client)
-                            break
-
-                        elif size == 'm':
-                            for num in range(0, 10):
-                                rand_size = random.randint(50, 100)
-                                client.exec_command(
-                                    cmd=fio_readwrite %
-                                    (rand_size,
-                                     size,
-                                     client.hostname,
-                                     rand_size,
-                                     num,
-                                     mounting_dir,
-                                     self.dir_name),
-                                    long_running=True)
-                                self.return_counts = self.io_verify(client)
-                            break
-
-                        else:
-                            for num in range(0, 500):
-                                rand_size = random.randint(50, 100)
-                                client.exec_command(
-                                    cmd=fio_readwrite %
-                                    (rand_size,
-                                     size,
-                                     client.hostname,
-                                     rand_size,
-                                     num,
-                                     mounting_dir,
-                                     self.dir_name))
-                                self.return_counts = self.io_verify(client)
-                            break
-
-            else:
-                size = 'k'
-                for num in range(0, 500):
-                    rand_size = random.randint(50, 100)
-                    client.exec_command(
-                        cmd=fio_readwrite %
-                        (rand_size,
-                         size,
-                         client.hostname,
-                         rand_size,
-                         rand_size,
-                         num,
-                         mounting_dir,
-                         self.dir_name),
-                        long_running=True)
-                    client.exec_command(
-                        cmd="sudo touch %s%s_%d" %
-                        (mounting_dir, client.hostname, rand_size))
-                    self.return_counts = self.io_verify(client)
-            break
         return self.return_counts, 0
 
-    def file_locking(self, client, mounting_dir):
+    def file_locking(self, clients, mounting_dir):
+        for client in clients:
 
-        to_lock_file = """
+            to_lock_file = """
 import fcntl
 import subprocess
 import time
@@ -381,48 +414,54 @@ try:
     f = open('%sto_test_file_lock', 'w+')
     fcntl.lockf(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
     print "locking file:--------------------------------"
-    subprocess.check_output(["sudo","fio","--name=global","--rw=write","--size=10m","--name=to_test_file_lock","--directory=%s","--runtime=10","--verify=meta"])
+    subprocess.check_output(["sudo","dd","if=/dev/zero","of=%sto_test_file_lock","bs=10M","count=1"])
 except IOError as e:
     print e
 finally:
     print "Unlocking file:------------------------------"
     fcntl.lockf(f,fcntl.LOCK_UN)
-                    """ % (mounting_dir, mounting_dir)
-        to_lock_code = client.write_file(
-            sudo=True,
-            file_name='/home/cephuser/file_lock.py',
-            file_mode='w')
-        to_lock_code.write(to_lock_file)
-        to_lock_code.flush()
-        out, rc = client.exec_command(
-            cmd="sudo python /home/cephuser/file_lock.py")
-        output = out.read()
-        output.split()
-        if 'Errno 11' in output:
-            log.info("File locking achieved, data is not corrupted")
-        elif 'locking' in output:
-            log.info("File locking achieved, data is not corrupted")
-        else:
-            log.error("Data is corrupted")
+                        """ % (mounting_dir, mounting_dir)
+            to_lock_code = client.write_file(
+                sudo=True,
+                file_name='/home/cephuser/file_lock.py',
+                file_mode='w')
+            to_lock_code.write(to_lock_file)
+            to_lock_code.flush()
+            out, rc = client.exec_command(
+                cmd="sudo python /home/cephuser/file_lock.py")
+            output = out.read()
+            output.split()
+            if 'Errno 11' in output:
+                log.info("File locking achieved, data is not corrupted")
+            elif 'locking' in output:
+                log.info("File locking achieved, data is not corrupted")
+            else:
+                log.error("Data is corrupted")
 
-        out, rc = client.exec_command(
-            cmd="sudo md5sum %sto_test_file_lock | awk '{print $1}'" %
-            (mounting_dir))
-        md5sum_file_lock = out.read()
-        return md5sum_file_lock, 0
+            out, rc = client.exec_command(
+                cmd="sudo md5sum %sto_test_file_lock | awk '{print $1}'" %
+                (mounting_dir))
+            md5sum_file_lock = out.read()
+            return md5sum_file_lock, 0
 
     def mkdir(self, clients, range1, range2, mounting_dir, dir_name):
         for client in clients:
-            for num in range(range1, range2):
-                log.info("Creating Directories")
-                out, rc = client.exec_command(
-                    cmd='sudo mkdir %s%s_%d' %
-                    (mounting_dir, dir_name, num))
-                print out.read()
-                out, rc = client.exec_command(
-                    cmd='sudo ls %s | grep %s' %
-                    (mounting_dir, dir_name))
-                self.dirs = out.read()
+            out, rc = client.exec_command(cmd='df -h')
+            mount_output = out.read()
+            mount_output.split()
+            mon_node_ip = self.mon_node_ip.replace(" ", "")
+            if 'ceph-fuse' in mount_output or '%s:6789:/' % \
+                    mon_node_ip in mount_output:
+                for num in range(range1, range2):
+                    log.info("Creating Directories")
+                    out, rc = client.exec_command(
+                        cmd='sudo mkdir %s%s_%d' %
+                        (mounting_dir, dir_name, num))
+                    print out.read()
+                    out, rc = client.exec_command(
+                        cmd='sudo ls %s | grep %s' %
+                        (mounting_dir, dir_name))
+                    self.dirs = out.read()
             break
         return self.dirs, 0
 
@@ -457,6 +496,7 @@ finally:
         return 0
 
     def get_active_mdss(self, mds_nodes):
+        time.sleep(20)
         for node in mds_nodes:
             out, rc = node.exec_command(
                 cmd="sudo ceph mds stat | grep -o -P '(?<=0=)."
@@ -509,57 +549,64 @@ finally:
             range2,
             **kwargs):
         for client in clients:
-            for num in range(range1, range2):
-                for key, val in kwargs.iteritems():
-                    if val == 'touch':
-                        out, rc = client.exec_command(
-                            cmd="sudo touch %s%s/%d.txt" %
-                            (mounting_dir, dir_name, num))
-                        self.return_counts = self.io_verify(client)
-                    elif val == 'fio':
-                        for i in range(0, 10):
-                            rand_num = random.randint(1, 5)
+            out, rc = client.exec_command(cmd='df -h')
+            mount_output = out.read()
+            mount_output.split()
+            mon_node_ip = self.mon_node_ip.replace(" ", "")
+            if 'ceph-fuse' in mount_output or '%s:6789:/' % \
+                    mon_node_ip in mount_output:
+                for num in range(range1, range2):
+                    for key, val in kwargs.iteritems():
+                        if val == 'touch':
                             out, rc = client.exec_command(
-                                cmd="sudo fio --name=global --rw=write "
-                                    "--size=%dm --name=%s_%d --directory=%s%s "
-                                    "--runtime=10 --verify=meta" %
-                                (rand_num, client.hostname, rand_num,
-                                 mounting_dir, dir_name), long_running=True)
+                                cmd="sudo touch %s%s/%d.txt" %
+                                (mounting_dir, dir_name, num))
                             self.return_counts = self.io_verify(client)
-
-                    elif val == 'dd':
-                        for i in range(0, 10):
-                            rand_bs = random.randint(1, 5)
-                            rand_count = random.randint(1, 5)
-                            out, rc = client.exec_command(
-                                cmd='sudo dd if=/dev/zero of=%s%s/%s%d.txt '
-                                    'bs=%dM count=%d' %
-                                (mounting_dir, dir_name, client.hostname,
-                                 num, rand_bs, rand_count), long_running=True)
-                            self.return_counts = self.io_verify(client)
-
-                    elif val == 'crefi':
-                        for i in range(0, 6):
-                            ops = [
-                                'create',
-                                'rename',
-                                'chmod',
-                                'chown',
-                                'chgrp',
-                                'setxattr']
-                            rand_ops = random.choice(ops)
-                            ftypes = ['text', 'sparse', 'binary', 'tar']
-                            rand_filetype = random.choice(ftypes)
-                            rand_count = random.randint(2, 10)
-                            if ops == 'create':
+                        elif val == 'fio':
+                            for i in range(0, 10):
+                                rand_num = random.randint(1, 5)
                                 out, rc = client.exec_command(
-                                    cmd='sudo crefi %s%s --fop create -t %s '
-                                        '--multi -b 10 -d 10 -n 10 -T 10 '
-                                        '--random --min=1K --max=%dK' %
-                                    (mounting_dir, dir_name, rand_filetype,
-                                     rand_count), long_running=True)
+                                    cmd="sudo fio --name=global --rw=write "
+                                        "--size=%dm --name=%s_%d"
+                                        " --directory=%s%s "
+                                        "--runtime=10 --verify=meta" %
+                                    (rand_num, client.hostname, rand_num,
+                                     mounting_dir, dir_name),
+                                    long_running=True)
+                                self.return_counts = self.io_verify(client)
 
-                            else:
+                        elif val == 'dd':
+                            for i in range(0, 10):
+                                rand_bs = random.randint(1, 5)
+                                rand_count = random.randint(1, 5)
+                                out, rc = client.exec_command(
+                                    cmd="sudo dd if=/dev/zero "
+                                        "of=%s%s/%s_%d_%d.txt "
+                                        "bs=%dM count=%d" %
+                                    (mounting_dir, dir_name, client.hostname,
+                                     i, rand_bs, rand_bs, rand_count),
+                                    long_running=True)
+                                self.return_counts = self.io_verify(client)
+
+                        elif val == 'crefi':
+                            out, rc = client.exec_command(
+                                cmd='sudo crefi %s%s --fop create -t %s '
+                                    '--multi -b 10 -d 10 -n 10 -T 10 '
+                                    '--random --min=1K --max=%dK' %
+                                    (mounting_dir, dir_name, 'text',
+                                     5), long_running=True)
+                            for i in range(0, 6):
+                                ops = [
+                                    'create',
+                                    'rename',
+                                    'chmod',
+                                    'chown',
+                                    'chgrp',
+                                    'setxattr']
+                                rand_ops = random.choice(ops)
+                                ftypes = ['text', 'sparse', 'binary', 'tar']
+                                rand_filetype = random.choice(ftypes)
+                                rand_count = random.randint(2, 10)
                                 out, rc = client.exec_command(
                                     cmd='sudo crefi %s%s --fop %s -t %s '
                                         '--multi -b 10 -d 10 -n 10 -T 10 '
@@ -567,29 +614,28 @@ finally:
                                     (mounting_dir, dir_name, rand_ops,
                                      rand_filetype, rand_count),
                                     long_running=True)
+                                self.return_counts = self.io_verify(client)
+
+                        elif val == 'smallfile_delete':
+                            out, rc = client.exec_command(
+                                cmd='sudo python /home/cephuser/smallfile/'
+                                    'smallfile_cli.py --operation create '
+                                    '--threads 4 --file-size 1024 --files 10 '
+                                    '--top %s%s ' %
+                                (mounting_dir, dir_name), long_running=True)
                             self.return_counts = self.io_verify(client)
 
-                    elif val == 'smallfile_delete':
-                        out, rc = client.exec_command(
-                            cmd='sudo python /home/cephuser/smallfile/'
-                                'smallfile_cli.py --operation create '
-                                '--threads 4 --file-size 1024 --files 10 '
-                                '--top %s%s ' %
-                            (mounting_dir, dir_name), long_running=True)
-                        self.return_counts = self.io_verify(client)
+                            client.exec_command(
+                                cmd='sudo python /home/cephuser/smallfile/'
+                                    'smallfile_cli.py --operation delete '
+                                    '--threads 4 --file-size 1024 --files 10 '
+                                    '--top %s%s ' %
+                                (mounting_dir, dir_name), long_running=True)
+                            self.return_counts = self.io_verify(client)
 
-                        client.exec_command(
-                            cmd='sudo python /home/cephuser/smallfile/'
-                                'smallfile_cli.py --operation delete '
-                                '--threads 4 --file-size 1024 --files 10 '
-                                '--top %s%s ' %
-                            (mounting_dir, dir_name), long_running=True)
-                        self.return_counts = self.io_verify(client)
-
-                    else:
-                        log.error("IO type not specifiesd")
-                        return 1
-            break
+                        else:
+                            log.error("IO type not specifiesd")
+                            return 1
         return self.return_counts, 0
 
     def pinned_dir_io_mdsfailover(
@@ -604,15 +650,21 @@ finally:
             mds_nodes):
         log.info("Performing IOs on clients")
         for client in clients:
-            for num in range(range1, range2):
-                log.info("Performing MDS failover:")
-                mds_fail_over(mds_nodes)
-                out, rc = client.exec_command(
-                    cmd='sudo crefi -n %d %s%s_%d' %
-                    (num_of_files, mounting_dir, dir_name, num),
-                    long_running=True)
-                self.return_counts = self.io_verify(client)
-            break
+            out, rc = client.exec_command(cmd='df -h')
+            mount_output = out.read()
+            mount_output.split()
+            mon_node_ip = self.mon_node_ip.replace(" ", "")
+            if 'ceph-fuse' in mount_output or '%s:6789:/' % (
+                    mon_node_ip) in mount_output:
+                for num in range(range1, range2):
+                    log.info("Performing MDS failover:")
+                    mds_fail_over(mds_nodes)
+                    out, rc = client.exec_command(
+                        cmd='sudo crefi -n %d %s%s_%d' %
+                        (num_of_files, mounting_dir, dir_name, num),
+                        long_running=True)
+                    self.return_counts = self.io_verify(client)
+                break
         return self.return_counts, 0
 
     def filesystem_utilities(
@@ -624,21 +676,27 @@ finally:
             range2):
         commands = ['ls', 'rm -rf', 'ls -l']
         for client in clients:
-            for num in range(range1, range2):
-                if random.choice(commands) == 'ls':
-                    out, rc = client.exec_command(
-                        cmd='sudo ls %s%s_%d' %
-                        (mounting_dir, dir_name, num))
-                elif random.choice(commands) == 'ls -l':
-                    out, rc = client.exec_command(
-                        cmd='sudo ls -l %s%s_%d/' %
-                        (mounting_dir, dir_name, num))
-                else:
-                    out, rc = client.exec_command(
-                        cmd='sudo rm -rf %s%s_%d/*' %
-                        (mounting_dir, dir_name, num))
-                print out.read()
-                self.return_counts = self.io_verify(client)
+            out, rc = client.exec_command(cmd='df -h')
+            mount_output = out.read()
+            mount_output.split()
+            mon_node_ip = self.mon_node_ip.replace(" ", "")
+            if 'ceph-fuse' in mount_output or '%s:6789:/' % (
+                    mon_node_ip) in mount_output:
+                for num in range(range1, range2):
+                    if random.choice(commands) == 'ls':
+                        out, rc = client.exec_command(
+                            cmd='sudo ls %s%s_%d' %
+                            (mounting_dir, dir_name, num))
+                    elif random.choice(commands) == 'ls -l':
+                        out, rc = client.exec_command(
+                            cmd='sudo ls -l %s%s_%d/' %
+                            (mounting_dir, dir_name, num))
+                    else:
+                        out, rc = client.exec_command(
+                            cmd='sudo rm -rf %s%s_%d/*' %
+                            (mounting_dir, dir_name, num))
+                    print out.read()
+                    self.return_counts = self.io_verify(client)
 
             break
         return self.return_counts, 0
@@ -705,34 +763,43 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
     def reboot(self, clients, **kwargs):
         timeout = 600
         for client in clients:
-            client.exec_command(cmd='sudo reboot', check_ec=False)
-            self.return_counts.update({client.hostname: client.exit_status})
-            timeout = datetime.timedelta(seconds=timeout)
-            starttime = datetime.datetime.now()
-            while True:
-                try:
-                    client.reconnect()
-                    break
-                except BaseException:
-                    if datetime.datetime.now() - starttime > timeout:
-                        log.error(
-                            'Failed to reconnect to the node {node} after '
-                            'reboot '.format(
-                                node=client.ip_address))
-                        time.sleep(5)
-                        raise RuntimeError(
-                            'Failed to reconnect to the node {node} after '
-                            'reboot '.format(
-                                node=client.ip_address))
-            if kwargs:
-                out, rc = client.exec_command(
-                    cmd='sudo crefi %s --fop create --multi -b 10 -d 10 -n 10 '
-                        '-T 10 --random --min=1K --max=10K' %
-                    (self.mounting_dir))
-                print out.read()
+            out, rc = client.exec_command(cmd='df -h')
+            mount_output = out.read()
+            mount_output.split()
+            mon_node_ip = self.mon_node_ip.replace(" ", "")
+
+            if 'ceph-fuse' in mount_output or '%s:6789:/' % (
+                    mon_node_ip) in mount_output:
+                client.exec_command(cmd='sudo reboot', check_ec=False)
                 self.return_counts.update(
                     {client.hostname: client.exit_status})
-            break
+                timeout = datetime.timedelta(seconds=timeout)
+                starttime = datetime.datetime.now()
+                while True:
+                    try:
+                        client.reconnect()
+                        break
+                    except BaseException:
+                        if datetime.datetime.now() - starttime > timeout:
+                            log.error(
+                                'Failed to reconnect to the node {node} after '
+                                'reboot '.format(
+                                    node=client.ip_address))
+                            time.sleep(5)
+                            raise RuntimeError(
+                                'Failed to reconnect to the node {node} after '
+                                'reboot '.format(
+                                    node=client.ip_address))
+                if kwargs:
+                    out, rc = client.exec_command(
+                        cmd='sudo crefi %s --fop create --multi -b 10'
+                            ' -d 10 -n 10 '
+                            '-T 10 --random --min=1K --max=10K' %
+                        (self.mounting_dir))
+                    print out.read()
+                    self.return_counts.update(
+                        {client.hostname: client.exit_status})
+                break
         return self.return_counts, 0
 
     def io_verify(self, client):
@@ -807,11 +874,6 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
             self.return_counts.update(
                 {mon_node.hostname: mon_node.exit_status})
             return self.return_counts, 0
-        else:
-            self.return_counts.update(
-                {mon_node.hostname: mon_node.exit_status})
-            print self.return_counts
-            return self.return_counts, 0
 
     def remove_pool(self, mon_node, fs_name, pool_name):
         mon_node.exec_command(
@@ -842,7 +904,6 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
                 'allow_dirfrags',
                 'balancer',
                 'standby_count_wanted']
-            print "-----------------------------------------------------"
             if attrs[0]:
                 node.exec_command(
                     cmd='sudo ceph fs set  %s %s 2' %
@@ -871,7 +932,6 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
                         print self.return_counts
                         log.error("Setting max mds attr failed")
                         return self.return_counts, 1
-            print "-----------------------------------------------------"
             if attrs[1]:
                 node.exec_command(
                     cmd='sudo ceph fs set  %s %s 65536' %
@@ -906,7 +966,6 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
                     print self.return_counts
                     return self.return_counts, 1
 
-            print "----------------------------------------------------------"
             if attrs[2]:
                 out, rc = node.exec_command(
                     cmd='sudo ceph fs set %s %s 1 --yes-i-really-mean-it' %
@@ -935,7 +994,6 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
                     log.error('failed to enable new snap shots')
                     return self.return_counts, 1
 
-            print "----------------------------------------------------------"
             if attrs[3]:
                 out, rc = node.exec_command(
                     cmd='sudo ceph fs set %s %s 1 --yes-i-really-mean-it' %
@@ -964,7 +1022,6 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
                     log.error("inline data attr failed")
                     return self.return_counts, 1
 
-            print "----------------------------------------------------------"
             if attrs[4]:
                 out, rc = node.exec_command(
                     cmd='sudo ceph fs set %s %s 1' %
@@ -993,7 +1050,6 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
                     log.error("cluster_down attr set failed")
                     return self.return_counts, 1
 
-            print "----------------------------------------------------------"
             if attrs[5]:
                 out, rc = node.exec_command(
                     cmd='sudo ceph fs set %s  %s 1' %
@@ -1024,7 +1080,6 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
                     log.error("allow_multimds attr failed")
                     return self.return_counts, 1
 
-            print "----------------------------------------------------------"
             if attrs[6]:
                 log.info(
                     "Allowing directorty fragmenation for splitting "
@@ -1051,12 +1106,12 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
                         log.error("allow_dirfrags set attr failed")
                         return self.return_counts, 1
                 else:
-                    self.failure_info.update({node.hostname: node.exit_status})
-                    print self.failure_info
+                    self.return_counts.update({node.hostname:
+                                               node.exit_status})
+                    print self.return_counts
                     log.error("allow_dirfrags set attr failed")
                     return self.return_counts, 1
 
-            print "----------------------------------------------------------"
             if attrs[7]:
                 log.info("setting the metadata load balancer")
                 out, rc = node.exec_command(
@@ -1096,7 +1151,6 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
                     log.error("metadata load balancer attr failed")
                     return self.return_counts, 1
 
-            print "----------------------------------------------------------"
             if attrs[8]:
                 log.info("setting standby_count_wanted")
                 node.exec_command(
@@ -1139,40 +1193,39 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
 
     def rsync(self, clients, source_dir, dest_dir):
         for client in clients:
-            client.exec_command(
-                cmd='sudo rsync -zvh %s %s' %
-                (source_dir, dest_dir))
-            if client.exit_status == 0:
-                log.info("Files synced successfully")
-            else:
-                raise CommandFailed('File sync failed')
-            break
+            out, rc = client.exec_command(cmd='df -h')
+            mount_output = out.read()
+            mount_output.split()
+            mon_node_ip = self.mon_node_ip.replace(" ", "")
+
+            if 'ceph-fuse' in mount_output or '%s:6789:/' % (
+                    mon_node_ip) in mount_output:
+                client.exec_command(
+                    cmd='sudo rsync -zvh %s %s' %
+                    (source_dir, dest_dir))
+                if client.exit_status == 0:
+                    log.info("Files synced successfully")
+                else:
+                    raise CommandFailed('File sync failed')
+                break
         return self.return_counts, 0
 
     def auto_evict(self, active_mds_node, clients, rank):
-        grep_cmd = """
-        sudo ceph tell mds.%d client ls | grep '"hostname":'
-        """
-        op, rc = active_mds_node.exec_command(cmd=grep_cmd % (rank))
-        op = op.read().split('\n')
-        hostname = op[0].strip('"hostname": ').strip('"').strip('",')
-        print hostname
         grep_pid_cmd = """
                sudo ceph tell mds.%d client ls | grep '"pid":'
                """
         out, rc = active_mds_node.exec_command(cmd=grep_pid_cmd % (rank))
         out = out.read()
         client_pid = re.findall(r"\d+", out)
-        for client in clients:
-            if client.hostname == hostname:
-                while True:
-                    try:
-                        for id in client_pid:
-                            client.exec_command(cmd='sudo kill -9 %s' % (id))
-                            return 0
-                    except Exception as e:
-                        print e
-                        pass
+        while True:
+            for client in clients:
+                try:
+                    for id in client_pid:
+                        client.exec_command(cmd='sudo kill -9 %s' % (id))
+                        return 0
+                except Exception as e:
+                    print e
+                    pass
 
     def manual_evict(self, active_mds_node, rank):
         grep_cmd = """
@@ -1181,7 +1234,6 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
         out, rc = active_mds_node.exec_command(cmd=grep_cmd % (rank))
         out = out.read()
         client_ids = re.findall(r"\d+", out)
-        print '--------------------------------'
         grep_cmd = """
                sudo ceph tell mds.%d client ls | grep '"inst":'
                """
@@ -1192,7 +1244,6 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
         ip_add = op[0]
         ip_add = ip_add.split(' ')
         ip_add = ip_add[1].strip('",')
-        print '------------------------'
         id_cmd = 'sudo ceph tell mds.%d client evict id=%s'
         for id in client_ids:
             active_mds_node.exec_command(cmd=id_cmd % (rank, id))
@@ -1283,19 +1334,12 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
             *args):
         for client in fuse_clients:
             log.info("Removing files:")
-            while True:
-                client.exec_command(
-                    cmd='sudo find %s -type f -delete' %
-                    (mounting_dir), long_running=True)
-                client.exec_command(
-                    cmd='sudo rm -rf %s*' %
-                    (mounting_dir), long_running=True)
-                out, rc = client.exec_command(
-                    cmd='sudo ls -l %s' %
-                    (mounting_dir))
-                op = out.read().rstrip('\n')
-                if 'total 0' in op:
-                    break
+            client.exec_command(
+                cmd='sudo find %s -type f -delete' %
+                (mounting_dir), long_running=True)
+            client.exec_command(
+                cmd='sudo rm -rf %s*' %
+                (mounting_dir), long_running=True)
             if args:
                 if 'umount' in args:
                     log.info("Unmounting fuse client:")
@@ -1319,43 +1363,41 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
                         cmd='sudo rm -rf /home/cephuser/*',
                         long_running=True)
                     client.exec_command(cmd='sudo iptables -F')
-
         for client in kernel_clients:
-            log.info("Removing files:")
-            while True:
+            if client.pkg_type == 'deb':
+                pass
+            else:
+                log.info("Removing files:")
                 client.exec_command(
                     cmd='sudo find %s -type f -delete' %
                     (mounting_dir), long_running=True)
                 client.exec_command(
                     cmd='sudo rm -rf %s*' %
                     (mounting_dir), long_running=True)
-                out, rc = client.exec_command(
-                    cmd='sudo ls -l %s' %
-                    (mounting_dir))
-                op = out.read().rstrip('\n')
-                if 'total 0' in op:
-                    break
-            if args:
-                if 'umount' in args:
-                    log.info("Unmounting kernel client:")
-                    client.exec_command(
-                        cmd='sudo umount %s -l' %
-                        (mounting_dir))
-                    client.exec_command(cmd='sudo rmdir %s' % (mounting_dir))
-                    log.info("Removing keyring file:")
-                    client.exec_command(
-                        cmd="sudo rm -rf /etc/ceph/ceph.client.%s.keyring" %
-                        (client.hostname))
-                    log.info("Removing permissions:")
-                    client.exec_command(
-                        cmd="sudo ceph auth rm client.%s" %
-                        (client.hostname))
-                    client.exec_command(
-                        cmd='sudo find /home/cephuser/ -type f -delete',
-                        long_running=True)
-                    client.exec_command(
-                        cmd='sudo rm -rf /home/cephuser/*',
-                        long_running=True)
+                if args:
+                    if 'umount' in args:
+                        log.info("Unmounting kernel client:")
+                        client.exec_command(
+                            cmd='sudo umount %s -l' %
+                            (mounting_dir))
+                        client.exec_command(
+                            cmd='sudo rmdir %s' %
+                            (mounting_dir))
+                        log.info("Removing keyring file:")
+                        client.exec_command(
+                            cmd="sudo rm -rf "
+                                "/etc/ceph/ceph.client.%s.keyring" %
+                            (client.hostname))
+                        log.info("Removing permissions:")
+                        client.exec_command(
+                            cmd="sudo ceph auth rm client.%s" %
+                            (client.hostname))
+                        client.exec_command(
+                            cmd='sudo find /home/cephuser/ -type f -delete',
+                            long_running=True)
+                        client.exec_command(
+                            cmd='sudo rm -rf /home/cephuser/*',
+                            long_running=True)
 
         return 0
 
@@ -1373,6 +1415,7 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
                 node.exec_command(
                     cmd='sudo ceph fs set cephfs allow_dirfrags 0')
             break
+        time.sleep(120)
         return 0
 
 
@@ -1384,6 +1427,9 @@ class MkdirPinning(FsUtils):
     def mkdir_pinning(self, clients, range1, range2, mounting_dir, dir_name):
         super(
             MkdirPinning,
+            self).get_clients()
+        super(
+            MkdirPinning,
             self).mkdir(
             clients,
             range1,
@@ -1391,8 +1437,14 @@ class MkdirPinning(FsUtils):
             mounting_dir,
             dir_name)
         for client in clients:
-            for num in range(range1, range2):
-                client.exec_command(
-                    cmd='sudo setfattr -n ceph.dir.pin -v %s %s%s_%d' %
-                    (self.pin_val, mounting_dir, dir_name, num))
-            return 0
+            out, rc = client.exec_command(cmd='df -h')
+            mount_output = out.read()
+            mount_output.split()
+            mon_node_ip = self.mon_node_ip.replace(" ", "")
+            if 'ceph-fuse' in mount_output or '%s:6789:/'\
+                    % mon_node_ip in mount_output:
+                for num in range(range1, range2):
+                    client.exec_command(
+                        cmd='sudo setfattr -n ceph.dir.pin -v %s %s%s_%d' %
+                        (self.pin_val, mounting_dir, dir_name, num))
+        return 0

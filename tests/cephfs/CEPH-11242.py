@@ -99,7 +99,7 @@ def run(**kw):
                     fs_util.mkdir,
                     client1,
                     0,
-                    num_of_dirs * 1,
+                    num_of_dirs * 5,
                     client_info['mounting_dir'],
                     dir_name)
                 p.spawn(
@@ -223,35 +223,23 @@ def run(**kw):
             print "Results:"
             result = fs_util.rc_verify(tc, return_counts)
             print result
-            log.info("Cleaning up!-----")
-            rc = fs_util.client_clean_up(
-                client_info['fuse_clients'],
-                client_info['kernel_clients'],
-                client_info['mounting_dir'],
-                'umount')
-            if rc == 0:
-                log.info("Client Cleaning up successfull")
+            log.info('Cleaning up!-----')
+            if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
+                rc = fs_util.client_clean_up(
+                    client_info['fuse_clients'],
+                    client_info['kernel_clients'],
+                    client_info['mounting_dir'],
+                    'umount')
             else:
-                raise CommandFailed("Client cleanup failed")
-
-            rc = fs_util.mds_cleanup(client_info['mds_nodes'], None)
+                rc = fs_util.client_clean_up(
+                    client_info['fuse_clients'],
+                    '',
+                    client_info['mounting_dir'],
+                    'umount')
             if rc == 0:
-                log.info("MDS Cleaning up successfull")
+                log.info('Cleaning up successfull')
             else:
-                raise CommandFailed("MDS cleanup failed")
-
-        else:
-            print "Data validation failed"
-            log.info("Cleaning up!-----")
-            fs_util.client_clean_up(
-                client_info['fuse_clients'],
-                client_info['kernel_clients'],
-                client_info['mounting_dir'],
-                'umount')
-            fs_util.mds_cleanup(client_info['mds_nodes'], None)
-            log.info("Cleaning up successfull")
-            return 1
-
+                return 1
         print'Script execution time:------'
         stop = timeit.default_timer()
         total_time = stop - start
@@ -264,6 +252,17 @@ def run(**kw):
     except CommandFailed as e:
         log.info(e)
         log.info(traceback.format_exc())
+        log.info('Cleaning up!-----')
+        if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
+            rc = fs_util.client_clean_up(client_info['fuse_clients'],
+                                         client_info['kernel_clients'],
+                                         client_info['mounting_dir'], 'umount')
+        else:
+            rc = fs_util.client_clean_up(client_info['fuse_clients'],
+                                         '',
+                                         client_info['mounting_dir'], 'umount')
+        if rc == 0:
+            log.info('Cleaning up successfull')
         return 1
 
     except Exception as e:

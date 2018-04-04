@@ -62,8 +62,8 @@ def run(**kw):
         else:
             raise CommandFailed("kernel mount failed")
         for client in client_info['clients']:
-            client.exec_command(cmd='sudo rm -rf  %s' % (source_dir))
-            client.exec_command(cmd='sudo mkdir %s' % (source_dir))
+            client.exec_command(cmd='sudo rm -rf  %s' % source_dir)
+            client.exec_command(cmd='sudo mkdir %s' % source_dir)
 
         for client in client_info['clients']:
             client.exec_command(
@@ -77,15 +77,17 @@ def run(**kw):
                 source_dir,
                 '',
                 0,
-                1,
+                100,
                 iotype='touch')
+            p.spawn(fs_util.read_write_IO, client1,
+                    source_dir, 'g', 'write')
             p.spawn(
                 fs_util.stress_io,
                 client2,
                 source_dir,
                 '',
                 0,
-                2,
+                10,
                 iotype='dd')
             p.spawn(
                 fs_util.stress_io,
@@ -93,7 +95,7 @@ def run(**kw):
                 source_dir,
                 '',
                 0,
-                3,
+                10,
                 iotype='crefi')
             p.spawn(
                 fs_util.stress_io,
@@ -107,13 +109,13 @@ def run(**kw):
                 return_counts1, rc = op
 
         with parallel() as p:
-            p.spawn(fs_util.rsync, client1, source_dir + '/*', '%s%s' %
+            p.spawn(fs_util.rsync, client1, source_dir, '%s%s' %
                     (client_info['mounting_dir'], target_dir))
-            p.spawn(fs_util.rsync, client2, source_dir + '/*', '%s%s' %
+            p.spawn(fs_util.rsync, client2, source_dir, '%s%s' %
                     (client_info['mounting_dir'], target_dir))
-            p.spawn(fs_util.rsync, client3, source_dir + '/*', '%s%s' %
+            p.spawn(fs_util.rsync, client3, source_dir, '%s%s' %
                     (client_info['mounting_dir'], target_dir))
-            p.spawn(fs_util.rsync, client4, source_dir + '/*', '%s%s' %
+            p.spawn(fs_util.rsync, client4, source_dir, '%s%s' %
                     (client_info['mounting_dir'], target_dir))
             for op in p:
                 return_counts2, rc = op
@@ -125,7 +127,7 @@ def run(**kw):
                 client_info['mounting_dir'],
                 target_dir,
                 0,
-                1,
+                100,
                 iotype='touch')
             p.spawn(
                 fs_util.stress_io,
@@ -133,7 +135,7 @@ def run(**kw):
                 client_info['mounting_dir'],
                 target_dir,
                 0,
-                2,
+                11,
                 iotype='dd')
             p.spawn(
                 fs_util.stress_io,
@@ -142,7 +144,7 @@ def run(**kw):
                 target_dir,
                 0,
                 3,
-                iotype='crefi')
+                iotype='fio')
             p.spawn(
                 fs_util.stress_io,
                 client4,
@@ -173,16 +175,19 @@ def run(**kw):
         else:
             print("Test case CEPH-%s failed" % (tc))
         log.info("Test completed for CEPH-%s" % (tc))
-        log.info("Cleaning up!-----")
-        rc = fs_util.client_clean_up(
-            client_info['fuse_clients'],
-            client_info['kernel_clients'],
-            client_info['mounting_dir'],
-            'umount')
-        if rc == 0:
-            log.info("Cleaning up successfull")
+        log.info('Cleaning up!-----')
+        if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
+            rc = fs_util.client_clean_up(client_info['fuse_clients'],
+                                         client_info['kernel_clients'],
+                                         client_info['mounting_dir'], 'umount')
         else:
-            raise CommandFailed("Client Cleaning Failed")
+            rc = fs_util.client_clean_up(client_info['fuse_clients'],
+                                         '',
+                                         client_info['mounting_dir'], 'umount')
+        if rc == 0:
+            log.info('Cleaning up successfull')
+        else:
+            return 1
         print'Script execution time:------'
         stop = timeit.default_timer()
         total_time = stop - start
@@ -193,8 +198,16 @@ def run(**kw):
     except CommandFailed as e:
         log.info(e)
         log.info(traceback.format_exc())
+        log.info('Cleaning up!-----')
+        if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
+            fs_util.client_clean_up(client_info['fuse_clients'],
+                                    client_info['kernel_clients'],
+                                    client_info['mounting_dir'], 'umount')
+        else:
+            fs_util.client_clean_up(client_info['fuse_clients'],
+                                    '',
+                                    client_info['mounting_dir'], 'umount')
         return 1
-
     except Exception as e:
         log.info(e)
         log.info(traceback.format_exc())
