@@ -1,7 +1,9 @@
 import logging
+import traceback
 from select import select
 from time import sleep
 
+import datetime
 import paramiko
 from paramiko.ssh_exception import SSHException
 
@@ -100,31 +102,43 @@ class CephNode(object):
             self.vm_node = kw['ceph_vmnode']
         self.run_once = False
 
-    def connect(self):
+    def connect(self, timeout=300):
         """
         connect to ceph instance using paramiko ssh protocol
         eg: self.connect()
         - setup tcp keepalive to max retries for active connection
         - set up hostname and shortname as attributes for tests to query
         """
-
+        logger.info('Connecting {host_name} / {ip_address}'.format(host_name=self.vmname, ip_address=self.ip_address))
         if self.run_once is True:
             return
         self.rssh = paramiko.SSHClient()
         self.rssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        count = 0
+        tout = datetime.timedelta(seconds=timeout)
+        starttime = datetime.datetime.now()
         while True:
-            self.rssh.connect(self.vmname,
-                              username='root',
-                              password=self.root_passwd,
-                              look_for_keys=False)
-            self.rssh_transport = self.rssh.get_transport()
-            if not self.rssh_transport.is_active() and count <= 3:
-                logger.info("Connect failed, Retrying...")
+            try:
+                self.rssh.connect(self.vmname,
+                                  username='root',
+                                  password=self.root_passwd,
+                                  look_for_keys=False)
+                self.rssh_transport = self.rssh.get_transport()
+            except Exception:
+                if datetime.datetime.now() - starttime > tout:
+                    raise RuntimeError("{traceback} \nFailed to connect in {timeout} on {ip_address}"
+                                       .format(timeout=tout, ip_address=self.ip_address,
+                                               traceback=traceback.format_exc()))
                 sleep(10)
-                count += 1
-            else:
-                break
+                continue
+            if not self.rssh_transport.is_active():
+                if datetime.datetime.now() - starttime <= tout:
+                    logger.warn("Transport status check failed, Reconnecting...")
+                    sleep(10)
+                    continue
+                else:
+                    raise RuntimeError(
+                        'Failed to establish active trasport on {ip_address}'.format(ip_address=self.ip_address))
+            break
         stdin, stdout, stderr = self.rssh.exec_command("dmesg")
         self.rssh_transport.set_keepalive(15)
         changepwd = 'echo ' + "'" + self.username + ":" + self.password + "'" \
@@ -140,18 +154,32 @@ class CephNode(object):
             "echo 20 > /proc/sys/net/ipv4/tcp_keepalive_probes")
         self.ssh = paramiko.SSHClient()
         self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        tout = datetime.timedelta(seconds=timeout)
+        starttime = datetime.datetime.now()
         while True:
-            self.ssh.connect(self.vmname,
-                             password=self.password,
-                             username=self.username,
-                             look_for_keys=False)
-            self.ssh_transport = self.ssh.get_transport()
-            if not self.ssh_transport.is_active() and count <= 3:
-                logger.info("Connect failed, Retrying...")
+            try:
+                self.ssh.connect(self.vmname,
+                                 password=self.password,
+                                 username=self.username,
+                                 look_for_keys=False)
+                self.ssh_transport = self.ssh.get_transport()
+            except Exception:
+                if datetime.datetime.now() - starttime > tout:
+                    raise RuntimeError("{traceback} \nFailed to connect in {timeout} on {ip_address}"
+                                       .format(timeout=tout, ip_address=self.ip_address,
+                                               traceback=traceback.format_exc()))
+                    raise
                 sleep(10)
-                count += 1
-            else:
-                break
+                continue
+            if not self.ssh_transport.is_active():
+                if datetime.datetime.now() - starttime <= tout:
+                    logger.warn("Transport status check failed, Reconnecting...")
+                    sleep(10)
+                    continue
+                else:
+                    raise RuntimeError(
+                        'Failed to establish active trasport on {ip_address}'.format(ip_address=self.ip_address))
+            break
         self.exec_command(cmd="ls / ; uptime ; date")
         self.ssh_transport.set_keepalive(15)
         out, err = self.exec_command(cmd="hostname")
