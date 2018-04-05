@@ -6,7 +6,6 @@ import traceback
 import os
 import re
 import requests
-import yaml
 from gevent import sleep
 from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
@@ -18,14 +17,12 @@ from parallel import parallel
 log = logging.getLogger(__name__)
 
 
-def create_ceph_nodes(gyaml, osp_cred):
-    var = yaml.safe_load(open(gyaml))
-    glbs = var.get('globals')
-    ovar = yaml.safe_load(open(osp_cred))
-    osp_glbs = ovar.get('globals')
+def create_ceph_nodes(cluster_conf, osp_cred):
+    osp_glbs = osp_cred.get('globals')
     os_cred = osp_glbs.get('openstack-credentials')
     params = dict()
-    params['cloud-data'] = glbs.get('cloud-data')
+    ceph_cluster = cluster_conf.get('ceph-cluster')
+    params['cloud-data'] = ceph_cluster.get('cloud-data')
     params['username'] = os_cred['username']
     params['password'] = os_cred['password']
     params['auth-url'] = os_cred['auth-url']
@@ -33,7 +30,6 @@ def create_ceph_nodes(gyaml, osp_cred):
     params['tenant-name'] = os_cred['tenant-name']
     params['service-region'] = os_cred['service-region']
     params['keypair'] = os_cred.get('keypair', None)
-    ceph_cluster = glbs.get('ceph-cluster')
     ceph_nodes = dict()
     if ceph_cluster.get('create'):
         params['image-name'] = ceph_cluster.get('image-name')
@@ -52,13 +48,13 @@ def create_ceph_nodes(gyaml, osp_cred):
                 node_dict = ceph_cluster.get(node)
                 params['role'] = RolesContainer(node_dict.get('role'))
                 role = params['role']
+                user = os.getlogin()
                 if params.get('run'):
                     log.info("Using existing run name")
                 else:
-                    user = os.getlogin()
                     params['run'] = run_name
-                params['node-name'] = 'ceph-' + user + \
-                                      '-' + params['run'] + node + '-' + '+'.join(role)
+                params['node-name'] = params.get('cluster-name', 'ceph') + '-' + user + '-' + params[
+                    'run'] + node + '-' + '+'.join(role)
                 if role == 'osd':
                     params['no-of-volumes'] = node_dict.get('no-of-volumes')
                     params['size-of-disks'] = node_dict.get('disk-size')
@@ -97,16 +93,14 @@ def get_openstack_driver(yaml):
     return driver
 
 
-def cleanup_ceph_nodes(gyaml, name=None, timeout=300):
+def cleanup_ceph_nodes(osp_cred, pattern=None, timeout=300):
     user = os.getlogin()
-    if name is None:
-        name = 'ceph-' + user
-    var = yaml.safe_load(open(gyaml))
-    driver = get_openstack_driver(var)
+    name = pattern if pattern else '-{user}-'.format(user=user)
+    driver = get_openstack_driver(osp_cred)
     timeout = datetime.timedelta(seconds=timeout)
     with parallel() as p:
         for node in driver.list_nodes():
-            if node.name.startswith(name):
+            if name in node.name:
                 for ip in node.public_ips:
                     log.info("removing ip %s from node %s", ip, node.name)
                     driver.ex_detach_floating_ip_from_node(node, ip)
@@ -135,7 +129,7 @@ def cleanup_ceph_nodes(gyaml, name=None, timeout=300):
         for volume in driver.list_volumes():
             if volume.name is None:
                 log.info("Volume has no name, skipping")
-            elif volume.name.startswith(name):
+            elif name in volume.name:
                 log.info("Removing volume %s", volume.name)
                 sleep(10)
                 volume.destroy()
@@ -236,8 +230,7 @@ def generate_repo_file(base_url, repos):
             baseurl = "baseurl=" + repo_to_use + "\n"
             gpgcheck = "gpgcheck=0\n"
             enabled = "enabled=1\n\n"
-            repo_file = repo_file + header + name + baseurl + \
-                gpgcheck + enabled
+            repo_file = repo_file + header + name + baseurl + gpgcheck + enabled
     return repo_file
 
 
@@ -270,8 +263,7 @@ def create_ceph_conf(fsid, mon_hosts, pg_num='128', pgp_num='128', size='2',
     mon_init_memb = mon_init_memb[:-1] + '\n'
     mon_host = mon_host[:-1] + '\n'
     conf = '[global]\n'
-    conf = conf + fsid + mon_init_memb + mon_host + public_network + auth + \
-        size + jsize + pgnum + pgpnum
+    conf = conf + fsid + mon_init_memb + mon_host + public_network + auth + size + jsize + pgnum + pgpnum
     return conf
 
 

@@ -1,57 +1,44 @@
 globals:
-    ceph-cluster:
-       name: ceph
-       create: true
-       image-name: rhel-7.4-server-x86_64-released
-       vm-size: m1.medium
-       node1:
-         role:
-            - mon
-            - mgr
-            - installer
-       node2:
-         role: osd
-         no-of-volumes: 3
-         disk-size: 30
-       node3:
-         role: mds
-       node4:
-         role: mds
-       node5:
-         role: client
-       node6:
-         role: mds
-       node7:
-         role: client
-       node8:
-         role: client
-       node9:
-         role: client
-       node10:
-         role: osd
-         no-of-volumes: 3
-         disk-size: 30
-       node11:
-         role: osd
-         no-of-volumes: 3
-         disk-size: 30
-       node12:
-         role: mds
-       node13:
-         role: osd
-         no-of-volumes: 3
-         disk-size: 30
-    cloud-data: conf/cloud-data.yaml
-    ceph-conf-overrides:
-      global:
-        osd pool default size: 2
-        osd pool default pg num:  128
-        osd pool default pgp num:  128
-    openstack-credentials:
-        username: 'vakulkar'
-        password: 'XXXXX'
-        auth-url: 'http://10.8.188.11:5000'
-        auth-version: '2.0_password'
-        tenant-name: 'ceph-jenkins'
-        service-region: 'regionOne'
-        keypair: 'vasu-lp'
+  - ceph-cluster:
+     name: ceph
+     create: true
+     image-name: rhel-7.4-server-x86_64-released
+     vm-size: m1.medium
+     node1:
+       role:
+          - mon
+          - mgr
+          - installer
+     node2:
+       role: osd
+       no-of-volumes: 3
+       disk-size: 30
+     node3:
+       role: mds
+     node4:
+       role: mds
+     node5:
+       role: client
+     node6:
+       role: mds
+     node7:
+       role: client
+     node8:
+       role: client
+     node9:
+       role: client
+     node10:
+       role: osd
+       no-of-volumes: 3
+       disk-size: 30
+     node11:
+       role: osd
+       no-of-volumes: 3
+       disk-size: 30
+     node12:
+       role: mds
+     node13:
+       role: osd
+       no-of-volumes: 3
+       disk-size: 30
+     cloud-data: conf/cloud-data.yaml
