@@ -42,6 +42,7 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--insecure-registry]
         [--post-results]
         [--report-portal]
+        [--log-level <LEVEL>]
 
 
 Options:
@@ -75,6 +76,7 @@ Options:
   --post-results                    Post results to polarion, needs Polarion IDs
                                     in test suite yamls. Requires config file, see README.
   --report-portal                   Post results to report portal. Requires config file, see README.
+  --log-level <LEVEL>                       Set logging level
 """
 log = logging.getLogger(__name__)
 root = logging.getLogger()
@@ -184,8 +186,11 @@ def run(args):
     skip_setup = args.get('--skip-cluster', False)
     cleanup_name = args.get('--cleanup', None)
     post_to_report_portal = args.get('--report-portal', False)
+    console_log_level = args.get('--log-level', 'ERROR').upper()
     suites_path = os.path.abspath(suite_file)
     conf_path = os.path.abspath(glb_file)
+
+    ch.setLevel(logging.getLevelName(console_log_level))
 
     with open(conf_path, 'r') as conf_stream:
         conf = yaml.safe_load(conf_stream)
