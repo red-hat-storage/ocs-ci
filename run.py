@@ -76,7 +76,7 @@ Options:
   --post-results                    Post results to polarion, needs Polarion IDs
                                     in test suite yamls. Requires config file, see README.
   --report-portal                   Post results to report portal. Requires config file, see README.
-  --log-level <LEVEL>                       Set logging level
+  --log-level <LEVEL>               Set logging level
 """
 log = logging.getLogger(__name__)
 root = logging.getLogger()

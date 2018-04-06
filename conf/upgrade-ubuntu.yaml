@@ -2,7 +2,7 @@ globals:
   - ceph-cluster:
      name: ceph
      create: true
-     image-name: rhel-7.4-server-x86_64-released
+     image-name: xenial-latest
      vm-size: m1.medium
      node1:
        role: mon
@@ -30,4 +30,4 @@ globals:
        role: rgw
      node10:
        role: client
-     cloud-data: conf/cloud-data.yaml
+     cloud-data: conf/cloud-data-xenial.yaml
