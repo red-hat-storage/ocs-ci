@@ -186,11 +186,12 @@ def run(args):
     skip_setup = args.get('--skip-cluster', False)
     cleanup_name = args.get('--cleanup', None)
     post_to_report_portal = args.get('--report-portal', False)
-    console_log_level = args.get('--log-level', 'ERROR').upper()
+    console_log_level = args.get('--log-level')
     suites_path = os.path.abspath(suite_file)
     conf_path = os.path.abspath(glb_file)
 
-    ch.setLevel(logging.getLevelName(console_log_level))
+    if console_log_level:
+        ch.setLevel(logging.getLevelName(console_log_level.upper()))
 
     with open(conf_path, 'r') as conf_stream:
         conf = yaml.safe_load(conf_stream)
