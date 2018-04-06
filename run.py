@@ -35,6 +35,7 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--store]
         [--reuse <file>]
         [--skip-cluster]
+        [--skip-subscription]
         [--docker-registry <registry>]
         [--docker-image <image>]
         [--docker-tag <tag>]
@@ -69,6 +70,7 @@ Options:
   --store                           store the current vm state for reuse
   --reuse <file>                    use the stored vm state for rerun
   --skip-cluster                    skip cluster creation from ansible/ceph-deploy
+  --skip-subscription               skip subscription manager if using beta rhel images
   --docker-registry <registry>      Docker registry, deafult value is taken from ansible config
   --docker-image <image>            Docker image, deafult value is taken from ansible config
   --docker-tag <tag>                Docker tag, default value is 'latest'
@@ -185,6 +187,7 @@ def run(args):
     post_results = args.get('--post-results')
     use_cdn = args.get('--use-cdn', False)
     skip_setup = args.get('--skip-cluster', False)
+    skip_subscription = args.get('--skip-subscription', False)
     cleanup_name = args.get('--cleanup', None)
     post_to_report_portal = args.get('--report-portal', False)
     console_log_level = args.get('--log-level')
@@ -388,6 +391,8 @@ def run(args):
                 config['use_cdn'] = use_cdn
             if skip_setup is True:
                 config['skip_setup'] = True
+            if skip_subscription is True:
+                config['skip_subscription'] = True
             if args.get('--add-repo'):
                 repo = args.get('--add-repo')
                 if repo.startswith('http'):
