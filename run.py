@@ -273,7 +273,7 @@ def run(args):
             m = re.search(r'ceph\nVersion: (.*)', ubuntu_pkgs.text)
             ceph_version.append(m.group(1))
             m = re.search(r'ceph-ansible\nVersion: (.*)', ubuntu_pkgs.text)
-            ceph_ansible_version = ceph_ansible_version.append(m.group(1))
+            ceph_ansible_version.append(m.group(1))
 
     distro = ', '.join(list(set(distro)))
     ceph_version = ', '.join(list(set(ceph_version)))
