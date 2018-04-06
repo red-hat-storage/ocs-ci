@@ -288,10 +288,10 @@ def run(args):
     log.info("Testing Ceph Ansible Version: " + ceph_ansible_version)
 
     service = None
+    suite_name = os.path.basename(suite_file).split(".")[0]
     if post_to_report_portal:
         log.info("Creating report portal session")
         service = create_report_portal_session()
-        suite_name = os.path.basename(suite_file).split(".")[0]
         launch_name = "{suite_name} ({distro})".format(suite_name=suite_name, distro=distro)
         launch_desc = textwrap.dedent(
             """
@@ -346,6 +346,11 @@ def run(args):
         tc['file'] = test.get('module')
         tc['polarion-id'] = test.get('polarion-id')
         tc['rhbuild'] = rhbuild
+        tc['ceph-version'] = ceph_version
+        tc['ceph-ansible-version'] = ceph_ansible_version
+        tc['compose-id'] = compose_id
+        tc['distro'] = distro
+        tc['suite-name'] = suite_name
         test_file = tc['file']
         unique_test_name = create_unique_test_name(tc['name'], test_names)
         test_names.append(unique_test_name)

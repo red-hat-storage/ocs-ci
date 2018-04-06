@@ -35,9 +35,12 @@ def post_to_polarion(tc):
         # add polarion attributes
         ids = tc['polarion-id'].split(',')
         tc['space'] = 'Smoke Suite'
-        build = tc['rhbuild'].replace('.', "_")
-        tc['test_run_id'] = build + "_Automated_Smoke_Runs"
+        version = tc['ceph-version'].replace('.', '_')
+        tc['test_run_id'] = version + "_" \
+            + tc['suite-name'] + "_" + tc['distro'] + "_Automated_Smoke_Runs"
         log.info("Updating test run: %s " % tc['test_run_id'])
+        tc['ceph-build'] = tc['ceph-version'] + "_" \
+            + tc['ceph-ansible-version'] + "_" + tc['compose-id']
         tc['test_case_title'] = tc['desc']
         if tc['desc'] is None:
             log.info("cannot update polarion with no description")
