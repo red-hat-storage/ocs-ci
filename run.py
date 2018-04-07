@@ -490,6 +490,8 @@ def create_run_dir(run_id):
     """
     dir_name = "cephci-run-{run_id}".format(run_id=run_id)
     base_dir = "/ceph/cephci-jenkins"
+    if not os.path.isdir(base_dir):
+        base_dir = "/tmp"
     run_dir = os.path.join(base_dir, dir_name)
     try:
         os.makedirs(run_dir)
