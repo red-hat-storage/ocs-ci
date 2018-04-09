@@ -286,6 +286,17 @@ def setup_deb_repos(node, ubuntu_repo):
     node.exec_command(cmd='sudo apt-get update')
 
 
+def setup_deb_cdn_repo(node, build=None):
+    user = 'redhat'
+    passwd = 'OgYZNpkj6jZAIF20XFZW0gnnwYBjYcmt7PeY76bLHec9'
+    num = build.split('.')[0]
+    cmd = 'umask 0077; echo deb https://{user}:{passwd}@rhcs.download.redhat.com/{num}-updates/Tools ' \
+          '$(lsb_release -sc) main | tee /etc/apt/sources.list.d/Tools.list'.format(user=user, passwd=passwd, num=num)
+    node.exec_command(sudo=True, cmd=cmd)
+    node.exec_command(sudo=True, cmd='wget -O - https://www.redhat.com/security/fd431d51.txt | apt-key add -')
+    node.exec_command(sudo=True, cmd='apt-get update')
+
+
 def setup_cdn_repos(ceph_nodes, build=None):
     repos_13x = ['rhel-7-server-rhceph-1.3-mon-rpms',
                  'rhel-7-server-rhceph-1.3-osd-rpms',
