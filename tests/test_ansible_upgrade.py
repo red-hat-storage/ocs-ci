@@ -102,6 +102,11 @@ def run(**kw):
         cmd='cd {} ; ansible-playbook -e ireallymeanit=yes -vv -i hosts rolling_update.yml'.format(ansible_dir),
         long_running=True)
 
+    # set build to new version
+    if config.get('build'):
+        log.info("Setting rhbuild to {build}".format(build=config['build']))
+        test_data['ceph-ansible']['rhbuild'] = config['build']
+
     # check if all mon's and osd's are in correct state
     num_osds = test_data['ceph-ansible']['num-osds']
     num_mons = test_data['ceph-ansible']['num-mons']

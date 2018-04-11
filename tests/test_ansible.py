@@ -5,7 +5,7 @@ from time import sleep
 import yaml
 
 from ceph.utils import setup_deb_repos, get_iso_file_url, setup_cdn_repos, write_docker_daemon_json, \
-    search_ethernet_interface, open_firewall_port
+    search_ethernet_interface, open_firewall_port, setup_deb_cdn_repo
 from ceph.utils import setup_repos, check_ceph_healthly
 
 logger = logging.getLogger(__name__)
@@ -114,8 +114,13 @@ def run(**kw):
                 ceph.exec_command(sudo=True, cmd='mkdir -p {}/iso'.format(ansible_dir))
                 ceph.exec_command(sudo=True, cmd='wget -O {}/iso/ceph.iso {}'.format(ansible_dir, iso_file_url))
         else:
-            log.info("Using the cdn repo for the test")
-            setup_cdn_repos(ceph_nodes, build=config.get('build'))
+            if ceph.pkg_type == 'deb':
+                if ceph.role == 'installer':
+                    log.info("Enabling tools repository")
+                    setup_deb_cdn_repo(ceph, config.get('build'))
+            else:
+                log.info("Using the cdn repo for the test")
+                setup_cdn_repos(ceph_nodes, build=config.get('build'))
         log.info("Updating metadata")
         sleep(15)
     if ceph_installer.pkg_type == 'deb':
@@ -230,7 +235,7 @@ def run(**kw):
     if ceph_installer.pkg_type == 'rpm':
         out, rc = ceph_installer.exec_command(cmd='rpm -qa | grep ceph')
     else:
-        out, rc = ceph_installer.exec_command(cmd='apt-cache search ceph')
+        out, rc = ceph_installer.exec_command(sudo=True, cmd='apt-cache search ceph')
     log.info("Ceph versions " + out.read())
     out, rc = ceph_installer.exec_command(
         cmd='cd {} ; ansible-playbook -vv -i hosts site.yml'.format(ansible_dir), long_running=True)
