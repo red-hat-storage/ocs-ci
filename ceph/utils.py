@@ -191,9 +191,11 @@ def check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container=None, timeou
         else:
             out, err = ceph_mon.exec_command(cmd='sudo ceph -s')
         lines = out.read()
-        if 'peering' not in lines and 'activating' not in lines and \
-                'creating' not in lines:
-            break
+        pending_states = ['peering', 'activating', 'creating']
+        valid_states = ['active+clean']
+        if not any(state in lines for state in pending_states):
+            if all(state in lines for state in valid_states):
+                break
         sleep(1)
     log.info(lines)
     match = re.search(r"(\d+)\s+osds:\s+(\d+)\s+up,\s+(\d+)\s+in", lines)
