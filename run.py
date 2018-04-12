@@ -35,7 +35,6 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--store]
         [--reuse <file>]
         [--skip-cluster]
-        [--cleanup <name>]
         [--docker-registry <registry>]
         [--docker-image <image>]
         [--docker-tag <tag>]
@@ -43,7 +42,9 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--post-results]
         [--report-portal]
         [--log-level <LEVEL>]
-
+        [--instances-name <name>]
+  run.py --cleanup=name [--osp-cred <file>]
+        [--log-level <LEVEL>]
 
 Options:
   -h --help                         show this screen
@@ -64,8 +65,6 @@ Options:
   --add-repo <repo>                 Any additional repo's need to be enabled
   --ubuntu-repo <repo>              http location of downstream ubuntu repo
   --kernel-repo <repo>              Zstream Kernel Repo location
-  --cleanup <name>                  cleanup nodes on OSP with names that start
-                                    with 'name' , returns after node cleanup
   --store                           store the current vm state for reuse
   --reuse <file>                    use the stored vm state for rerun
   --skip-cluster                    skip cluster creation from ansible/ceph-deploy
@@ -77,6 +76,7 @@ Options:
                                     in test suite yamls. Requires config file, see README.
   --report-portal                   Post results to report portal. Requires config file, see README.
   --log-level <LEVEL>               Set logging level
+  --instances-name <name>           Name that will be used for instances creation
 """
 log = logging.getLogger(__name__)
 root = logging.getLogger()
@@ -99,7 +99,7 @@ root.addHandler(handler)
 test_names = []
 
 
-def create_nodes(conf, osp_cred, report_portal_session=None):
+def create_nodes(conf, osp_cred, report_portal_session=None, instances_name=None):
     if report_portal_session:
         name = create_unique_test_name("ceph node creation", test_names)
         test_names.append(name)
@@ -109,12 +109,11 @@ def create_nodes(conf, osp_cred, report_portal_session=None):
                                               start_time=timestamp(),
                                               item_type="STEP")
     log.info("Destroying existing osp instances")
-    for cluster in conf.get('globals'):
-        cleanup_ceph_nodes(osp_cred)
+    cleanup_ceph_nodes(osp_cred, instances_name)
     ceph_cluster_dict = {}
     log.info('Creating osp instances')
     for cluster in conf.get('globals'):
-        ceph_vmnodes = create_ceph_nodes(cluster, osp_cred)
+        ceph_vmnodes = create_ceph_nodes(cluster, osp_cred, instances_name)
         ceph_nodes = []
         for node_key in ceph_vmnodes.iterkeys():
             node = ceph_vmnodes[node_key]
@@ -187,18 +186,26 @@ def run(args):
     cleanup_name = args.get('--cleanup', None)
     post_to_report_portal = args.get('--report-portal', False)
     console_log_level = args.get('--log-level')
-    suites_path = os.path.abspath(suite_file)
-    conf_path = os.path.abspath(glb_file)
+    instances_name = args.get('--instances-name')
 
     if console_log_level:
         ch.setLevel(logging.getLevelName(console_log_level.upper()))
 
-    with open(conf_path, 'r') as conf_stream:
-        conf = yaml.safe_load(conf_stream)
-    with open(suites_path, 'r') as suite_stream:
-        suite = yaml.safe_load(suite_stream)
-    with open(osp_cred_file, 'r') as osp_cred_stream:
-        osp_cred = yaml.safe_load(osp_cred_stream)
+    if glb_file:
+        conf_path = os.path.abspath(glb_file)
+        with open(conf_path, 'r') as conf_stream:
+            conf = yaml.safe_load(conf_stream)
+    if suite_file:
+        suites_path = os.path.abspath(suite_file)
+        with open(suites_path, 'r') as suite_stream:
+            suite = yaml.safe_load(suite_stream)
+    if osp_cred_file:
+        with open(osp_cred_file, 'r') as osp_cred_stream:
+            osp_cred = yaml.safe_load(osp_cred_stream)
+
+    if cleanup_name is not None:
+        cleanup_ceph_nodes(osp_cred, cleanup_name)
+        return 0
 
     compose_id = None
     if rhbuild.startswith('2'):
@@ -303,11 +310,8 @@ def run(args):
                        compose_id=compose_id))
         service.start_launch(name=launch_name, start_time=timestamp(), description=launch_desc)
 
-    if cleanup_name is not None:
-        cleanup_ceph_nodes(osp_cred, cleanup_name)
-        return 0
     if reuse is None:
-        ceph_cluster_dict = create_nodes(conf, osp_cred, service)
+        ceph_cluster_dict = create_nodes(conf, osp_cred, service, instances_name)
     else:
         ceph_store_nodes = open(reuse, 'rb')
         ceph_cluster_dict = pickle.load(ceph_store_nodes)
@@ -432,7 +436,7 @@ def run(args):
         if test.get('destroy-cluster') is True:
             cleanup_ceph_nodes(osp_cred)
         if test.get('recreate-cluster') is True:
-            ceph_nodes = create_nodes(conf, osp_cred)
+            ceph_nodes = create_nodes(conf, osp_cred, instances_name)
         tcs.append(tc)
     close_and_remove_filehandlers()
     if post_to_report_portal:

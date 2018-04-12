@@ -17,7 +17,7 @@ from parallel import parallel
 log = logging.getLogger(__name__)
 
 
-def create_ceph_nodes(cluster_conf, osp_cred):
+def create_ceph_nodes(cluster_conf, osp_cred, instances_name=None):
     osp_glbs = osp_cred.get('globals')
     os_cred = osp_glbs.get('openstack-credentials')
     params = dict()
@@ -53,8 +53,12 @@ def create_ceph_nodes(cluster_conf, osp_cred):
                     log.info("Using existing run name")
                 else:
                     params['run'] = run_name
-                params['node-name'] = params.get('cluster-name', 'ceph') + '-' + user + '-' + params[
-                    'run'] + node + '-' + '+'.join(role)
+                if instances_name:
+                    params['node-name'] = params.get('cluster-name', 'ceph') + '-' + instances_name + '-' + params[
+                        'run'] + node + '-' + '+'.join(role)
+                else:
+                    params['node-name'] = params.get('cluster-name', 'ceph') + '-' + user + '-' + params[
+                        'run'] + node + '-' + '+'.join(role)
                 if role == 'osd':
                     params['no-of-volumes'] = node_dict.get('no-of-volumes')
                     params['size-of-disks'] = node_dict.get('disk-size')
