@@ -39,8 +39,7 @@ def post_to_polarion(tc):
         tc['test_run_id'] = version + "_" \
             + tc['suite-name'] + "_" + tc['distro'] + "_Automated_Smoke_Runs"
         log.info("Updating test run: %s " % tc['test_run_id'])
-        tc['ceph-build'] = tc['ceph-version'] + "_" \
-            + tc['ceph-ansible-version'] + "_" + tc['compose-id']
+        tc['ceph-build'] = '_'.join(filter(None, [tc['ceph-version'], tc['ceph-ansible-version'], tc['compose-id']]))
         tc['test_case_title'] = tc['desc']
         if tc['desc'] is None:
             log.info("cannot update polarion with no description")
