@@ -185,28 +185,33 @@ def check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container=None, timeou
     timeout = datetime.timedelta(seconds=timeout)
     starttime = datetime.datetime.now()
     lines = None
+    pending_states = ['peering', 'activating', 'creating']
+    valid_states = ['active+clean']
+
     while datetime.datetime.now() - starttime <= timeout:
         if mon_container:
             out, err = ceph_mon.exec_command(cmd='sudo docker exec {container} ceph -s'.format(container=mon_container))
         else:
             out, err = ceph_mon.exec_command(cmd='sudo ceph -s')
         lines = out.read()
-        pending_states = ['peering', 'activating', 'creating']
-        valid_states = ['active+clean']
+
         if not any(state in lines for state in pending_states):
             if all(state in lines for state in valid_states):
                 break
-        sleep(1)
+        sleep(5)
     log.info(lines)
+    if not all(state in lines for state in valid_states):
+        log.error("Valid States are not found in the health check")
+        return 1
     match = re.search(r"(\d+)\s+osds:\s+(\d+)\s+up,\s+(\d+)\s+in", lines)
     all_osds = int(match.group(1))
     up_osds = int(match.group(2))
     in_osds = int(match.group(3))
     if num_osds != all_osds:
-        log.info("Not all osd's are up. %s / %s" % (num_osds, all_osds))
+        log.error("Not all osd's are up. %s / %s" % (num_osds, all_osds))
         return 1
     if up_osds != in_osds:
-        log.info("Not all osd's are in. %s / %s" % (up_osds, all_osds))
+        log.error("Not all osd's are in. %s / %s" % (up_osds, all_osds))
         return 1
 
     # attempt luminous pattern first, if it returns none attempt jewel pattern
@@ -215,10 +220,10 @@ def check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container=None, timeou
         match = re.search(r"(\d+) mons at", lines)
     all_mons = int(match.group(1))
     if all_mons != num_mons:
-        log.info("Not all monitors are in cluster")
+        log.error("Not all monitors are in cluster")
         return 1
     if "HEALTH_ERR" in lines:
-        log.info("HEALTH in ERROR STATE")
+        log.error("HEALTH in ERROR STATE")
         return 1
     return 0
 
