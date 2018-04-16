@@ -94,7 +94,15 @@ def run(**kw):
         ceph.exec_command(cmd='chmod 400 ~/.ssh/config')
 
     for ceph in ceph_nodes:
-        if not config.get('use_cdn', False):
+        if config.get('use_cdn'):
+            if ceph.pkg_type == 'deb':
+                if ceph.role == 'installer':
+                    log.info("Enabling tools repository")
+                    setup_deb_cdn_repo(ceph, config.get('build'))
+            else:
+                log.info("Using the cdn repo for the test")
+                setup_cdn_repos(ceph_nodes, build=config.get('build'))
+        else:
             if config['ansi_config'].get('ceph_repository_type') != 'iso' or \
                     config['ansi_config'].get('ceph_repository_type') == 'iso' and \
                     (ceph.role == 'installer'):
@@ -113,14 +121,6 @@ def run(**kw):
                 iso_file_url = get_iso_file_url(base_url)
                 ceph.exec_command(sudo=True, cmd='mkdir -p {}/iso'.format(ansible_dir))
                 ceph.exec_command(sudo=True, cmd='wget -O {}/iso/ceph.iso {}'.format(ansible_dir, iso_file_url))
-        else:
-            if ceph.pkg_type == 'deb':
-                if ceph.role == 'installer':
-                    log.info("Enabling tools repository")
-                    setup_deb_cdn_repo(ceph, config.get('build'))
-            else:
-                log.info("Using the cdn repo for the test")
-                setup_cdn_repos(ceph_nodes, build=config.get('build'))
         log.info("Updating metadata")
         sleep(15)
     if ceph_installer.pkg_type == 'deb':

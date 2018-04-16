@@ -2,7 +2,7 @@ import logging
 
 import yaml
 
-from ceph.utils import setup_deb_repos
+from ceph.utils import setup_deb_repos, setup_cdn_repos, setup_deb_cdn_repo
 from ceph.utils import setup_repos, check_ceph_healthly
 
 log = logging.getLogger(__name__)
@@ -38,12 +38,20 @@ def run(**kw):
             ceph_mon = node
 
     for ceph in ceph_nodes:
-        # setup latest repo's
-        if ceph.pkg_type == 'deb':
-            setup_deb_repos(ceph, ubuntu_repo)
-        else:
-            setup_repos(ceph, base_url, installer_url)
+        if config.get('use_cdn'):
             log.info("Using the cdn repo for the test")
+            if ceph.pkg_type == 'deb':
+                if ceph.role == 'installer':
+                    setup_deb_cdn_repo(ceph, config.get('build'))
+            else:
+                setup_cdn_repos(ceph_nodes, build=config.get('build'))
+        else:
+            log.info("Using nightly repos for the test")
+            if ceph.pkg_type == 'deb':
+                setup_deb_repos(ceph, ubuntu_repo)
+            else:
+                setup_repos(ceph, base_url, installer_url)
+
         log.info("Updating metadata")
         if ceph.pkg_type == 'rpm':
             ceph.exec_command(sudo=True, cmd='yum update metadata')

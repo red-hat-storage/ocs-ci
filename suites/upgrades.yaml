@@ -5,11 +5,11 @@ tests:
        abort-on-fail: True
 
    - test:
-      name: ceph ansible install 2.x
+      name: ceph ansible install rhcs 2 stable
       module: test_ansible.py
       config:
         use_cdn: True
-        build: '2.x'
+        build: '2.0'
         ansi_config:
             ceph_test: True
             ceph_rhcs: True
@@ -34,18 +34,16 @@ tests:
       destroy-cluster: False
       abort-on-fail: True
    - test:
-       name: upgrade to 3.x
+       name: ceph ansible upgrade to rhcs 3 nightly
        polarion-id: CEPH-83571475
        module: test_ansible_upgrade.py
        destroy-cluster: True
        config:
-          use_cdn: True
           build: '3.x'
           ansi_config:
             ceph_test: True
             ceph_origin: distro
             ceph_repository: rhcs
-            ceph_repository_type: cdn
             ceph_rhcs_version: 3
             ceph_stable_release: luminous
             ceph_repository: rhcs
@@ -110,11 +108,11 @@ tests:
       abort-on-fail: True
 
    - test:
-      name: ceph ansible install 2.x
+      name: ceph ansible install rhcs 2 stable
       module: test_ansible.py
       config:
         use_cdn: True
-        build: '2.x'
+        build: '2.0'
         ansi_config:
             ceph_test: True
             ceph_rhcs: True
@@ -139,7 +137,7 @@ tests:
       destroy-cluster: False
       abort-on-fail: True
    - test:
-       name: upgrade to 3.0
+       name: ceph ansible upgrade to rhcs 3 stable
        module: test_ansible_upgrade.py
        destroy-cluster: True
        config:
@@ -171,7 +169,7 @@ tests:
        destroy-cluster: False
        abort-on-fail: True
    - test:
-       name: upgrade to latest
+       name: ceph ansible upgrade to rhcs 3 nightly
        polarion-id: CEPH-83571476
        module: test_ansible_upgrade.py
        config:
@@ -226,7 +224,7 @@ tests:
       abort-on-fail: True
 
    - test:
-      name: ceph ansible install 3.0
+      name: ceph ansible install rhcs 3 stable
       module: test_ansible.py
       config:
         use_cdn: True
@@ -257,7 +255,7 @@ tests:
       destroy-cluster: False
       abort-on-fail: True
    - test:
-       name: upgrade to latest
+       name: ceph ansible upgrade to rhcs 3 nightly
        polarion-id: CEPH-83571477
        module: test_ansible_upgrade.py
        config:
