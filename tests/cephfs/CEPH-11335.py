@@ -279,14 +279,40 @@ def run(**kw):
                     "Configure blacklisting for auto evict failed")
         else:
             raise CommandFailed("Configure blacklisting for auto evict failed")
+
+        if client3[0].pkg_type == 'deb' and client4[0].pkg_type == 'deb':
+            for client in client_info['fuse_clients']:
+                client.exec_command(
+                    cmd='sudo rm -rf %s*' %
+                    (client_info['mounting_dir']))
+                client.exec_command(
+                    cmd='sudo fusermount -u %s -z' %
+                        (client_info['mounting_dir']))
+                client.exec_command(
+                    cmd='sudo rm -rf %s' %
+                        (client_info['mounting_dir']))
+        else:
+            for client in client_info['fuse_clients']:
+                client.exec_command(
+                    cmd='sudo fusermount -u %s -z' %
+                        (client_info['mounting_dir']))
+                client.exec_command(
+                    cmd='sudo rm -rf %s' %
+                        (client_info['mounting_dir']))
+
+            for client in client_info['kernel_clients']:
+                client.exec_command(
+                    cmd='sudo umount %s -l' %
+                        (client_info['mounting_dir']))
+                client.exec_command(
+                    cmd='sudo rm -rf %s' %
+                        (client_info['mounting_dir']))
         print 'Script execution time:------'
         stop = timeit.default_timer()
         total_time = stop - start
         mins, secs = divmod(total_time, 60)
         hours, mins = divmod(mins, 60)
-
         print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
-
         return 0
 
     except CommandFailed as e:
