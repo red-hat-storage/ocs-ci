@@ -43,6 +43,7 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--report-portal]
         [--log-level <LEVEL>]
         [--instances-name <name>]
+        [--osp-image <image>]
   run.py --cleanup=name [--osp-cred <file>]
         [--log-level <LEVEL>]
 
@@ -77,6 +78,7 @@ Options:
   --report-portal                   Post results to report portal. Requires config file, see README.
   --log-level <LEVEL>               Set logging level
   --instances-name <name>           Name that will be used for instances creation
+  --osp-image <image>               Image for osp instances, default value is taken from conf file
 """
 log = logging.getLogger(__name__)
 root = logging.getLogger()
@@ -187,6 +189,7 @@ def run(args):
     post_to_report_portal = args.get('--report-portal', False)
     console_log_level = args.get('--log-level')
     instances_name = args.get('--instances-name')
+    osp_image = args.get('--osp-image')
 
     if console_log_level:
         ch.setLevel(logging.getLevelName(console_log_level.upper()))
@@ -206,6 +209,8 @@ def run(args):
     if cleanup_name is not None:
         cleanup_ceph_nodes(osp_cred, cleanup_name)
         return 0
+
+    [cluster['ceph-cluster'].update({'image-name': osp_image}) for cluster in conf.get('globals') if osp_image]
 
     compose_id = None
     if rhbuild.startswith('2'):
