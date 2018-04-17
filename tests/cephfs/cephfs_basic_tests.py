@@ -90,9 +90,8 @@ def run(**kw):
             log.info('Execution of testcase %s started' % tc1)
             out, rc = node.exec_command(
                 cmd='sudo crefi %s%s --fop create --multi -b 1000 -d 1000 '
-                    '-n 100 -T 10 --random --min=1K --max=10K' %
+                    '-n 1 -T 5 --random --min=1K --max=10K' %
                 (client_info['mounting_dir'], dir1), long_running=True)
-            print out.read()
             log.info('Execution of testcase %s ended' % tc1)
             if node.exit_status == 0:
                 results.append("TC %s passed" % tc1)
@@ -115,7 +114,6 @@ def run(**kw):
                 cmd='sudo mv  %s%s/* %s%s/' %
                 (client_info['mounting_dir'], dir1,
                  client_info['mounting_dir'], dir3))
-            print out.read()
             log.info('Execution of testcase %s ended' % tc3)
             if node.exit_status == 0:
                 results.append("TC %s passed" % tc3)
