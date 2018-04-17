@@ -98,9 +98,10 @@ def run(**kw):
     # copy rolling update from infrastructure playbook
     ceph_installer.exec_command(
         sudo=True, cmd='cd {} ; cp infrastructure-playbooks/rolling_update.yml .'.format(ansible_dir))
-    out, rc = ceph_installer.exec_command(
-        cmd='cd {} ; ANSIBLE_STDOUT_CALLBACK=debug; ansible-playbook -e ireallymeanit=yes -vv -i hosts rolling_update.yml'.format(ansible_dir),
-        long_running=True)
+    cmd = 'cd {};' \
+          'ANSIBLE_STDOUT_CALLBACK=debug;' \
+          'ansible-playbook -e ireallymeanit=yes -vv -i hosts rolling_update.yml'.format(ansible_dir)
+    out, rc = ceph_installer.exec_command(cmd=cmd, long_running=True)
 
     # check if all mon's and osd's are in correct state
     num_osds = test_data['ceph-ansible']['num-osds']
