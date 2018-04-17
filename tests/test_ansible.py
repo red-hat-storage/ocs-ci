@@ -238,7 +238,8 @@ def run(**kw):
         out, rc = ceph_installer.exec_command(sudo=True, cmd='apt-cache search ceph')
     log.info("Ceph versions " + out.read())
     out, rc = ceph_installer.exec_command(
-        cmd='cd {} ; ansible-playbook -vv -i hosts site.yml'.format(ansible_dir), long_running=True)
+        cmd='cd {} ; ANSIBLE_STDOUT_CALLBACK=debug; ansible-playbook -vv -i hosts site.yml'.format(ansible_dir),
+        long_running=True)
 
     if rc != 0:
         log.error("Failed during deployment")
