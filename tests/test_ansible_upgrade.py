@@ -84,17 +84,10 @@ def run(**kw):
 
         log.info(mgr_block)
 
-        # If a major version upgrade, ignore all.yml backup
-        gvar = yaml.dump(config.get('ansi_config'), default_flow_style=False)
+    gvar = yaml.dump(config.get('ansi_config'), default_flow_style=False)
 
-    else:  # Pull all.yml backup if not a major version upgrade
-        all_yml = ceph_installer.write_file(file_name='/tmp/all.yml', file_mode='r')
-        ansi_config = yaml.load(all_yml)
-        # with open('/tmp/all.yml', 'r') as stream:
-        #     ansi_config = yaml.load(stream)
-        for key, value in config.get('ansi_config').iteritems():
-            ansi_config[key] = value
-        gvar = yaml.dump(ansi_config, default_flow_style=False)
+    host_file = ceph_installer.write_file(sudo=True, file_name='{}/hosts'.format(ansible_dir), file_mode='a')
+    log.info("Hosts file {}".format(host_file))
 
     # Create all.yml
     log.info("global vars {}".format(gvar))
