@@ -28,54 +28,54 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
-                  debug mon: 20
+                  debug mon: 5
                 mds:
                   mds_bal_split_size: 100
                   mds_bal_merge_size: 5
                   mds_bal_fragment_size_max: 10000
-                  debug mds: 20
+                  debug mds: 5
 
       desc: test cluster setup using ceph-ansible
       destroy-cluster: False
       abort-on-fail: true
    - test:
-       name: multiple clients read/writing io
+       name: multi-client-rw-io
        module: CEPH-10528_10529.py
        polarion-id: CEPH-10528,CEPH-10529
-       desc: Testing Single CephFS on multiple clients,performing IOs and checking file locking mechanism
+       desc: Single CephFS on multiple clients,performing IOs and checking file locking mechanism
        abort-on-fail: false
    - test:
-       name: cephfs_mds_failover
+       name: cephfs-mds-failover
        module: CEPH-11228.py
        config:
              num_of_dirs: 1000
        polarion-id: CEPH-11228
-       desc: Testing MDSfailover on active-active mdss,performing client IOs with max:min directory pinning with 2 active mdss
+       desc: MDSfailover on active-active mdss,performing client IOs with max:min directory pinning with 2 active mdss
        abort-on-fail: false
    - test:
-       name: cephfs_mds_failover
+       name: cephfs-mds-failover
        module: CEPH-11229.py
        config:
              num_of_dirs: 1000
        polarion-id: CEPH-11229
-       desc: Testing MDSfailover on active-active mdss,performing client IOs with 10:2 directory pinning with 2 active mdss
+       desc: MDSfailover on active-active mdss,performing client IOs with 10:2 directory pinning with 2 active mdss
        abort-on-fail: false
    - test:
-       name: cephfs_mds_failover
+       name: cephfs-mds-failover
        module: CEPH-11230.py
        config:
              num_of_dirs: 1000
        polarion-id: CEPH-11230
-       desc: Testing MDSfailover on active-active mdss,performing client IOs with equal directory pinning with 2 active mdss
+       desc: MDSfailover on active-active mdss,performing client IOs with equal directory pinning with 2 active mdss
        abort-on-fail: false
    - test:
-       name: cephfs_mds_failover
+       name: cephfs-split-merge
        module: CEPH-11232_11233.py
-       polarion-id: CEPH-11232,11233
-       desc: Testing MDSfailover on active-active mdss,performing client IOs with equal directory pinning with 2 active mdss
+       polarion-id: CEPH-11232,CEPH-11233
+       desc: Performing stress IOs to check split and merge functions of mds
        abort-on-fail: false
    - test:
-       name: cephfs_mds_failover
+       name: mdsfailover-fs-utilites
        module: CEPH-11242.py
        config:
              num_of_dirs: 1000
@@ -83,43 +83,38 @@ tests:
        desc: Testing fs utilites along with mds failover on active-active mdss
        abort-on-fail: false
    - test:
-       name: cephfs_mds_failover
+       name: read-write-del-ops
        module: CEPH-11219.py
        polarion-id: CEPH-11219
        desc: Mount CephFS on multiple clients perform read and write operation on same file from different clients and perform delete ops
        abort-on-fail: false
    - test:
-       name: cephfs_io
+       name: cephfs-io
        module: CEPH-11220.py
        polarion-id: CEPH-11220
        desc: Mount CephFS on multiple clients, On same directory perform write from some clients and do read that data from some clients
        abort-on-fail: false
+
    - test:
-       name: cephfs_io
-       module: CEPH-11222.py
-       polarion-id: CEPH-11222
-       desc: Mount CephFS on multiple clients and run Stress IO from all clients on different directories,renaming a directory
-       abort-on-fail: false
-   - test:
-       name: cephfs_rsync
+       name: cephfs-rsync
        module: CEPH-11298.py
        polarion-id: CEPH-11298
        desc: Mount CephFS on multiple clients and rsync files and directories to outside the filesystem and vice-versa
        abort-on-fail: false
    - test:
-       name: cephfs_file_layouts
+       name: cephfs-filelayouts
        module: CEPH-11334.py
        polarion-id: CEPH-11334
        desc: Mount CephFS on multiple clients and perform file layout operations
        abort-on-fail: false
    - test:
-       name: cephfs_basics
+       name: cephfs-basics
        module: cephfs_basic_tests.py
        polarion-id: CEPH-11293,CEPH-11296,CEPH-11297,CEPH-11295
-       desc: Mount CephFS on multiple clients, On same directory perform write from some clients and do read that data from some clients
+       desc: cephfs basic operations
        abort-on-fail: false
    - test:
-       name: cephfs_file_layouts
+       name: client-eviction
        module: CEPH-11335.py
        polarion-id: CEPH-11335
        desc: Mount CephFS on multiple clients and perform client eviction
