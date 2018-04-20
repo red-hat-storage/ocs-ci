@@ -257,8 +257,6 @@ def run(**kw):
     timeout = 300
     if config.get('timeout'):
         timeout = datetime.timedelta(seconds=config.get('timeout'))
-    if check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container, timeout) != 0:
-        return 1
     # add test_data for later use by upgrade test etc
     test_data['ceph-ansible'] = {'num-osds': num_osds, 'num-mons': num_mons, 'rhbuild': build}
 
@@ -273,4 +271,6 @@ def run(**kw):
         else:
             ceph_mon.exec_command(sudo=True, cmd='ceph osd pool create rbd 64 64')
             ceph_mon.exec_command(sudo=True, cmd='ceph osd pool application enable rbd rbd --yes-i-really-mean-it')
+    if check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container, timeout) != 0:
+        return 1
     return rc
