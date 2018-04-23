@@ -94,7 +94,18 @@ tests:
        polarion-id: CEPH-11220
        desc: Mount CephFS on multiple clients, On same directory perform write from some clients and do read that data from some clients
        abort-on-fail: false
-
+   - test:
+       name: cephfs-stressIO
+       module: CEPH-11222_11223.py
+       polarion-id: CEPH-11222,CEPH-11223
+       desc: Mount CephFS on multiple clients,
+       abort-on-fail: false
+   - test:
+       name: cephfs-basics-ios
+       module: CEPH-10625_11225.py
+       polarion-id: CEPH-10625,CEPH-11225
+       desc: Mount CephFS on multiple clients,running IOs,creating files and dirs with special chars
+       abort-on-fail: false
    - test:
        name: cephfs-rsync
        module: CEPH-11298.py
@@ -119,51 +130,4 @@ tests:
        polarion-id: CEPH-11335
        desc: Mount CephFS on multiple clients and perform client eviction
        abort-on-fail: false
-   - test:
-       name: purge cluster
-       module: purge_cluster.py
-       config:
-         ansible-dir: /usr/share/ceph-ansible
-       abort-on-fail: true
-       desc: Purge ceph cluster
-   - test:
-      name: ceph ansible
-      module: test_ansible.py
-      config:
-        ansi_config:
-            ceph_test: True
-            ceph_origin: distro
-            ceph_stable_release: luminous
-            ceph_repository: rhcs
-            osd_scenario: collocated
-            osd_auto_discovery: False
-            journal_size: 1024
-            ceph_stable: True
-            ceph_stable_rh_storage: True
-            public_network: 172.16.0.0/12
-            fetch_directory: ~/fetch
-            copy_admin_key: true
-            ceph_conf_overrides:
-                global:
-                  osd_pool_default_pg_num: 64
-                  osd_default_pool_size: 2
-                  osd_pool_default_pgp_num: 64
-                  mon_max_pg_per_osd: 1024
-                mon:
-                  mon_allow_pool_delete: true
-                  debug mon: 20
-                mds:
-                  mds_bal_split_size: 100
-                  mds_bal_merge_size: 5
-                  mds_bal_fragment_size_max: 10000
-                  debug mds: 20
 
-      desc: test cluster setup using ceph-ansible
-      destroy-cluster: False
-      abort-on-fail: true
-   - test:
-       name: cephfs_lifecycle
-       module: CEPH-11333.py
-       polarion-id: CEPH-11333
-       desc: Perfrom cephfs lifecycle operations
-       abort-on-fail: false

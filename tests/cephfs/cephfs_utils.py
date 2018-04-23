@@ -3,6 +3,8 @@ import string
 import time
 import datetime
 import logging
+import timeit
+
 import re
 from ceph.ceph import CommandFailed
 logger = logging.getLogger(__name__)
@@ -125,7 +127,8 @@ class FsUtils(object):
         for node in clients:
             log.info("Giving required permissions for clients from MON node:")
             mon_node.exec_command(
-                cmd="sudo ceph auth get-or-create client.%s mon 'allow *' mds "
+                cmd="sudo ceph auth get-or-create client.%s"
+                    " mon 'allow *' mds "
                     "'allow *, allow rw path=/' osd 'allow "
                     "rw pool=cephfs_data'"
                     " -o /etc/ceph/ceph.client.%s.keyring" %
@@ -182,11 +185,18 @@ class FsUtils(object):
                         (client.hostname))
                 secret_key = out.read().rstrip('\n')
                 mon_node_ip = mon_node_ip.replace(" ", "")
+                key_file = client.write_file(
+                    sudo=True,
+                    file_name='/etc/ceph/%s.secret' % (client.hostname),
+                    file_mode='w')
+                key_file.write(secret_key)
+                key_file.flush()
+
                 op, rc = client.exec_command(
                     cmd='sudo mount -t ceph %s:6789:/ '
-                        '%s -o name=%s,secret=%s' % (
+                        '%s -o name=%s,secretfile=/etc/ceph/%s.secret' % (
                             mon_node_ip, mounting_dir,
-                            client.hostname, secret_key))
+                            client.hostname, client.hostname))
                 out, rc = client.exec_command(cmd='mount')
                 mount_output = out.read()
                 mount_output.split()
@@ -201,7 +211,7 @@ class FsUtils(object):
 
     def read_write_IO(self, clients, mounting_dir, *args, **kwargs):
         for client in clients:
-            out, rc = client.exec_command(cmd='df -h')
+            out, rc = client.exec_command(cmd='df -h', timeout=10)
             mount_output = out.read()
             mount_output.split()
             if 'ceph-fuse' in mount_output or '%s:6789:/' % (
@@ -446,7 +456,7 @@ finally:
 
     def mkdir(self, clients, range1, range2, mounting_dir, dir_name):
         for client in clients:
-            out, rc = client.exec_command(cmd='df -h')
+            out, rc = client.exec_command(cmd='df -h', timeout=10)
             mount_output = out.read()
             mount_output.split()
             mon_node_ip = self.mon_node_ip.replace(" ", "")
@@ -454,13 +464,18 @@ finally:
                     mon_node_ip in mount_output:
                 for num in range(range1, range2):
                     log.info("Creating Directories")
-                    out, rc = client.exec_command(
-                        cmd='sudo mkdir %s%s_%d' %
-                        (mounting_dir, dir_name, num))
-                    print out.read()
-                    out, rc = client.exec_command(
-                        cmd='sudo ls %s | grep %s' %
-                        (mounting_dir, dir_name))
+                    try:
+                        out, rc = client.exec_command(
+                            cmd='sudo mkdir %s%s_%d' %
+                            (mounting_dir, dir_name, num))
+                    except Exception as e:
+                        log.error(e)
+                        pass
+                    finally:
+                        print out.read()
+                        out, rc = client.exec_command(
+                            cmd='sudo ls %s | grep %s' %
+                            (mounting_dir, dir_name))
                     self.dirs = out.read()
             break
         return self.dirs, 0
@@ -549,18 +564,33 @@ finally:
             range2,
             **kwargs):
         for client in clients:
-            out, rc = client.exec_command(cmd='df -h')
+            self.num_files = 0
+            self.file_size = 0
+            self.file_name = ''
+            out, rc = client.exec_command(cmd='df -h', timeout=10)
             mount_output = out.read()
             mount_output.split()
             mon_node_ip = self.mon_node_ip.replace(" ", "")
             if 'ceph-fuse' in mount_output or '%s:6789:/' % \
                     mon_node_ip in mount_output:
+                if 'fnum' in kwargs:
+                    self.num_files = kwargs['fnum']
+                    print self.num_files
+                if 'fsize' in kwargs:
+                    self.file_size = kwargs['fsize']
+                if 'fname' in kwargs:
+                    self.file_name = kwargs['fname']
                 for num in range(range1, range2):
                     for key, val in kwargs.iteritems():
                         if val == 'touch':
-                            out, rc = client.exec_command(
-                                cmd="sudo touch %s%s/%d.txt" %
-                                (mounting_dir, dir_name, num))
+                            if self.file_name != '':
+                                out, rc = client.exec_command(
+                                    cmd="sudo touch %s%s/%s" %
+                                    (mounting_dir, dir_name, self.file_name))
+                            else:
+                                out, rc = client.exec_command(
+                                    cmd="sudo touch %s%s/%d.txt" %
+                                        (mounting_dir, dir_name, num))
                             self.return_counts = self.io_verify(client)
                         elif val == 'fio':
                             for i in range(0, 10):
@@ -616,26 +646,62 @@ finally:
                                     long_running=True)
                                 self.return_counts = self.io_verify(client)
 
-                        elif val == 'smallfile_delete':
-                            out, rc = client.exec_command(
+                        elif val == 'smallfile_create':
+                            client.exec_command(
                                 cmd='sudo python /home/cephuser/smallfile/'
-                                    'smallfile_cli.py --operation create '
-                                    '--threads 4 --file-size 1024 --files 10 '
-                                    '--top %s%s ' %
-                                (mounting_dir, dir_name), long_running=True)
+                                'smallfile_cli.py --operation create '
+                                '--threads 4 --file-size %d --files %d'
+                                ' --top %s%s ' %
+                                (self.file_size, self.num_files, mounting_dir,
+                                 dir_name), long_running=True)
                             self.return_counts = self.io_verify(client)
 
+                        elif val == 'smallfile_rename':
+                            client.exec_command(
+                                cmd='sudo python /home/cephuser/smallfile/'
+                                    'smallfile_cli.py --operation rename '
+                                '--threads 4 --file-size %d --files %d'
+                                    ' --top %s%s' %
+                                (self.file_size, self.num_files, mounting_dir,
+                                 dir_name), long_running=True)
+                            self.return_counts = self.io_verify(client)
+                        elif val == 'smallfile_delete':
                             client.exec_command(
                                 cmd='sudo python /home/cephuser/smallfile/'
                                     'smallfile_cli.py --operation delete '
-                                    '--threads 4 --file-size 1024 --files 10 '
-                                    '--top %s%s ' %
-                                (mounting_dir, dir_name), long_running=True)
+                                '--threads 4 --file-size %d --files %d'
+                                ' --top %s%s ' %
+                                (self.file_size, self.num_files, mounting_dir,
+                                 dir_name), long_running=True)
+                            self.return_counts = self.io_verify(client)
+                        elif val == 'smallfile_delete-renamed':
+                            client.exec_command(
+                                cmd='sudo python /home/cephuser/smallfile/'
+                                    'smallfile_cli.py '
+                                    '--operation delete-renamed '
+                                '--threads 4 --file-size %d --files %d'
+                                ' --top %s%s ' %
+                                (self.file_size, self.num_files, mounting_dir,
+                                 dir_name), long_running=True)
                             self.return_counts = self.io_verify(client)
 
-                        else:
-                            log.error("IO type not specifiesd")
-                            return 1
+        return self.return_counts, 0
+
+    def max_dir_io(
+            self,
+            clients,
+            mounting_dir,
+            dir_name,
+            range1,
+            range2,
+            num_of_files):
+        for client in clients:
+            for num in range(range1, range2):
+                out, rc = client.exec_command(
+                    cmd='sudo crefi -n %d %s%s_%d' %
+                        (num_of_files, mounting_dir, dir_name, num),
+                    long_running=True)
+                self.return_counts = self.io_verify(client)
         return self.return_counts, 0
 
     def pinned_dir_io_mdsfailover(
@@ -650,7 +716,7 @@ finally:
             mds_nodes):
         log.info("Performing IOs on clients")
         for client in clients:
-            out, rc = client.exec_command(cmd='df -h')
+            out, rc = client.exec_command(cmd='df -h', timeout=10)
             mount_output = out.read()
             mount_output.split()
             mon_node_ip = self.mon_node_ip.replace(" ", "")
@@ -676,7 +742,7 @@ finally:
             range2):
         commands = ['ls', 'rm -rf', 'ls -l']
         for client in clients:
-            out, rc = client.exec_command(cmd='df -h')
+            out, rc = client.exec_command(cmd='df -h', timeout=10)
             mount_output = out.read()
             mount_output.split()
             mon_node_ip = self.mon_node_ip.replace(" ", "")
@@ -713,8 +779,8 @@ finally:
                 fuse_fstab = """
 {old_entry}
 #DEVICE         PATH                 TYPE           OPTIONS
-none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
-,ceph.conf=/etc/ceph/ceph.conf,_netdev,defaults  0 0
+none           {mounting_dir}       {fuse}          ceph.id={client_hostname},\
+ceph.conf=/etc/ceph/ceph.conf,_netdev,defaults  0 0
                         """.format(old_entry=out, fuse='fuse.ceph',
                                    mounting_dir=mounting_dir,
                                    client_hostname=client.hostname)
@@ -729,13 +795,11 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
                 out, rc = client.exec_command(
                     cmd='sudo ceph auth get-key client.%s' %
                     (client.hostname))
-                secret_key = out.read().rstrip('\n')
                 out, rc = client.exec_command(cmd='sudo cat /etc/fstab')
                 out = out.read()
                 if kwargs:
                     for key, val in kwargs.iteritems():
                         mon_node_ip = val
-
                 else:
                     log.error("Mon Ip not specified")
                     return 1
@@ -743,15 +807,15 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
                 kernel_fstab = '''
 {old_entry}
 #DEVICE              PATH                TYPE          OPTIONS
-{mon_ip}:6789:/      {mounting_dir}      {ceph}        name={client_hostname}
-,secret={secret_key},_netdev,noatime 00
+{mon_ip}:6789:/      {mounting_dir}      {ceph}        name={client_hostname},\
+secretfile={secret_key},_netdev,noatime 00
                         '''.format(
                     old_entry=out,
                     ceph='ceph',
                     mon_ip=mon_node_ip,
                     mounting_dir=mounting_dir,
                     client_hostname=client.hostname,
-                    secret_key=secret_key)
+                    secret_key='/etc/ceph/%s.secret' % client.hostname)
                 fstab = client.write_file(
                     sudo=True,
                     file_name='/etc/fstab',
@@ -762,44 +826,67 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
 
     def reboot(self, clients, **kwargs):
         timeout = 600
-        for client in clients:
-            out, rc = client.exec_command(cmd='df -h')
-            mount_output = out.read()
-            mount_output.split()
-            mon_node_ip = self.mon_node_ip.replace(" ", "")
+        for i in range(0, 10):
+            for client in clients:
+                out, rc = client.exec_command(cmd='df -h', timeout=10)
+                mount_output = out.read()
+                mount_output.split()
+                mon_node_ip = self.mon_node_ip.replace(" ", "")
 
-            if 'ceph-fuse' in mount_output or '%s:6789:/' % (
-                    mon_node_ip) in mount_output:
-                client.exec_command(cmd='sudo reboot', check_ec=False)
-                self.return_counts.update(
-                    {client.hostname: client.exit_status})
-                timeout = datetime.timedelta(seconds=timeout)
-                starttime = datetime.datetime.now()
-                while True:
-                    try:
-                        client.reconnect()
-                        break
-                    except BaseException:
-                        if datetime.datetime.now() - starttime > timeout:
-                            log.error(
-                                'Failed to reconnect to the node {node} after '
-                                'reboot '.format(
-                                    node=client.ip_address))
-                            time.sleep(5)
-                            raise RuntimeError(
-                                'Failed to reconnect to the node {node} after '
-                                'reboot '.format(
-                                    node=client.ip_address))
-                if kwargs:
-                    out, rc = client.exec_command(
-                        cmd='sudo crefi %s --fop create --multi -b 10'
-                            ' -d 10 -n 10 '
-                            '-T 10 --random --min=1K --max=10K' %
-                        (self.mounting_dir))
-                    print out.read()
+                if 'ceph-fuse' in mount_output or '%s:6789:/' % (
+                        mon_node_ip) in mount_output:
+                    if 'before_rebootIO' in kwargs:
+                        out, rc = client.exec_command(
+                            cmd='sudo crefi %s --fop create --multi -b 1'
+                                ' -d 1 -n 10 '
+                                '-T 5 --random --min=1K --max=10K' %
+                                (self.mounting_dir))
+                    else:
+                        pass
+            for client in clients:
+                out, rc = client.exec_command(cmd='df -h', timeout=10)
+                mount_output = out.read()
+                mount_output.split()
+                mon_node_ip = self.mon_node_ip.replace(" ", "")
+                if 'ceph-fuse' in mount_output or '%s:6789:/' % (
+                        mon_node_ip) in mount_output:
+                    client.exec_command(cmd='sudo reboot', check_ec=False)
                     self.return_counts.update(
                         {client.hostname: client.exit_status})
-                break
+                    timeout = datetime.timedelta(seconds=timeout)
+                    starttime = datetime.datetime.now()
+                    while True:
+                        try:
+                            client.reconnect()
+                            break
+                        except BaseException:
+                            if datetime.datetime.now() - starttime > timeout:
+                                log.error(
+                                    'Failed to reconnect to the'
+                                    ' node {node} after'
+                                    'reboot '.format(
+                                        node=client.ip_address))
+                                time.sleep(5)
+                                raise RuntimeError(
+                                    'Failed to reconnect to the node '
+                                    '{node} after reboot '.format(
+                                        node=client.ip_address))
+            for client in clients:
+                out, rc = client.exec_command(cmd='df -h', timeout=10)
+                mount_output = out.read()
+                mount_output.split()
+                mon_node_ip = self.mon_node_ip.replace(" ", "")
+
+                if 'ceph-fuse' in mount_output or '%s:6789:/' % (
+                        mon_node_ip) in mount_output:
+                    if 'after_rebootIO' in kwargs:
+                        out, rc = client.exec_command(
+                            cmd='sudo crefi %s --fop create --multi -b 1'
+                                ' -d 1 -n 10 '
+                                '-T 5 --random --min=1K --max=10K' %
+                                self.mounting_dir)
+                    else:
+                        pass
         return self.return_counts, 0
 
     def io_verify(self, client):
@@ -896,7 +983,7 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
         for node in mds_nodes:
             attrs = [
                 'max_mds',
-                'max_file_size',
+                'max_self.file_size',
                 'allow_new_snaps',
                 'inline_data',
                 'cluster_down',
@@ -935,10 +1022,10 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
             if attrs[1]:
                 node.exec_command(
                     cmd='sudo ceph fs set  %s %s 65536' %
-                    (fs_name, attrs[1]))
+                        (fs_name, attrs[1]))
                 out, rc = node.exec_command(
                     cmd='sudo ceph fs get %s| grep %s' %
-                    (fs_name, attrs[1]))
+                        (fs_name, attrs[1]))
                 out = out.read().rstrip()
                 print out
                 if 'max_file_size	65536' in out:
@@ -946,10 +1033,10 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
                     log.info("Reverting:")
                     out, rc = node.exec_command(
                         cmd='sudo ceph fs set  %s %s %s' %
-                        (fs_name, attrs[1], max_file_size))
+                            (fs_name, attrs[1], max_file_size))
                     out, rc = node.exec_command(
                         cmd='sudo ceph fs get %s| grep %s' %
-                        (fs_name, attrs[1]))
+                            (fs_name, attrs[1]))
                     if max_file_size in out.read():
                         log.info("max file size attr reverted successfully")
                         self.return_counts.update(
@@ -1191,9 +1278,17 @@ none           {mounting_dir}       {fuse}          ceph.id={client_hostname}
 
             return self.return_counts, 0
 
+    def exe_time(self, start):
+        stop = timeit.default_timer()
+        total_time = stop - start
+        (mins, secs) = divmod(total_time, 60)
+        (hours, mins) = divmod(mins, 60)
+        print 'Script execution time:------'
+        print 'Hours:%d Minutes:%d Seconds:%f' % (hours, mins, secs)
+
     def rsync(self, clients, source_dir, dest_dir):
         for client in clients:
-            out, rc = client.exec_command(cmd='df -h')
+            out, rc = client.exec_command(cmd='df -h', timeout=10)
             mount_output = out.read()
             mount_output.split()
             mon_node_ip = self.mon_node_ip.replace(" ", "")
@@ -1437,7 +1532,7 @@ class MkdirPinning(FsUtils):
             mounting_dir,
             dir_name)
         for client in clients:
-            out, rc = client.exec_command(cmd='df -h')
+            out, rc = client.exec_command(cmd='df -h', timeout=10)
             mount_output = out.read()
             mount_output.split()
             mon_node_ip = self.mon_node_ip.replace(" ", "")
