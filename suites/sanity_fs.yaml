@@ -95,6 +95,12 @@ tests:
        desc: Mount CephFS on multiple clients, On same directory perform write from some clients and do read that data from some clients
        abort-on-fail: false
    - test:
+       name: cephfs-stressIO
+       module: CEPH-11222_11223.py
+       polarion-id: CEPH-11222,CEPH-11223
+       desc: Mount CephFS on multiple clients,
+       abort-on-fail: false
+   - test:
        name: cephfs-basics-ios
        module: CEPH-10625_11225.py
        polarion-id: CEPH-10625,CEPH-11225
