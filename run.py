@@ -411,7 +411,8 @@ def run(args):
                         name=unique_test_name, description=tc['desc'], start_time=timestamp(), item_type="STEP")
                     service.log(time=timestamp(), message="Logfile location: {}".format(tc['log-link']), level="INFO")
                     service.log(time=timestamp(), message="Polarion ID: {}".format(tc['polarion-id']), level="INFO")
-                rc = test_mod.run(ceph_nodes=ceph_cluster_dict[cluster_name], config=config, test_data=ceph_test_data)
+                rc = test_mod.run(ceph_nodes=ceph_cluster_dict[cluster_name], config=config, test_data=ceph_test_data,
+                                  ceph_cluster_dict=ceph_cluster_dict)
             except BaseException:
                 log.error(traceback.format_exc())
                 rc = 1
