@@ -49,7 +49,7 @@ tests:
        module: CEPH-11228.py
        config:
              num_of_dirs: 1000
-       polarion-id: CEPH-11228
+       polarion-id: CEPH-11228,CEPH-11239
        desc: MDSfailover on active-active mdss,performing client IOs with max:min directory pinning with 2 active mdss
        abort-on-fail: false
    - test:
@@ -85,7 +85,7 @@ tests:
    - test:
        name: read-write-del-ops
        module: CEPH-11219.py
-       polarion-id: CEPH-11219
+       polarion-id: CEPH-11219,CEPH-11226
        desc: Mount CephFS on multiple clients perform read and write operation on same file from different clients and perform delete ops
        abort-on-fail: false
    - test:
