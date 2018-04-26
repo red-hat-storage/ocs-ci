@@ -55,3 +55,12 @@
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
+
+   - test:
+      name: Setup RBD Mirror
+      module: mirror_setup.py
+      clusters:
+        ceph-rbd1:
+          config:
+            way: two-way
+      abort-on-fail: true
