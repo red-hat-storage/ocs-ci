@@ -336,6 +336,7 @@ def run(args):
     sys.path.append(os.path.abspath('tests'))
     sys.path.append(os.path.abspath('tests/rados'))
     sys.path.append(os.path.abspath('tests/rbd'))
+    sys.path.append(os.path.abspath('tests/rbd-mirror'))
     sys.path.append(os.path.abspath('tests/cephfs'))
     sys.path.append(os.path.abspath('tests/iscsi'))
     tests = suite.get('tests')
