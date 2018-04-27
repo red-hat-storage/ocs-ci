@@ -42,10 +42,13 @@ def run(**kw):
     for ceph in ceph_nodes:
         if ceph.role == 'mon':
             open_firewall_port(ceph, port='6789', protocol='tcp')
+            # for upgrades from 2.5 to 3.x, we convert mon to mgr
+            # so lets open ports from 6800 to 6820
+            open_firewall_port(ceph, port='6800-6820', protocol='tcp')
         if ceph.role == 'osd':
             open_firewall_port(ceph, port='6800-7300', protocol='tcp')
         if ceph.role == 'mgr':
-            open_firewall_port(ceph, port='6800-7300', protocol='tcp')
+            open_firewall_port(ceph, port='6800-6820', protocol='tcp')
         if ceph.role == 'mds':
             open_firewall_port(ceph, port='6800', protocol='tcp')
     for node in ceph_nodes:
