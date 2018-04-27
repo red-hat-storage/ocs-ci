@@ -84,8 +84,8 @@ tests:
        abort-on-fail: false
    - test:
        name: read-write-del-ops
-       module: CEPH-11219.py
-       polarion-id: CEPH-11219,CEPH-11226
+       module: CEPH-11219_11224.py
+       polarion-id: CEPH-11219,CEPH-11226,CEPH-11224
        desc: Mount CephFS on multiple clients perform read and write operation on same file from different clients and perform delete ops
        abort-on-fail: false
    - test:
