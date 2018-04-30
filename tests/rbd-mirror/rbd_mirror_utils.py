@@ -1,3 +1,4 @@
+import ast
 import time
 import random
 import string
@@ -136,8 +137,6 @@ class RbdMirror:
 
     def config_mirror(self, peer_cluster, **kw):
         poolname = kw.get('poolname')
-        imagename = kw.get('imagename', '')
-        imagespec = kw.get('imagespec', poolname + '/' + imagename)
         mode = kw.get('mode')
 
         self.mirror_daemon(enable=True, start=True, restart=True)
@@ -162,10 +161,6 @@ class RbdMirror:
         else:
             log.error('Peers were not added')
 
-        if 'image' in kw.get('mode'):
-            self.enable_mirroring('image', imagespec)
-            self.wait_for_status(imagespec=imagespec,
-                                 state_pattern='up+stopped')
         self.wait_for_status(poolname=poolname, health_pattern='OK')
         peer_cluster.wait_for_status(poolname=poolname, health_pattern='OK')
 
@@ -176,35 +171,47 @@ class RbdMirror:
                 if kw.get('health_pattern'):
                     out = self.mirror_status('pool', kw.get('poolname'),
                                              'health')
-                    log.info('Health of {} pool in {} cluster is {}'
+                    log.info('Health of {} pool in {} cluster: {}'
                              .format(kw.get('poolname'),
                                      self.cluster_name, out))
                     if kw.get('health_pattern') in out:
                         return 0
                 if kw.get('images_pattern'):
                     out = self.mirror_status('pool', kw.get('poolname'),
-                                             'replaying')
-                    log.info('Images in {} pool in {} cluster is {}'
-                             .format(kw.get('poolname'),
-                                     self.cluster_name, out))
-                    if kw.get('images_pattern') in out:
+                                             'states')
+                    out = ast.literal_eval(out)
+                    state_pattern = kw.get('state', 'total')
+                    num_image = 0
+                    if 'total' in state_pattern:
+                        for k, v in out.iteritems():
+                            num_image = num_image + v
+                    else:
+                        num_image = out[state_pattern]
+                    log.info(
+                        'Images in {} pool in {} cluster {}: {}'
+                        .format(kw.get('poolname'), self.cluster_name,
+                                state_pattern, num_image))
+                    if kw.get('images_pattern') == num_image:
                         return 0
             else:
                 if kw.get('state_pattern'):
                     out = self.mirror_status('image', kw.get('imagespec'),
                                              'state')
-                    log.info('State of {} image in {} cluster is {}'
+                    log.info('State of {} image in {} cluster: {}'
                              .format(kw.get('imagespec'),
                                      self.cluster_name, out))
                     if kw.get('state_pattern') in out:
                         return 0
                 if kw.get('description_pattern'):
-                    out = self.mirror_status('image', kw.get('imagespec'),
-                                             'description')
-                    log.info('Description of {} image in {} cluster is {}'
+                    out = self.get_position(
+                        imagespec=kw.get('imagespec'),
+                        pattern=kw.get('description_pattern'))
+                    log.info('Description of {} image in {} cluster: {}'
                              .format(kw.get('imagespec'),
                                      self.cluster_name, out))
                     return out
+                    if out:
+                        return out
             time.sleep(20)
         log.error('Required status can not be attained')
         return 1
@@ -212,11 +219,30 @@ class RbdMirror:
     # Wait for replay to complete, check every 60 seconds
     def wait_for_replay_complete(self, imagespec):
         while 1:
-            output = self.wait_for_status(imagespec=imagespec,
-                                          description_pattern='replaying')
-            if 'entries_behind_master=0' in output.split()[-1]:
+            out = self.wait_for_status(imagespec=imagespec,
+                                       description_pattern='entries')
+            if int(out.split('=')[-1]) == 0:
                 return 0
             time.sleep(60)
+
+    # Get Position
+    def get_position(self, imagespec, pattern=None):
+        out = self.mirror_status('image', imagespec, 'description')
+        if pattern is not None:
+            master_pos = out.find('master_position')
+            mirror_pos = out.find('mirror_position')
+            entries_behind = out.find('entries')
+            pos = [out[master_pos: mirror_pos - 2],
+                   out[mirror_pos: entries_behind - 2],
+                   out[entries_behind:]]
+            if 'master' in pattern:
+                return pos[0]
+            elif 'mirror' in pattern:
+                return pos[1]
+            else:
+                return pos[2]
+        else:
+            return out
 
     # Check data consistency
     def check_data(self, peercluster, imagespec):
@@ -334,11 +360,8 @@ class RbdMirror:
         return temp_str
 
     def delete_pool(self, poolname):
-        self.exec_cmd(cmd="ceph tell mon.* injectargs \'"
-                          "--mon_allow_pool_delete=true\'")
         self.exec_cmd(cmd='ceph osd pool delete {pool} {pool} '
-                          '--yes-i-really-really-mean-it'.
-                      format(pool=poolname))
+                          '--yes-i-really-really-mean-it'.format(pool=poolname))
 
     def delete_image(self, imagespec):
         self.exec_cmd(cmd='rbd rm {}'.format(imagespec))
