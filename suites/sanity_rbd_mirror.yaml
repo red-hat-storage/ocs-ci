@@ -86,3 +86,15 @@
             io-total: 50M
       polarion-id: CEPH-9475
       desc: Recovery of shutdown secondary cluster
+
+   - test:
+      name: Test CEPH-11489
+      module: CEPH-11489.py
+      clusters:
+        ceph-rbd1:
+          config:
+            imagesize: 500M
+            io-total: 10M
+            delay: 600
+      polarion-id: CEPH-11489
+      desc: Delayed replication
