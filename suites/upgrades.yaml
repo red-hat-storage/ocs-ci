@@ -21,7 +21,7 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
-            fetch_directory: /home/cephuser/fetch
+            fetch_directory: ~/fetch
             copy_admin_key: True
             ceph_conf_overrides:
                 global:
@@ -46,21 +46,15 @@ tests:
             ceph_repository: rhcs
             ceph_rhcs_version: 3
             ceph_stable_release: luminous
-            ceph_repository: rhcs
-            upgrade_ceph_packages: True
-            radosgw_interface: eth0
-            public_network: 172.16.0.0/12
             osd_scenario: collocated
-            osd_auto_discovery: False
-            fetch_directory: /home/cephuser/fetch
+            osd_auto_discovery: True
+            upgrade_ceph_packages: True
+            public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
             copy_admin_key: True
             ceph_conf_overrides:
                 global:
-                  osd_pool_default_pg_num: 128
-                  osd_default_pool_size: 2
-                  osd_pool_default_pgp_num: 128
                   mon_max_pg_per_osd: 2048
-                  mon_allow_pool_delete: True
        desc: Test Ceph-Ansible rolling update - 2.x -> 3.x
        destroy-cluster: False
        abort-on-fail: True
@@ -119,12 +113,12 @@ tests:
             ceph_rhcs_cdn_install: True
             ceph_stable_release: jewel
             journal_collocation: True
-            osd_auto_discovery: False
+            osd_auto_discovery: True
             journal_size: 1024
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
-            fetch_directory: /home/cephuser/fetch
+            fetch_directory: ~/fetch
             copy_admin_key: True
             ceph_conf_overrides:
                 global:
@@ -155,16 +149,12 @@ tests:
             radosgw_interface: eth0
             public_network: 172.16.0.0/12
             osd_scenario: collocated
-            osd_auto_discovery: False
-            fetch_directory: /home/cephuser/fetch
+            osd_auto_discovery: True
+            fetch_directory: ~/fetch
             copy_admin_key: True
             ceph_conf_overrides:
                 global:
-                  osd_pool_default_pg_num: 128
-                  osd_default_pool_size: 2
-                  osd_pool_default_pgp_num: 128
                   mon_max_pg_per_osd: 2048
-                  mon_allow_pool_delete: True
        desc: test rolling upgrade using ceph-ansible
        destroy-cluster: False
        abort-on-fail: True
@@ -178,6 +168,13 @@ tests:
             ceph_origin: distro
             ceph_stable_release: luminous
             ceph_repository: rhcs
+            upgrade_ceph_packages: True
+            radosgw_interface: eth0
+            public_network: 172.16.0.0/12
+            osd_scenario: collocated
+            osd_auto_discovery: True
+            fetch_directory: ~/fetch
+            copy_admin_key: True
        desc: Test Ceph-Ansible rolling update - 2.x -> 3.0 - 3.x
        abort-on-fail: True
    - test:
@@ -242,7 +239,7 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
-            fetch_directory: /home/cephuser/fetch
+            fetch_directory: ~/fetch
             copy_admin_key: True
             ceph_conf_overrides:
                 global:
@@ -264,6 +261,12 @@ tests:
             ceph_origin: distro
             ceph_stable_release: luminous
             ceph_repository: rhcs
+            osd_scenario: collocated
+            osd_auto_discovery: True
+            upgrade_ceph_packages: True
+            public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
+            copy_admin_key: True
        desc: Ceph-Ansible rolling update - 3.0 -> 3.x
        abort-on-fail: True
    - test:
