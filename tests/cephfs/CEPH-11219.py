@@ -12,7 +12,7 @@ log = logger
 def run(**kw):
     try:
         start = timeit.default_timer()
-        tc = '11219'
+        tc = '11219,11224'
         dir_name = 'dir'
         log.info("Running cephfs %s test case" % (tc))
         ceph_nodes = kw.get('ceph_nodes')
@@ -142,7 +142,34 @@ def run(**kw):
                     dirs[0],
                     0,
                     1,
-                    iotype='smallfile_delete')
+                    iotype='smallfile_create', fnum=10, fsize=1024)
+                p.spawn(
+                    fs_util.stress_io,
+                    client3,
+                    client_info['mounting_dir'],
+                    dirs[1],
+                    0,
+                    1,
+                    iotype='smallfile_create', fnum=10, fsize=1024)
+                p.spawn(
+                    fs_util.stress_io,
+                    client3,
+                    client_info['mounting_dir'],
+                    dirs[2],
+                    0,
+                    1,
+                    iotype='smallfile_create', fnum=10, fsize=1024)
+                for op in p:
+                    return_counts, rc = op
+            with parallel() as p:
+                p.spawn(
+                    fs_util.stress_io,
+                    client3,
+                    client_info['mounting_dir'],
+                    dirs[0],
+                    0,
+                    1,
+                    iotype='smallfile_delete', fnum=10, fsize=1024)
                 p.spawn(
                     fs_util.stress_io,
                     client3,
@@ -158,10 +185,9 @@ def run(**kw):
                     dirs[2],
                     0,
                     1,
-                    iotype='smallfile_delete')
+                    iotype='smallfile_delete', fnum=10, fsize=1024)
                 for op in p:
                     return_counts, rc = op
-
             cluster_health_afterIO = check_ceph_healthly(
                 client_info['mon_node'], 12, 1, None, 300)
 
@@ -170,6 +196,108 @@ def run(**kw):
             result = fs_util.rc_verify(tc, return_counts)
             if cluster_health_beforeIO == cluster_health_afterIO:
                 print result
+            print '-----------------------------------------'
+            with parallel() as p:
+                p.spawn(
+                    fs_util.stress_io,
+                    client1,
+                    client_info['mounting_dir'],
+                    dirs[0],
+                    0,
+                    1,
+                    iotype='smallfile_create', fnum=1000, fsize=10)
+                p.spawn(
+                    fs_util.stress_io,
+                    client2,
+                    client_info['mounting_dir'],
+                    dirs[0],
+                    0,
+                    5,
+                    iotype='fio')
+                p.spawn(
+                    fs_util.stress_io,
+                    client3,
+                    client_info['mounting_dir'],
+                    dirs[0],
+                    0,
+                    10,
+                    iotype='dd')
+                p.spawn(
+                    fs_util.stress_io,
+                    client4,
+                    client_info['mounting_dir'],
+                    dirs[0],
+                    0,
+                    1,
+                    iotype='crefi')
+            print '-------------------------------------------------------'
+            with parallel() as p:
+                p.spawn(
+                    fs_util.read_write_IO,
+                    client1,
+                    client_info['mounting_dir'],
+                    'g',
+                    'read',
+                    dir_name=dirs[0])
+                p.spawn(
+                    fs_util.read_write_IO,
+                    client2,
+                    client_info['mounting_dir'],
+                    'g',
+                    'read',
+                    dir_name=dirs[0])
+            print '-------------------------------------------------------'
+            with parallel() as p:
+                p.spawn(
+                    fs_util.stress_io,
+                    client1,
+                    client_info['mounting_dir'],
+                    dirs[0],
+                    0,
+                    1,
+                    iotype='smallfile_create', fnum=1000, fsize=10)
+                p.spawn(
+                    fs_util.stress_io,
+                    client2,
+                    client_info['mounting_dir'],
+                    dirs[0],
+                    0,
+                    5,
+                    iotype='fio')
+                p.spawn(
+                    fs_util.stress_io,
+                    client3,
+                    client_info['mounting_dir'],
+                    dirs[0],
+                    0,
+                    10,
+                    iotype='dd')
+                p.spawn(
+                    fs_util.stress_io,
+                    client4,
+                    client_info['mounting_dir'],
+                    dirs[0],
+                    0,
+                    1,
+                    iotype='crefi')
+            print '-------------------------------------------------------'
+            with parallel() as p:
+                p.spawn(
+                    fs_util.read_write_IO,
+                    client1,
+                    client_info['mounting_dir'],
+                    'g',
+                    'read',
+                    dir_name=dirs[0])
+                p.spawn(
+                    fs_util.read_write_IO,
+                    client2,
+                    client_info['mounting_dir'],
+                    'g',
+                    'read',
+                    dir_name=dirs[0])
+            print '-------------------------------------------------------'
+
             log.info('Cleaning up!-----')
             if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
                 rc = fs_util.client_clean_up(
@@ -186,7 +314,14 @@ def run(**kw):
             if rc == 0:
                 log.info('Cleaning up successfull')
             else:
-                raise Exception('Cleanup failed')
+                return 1
+            log.info("Execution of Test case CEPH-%s ended" % (tc))
+            print "Results:"
+            result = fs_util.rc_verify(tc, return_counts)
+            if cluster_health_beforeIO == cluster_health_afterIO:
+                print result
+            else:
+                return 1
         print'Script execution time:------'
         stop = timeit.default_timer()
         total_time = stop - start
