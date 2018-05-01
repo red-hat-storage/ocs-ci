@@ -148,7 +148,7 @@ def create_nodes(conf, osp_cred, report_portal_session=None, instances_name=None
 
 
 def print_results(tc):
-    header = '{name:<20s}   {desc:50s}   {duration:20s}   {status:>15s}'.format(
+    header = '\n{name:<20s}   {desc:50s}   {duration:20s}   {status:>15s}'.format(
         name='TEST NAME',
         desc='TEST DESCRIPTION',
         duration='DURATION',
@@ -366,8 +366,8 @@ def run(args):
         tc['log-link'] = configure_logger(unique_test_name, run_dir)
         mod_file_name = os.path.splitext(test_file)[0]
         test_mod = importlib.import_module(mod_file_name)
-        print("Running test {test_name}\n".format(test_name=tc['name']))
-        print("Test logfile location: {log_url}\n".format(log_url=tc['log-link']))
+        print("\nRunning test: {test_name}".format(test_name=tc['name']))
+        print("Test logfile location: {log_url}".format(log_url=tc['log-link']))
         log.info("Running test %s", test_file)
         tc['duration'] = '0s'
         tc['status'] = 'Not Executed'
@@ -421,15 +421,19 @@ def run(args):
         elapsed = (time.time() - start)
         tc['duration'] = elapsed
         if rc == 0:
-            log.info("Test %s passed" % test_mod)
             tc['status'] = 'Pass'
+            msg = "Test {} passed".format(test_mod)
+            log.info(msg)
+            print(msg)
             if post_to_report_portal:
                 service.finish_test_item(end_time=timestamp(), status="PASSED")
             if post_results:
                 post_to_polarion(tc=tc)
         else:
             tc['status'] = 'Failed'
-            log.info("Test %s failed" % test_mod)
+            msg = "Test {} failed".format(test_mod)
+            log.info(msg)
+            print(msg)
             jenkins_rc = 1
             if post_to_report_portal:
                 service.finish_test_item(end_time=timestamp(), status="FAILED")
