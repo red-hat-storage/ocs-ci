@@ -367,7 +367,8 @@ def run(args):
         mod_file_name = os.path.splitext(test_file)[0]
         test_mod = importlib.import_module(mod_file_name)
         print("\nRunning test: {test_name}".format(test_name=tc['name']))
-        print("Test logfile location: {log_url}".format(log_url=tc['log-link']))
+        if tc.get('log-link'):
+            print("Test logfile location: {log_url}".format(log_url=tc['log-link']))
         log.info("Running test %s", test_file)
         tc['duration'] = '0s'
         tc['status'] = 'Not Executed'

@@ -4,6 +4,7 @@ import time
 import traceback
 import os
 import yaml
+import getpass
 from reportportal_client import ReportPortalServiceAsync
 
 logger = logging.getLogger(__name__)
@@ -305,7 +306,7 @@ def rc_verify(tc, RC):
 
 def configure_logger(test_name, run_dir, level=logging.INFO):
     """
-    Configures a new FileHandler for the root logger depending on the run_id and test_name.
+    Configures a new FileHandler for the root logger.
 
     Args:
         test_name: name of the test being executed. used for naming the logfile
@@ -313,8 +314,11 @@ def configure_logger(test_name, run_dir, level=logging.INFO):
         level: logging level
 
     Returns:
-        URL where the log file can be viewed
+        URL where the log file can be viewed or None if the run_dir does not exist
     """
+    if not os.path.isdir(run_dir):
+        log.error("Run directory '{run_dir}' does not exist, logs will not output to file.".format(run_dir=run_dir))
+        return None
     _root = logging.getLogger()
 
     full_log_name = "{test_name}.log".format(test_name=test_name)
@@ -353,7 +357,8 @@ def create_run_dir(run_id):
     try:
         os.makedirs(run_dir)
     except OSError:
-        pass  # todo: raise exception, fail test run?
+        if "jenkins" in getpass.getuser():
+            raise
 
     return run_dir
 
