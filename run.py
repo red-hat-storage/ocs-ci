@@ -452,6 +452,9 @@ def run(args):
     if post_to_report_portal:
         service.finish_launch(end_time=timestamp())
         service.terminate()
+    url_base = "http://magna002.ceph.redhat.com/cephci-jenkins"
+    run_dir_name = run_dir.split('/')[-1]
+    print("\nAll test logs located here: {base}/{dir}".format(base=url_base, dir=run_dir_name))
     print_results(tcs)
     return jenkins_rc
 
