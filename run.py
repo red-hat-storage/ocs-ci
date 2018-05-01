@@ -415,6 +415,8 @@ def run(args):
                 rc = test_mod.run(ceph_nodes=ceph_cluster_dict[cluster_name], config=config, test_data=ceph_test_data,
                                   ceph_cluster_dict=ceph_cluster_dict)
             except BaseException:
+                if post_to_report_portal:
+                    service.log(time=timestamp(), message=traceback.format_exc(), level="ERROR")
                 log.error(traceback.format_exc())
                 rc = 1
             if rc != 0:
