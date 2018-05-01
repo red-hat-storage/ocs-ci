@@ -11,17 +11,15 @@ import logging
 import importlib
 import pickle
 import time
-import uuid
-import shutil
 import re
 import requests
 import textwrap
 from docopt import docopt
-from reportportal_client import ReportPortalServiceAsync
 from ceph.ceph import CephNode
-from ceph.utils import create_ceph_nodes, cleanup_ceph_nodes
-from ceph.utils import setup_cdn_repos
+from ceph.utils import create_ceph_nodes, cleanup_ceph_nodes, setup_cdn_repos
 from utils.polarion import post_to_polarion
+from utils.utils import timestamp, create_run_dir, create_unique_test_name, create_report_portal_session,\
+    configure_logger, close_and_remove_filehandlers
 
 doc = """
 A simple test suite wrapper that executes tests based on yaml test configuration
@@ -91,9 +89,11 @@ ch.setLevel(logging.ERROR)
 ch.setFormatter(formatter)
 root.addHandler(ch)
 
-temp_startup_log = os.path.join("/tmp/", "startup-{uuid}.log".format(uuid=uuid.uuid4().hex))
-print("Temporary startup log location: {location}\n".format(location=temp_startup_log))
-handler = logging.FileHandler(temp_startup_log)
+run_id = timestamp()
+run_dir = create_run_dir(run_id)
+startup_log = os.path.join(run_dir, "startup.log")
+print("Startup log location: {}".format(startup_log))
+handler = logging.FileHandler(startup_log)
 handler.setLevel(logging.INFO)
 handler.setFormatter(formatter)
 root.addHandler(handler)
@@ -168,7 +168,6 @@ def print_results(tc):
 def run(args):
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    run_id = timestamp()
     glb_file = args['--global-conf']
     osp_cred_file = args['--osp-cred']
     suite_file = args['--suite']
@@ -364,7 +363,7 @@ def run(args):
         test_file = tc['file']
         unique_test_name = create_unique_test_name(tc['name'], test_names)
         test_names.append(unique_test_name)
-        tc['log-link'] = configure_logger(unique_test_name, run_id)
+        tc['log-link'] = configure_logger(unique_test_name, run_dir)
         mod_file_name = os.path.splitext(test_file)[0]
         test_mod = importlib.import_module(mod_file_name)
         print("Running test {test_name}\n".format(test_name=tc['name']))
@@ -451,142 +450,6 @@ def run(args):
         service.terminate()
     print_results(tcs)
     return jenkins_rc
-
-
-def configure_logger(test_name, run_id, level=logging.INFO):
-    """
-    Configures a new FileHandler for the root logger depending on the run_id and test_name.
-
-    Args:
-        test_name: name of the test being executed. used for naming the logfile
-        run_id: id of the test run. passed through to the directory creation
-        level: logging level
-
-    Returns:
-        URL where the log file can be viewed
-    """
-    _root = logging.getLogger()
-
-    run_dir = create_run_dir(run_id)
-
-    if os.path.exists(temp_startup_log):
-        shutil.move(temp_startup_log, os.path.join(run_dir, "startup.log"))
-
-    full_log_name = "{test_name}.log".format(test_name=test_name)
-    test_logfile = os.path.join(run_dir, full_log_name)
-
-    close_and_remove_filehandlers()
-    _handler = logging.FileHandler(test_logfile)
-    _handler.setLevel(level)
-    _handler.setFormatter(formatter)
-    _root.addHandler(_handler)
-
-    url_base = "http://magna002.ceph.redhat.com/cephci-jenkins"
-    run_dir_name = run_dir.split('/')[-1]
-    log_url = "{url_base}/{run_dir}/{log_name}".format(url_base=url_base, run_dir=run_dir_name, log_name=full_log_name)
-
-    log.info("Completed log configuration")
-    return log_url
-
-
-def create_run_dir(run_id):
-    """
-    Create the directory where test logs will be placed.
-
-    Args:
-        run_id: id of the test run. used to name the directory
-
-    Returns:
-        Full path of the created directory
-    """
-    dir_name = "cephci-run-{run_id}".format(run_id=run_id)
-    base_dir = "/ceph/cephci-jenkins"
-    if not os.path.isdir(base_dir):
-        base_dir = "/tmp"
-    run_dir = os.path.join(base_dir, dir_name)
-    try:
-        os.makedirs(run_dir)
-        log.info("Created run directory: {run_dir}".format(run_dir=run_dir))
-    except OSError:
-        pass
-
-    return run_dir
-
-
-def close_and_remove_filehandlers(logger=logging.getLogger()):
-    """
-    Close FileHandlers and then remove them from the loggers handlers list.
-
-    Args:
-        logger: the logger in which to remove the handlers from, defaults to root logger
-
-    Returns:
-        None
-    """
-    handlers = logger.handlers[:]
-    for h in handlers:
-        if isinstance(h, logging.FileHandler):
-            h.close()
-            logger.removeHandler(h)
-
-
-def create_report_portal_session():
-    """
-    Configures and creates a session to the Report Portal instance.
-
-    Returns:
-        The session object
-    """
-    home_dir = os.path.expanduser("~")
-    cfg_file = os.path.join(home_dir, ".cephci.yaml")
-    try:
-        with open(cfg_file, "r") as yml:
-            cfg = yaml.load(yml)['report-portal']
-    except IOError:
-        log.error("Please create ~/.cephci.yaml from the cephci.yaml.template. See README for more information.")
-        raise
-
-    return ReportPortalServiceAsync(
-        endpoint=cfg['endpoint'], project=cfg['project'], token=cfg['token'], error_handler=error_handler)
-
-
-def timestamp():
-    """
-    The current epoch timestamp in milliseconds as a string.
-
-    Returns:
-        The timestamp
-    """
-    return str(int(time.time() * 1000))
-
-
-def error_handler(exc_info):
-    """
-    Error handler for the Report Portal session.
-
-    Returns:
-        None
-    """
-    print("Error occurred: {}".format(exc_info[1]))
-    traceback.print_exception(*exc_info)
-
-
-def create_unique_test_name(test_name, name_list):
-    """
-    Creates a unique test name using the actual test name and an increasing integer for each duplicate test name.
-
-    Args:
-        test_name: name of the test
-        name_list: list of names to compare test name against
-
-    Returns:
-        unique name for the test case
-    """
-    base = "_".join(test_name.split())
-    num = 0
-    while "{base}_{num}".format(base=base, num=num) in name_list:
-        num += 1
-    return "{base}_{num}".format(base=base, num=num)
 
 
 if __name__ == '__main__':
