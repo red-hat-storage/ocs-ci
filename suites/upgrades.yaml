@@ -3,7 +3,6 @@ tests:
        name: install ceph pre-requisities
        module: install_prereq.py
        abort-on-fail: True
-
    - test:
       name: ceph ansible install rhcs 2 stable
       module: test_ansible.py
@@ -98,9 +97,13 @@ tests:
       name: ceph ansible purge
       module: purge_cluster.py
       desc: Purge ceph cluster
-      destroy-cluster: False
       abort-on-fail: True
+      recreate-cluster: True
 
+   - test:
+      name: install ceph pre-requisities
+      module: install_prereq.py
+      abort-on-fail: True
    - test:
       name: ceph ansible install rhcs 2 stable
       module: test_ansible.py
@@ -217,9 +220,13 @@ tests:
       name: ceph ansible purge
       module: purge_cluster.py
       desc: Purge ceph cluster
-      destroy-cluster: False
       abort-on-fail: True
+      recreate-cluster: True
 
+   - test:
+      name: install ceph pre-requisities
+      module: install_prereq.py
+      abort-on-fail: True
    - test:
       name: ceph ansible install rhcs 3 stable
       module: test_ansible.py
@@ -309,4 +316,4 @@ tests:
       name: ceph ansible purge
       module: purge_cluster.py
       desc: Purge ceph cluster
-      destroy-cluster: False
+      destroy-cluster: True
