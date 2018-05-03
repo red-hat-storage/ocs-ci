@@ -66,18 +66,6 @@ def run(**kw):
         hosts = hosts + ceph.ip_address + "\t" + ceph.hostname \
             + "\t" + ceph.shortname + "\n"
 
-    # check to see for any additional repo (test mode)
-    if config.get('add-repo'):
-        repo = config['add-repo']
-        for ceph in ceph_nodes:
-            if ceph.pkg_type == 'rpm':
-                log.info(
-                    "Additing addition repo {repo} to {sn}".format(
-                        repo=repo, sn=ceph.shortname))
-                ceph.exec_command(
-                    sudo=True, cmd='wget -O /etc/yum.repos.d/rh_add_repo.repo {repo}'.format(repo=repo))
-                ceph.exec_command(sudo=True, cmd='yum update metadata')
-
     for ceph in ceph_nodes:
         keys_file = ceph.write_file(
             file_name='.ssh/authorized_keys', file_mode='a')
