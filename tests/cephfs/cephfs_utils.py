@@ -3,8 +3,6 @@ import string
 import time
 import datetime
 import logging
-import timeit
-
 import re
 from ceph.ceph import CommandFailed
 logger = logging.getLogger(__name__)
@@ -43,7 +41,6 @@ class FsUtils(object):
                 out, rc = self.mon_node.exec_command(cmd='sudo hostname -I')
                 self.mon_node_ip = out.read().rstrip('\n')
                 break
-
         for node in self.clients:
             if node.pkg_type == 'rpm':
                 out, rc = node.exec_command(cmd='sudo rpm -qa | grep -w attr')
@@ -454,6 +451,42 @@ finally:
             md5sum_file_lock = out.read()
             return md5sum_file_lock, 0
 
+    def mkdir_bulk(self, clients, range1, range2, mounting_dir, dir_name):
+        for client in clients:
+            out, rc = client.exec_command(cmd='df -h', timeout=10)
+            mount_output = out.read()
+            mount_output.split()
+            mon_node_ip = self.mon_node_ip.replace(" ", "")
+            if 'ceph-fuse' in mount_output or '%s:6789:/' % \
+                    mon_node_ip in mount_output:
+                for num in range(0, 1):
+                    log.info("Creating Directories")
+                    out, rc = client.exec_command(
+                        cmd='sudo mkdir %s%s_{%d..%d}' %
+                        (mounting_dir, dir_name, range1, range2))
+        return 0
+
+    def pinning(
+            self,
+            clients,
+            range1,
+            range2,
+            mounting_dir,
+            dir_name,
+            pin_val):
+        for client in clients:
+            out, rc = client.exec_command(cmd='df -h', timeout=10)
+            mount_output = out.read()
+            mount_output.split()
+            mon_node_ip = self.mon_node_ip.replace(" ", "")
+            if 'ceph-fuse' in mount_output or '%s:6789:/' \
+                    % mon_node_ip in mount_output:
+                for num in range(range1, range2):
+                    client.exec_command(
+                        cmd='sudo setfattr -n ceph.dir.pin -v %s %s%s_%d' %
+                            (pin_val, mounting_dir, dir_name, num))
+        return 0
+
     def mkdir(self, clients, range1, range2, mounting_dir, dir_name):
         for client in clients:
             out, rc = client.exec_command(cmd='df -h', timeout=10)
@@ -476,7 +509,7 @@ finally:
                         out, rc = client.exec_command(
                             cmd='sudo ls %s | grep %s' %
                             (mounting_dir, dir_name))
-                    self.dirs = out.read()
+                        self.dirs = out.read()
             break
         return self.dirs, 0
 
@@ -503,11 +536,29 @@ finally:
 
     def mds_fail_over(self, mds_nodes):
         rand = random.randint(0, 1)
+        timeout = 120
+        timeout = datetime.timedelta(seconds=timeout)
+        starttime = datetime.datetime.now()
         for node in mds_nodes:
-            log.info("Failing MDS %d" % (rand))
-            node.exec_command(cmd='sudo ceph mds fail %d' % (rand))
+            while True:
+                out, rc = node.exec_command(
+                    cmd="sudo ceph mds stat --format=json-pretty | grep active"
+                        " | awk {'print $2'}")
+                out = out.read()
+                count = out.count('active')
+                print '-----------------------------------'
+                print count
+                print '-----------------------------------'
+                if count == 2:
+                    log.info("Failing MDS %d" % (rand))
+                    node.exec_command(cmd='sudo ceph mds fail %d' % (rand))
+                    break
+                else:
+                    log.info("waiting for active-active mds state")
+                    if datetime.datetime.now() - starttime > timeout:
+                        log.error('Failed to get active-active mds')
+                        return 1
             break
-
         return 0
 
     def get_active_mdss(self, mds_nodes):
@@ -696,12 +747,18 @@ finally:
             range2,
             num_of_files):
         for client in clients:
-            for num in range(range1, range2):
-                out, rc = client.exec_command(
-                    cmd='sudo crefi -n %d %s%s_%d' %
-                        (num_of_files, mounting_dir, dir_name, num),
-                    long_running=True)
-                self.return_counts = self.io_verify(client)
+            out, rc = client.exec_command(cmd='df -h', timeout=10)
+            mount_output = out.read()
+            mount_output.split()
+            mon_node_ip = self.mon_node_ip.replace(" ", "")
+            if 'ceph-fuse' in mount_output or '%s:6789:/' % \
+                    mon_node_ip in mount_output:
+                for num in range(range1, range2):
+                    out, rc = client.exec_command(
+                        cmd='sudo crefi -n %d %s%s_%d' %
+                            (num_of_files, mounting_dir, dir_name, num),
+                        long_running=True)
+                    self.return_counts = self.io_verify(client)
         return self.return_counts, 0
 
     def pinned_dir_io_mdsfailover(
@@ -1278,14 +1335,6 @@ secretfile={secret_key},_netdev,noatime 00
 
             return self.return_counts, 0
 
-    def exe_time(self, start):
-        stop = timeit.default_timer()
-        total_time = stop - start
-        (mins, secs) = divmod(total_time, 60)
-        (hours, mins) = divmod(mins, 60)
-        print 'Script execution time:------'
-        print 'Hours:%d Minutes:%d Seconds:%f' % (hours, mins, secs)
-
     def rsync(self, clients, source_dir, dest_dir):
         for client in clients:
             out, rc = client.exec_command(cmd='df -h', timeout=10)
@@ -1511,35 +1560,4 @@ secretfile={secret_key},_netdev,noatime 00
                     cmd='sudo ceph fs set cephfs allow_dirfrags 0')
             break
         time.sleep(120)
-        return 0
-
-
-class MkdirPinning(FsUtils):
-    def __init__(self, ceph_nodes, pin_val):
-        super(MkdirPinning, self).__init__(ceph_nodes)
-        self.pin_val = pin_val
-
-    def mkdir_pinning(self, clients, range1, range2, mounting_dir, dir_name):
-        super(
-            MkdirPinning,
-            self).get_clients()
-        super(
-            MkdirPinning,
-            self).mkdir(
-            clients,
-            range1,
-            range2,
-            mounting_dir,
-            dir_name)
-        for client in clients:
-            out, rc = client.exec_command(cmd='df -h', timeout=10)
-            mount_output = out.read()
-            mount_output.split()
-            mon_node_ip = self.mon_node_ip.replace(" ", "")
-            if 'ceph-fuse' in mount_output or '%s:6789:/'\
-                    % mon_node_ip in mount_output:
-                for num in range(range1, range2):
-                    client.exec_command(
-                        cmd='sudo setfattr -n ceph.dir.pin -v %s %s%s_%d' %
-                        (self.pin_val, mounting_dir, dir_name, num))
         return 0
