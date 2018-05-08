@@ -1,4 +1,4 @@
-from tests.cephfs.cephfs_utils import FsUtils, MkdirPinning
+from tests.cephfs.cephfs_utils import FsUtils
 from ceph.parallel import parallel
 import timeit
 from ceph.ceph import CommandFailed
@@ -12,9 +12,6 @@ log = logger
 def run(**kw):
     try:
         start = timeit.default_timer()
-        config = kw.get('config')
-        num_of_dirs = config.get('num_of_dirs')
-        num_of_dirs = num_of_dirs / 5
         tc = '11230'
         dir_name = 'dir'
         log.info("Running cephfs %s test case" % (tc))
@@ -80,7 +77,7 @@ def run(**kw):
                 client_info['mounting_dir'],
                 '',
                 0,
-                2,
+                1,
                 iotype='crefi',
             )
             p.spawn(
@@ -89,7 +86,7 @@ def run(**kw):
                 client_info['mounting_dir'],
                 dir_name,
                 0,
-                2,
+                1,
                 iotype='crefi'
             )
             p.spawn(fs_util.read_write_IO, client4,
@@ -103,23 +100,48 @@ def run(**kw):
             print "Data validation success"
             fs_util.activate_multiple_mdss(client_info['mds_nodes'])
             log.info("Execution of Test case CEPH-%s started:" % (tc))
-            pinning_obj1 = MkdirPinning(ceph_nodes, 0)
-            pinning_obj2 = MkdirPinning(ceph_nodes, 1)
+            for client in client1:
+                client.exec_command(
+                    cmd='sudo mkdir %s%s_{1..50}' %
+                    (client_info['mounting_dir'], dir_name))
+                if client.exit_status == 0:
+                    log.info("directories created succcessfully")
+                else:
+                    raise CommandFailed("directories creation failed")
             with parallel() as p:
                 p.spawn(
-                    pinning_obj1.mkdir_pinning,
+                    fs_util.pinning,
                     client1,
-                    num_of_dirs * 21,
-                    num_of_dirs * 21 + 25,
+                    1,
+                    25,
                     client_info['mounting_dir'],
-                    dir_name)
+                    dir_name,
+                    0)
                 p.spawn(
-                    pinning_obj2.mkdir_pinning,
-                    client2,
-                    num_of_dirs * 21 + 25,
-                    num_of_dirs * 21 + 50,
+                    fs_util.pinning,
+                    client3,
+                    26,
+                    50,
                     client_info['mounting_dir'],
-                    dir_name)
+                    dir_name,
+                    1)
+            with parallel() as p:
+                p.spawn(
+                    fs_util.max_dir_io,
+                    client1,
+                    client_info['mounting_dir'],
+                    dir_name,
+                    1,
+                    25,
+                    1000)
+                p.spawn(
+                    fs_util.max_dir_io,
+                    client3,
+                    client_info['mounting_dir'],
+                    dir_name,
+                    26,
+                    50,
+                    1000)
 
             with parallel() as p:
                 p.spawn(
@@ -127,27 +149,28 @@ def run(**kw):
                     client1,
                     client_info['mounting_dir'],
                     dir_name,
-                    num_of_dirs * 21,
-                    num_of_dirs * 21 + 25,
+                    1,
+                    25,
                     10,
                     fs_util.mds_fail_over,
                     client_info['mds_nodes'])
+                for op in p:
+                    return_counts, rc = op
+            with parallel() as p:
                 p.spawn(
                     fs_util.pinned_dir_io_mdsfailover,
                     client4,
                     client_info['mounting_dir'],
                     dir_name,
-                    num_of_dirs * 21 + 25,
-                    num_of_dirs * 21 + 50,
+                    26,
+                    50,
                     20,
                     fs_util.mds_fail_over,
                     client_info['mds_nodes'])
                 for op in p:
-                    return_counts = op
-
+                    return_counts, rc = op
             log.info("Execution of Test case CEPH-%s ended:" % (tc))
             print "Results:"
-            return_counts = return_counts[0]
             result = fs_util.rc_verify(tc, return_counts)
             log.info(result)
             log.info('Cleaning up!-----')

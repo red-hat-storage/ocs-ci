@@ -1,4 +1,4 @@
-from tests.cephfs.cephfs_utils import FsUtils, MkdirPinning
+from tests.cephfs.cephfs_utils import FsUtils
 from ceph.parallel import parallel
 import timeit
 from ceph.ceph import CommandFailed
@@ -17,6 +17,7 @@ def run(**kw):
         num_of_dirs = num_of_dirs / 5
         tc = '11229'
         dir_name = 'dir'
+        test_dir = 'testdir/'
         log.info("Running cephfs %s test case" % (tc))
         ceph_nodes = kw.get('ceph_nodes')
         fs_util = FsUtils(ceph_nodes)
@@ -80,16 +81,16 @@ def run(**kw):
                 client_info['mounting_dir'],
                 '',
                 0,
-                2,
+                1,
                 iotype='crefi',
             )
             p.spawn(
                 fs_util.stress_io,
                 client3,
                 client_info['mounting_dir'],
-                dir_name,
+                '',
                 0,
-                2,
+                1,
                 iotype='crefi'
             )
             p.spawn(fs_util.read_write_IO, client4,
@@ -102,66 +103,117 @@ def run(**kw):
         result = fs_util.rc_verify('', return_counts)
         if result == 'Data validation success':
             log.info("Data validation success")
-            pinning_obj1 = MkdirPinning(ceph_nodes, 0)
-            pinning_obj2 = MkdirPinning(ceph_nodes, 1)
+            for client in client1:
+                client.exec_command(
+                    cmd='sudo mkdir %s%s' %
+                    (client_info['mounting_dir'], test_dir))
             log.info("Execution of Test case CEPH-%s started:" % (tc))
             with parallel() as p:
-                p.spawn(pinning_obj1.mkdir_pinning, client1, 0, num_of_dirs,
-                        client_info['mounting_dir'], dir_name)
                 p.spawn(
-                    pinning_obj1.mkdir_pinning,
+                    fs_util.mkdir_bulk,
                     client2,
-                    num_of_dirs,
-                    num_of_dirs * 2,
-                    client_info['mounting_dir'],
+                    0,
+                    num_of_dirs * 1,
+                    client_info['mounting_dir'] + test_dir,
                     dir_name)
                 p.spawn(
-                    pinning_obj1.mkdir_pinning,
+                    fs_util.mkdir_bulk,
                     client3,
+                    num_of_dirs * 1 + 1,
+                    num_of_dirs * 2,
+                    client_info['mounting_dir'] + test_dir,
+                    dir_name)
+                p.spawn(
+                    fs_util.mkdir_bulk,
+                    client4,
+                    num_of_dirs * 2 + 1,
+                    num_of_dirs * 3,
+                    client_info['mounting_dir'] + test_dir,
+                    dir_name)
+                p.spawn(
+                    fs_util.mkdir_bulk,
+                    client1,
+                    num_of_dirs * 3 + 1,
+                    num_of_dirs * 4,
+                    client_info['mounting_dir'] + test_dir,
+                    dir_name)
+                p.spawn(
+                    fs_util.mkdir_bulk,
+                    client1,
+                    num_of_dirs * 4 + 1,
+                    num_of_dirs * 5,
+                    client_info['mounting_dir'] + test_dir,
+                    dir_name)
+
+            with parallel() as p:
+                p.spawn(
+                    fs_util.pinning,
+                    client2,
+                    0,
+                    num_of_dirs * 1,
+                    client_info['mounting_dir'] + test_dir,
+                    dir_name,
+                    0)
+                p.spawn(
+                    fs_util.pinning,
+                    client3,
+                    num_of_dirs * 1,
+                    num_of_dirs * 2,
+                    client_info['mounting_dir'] + test_dir,
+                    dir_name,
+                    1)
+                p.spawn(
+                    fs_util.pinning,
+                    client4,
                     num_of_dirs * 2,
                     num_of_dirs * 3,
-                    client_info['mounting_dir'],
-                    dir_name)
+                    client_info['mounting_dir'] + test_dir,
+                    dir_name,
+                    1)
                 p.spawn(
-                    pinning_obj1.mkdir_pinning,
-                    client4,
+                    fs_util.pinning,
+                    client1,
                     num_of_dirs * 3,
                     num_of_dirs * 4,
-                    client_info['mounting_dir'],
-                    dir_name)
+                    client_info['mounting_dir'] + test_dir,
+                    dir_name,
+                    1)
                 p.spawn(
-                    pinning_obj2.mkdir_pinning,
-                    client1,
+                    fs_util.pinning,
+                    client3,
                     num_of_dirs * 4,
                     num_of_dirs * 5,
-                    client_info['mounting_dir'],
-                    dir_name)
+                    client_info['mounting_dir'] + test_dir,
+                    dir_name,
+                    1)
 
             with parallel() as p:
                 p.spawn(
                     fs_util.pinned_dir_io_mdsfailover,
                     client3,
-                    client_info['mounting_dir'],
+                    client_info['mounting_dir'] + test_dir,
                     dir_name,
                     0,
                     num_of_dirs / 2,
                     1,
                     fs_util.mds_fail_over,
                     client_info['mds_nodes'])
+            with parallel() as p:
                 p.spawn(
                     fs_util.pinned_dir_io_mdsfailover,
                     client4,
-                    client_info['mounting_dir'],
+                    client_info['mounting_dir'] + test_dir,
                     dir_name,
                     num_of_dirs / 2,
                     num_of_dirs,
                     2,
                     fs_util.mds_fail_over,
                     client_info['mds_nodes'])
+            with parallel() as p:
                 p.spawn(
                     fs_util.pinned_dir_io_mdsfailover,
                     client2,
-                    client_info['mounting_dir'],
+                    client_info['mounting_dir'] + test_dir,
                     dir_name,
                     num_of_dirs * 4,
                     num_of_dirs * 4 + 10,
@@ -169,8 +221,7 @@ def run(**kw):
                     fs_util.mds_fail_over,
                     client_info['mds_nodes'])
                 for op in p:
-                    return_counts = op
-            return_counts = return_counts[0]
+                    return_counts, rc = op
             log.info("Execution of Test case CEPH-%s ended" % (tc))
             print "Results:"
             result = fs_util.rc_verify(tc, return_counts)
