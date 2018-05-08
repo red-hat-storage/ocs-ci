@@ -275,8 +275,8 @@ def run(args):
     distro = []
     for cluster in conf.get('globals'):
         image_name = cluster.get('ceph-cluster').get('image-name')
+        distro.append(image_name.replace('.iso', ''))
         if 'rhel' in image_name:
-            distro.append("RHEL")
             # get COMPOSE ID and ceph version
             id = requests.get(base_url + "/COMPOSE_ID")
             compose_id = id.text
@@ -288,7 +288,6 @@ def run(args):
             ceph_ansible_version.append(m.group(1))
             log.info("Compose id is: " + compose_id)
         else:
-            distro.append("Ubuntu")
             ubuntu_pkgs = requests.get(ubuntu_repo +
                                        "/Tools/dists/xenial/main/binary-amd64/Packages")
             m = re.search(r'ceph\nVersion: (.*)', ubuntu_pkgs.text)
@@ -296,7 +295,7 @@ def run(args):
             m = re.search(r'ceph-ansible\nVersion: (.*)', ubuntu_pkgs.text)
             ceph_ansible_version.append(m.group(1))
 
-    distro = ', '.join(list(set(distro)))
+    distro = ','.join(list(set(distro)))
     ceph_version = ', '.join(list(set(ceph_version)))
     ceph_ansible_version = ', '.join(list(set(ceph_ansible_version)))
     log.info("Testing Ceph Version: " + ceph_version)
@@ -316,6 +315,15 @@ def run(args):
             """.format(ceph_version=ceph_version,
                        ceph_ansible_version=ceph_ansible_version,
                        compose_id=compose_id))
+        if docker_image and docker_registry and docker_tag:
+            launch_desc = launch_desc + textwrap.dedent(
+                """
+                docker registry: {docker_registry}
+                docker image: {docker_image}
+                docker tag: {docker_tag}
+                """.format(docker_registry=docker_registry,
+                           docker_image=docker_image,
+                           docker_tag=docker_tag))
         service.start_launch(name=launch_name, start_time=timestamp(), description=launch_desc)
 
     if reuse is None:
@@ -354,6 +362,7 @@ def run(args):
     for test in tests:
         test = test.get('test')
         tc = dict()
+        tc['docker-containers-list'] = []
         tc['name'] = test.get('name')
         tc['desc'] = test.get('desc')
         tc['file'] = test.get('module')
@@ -365,6 +374,7 @@ def run(args):
         tc['distro'] = distro
         tc['suite-name'] = suite_name
         test_file = tc['file']
+        report_portal_description = tc['desc']
         unique_test_name = create_unique_test_name(tc['name'], test_names)
         test_names.append(unique_test_name)
         tc['log-link'] = configure_logger(unique_test_name, run_dir)
@@ -407,6 +417,25 @@ def run(args):
                     config.get('ansi_config')['ceph_docker_image'] = str(docker_image)
                 if docker_tag:
                     config.get('ansi_config')['ceph_docker_image_tag'] = str(docker_tag)
+                cluster_docker_registry = config.get('ansi_config').get('ceph_docker_registry')
+                cluster_docker_image = config.get('ansi_config').get('ceph_docker_image')
+                cluster_docker_tag = config.get('ansi_config').get('ceph_docker_image_tag')
+                if cluster_docker_registry:
+                    cluster_docker_registry = config.get('ansi_config').get('ceph_docker_registry')
+                    report_portal_description = report_portal_description + '\ndocker registry: {docker_registry}' \
+                        .format(docker_registry=cluster_docker_registry)
+                if cluster_docker_image:
+                    cluster_docker_image = config.get('ansi_config').get('ceph_docker_image')
+                    report_portal_description = report_portal_description + '\ndocker image: {docker_image}' \
+                        .format(docker_image=cluster_docker_image)
+                if cluster_docker_tag:
+                    cluster_docker_tag = config.get('ansi_config').get('ceph_docker_image_tag')
+                    report_portal_description = report_portal_description + '\ndocker tag: {docker_tag}' \
+                        .format(docker_tag=cluster_docker_tag)
+                if cluster_docker_image and cluster_docker_registry:
+                    tc['docker-containers-list'].append('{docker_registry}/{docker_image}:{docker_tag}'.format(
+                        docker_registry=cluster_docker_registry, docker_image=cluster_docker_image,
+                        docker_tag=cluster_docker_tag))
             if kernel_repo is not None:
                 config['kernel-repo'] = kernel_repo
             # if Kernel Repo is defined in ENV then set the value in config
@@ -414,8 +443,8 @@ def run(args):
                 config['kernel-repo'] = os.environ.get('KERNEL-REPO-URL')
             try:
                 if post_to_report_portal:
-                    service.start_test_item(
-                        name=unique_test_name, description=tc['desc'], start_time=timestamp(), item_type="STEP")
+                    service.start_test_item(name=unique_test_name, description=report_portal_description,
+                                            start_time=timestamp(), item_type="STEP")
                     service.log(time=timestamp(), message="Logfile location: {}".format(tc['log-link']), level="INFO")
                     service.log(time=timestamp(), message="Polarion ID: {}".format(tc['polarion-id']), level="INFO")
                 rc = test_mod.run(ceph_nodes=ceph_cluster_dict[cluster_name], config=config, test_data=ceph_test_data,
