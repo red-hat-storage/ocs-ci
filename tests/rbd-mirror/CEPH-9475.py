@@ -17,7 +17,7 @@ def run(**kw):
     mirror2.create_pool(poolname=poolname)
     mirror1.create_image(imagespec=imagespec, size=config.get('imagesize'))
     mirror1.config_mirror(mirror2, poolname=poolname, mode='pool')
-    mirror2.wait_for_status(poolname=poolname, images_pattern='1')
+    mirror2.wait_for_status(poolname=poolname, images_pattern=1)
 
     with parallel() as p:
         for node in mirror2.ceph_nodes:
@@ -26,7 +26,7 @@ def run(**kw):
         p.spawn(mirror1.benchwrite, imagespec=imagespec,
                 io=config.get('io-total'))
     time.sleep(10)
-    rc = mirror1.check_data(mirror2, imagespec=imagespec)
+    rc = mirror1.check_data(peercluster=mirror2, imagespec=imagespec)
     if rc == 0:
         mirror1.delete_pool(poolname=poolname)
         mirror2.delete_pool(poolname=poolname)

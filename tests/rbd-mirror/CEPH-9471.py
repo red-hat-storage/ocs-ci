@@ -17,7 +17,7 @@ def run(**kw):
     mirror2.create_pool(poolname=poolname)
     mirror1.create_image(imagespec=imagespec, size=config.get('imagesize'))
     mirror1.config_mirror(mirror2, poolname=poolname, mode='pool')
-    mirror2.wait_for_status(poolname=poolname, images_pattern='1')
+    mirror2.wait_for_status(poolname=poolname, images_pattern=1)
     mirror1.benchwrite(imagespec=imagespec, io=config.get('io-total'))
     mirror2.wait_for_replay_complete(imagespec=imagespec)
     mirror1.demote(imagespec=imagespec)
@@ -30,7 +30,7 @@ def run(**kw):
     mirror2.promote(imagespec=imagespec)
     mirror2.benchwrite(imagespec=imagespec, io=config.get('io-total'))
     time.sleep(10)
-    rc = mirror2.check_data(mirror1, imagespec=imagespec)
+    rc = mirror2.check_data(peercluster=mirror1, imagespec=imagespec)
     if rc != 0:
         return 1
     mirror2.demote(imagespec=imagespec)
@@ -39,7 +39,7 @@ def run(**kw):
     mirror1.promote(imagespec=imagespec)
     mirror1.benchwrite(imagespec=imagespec, io=config.get('io-total'))
     time.sleep(10)
-    rc = mirror1.check_data(mirror2, imagespec=imagespec)
+    rc = mirror1.check_data(peercluster=mirror2, imagespec=imagespec)
     if rc == 0:
         mirror1.delete_pool(poolname=poolname)
         mirror2.delete_pool(poolname=poolname)
