@@ -34,7 +34,6 @@ tests:
                   mds_bal_merge_size: 5
                   mds_bal_fragment_size_max: 10000
                   debug mds: 5
-
       desc: test cluster setup using ceph-ansible
       destroy-cluster: False
       abort-on-fail: true
@@ -84,9 +83,18 @@ tests:
        abort-on-fail: false
    - test:
        name: read-write-del-ops
-       module: CEPH-11219_11224.py
+       module: CEPH-11219.py
        polarion-id: CEPH-11219,CEPH-11226,CEPH-11224
        desc: Mount CephFS on multiple clients perform read and write operation on same file from different clients and perform delete ops
+       abort-on-fail: false
+
+   - test:
+       name: cephfs-mdsfailover-pinning-io
+       module: CEPH-11227.py
+       config:
+             num_of_dirs: 1000
+       polarion-id: CEPH-11227
+       desc: MDSfailover on active-active mdss,performing client IOs with no pinning at the first,later pin 10 dirs with IOs
        abort-on-fail: false
    - test:
        name: cephfs-io
@@ -130,4 +138,3 @@ tests:
        polarion-id: CEPH-11335
        desc: Mount CephFS on multiple clients and perform client eviction
        abort-on-fail: false
-
