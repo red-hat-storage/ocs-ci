@@ -117,7 +117,7 @@ def run(**kw):
     log.info("HEALTH_ERR found as expected")
     log.info("inconsistent foud as expected")
 
-    timeout = 10
+    timeout = 300
     found = 0
     while timeout:
         incon_pg = "sudo rados list-inconsistent-pg {pname}".format(pname=pname)
@@ -134,7 +134,7 @@ def run(**kw):
         log.error("pg not listed as inconsistent")
         return 1
 
-    timeout = 10
+    timeout = 300
     found = 0
     # need to check for inconsistent obj before checking for -
     # - inconsistent snapset in case of snapset corruption on primary osds
