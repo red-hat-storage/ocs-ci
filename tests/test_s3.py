@@ -64,7 +64,8 @@ def setup_s3_tests(client_node, rgw_node, config):
     client_node.exec_command(cmd="cd s3-tests; ./bootstrap")
 
     main_info = create_s3_user(client_node, 'main-user')
-    alt_info = create_s3_user(client_node, 'alt-user', 'foo.bar@test.test')
+    alt_info = create_s3_user(client_node, 'alt-user', email=True)
+    tenant_info = create_s3_user(client_node, 'tenant', email=True)
 
     log.info("Creating configuration file")
     port = 8080
@@ -89,6 +90,13 @@ display_name = {alt_name}
 email = {alt_email}
 access_key = {alt_access_key}
 secret_key = {alt_secret_key}
+
+[s3 tenant]
+user_id = {tenant_id}
+display_name = {tenant_name}
+email = {tenant_email}
+access_key = {tenant_access_key}
+secret_key = {tenant_secret_key}
     '''.format(host=rgw_node.shortname,
                port=port,
                random='{random}',
@@ -100,7 +108,12 @@ secret_key = {alt_secret_key}
                alt_name=alt_info['display_name'],
                alt_email=alt_info['email'],
                alt_access_key=alt_info['keys'][0]['access_key'],
-               alt_secret_key=alt_info['keys'][0]['secret_key'])
+               alt_secret_key=alt_info['keys'][0]['secret_key'],
+               tenant_id=tenant_info['user_id'],
+               tenant_name=tenant_info['display_name'],
+               tenant_email=tenant_info['email'],
+               tenant_access_key=tenant_info['keys'][0]['access_key'],
+               tenant_secret_key=tenant_info['keys'][0]['secret_key'])
 
     log.info("s3-tests configuration: {s3_config}".format(s3_config=s3_config))
     config_file = client_node.write_file(file_name='s3-tests/config.yaml', file_mode='w')
@@ -111,14 +124,14 @@ secret_key = {alt_secret_key}
     open_firewall_port(rgw_node, port=port, protocol='tcp')
 
 
-def create_s3_user(client_node, display_name, email=None):
+def create_s3_user(client_node, display_name, email=False):
     """
     Create an s3 user with the given display_name. The uid will be generated.
 
     Args:
         client_node: node in the cluster to create the user on
         display_name: display name for the new user
-        email: (optional) email address for the user
+        email: (optional) generate fake email address for user
 
     Returns:
         user_info dict
@@ -129,7 +142,7 @@ def create_s3_user(client_node, display_name, email=None):
     cmd = "radosgw-admin user create --uid={uid} --display_name={display_name}".format(
         uid=uid, display_name=display_name)
     if email:
-        cmd += "--email={email}".format(email=email)
+        cmd += " --email={email}@foo.bar".format(email=uid)
 
     out, err = client_node.exec_command(sudo=True, cmd=cmd)
     user_info = json.loads(out.read())
@@ -150,7 +163,11 @@ def execute_s3_tests(client_node):
     """
     log.info("Executing s3-tests")
     try:
-        client_node.exec_command(cmd="cd s3-tests; S3TEST_CONF=config.yaml ./virtualenv/bin/nosetests")
+        out, err = client_node.exec_command(
+            cmd="cd s3-tests; S3TEST_CONF=config.yaml ./virtualenv/bin/nosetests -v -a '!fails_on_rgw,!lifecycle'",
+            timeout=3600)
+        log.info(out.read())
+        log.info(err.read())
         return 0
     except CommandFailed as e:
         log.warn("Received CommandFailed")
