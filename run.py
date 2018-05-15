@@ -28,6 +28,7 @@ A simple test suite wrapper that executes tests based on yaml test configuration
   run.py --rhbuild BUILD --global-conf FILE --suite FILE [--use-cdn ]
         [--osp-cred <file>]
         [--rhs-con-repo <repo> --rhs-ceph-repo <repo>]
+        [ --ubuntu-repo <repo>]
         [--add-repo <repo>]
         [--kernel-repo <repo>]
         [--store]
