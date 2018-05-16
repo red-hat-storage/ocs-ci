@@ -289,7 +289,8 @@ def setup_deb_repos(node, ubuntu_repo):
                               ' /etc/apt/sources.list.d/')
     ds_keys = ['https://www.redhat.com/security/897da07a.txt',
                'https://www.redhat.com/security/f21541eb.txt',
-               'http://puddle.ceph.redhat.com/keys/RPM-GPG-KEY-redhatbuild']
+               'https://prodsec.redhat.com/keys/00da75f2.txt',
+               'https://www.redhat.com/security/data/fd431d51.txt']
 
     for key in ds_keys:
         wget_cmd = 'sudo wget -O - ' + key + ' | sudo apt-key add -'
