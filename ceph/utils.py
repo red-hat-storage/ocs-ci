@@ -412,3 +412,15 @@ def open_firewall_port(ceph_node, port, protocol):
         #                        .format(port=str(port).replace('-', ':'), protocol=protocol))
         # ceph_node.exec_command(cmd="sudo DEBIAN_FRONTEND=noninteractive apt-get -yq install iptables-persistent",
         #                        long_running=True)
+
+
+def config_ntp(ceph_node):
+    ceph_node.exec_command(
+        cmd="sudo sed -i '/server*/d' /etc/ntp.conf",
+        long_running=True)
+    ceph_node.exec_command(
+        cmd="echo 'server clock.corp.redhat.com iburst' | sudo tee -a /etc/ntp.conf",
+        long_running=True)
+    ceph_node.exec_command(cmd="sudo ntpd -gq", long_running=True)
+    ceph_node.exec_command(cmd="sudo systemctl enable ntpd", long_running=True)
+    ceph_node.exec_command(cmd="sudo systemctl start ntpd", long_running=True)
