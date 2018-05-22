@@ -34,6 +34,11 @@ tests:
                   mds_bal_merge_size: 5
                   mds_bal_fragment_size_max: 10000
                   debug mds: 5
+            cephfs_pools:
+              - name: "cephfs_data"
+                pgs: "8"
+              - name: "cephfs_metadata"
+                pgs: "8"
       desc: test cluster setup using ceph-ansible
       destroy-cluster: False
       abort-on-fail: true
