@@ -30,6 +30,11 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
+            cephfs_pools:
+              - name: "cephfs_data"
+                pgs: "8"
+              - name: "cephfs_metadata"
+                pgs: "8"
       desc: osd with collocated journal
       destroy-cluster: False
       abort-on-fail: true
@@ -105,6 +110,11 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
+            cephfs_pools:
+              - name: "cephfs_data"
+                pgs: "8"
+              - name: "cephfs_metadata"
+                pgs: "8"
       desc: encrypted osd with collocated journal
       destroy-cluster: False
       abort-on-fail: true
@@ -183,6 +193,11 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
+            cephfs_pools:
+              - name: "cephfs_data"
+                pgs: "8"
+              - name: "cephfs_metadata"
+                pgs: "8"
       desc: osd with dedicated journal
       destroy-cluster: False
       abort-on-fail: true
@@ -262,6 +277,11 @@ tests:
                     mon_max_pg_per_osd: 1024
                   mon:
                     mon_allow_pool_delete: true
+              cephfs_pools:
+                - name: "cephfs_data"
+                  pgs: "8"
+                - name: "cephfs_metadata"
+                  pgs: "8"
         desc: encrypted osd with dedicated journal
         destroy-cluster: False
         abort-on-fail: true
@@ -338,6 +358,11 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
+            cephfs_pools:
+              - name: "cephfs_data"
+                pgs: "8"
+              - name: "cephfs_metadata"
+                pgs: "8"
       desc: iso source (osd with collocated journal)
       destroy-cluster: False
       abort-on-fail: true
@@ -412,6 +437,11 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
+            cephfs_pools:
+              - name: "cephfs_data"
+                pgs: "8"
+              - name: "cephfs_metadata"
+                pgs: "8"
       desc: osd with collocated journal and autodiscovery
       destroy-cluster: False
       abort-on-fail: true
@@ -487,6 +517,11 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
+            cephfs_pools:
+              - name: "cephfs_data"
+                pgs: "8"
+              - name: "cephfs_metadata"
+                pgs: "8"
       desc: encrypted osd with collocated journal and autodiscovery
       destroy-cluster: False
       abort-on-fail: true
