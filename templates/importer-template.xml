@@ -2,7 +2,7 @@
     <properties>
         <property name="polarion-project-id" value="CEPH"/>
         <property name="polarion-testrun-id" value="{{tc['test_run_id']}}"/>
-        <property name="polarion-group-id" value="ceph-build: {{tc['ceph-build']}}"/>
+        <property name="polarion-group-id" value="ceph-build: {{tc['ceph-build']}} {{tc['docker-container']}}"/>
     </properties>
     <testsuite name="{{tc['name']}} test suite" tests="1">
     <testcase name="{{tc['name']}}">
