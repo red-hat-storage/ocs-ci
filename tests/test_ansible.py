@@ -216,6 +216,9 @@ def run(**kw):
         ceph_installer.exec_command(
             sudo=True, cmd='cp -R {ansible_dir}/site.yml.sample {ansible_dir}/site.yml'.format(ansible_dir=ansible_dir))
 
+    if config.get('ansi_config').get('fetch_directory') is None:
+        # default fetch directory is not writeable, lets use local one if not set
+        config['ansi_config']['fetch_directory'] = '~/fetch/'
     gvar = yaml.dump(config.get('ansi_config'), default_flow_style=False)
     log.info("global vars " + gvar)
     gvars_file = ceph_installer.write_file(
