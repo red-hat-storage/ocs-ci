@@ -14,7 +14,7 @@ def run(**kw):
     log.info("Running ceph ansible test")
     config = kw.get('config')
     test_data = kw.get('test_data')
-    build = test_data['ceph-ansible']['rhbuild']
+    prev_install_version = test_data['install_version']
 
     ubuntu_repo = None
     ceph_installer = None
@@ -71,7 +71,7 @@ def run(**kw):
     ceph_installer.exec_command(sudo=True, cmd='cp /tmp/hosts {}/hosts'.format(ansible_dir))
 
     # If upgrading from version 2 update hosts file with mgrs
-    if build.startswith('2'):
+    if prev_install_version.startswith('2'):
         log.info("Adding mons as mgrs in hosts file")
         mon_nodes = [node for node in ceph_nodes if node.role == 'mon']
         mgr_block = '[mgrs]\n'
@@ -106,8 +106,8 @@ def run(**kw):
 
     # set build to new version
     if config.get('build'):
-        log.info("Setting rhbuild to {build}".format(build=config['build']))
-        test_data['ceph-ansible']['rhbuild'] = config['build']
+        log.info("Setting install_version to {build}".format(build=config['build']))
+        test_data['install_version'] = config['build']
 
     # check if all mon's and osd's are in correct state
     num_osds = test_data['ceph-ansible']['num-osds']
