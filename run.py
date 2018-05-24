@@ -223,6 +223,16 @@ def run(args):
         if ubuntu_repo is None:
             log.info("Using latest ubuntu repo since no default value provided")
             ubuntu_repo = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/2/latest-Ceph-2-Ubuntu/'
+    elif rhbuild == '3.1':
+        if base_url is None:
+            # default to latest RHCeph build 3.1
+            base_url = 'http://download.eng.bos.redhat.com/composes/auto/ceph-3.1-rhel-7/latest-RHCEPH-3-RHEL-7/'
+            # we dont need installer repo
+            installer_url = None
+        if ubuntu_repo is None:
+            # TODO: the link is guessed, required to be validated after latest link is fixed for 3.1 Ubuntu
+            ubuntu_repo = \
+                'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/3.1/latest-RHCEPH-3.1-Ubuntu/'
     elif rhbuild.startswith('3'):
         if base_url is None:
             # default to latest RHCeph build 3.0
