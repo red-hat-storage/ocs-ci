@@ -25,10 +25,7 @@ def run(**kw):
             log.info("Got client info")
         else:
             raise CommandFailed("fetching client info failed")
-        client1 = []
-        client2 = []
-        client3 = []
-        client4 = []
+        client1, client2, client3, client4 = ([] for _ in range(4))
         client1.append(client_info['fuse_clients'][0])
         client2.append(client_info['fuse_clients'][1])
         client3.append(client_info['kernel_clients'][0])
@@ -80,7 +77,7 @@ def run(**kw):
                 client_info['mounting_dir'],
                 dir_name,
                 0,
-                2,
+                1,
                 iotype='crefi'
             )
             p.spawn(fs_util.read_write_IO, client4,
@@ -99,7 +96,7 @@ def run(**kw):
                     fs_util.mkdir,
                     client1,
                     0,
-                    num_of_dirs * 5,
+                    num_of_dirs * 1,
                     client_info['mounting_dir'],
                     dir_name)
                 p.spawn(
@@ -130,7 +127,12 @@ def run(**kw):
                     num_of_dirs * 5,
                     client_info['mounting_dir'],
                     dir_name)
-
+                for op in p:
+                    _, rc = op
+            if rc == 0:
+                log.info("Dirs created successfully")
+            else:
+                raise CommandFailed("Dirs creation failed")
             with parallel() as p:
                 p.spawn(
                     fs_util.pinned_dir_io_mdsfailover,
@@ -149,6 +151,9 @@ def run(**kw):
                     dir_name,
                     0,
                     num_of_dirs * 1)
+                for op in p:
+                    return_counts, rc = op
+            with parallel() as p:
                 p.spawn(
                     fs_util.pinned_dir_io_mdsfailover,
                     client3,
@@ -166,6 +171,9 @@ def run(**kw):
                     dir_name,
                     num_of_dirs * 1,
                     num_of_dirs * 2)
+                for op in p:
+                    return_counts, rc = op
+            with parallel() as p:
                 p.spawn(
                     fs_util.pinned_dir_io_mdsfailover,
                     client1,
@@ -183,6 +191,9 @@ def run(**kw):
                     dir_name,
                     num_of_dirs * 2,
                     num_of_dirs * 3)
+                for op in p:
+                    return_counts, rc = op
+            with parallel() as p:
                 p.spawn(
                     fs_util.pinned_dir_io_mdsfailover,
                     client3,
@@ -193,6 +204,9 @@ def run(**kw):
                     1,
                     fs_util.mds_fail_over,
                     client_info['mds_nodes'])
+                for op in p:
+                    return_counts, rc = op
+            with parallel() as p:
                 p.spawn(
                     fs_util.filesystem_utilities,
                     client3,
