@@ -3,7 +3,7 @@ import logging
 import yaml
 
 from ceph.utils import setup_deb_repos, setup_cdn_repos, setup_deb_cdn_repo
-from ceph.utils import setup_repos, check_ceph_healthly
+from ceph.utils import setup_repos, check_ceph_healthly, log_ceph_versions
 
 log = logging.getLogger(__name__)
 
@@ -96,6 +96,9 @@ def run(**kw):
     gvars_file.write(gvar)
     gvars_file.flush()
 
+    log.info("Pre-Upgrade Ceph Versions")
+    log_ceph_versions(ceph_nodes)
+
     # copy rolling update from infrastructure playbook
     ceph_installer.exec_command(
         sudo=True, cmd='cd {} ; cp infrastructure-playbooks/rolling_update.yml .'.format(ansible_dir))
@@ -115,4 +118,8 @@ def run(**kw):
     if rc != 0:
         log.error("Failed during upgrade")
         return rc
+
+    log.info("Post-Upgrade Ceph Versions")
+    log_ceph_versions(ceph_nodes)
+
     return check_ceph_healthly(ceph_mon, num_osds, num_mons)
