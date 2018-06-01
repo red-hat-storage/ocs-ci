@@ -437,11 +437,16 @@ def log_ceph_versions(ceph_nodes):
         None
     """
     for node in ceph_nodes:
-        try:
+        if node.role == 'installer':
             if node.pkg_type == 'rpm':
-                out, rc = node.exec_command(cmd='rpm -qa | grep ceph')
+                cmd = 'rpm -qa | grep ceph-ansible'
             else:
-                out, rc = node.exec_command(sudo=True, cmd='apt-cache search ceph')
-            log.info("{} ceph versions:\n{}".format(node.shortname, out.read()))
+                cmd = 'dpkg -s ceph-ansible'
+        else:
+            cmd = 'ceph --version'
+
+        try:
+            out, rc = node.exec_command(cmd=cmd)
+            log.info("{} ceph versions: {}".format(node.shortname, out.read()))
         except CommandFailed:
             log.info("No ceph verions on {}".format(node.shortname))
