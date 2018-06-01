@@ -10,7 +10,7 @@ from gevent import sleep
 from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
 
-from ceph import RolesContainer
+from ceph import RolesContainer, CommandFailed
 from mita.openstack import CephVMNode
 from parallel import parallel
 
@@ -424,3 +424,29 @@ def config_ntp(ceph_node):
     ceph_node.exec_command(cmd="sudo ntpd -gq", long_running=True)
     ceph_node.exec_command(cmd="sudo systemctl enable ntpd", long_running=True)
     ceph_node.exec_command(cmd="sudo systemctl start ntpd", long_running=True)
+
+
+def log_ceph_versions(ceph_nodes):
+    """
+    Log the versions for any packages on the system with ceph in the name.
+
+    Args:
+        ceph_nodes: nodes in the cluster
+
+    Returns:
+        None
+    """
+    for node in ceph_nodes:
+        if node.role == 'installer':
+            if node.pkg_type == 'rpm':
+                cmd = 'rpm -qa | grep ceph-ansible'
+            else:
+                cmd = 'dpkg -s ceph-ansible'
+        else:
+            cmd = 'ceph --version'
+
+        try:
+            out, rc = node.exec_command(cmd=cmd)
+            log.info("{} ceph versions: {}".format(node.shortname, out.read()))
+        except CommandFailed:
+            log.info("No ceph verions on {}".format(node.shortname))
