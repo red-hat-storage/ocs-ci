@@ -20,14 +20,14 @@ def run(**kw):
     rgw_node.exec_command(cmd='sudo rm -rf ' + test_folder)
     rgw_node.exec_command(cmd='sudo mkdir ' + test_folder)
     rgw_node.exec_command(cmd='cd ' + test_folder + ' ; ' + git_clone)
-    rgw_node.exec_command(cmd='sudo pip install boto3 names PyYaml ConfigParser python-swiftclient, swiftly')
+    rgw_node.exec_command(cmd='sudo pip install boto3 names PyYaml ConfigParser python-swiftclient swiftly')
     config = kw.get('config')
     script_name = config.get('script-name')
     config_file_name = config.get('config-file-name')
     timeout = config.get('timeout', 300)
     out, err = rgw_node.exec_command(
-        cmd='sudo python ~/' + test_folder + '/ceph-qe-scripts/rgw/v2/tests/s3_swift/' + script_name + ' -c ' + test_folder +
-            '/ceph-qe-scripts/rgw/v2/tests/s3_swift/configs/' + config_file_name,
+        cmd='sudo python ~/' + test_folder + '/ceph-qe-scripts/rgw/v2/tests/s3_swift/' + script_name + ' -c ' +
+            test_folder + '/ceph-qe-scripts/rgw/v2/tests/s3_swift/configs/' + config_file_name,
         timeout=timeout)
     log.info(out.read())
     return 0
