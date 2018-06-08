@@ -51,12 +51,37 @@ tests:
 #            role: mon
 #      desc: Test librbd unit tests
 #   - test:
-#      name: rbd cli automation
+#      name: rbd cli image
 #      module: rbd_system.py
 #      config:
-#            test_name: rbd_cli_automation.py
+#            test_name: cli/rbd_cli_image.py
 #            branch: master
-#      desc: Test rbd cli automation tests
+#      polarion-id: CEPH-83572722
+#      desc: CLI validation for image related commands
+#   - test:
+#      name: rbd cli snap_clone
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_snap_clone.py
+#            branch: master
+#      polarion-id: CEPH-83572725
+#      desc: CLI validation for snap and clone related commands
+#   - test:
+#      name: rbd cli misc
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_misc.py
+#            branch: master
+#      polarion-id: CEPH-83572724
+#      desc: CLI validation for miscellaneous rbd commands
+#   - test:
+#      name: rbd cli import_export
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_import_export_diff.py
+#            branch: master
+#      polarion-id: CEPH-83572723
+#      desc: CLI validation for import, export and diff related commands
 #   - test:
 #      name: check-ceph-health
 #      module: exec.py
@@ -129,12 +154,37 @@ tests:
 #            role: mon
 #      desc: Test librbd unit tests
 #   - test:
-#      name: rbd cli automation
+#      name: rbd cli image
 #      module: rbd_system.py
 #      config:
-#            test_name: rbd_cli_automation.py
+#            test_name: cli/rbd_cli_image.py
 #            branch: master
-#      desc: Test rbd cli automation tests
+#      polarion-id: CEPH-83572722
+#      desc: CLI validation for image related commands
+#   - test:
+#      name: rbd cli snap_clone
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_snap_clone.py
+#            branch: master
+#      polarion-id: CEPH-83572725
+#      desc: CLI validation for snap and clone related commands
+#   - test:
+#      name: rbd cli misc
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_misc.py
+#            branch: master
+#      polarion-id: CEPH-83572724
+#      desc: CLI validation for miscellaneous rbd commands
+#   - test:
+#      name: rbd cli import_export
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_import_export_diff.py
+#            branch: master
+#      polarion-id: CEPH-83572723
+#      desc: CLI validation for import, export and diff related commands
 #   - test:
 #      name: check-ceph-health
 #      module: exec.py
@@ -210,12 +260,37 @@ tests:
 #            role: mon
 #      desc: Test librbd unit tests
 #   - test:
-#      name: rbd cli automation
+#      name: rbd cli image
 #      module: rbd_system.py
 #      config:
-#            test_name: rbd_cli_automation.py
+#            test_name: cli/rbd_cli_image.py
 #            branch: master
-#      desc: Test rbd cli automation tests
+#      polarion-id: CEPH-83572722
+#      desc: CLI validation for image related commands
+#   - test:
+#      name: rbd cli snap_clone
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_snap_clone.py
+#            branch: master
+#      polarion-id: CEPH-83572725
+#      desc: CLI validation for snap and clone related commands
+#   - test:
+#      name: rbd cli misc
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_misc.py
+#            branch: master
+#      polarion-id: CEPH-83572724
+#      desc: CLI validation for miscellaneous rbd commands
+#   - test:
+#      name: rbd cli import_export
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_import_export_diff.py
+#            branch: master
+#      polarion-id: CEPH-83572723
+#      desc: CLI validation for import, export and diff related commands
 #   - test:
 #      name: check-ceph-health
 #      module: exec.py
@@ -292,12 +367,37 @@ tests:
 #            role: mon
 #      desc: Test librbd unit tests
 #   - test:
-#      name: rbd cli automation
+#      name: rbd cli image
 #      module: rbd_system.py
 #      config:
-#            test_name: rbd_cli_automation.py
+#            test_name: cli/rbd_cli_image.py
 #            branch: master
-#      desc: Test rbd cli automation tests
+#      polarion-id: CEPH-83572722
+#      desc: CLI validation for image related commands
+#   - test:
+#      name: rbd cli snap_clone
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_snap_clone.py
+#            branch: master
+#      polarion-id: CEPH-83572725
+#      desc: CLI validation for snap and clone related commands
+#   - test:
+#      name: rbd cli misc
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_misc.py
+#            branch: master
+#      polarion-id: CEPH-83572724
+#      desc: CLI validation for miscellaneous rbd commands
+#   - test:
+#      name: rbd cli import_export
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_import_export_diff.py
+#            branch: master
+#      polarion-id: CEPH-83572723
+#      desc: CLI validation for import, export and diff related commands
 #   - test:
 #      name: check-ceph-health
 #      module: exec.py
@@ -371,12 +471,37 @@ tests:
 #            role: mon
 #      desc: Test librbd unit tests
 #   - test:
-#      name: rbd cli automation
+#      name: rbd cli image
 #      module: rbd_system.py
 #      config:
-#            test_name: rbd_cli_automation.py
+#            test_name: cli/rbd_cli_image.py
 #            branch: master
-#      desc: Test rbd cli automation tests
+#      polarion-id: CEPH-83572722
+#      desc: CLI validation for image related commands
+#   - test:
+#      name: rbd cli snap_clone
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_snap_clone.py
+#            branch: master
+#      polarion-id: CEPH-83572725
+#      desc: CLI validation for snap and clone related commands
+#   - test:
+#      name: rbd cli misc
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_misc.py
+#            branch: master
+#      polarion-id: CEPH-83572724
+#      desc: CLI validation for miscellaneous rbd commands
+#   - test:
+#      name: rbd cli import_export
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_import_export_diff.py
+#            branch: master
+#      polarion-id: CEPH-83572723
+#      desc: CLI validation for import, export and diff related commands
 #   - test:
 #      name: check-ceph-health
 #      module: exec.py
@@ -449,12 +574,37 @@ tests:
 #            role: mon
 #      desc: Test librbd unit tests
 #   - test:
-#      name: rbd cli automation
+#      name: rbd cli image
 #      module: rbd_system.py
 #      config:
-#            test_name: rbd_cli_automation.py
+#            test_name: cli/rbd_cli_image.py
 #            branch: master
-#      desc: Test rbd cli automation tests
+#      polarion-id: CEPH-83572722
+#      desc: CLI validation for image related commands
+#   - test:
+#      name: rbd cli snap_clone
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_snap_clone.py
+#            branch: master
+#      polarion-id: CEPH-83572725
+#      desc: CLI validation for snap and clone related commands
+#   - test:
+#      name: rbd cli misc
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_misc.py
+#            branch: master
+#      polarion-id: CEPH-83572724
+#      desc: CLI validation for miscellaneous rbd commands
+#   - test:
+#      name: rbd cli import_export
+#      module: rbd_system.py
+#      config:
+#            test_name: cli/rbd_cli_import_export_diff.py
+#            branch: master
+#      polarion-id: CEPH-83572723
+#      desc: CLI validation for import, export and diff related commands
 #   - test:
 #      name: check-ceph-health
 #      module: exec.py
