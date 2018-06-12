@@ -43,7 +43,7 @@ class CephVMNode(object):
         self.vm_size = kw['vm-size']
         self.role = kw['role']
         self.no_of_volumes = None
-        if self.role == 'osd':
+        if kw.get('no-of-volumes'):
             self.no_of_volumes = kw['no-of-volumes']
             self.size_of_disk = kw['size-of-disks']
         self.cd_file = os.path.abspath(kw['cloud-data'])
@@ -113,7 +113,7 @@ class CephVMNode(object):
         logger.info("Attaching floating ip")
         self.attach_floating_ip()
         self.volumes = []
-        if self.role == 'osd':
+        if self.no_of_volumes:
             total_vols = self.no_of_volumes
             size = self.size_of_disk
             for vol in range(0, total_vols):
