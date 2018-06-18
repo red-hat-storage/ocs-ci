@@ -138,6 +138,11 @@ tests:
        desc: cephfs basic operations
        abort-on-fail: false
    - test:
+       name: nfs-ganesha_with_cephfs
+       module: nfs-ganesha_basics.py
+       desc: Mount cephfs on clients,configure nfs-ganesha on nfs server,do mount on any client and do IOs
+       abort-on-fail: false
+   - test:
        name: client-eviction
        module: CEPH-11335.py
        polarion-id: CEPH-11335
