@@ -111,43 +111,53 @@ class IscsiUtils(object):
                 iscsi_initiators = node
                 return iscsi_initiators
 
-    def get_initiatorname(self):
+    def get_initiatorname(self, full=False):
         for node in self.ceph_nodes:
             if node.role == "iscsi-clients":
                 out, err = node.exec_command(
                     sudo=True, cmd='cat /etc/iscsi/'
                                    'initiatorname.iscsi', check_ec=False)
                 output = out.read()
-                temp = output.split('=')
-                out = temp[1].split(":")
+                out = output.split('=')
                 name = out[1].rstrip("\n")
-                return name
+                if full:
+                    return name
+                else:
+                    host_name = name.split(":")[1]
+                    return host_name
+
+    def create_host(self, gwcli_node, init_name):
+        login = init_name.split(":")[1]
+        gwcli_node.exec_command(
+            cmd='sudo gwcli /iscsi-target/'
+                'iqn.2003-01.com.redhat.iscsi-gw:ceph-'
+                'igw/hosts create {}'.format(init_name))
+        gwcli_node.exec_command(
+            cmd='sudo gwcli /iscsi-target/iqn.2003-01.com.redhat.'
+                'iscsi-gw:ceph-igw/hosts/{0} '
+                'auth {1}/redhat@123456 "|" nochap'.format(init_name, login))
+        log.info('Client {} was added '.format(init_name))
 
     def create_luns(
             self,
             no_of_luns,
-            ceph_osd_nodes,
+            gwcli_node,
             image_name,
             iosize,
             map_to_client):
         for i in range(0, no_of_luns):
-            ceph_osd_nodes.exec_command(
+            disk_name = image_name + str(i)
+            gwcli_node.exec_command(
                 sudo=True,
-                cmd='gwcli /disks create rbd image=' +
-                    image_name +
-                    str(i) +
-                    ' size=' +
-                    iosize)
-        if map_to_client:
-            for i in range(0, no_of_luns):
-                ceph_osd_nodes.exec_command(
+                cmd='gwcli /disks create rbd image={0} '
+                    'size={1}'.format(disk_name, iosize))
+            if map_to_client:
+                gwcli_node.exec_command(
                     sudo=True,
                     cmd='gwcli /iscsi-target/iqn.2003-01.com.redhat.iscsi-'
-                        'gw:ceph-igw/hosts/iqn.1994-05.com.redhat:' +
-                        self.get_initiatorname() +
-                        ' disk add rbd.' +
-                        image_name +
-                        str(i))
+                        'gw:ceph-igw/hosts/{0} disk add rbd.{1}'.format(
+                            self.get_initiatorname(full=True), disk_name
+                        ))
 
     def create_directory_with_io(
             self,

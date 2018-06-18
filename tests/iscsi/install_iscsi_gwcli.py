@@ -15,7 +15,7 @@ def run(**kw):
     iscsi_util = IscsiUtils(ceph_nodes)
     global no_of_luns
     no_of_luns = 0
-    ceph_iscsi_initiatorname = []
+    initiator_name = iscsi_util.get_initiatorname(full=True)
     trusted_ip_list = ''
     if config.get('no_of_gateways'):
         no_of_gateways = int(config.get('no_of_gateways'))
@@ -30,7 +30,11 @@ def run(**kw):
 
     for ceph in ceph_nodes:
         if ceph.role == 'osd':
-            ceph_osd_nodes = ceph
+            gwcli_node = ceph
+            break
+    for ceph in ceph_nodes:
+        if ceph.role == 'iscsi-clients':
+            iscsi_initiator = ceph
             break
     check = 1
     iscsi_util.do_iptables_flush()
@@ -96,7 +100,7 @@ trusted_ip_list = {0}""".format(trusted_ip_list)
             log.info('Starting to create software iscsi')
             count = 0
             sleep(5)
-            ceph_osd_nodes.exec_command(
+            gwcli_node.exec_command(
                 cmd='sudo gwcli /iscsi-target create '
                     'iqn.2003-01.com.redhat.iscsi-gw:ceph-igw')
             sleep(5)
@@ -106,7 +110,7 @@ trusted_ip_list = {0}""".format(trusted_ip_list)
                 if ceph.role == 'osd' and check <= no_of_gateways:
                     (out, rc) = ceph.exec_command(cmd='hostname -I')
                     ip = out.read()
-                    ceph_osd_nodes.exec_command(
+                    gwcli_node.exec_command(
                         cmd='sudo gwcli /iscsi-target'
                             '/iqn.2003-01.com.redhat.iscsi-'
                             'gw:ceph-igw/gateways create ' +
@@ -118,44 +122,15 @@ trusted_ip_list = {0}""".format(trusted_ip_list)
                     log.info(ceph.shortname + ' gateway added')
                     check = check + 1
             image_name = 'test_image' + str(random.randint(10, 999))
-
-            for ceph in ceph_nodes:
-                if ceph.role == 'iscsi-clients':
-                    iscsi_initiators = ceph
-            (out, err) = iscsi_initiators.exec_command(
-                sudo=True, cmd='sudo cat /etc/iscsi/initiatorname.iscsi')
-            output = out.read()
-            temp = output.split('=')
-            ceph_iscsi_initiatorname.append(temp[1])
-            ini_name = temp[1]
-            ini_name = ini_name.split(':')
-            ini_name = ini_name[1]
             log.info('Adding iscsi-clients')
-
-            count = 0
-            for ceph in range(len(ceph_iscsi_initiatorname)):
-                ceph_osd_nodes.exec_command(
-                    cmd='sudo gwcli /iscsi-target/'
-                        'iqn.2003-01.com.redhat.iscsi-gw:ceph-'
-                        'igw/hosts create iqn.1994-05.com.redhat:' +
-                        iscsi_util.get_initiatorname())
-                ceph_osd_nodes.exec_command(
-                    cmd='sudo gwcli /iscsi-target/iqn.2003-01.com.redhat.'
-                        'iscsi-gw:ceph-igw/hosts/iqn.1994-05.com.redhat:' +
-                        iscsi_util.get_initiatorname() +
-                        ' auth ' +
-                        ini_name.rstrip('\n') +
-                        '/redhat@123456 "|" nochap')
-                log.info('Client Added ' +
-                         ceph_iscsi_initiatorname[ceph])
+            iscsi_util.create_host(gwcli_node, initiator_name)
             iscsi_util.create_luns(
                 no_of_luns,
-                ceph_osd_nodes,
+                gwcli_node,
                 image_name,
                 iosize="2g",
                 map_to_client=True)
-            iscsi_util.write_multipath(iscsi_initiators)
-
+            iscsi_util.write_multipath(iscsi_initiator)
             return 0
         else:
             log.error('No_of_gateways excited ' + no_of_gateways +
