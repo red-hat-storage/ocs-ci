@@ -137,9 +137,8 @@ class FsUtils(object):
             self.rc_list.append(mon_node.exit_status)
             keyring = out.read()
             key_file = node.write_file(
-                sudo=True,
-                file_name='/etc/ceph/ceph.client.%s.keyring' % (node.hostname),
-                file_mode='w')
+                sudo=True, file_name='/etc/ceph/ceph.client.%s.keyring' %
+                (node.hostname), file_mode='w')
             key_file.write(keyring)
             key_file.flush()
             self.rc_list.append(node.exit_status)
@@ -206,6 +205,88 @@ class FsUtils(object):
                 log.info("Kernel mount is not supported for Ubuntu")
                 return 0
 
+    def nfs_ganesha_install(self, node):
+        if node.pkg_type == 'rpm':
+            node.exec_command(cmd='sudo yum install nfs-ganesha-ceph -y')
+            node.exec_command(cmd='sudo systemctl start rpcbind')
+            node.exec_command(cmd='sudo systemctl stop nfs-server.service')
+            node.exec_command(cmd='sudo systemctl disable nfs-server.service')
+            assert node.exit_status == 0
+        return 0
+
+    def nfs_ganesha_conf(self, node, nfs_client_name):
+        out, rc = node.exec_command(
+            cmd='sudo ceph auth get-key client.%s' %
+                (nfs_client_name))
+        secret_key = out.read().rstrip('\n')
+
+        conf = """
+       NFS_CORE_PARAM
+       {
+           Enable_NLM = false;
+           Enable_RQUOTA = false;
+           Protocols = 4;
+       }
+
+       NFSv4
+       {
+           Delegations = true;
+           Minor_Versions = 1, 2;
+       }
+
+       CACHEINODE {
+           Dir_Max = 1;
+           Dir_Chunk = 0;
+           Cache_FDs = true;
+           NParts = 1;
+           Cache_Size = 1;
+       }
+
+       EXPORT
+       {
+           Export_ID=100;
+           Protocols = 4;
+           Transports = TCP;
+           Path = /;
+           Pseudo = /ceph/;
+           Access_Type = RW;
+           Attr_Expiration_Time = 0;
+           Delegations = R;
+           Squash = "None";
+
+           FSAL {
+               Name = CEPH;
+               User_Id = "%s";
+               Secret_Access_key = "%s";
+           }
+
+       }
+       CEPH
+       {
+           Ceph_Conf = /etc/ceph/ceph.conf;
+       }
+            """ % (nfs_client_name, secret_key)
+        conf_file = node.write_file(
+            sudo=True,
+            file_name='/etc/ganesha/ganesha.conf',
+            file_mode='w')
+        conf_file.write(conf)
+        conf_file.flush()
+        node.exec_command(cmd='sudo systemctl enable nfs-ganesha')
+        node.exec_command(cmd='sudo systemctl start nfs-ganesha')
+        return 0
+
+    def nfs_ganesha_mount(self, client, mounting_dir, nfs_server):
+        if client.pkg_type == 'rpm':
+            client.exec_command(cmd='sudo yum install nfs-utils -y')
+            client.exec_command(cmd='sudo mkdir %s' % (mounting_dir))
+            client.exec_command(
+                cmd='sudo mount -t nfs -o nfsvers=4,sync,noauto,'
+                    'soft,proto=tcp %s:/ %s' %
+                    (nfs_server, mounting_dir))
+
+        return 0
+
     def read_write_IO(self, clients, mounting_dir, *args, **kwargs):
         for client in clients:
             out, rc = client.exec_command(cmd='df -h', timeout=10)
@@ -267,7 +348,8 @@ class FsUtils(object):
                                          mounting_dir,
                                          self.dir_name),
                                         long_running=True)
-                                    self.return_counts = self.io_verify(client)
+                                    self.return_counts = self.io_verify(
+                                        client)
                                 break
 
                             else:
@@ -284,7 +366,8 @@ class FsUtils(object):
                                          mounting_dir,
                                          self.dir_name),
                                         long_running=True)
-                                    self.return_counts = self.io_verify(client)
+                                    self.return_counts = self.io_verify(
+                                        client)
                                 break
 
                         elif arg == 'write':
@@ -318,7 +401,8 @@ class FsUtils(object):
                                          mounting_dir,
                                          self.dir_name),
                                         long_running=True)
-                                    self.return_counts = self.io_verify(client)
+                                    self.return_counts = self.io_verify(
+                                        client)
                                 break
 
                             else:
@@ -335,7 +419,8 @@ class FsUtils(object):
                                          mounting_dir,
                                          self.dir_name),
                                         long_running=True)
-                                    self.return_counts = self.io_verify(client)
+                                    self.return_counts = self.io_verify(
+                                        client)
                                 break
 
                         elif arg == 'readwrite':
@@ -370,7 +455,8 @@ class FsUtils(object):
                                          mounting_dir,
                                          self.dir_name),
                                         long_running=True)
-                                    self.return_counts = self.io_verify(client)
+                                    self.return_counts = self.io_verify(
+                                        client)
                                 break
 
                             else:
@@ -385,7 +471,8 @@ class FsUtils(object):
                                          num,
                                          mounting_dir,
                                          self.dir_name))
-                                    self.return_counts = self.io_verify(client)
+                                    self.return_counts = self.io_verify(
+                                        client)
                                 break
 
                 else:
@@ -990,7 +1077,8 @@ secretfile={secret_key},_netdev,noatime 00
                 cmd='sudo systemctl start ceph-mds@%s.service' %
                 (mds.hostname))
             mds.exec_command(cmd='sudo ceph osd pool create fs_data 64 64')
-            mds.exec_command(cmd='sudo ceph osd pool create fs_metadata 64 64')
+            mds.exec_command(
+                cmd='sudo ceph osd pool create fs_metadata 64 64')
             mds.exec_command(
                 cmd='sudo ceph fs new %s fs_metadata fs_data --force '
                     '--allow-dangerous-metadata-overlay' %
