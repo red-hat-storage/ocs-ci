@@ -41,4 +41,12 @@ globals:
        role: osd
        no-of-volumes: 3
        disk-size: 30
+     node14:
+       role:
+          - mon
+          - mgr
+     node15:
+       role:
+          - mon
+          - mgr
      cloud-data: conf/cloud-data.yaml

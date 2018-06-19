@@ -90,6 +90,8 @@ tests:
        name: read-write-del-ops
        module: CEPH-11219.py
        polarion-id: CEPH-11219,CEPH-11226,CEPH-11224
+       config:
+             num_of_osds: 12
        desc: Mount CephFS on multiple clients perform read and write operation on same file from different clients and perform delete ops
        abort-on-fail: false
 
@@ -111,6 +113,8 @@ tests:
        name: cephfs-stressIO
        module: CEPH-11222_11223.py
        polarion-id: CEPH-11222,CEPH-11223
+       config:
+             num_of_osds: 12
        desc: Mount CephFS on multiple clients,
        abort-on-fail: false
    - test:
@@ -148,3 +152,4 @@ tests:
        polarion-id: CEPH-11335
        desc: Mount CephFS on multiple clients and perform client eviction
        abort-on-fail: false
+
