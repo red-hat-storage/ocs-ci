@@ -105,6 +105,7 @@ root.addHandler(handler)
 
 test_names = []
 
+
 @retry(LibcloudError, tries=5, delay=15)
 def create_nodes(conf, osp_cred, report_portal_session=None, instances_name=None):
     if report_portal_session:
