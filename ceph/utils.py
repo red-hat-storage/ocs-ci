@@ -426,27 +426,62 @@ def config_ntp(ceph_node):
     ceph_node.exec_command(cmd="sudo systemctl start ntpd", long_running=True)
 
 
-def log_ceph_versions(ceph_nodes):
+def get_ceph_versions(ceph_nodes, containerized=False):
     """
-    Log the versions for any packages on the system with ceph in the name.
+    Log and return the ceph or ceph-ansible versions for each node in the cluster.
 
     Args:
         ceph_nodes: nodes in the cluster
+        containerized: is the cluster containerized or not
 
     Returns:
-        None
+        A dict of the name / version pair for each node or container in the cluster
     """
-    for node in ceph_nodes:
-        if node.role == 'installer':
-            if node.pkg_type == 'rpm':
-                cmd = 'rpm -qa | grep ceph-ansible'
-            else:
-                cmd = 'dpkg -s ceph-ansible'
-        else:
-            cmd = 'ceph --version'
+    versions_dict = {}
 
+    for node in ceph_nodes:
         try:
-            out, rc = node.exec_command(cmd=cmd)
-            log.info("{} ceph versions: {}".format(node.shortname, out.read()))
+            if node.role == 'installer':
+                if node.pkg_type == 'rpm':
+                    out, rc = node.exec_command(cmd='rpm -qa | grep ceph-ansible')
+                else:
+                    out, rc = node.exec_command(cmd='dpkg -s ceph-ansible')
+                output = out.read().rstrip()
+                log.info(output)
+                versions_dict.update({node.shortname: output})
+
+            else:
+                if containerized:
+                    containers = []
+                    if node.role == 'client':
+                        pass
+                    elif node.role == 'osd':
+                        drives = ['vdb', 'vdc', 'vdd', 'vde']
+                        log.info("Number of volumes for OSD: {}".format(node.no_of_volumes))
+                        for drive in drives[:node.no_of_volumes]:
+                            _cname = 'ceph-osd-{shortname}-{drive}'.format(
+                                role=node.role, shortname=node.shortname, drive=drive)
+                            containers.append(_cname)
+                    else:
+                        role = "-".join(node.role)
+                        _cname = 'ceph-{role}-{shortname}'.format(role=role, shortname=node.shortname)
+                        containers.append(_cname)
+
+                    for container_name in containers:
+                        out, rc = node.exec_command(
+                            sudo=True, cmd='sudo docker exec {container} ceph --version'.format(
+                                container=container_name))
+                        output = out.read().rstrip()
+                        log.info(output)
+                        versions_dict.update({container_name: output})
+
+                else:
+                    out, rc = node.exec_command(cmd='ceph --version')
+                    output = out.read().rstrip()
+                    log.info(output)
+                    versions_dict.update({node.shortname: output})
+
         except CommandFailed:
-            log.info("No ceph verions on {}".format(node.shortname))
+            log.info("No ceph versions on {}".format(node.shortname))
+
+    return versions_dict

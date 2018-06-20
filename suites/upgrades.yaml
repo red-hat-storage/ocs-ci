@@ -20,7 +20,6 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
-            fetch_directory: ~/fetch
             copy_admin_key: True
             ceph_conf_overrides:
                 global:
@@ -53,7 +52,6 @@ tests:
             osd_auto_discovery: True
             upgrade_ceph_packages: True
             public_network: 172.16.0.0/12
-            fetch_directory: ~/fetch
             copy_admin_key: True
             ceph_conf_overrides:
                 global:
@@ -190,7 +188,6 @@ tests:
             public_network: 172.16.0.0/12
             osd_scenario: collocated
             osd_auto_discovery: True
-            fetch_directory: ~/fetch
             copy_admin_key: True
             ceph_conf_overrides:
                 global:
@@ -217,7 +214,6 @@ tests:
             public_network: 172.16.0.0/12
             osd_scenario: collocated
             osd_auto_discovery: True
-            fetch_directory: ~/fetch
             copy_admin_key: True
             ceph_conf_overrides:
                 global:
@@ -323,7 +319,6 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
-            fetch_directory: ~/fetch
             copy_admin_key: True
             ceph_conf_overrides:
                 global:
@@ -349,7 +344,6 @@ tests:
             osd_auto_discovery: True
             upgrade_ceph_packages: True
             public_network: 172.16.0.0/12
-            fetch_directory: ~/fetch
             copy_admin_key: True
             ceph_conf_overrides:
                 global:
