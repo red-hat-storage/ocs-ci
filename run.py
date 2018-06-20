@@ -15,9 +15,11 @@ import re
 import requests
 import textwrap
 from docopt import docopt
+from libcloud.common.types import LibcloudError
 from ceph.ceph import CephNode
 from ceph.utils import create_ceph_nodes, cleanup_ceph_nodes, setup_cdn_repos
 from utils.polarion import post_to_polarion
+from utils.retry import retry
 from utils.utils import timestamp, create_run_dir, create_unique_test_name, create_report_portal_session,\
     configure_logger, close_and_remove_filehandlers
 
@@ -103,7 +105,7 @@ root.addHandler(handler)
 
 test_names = []
 
-
+@retry(LibcloudError, tries=5, delay=15)
 def create_nodes(conf, osp_cred, report_portal_session=None, instances_name=None):
     if report_portal_session:
         name = create_unique_test_name("ceph node creation", test_names)
