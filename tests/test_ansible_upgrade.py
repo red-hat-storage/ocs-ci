@@ -2,8 +2,8 @@ import logging
 
 import yaml
 
-from ceph.utils import setup_deb_repos, setup_cdn_repos, setup_deb_cdn_repo
-from ceph.utils import setup_repos, check_ceph_healthly, log_ceph_versions
+from ceph.utils import setup_deb_repos, setup_cdn_repos, setup_deb_cdn_repo, write_docker_daemon_json
+from ceph.utils import setup_repos, check_ceph_healthly, get_ceph_versions
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +84,9 @@ def run(**kw):
 
         log.info(mgr_block)
 
+    if config.get('ansi_config').get('fetch_directory') is None:
+        config['ansi_config']['fetch_directory'] = '~/fetch/'
+
     gvar = yaml.dump(config.get('ansi_config'), default_flow_style=False)
 
     host_file = ceph_installer.write_file(sudo=True, file_name='{}/hosts'.format(ansible_dir), file_mode='a')
@@ -96,8 +99,29 @@ def run(**kw):
     gvars_file.write(gvar)
     gvars_file.flush()
 
-    log.info("Pre-Upgrade Ceph Versions")
-    log_ceph_versions(ceph_nodes)
+    containerized = config.get('ansi_config').get('containerized_deployment')
+    pre_upgrade_versions = get_ceph_versions(ceph_nodes, containerized)
+
+    # retrieve container count if containerized
+    if containerized:
+        pre_upgrade_container_counts = {}
+        for node in ceph_nodes:
+            if node.role != 'installer':
+                out, rc = node.exec_command(sudo=True, cmd='docker ps | grep $(hostname) | wc -l')
+                count = out.read().rstrip()
+                log.info("{} has {} containers running".format(node.shortname, count))
+                pre_upgrade_container_counts.update({node.shortname: count})
+
+    if containerized and config.get('docker-insecure-registry') and \
+            config.get('ansi_config').get('ceph_docker_registry'):
+        insecure_registry = '{{"insecure-registries" : ["{registry}"]}}'.format(
+            registry=config.get('ansi_config').get('ceph_docker_registry'))
+        log.warn('Adding insecure registry:\n{registry}'.format(registry=insecure_registry))
+        for node in ceph_nodes:
+            if node.role != 'installer':
+                write_docker_daemon_json(insecure_registry, node)
+                log.info("Restarting docker on {node}".format(node=node.shortname))
+                node.exec_command(sudo=True, cmd='systemctl restart docker')
 
     # copy rolling update from infrastructure playbook
     ceph_installer.exec_command(
@@ -119,7 +143,32 @@ def run(**kw):
         log.error("Failed during upgrade")
         return rc
 
-    log.info("Post-Upgrade Ceph Versions")
-    log_ceph_versions(ceph_nodes)
+    post_upgrade_versions = get_ceph_versions(ceph_nodes, containerized)
+    for name, version in post_upgrade_versions.iteritems():
+        if 'installer' not in name and pre_upgrade_versions[name] == version:
+            log.error("Pre upgrade version matches post upgrade version")
+            log.error("{}:{} matches".format(name, version))
+            return 1
 
-    return check_ceph_healthly(ceph_mon, num_osds, num_mons)
+    # retrieve container count if containerized
+    if containerized:
+        post_upgrade_container_counts = {}
+        for node in ceph_nodes:
+            if node.role != 'installer':
+                out, rc = node.exec_command(sudo=True, cmd='docker ps | grep $(hostname) | wc -l')
+                count = out.read().rstrip()
+                log.info("{} has {} container(s) running".format(node.shortname, count))
+                post_upgrade_container_counts.update({node.shortname: count})
+
+        log.info("Post upgrade container counts: {}".format(post_upgrade_container_counts))
+        # compare container count to pre-upgrade container count
+        for node, count in post_upgrade_container_counts.iteritems():
+            if pre_upgrade_container_counts[node] != count:
+                log.error("Mismatched container count post upgrade")
+                return 1
+
+    mon_container = None
+    if config.get('ansi_config').get('containerized_deployment') is True:
+        mon_container = 'ceph-mon-{host}'.format(host=ceph_mon.hostname)
+
+    return check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container)

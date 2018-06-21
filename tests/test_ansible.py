@@ -236,6 +236,13 @@ def run(**kw):
         cmd='cd {} ; ANSIBLE_STDOUT_CALLBACK=debug; ansible-playbook -vv -i hosts site.yml'.format(ansible_dir),
         long_running=True)
 
+    # manually handle client creation in a containerized deployment (temporary)
+    if config.get('ansi_config').get('containerized_deployment') is True:
+        for node in ceph_nodes:
+            if node.role == 'client':
+                log.info("Manually installing client node")
+                node.exec_command(sudo=True, cmd="yum install -y ceph-common")
+
     if rc != 0:
         log.error("Failed during deployment")
         return rc
