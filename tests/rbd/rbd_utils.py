@@ -1,70 +1,46 @@
+import random
+import string
 import logging
 
 log = logging.getLogger(__name__)
 
 
-# Directories Creation
-def create_dir(node, args):
-    node.exec_command(cmd='mkdir {}'.format(args))
+class Rbd:
+    def __init__(self, cluster):
+        self.ceph_nodes = cluster
 
+        # Identifying Monitor And Client node
+        for node in self.ceph_nodes:
+            if node.role == 'mon':
+                self.ceph_mon = node
+                continue
+            if node.role == 'client':
+                self.ceph_client = node
+                continue
 
-# Directories deletion
-def delete_dir(node, args):
-    node.exec_command(cmd='rm -rf {}'.format(args))
+    def exec_cmd(self, **kw):
+        cmd = kw.get('cmd')
+        node = kw.get('node') if kw.get('node') else self.ceph_client
 
+        out, err = node.exec_command(
+            sudo=True, cmd=cmd, long_running=kw.get('long_running', False),
+            check_ec=kw.get('check_ec', True))
 
-# Create Pool
-def create_pool(node, args):
-    node.exec_command(cmd='sudo ceph osd pool create {} 128 128'.format(args))
+        if kw.get('output', False):
+            return out.read() if out else err.read()
 
+        if out:
+            return 0
 
-# Delete Pool
-def delete_pool(node, args):
-    node.exec_command(cmd='sudo ceph osd pool delete {pool} {pool} --yes-i-really-really-mean-it'
-                      .format(pool=args))
+        return 1
 
+    def random_string(self):
+        temp_str = ''.join(
+            [random.choice(string.ascii_letters) for _ in xrange(10)])
+        return temp_str
 
-# Create Image
-def create_image(node, *args):
-    node.exec_command(cmd='sudo rbd create -s {} {}/{}'.format(args[0], args[1], args[2]))
-
-
-# Resize Image
-def resize_image(node, *args):
-    node.exec_command(cmd='sudo rbd resize -s {} --allow-shrink {}/{}'.format(args[0], args[1], args[2]))
-
-
-# Create Snap
-def create_snap(node, *args):
-    node.exec_command(cmd='sudo rbd snap create {}/{}@{}'.format(args[0], args[1], args[2]))
-
-
-# Protect Snap
-def protect_snap(node, *args):
-    node.exec_command(cmd='sudo rbd snap protect {}/{}@{}'.format(args[0], args[1], args[2]))
-
-
-# Create Clone
-def create_clone(node, *args):
-    node.exec_command(cmd='sudo rbd clone {pool}/{}@{} {pool}/{}'
-                      .format(args[1], args[2], args[3], pool=args[0]))
-
-
-# Export
-def export_image(node, *args):
-    node.exec_command(cmd='sudo rbd export {}/{} {}'.format(args[0], args[1], args[2]))
-
-
-# Bench-write
-def bench_write(node, *args):
-    node.exec_command(cmd='sudo rbd bench-write {}/{}'.format(args[0], args[1]))
-
-
-# Flatten
-def flatten(node, *args):
-    node.exec_command(cmd='sudo rbd flatten {}/{}'.format(args[0], args[1]))
-
-
-# Lock Add
-def lock(node, *args):
-    node.exec_command(cmd='sudo rbd lock add {}/{} lok'.format(args[0], args[1]))
+    def check_cmd_ec(self, arg):
+        for rc in arg:
+            if rc != 0:
+                return 1
+        return 0
