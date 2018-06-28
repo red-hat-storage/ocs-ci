@@ -39,17 +39,23 @@ class RolesContainer(object):
     Note that '==' operator will behave the same way as 'in' operator i.e. check that value is present in the role list.
     """
 
-    def __init__(self, role):
+    def __init__(self, role='pool'):
         if hasattr(role, '__iter__'):
             self.role_list = role
         else:
             self.role_list = [str(role)]
 
     def __eq__(self, role):
-        if role in self.role_list:
-            return True
+        if hasattr(role, '__iter__'):
+            if all(atomic_role in role for atomic_role in self.role_list):
+                return True
+            else:
+                return False
         else:
-            return False
+            if role in self.role_list:
+                return True
+            else:
+                return False
 
     def __ne__(self, role):
         return not self.__eq__(role)
@@ -75,6 +81,31 @@ class RolesContainer(object):
     def __iter__(self):
         return iter(self.role_list)
 
+    def remove(self, object):
+        self.role_list.remove(object)
+
+    def append(self, object):
+        self.role_list.append(object)
+
+    def extend(self, iterable):
+        self.role_list.extend(iterable)
+        self.role_list = list(set(self.role_list))
+
+    def update_role(self, roles_list):
+        self.role_list.remove('pool')
+        self.extend(roles_list)
+
+    def clear(self):
+        self.role_list = ['pool']
+
+
+class NodeVolume(object):
+    FREE = 'free'
+    ALLOCATED = 'allocated'
+
+    def __init__(self, status):
+        self.status = status
+
 
 class CephNode(object):
 
@@ -96,11 +127,21 @@ class CephNode(object):
         vmshortname = self.vmname.split('.')
         self.vmshortname = vmshortname[0]
         self.role = RolesContainer(kw['role'])
+        self.voulume_list = []
+        if kw['no_of_volumes']:
+            self.voulume_list = [NodeVolume(NodeVolume.FREE) for vol_id in xrange(kw['no_of_volumes'])]
         if self.role == 'osd':
-            self.no_of_volumes = kw['no_of_volumes']
+            for volume in self.voulume_list:
+                volume.status = NodeVolume.ALLOCATED
         if kw.get('ceph_vmnode'):
             self.vm_node = kw['ceph_vmnode']
         self.run_once = False
+
+    def get_free_volumes(self):
+        return [volume for volume in self.voulume_list if volume.status == NodeVolume.FREE]
+
+    def get_allocated_volumes(self):
+        return [volume for volume in self.voulume_list if volume.status == NodeVolume.ALLOCATED]
 
     def connect(self, timeout=300):
         """

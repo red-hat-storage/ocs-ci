@@ -2,8 +2,10 @@ import datetime
 import json
 import logging
 from time import sleep
+import re
 import yaml
 
+from ceph.ceph import NodeVolume
 from ceph.utils import setup_deb_repos, get_iso_file_url, setup_cdn_repos, write_docker_daemon_json, \
     search_ethernet_interface, open_firewall_port, setup_deb_cdn_repo
 from ceph.utils import setup_repos, check_ceph_healthly
@@ -13,6 +15,43 @@ log = logger
 
 
 def run(**kw):
+    """
+    Rolls updates over existing ceph-ansible deployment
+    :param kw: config sample:
+        config:
+          ansi_config:
+              ceph_test: True
+              ceph_origin: distro
+              ceph_stable_release: luminous
+              ceph_repository: rhcs
+              osd_scenario: collocated
+              osd_auto_discovery: False
+              journal_size: 1024
+              ceph_stable: True
+              ceph_stable_rh_storage: True
+              public_network: 172.16.0.0/12
+              fetch_directory: ~/fetch
+              copy_admin_key: true
+              ceph_conf_overrides:
+                  global:
+                    osd_pool_default_pg_num: 64
+                    osd_default_pool_size: 2
+                    osd_pool_default_pgp_num: 64
+                    mon_max_pg_per_osd: 1024
+                  mon:
+                    mon_allow_pool_delete: true
+              cephfs_pools:
+                - name: "cephfs_data"
+                  pgs: "8"
+                - name: "cephfs_metadata"
+                  pgs: "8"
+          add:
+              - node:
+                  node-name: .*node15.*
+                  demon:
+                      - mon
+    :return: non-zero on failure, zero on pass
+    """
     log.info("Running test")
     ceph_nodes = kw.get('ceph_nodes')
     log.info("Running ceph ansible test")
@@ -20,6 +59,33 @@ def run(**kw):
     test_data = kw.get('test_data')
     ubuntu_repo = None
     ansible_dir = '/usr/share/ceph-ansible'
+
+    if config.get('add'):
+        for added_node in config.get('add'):
+            added_node = added_node.get('node')
+            node_name = added_node.get('node-name')
+            demon_list = added_node.get('demon')
+            osds_required = [demon for demon in demon_list if demon == 'osd']
+            short_name_list = [ceph_node.shortname for ceph_node in ceph_nodes]
+            matcher = re.compile(node_name)
+            matched_short_names = filter(matcher.match, short_name_list)
+            if len(matched_short_names) > 1:
+                raise RuntimeError('Multiple nodes are matching node-name {node_name}: \n{matched_short_names}'.format(
+                    node_name=node_name, matched_short_names=matched_short_names))
+            if len(matched_short_names) == 0:
+                raise RuntimeError('No match for {node_name}'.format(node_name=node_name))
+            for ceph_node in ceph_nodes:
+                if ceph_node.shortname == matched_short_names[0]:
+                    matched_ceph_node = ceph_node
+            free_volumes = matched_ceph_node.get_free_volumes()
+            if len(osds_required) > len(free_volumes):
+                raise RuntimeError(
+                    'Insufficient volumes on the {node_name} node. Rquired: {required} - Found: {found}'.format(
+                        node_name=matched_ceph_node.shotrtname, required=len(osds_required),
+                        found=len(free_volumes)))
+            for osd in osds_required:
+                free_volumes.pop().status = NodeVolume.ALLOCATED
+            matched_ceph_node.role.update_role(demon_list)
 
     if config.get('ubuntu_repo'):
         ubuntu_repo = config.get('ubuntu_repo')
@@ -57,33 +123,6 @@ def run(**kw):
             log.info("Setting installer node")
             ceph_installer = node
             break
-    keys = ''
-    hosts = ''
-    hostkeycheck = 'Host *\n\tStrictHostKeyChecking no\n\tServerAliveInterval 2400\n'
-
-    for ceph in ceph_nodes:
-        ceph.generate_id_rsa()
-        keys = keys + ceph.id_rsa_pub
-        hosts = hosts + ceph.ip_address + "\t" + ceph.hostname \
-            + "\t" + ceph.shortname + "\n"
-
-    for ceph in ceph_nodes:
-        keys_file = ceph.write_file(
-            file_name='.ssh/authorized_keys', file_mode='a')
-        hosts_file = ceph.write_file(
-            sudo=True, file_name='/etc/hosts', file_mode='a')
-        ceph.exec_command(
-            cmd='[ -f ~/.ssh/config ] && chmod 700 ~/.ssh/config',
-            check_ec=False)
-        ssh_config = ceph.write_file(file_name='.ssh/config', file_mode='a')
-        keys_file.write(keys)
-        hosts_file.write(hosts)
-        ssh_config.write(hostkeycheck)
-        keys_file.flush()
-        hosts_file.flush()
-        ssh_config.flush()
-        ceph.exec_command(cmd='chmod 600 ~/.ssh/authorized_keys')
-        ceph.exec_command(cmd='chmod 400 ~/.ssh/config')
 
     for ceph in ceph_nodes:
         if config.get('use_cdn'):
@@ -235,13 +274,6 @@ def run(**kw):
     out, rc = ceph_installer.exec_command(
         cmd='cd {} ; ANSIBLE_STDOUT_CALLBACK=debug; ansible-playbook -vv -i hosts site.yml'.format(ansible_dir),
         long_running=True)
-
-    # manually handle client creation in a containerized deployment (temporary)
-    if config.get('ansi_config').get('containerized_deployment') is True:
-        for node in ceph_nodes:
-            if node.role == 'client':
-                log.info("Manually installing client node")
-                node.exec_command(sudo=True, cmd="yum install -y ceph-common")
 
     if rc != 0:
         log.error("Failed during deployment")

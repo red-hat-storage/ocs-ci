@@ -59,7 +59,7 @@ def create_ceph_nodes(cluster_conf, osp_cred, instances_name=None):
                 else:
                     params['node-name'] = params.get('cluster-name', 'ceph') + '-' + user + '-' + params[
                         'run'] + node + '-' + '+'.join(role)
-                if role == 'osd':
+                if node_dict.get('no-of-volumes'):
                     params['no-of-volumes'] = node_dict.get('no-of-volumes')
                     params['size-of-disks'] = node_dict.get('disk-size')
                 if node_dict.get('image-name'):
@@ -485,3 +485,13 @@ def get_ceph_versions(ceph_nodes, containerized=False):
             log.info("No ceph versions on {}".format(node.shortname))
 
     return versions_dict
+
+
+def get_root_permissions(node, path):
+    """
+    Transfer ownership of root to current user for the path given. Recursive.
+    :param node: ceph node
+    :param path: directory ot file path
+    :return: paramiko output streams
+    """
+    return node.exec_command(cmd='sudo chown -R $USER:$USER {path}'.format(path=path))
