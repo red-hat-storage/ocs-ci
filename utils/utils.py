@@ -1,10 +1,12 @@
+import getpass
 import logging
 import random
 import time
 import traceback
+
 import os
+import requests
 import yaml
-import getpass
 from reportportal_client import ReportPortalServiceAsync
 
 logger = logging.getLogger(__name__)
@@ -437,3 +439,23 @@ def create_unique_test_name(test_name, name_list):
     while "{base}_{num}".format(base=base, num=num) in name_list:
         num += 1
     return "{base}_{num}".format(base=base, num=num)
+
+
+def get_latest_container_image_tag(version):
+    """
+    Retrieves the container image tag of the latest compose for the given version
+
+    Args:
+        version: version to get the latest image tag for (3.0, 3.1)
+
+    Returns:
+        Image tag of the latest compose for the given version
+
+    """
+    url = 'http://magna002.ceph.redhat.com/latest-ceph-container-builds/latest-RHCEPH-{version}.json'.format(
+        version=version)
+    data = requests.get(url)
+    repo = data.json()['repositories'][0]
+    image_tag = repo.split(':')[-1:][0]
+    log.info("Found image tag: {image_tag}".format(image_tag=image_tag))
+    return image_tag

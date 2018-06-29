@@ -4,6 +4,7 @@ import yaml
 
 from ceph.utils import setup_deb_repos, setup_cdn_repos, setup_deb_cdn_repo, write_docker_daemon_json
 from ceph.utils import setup_repos, check_ceph_healthly, get_ceph_versions
+from utils.utils import get_latest_container_image_tag
 
 log = logging.getLogger(__name__)
 
@@ -87,6 +88,12 @@ def run(**kw):
     if config.get('ansi_config').get('fetch_directory') is None:
         config['ansi_config']['fetch_directory'] = '~/fetch/'
 
+    containerized = config.get('ansi_config').get('containerized_deployment')
+
+    if containerized and config.get('ansi_config').get('docker-insecure-registry'):
+        # set the docker image tag
+        config['ansi_config']['ceph_docker_image_tag'] = get_latest_container_image_tag(config['build'])
+    log.info("gvar: {}".format(config.get('ansi_config')))
     gvar = yaml.dump(config.get('ansi_config'), default_flow_style=False)
 
     host_file = ceph_installer.write_file(sudo=True, file_name='{}/hosts'.format(ansible_dir), file_mode='a')
@@ -99,7 +106,6 @@ def run(**kw):
     gvars_file.write(gvar)
     gvars_file.flush()
 
-    containerized = config.get('ansi_config').get('containerized_deployment')
     pre_upgrade_versions = get_ceph_versions(ceph_nodes, containerized)
 
     # retrieve container count if containerized
