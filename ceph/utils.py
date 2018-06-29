@@ -455,17 +455,11 @@ def get_ceph_versions(ceph_nodes, containerized=False):
                     containers = []
                     if node.role == 'client':
                         pass
-                    elif node.role == 'osd':
-                        drives = ['vdb', 'vdc', 'vdd', 'vde']
-                        log.info("Number of volumes for OSD: {}".format(node.no_of_volumes))
-                        for drive in drives[:node.no_of_volumes]:
-                            _cname = 'ceph-osd-{shortname}-{drive}'.format(
-                                role=node.role, shortname=node.shortname, drive=drive)
-                            containers.append(_cname)
                     else:
-                        role = "-".join(node.role)
-                        _cname = 'ceph-{role}-{shortname}'.format(role=role, shortname=node.shortname)
-                        containers.append(_cname)
+                        out, rc = node.exec_command(sudo=True, cmd='docker ps --format "{{.Names}}"')
+                        output = out.read()
+                        containers = [container for container in output.split('\n') if container != '']
+                        log.info("Containers: {}".format(containers))
 
                     for container_name in containers:
                         out, rc = node.exec_command(
