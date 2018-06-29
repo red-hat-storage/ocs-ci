@@ -46,6 +46,7 @@ tests:
       module: test_ansible_upgrade.py
       polarion-id: CEPH-83572731
       config:
+        build: 3.0
         ansi_config:
             ceph_test: True
             ceph_origin: distro
@@ -61,7 +62,6 @@ tests:
             docker-insecure-registry: True
             ceph_docker_registry: brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888
             ceph_docker_image: rhceph
-            ceph_docker_image_tag: ceph-3.0-rhel-7-containers-candidate-42352-20180613042051
             insecure_registry: True
             copy_admin_key: True
             ceph_conf_overrides:
@@ -173,6 +173,7 @@ tests:
       module: test_ansible_upgrade.py
       polarion-id: CEPH-83572730
       config:
+        build: 3.1
         ansi_config:
             ceph_test: True
             ceph_origin: distro
@@ -188,7 +189,6 @@ tests:
             docker-insecure-registry: True
             ceph_docker_registry: brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888
             ceph_docker_image: rhceph
-            ceph_docker_image_tag: ceph-3.1-rhel-7-containers-candidate-49862-20180613163343
             insecure_registry: True
             copy_admin_key: True
             ceph_conf_overrides:
