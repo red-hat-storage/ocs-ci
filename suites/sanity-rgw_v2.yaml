@@ -328,7 +328,7 @@ tests:
        polarion-id: CEPH-11019
        module: sanity_rgw_v2.py
        config:
-           script-name: test_basic_swift_ops.py
-           config-file-name: test_basic_swift_ops.yaml
+           script-name: test_swift_basic_ops.py
+           config-file-name: test_swift_basic_ops.yaml
            timeout: 300
 
