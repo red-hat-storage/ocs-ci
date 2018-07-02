@@ -16,6 +16,8 @@ def run(**kw):
     git_clone = 'sudo git clone ' + git_url + branch
     rgw_node = rgw_client_nodes[0]
     # cleanup any existing stale test dir
+    log.info('flushing iptables')
+    rgw_node.exec_command(cmd='sudo iptables -F')
     test_folder = 'rgw-tests'
     rgw_node.exec_command(cmd='sudo rm -rf ' + test_folder)
     rgw_node.exec_command(cmd='sudo mkdir ' + test_folder)
@@ -30,4 +32,5 @@ def run(**kw):
             test_folder + '/ceph-qe-scripts/rgw/v2/tests/s3_swift/configs/' + config_file_name,
         timeout=timeout)
     log.info(out.read())
+    log.error(err.read())
     return 0
