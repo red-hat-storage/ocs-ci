@@ -32,5 +32,5 @@ def run(**kw):
             test_folder + '/ceph-qe-scripts/rgw/v2/tests/s3_swift/configs/' + config_file_name,
         timeout=timeout)
     log.info(out.read())
-    log.info(err.read())
+    log.error(err.read())
     return 0
