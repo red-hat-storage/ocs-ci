@@ -1,0 +1,31 @@
+globals:
+  - ceph-cluster:
+      name: ceph
+      create: true
+      image-name: rhel-7.4-server-x86_64-latest
+      vm-size: m1.medium
+      node1:
+        role:
+          - installer
+          - mon
+          - mgr
+      node2:
+        role: osd
+        no-of-volumes: 3
+        disk-size: 20
+      node3:
+        role: osd
+        no-of-volumes: 3
+        disk-size: 20
+      node4:
+        role: win-iscsi-clients
+        image-name: win_2016_mpio
+      node5:
+        role: osd
+        no-of-volumes: 3
+        disk-size: 20
+      node6:
+        role: osd
+        no-of-volumes: 3
+        disk-size: 20
+      cloud-data: conf/cloud-data.yaml

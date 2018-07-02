@@ -167,6 +167,14 @@ class CephVMNode(object):
                 volume.name)
         return True
 
+    def get_private_ip(self):
+        """
+        Workaround. self.node.private_ips returns empty list.
+        """
+        node_detail = self.driver.ex_get_node_details(self.node)
+        private_ip = node_detail.private_ips[0].encode('ascii', 'ignore')
+        return private_ip
+
     def get_volume(self, name):
         """ Return libcloud.compute.base.StorageVolume """
         driver = self.driver

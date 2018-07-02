@@ -4,12 +4,12 @@ tests:
       module: install_prereq.py
       abort-on-fail: true
 
-   - test:
-      name: Update kernel
-      module: update-kernel-iscsi.py
-      abort-on-fail: true
-      config:
-            kernel-repo: http://autobkr.app.eng.bos.redhat.com/repos/kernel/3.10.0/823.el7/
+  #  - test:
+  #     name: Update kernel
+  #     module: update-kernel-iscsi.py
+  #     abort-on-fail: true
+  #     config:
+  #           kernel-repo: http://autobkr.app.eng.bos.redhat.com/repos/kernel/3.10.0/823.el7/
 
    - test:
       name: ceph ansible
@@ -41,12 +41,6 @@ tests:
       abort-on-fail: true
 
    - test:
-      name: Install_prereq_gw
-      module: install_pre_gw.py
-      abort-on-fail: true
-      desc: Install the packages required for iscsi-gw
-
-   - test:
       name: Install gwcli iscsi.
       module: install_iscsi_gwcli.py
       abort-on-fail: true
@@ -54,7 +48,6 @@ tests:
             no_of_gateways: 4
             no_of_luns: 10
       desc: Create iscsi gateway using gwcli tool
-
 
    - test:
       name: Verify gateways are installed on all the nodes.
@@ -110,12 +103,6 @@ tests:
       abort-on-fail: true
 
    - test:
-      name: Install_prereq_gw
-      module: install_pre_gw.py
-      abort-on-fail: true
-      desc: Install the packages required for iscsi-gw
-
-   - test:
       name: Install gwcli iscsi.
       module: install_iscsi_gwcli.py
       abort-on-fail: true
@@ -169,12 +156,6 @@ tests:
       abort-on-fail: true
 
    - test:
-      name: Install_prereq_gw
-      module: install_pre_gw.py
-      abort-on-fail: true
-      desc: Install the packages required for iscsi-gw
-
-   - test:
       name: Install gwcli iscsi.
       module: install_iscsi_gwcli.py
       abort-on-fail: true
@@ -189,4 +170,3 @@ tests:
       polarion-id: CEPH-10451
       abort-on-fail: false
       desc: Fail an Recover Active-NonOptimized path
-

@@ -123,6 +123,7 @@ class CephNode(object):
         self.password = kw['password']
         self.root_passwd = kw['root_password']
         self.root_login = kw['root_login']
+        self.private_ip = kw['private_ip']
         self.ip_address = kw['ip_address']
         self.vmname = kw['hostname']
         vmshortname = self.vmname.split('.')
