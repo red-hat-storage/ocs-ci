@@ -107,7 +107,7 @@ test_names = []
 
 
 @retry(LibcloudError, tries=5, delay=15)
-def create_nodes(conf, osp_cred, report_portal_session=None, instances_name=None):
+def create_nodes(conf, osp_cred, run_id, report_portal_session=None, instances_name=None):
     if report_portal_session:
         name = create_unique_test_name("ceph node creation", test_names)
         test_names.append(name)
@@ -121,7 +121,7 @@ def create_nodes(conf, osp_cred, report_portal_session=None, instances_name=None
     ceph_cluster_dict = {}
     log.info('Creating osp instances')
     for cluster in conf.get('globals'):
-        ceph_vmnodes = create_ceph_nodes(cluster, osp_cred, instances_name)
+        ceph_vmnodes = create_ceph_nodes(cluster, osp_cred, run_id, instances_name)
         ceph_nodes = []
         for node_key in ceph_vmnodes.iterkeys():
             node = ceph_vmnodes[node_key]
@@ -339,7 +339,7 @@ def run(args):
         service.start_launch(name=launch_name, start_time=timestamp(), description=launch_desc)
 
     if reuse is None:
-        ceph_cluster_dict = create_nodes(conf, osp_cred, service, instances_name)
+        ceph_cluster_dict = create_nodes(conf, osp_cred, run_id, service, instances_name)
     else:
         ceph_store_nodes = open(reuse, 'rb')
         ceph_cluster_dict = pickle.load(ceph_store_nodes)
@@ -496,7 +496,7 @@ def run(args):
         if test.get('destroy-cluster') is True:
             cleanup_ceph_nodes(osp_cred)
         if test.get('recreate-cluster') is True:
-            ceph_cluster_dict = create_nodes(conf, osp_cred, service, instances_name)
+            ceph_cluster_dict = create_nodes(conf, osp_cred, run_id, service, instances_name)
         tcs.append(tc)
     close_and_remove_filehandlers()
     if post_to_report_portal:

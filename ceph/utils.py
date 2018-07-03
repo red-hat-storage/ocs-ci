@@ -1,6 +1,5 @@
 import datetime
 import logging
-import random
 import traceback
 
 import os
@@ -17,7 +16,7 @@ from parallel import parallel
 log = logging.getLogger(__name__)
 
 
-def create_ceph_nodes(cluster_conf, osp_cred, instances_name=None):
+def create_ceph_nodes(cluster_conf, osp_cred, run_id, instances_name=None):
     osp_glbs = osp_cred.get('globals')
     os_cred = osp_glbs.get('openstack-credentials')
     params = dict()
@@ -39,35 +38,30 @@ def create_ceph_nodes(cluster_conf, osp_cred, instances_name=None):
             params['root-login'] = False
         else:
             params['root-login'] = True
-            run_name = "run" + str(random.randint(10, 999)) + "-"
         with parallel() as p:
             for node in range(1, 100):
                 node = "node" + str(node)
                 if not ceph_cluster.get(node):
                     break
                 node_dict = ceph_cluster.get(node)
-                params['role'] = RolesContainer(node_dict.get('role'))
-                role = params['role']
+                node_params = params.copy()
+                node_params['role'] = RolesContainer(node_dict.get('role'))
+                role = node_params['role']
                 user = os.getlogin()
-                if params.get('run'):
-                    log.info("Using existing run name")
-                else:
-                    params['run'] = run_name
                 if instances_name:
-                    params['node-name'] = params.get('cluster-name', 'ceph') + '-' + instances_name + '-' + params[
-                        'run'] + node + '-' + '+'.join(role)
+                    node_params['node-name'] = "{}-{}-{}-{}-{}".format(
+                        node_params.get('cluster-name', 'ceph'), instances_name, run_id, node, '+'.join(role))
                 else:
-                    params['node-name'] = params.get('cluster-name', 'ceph') + '-' + user + '-' + params[
-                        'run'] + node + '-' + '+'.join(role)
+                    node_params['node-name'] = "{}-{}-{}-{}-{}".format(
+                        node_params.get('cluster-name', 'ceph'), user, run_id, node, '+'.join(role))
                 if node_dict.get('no-of-volumes'):
-                    params['no-of-volumes'] = node_dict.get('no-of-volumes')
-                    params['size-of-disks'] = node_dict.get('disk-size')
+                    node_params['no-of-volumes'] = node_dict.get('no-of-volumes')
+                    node_params['size-of-disks'] = node_dict.get('disk-size')
                 if node_dict.get('image-name'):
-                    params['image-name'] = node_dict.get('image-name')
+                    node_params['image-name'] = node_dict.get('image-name')
                 if node_dict.get('cloud-data'):
-                    params['cloud-data'] = node_dict.get('cloud-data')
-                del params['run']
-                p.spawn(setup_vm_node, node, ceph_nodes, **params)
+                    node_params['cloud-data'] = node_dict.get('cloud-data')
+                p.spawn(setup_vm_node, node, ceph_nodes, **node_params)
     log.info("Done creating nodes")
     return ceph_nodes
 
