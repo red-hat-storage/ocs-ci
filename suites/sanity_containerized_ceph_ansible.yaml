@@ -20,8 +20,8 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
-            fetch_directory: ~/fetch
             ceph_docker_image: rhceph/rhceph-3-rhel7
+            ceph_docker_image_tag: latest
             containerized_deployment: true
             ceph_docker_registry: registry.access.redhat.com
             copy_admin_key: true
@@ -33,6 +33,10 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
+                client:
+                  rgw crypt require ssl: false
+                  rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo=
+                    testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
             cephfs_pools:
               - name: "cephfs_data"
                 pgs: "8"
@@ -42,61 +46,67 @@ tests:
       destroy-cluster: False
       abort-on-fail: true
 
-#   - test:
-#      name: librbd workunit
-#      module: test_workunit.py
-#      config:
-#            test_name: rbd/test_librbd_python.sh
-#            branch: luminous
-#            role: mon
-#      desc: Test librbd unit tests
-#   - test:
-#      name: rbd cli image
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_image.py
-#            branch: master
-#      polarion-id: CEPH-83572722
-#      desc: CLI validation for image related commands
-#   - test:
-#      name: rbd cli snap_clone
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_snap_clone.py
-#            branch: master
-#      polarion-id: CEPH-83572725
-#      desc: CLI validation for snap and clone related commands
-#   - test:
-#      name: rbd cli misc
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_misc.py
-#            branch: master
-#      polarion-id: CEPH-83572724
-#      desc: CLI validation for miscellaneous rbd commands
-#   - test:
-#      name: rbd cli import_export
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_import_export_diff.py
-#            branch: master
-#      polarion-id: CEPH-83572723
-#      desc: CLI validation for import, export and diff related commands
-#   - test:
-#      name: check-ceph-health
-#      module: exec.py
-#      config:
-#            cmd: ceph -s
-#            sudo: True
-#      desc: Check for ceph health debug info
-#   - test:
-#      name: rados_bench_test
-#      module: radosbench.py
-#      config:
-#            pg_num: '128'
-#            pool_type: 'normal'
-#      desc: run rados bench for 360 - normal profile
-
+   - test:
+      name: librbd workunit
+      module: test_workunit.py
+      config:
+            test_name: rbd/test_librbd_python.sh
+            branch: luminous
+            role: mon
+      desc: Test librbd unit tests
+   - test:
+      name: rbd cli image
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_image.py
+            branch: master
+      polarion-id: CEPH-83572722
+      desc: CLI validation for image related commands
+   - test:
+      name: rbd cli snap_clone
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_snap_clone.py
+            branch: master
+      polarion-id: CEPH-83572725
+      desc: CLI validation for snap and clone related commands
+   - test:
+      name: rbd cli misc
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_misc.py
+            branch: master
+      polarion-id: CEPH-83572724
+      desc: CLI validation for miscellaneous rbd commands
+   - test:
+      name: rbd cli import_export
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_import_export_diff.py
+            branch: master
+      polarion-id: CEPH-83572723
+      desc: CLI validation for import, export and diff related commands
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+            cmd: ceph -s
+            sudo: True
+      desc: Check for ceph health debug info
+   - test:
+      name: rados_bench_test
+      module: radosbench.py
+      config:
+            pg_num: '128'
+            pool_type: 'normal'
+      desc: run rados bench for 360 - normal profile
+   - test:
+      name: s3 tests
+      module: test_s3.py
+      config:
+         branch: ceph-luminous
+      desc: execution of s3 tests against radosgw
+      destroy-cluster: False
    - test:
       name: ceph ansible purge
       polarion-id: CEPH-83571493
@@ -123,8 +133,8 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
-            fetch_directory: ~/fetch
             ceph_docker_image: rhceph/rhceph-3-rhel7
+            ceph_docker_image_tag: latest
             containerized_deployment: true
             ceph_docker_registry: registry.access.redhat.com
             copy_admin_key: true
@@ -136,6 +146,10 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
+                client:
+                  rgw crypt require ssl: false
+                  rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo=
+                    testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
             cephfs_pools:
               - name: "cephfs_data"
                 pgs: "8"
@@ -145,60 +159,67 @@ tests:
       destroy-cluster: False
       abort-on-fail: true
 
-#   - test:
-#      name: librbd workunit
-#      module: test_workunit.py
-#      config:
-#            test_name: rbd/test_librbd_python.sh
-#            branch: luminous
-#            role: mon
-#      desc: Test librbd unit tests
-#   - test:
-#      name: rbd cli image
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_image.py
-#            branch: master
-#      polarion-id: CEPH-83572722
-#      desc: CLI validation for image related commands
-#   - test:
-#      name: rbd cli snap_clone
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_snap_clone.py
-#            branch: master
-#      polarion-id: CEPH-83572725
-#      desc: CLI validation for snap and clone related commands
-#   - test:
-#      name: rbd cli misc
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_misc.py
-#            branch: master
-#      polarion-id: CEPH-83572724
-#      desc: CLI validation for miscellaneous rbd commands
-#   - test:
-#      name: rbd cli import_export
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_import_export_diff.py
-#            branch: master
-#      polarion-id: CEPH-83572723
-#      desc: CLI validation for import, export and diff related commands
-#   - test:
-#      name: check-ceph-health
-#      module: exec.py
-#      config:
-#            cmd: ceph -s
-#            sudo: True
-#      desc: Check for ceph health debug info
-#   - test:
-#      name: rados_bench_test
-#      module: radosbench.py
-#      config:
-#            pg_num: '128'
-#            pool_type: 'normal'
-#      desc: run rados bench for 360 - normal profile
+   - test:
+      name: librbd workunit
+      module: test_workunit.py
+      config:
+            test_name: rbd/test_librbd_python.sh
+            branch: luminous
+            role: mon
+      desc: Test librbd unit tests
+   - test:
+      name: rbd cli image
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_image.py
+            branch: master
+      polarion-id: CEPH-83572722
+      desc: CLI validation for image related commands
+   - test:
+      name: rbd cli snap_clone
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_snap_clone.py
+            branch: master
+      polarion-id: CEPH-83572725
+      desc: CLI validation for snap and clone related commands
+   - test:
+      name: rbd cli misc
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_misc.py
+            branch: master
+      polarion-id: CEPH-83572724
+      desc: CLI validation for miscellaneous rbd commands
+   - test:
+      name: rbd cli import_export
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_import_export_diff.py
+            branch: master
+      polarion-id: CEPH-83572723
+      desc: CLI validation for import, export and diff related commands
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+            cmd: ceph -s
+            sudo: True
+      desc: Check for ceph health debug info
+   - test:
+      name: s3 tests
+      module: test_s3.py
+      config:
+         branch: ceph-luminous
+      desc: execution of s3 tests against radosgw
+      destroy-cluster: False
+   - test:
+      name: rados_bench_test
+      module: radosbench.py
+      config:
+            pg_num: '128'
+            pool_type: 'normal'
+      desc: run rados bench for 360 - normal profile
 
    - test:
       name: ceph ansible purge
@@ -231,6 +252,7 @@ tests:
             public_network: 172.16.0.0/12
             fetch_directory: ~/fetch
             ceph_docker_image: rhceph/rhceph-3-rhel7
+            ceph_docker_image_tag: latest
             containerized_deployment: true
             ceph_docker_registry: registry.access.redhat.com
             copy_admin_key: true
@@ -242,6 +264,10 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
+                client:
+                  rgw crypt require ssl: false
+                  rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo=
+                    testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
             cephfs_pools:
               - name: "cephfs_data"
                 pgs: "8"
@@ -251,61 +277,67 @@ tests:
       destroy-cluster: False
       abort-on-fail: true
 
-#   - test:
-#      name: librbd workunit
-#      module: test_workunit.py
-#      config:
-#            test_name: rbd/test_librbd_python.sh
-#            branch: luminous
-#            role: mon
-#      desc: Test librbd unit tests
-#   - test:
-#      name: rbd cli image
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_image.py
-#            branch: master
-#      polarion-id: CEPH-83572722
-#      desc: CLI validation for image related commands
-#   - test:
-#      name: rbd cli snap_clone
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_snap_clone.py
-#            branch: master
-#      polarion-id: CEPH-83572725
-#      desc: CLI validation for snap and clone related commands
-#   - test:
-#      name: rbd cli misc
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_misc.py
-#            branch: master
-#      polarion-id: CEPH-83572724
-#      desc: CLI validation for miscellaneous rbd commands
-#   - test:
-#      name: rbd cli import_export
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_import_export_diff.py
-#            branch: master
-#      polarion-id: CEPH-83572723
-#      desc: CLI validation for import, export and diff related commands
-#   - test:
-#      name: check-ceph-health
-#      module: exec.py
-#      config:
-#            cmd: ceph -s
-#            sudo: True
-#      desc: Check for ceph health debug info
-#   - test:
-#      name: rados_bench_test
-#      module: radosbench.py
-#      config:
-#            pg_num: '128'
-#            pool_type: 'normal'
-#      desc: run rados bench for 360 - normal profile
-
+   - test:
+      name: librbd workunit
+      module: test_workunit.py
+      config:
+            test_name: rbd/test_librbd_python.sh
+            branch: luminous
+            role: mon
+      desc: Test librbd unit tests
+   - test:
+      name: rbd cli image
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_image.py
+            branch: master
+      polarion-id: CEPH-83572722
+      desc: CLI validation for image related commands
+   - test:
+      name: rbd cli snap_clone
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_snap_clone.py
+            branch: master
+      polarion-id: CEPH-83572725
+      desc: CLI validation for snap and clone related commands
+   - test:
+      name: rbd cli misc
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_misc.py
+            branch: master
+      polarion-id: CEPH-83572724
+      desc: CLI validation for miscellaneous rbd commands
+   - test:
+      name: rbd cli import_export
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_import_export_diff.py
+            branch: master
+      polarion-id: CEPH-83572723
+      desc: CLI validation for import, export and diff related commands
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+            cmd: ceph -s
+            sudo: True
+      desc: Check for ceph health debug info
+   - test:
+      name: rados_bench_test
+      module: radosbench.py
+      config:
+            pg_num: '128'
+            pool_type: 'normal'
+      desc: run rados bench for 360 - normal profile
+   - test:
+      name: s3 tests
+      module: test_s3.py
+      config:
+         branch: ceph-luminous
+      desc: execution of s3 tests against radosgw
+      destroy-cluster: False
    - test:
       name: ceph ansible purge
       polarion-id: CEPH-83571493
@@ -336,8 +368,8 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
-            fetch_directory: ~/fetch
             ceph_docker_image: rhceph/rhceph-3-rhel7
+            ceph_docker_image_tag: latest
             containerized_deployment: true
             ceph_docker_registry: registry.access.redhat.com
             copy_admin_key: true
@@ -349,6 +381,10 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
+                client:
+                  rgw crypt require ssl: false
+                  rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo=
+                    testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
             cephfs_pools:
               - name: "cephfs_data"
                 pgs: "8"
@@ -358,61 +394,67 @@ tests:
       destroy-cluster: False
       abort-on-fail: true
 
-#   - test:
-#      name: librbd workunit
-#      module: test_workunit.py
-#      config:
-#            test_name: rbd/test_librbd_python.sh
-#            branch: luminous
-#            role: mon
-#      desc: Test librbd unit tests
-#   - test:
-#      name: rbd cli image
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_image.py
-#            branch: master
-#      polarion-id: CEPH-83572722
-#      desc: CLI validation for image related commands
-#   - test:
-#      name: rbd cli snap_clone
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_snap_clone.py
-#            branch: master
-#      polarion-id: CEPH-83572725
-#      desc: CLI validation for snap and clone related commands
-#   - test:
-#      name: rbd cli misc
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_misc.py
-#            branch: master
-#      polarion-id: CEPH-83572724
-#      desc: CLI validation for miscellaneous rbd commands
-#   - test:
-#      name: rbd cli import_export
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_import_export_diff.py
-#            branch: master
-#      polarion-id: CEPH-83572723
-#      desc: CLI validation for import, export and diff related commands
-#   - test:
-#      name: check-ceph-health
-#      module: exec.py
-#      config:
-#            cmd: ceph -s
-#            sudo: True
-#      desc: Check for ceph health debug info
-#   - test:
-#      name: rados_bench_test
-#      module: radosbench.py
-#      config:
-#            pg_num: '128'
-#            pool_type: 'normal'
-#      desc: run rados bench for 360 - normal profile
-
+   - test:
+      name: librbd workunit
+      module: test_workunit.py
+      config:
+            test_name: rbd/test_librbd_python.sh
+            branch: luminous
+            role: mon
+      desc: Test librbd unit tests
+   - test:
+      name: rbd cli image
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_image.py
+            branch: master
+      polarion-id: CEPH-83572722
+      desc: CLI validation for image related commands
+   - test:
+      name: rbd cli snap_clone
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_snap_clone.py
+            branch: master
+      polarion-id: CEPH-83572725
+      desc: CLI validation for snap and clone related commands
+   - test:
+      name: rbd cli misc
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_misc.py
+            branch: master
+      polarion-id: CEPH-83572724
+      desc: CLI validation for miscellaneous rbd commands
+   - test:
+      name: rbd cli import_export
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_import_export_diff.py
+            branch: master
+      polarion-id: CEPH-83572723
+      desc: CLI validation for import, export and diff related commands
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+            cmd: ceph -s
+            sudo: True
+      desc: Check for ceph health debug info
+   - test:
+      name: rados_bench_test
+      module: radosbench.py
+      config:
+            pg_num: '128'
+            pool_type: 'normal'
+      desc: run rados bench for 360 - normal profile
+   - test:
+      name: s3 tests
+      module: test_s3.py
+      config:
+         branch: ceph-luminous
+      desc: execution of s3 tests against radosgw
+      destroy-cluster: False
    - test:
       name: ceph ansible purge
       polarion-id: CEPH-83571493
@@ -440,8 +482,8 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
-            fetch_directory: ~/fetch
             ceph_docker_image: rhceph/rhceph-3-rhel7
+            ceph_docker_image_tag: latest
             containerized_deployment: true
             ceph_docker_registry: registry.access.redhat.com
             copy_admin_key: true
@@ -453,6 +495,10 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
+                client:
+                  rgw crypt require ssl: false
+                  rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo=
+                    testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
             cephfs_pools:
               - name: "cephfs_data"
                 pgs: "8"
@@ -462,61 +508,67 @@ tests:
       destroy-cluster: False
       abort-on-fail: true
 
-#   - test:
-#      name: librbd workunit
-#      module: test_workunit.py
-#      config:
-#            test_name: rbd/test_librbd_python.sh
-#            branch: luminous
-#            role: mon
-#      desc: Test librbd unit tests
-#   - test:
-#      name: rbd cli image
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_image.py
-#            branch: master
-#      polarion-id: CEPH-83572722
-#      desc: CLI validation for image related commands
-#   - test:
-#      name: rbd cli snap_clone
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_snap_clone.py
-#            branch: master
-#      polarion-id: CEPH-83572725
-#      desc: CLI validation for snap and clone related commands
-#   - test:
-#      name: rbd cli misc
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_misc.py
-#            branch: master
-#      polarion-id: CEPH-83572724
-#      desc: CLI validation for miscellaneous rbd commands
-#   - test:
-#      name: rbd cli import_export
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_import_export_diff.py
-#            branch: master
-#      polarion-id: CEPH-83572723
-#      desc: CLI validation for import, export and diff related commands
-#   - test:
-#      name: check-ceph-health
-#      module: exec.py
-#      config:
-#            cmd: ceph -s
-#            sudo: True
-#      desc: Check for ceph health debug info
-#   - test:
-#      name: rados_bench_test
-#      module: radosbench.py
-#      config:
-#            pg_num: '128'
-#            pool_type: 'normal'
-#      desc: run rados bench for 360 - normal profile
-
+   - test:
+      name: librbd workunit
+      module: test_workunit.py
+      config:
+            test_name: rbd/test_librbd_python.sh
+            branch: luminous
+            role: mon
+      desc: Test librbd unit tests
+   - test:
+      name: rbd cli image
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_image.py
+            branch: master
+      polarion-id: CEPH-83572722
+      desc: CLI validation for image related commands
+   - test:
+      name: rbd cli snap_clone
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_snap_clone.py
+            branch: master
+      polarion-id: CEPH-83572725
+      desc: CLI validation for snap and clone related commands
+   - test:
+      name: rbd cli misc
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_misc.py
+            branch: master
+      polarion-id: CEPH-83572724
+      desc: CLI validation for miscellaneous rbd commands
+   - test:
+      name: rbd cli import_export
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_import_export_diff.py
+            branch: master
+      polarion-id: CEPH-83572723
+      desc: CLI validation for import, export and diff related commands
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+            cmd: ceph -s
+            sudo: True
+      desc: Check for ceph health debug info
+   - test:
+      name: rados_bench_test
+      module: radosbench.py
+      config:
+            pg_num: '128'
+            pool_type: 'normal'
+      desc: run rados bench for 360 - normal profile
+   - test:
+      name: s3 tests
+      module: test_s3.py
+      config:
+         branch: ceph-luminous
+      desc: execution of s3 tests against radosgw
+      destroy-cluster: False
    - test:
       name: ceph ansible purge
       polarion-id: CEPH-83571493
@@ -527,7 +579,7 @@ tests:
       desc: Purge ceph cluster
 
    - test:
-      name: ceph ansible
+      name: containerized ceph ansible
       polarion-id: CEPH-83571499
       module: test_ansible.py
       config:
@@ -543,8 +595,8 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
-            fetch_directory: ~/fetch
             ceph_docker_image: rhceph/rhceph-3-rhel7
+            ceph_docker_image_tag: latest
             containerized_deployment: true
             ceph_docker_registry: registry.access.redhat.com
             copy_admin_key: true
@@ -556,6 +608,10 @@ tests:
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
+                client:
+                  rgw crypt require ssl: false
+                  rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo=
+                    testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
             cephfs_pools:
               - name: "cephfs_data"
                 pgs: "8"
@@ -565,61 +621,67 @@ tests:
       destroy-cluster: False
       abort-on-fail: true
 
-#   - test:
-#      name: librbd workunit
-#      module: test_workunit.py
-#      config:
-#            test_name: rbd/test_librbd_python.sh
-#            branch: luminous
-#            role: mon
-#      desc: Test librbd unit tests
-#   - test:
-#      name: rbd cli image
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_image.py
-#            branch: master
-#      polarion-id: CEPH-83572722
-#      desc: CLI validation for image related commands
-#   - test:
-#      name: rbd cli snap_clone
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_snap_clone.py
-#            branch: master
-#      polarion-id: CEPH-83572725
-#      desc: CLI validation for snap and clone related commands
-#   - test:
-#      name: rbd cli misc
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_misc.py
-#            branch: master
-#      polarion-id: CEPH-83572724
-#      desc: CLI validation for miscellaneous rbd commands
-#   - test:
-#      name: rbd cli import_export
-#      module: rbd_system.py
-#      config:
-#            test_name: cli/rbd_cli_import_export_diff.py
-#            branch: master
-#      polarion-id: CEPH-83572723
-#      desc: CLI validation for import, export and diff related commands
-#   - test:
-#      name: check-ceph-health
-#      module: exec.py
-#      config:
-#            cmd: ceph -s
-#            sudo: True
-#      desc: Check for ceph health debug info
-#   - test:
-#      name: rados_bench_test
-#      module: radosbench.py
-#      config:
-#            pg_num: '128'
-#            pool_type: 'normal'
-#      desc: run rados bench for 360 - normal profile
-
+   - test:
+      name: librbd workunit
+      module: test_workunit.py
+      config:
+            test_name: rbd/test_librbd_python.sh
+            branch: luminous
+            role: mon
+      desc: Test librbd unit tests
+   - test:
+      name: rbd cli image
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_image.py
+            branch: master
+      polarion-id: CEPH-83572722
+      desc: CLI validation for image related commands
+   - test:
+      name: rbd cli snap_clone
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_snap_clone.py
+            branch: master
+      polarion-id: CEPH-83572725
+      desc: CLI validation for snap and clone related commands
+   - test:
+      name: rbd cli misc
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_misc.py
+            branch: master
+      polarion-id: CEPH-83572724
+      desc: CLI validation for miscellaneous rbd commands
+   - test:
+      name: rbd cli import_export
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_import_export_diff.py
+            branch: master
+      polarion-id: CEPH-83572723
+      desc: CLI validation for import, export and diff related commands
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+            cmd: ceph -s
+            sudo: True
+      desc: Check for ceph health debug info
+   - test:
+      name: rados_bench_test
+      module: radosbench.py
+      config:
+            pg_num: '128'
+            pool_type: 'normal'
+      desc: run rados bench for 360 - normal profile
+   - test:
+      name: s3 tests
+      module: test_s3.py
+      config:
+         branch: ceph-luminous
+      desc: execution of s3 tests against radosgw
+      destroy-cluster: False
    - test:
       name: ceph ansible purge
       polarion-id: CEPH-83571493

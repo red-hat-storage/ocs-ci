@@ -41,5 +41,7 @@ globals:
         role: osd
         no-of-volumes: 4
         disk-size: 15
+      node10:
+        role: client
 
       cloud-data: conf/cloud-data.yaml
