@@ -92,7 +92,8 @@ class RolesContainer(object):
         self.role_list = list(set(self.role_list))
 
     def update_role(self, roles_list):
-        self.role_list.remove('pool')
+        if 'pool' in self.role_list:
+            self.role_list.remove('pool')
         self.extend(roles_list)
 
     def clear(self):
