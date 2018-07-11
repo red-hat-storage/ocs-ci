@@ -10,12 +10,11 @@ def run(**kw):
     log.info("Running test")
     ceph_nodes = kw.get('ceph_nodes')
     iscsi_util = IscsiUtils(ceph_nodes)
-    iscsi_initiators = iscsi_util.get_iscsi_initiators()
+    iscsi_initiators = iscsi_util.get_iscsi_initiator_linux()
     initiatorname = iscsi_util.get_initiatorname()
     iscsi_util.write_multipath(iscsi_initiators)  # to be chnage later
     iscsi_util.write_chap(initiatorname, iscsi_initiators)
     no_of_luns = install_iscsi_gwcli.no_of_luns
-
     device_list = iscsi_util.get_devicelist_luns(no_of_luns)
     if isinstance(device_list, list):
         pass

@@ -13,7 +13,7 @@ def run(**kw):
     log.info("Running test")
     ceph_nodes = kw.get('ceph_nodes')
     iscsi_util = IscsiUtils(ceph_nodes)
-    iscsi_initiators = iscsi_util.get_iscsi_initiators()
+    iscsi_initiators = iscsi_util.get_iscsi_initiator_linux()
     initiatorname = iscsi_util.get_initiatorname()
     iscsi_util.write_chap(initiatorname, iscsi_initiators)
     no_of_luns = install_iscsi_gwcli.no_of_luns

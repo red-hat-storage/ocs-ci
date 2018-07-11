@@ -17,6 +17,7 @@ import textwrap
 from docopt import docopt
 from libcloud.common.types import LibcloudError
 from ceph.ceph import CephNode
+from ceph.clients import WinNode
 from ceph.utils import create_ceph_nodes, cleanup_ceph_nodes, setup_cdn_repos
 from utils.polarion import post_to_polarion
 from utils.retry import retry
@@ -123,19 +124,25 @@ def create_nodes(conf, osp_cred, run_id, report_portal_session=None, instances_n
     for cluster in conf.get('globals'):
         ceph_vmnodes = create_ceph_nodes(cluster, osp_cred, run_id, instances_name)
         ceph_nodes = []
-        for node_key in ceph_vmnodes.iterkeys():
-            node = ceph_vmnodes[node_key]
-            ceph = CephNode(username='cephuser',
-                            password='cephuser',
-                            root_password='passwd',
-                            root_login=node.root_login,
-                            role=node.role,
-                            no_of_volumes=node.no_of_volumes,
-                            ip_address=node.ip_address,
-                            hostname=node.hostname,
-                            ceph_vmnode=node)
-            ceph_nodes.append(ceph)
+        clients = []
+        for node in ceph_vmnodes.itervalues():
+            if node.role == 'win-iscsi-clients':
+                clients.append(WinNode(ip_address=node.ip_address,
+                                       private_ip=node.get_private_ip()))
+            else:
+                ceph = CephNode(username='cephuser',
+                                password='cephuser',
+                                root_password='passwd',
+                                root_login=node.root_login,
+                                role=node.role,
+                                no_of_volumes=node.no_of_volumes,
+                                ip_address=node.ip_address,
+                                private_ip=node.get_private_ip(),
+                                hostname=node.hostname,
+                                ceph_vmnode=node)
+                ceph_nodes.append(ceph)
         ceph_cluster_dict[cluster.get('ceph-cluster').get('name', 'ceph')] = ceph_nodes
+
     log.info('Done creating osp instances')
     log.info("Waiting for Floating IPs to be available")
     log.info("Sleeping 15 Seconds")
@@ -150,7 +157,7 @@ def create_nodes(conf, osp_cred, run_id, report_portal_session=None, instances_n
                 raise
     if report_portal_session:
         report_portal_session.finish_test_item(end_time=timestamp(), status="PASSED")
-    return ceph_cluster_dict
+    return ceph_cluster_dict, clients
 
 
 def print_results(tc):
@@ -339,7 +346,7 @@ def run(args):
         service.start_launch(name=launch_name, start_time=timestamp(), description=launch_desc)
 
     if reuse is None:
-        ceph_cluster_dict = create_nodes(conf, osp_cred, run_id, service, instances_name)
+        ceph_cluster_dict, clients = create_nodes(conf, osp_cred, run_id, service, instances_name)
     else:
         ceph_store_nodes = open(reuse, 'rb')
         ceph_cluster_dict = pickle.load(ceph_store_nodes)
@@ -460,7 +467,7 @@ def run(args):
                     service.log(time=timestamp(), message="Logfile location: {}".format(tc['log-link']), level="INFO")
                     service.log(time=timestamp(), message="Polarion ID: {}".format(tc['polarion-id']), level="INFO")
                 rc = test_mod.run(ceph_nodes=ceph_cluster_dict[cluster_name], config=config, test_data=ceph_test_data,
-                                  ceph_cluster_dict=ceph_cluster_dict)
+                                  ceph_cluster_dict=ceph_cluster_dict, clients=clients)
             except BaseException:
                 if post_to_report_portal:
                     service.log(time=timestamp(), message=traceback.format_exc(), level="ERROR")
@@ -496,7 +503,7 @@ def run(args):
         if test.get('destroy-cluster') is True:
             cleanup_ceph_nodes(osp_cred)
         if test.get('recreate-cluster') is True:
-            ceph_cluster_dict = create_nodes(conf, osp_cred, run_id, service, instances_name)
+            ceph_cluster_dict, clients = create_nodes(conf, osp_cred, run_id, service, instances_name)
         tcs.append(tc)
     close_and_remove_filehandlers()
     if post_to_report_portal:
