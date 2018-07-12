@@ -43,5 +43,12 @@ globals:
         disk-size: 15
       node10:
         role: client
-
+      node11:
+        role: pool
+        no-of-volumes: 4
+        disk-size: 15
+      node12:
+        role: pool
+        no-of-volumes: 4
+        disk-size: 15
       cloud-data: conf/cloud-data.yaml
