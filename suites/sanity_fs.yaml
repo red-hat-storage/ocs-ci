@@ -118,6 +118,14 @@ tests:
        desc: Mount CephFS on multiple clients,
        abort-on-fail: false
    - test:
+       name: MON-failure
+       module: 11254.py
+       polarion-id: CEPH-11254
+       config:
+         num_of_osds: 12
+       desc: Mount CephFS on multiple clients with fstab entry ,perform MON reboot,service kill,network disconnections,client reboots, with IOs
+       abort-on-fail: false
+   - test:
        name: cephfs-basics-ios
        module: CEPH-10625_11225.py
        polarion-id: CEPH-10625,CEPH-11225
