@@ -119,11 +119,19 @@ tests:
        abort-on-fail: false
    - test:
        name: MON-failure
-       module: 11254.py
+       module: CEPH-11254_fuse.py
        polarion-id: CEPH-11254
        config:
          num_of_osds: 12
        desc: Mount CephFS on multiple clients with fstab entry ,perform MON reboot,service kill,network disconnections,client reboots, with IOs
+       abort-on-fail: false
+   - test:
+       name: OSD-failure
+       module: CEPH-11255_11336_fuse.py
+       polarion-id: CEPH-11255,CEPH-11336
+       config:
+         num_of_osds: 12
+       desc: Mount CephFS on multiple clients with fstab entry ,perform OSD reboot,service kill,network disconnections,client reboots, with IOs
        abort-on-fail: false
    - test:
        name: cephfs-basics-ios
