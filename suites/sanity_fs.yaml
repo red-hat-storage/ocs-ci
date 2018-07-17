@@ -142,6 +142,14 @@ tests:
        desc: Mount CephFS on multiple clients,perform MDS reboot,service kill,network disconnections,client reboots, with IOs
        abort-on-fail: false
    - test:
+       name: MDS-pinning-system_tests
+       module: CEPH-11231.py
+       polarion-id: CEPH-11231
+       config:
+         num_of_osds: 12
+       desc: Active-active multi MDS with standby and pinning subtrees to all MDS, perform system tests like, OSD/MON/MDS reboot,service,restart
+       abort-on-fail: false
+   - test:
        name: cephfs-basics-ios
        module: CEPH-10625_11225.py
        polarion-id: CEPH-10625,CEPH-11225
