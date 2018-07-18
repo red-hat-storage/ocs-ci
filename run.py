@@ -501,7 +501,7 @@ def run(args):
                 tcs.append(tc)
                 break
         if test.get('destroy-cluster') is True:
-            cleanup_ceph_nodes(osp_cred)
+            cleanup_ceph_nodes(osp_cred, instances_name)
         if test.get('recreate-cluster') is True:
             ceph_cluster_dict, clients = create_nodes(conf, osp_cred, run_id, service, instances_name)
         tcs.append(tc)
