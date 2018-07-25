@@ -475,6 +475,19 @@ def get_ceph_versions(ceph_nodes, containerized=False):
     return versions_dict
 
 
+def hard_reboot(gyaml, name=None):
+    user = os.getlogin()
+    if name is None:
+        name = 'ceph-' + user
+    driver = get_openstack_driver(gyaml)
+    for node in driver.list_nodes():
+        if node.name.startswith(name):
+            log.info('Hard-rebooting %s' % node.name)
+            driver.ex_hard_reboot_node(node)
+
+    return 0
+
+
 def get_root_permissions(node, path):
     """
     Transfer ownership of root to current user for the path given. Recursive.
