@@ -17,6 +17,8 @@ def run(**kw):
     ceph_nodes = kw.get('ceph_nodes')
     log.info("Running ceph ansible test")
     config = kw.get('config')
+    bluestore = config.get('bluestore')
+    k_and_m = config.get('ec-pool-k-m')
     test_data = kw.get('test_data')
     ubuntu_repo = None
     ansible_dir = '/usr/share/ceph-ansible'
@@ -162,8 +164,11 @@ def run(**kw):
             devs = [_dev for _dev in devs if _dev not in reserved_devs]
             num_osds = num_osds + len(devs)
             auto_discovey = config['ansi_config'].get('osd_auto_discovery', False)
+            objectstore = ''
+            if bluestore:
+                objectstore = 'osd_objectstore="bluestore"'
             osd_host = node.shortname + mon_interface + \
-                (" devices='" + json.dumps(devs) + "'" if not auto_discovey else '')
+                (" devices='" + json.dumps(devs) + "'" if not auto_discovey else '') + ' ' + objectstore
             osd_hosts.append(osd_host)
         if node.role == 'mds':
             mds_host = node.shortname + ' monitor_interface=' + node.eth_interface
@@ -271,8 +276,28 @@ def run(**kw):
                 sudo=True, cmd='docker exec {container} ceph osd pool application enable rbd rbd --yes-i-really-mean-it'
                     .format(container=mon_container))
         else:
-            ceph_mon.exec_command(sudo=True, cmd='ceph osd pool create rbd 64 64')
-            ceph_mon.exec_command(sudo=True, cmd='ceph osd pool application enable rbd rbd --yes-i-really-mean-it')
+            if k_and_m:
+                pool_name = 'rbd'
+                ceph_mon.exec_command(
+                    cmd='sudo ceph osd erasure-code-profile set %s k=%s m=%s' %
+                    ('ec_profile', k_and_m[0], k_and_m[2]))
+                ceph_mon.exec_command(
+                    cmd='sudo ceph osd pool create %s 64 64 erasure ec_profile' %
+                    pool_name)
+                ceph_mon.exec_command(
+                    cmd='sudo ceph osd pool set %s allow_ec_overwrites true' %
+                        (pool_name))
+                ceph_mon.exec_command(
+                    sudo=True,
+                    cmd='ceph osd pool application enable %s rbd --yes-i-really-mean-it' %
+                    pool_name)
+            else:
+                ceph_mon.exec_command(
+                    sudo=True, cmd='ceph osd pool create rbd 64 64 ')
+                ceph_mon.exec_command(
+                    sudo=True,
+                    cmd='ceph osd pool application enable rbd rbd --yes-i-really-mean-it')
+
     if check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container, timeout) != 0:
         return 1
     return rc
