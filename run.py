@@ -47,6 +47,8 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--log-level <LEVEL>]
         [--instances-name <name>]
         [--osp-image <image>]
+        [--bluestore]
+        [--use-ec-pool <k,m>]
   run.py --cleanup=name [--osp-cred <file>]
         [--log-level <LEVEL>]
 
@@ -83,6 +85,8 @@ Options:
   --log-level <LEVEL>               Set logging level
   --instances-name <name>           Name that will be used for instances creation
   --osp-image <image>               Image for osp instances, default value is taken from conf file
+  --bluestore                       To specify bluestore as osd object store
+  --use-ec-pool <k,m>               To use ec pools instead of replicated pools
 """
 log = logging.getLogger(__name__)
 root = logging.getLogger()
@@ -203,7 +207,8 @@ def run(args):
     console_log_level = args.get('--log-level')
     instances_name = args.get('--instances-name')
     osp_image = args.get('--osp-image')
-
+    bluestore = args.get('--bluestore', False)
+    ec_pool_vals = args.get('--use-ec-pool', None)
     if console_log_level:
         ch.setLevel(logging.getLevelName(console_log_level.upper()))
 
@@ -455,6 +460,10 @@ def run(args):
                     tc['docker-containers-list'].append('{docker_registry}/{docker_image}:{docker_tag}'.format(
                         docker_registry=cluster_docker_registry, docker_image=cluster_docker_image,
                         docker_tag=cluster_docker_tag))
+            if bluestore:
+                config['bluestore'] = bluestore
+            if ec_pool_vals:
+                config['ec-pool-k-m'] = ec_pool_vals
             if kernel_repo is not None:
                 config['kernel-repo'] = kernel_repo
             # if Kernel Repo is defined in ENV then set the value in config
