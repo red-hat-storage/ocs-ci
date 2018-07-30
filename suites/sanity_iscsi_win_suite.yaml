@@ -35,18 +35,24 @@ tests:
 
    - test:
       name: Install gwcli iscsi.
-      module: setup_iscsi_win.py
+      module: setup_iscsi.py
+      polarion-id: CEPH-10366,CEPH-10367
       abort-on-fail: true
       config:
             no_of_gateways: 4
-            no_of_luns: 10
       desc: Create iscsi gateway using gwcli tool
 
    - test:
-      name: Verify gateways are installed on all the nodes.
-      module: CEPH-10365_10367.py
-      polarion-id: CEPH-10365,CEPH-10367
-      desc: Install iSCSI setup with 2 Gateways co-located on the OSDs using ceph-ansible
-      abort-on-fail: false
+      name: Setup windows client
+      module: setup_win_client.py
+      abort-on-fail: true
+      desc: Setup iscsi initiator on windows server
+
+   - test:
+      name: Doing some i-o
+      module: CEPH-10440-win.py
+      polarion-id: CEPH-10440
+      desc: Configure multiple LUNs(20-30) from a Single Target and discover it on Initiators and run IO on the connected targets from clients
       config:
-            no_of_gateways: 4
+            no_of_luns: 10
+      abort-on-fail: false

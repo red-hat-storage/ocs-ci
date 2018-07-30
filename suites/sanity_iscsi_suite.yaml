@@ -4,12 +4,12 @@ tests:
       module: install_prereq.py
       abort-on-fail: true
 
-  #  - test:
-  #     name: Update kernel
-  #     module: update-kernel-iscsi.py
-  #     abort-on-fail: true
-  #     config:
-  #           kernel-repo: http://autobkr.app.eng.bos.redhat.com/repos/kernel/3.10.0/823.el7/
+   - test:
+      name: Update kernel
+      module: update-kernel-iscsi.py
+      abort-on-fail: true
+      config:
+            kernel-repo: http://autobkr.app.eng.bos.redhat.com/repos/kernel/3.10.0/823.el7/
 
    - test:
       name: ceph ansible
@@ -42,35 +42,34 @@ tests:
 
    - test:
       name: Install gwcli iscsi.
-      module: install_iscsi_gwcli.py
+      module: setup_iscsi.py
+      polarion-id: CEPH-10366,CEPH-10367
       abort-on-fail: true
       config:
             no_of_gateways: 4
-            no_of_luns: 10
       desc: Create iscsi gateway using gwcli tool
 
    - test:
-      name: Verify gateways are installed on all the nodes.
-      module: CEPH-10365_10367.py
-      polarion-id: CEPH-10365,CEPH-10367
-      desc: Install iSCSI setup with 2 Gateways co-located on the OSDs using ceph-ansible
-      abort-on-fail: false
+      name: Setup rhel client
+      module: setup_linux_client.py
+      abort-on-fail: true
       config:
-            no_of_gateways: 4
+            no_of_luns: 8
+      desc: Setup iscsi initiator on linux server
 
    - test:
       name: Doing some i-o
       module: CEPH-10440.py
       polarion-id: CEPH-10440
       desc: Configure multiple LUNs(20-30) from a Single Target and discover it on Initiators and run IO on the connected targets from clients
-      abort-on-fail: false
+      abort-on-fail: true
 
    - test:
       name: purge cluster
       module: purge_cluster.py
       config:
         ansible-dir: /usr/share/ceph-ansible
-      abort-on-fail: true
+      abort-on-fail: false
       desc: Purge ceph cluster
 
    - test:
@@ -104,18 +103,25 @@ tests:
 
    - test:
       name: Install gwcli iscsi.
-      module: install_iscsi_gwcli.py
+      module: setup_iscsi.py
       abort-on-fail: true
       config:
             no_of_gateways: 4
-            no_of_luns: 25
       desc: Create iscsi gateway using gwcli tool
+
+   - test:
+      name: Setup rhel client
+      module: setup_linux_client.py
+      abort-on-fail: true
+      config:
+            no_of_luns: 8
+      desc: Setup iscsi initiator on linux server
 
    - test:
       name: verify i-o after restart
       module: CEPH-10572_10460_10450.py
       polarion-id: CEPH-10572,CEPH-10460,CEPH-10450
-      abort-on-fail: false
+      abort-on-fail: true
       desc: verify i/o after restart,iscsi-failover-test
 
    - test:
@@ -123,7 +129,7 @@ tests:
       module: purge_cluster.py
       config:
         ansible-dir: /usr/share/ceph-ansible
-      abort-on-fail: true
+      abort-on-fail: false
       desc: Purge ceph cluster
 
    - test:
@@ -157,12 +163,19 @@ tests:
 
    - test:
       name: Install gwcli iscsi.
-      module: install_iscsi_gwcli.py
+      module: setup_iscsi.py
       abort-on-fail: true
       config:
             no_of_gateways: 4
-            no_of_luns: 25
       desc: Create iscsi gateway using gwcli tool
+
+   - test:
+      name: Setup rhel client
+      module: setup_linux_client.py
+      abort-on-fail: true
+      config:
+            no_of_luns: 8
+      desc: Setup iscsi initiator on linux server
 
    - test:
       name: Fail an Recover

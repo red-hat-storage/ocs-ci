@@ -1,9 +1,7 @@
 globals:
   - ceph-cluster:
       name: ceph
-      create: true
-      image-name: rhel-7.4-server-x86_64-latest
-      vm-size: m1.medium
+      vm-size: m1.large
       node1:
         role:
           - installer

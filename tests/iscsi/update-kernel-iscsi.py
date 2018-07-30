@@ -2,6 +2,7 @@ import logging
 import os
 import time
 
+from ceph.ceph import CommandFailed
 from ceph.parallel import parallel
 
 logger = logging.getLogger(__name__)
@@ -13,6 +14,8 @@ def run(**kw):
     ceph_nodes = kw.get('ceph_nodes')
     config = kw.get('config')
     role = 'osd'
+    if not check_rhel_7_4(ceph_nodes[0]):
+        return 0
     if config.get('role'):
         role = config.get('role')
     with parallel() as p:
@@ -27,6 +30,19 @@ def run(**kw):
                     repo = os.environ['KERNEL-REPO-URL']
                     p.spawn(update_kernel_and_reboot, cnode, repo)
     return 0
+
+
+def check_rhel_7_4(node):
+    try:
+        node.exec_command(sudo=True,
+                          cmd="cat /etc/redhat-release | grep 'release 7.4'",
+                          check_ec=True)
+    except CommandFailed:
+        log.info("Skipping kernel upgrade for RHEL 7.4")
+        return False
+    else:
+        log.info("RHEL version is 7.4. Runnig kernel upgrade")
+        return True
 
 
 def update_kernel_and_reboot(client, repo_url):
