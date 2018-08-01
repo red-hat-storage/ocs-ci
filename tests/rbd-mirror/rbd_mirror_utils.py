@@ -1,10 +1,11 @@
+import datetime
 import ast
 import time
 import random
 import string
 import logging
 import json
-
+from ceph.ceph import CommandFailed
 log = logging.getLogger(__name__)
 
 
@@ -210,15 +211,13 @@ class RbdMirror:
                              .format(kw.get('imagespec'),
                                      self.cluster_name, out))
                     return out
-                    if out:
-                        return out
             time.sleep(20)
         log.error('Required status can not be attained')
         return 1
 
     # Wait for replay to complete, check every 60 seconds
     def wait_for_replay_complete(self, imagespec):
-        while 1:
+        while True:
             out = self.wait_for_status(imagespec=imagespec,
                                        description_pattern='entries')
             if int(out.split('=')[-1]) == 0:
@@ -315,13 +314,23 @@ class RbdMirror:
 
     # Mirroring Status
     def mirror_status(self, *args):
-        output = self.exec_cmd(output=True,
-                               cmd="rbd mirror {} status {} --format=json"
-                               .format(args[0], args[1]))
-        json_dict = json.loads(output)
-        return self.value(args[2], json_dict)
-
+        timeout = 300
+        timeout = datetime.timedelta(seconds=timeout)
+        starttime = datetime.datetime.now()
+        while True:
+            try:
+                output = self.exec_cmd(output=True,
+                                       cmd="rbd mirror {} status {} --format=json"
+                                       .format(args[0], args[1]))
+                json_dict = json.loads(output)
+                return self.value(args[2], json_dict)
+            except CommandFailed as e:
+                if datetime.now() - starttime > timeout:
+                    log.error('Failed to get image status %s' % e)
+                    return 1
+                pass
     # Add Peer
+
     def peer_add(self, **kw):
         return self.exec_cmd(cmd='rbd mirror pool peer add {} {}'
                              .format(kw.get('poolname'),
@@ -360,8 +369,10 @@ class RbdMirror:
         return temp_str
 
     def delete_pool(self, poolname):
-        self.exec_cmd(cmd='ceph osd pool delete {pool} {pool} '
-                          '--yes-i-really-really-mean-it'.format(pool=poolname))
+        self.exec_cmd(
+            cmd='ceph osd pool delete {pool} {pool} '
+            '--yes-i-really-really-mean-it'.format(
+                pool=poolname))
 
     def delete_image(self, imagespec):
         self.exec_cmd(cmd='rbd rm {}'.format(imagespec))
