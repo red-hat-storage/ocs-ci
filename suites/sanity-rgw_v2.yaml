@@ -332,3 +332,64 @@ tests:
            config-file-name: test_swift_basic_ops.yaml
            timeout: 300
 
+   - test:
+      name: ceph ansible purge
+      polarion-id: CEPH-83571498
+      module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
+      desc: Purge ceph cluster
+
+   - test:
+      name: ceph ansible
+      module: test_ansible.py
+      config:
+        ansi_config:
+            ceph_test: True
+            ceph_origin: distro
+            ceph_stable_release: luminous
+            ceph_repository: rhcs
+            osd_scenario: collocated
+            osd_auto_discovery: False
+            journal_size: 1024
+            ceph_stable: True
+            ceph_stable_rh_storage: True
+            public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
+            copy_admin_key: true
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 64
+                  osd_default_pool_size: 2
+                  osd_pool_default_pgp_num: 64
+                  mon_max_pg_per_osd: 1024
+            cephfs_pools:
+              - name: "cephfs_data"
+                pgs: "8"
+              - name: "cephfs_metadata"
+                pgs: "8"
+      desc: test cluster setup using ceph-ansible
+      destroy-cluster: false
+      abort-on-fail: true
+
+   # Bucket Request Payer tests
+
+   - test:
+       name: Bucket Request Payer Tests
+       desc: Basic test for bucket request payer
+       polarion-id: CEPH-10344,CEPH-10346,CEPH-10351
+       module: sanity_rgw_v2.py
+       config:
+           script-name: test_bucket_request_payer.py
+           config-file-name: test_bucket_request_payer.yaml
+           timeout: 300
+
+   - test:
+       name: Bucket Request Payer Tests
+       desc: Basic test for bucket request payer with object download
+       polarion-id: CEPH-10347
+       module: sanity_rgw_v2.py
+       config:
+           script-name: test_bucket_request_payer.py
+           config-file-name: test_bucket_request_payer_download.yaml
+           timeout: 300
