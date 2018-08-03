@@ -663,7 +663,6 @@ tests:
       config:
             ansible-dir: /usr/share/ceph-ansible
       desc: Purge ceph cluster
-      recreate-cluster: True
 
    - test:
       name: ceph ansible
