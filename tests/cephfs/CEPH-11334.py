@@ -21,10 +21,7 @@ def run(**kw):
             log.info("Got client info")
         else:
             raise CommandFailed("fetching client info failed")
-        client1 = []
-        client2 = []
-        client3 = []
-        client4 = []
+        client1, client2, client3, client4 = ([] for _ in range(4))
         client1.append(client_info['fuse_clients'][0])
         client2.append(client_info['fuse_clients'][1])
         client3.append(client_info['kernel_clients'][0])
@@ -34,7 +31,6 @@ def run(**kw):
         rc2 = fs_util.auth_list(client2, client_info['mon_node'])
         rc3 = fs_util.auth_list(client3, client_info['mon_node'])
         rc4 = fs_util.auth_list(client4, client_info['mon_node'])
-        print rc1, rc2, rc3, rc4
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
         else:
@@ -62,7 +58,6 @@ def run(**kw):
             raise CommandFailed("kernel mount failed")
         vals, rc = fs_util.getfattr(
             client1, client_info['mounting_dir'], file_name)
-
         rc = fs_util.setfattr(
             client1,
             'stripe_unit',
@@ -99,9 +94,15 @@ def run(**kw):
             raise CommandFailed(
                 "Setfattr object_size for file %s success" %
                 file_name)
-        rc = fs_util.add_pool(
-            client_info['mon_node'],
-            'cephfs',
+        fs_info = fs_util.get_fs_info(client_info['mon_node'][0])
+        fs_util.create_pool(
+            client_info['mon_node'][0],
+            'new_data_pool',
+            64,
+            64)
+        rc = fs_util.add_pool_to_fs(
+            client_info['mon_node'][0],
+            fs_info.get('fs_name'),
             'new_data_pool')
         if 0 in rc:
             log.info("Adding new pool to cephfs success")
@@ -145,8 +146,10 @@ def run(**kw):
             if vals['object_size'] in out.read():
                 log.info("reading object_size by getfattr successfull")
             break
-        rc = fs_util.remove_pool(
-            client_info['mon_node'], 'cephfs', 'new_data_pool')
+        rc = fs_util.remove_pool_from_fs(
+            client_info['mon_node'][0],
+            fs_info.get('fs_name'),
+            'new_data_pool')
         if 0 in rc:
             log.info("Pool removing success")
         else:
@@ -158,15 +161,13 @@ def run(**kw):
                 client_info['kernel_clients'],
                 client_info['mounting_dir'],
                 'umount')
-            rc_mds = fs_util.mds_cleanup(client_info['mds_nodes'], None)
 
         else:
             rc_client = fs_util.client_clean_up(
                 client_info['fuse_clients'], '',
                 client_info['mounting_dir'], 'umount')
-            rc_mds = fs_util.mds_cleanup(client_info['mds_nodes'], None)
 
-        if rc_client == 0 and rc_mds == 0:
+        if rc_client == 0:
             log.info('Cleaning up successfull')
         else:
             return 1
@@ -188,15 +189,12 @@ def run(**kw):
                 client_info['kernel_clients'],
                 client_info['mounting_dir'],
                 'umount')
-            rc_mds = fs_util.mds_cleanup(client_info['mds_nodes'], None)
-
         else:
             rc_client = fs_util.client_clean_up(
                 client_info['fuse_clients'], '',
                 client_info['mounting_dir'], 'umount')
-            rc_mds = fs_util.mds_cleanup(client_info['mds_nodes'], None)
 
-        if rc_client == 0 and rc_mds == 0:
+        if rc_client == 0:
             log.info('Cleaning up successfull')
         return 1
 
