@@ -21,10 +21,7 @@ def run(**kw):
             log.info("Got client info")
         else:
             raise CommandFailed("fetching client info failed")
-        client1 = []
-        client2 = []
-        client3 = []
-        client4 = []
+        client1, client2, client3, client4 = ([] for _ in range(4))
         client1.append(client_info['fuse_clients'][0])
         client2.append(client_info['fuse_clients'][1])
         client3.append(client_info['kernel_clients'][0])
@@ -71,7 +68,7 @@ def run(**kw):
             log.info("Got active mdss")
         else:
             raise CommandFailed("getting active-mdss failed")
-        #
+
         with parallel() as p:
             p.spawn(fs_util.read_write_IO, client1,
                     client_info['mounting_dir'], 'm', 'write')
@@ -283,9 +280,6 @@ def run(**kw):
         if client3[0].pkg_type == 'deb' and client4[0].pkg_type == 'deb':
             for client in client_info['fuse_clients']:
                 client.exec_command(
-                    cmd='sudo rm -rf %s*' %
-                    (client_info['mounting_dir']))
-                client.exec_command(
                     cmd='sudo fusermount -u %s -z' %
                         (client_info['mounting_dir']))
                 client.exec_command(
@@ -307,12 +301,65 @@ def run(**kw):
                 client.exec_command(
                     cmd='sudo rm -rf %s' %
                         (client_info['mounting_dir']))
+        rc1 = fs_util.fuse_mount(client1, client_info['mounting_dir'])
+        rc2 = fs_util.fuse_mount(client2, client_info['mounting_dir'])
+
+        if rc1 == 0 and rc2 == 0:
+            log.info("Fuse mount passed")
+        else:
+            raise CommandFailed("Fuse mount failed")
+
+        rc3 = fs_util.kernel_mount(
+            client3,
+            client_info['mounting_dir'],
+            client_info['mon_node_ip'])
+        rc4 = fs_util.kernel_mount(
+            client4,
+            client_info['mounting_dir'],
+            client_info['mon_node_ip'])
+        if rc3 == 0 and rc4 == 0:
+            log.info("kernel mount passed")
+        else:
+            raise CommandFailed("kernel mount failed")
+        if client3[0].pkg_type == 'deb' and client4[0].pkg_type == 'deb':
+            for client in client_info['fuse_clients']:
+                client.exec_command(
+                    cmd='sudo rm -rf %s*' %
+                        (client_info['mounting_dir']))
+                client.exec_command(
+                    cmd='sudo fusermount -u %s -z' %
+                        (client_info['mounting_dir']))
+                client.exec_command(
+                    cmd='sudo rm -rf %s' %
+                        (client_info['mounting_dir']))
+        else:
+            for client in client_info['fuse_clients']:
+                client.exec_command(
+                    cmd='sudo rm -rf %s*' %
+                        (client_info['mounting_dir']))
+                client.exec_command(
+                    cmd='sudo fusermount -u %s -z' %
+                        (client_info['mounting_dir']))
+                client.exec_command(
+                    cmd='sudo rm -rf %s' %
+                        (client_info['mounting_dir']))
+
+            for client in client_info['kernel_clients']:
+                client.exec_command(
+                    cmd='sudo umount %s -l' %
+                        (client_info['mounting_dir']))
+                client.exec_command(
+                    cmd='sudo rm -rf %s' %
+                        (client_info['mounting_dir']))
+
         print 'Script execution time:------'
         stop = timeit.default_timer()
         total_time = stop - start
         mins, secs = divmod(total_time, 60)
         hours, mins = divmod(mins, 60)
+
         print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
+
         return 0
 
     except CommandFailed as e:
