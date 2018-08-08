@@ -24,10 +24,7 @@ def run(**kw):
             log.info("Got client info")
         else:
             raise CommandFailed("fetching client info failed")
-        client1 = []
-        client2 = []
-        client3 = []
-        client4 = []
+        client1, client2, client3, client4 = ([] for _ in range(4))
         client1.append(client_info['fuse_clients'][0])
         client2.append(client_info['fuse_clients'][1])
         client3.append(client_info['kernel_clients'][0])
@@ -37,7 +34,6 @@ def run(**kw):
         rc2 = fs_util.auth_list(client2, client_info['mon_node'])
         rc3 = fs_util.auth_list(client3, client_info['mon_node'])
         rc4 = fs_util.auth_list(client4, client_info['mon_node'])
-        print rc1, rc2, rc3, rc4
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
         else:
@@ -100,10 +96,9 @@ def run(**kw):
 
         result = fs_util.rc_verify('', return_counts)
 
-        for client in client1:
-            client.exec_command(
-                cmd='sudo mkdir %s%s' %
-                (client_info['mounting_dir'], 'testdir'))
+        client1[0].exec_command(
+            cmd='sudo mkdir %s%s' %
+            (client_info['mounting_dir'], 'testdir'))
 
         if result == 'Data validation success':
             print "Data validation success"
@@ -127,21 +122,21 @@ def run(**kw):
                     dir_name)
                 p.spawn(
                     fs_util.mkdir_bulk,
-                    client3,
+                    client1,
                     num_of_dirs * 2 + 1,
                     num_of_dirs * 3,
                     client_info['mounting_dir'] + 'testdir/',
                     dir_name)
                 p.spawn(
                     fs_util.mkdir_bulk,
-                    client3,
+                    client2,
                     num_of_dirs * 3 + 1,
                     num_of_dirs * 4,
                     client_info['mounting_dir'] + 'testdir/',
                     dir_name)
                 p.spawn(
                     fs_util.mkdir_bulk,
-                    client4,
+                    client1,
                     num_of_dirs * 4 + 1,
                     num_of_dirs * 5,
                     client_info['mounting_dir'] + 'testdir/',
@@ -170,21 +165,17 @@ def run(**kw):
                     num_of_dirs * 1,
                     num_of_dirs * 2,
                     10)
-                for client in client1:
-                    out, rc = client.exec_command(cmd='df -h', timeout=10)
-                    mount_output = out.read()
-                    mount_output.split()
-                    client_info['mon_node_ip'] = client_info['mon_node_ip'].\
-                        replace(
-                        " ", "")
-                    if 'ceph-fuse' in mount_output or '%s:6789:/' \
-                            % client_info['mon_node_ip'] in mount_output:
-                        for num in range(0, 10):
-                            client.exec_command(
-                                cmd='sudo setfattr -n ceph.dir.pin -v %s '
-                                    '%s%s_%d' % (0,
-                                                 client_info['mounting_dir'] +
-                                                 'testdir/', dir_name, num))
+                rc = fs_util.check_mount_exists(client1[0])
+                if rc == 0:
+                    fs_util.pinning(
+                        client1,
+                        0,
+                        10,
+                        client_info['mounting_dir'] +
+                        'testdir/',
+                        dir_name,
+                        0)
+
                 p.spawn(
                     fs_util.max_dir_io,
                     client3,
@@ -302,8 +293,6 @@ def run(**kw):
                     client_info['mds_nodes'])
 
             log.info("Execution of Test case CEPH-%s ended:" % (tc))
-            print "Results:"
-            print fs_util.rc_verify(tc, return_counts)
             log.info('Cleaning up!-----')
             if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
                 rc_client = fs_util.client_clean_up(
@@ -348,7 +337,6 @@ def run(**kw):
                 client_info['fuse_clients'], '',
                 client_info['mounting_dir'], 'umount')
             rc_mds = fs_util.mds_cleanup(client_info['mds_nodes'], None)
-
         if rc_client == 0 and rc_mds == 0:
             log.info('Cleaning up successfull')
         return 1
