@@ -102,5 +102,5 @@ def setup_subscription_manager(ceph, timeout=1800):
     ceph.exec_command(cmd='sudo subscription-manager repos --disable=*', long_running=True)
     ceph.exec_command(
         cmd='sudo subscription-manager repos --enable=rhel-7-server-rpms  --enable=rhel-7-server-optional-rpms '
-            '--enable=rhel-7-server-extras-rpms',
+            '--enable=rhel-7-server-ansible-2.4-rpms',
         long_running=True)
