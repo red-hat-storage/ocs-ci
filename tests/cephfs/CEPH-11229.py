@@ -111,28 +111,28 @@ def run(**kw):
             with parallel() as p:
                 p.spawn(
                     fs_util.mkdir_bulk,
-                    client2,
+                    client1,
                     0,
                     num_of_dirs * 1,
                     client_info['mounting_dir'] + test_dir,
                     dir_name)
                 p.spawn(
                     fs_util.mkdir_bulk,
-                    client3,
+                    client2,
                     num_of_dirs * 1 + 1,
                     num_of_dirs * 2,
                     client_info['mounting_dir'] + test_dir,
                     dir_name)
                 p.spawn(
                     fs_util.mkdir_bulk,
-                    client4,
+                    client1,
                     num_of_dirs * 2 + 1,
                     num_of_dirs * 3,
                     client_info['mounting_dir'] + test_dir,
                     dir_name)
                 p.spawn(
                     fs_util.mkdir_bulk,
-                    client1,
+                    client2,
                     num_of_dirs * 3 + 1,
                     num_of_dirs * 4,
                     client_info['mounting_dir'] + test_dir,
@@ -216,7 +216,7 @@ def run(**kw):
                     client_info['mounting_dir'] + test_dir,
                     dir_name,
                     num_of_dirs * 4,
-                    num_of_dirs * 4 + 10,
+                    num_of_dirs * 5,
                     1,
                     fs_util.mds_fail_over,
                     client_info['mds_nodes'])
