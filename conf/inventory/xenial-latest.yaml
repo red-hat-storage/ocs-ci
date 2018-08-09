@@ -1,0 +1,37 @@
+instance:
+  create:
+    image-name: xenial-latest
+    vm-size: m1.medium
+
+  setup: |
+    #cloud-config
+
+    groups:
+        - cephuser
+
+    users:
+      - name: cephuser
+        primary-group: cephuser
+        sudo: ALL=(ALL) NOPASSWD:ALL
+        shell: /bin/bash
+        ssh-authorized-keys:
+           - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCuSSmQizIeyro4EbCbhN0QXkdoLStgPSrlBzgcqBYI38okqKaHXH8B6wQjEtyp5Nw476Rer5sEYV3N1955pv2L2T2Gr3ncaljzqBRAXH91VIcZmwBPtdInG77KVhzb5Ev4Ds2CBFogG1uopWKTVoglISVkj3aP1XzEuueHDZ1psinHwq92qxFG21rJ1UeC2e2XmBrIrOzZXlEq4iwX/q6zbhzmWzU5K5c48J2DWedFSFWeWK6iDr9/ueHTQSYhf5CZ61xA3zTVxSMOEHwbAS0FAdiZyoCFgSN/9IMJ8xLpslw41AdsUa+M1M48mrNKJkbDFh9Gt6fpXPPsv0rvKUQ/ vakulkar@vakulkar.sjc.csb
+           - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC4eHmz10szeHNS3dNejKokW85ksB+iR4HGOFsmQM11Ni68Nm5aqEKvkOZU8TpY92vpCQL0A68GlrXB845cACdyk6HUJYyNNNMC43l1FYWOwjMqQBSdj8W3VQDTA6eiG60mt5fgI8fyR38rKzIA1MnTBkSSjuh5kQVJ9bdEp3GuY5oc8vxDNBlGJ6LYnyEWt/pqL2J+mpjqnOjsC+EbE2exhP9O+mvzpQiyo/+dEN1COwX3//pNRXGfOSeOczHNsJE8Eu+j/n/BlW57++sJyFMkzS7bUxMSGM6quvjQZ7RT1c5JM6vLEiQyzQxoRgzY93h1yKlOstBi0NamtpqHQZGP kdreyer@mbp.ktdreyer.com
+           - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDI0tHxJQ7n+uMiLpsoR6CKAVd0xatgVQuqp/gmnGpZU0kE54a29vPNnEt7/aLitbfyhc57rrbHOT09H3ov74GZKkoVBSbMJUSsK3drbN+58wcuk+HK0htRewmwCfcfi9AkrVbyw6pbPXW/pbjxnxLep52fKmpJJnImZ5eHRV5le9OSAcLA1LHYR4y9R3IOrTp7jgpE205UxZi5OopAx7gkyTsmfydvmq4MjaSwbVOJ7aW/Fdt5FVxNJP3Zl/OrvDoo/1WovoRIDbVQH8JFpLikMSnCqtBVIHDeW6imAKl6dpn9Gf4FxD94+OcurhXo2p0pvSzC4Strg4d2Sxqh4wph jenkins-build@jenkins
+           - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDPHFNcyrHISbDksvZcICQFpVXOjYgSHuDIjMYHzaFh+2wOZxLE6NmHwhTJDEqW1WogzdfqFa39c6b4Mhm3JFDu8fbHs/2uccVdZrAEAdXBi++SMBzDTkBjp+6RTW8xHBKBBm/xbtCS2KuSMYWCzmT1bk87ZzzOY/4ov8UAOm6g5eouR1qpohCaRVmoVVankb4FAi8VGT1McQm6eiecebKNzMUP08eidKyCfpKgObSiEFTp7grAyv8BVNNsJTgLOtwoyfJbEbZridxgEqrDhF21WpqloeiyG4YPWN3TeDYtqaedtIjcfiOizy9HmsSu8miusfvMEjFgR9G2xbpudOyv jenkins-build@ci-slave.localdomain
+           - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDnvVnbK2SNfL8hTmrA09L41RudKW/F7Ty0vvlHjrFjDkdWXVgrafFWGKQZ8dSR6FJ9JLU0X59xiEo4z31ini/Dt2XozFMIr7RdeB3xpiifuUUG5Lgsasd2ezniUoOEukL1a9KkCIxNgmKJuvtlHCt+ZTtyL513yjRICByZbnmBSSpUiett50X10vtvaNBu4LikUJKLc8gP0PHLbaGsU3uOUd655lkFWjWhgExlU8bHWiAZq18Ss63jDlSKFVSk903GKSNcHXMHNPYaXlrYw8NFzejoy/XjxEfmF/Lv3MeAUhHQWx25sh5aDv48mzo8FaIJsL1MrD0QxF1gllobWAfp clacroix@redhat.com
+
+    chpasswd:
+      list: |
+        root:passwd
+        cephuser: pass123
+      expire: False
+
+    runcmd:
+      - touch /ceph-qa-ready
+      - sudo sed -i -e 's/^Defaults\s\+requiretty/# \0/' /etc/sudoers
+
+
+    final_message: "Ready for ceph qa testing"
+    # unlock root password for ubuntu images, sudo passwd root,  Then execute sudo passwd -u root
+    # fix ~/root/.ssh/authorized_keys

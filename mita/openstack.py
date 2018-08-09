@@ -4,7 +4,6 @@ import socket
 from ssl import SSLError
 from time import sleep
 
-import os
 from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
 
@@ -46,9 +45,7 @@ class CephVMNode(object):
         if kw.get('no-of-volumes'):
             self.no_of_volumes = kw['no-of-volumes']
             self.size_of_disk = kw['size-of-disks']
-        self.cd_file = os.path.abspath(kw['cloud-data'])
-        with open(self.cd_file) as cd:
-            self.cloud_data = cd.read()
+        self.cloud_data = kw['cloud-data']
         self.username = kw['username']
         self.password = kw['password']
         self.auth_url = kw['auth-url']

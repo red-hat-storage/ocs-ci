@@ -27,4 +27,3 @@ globals:
         role: osd
         no-of-volumes: 3
         disk-size: 20
-      cloud-data: conf/cloud-data.yaml

@@ -28,7 +28,7 @@ doc = """
 A simple test suite wrapper that executes tests based on yaml test configuration
 
  Usage:
-  run.py --rhbuild BUILD --global-conf FILE --suite FILE [--use-cdn ]
+  run.py --rhbuild BUILD --global-conf FILE --inventory FILE --suite FILE [--use-cdn ]
         [--osp-cred <file>]
         [--rhs-con-repo <repo> --rhs-ceph-repo <repo>]
         [ --ubuntu-repo <repo>]
@@ -59,7 +59,8 @@ Options:
                                     eg: -s smoke or -s rbd
   -f <tests> --filter <tests>       filter tests based on the patter
                                     eg: -f 'rbd' will run tests that have 'rbd'
-  --global-conf <file>              global configuration file
+  --global-conf <file>              global cloud configuration file
+  --inventory <file>                hosts inventory file
   --osp-cred <file>                 openstack credentials as separate file
   --rhbuild <1.3.0>                 ceph downstream version
                                     eg: 1.3.0, 2.0, 2.1 etc
@@ -112,7 +113,7 @@ test_names = []
 
 
 @retry(LibcloudError, tries=5, delay=15)
-def create_nodes(conf, osp_cred, run_id, report_portal_session=None, instances_name=None):
+def create_nodes(conf, inventory, osp_cred, run_id, report_portal_session=None, instances_name=None):
     if report_portal_session:
         name = create_unique_test_name("ceph node creation", test_names)
         test_names.append(name)
@@ -126,7 +127,7 @@ def create_nodes(conf, osp_cred, run_id, report_portal_session=None, instances_n
     ceph_cluster_dict = {}
     log.info('Creating osp instances')
     for cluster in conf.get('globals'):
-        ceph_vmnodes = create_ceph_nodes(cluster, osp_cred, run_id, instances_name)
+        ceph_vmnodes = create_ceph_nodes(cluster, inventory, osp_cred, run_id, instances_name)
         ceph_nodes = []
         clients = []
         for node in ceph_vmnodes.itervalues():
@@ -186,6 +187,7 @@ def run(args):
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     glb_file = args['--global-conf']
+    inventory_file = args['--inventory']
     osp_cred_file = args['--osp-cred']
     suite_file = args['--suite']
     store = args.get('--store', False)
@@ -216,6 +218,12 @@ def run(args):
         conf_path = os.path.abspath(glb_file)
         with open(conf_path, 'r') as conf_stream:
             conf = yaml.safe_load(conf_stream)
+
+    if inventory_file:
+        inventory_path = os.path.abspath(inventory_file)
+        with open(inventory_path, 'r') as inventory_stream:
+            inventory = yaml.safe_load(inventory_stream)
+
     if suite_file:
         suites_path = os.path.abspath(suite_file)
         with open(suites_path, 'r') as suite_stream:
@@ -228,7 +236,8 @@ def run(args):
         cleanup_ceph_nodes(osp_cred, cleanup_name)
         return 0
 
-    [cluster['ceph-cluster'].update({'image-name': osp_image}) for cluster in conf.get('globals') if osp_image]
+    if osp_image and inventory.get('instance').get('create'):
+        inventory.get('instance').get('create').update({'image-name': osp_image})
 
     compose_id = None
     if rhbuild.startswith('2'):
@@ -294,12 +303,19 @@ def run(args):
             installer_url = compose_url
             log.info("using console repo" + installer_url)
 
+    image_name = inventory.get('instance').get('create').get('image-name')
     ceph_version = []
     ceph_ansible_version = []
     distro = []
+    if inventory.get('instance').get('create'):
+        distro.append(inventory.get('instance').get('create').get('image-name'))
     for cluster in conf.get('globals'):
-        image_name = cluster.get('ceph-cluster').get('image-name')
-        distro.append(image_name.replace('.iso', ''))
+        if cluster.get('ceph-cluster').get('inventory'):
+            cluster_inventory_path = os.path.abspath(cluster.get('ceph-cluster').get('inventory'))
+            with open(cluster_inventory_path, 'r') as inventory_stream:
+                cluster_inventory = yaml.safe_load(inventory_stream)
+            image_name = cluster_inventory.get('instance').get('create').get('image-name')
+            distro.append(image_name.replace('.iso', ''))
         if 'rhel' in image_name:
             # get COMPOSE ID and ceph version
             id = requests.get(base_url + "/COMPOSE_ID")
@@ -351,7 +367,7 @@ def run(args):
         service.start_launch(name=launch_name, start_time=timestamp(), description=launch_desc)
 
     if reuse is None:
-        ceph_cluster_dict, clients = create_nodes(conf, osp_cred, run_id, service, instances_name)
+        ceph_cluster_dict, clients = create_nodes(conf, inventory, osp_cred, run_id, service, instances_name)
     else:
         ceph_store_nodes = open(reuse, 'rb')
         ceph_cluster_dict = pickle.load(ceph_store_nodes)

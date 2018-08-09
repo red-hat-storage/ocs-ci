@@ -1,9 +1,6 @@
 globals:
   - ceph-cluster:
      name: ceph-rbd1
-     create: true
-     image-name: rhel-7.4-server-x86_64-released
-     vm-size: m1.medium
      node1:
        role:
           - mon
@@ -23,14 +20,9 @@ globals:
        role: osd
        no-of-volumes: 4
        disk-size: 15
-
-     cloud-data: conf/cloud-data.yaml
 
   - ceph-cluster:
      name: ceph-rbd2
-     create: true
-     image-name: rhel-7.4-server-x86_64-released
-     vm-size: m1.medium
      node1:
        role:
           - mon
@@ -50,5 +42,3 @@ globals:
        role: osd
        no-of-volumes: 4
        disk-size: 15
-
-     cloud-data: conf/cloud-data.yaml

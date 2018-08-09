@@ -5,6 +5,7 @@ import traceback
 import os
 import re
 import requests
+import yaml
 from gevent import sleep
 from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
@@ -16,12 +17,16 @@ from parallel import parallel
 log = logging.getLogger(__name__)
 
 
-def create_ceph_nodes(cluster_conf, osp_cred, run_id, instances_name=None):
+def create_ceph_nodes(cluster_conf, inventory, osp_cred, run_id, instances_name=None):
     osp_glbs = osp_cred.get('globals')
     os_cred = osp_glbs.get('openstack-credentials')
     params = dict()
     ceph_cluster = cluster_conf.get('ceph-cluster')
-    params['cloud-data'] = ceph_cluster.get('cloud-data')
+    if ceph_cluster.get('inventory'):
+        inventory_path = os.path.abspath(ceph_cluster.get('inventory'))
+        with open(inventory_path, 'r') as inventory_stream:
+            inventory = yaml.safe_load(inventory_stream)
+    params['cloud-data'] = inventory.get('instance').get('setup')
     params['username'] = os_cred['username']
     params['password'] = os_cred['password']
     params['auth-url'] = os_cred['auth-url']
@@ -30,10 +35,13 @@ def create_ceph_nodes(cluster_conf, osp_cred, run_id, instances_name=None):
     params['service-region'] = os_cred['service-region']
     params['keypair'] = os_cred.get('keypair', None)
     ceph_nodes = dict()
-    if ceph_cluster.get('create'):
-        params['image-name'] = ceph_cluster.get('image-name')
+    if inventory.get('instance').get('create'):
+        if ceph_cluster.get('image-name'):
+            params['image-name'] = ceph_cluster.get('image-name')
+        else:
+            params['image-name'] = inventory.get('instance').get('create').get('image-name')
         params['cluster-name'] = ceph_cluster.get('name')
-        params['vm-size'] = ceph_cluster.get('vm-size')
+        params['vm-size'] = inventory.get('instance').get('create').get('vm-size')
         if params.get('root-login') is False:
             params['root-login'] = False
         else:
