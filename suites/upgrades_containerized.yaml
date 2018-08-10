@@ -35,12 +35,9 @@ tests:
                 pgs: "8"
               - name: "cephfs_metadata"
                 pgs: "8"
-      desc: ceph containerized installation
-      destroy-cluster: False
-      abort-on-fail: True
-      desc: ceph containerized installation
-      destroy-cluster: False
-      abort-on-fail: True
+        desc: ceph containerized installation
+        destroy-cluster: False
+        abort-on-fail: True
    - test:
       name: containerized ceph ansible upgrade to rhcs 3.0z
       module: test_ansible_upgrade.py
@@ -162,9 +159,6 @@ tests:
                 pgs: "8"
               - name: "cephfs_metadata"
                 pgs: "8"
-      desc: ceph containerized installation
-      destroy-cluster: False
-      abort-on-fail: True
       desc: ceph containerized installation
       destroy-cluster: False
       abort-on-fail: True
