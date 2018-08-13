@@ -530,7 +530,7 @@ def run(args):
         if test.get('destroy-cluster') is True:
             cleanup_ceph_nodes(osp_cred, instances_name)
         if test.get('recreate-cluster') is True:
-            ceph_cluster_dict, clients = create_nodes(conf, osp_cred, run_id, service, instances_name)
+            ceph_cluster_dict, clients = create_nodes(conf, inventory, osp_cred, run_id, service, instances_name)
         tcs.append(tc)
     close_and_remove_filehandlers()
     if post_to_report_portal:
