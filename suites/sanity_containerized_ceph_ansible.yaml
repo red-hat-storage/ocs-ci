@@ -702,8 +702,7 @@ tests:
             ceph_stable_release: luminous
             ceph_repository: rhcs
             osd_scenario: collocated
-            dmcrypt: True
-            osd_auto_discovery: True
+            osd_auto_discovery: False
             journal_size: 1024
             ceph_stable: True
             ceph_stable_rh_storage: True
@@ -745,8 +744,7 @@ tests:
             ceph_stable_release: luminous
             ceph_repository: rhcs
             osd_scenario: collocated
-            dmcrypt: True
-            osd_auto_discovery: True
+            osd_auto_discovery: False
             journal_size: 1024
             ceph_stable: True
             ceph_stable_rh_storage: True
@@ -791,8 +789,7 @@ tests:
             ceph_stable_release: luminous
             ceph_repository: rhcs
             osd_scenario: collocated
-            dmcrypt: True
-            osd_auto_discovery: True
+            osd_auto_discovery: False
             journal_size: 1024
             ceph_stable: True
             ceph_stable_rh_storage: True
@@ -838,8 +835,7 @@ tests:
             ceph_stable_release: luminous
             ceph_repository: rhcs
             osd_scenario: collocated
-            dmcrypt: True
-            osd_auto_discovery: True
+            osd_auto_discovery: False
             journal_size: 1024
             ceph_stable: True
             ceph_stable_rh_storage: True
