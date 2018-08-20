@@ -288,7 +288,7 @@ def run(args):
         elif os.environ['TOOL'] == 'bucko':
             # is a docker compose
             log.info("Trigger on CI Docker Compose")
-            docker_registry, docker_image_tag = ci_message['repositories'][0].split('/')
+            docker_registry, docker_image_tag = ci_message['repository'].split('/')
             docker_image, docker_tag = docker_image_tag.split(':')
             log.info("\nUsing docker registry from ci message: {registry} \nDocker image: {image}\nDocker tag:{tag}"
                      .format(registry=docker_registry, image=docker_image, tag=docker_tag))
