@@ -9,6 +9,7 @@ import yaml
 from gevent import sleep
 from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
+from libcloud.common.exceptions import BaseHTTPError
 
 from ceph import RolesContainer, CommandFailed
 from mita.openstack import CephVMNode
@@ -132,13 +133,22 @@ def cleanup_ceph_nodes(osp_cred, pattern=None, timeout=300):
                 log.info("Releasing ip %s", fips.ip_address)
                 driver.ex_delete_floating_ip(fips)
     with parallel() as p:
+        errors = {}
         for volume in driver.list_volumes():
             if volume.name is None:
                 log.info("Volume has no name, skipping")
             elif name in volume.name:
                 log.info("Removing volume %s", volume.name)
                 sleep(10)
-                volume.destroy()
+                try:
+                    volume.destroy()
+                except BaseHTTPError as e:
+                    log.error(e, exc_info=True)
+                    errors.update({volume.name: e.message})
+        if errors:
+            for vol, err in errors.iteritems():
+                log.error("Error destroying {vol}: {err}".format(vol=vol, err=err))
+            raise RuntimeError("Encountered errors during volume deletion. Volume names and messages have been logged.")
 
 
 def keep_alive(ceph_nodes):
