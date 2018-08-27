@@ -42,6 +42,11 @@ tests:
       desc: test cluster setup using ceph-ansible
       destroy-cluster: False
       abort-on-fail: true
+
+   - test:
+       name: recreate cephfs with ec pools
+       module: recreate-cephfs-ecpool.py
+       abort-on-fail: false
    - test:
        name: multi-client-rw-io
        module: CEPH-10528_10529.py
