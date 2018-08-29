@@ -243,7 +243,8 @@ def run(args):
     if rhbuild.startswith('2'):
         if base_url is None:
             # use latest as default when nothing is specified in cli
-            base_url = 'http://download.engineering.redhat.com/rcm-guest/ceph-drops/2/latest-RHCEPH-2.4-Ubuntu/'
+            # base_url = 'http://download.engineering.redhat.com/rcm-guest/ceph-drops/2/latest-RHCEPH-2.4-Ubuntu/'
+            base_url = 'http://download.eng.bos.redhat.com/composes/auto/ceph-2-rhel-7/latest-RHCEPH-2-RHEL-7/'
         if ubuntu_repo is None:
             log.info("Using latest ubuntu repo since no default value provided")
             ubuntu_repo = 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/2/latest-Ceph-2-Ubuntu/'

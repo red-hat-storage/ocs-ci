@@ -16,6 +16,7 @@ def run(**kw):
     config = kw.get('config')
     test_data = kw.get('test_data')
     prev_install_version = test_data['install_version']
+    upgrade_to_version = config.get('build')
 
     ubuntu_repo = None
     ceph_installer = None
@@ -72,7 +73,7 @@ def run(**kw):
     ceph_installer.exec_command(sudo=True, cmd='cp /tmp/hosts {}/hosts'.format(ansible_dir))
 
     # If upgrading from version 2 update hosts file with mgrs
-    if prev_install_version.startswith('2'):
+    if prev_install_version.startswith('2') and upgrade_to_version.startswith('3'):
         log.info("Adding mons as mgrs in hosts file")
         mon_nodes = [node for node in ceph_nodes if node.role == 'mon']
         mgr_block = '[mgrs]\n'
@@ -129,13 +130,23 @@ def run(**kw):
                 log.info("Restarting docker on {node}".format(node=node.shortname))
                 node.exec_command(sudo=True, cmd='systemctl restart docker')
 
+    jewel_minor_update = upgrade_to_version.startswith('2')
+
     # copy rolling update from infrastructure playbook
     ceph_installer.exec_command(
         sudo=True, cmd='cd {} ; cp infrastructure-playbooks/rolling_update.yml .'.format(ansible_dir))
     cmd = 'cd {};' \
           'ANSIBLE_STDOUT_CALLBACK=debug;' \
-          'ansible-playbook -e ireallymeanit=yes -vv -i hosts rolling_update.yml'.format(ansible_dir)
+          'ansible-playbook -e ireallymeanit=yes -vv -i hosts rolling_update.yml'.format(
+              ansible_dir)
+    if jewel_minor_update:
+        cmd += " -e jewel_minor_update=true"
+        log.info("Upgrade is jewel_minor_update, cmd: {cmd}".format(cmd=cmd))
     out, rc = ceph_installer.exec_command(cmd=cmd, long_running=True)
+
+    if rc != 0:
+        log.error("Failed during upgrade (rc = {})".format(rc))
+        return rc
 
     # set build to new version
     if config.get('build'):
@@ -145,15 +156,12 @@ def run(**kw):
     # check if all mon's and osd's are in correct state
     num_osds = test_data['ceph-ansible']['num-osds']
     num_mons = test_data['ceph-ansible']['num-mons']
-    if rc != 0:
-        log.error("Failed during upgrade")
-        return rc
 
     post_upgrade_versions = get_ceph_versions(ceph_nodes, containerized)
     for name, version in post_upgrade_versions.iteritems():
         if 'installer' not in name and pre_upgrade_versions[name] == version:
             log.error("Pre upgrade version matches post upgrade version")
-            log.error("{}:{} matches".format(name, version))
+            log.error("{}: {} matches".format(name, version))
             return 1
 
     # retrieve container count if containerized
