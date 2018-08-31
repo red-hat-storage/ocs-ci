@@ -40,7 +40,7 @@ tests:
    - test:
       name: containerized ceph ansible upgrade to rhcs 3.0z
       module: test_ansible_upgrade.py
-      polarion-id: CEPH-
+      polarion-id: CEPH-83572824
       config:
          build: '3.0'
          ansi_config:
@@ -160,7 +160,7 @@ tests:
    - test:
       name: containerized ceph ansible upgrade to rhcs 3.x nightly
       module: test_ansible_upgrade.py
-      polarion-id: CEPH-
+      polarion-id: CEPH-83572823
       config:
          build: '3.x'
          ansi_config:
