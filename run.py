@@ -415,7 +415,8 @@ def run(args):
         tc['distro'] = distro
         tc['suite-name'] = suite_name
         test_file = tc['file']
-        report_portal_description = tc['desc']
+        report_portal_description = tc['desc'] or ''
+        log.info("rp desc type: {}".format(type(report_portal_description)))
         unique_test_name = create_unique_test_name(tc['name'], test_names)
         test_names.append(unique_test_name)
         tc['log-link'] = configure_logger(unique_test_name, run_dir)

@@ -446,16 +446,16 @@ def get_latest_container_image_tag(version):
     Retrieves the container image tag of the latest compose for the given version
 
     Args:
-        version: version to get the latest image tag for (3.0, 3.1)
+        version: version to get the latest image tag for (2.x, 3.0, or 3.x)
 
     Returns:
         Image tag of the latest compose for the given version
 
     """
-    url = 'http://magna002.ceph.redhat.com/latest-ceph-container-builds/latest-RHCEPH-{version}.json'.format(
+    url = 'http://magna002.ceph.redhat.com/cephci-jenkins/latest-ci-message/ceph-container-latest-{version}'.format(
         version=version)
     data = requests.get(url)
-    repo = data.json()['repositories'][0]
-    image_tag = repo.split(':')[-1:][0]
+    docker_registry, docker_image_tag = data.json()['repository'].split('/')
+    docker_image, image_tag = docker_image_tag.split(':')
     log.info("Found image tag: {image_tag}".format(image_tag=image_tag))
     return image_tag

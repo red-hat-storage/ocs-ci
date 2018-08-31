@@ -33,6 +33,16 @@ def run(**kw):
     if config.get('skip_setup') is True:
         log.info("Skipping setup of ceph cluster")
         return 0
+
+    # remove mgr nodes from list if upgrading from 2.x
+    build = config.get('build', '3')
+    test_data['install_version'] = build
+    log.info("Previous install version: {}".format(prev_install_version))
+    if prev_install_version.startswith('2'):
+        ceph_nodes = [node for node in ceph_nodes if node.role != 'mgr']
+        node_names = [node.shortname for node in ceph_nodes]
+        log.info(node_names)
+
     for node in ceph_nodes:
         if node.role == 'installer':
             ceph_installer = node
@@ -115,7 +125,7 @@ def run(**kw):
         for node in ceph_nodes:
             if node.role != 'installer':
                 out, rc = node.exec_command(sudo=True, cmd='docker ps | grep $(hostname) | wc -l')
-                count = out.read().rstrip()
+                count = int(out.read().rstrip())
                 log.info("{} has {} containers running".format(node.shortname, count))
                 pre_upgrade_container_counts.update({node.shortname: count})
 
@@ -158,8 +168,9 @@ def run(**kw):
     num_mons = test_data['ceph-ansible']['num-mons']
 
     post_upgrade_versions = get_ceph_versions(ceph_nodes, containerized)
-    for name, version in post_upgrade_versions.iteritems():
-        if 'installer' not in name and pre_upgrade_versions[name] == version:
+
+    for name, version in pre_upgrade_versions.iteritems():
+        if 'installer' not in name and post_upgrade_versions[name] == version:
             log.error("Pre upgrade version matches post upgrade version")
             log.error("{}: {} matches".format(name, version))
             return 1
@@ -170,13 +181,18 @@ def run(**kw):
         for node in ceph_nodes:
             if node.role != 'installer':
                 out, rc = node.exec_command(sudo=True, cmd='docker ps | grep $(hostname) | wc -l')
-                count = out.read().rstrip()
+                count = int(out.read().rstrip())
                 log.info("{} has {} container(s) running".format(node.shortname, count))
                 post_upgrade_container_counts.update({node.shortname: count})
 
+        log.info("Pre upgrade container counts: {}".format(pre_upgrade_container_counts))
         log.info("Post upgrade container counts: {}".format(post_upgrade_container_counts))
         # compare container count to pre-upgrade container count
         for node, count in post_upgrade_container_counts.iteritems():
+            if prev_install_version.startswith('2'):
+                # subtract 1 since mgr containers are now collocated on mons
+                if '-mon' in node:
+                    count -= 1
             if pre_upgrade_container_counts[node] != count:
                 log.error("Mismatched container count post upgrade")
                 return 1
