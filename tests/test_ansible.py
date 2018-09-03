@@ -34,8 +34,8 @@ def run(**kw):
         log.info("Skipping setup of ceph cluster")
         return 0
 
-    # remove mgr nodes from list if build is 2.x
-    build = config.get('build', '3')
+    # remove mgr role from nodes if build is 2.x
+    build = config.get('build', config.get('rhbuild'))
     test_data['install_version'] = build
     if build.startswith('2'):
         ceph_nodes = [node for node in ceph_nodes if node.role != 'mgr']
