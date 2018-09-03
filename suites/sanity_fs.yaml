@@ -47,6 +47,14 @@ tests:
        name: recreate cephfs with ec pools
        module: recreate-cephfs-ecpool.py
        abort-on-fail: false
+
+   - test:
+       name: cephfs-lifecycle ops
+       module: CEPH-11333.py
+       polarion-id: CEPH-11333
+       desc: Perfrom cephfs lifecycle ops like delete cephfs,recreate cephfs
+       abort-on-fail: false
+
    - test:
        name: multi-client-rw-io
        module: CEPH-10528_10529.py
