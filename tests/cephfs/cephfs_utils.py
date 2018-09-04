@@ -50,6 +50,7 @@ class FsUtils(object):
                 self.mon_node_ip[-2].strip(
                 '/0') + ' ' + self.mon_node_ip[-1].strip('/0')
             self.mon_node_ip = self.mon_node_ip.split(' ')
+
             break
         for node in self.clients:
             if node.pkg_type == 'rpm':
@@ -805,15 +806,16 @@ finally:
             out = out.read()
             if out.startswith('10.'):
                 log.info('multimds is not supported in 2.x')
+                return 0
             else:
                 node.exec_command(
                     cmd="sudo ceph fs set %s allow_multimds true "
                     "--yes-i-really-mean-it" % fs_info.get('fs_name'))
-            log.info("Setting max mdss 2:")
-            node.exec_command(
-                cmd="sudo ceph fs set %s max_mds 2" %
-                fs_info.get('fs_name'))
-            return 0
+                log.info("Setting max mdss 2:")
+                node.exec_command(
+                    cmd="sudo ceph fs set %s max_mds 2" %
+                    fs_info.get('fs_name'))
+                return 0
 
     def allow_dir_fragmentation(self, mds_nodes):
         log.info("Allowing directorty fragmenation for splitting and merging")
@@ -1400,17 +1402,20 @@ mds standby for rank = 1
 
     def del_cephfs(self, mds_nodes, fs_name):
         for mds in mds_nodes:
-            mds.exec_command(
-                cmd='sudo systemctl stop ceph-mds@%s.service' %
-                    (mds.hostname))
+            mds.exec_command(cmd='sudo systemctl stop ceph-mds.target')
+            mds.exec_command(cmd='sudo ceph mds fail 0')
+        log.info('sleeping for 50sec')
+        time.sleep(50)
         for mds in mds_nodes:
             log.info("Deleting fs:")
-            mds.exec_command(
-                cmd='sudo ceph fs rm %s --yes-i-really-mean-it' %
-                    (fs_name))
-            self.return_counts.update({mds.hostname: mds.exit_status})
-
-            return self.return_counts, 0
+            try:
+                mds.exec_command(
+                    cmd='sudo ceph fs rm %s --yes-i-really-mean-it' %
+                        (fs_name))
+                return self.return_counts, 0
+            except CommandFailed:
+                mds.exec_command(cmd='sudo ceph mds fail 0')
+                time.sleep(30)
 
     def create_fs(
             self,
@@ -1436,26 +1441,9 @@ mds standby for rank = 1
                         '--allow-dangerous-metadata-overlay' %
                         (fs_name, metadata_pool, data_pool))
                 break
-        else:
-            for mds in mds_nodes:
-                log.info('starting mds service on %s' % (mds.hostname))
-                self.daemon_systemctl(mds, 'mds', 'start')
-                log.info('started  mds service on %s' % (mds.hostname))
+            log.info('sleeping for 50sec')
+            time.sleep(50)
 
-            for mds in mds_nodes:
-                mds.exec_command(
-                    cmd='sudo ceph osd pool create %s 64 64' % data_pool)
-                mds.exec_command(
-                    cmd='sudo ceph osd pool create %s 64 64' % metadata_pool)
-                mds.exec_command(
-                    cmd='sudo ceph fs new %s %s %s --force '
-                        '--allow-dangerous-metadata-overlay' %
-                        (fs_name, metadata_pool, data_pool))
-                break
-            for mds in mds_nodes:
-                log.info('restarting mds service on %s' % (mds.hostname))
-                self.daemon_systemctl(mds, 'mds', 'restart')
-                log.info('restarted mds service on %s' % (mds.hostname))
             for mds in mds_nodes:
                 out, rc = mds.exec_command(cmd='sudo ceph fs ls')
                 if fs_name in out.read():
@@ -1466,49 +1454,69 @@ mds standby for rank = 1
                     self.return_counts.update({mds.hostname: mds.exit_status})
                     return self.return_counts, 0
 
-    def add_pool(self, mon_node, fs_name, pool_name, **kwargs):
-        if kwargs:
-            mon_node.exec_command(
-                cmd='sudo ceph osd pool create %s 64 64 %s %s' %
-                (pool_name, kwargs.get('pool_type'), kwargs.get('profile_name')))
-            mon_node.exec_command(
-                cmd='sudo ceph osd pool set %s allow_ec_overwrites true' %
-                (pool_name))
-
         else:
-            for node in mon_node:
-                node.exec_command(
-                    cmd='sudo ceph osd pool create %s 64 64' %
-                        (pool_name))
-                node.exec_command(
-                    cmd='sudo ceph fs add_data_pool %s  %s' %
-                        (fs_name, pool_name))
-                out, rc = node.exec_command(cmd='sudo ceph fs ls')
-                output = out.read().split()
-                if pool_name in output:
-                    log.info("adding new pool to cephfs successfull")
-                    self.return_counts.update(
-                        {node.hostname: node.exit_status})
+            for mds in mds_nodes:
+                log.info('starting mds service on %s' % (mds.hostname))
+                self.daemon_systemctl(mds, 'mds', 'start')
+                log.info('started  mds service on %s' % (mds.hostname))
+
+            for mds in mds_nodes:
+                mds.exec_command(
+                    cmd='sudo ceph fs new %s %s %s --force '
+                        '--allow-dangerous-metadata-overlay' %
+                        (fs_name, metadata_pool, data_pool))
+                break
+            for mds in mds_nodes:
+                out, rc = mds.exec_command(cmd='sudo ceph fs ls')
+                if fs_name in out.read():
+                    log.info("New cephfs created")
+                    self.return_counts.update({mds.hostname: mds.exit_status})
                     return self.return_counts, 0
 
-    def remove_pool(self, mon_node, fs_name, pool_name):
-        for node in mon_node:
-            node.exec_command(
-                cmd='sudo ceph fs rm_data_pool %s %s' %
-                    (fs_name, pool_name))
-            out, rc = node.exec_command(cmd='sudo ceph fs ls')
-            output = out.read().split()
-            if pool_name not in output:
-                log.info(
-                    "removing pool %s to cephfs successfull" %
+    def create_pool(self, mon_node, pool_name, pg, pgp, **kwargs):
+        if kwargs:
+            mon_node.exec_command(
+                cmd='sudo ceph osd pool create %s %s %s %s %s' %
+                    (pool_name, pg, pgp, kwargs.get('pool_type'), kwargs.get('profile_name')))
+            mon_node.exec_command(
+                cmd='sudo ceph osd pool set %s allow_ec_overwrites true' %
                     (pool_name))
-                self.return_counts.update(
-                    {node.hostname: node.exit_status})
-                return self.return_counts, 0
-            else:
-                self.return_counts.update(
-                    {node.hostname: node.exit_status})
-                return self.return_counts, 1
+        else:
+            mon_node.exec_command(
+                cmd='sudo ceph osd pool create %s %s %s' %
+                    (pool_name, pg, pgp))
+
+    def create_erasure_profile(self, mon_node, profile_name, k, m):
+        mon_node.exec_command(
+            cmd='sudo ceph osd erasure-code-profile set %s k=%s m=%s' %
+                (profile_name, k, m))
+        return profile_name
+
+    def add_pool_to_fs(self, mon_node, fs_name, pool_name):
+        mon_node.exec_command(
+            cmd='sudo ceph fs add_data_pool %s  %s' %
+                (fs_name, pool_name))
+        out, rc = mon_node.exec_command(cmd='sudo ceph fs ls')
+        output = out.read().split()
+        if pool_name in output:
+            log.info("adding new pool to cephfs successfull")
+            self.return_counts.update(
+                {mon_node.hostname: mon_node.exit_status})
+            return self.return_counts, 0
+
+    def remove_pool_from_fs(self, node, fs_name, pool_name):
+        node.exec_command(
+            cmd='sudo ceph fs rm_data_pool %s %s' %
+                (fs_name, pool_name))
+        out, rc = node.exec_command(cmd='sudo ceph fs ls')
+        output = out.read().split()
+        if pool_name not in output:
+            log.info(
+                "removing pool %s to cephfs successfull" %
+                (pool_name))
+            self.return_counts.update(
+                {node.hostname: node.exit_status})
+        return self.return_counts, 0
 
     def set_attr(self, mds_nodes, fs_name):
         max_file_size = '1099511627776'
@@ -1961,6 +1969,12 @@ mds standby for rank = 1
                             (ops, val, mounting_dir, file_name))
                 return 0
 
+    def get_osd_count(self, mon_node):
+        out, rc = mon_node.exec_command(
+            cmd="sudo ceph -s| grep osds| awk {'print $2'}")
+        osd_count = out.read().rstrip('\n')
+        return osd_count
+
     def client_clean_up(
             self,
             fuse_clients,
@@ -2131,11 +2145,3 @@ mds standby for rank = 1
             break
         time.sleep(120)
         return 0
-
-    def get_active_mgr(self, mgr):
-        log.info('getting active mgr:')
-        out, rc = mgr.exec_command(
-            cmd="sudo ceph -s | grep mgr: | awk {'print $2'}")
-        out = out.read().rstrip('\n')
-        out = out.rstrip('(active),')
-        return out
