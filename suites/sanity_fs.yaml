@@ -47,6 +47,14 @@ tests:
        name: recreate cephfs with ec pools
        module: recreate-cephfs-ecpool.py
        abort-on-fail: false
+
+   - test:
+       name: cephfs-lifecycle ops
+       module: CEPH-11333.py
+       polarion-id: CEPH-11333
+       desc: Perfrom cephfs lifecycle ops like delete cephfs,recreate cephfs
+       abort-on-fail: false
+
    - test:
        name: multi-client-rw-io
        module: CEPH-10528_10529.py
@@ -171,6 +179,12 @@ tests:
        module: CEPH-11334.py
        polarion-id: CEPH-11334
        desc: Mount CephFS on multiple clients and perform file layout operations
+       abort-on-fail: false
+   - test:
+       name: cephfs_client-permissions
+       module: CEPH-11338.py
+       polarion-id: CEPH-11338
+       desc: Mount CephFS on multiple clients,give various permissions to client like only read,write etc
        abort-on-fail: false
    - test:
        name: cephfs-basics
