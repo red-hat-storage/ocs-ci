@@ -2,7 +2,6 @@ import datetime
 import logging
 from time import sleep
 
-import install_iscsi_gwcli
 from ceph.parallel import parallel
 from tests.iscsi.iscsi_utils import IscsiUtils
 
@@ -12,27 +11,20 @@ log = logging
 def run(**kw):
     log.info("Running test")
     ceph_nodes = kw.get('ceph_nodes')
+    test_data = kw.get('test_data')
     iscsi_util = IscsiUtils(ceph_nodes)
     iscsi_initiators = iscsi_util.get_iscsi_initiator_linux()
     initiatorname = iscsi_util.get_initiatorname()
+    iscsi_util.write_multipath(iscsi_initiators)
     iscsi_util.write_chap(initiatorname, iscsi_initiators)
-    no_of_luns = install_iscsi_gwcli.no_of_luns
+    no_of_luns = test_data['no_of_luns']
     rc = []
-    directory_name = ''
 
     device_list = iscsi_util.get_devicelist_luns(no_of_luns)
-    if isinstance(device_list, list):
-        pass
-    else:
-        return 1
-    out = iscsi_util.create_directory_with_io(
-        device_list, iscsi_initiators, io_size="2G", do_io=0)
-    if isinstance(out, int):
-        rc.append(out)
-    else:
-        directory_name = out
+    iscsi_util.create_directory_with_io(
+        device_list, iscsi_initiators, io_size="1G")
     with parallel() as p:
-        p.spawn(do_ios, iscsi_initiators, directory_name)
+        p.spawn(iscsi_util.do_ios, iscsi_initiators, device_list)
         p.spawn(do_failover, iscsi_initiators, device_list, ceph_nodes)
         for op in p:
             rc.append(op)
@@ -54,19 +46,6 @@ def run(**kw):
         return 0
     else:
         print rc
-
-        return 1
-
-
-def do_ios(iscsi_initiators, directory_name):
-    out, err = iscsi_initiators.exec_command(
-        sudo=True, cmd="cd ~/" + directory_name + " ; fio fio.fio "
-        "--verify=md5", long_running=True)
-    err_fio = err
-
-    if err_fio == 0:
-        return 0
-    else:
         return 1
 
 

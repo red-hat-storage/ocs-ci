@@ -16,7 +16,7 @@ globals:
         disk-size: 20
       node4:
         role: win-iscsi-clients
-        image-name: win_2016_mpio
+        image-name: win_2016_mpio_fio
       node5:
         role: osd
         no-of-volumes: 3
