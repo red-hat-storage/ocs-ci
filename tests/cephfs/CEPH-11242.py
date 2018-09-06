@@ -108,21 +108,21 @@ def run(**kw):
                     dir_name)
                 p.spawn(
                     fs_util.mkdir,
-                    client3,
+                    client1,
                     num_of_dirs * 2,
                     num_of_dirs * 3,
                     client_info['mounting_dir'],
                     dir_name)
                 p.spawn(
                     fs_util.mkdir,
-                    client4,
+                    client2,
                     num_of_dirs * 3,
                     num_of_dirs * 4,
                     client_info['mounting_dir'],
                     dir_name)
                 p.spawn(
                     fs_util.mkdir,
-                    client3,
+                    client1,
                     num_of_dirs * 4,
                     num_of_dirs * 5,
                     client_info['mounting_dir'],
