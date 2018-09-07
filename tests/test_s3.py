@@ -14,6 +14,7 @@ def run(**kw):
     log.info("Running s3-tests")
     ceph_nodes = kw.get('ceph_nodes')
     config = kw.get('config')
+    test_data = kw.get('test_data')
     client_node = None
     rgw_node = None
     for node in ceph_nodes:
@@ -27,6 +28,8 @@ def run(**kw):
             break
 
     if client_node:
+        if test_data['install_version'].startswith('2'):
+            client_node.exec_command(sudo=True, cmd='yum install -y ceph-radosgw')
         setup_s3_tests(client_node, rgw_node, config)
         exit_status = execute_s3_tests(client_node)
         cleanup(client_node)
