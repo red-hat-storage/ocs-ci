@@ -1,0 +1,314 @@
+tests:
+   - test:
+       name: install ceph pre-requisities
+       module: install_prereq.py
+       abort-on-fail: true
+
+   - test:
+      name: ceph ansible
+      module: test_ansible.py
+      config:
+        ansi_config:
+            ceph_test: True
+            ceph_origin: distro
+            journal_collocation: True
+            osd_auto_discovery: False
+            journal_size: 1024
+            ceph_stable: True
+            ceph_stable_rh_storage: True
+            public_network: 172.16.0.0/12
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 128
+                  osd_pool_default_pgp_num: 128
+      desc: test cluster setup using ceph-ansible
+      destroy-cluster: False
+      abort-on-fail: true
+
+   - test:
+      name: rados workunit
+      module: test_workunit.py
+      config:
+            test_name: rados/test_python.sh
+            branch: jewel
+            role: mon
+      desc: Test rados python api
+   - test:
+      name: librbd workunit
+      module: test_workunit.py
+      config:
+            test_name: rbd/test_librbd_python.sh
+            branch: jewel
+            role: mon
+      desc: Test librbd unit tests
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+            cmd: ceph -s
+            sudo: True
+      desc: Check for ceph health debug info
+   - test:
+      name: rados_bench_test
+      module: radosbench.py
+      config:
+            pg_num: '128'
+            pool_type: 'normal'
+      desc: run rados bench for 360 - normal profile
+
+   - test:
+        name: ceph ansible purge
+        module: exec_installer.py
+        config:
+              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
+              sudo: False
+        desc: Purge ceph cluster
+        recreate-cluster: True
+
+   - test:
+       name: install ceph pre-requisities
+       module: install_prereq.py
+       abort-on-fail: true
+
+   - test:
+      name: ceph ansible dmcrypt
+      module: test_ansible.py
+      config:
+        ansi_config:
+            ceph_test: True
+            ceph_origin: distro
+            journal_collocation: False
+            dmcrypt_journal_collocation: True
+            osd_auto_discovery: False
+            journal_size: 1024
+            ceph_stable: True
+            ceph_stable_rh_storage: True
+            public_network: 172.16.0.0/12
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 128
+                  osd_pool_default_pgp_num: 128
+      desc: test cluster with dmcrypt setup using ceph-ansible
+      destroy-cluster: False
+      abort-on-fail: true
+
+   - test:
+      name: rados workunit
+      module: test_workunit.py
+      config:
+            test_name: rados/test_python.sh
+            branch: jewel
+            role: mon
+      desc: Test rados python api
+   - test:
+      name: librbd workunit
+      module: test_workunit.py
+      config:
+            test_name: rbd/test_librbd_python.sh
+            branch: jewel
+            role: mon
+      desc: Test librbd unit tests
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+            cmd: ceph -s
+            sudo: True
+      desc: Check for ceph health debug info
+   - test:
+      name: rados_bench_test
+      module: radosbench.py
+      config:
+            pg_num: '128'
+            pool_type: 'normal'
+      desc: run rados bench for 360 - normal profile
+
+   - test:
+        name: ceph ansible purge
+        module: exec_installer.py
+        config:
+              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
+              sudo: False
+        desc: Purge ceph cluster
+        recreate-cluster: True
+
+   - test:
+       name: install ceph pre-requisities
+       module: install_prereq.py
+       abort-on-fail: true
+
+
+   - test:
+      name: ceph ansible raw multi journal
+      module: test_ansible.py
+      config:
+        ansi_config:
+            ceph_test: True
+            ceph_origin: distro
+            journal_collocation: False
+            raw_multi_journal: true
+            raw_journal_devices:
+              - /dev/vde
+              - /dev/vde
+              - /dev/vde
+            osd_auto_discovery: False
+            journal_size: 1024
+            ceph_stable: True
+            ceph_stable_rh_storage: True
+            public_network: 172.16.0.0/12
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 128
+                  osd_pool_default_pgp_num: 128
+      desc: test cluster with raw multi journal setup using ceph-ansible
+      destroy-cluster: False
+      abort-on-fail: true
+
+   - test:
+      name: rados workunit
+      module: test_workunit.py
+      config:
+            test_name: rados/test_python.sh
+            branch: jewel
+            role: mon
+      desc: Test rados python api
+   - test:
+      name: librbd workunit
+      module: test_workunit.py
+      config:
+            test_name: rbd/test_librbd_python.sh
+            branch: jewel
+            role: mon
+      desc: Test librbd unit tests
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+            cmd: ceph -s
+            sudo: True
+      desc: Check for ceph health debug info
+   - test:
+      name: rados_bench_test
+      module: radosbench.py
+      config:
+            pg_num: '128'
+            pool_type: 'normal'
+      desc: run rados bench for 360 - normal profile
+
+   - test:
+        name: ceph ansible purge
+        module: exec_installer.py
+        config:
+              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
+              sudo: False
+        desc: Purge ceph cluster
+        recreate-cluster: True
+
+   - test:
+       name: install ceph pre-requisities
+       module: install_prereq.py
+       abort-on-fail: true
+
+   - test:
+        name: ceph ansible dmcrypt dedicated journal
+        module: test_ansible.py
+        config:
+          ansi_config:
+              ceph_test: True
+              ceph_origin: distro
+              journal_collocation: False
+              dmcrypt_dedicated_journal: True
+              raw_journal_devices:
+                - /dev/vde
+                - /dev/vde
+                - /dev/vde
+              osd_auto_discovery: False
+              journal_size: 1024
+              ceph_stable: True
+              ceph_stable_rh_storage: True
+              public_network: 172.16.0.0/12
+              ceph_conf_overrides:
+                  global:
+                    osd_pool_default_pg_num: 128
+                    osd_pool_default_pgp_num: 128
+        desc: test cluster with dmcrypt dedicated journal setup using ceph-ansible
+        destroy-cluster: False
+        abort-on-fail: true
+
+   - test:
+      name: rados workunit
+      module: test_workunit.py
+      config:
+            test_name: rados/test_python.sh
+            branch: jewel
+            role: mon
+      desc: Test rados python api
+   - test:
+      name: librbd workunit
+      module: test_workunit.py
+      config:
+            test_name: rbd/test_librbd_python.sh
+            branch: jewel
+            role: mon
+      desc: Test librbd unit tests
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+            cmd: ceph -s
+            sudo: True
+      desc: Check for ceph health debug info
+   - test:
+      name: rados_bench_test
+      module: radosbench.py
+      config:
+            pg_num: '128'
+            pool_type: 'normal'
+      desc: run rados bench for 360 - normal profile
+
+   - test:
+        name: ceph ansible purge
+        module: exec_installer.py
+        config:
+              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
+              sudo: False
+        desc: Purge ceph cluster
+        recreate-cluster: True
+
+   - test:
+       name: install ceph pre-requisities
+       module: install_prereq.py
+       abort-on-fail: true
+
+   - test:
+      name: ceph ansible
+      module: test_ansible.py
+      config:
+        ansi_config:
+            ceph_test: True
+            ceph_origin: distro
+            journal_collocation: True
+            osd_auto_discovery: False
+            ceph_rhcs_iso_install: true
+            ceph_rhcs_iso_path: ~/ceph-ansible/iso/ceph.iso
+            journal_size: 1024
+            ceph_stable: True
+            ceph_stable_rh_storage: True
+            public_network: 172.16.0.0/12
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 128
+                  osd_pool_default_pgp_num: 128
+
+      desc: test cluster setup using ceph-ansible
+      destroy-cluster: False
+      abort-on-fail: true
+
+   - test:
+        name: ceph ansible purge
+        module: exec_installer.py
+        config:
+              cmd: ansible-playbook ~/ceph-ansible/infrastructure-playbooks/purge-cluster.yml -i ~/ceph-ansible/hosts -e ireallymeanit=yes
+              sudo: False
+        desc: Purge ceph cluster
+        destroy-cluster: True

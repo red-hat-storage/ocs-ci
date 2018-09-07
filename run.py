@@ -252,8 +252,6 @@ def run(args):
         if base_url is None:
             # default to latest RHCeph build 3.1
             base_url = 'http://download.eng.bos.redhat.com/composes/auto/ceph-3.1-rhel-7/latest-RHCEPH-3-RHEL-7/'
-            # we dont need installer repo
-            installer_url = None
         if ubuntu_repo is None:
             ubuntu_repo = \
                 'http://download.engineering.redhat.com/rcm-guest/ceph-drops/3.1/latest-RHCEPH-3.1-Ubuntu/'
@@ -261,16 +259,9 @@ def run(args):
         if base_url is None:
             # default to latest RHCeph build 3.0
             base_url = 'http://download.eng.bos.redhat.com/composes/auto/ceph-3.0-rhel-7/latest-RHCEPH-3-RHEL-7/'
-            # we dont need installer repo
-            installer_url = None
         if ubuntu_repo is None:
             ubuntu_repo = \
                 'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/3.0/latest-RHCEPH-3.0-Ubuntu/'
-    installer_url = args.get('--rhs-con-repo', None)
-    if rhbuild.startswith('2'):
-        if installer_url is None:
-            # default installer repo points to latest
-            installer_url = 'http://download.eng.bos.redhat.com/composes/auto/rhscon-2-rhel-7/latest-RHSCON-2-RHEL-7/'
     if os.environ.get('TOOL') is not None:
         ci_message = json.loads(os.environ['CI_MESSAGE'])
         compose_id = ci_message['compose_id']
@@ -299,10 +290,6 @@ def run(args):
             # is a rhceph compose
             base_url = compose_url
             log.info("using base url" + base_url)
-        elif product_name == 'rhscon':
-            # is a rhcon
-            installer_url = compose_url
-            log.info("using console repo" + installer_url)
 
     image_name = inventory.get('instance').get('create').get('image-name')
     ceph_version = []
@@ -436,8 +423,6 @@ def run(args):
                 config = test.get('config', {})
             if not config.get('base_url'):
                 config['base_url'] = base_url
-            if not config.get('installer_url'):
-                config['installer_url'] = installer_url
             config['rhbuild'] = rhbuild
             if 'ubuntu_repo' in locals():
                 config['ubuntu_repo'] = ubuntu_repo

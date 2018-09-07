@@ -1,0 +1,96 @@
+tests:
+   - test:
+       name: install ceph pre-requisites
+       module: install_prereq.py
+       abort-on-fail: true
+
+   - test:
+      name: ceph ansible
+      module: test_ansible.py
+      config:
+        ansi_config:
+            ceph_test: True
+            ceph_origin: distro
+            ceph_stable_release: luminous
+            ceph_repository: rhcs
+            osd_scenario: collocated
+            osd_auto_discovery: False
+            journal_size: 1024
+            ceph_stable: True
+            ceph_stable_rh_storage: True
+            public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
+            copy_admin_key: true
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 64
+                  osd_default_pool_size: 2
+                  osd_pool_default_pgp_num: 64
+                  mon_max_pg_per_osd: 1024
+            cephfs_pools:
+              - name: "cephfs_data"
+                pgs: "8"
+              - name: "cephfs_metadata"
+                pgs: "8"
+      desc: test cluster setup using ceph-ansible
+      destroy-cluster: false
+      abort-on-fail: true
+
+   - test:
+      name: LRCec pool io test_9281
+      module: test_9281.py
+      polarion-id: CEPH-9281
+      desc: LRCec pool with IO and osd failures
+
+   - test:
+      name: Different k,m,l:test_9322
+      module: test_9322.py
+      polarion-id: CEPH-9322
+      desc: LRCec pool with different k,m,l values
+
+   - test:
+      name: corrupt snaps test_9928
+      module: test_9928.py
+      polarion-id: CEPH-9928
+      desc: corrupt snapset of an object and list-inconsistent-snapset
+   - test:
+      name: corrupt object in ec pool test_9929
+      module: test_9929.py
+      polarion-id: CEPH-9929
+      desc: corrupt an object in ec pool and list-inconsistent-obj
+   - test:
+      name: Delete snapset of an object test_9939
+      module: test_9939.py
+      polarion-id: CEPH-9939
+      desc: Delete snapset of an object followed by list-inconsistent-obj
+   - test:
+      name: Corrupt snapset of an object on non-primary test_83571452
+      module: test_83571452.py
+      polarion-id: CEPH-83571452
+      desc: Corrupt snapset of an object on non-primary followed \
+             by list-inconsistent-*
+   - test:
+      name: Corrupt snapset on primary osd in ec pool test_83571453
+      module: test_83571453.py
+      polarion_id: CEPH-83571453
+      desc: Corrupt snapset on a primary osd in ec pool
+   - test:
+      name: LRCec pool local recovery test_9311
+      module: test_9311.py
+      polarion_id: CEPH-9311
+      desc: Trigger recovery from local codes in LRCpool
+   - test:
+      name: switch between simple and async messenger test_11538
+      module: test_11538.py
+      polarion_id: CEPH-11538
+      desc: switch between simple and async messenger
+   - test:
+      name: remove omap key on a replica
+      module: test_9925.py
+      polarion_id: CEPH-9925
+      desc: remove a known omap item of a replica and list-inconsistent-obj
+   - test:
+      name: corrupt omap on a replica
+      module: test_9924.py
+      polarion_id: CEPH-9924
+      desc: rewrite a known omap item of a replica and check list-inconsistent-obj
