@@ -309,6 +309,8 @@ class RbdMirror:
             self.create_ecpool(profile=self.ec_profile, poolname=self.datapool)
         self.exec_cmd(cmd='ceph osd pool create {} 64 64'
                       .format(kw.get('poolname')))
+        if self.ceph_version >= 3:
+            self.exec_cmd(cmd='rbd pool init {}'.format(kw.get('poolname')))
 
     def create_image(self, **kw):
         cmd = 'rbd create -s {} {} --image-feature exclusive-lock,journaling'\
