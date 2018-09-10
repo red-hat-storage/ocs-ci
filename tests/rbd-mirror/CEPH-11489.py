@@ -1,5 +1,6 @@
 import logging
 import time
+
 log = logging.getLogger(__name__)
 
 
@@ -79,6 +80,5 @@ def run(**kw):
                 return 1
             time.sleep(10)
 
-    mirror1.delete_pool(poolname=poolname)
-    mirror2.delete_pool(poolname=poolname)
+    mirror1.clean_up(peercluster=mirror2, pools=[poolname])
     return 0

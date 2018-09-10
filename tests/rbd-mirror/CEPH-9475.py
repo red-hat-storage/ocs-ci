@@ -1,6 +1,7 @@
-from ceph.parallel import parallel
 import logging
 import time
+from ceph.parallel import parallel
+
 log = logging.getLogger(__name__)
 
 
@@ -28,8 +29,7 @@ def run(**kw):
     time.sleep(10)
     rc = mirror1.check_data(peercluster=mirror2, imagespec=imagespec)
     if rc == 0:
-        mirror1.delete_pool(poolname=poolname)
-        mirror2.delete_pool(poolname=poolname)
+        mirror1.clean_up(peercluster=mirror2, pools=[poolname])
         return 0
     else:
         return 1
