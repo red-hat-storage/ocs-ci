@@ -1,0 +1,27 @@
+globals:
+  - ceph-cluster:
+     name: ceph
+     node1:
+       role: mon
+     node2:
+       role: mon
+     node3:
+       role: mon
+     node4:
+       role: osd
+       no-of-volumes: 3
+       disk-size: 20
+     node5:
+       role: osd
+       no-of-volumes: 3
+       disk-size: 20
+     node6:
+       role: osd
+       no-of-volumes: 3
+       disk-size: 20
+     node7:
+       role: installer
+     node8:
+       role: rgw
+     node9:
+       role: client

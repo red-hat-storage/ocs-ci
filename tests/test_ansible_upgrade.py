@@ -168,12 +168,12 @@ def run(**kw):
     num_mons = test_data['ceph-ansible']['num-mons']
 
     post_upgrade_versions = get_ceph_versions(ceph_nodes, containerized)
-
-    for name, version in pre_upgrade_versions.iteritems():
-        if 'installer' not in name and post_upgrade_versions[name] == version:
-            log.error("Pre upgrade version matches post upgrade version")
-            log.error("{}: {} matches".format(name, version))
-            return 1
+    if not upgrade_to_version.startswith('2'):
+        for name, version in pre_upgrade_versions.iteritems():
+            if 'installer' not in name and post_upgrade_versions[name] == version:
+                log.error("Pre upgrade version matches post upgrade version")
+                log.error("{}: {} matches".format(name, version))
+                return 1
 
     # retrieve container count if containerized
     if containerized:
