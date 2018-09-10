@@ -49,6 +49,7 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--osp-image <image>]
         [--bluestore]
         [--use-ec-pool <k,m>]
+        [--hotfix-repo <repo>]
   run.py --cleanup=name [--osp-cred <file>]
         [--log-level <LEVEL>]
 
@@ -88,6 +89,7 @@ Options:
   --osp-image <image>               Image for osp instances, default value is taken from conf file
   --bluestore                       To specify bluestore as osd object store
   --use-ec-pool <k,m>               To use ec pools instead of replicated pools
+  --hotfix-repo <repo>              To run sanity on hotfix build
 """
 log = logging.getLogger(__name__)
 root = logging.getLogger()
@@ -467,6 +469,10 @@ def run(args):
                 config['bluestore'] = bluestore
             if ec_pool_vals:
                 config['ec-pool-k-m'] = ec_pool_vals
+            if args.get('--hotfix-repo'):
+                hotfix_repo = args.get('--hotfix-repo')
+                if hotfix_repo.startswith('http'):
+                    config['hotfix_repo'] = hotfix_repo
             if kernel_repo is not None:
                 config['kernel-repo'] = kernel_repo
             if osp_cred:
