@@ -4,6 +4,7 @@ import string
 import time
 
 from ceph.ceph import CommandFailed
+from itertools import cycle
 
 log = logging
 
@@ -126,11 +127,9 @@ class IscsiUtils(object):
         for ceph in self.ceph_nodes:
             ceph.exec_command(sudo=True,
                               cmd='firewall-cmd --zone=public --add-port=3260/tcp '
-                              '--add-port=5000/tcp --permanent',
-                              long_running=True)
+                              '--add-port=5000/tcp --permanent')
             ceph.exec_command(sudo=True,
-                              cmd='firewall-cmd --reload',
-                              long_running=True)
+                              cmd='firewall-cmd --reload')
 
     def do_iptables_flush(self):
         for ceph in self.ceph_nodes:
@@ -425,3 +424,41 @@ node.session.scan = auto
                 return 1
         log.info("All disks devices in place")
         return 0
+
+    def generate_luns(self, numbers):
+        osds = []
+        for node in self.ceph_nodes:
+            if node.role == "osd":
+                osds.append(node)
+        osdscycle = cycle(osds)
+        setting = ["rbd_devices:"]
+        luns_list = []
+        for number in range(numbers):
+            node = next(osdscycle)
+            lun = " - {{ pool: 'rbd', image: 'ansible-{}', size: '2G', "\
+                "host: '{}', state: 'present' }}".format(number, node.hostname)
+            setting.append(lun)
+            luns_list.append("rbd.ansible-{}".format(number))
+        luns_setting = "\n".join(setting)
+        luns_setting += "\n"
+        return luns_setting, luns_list
+
+    def generate_clients(self, initiator_name, luns_list, host_name):
+        images = ",".join(luns_list)
+        client = "client_connections:\n - {{ client: '{}', image_list: '{}', "\
+            "chap: '{}/redhat@123456', status: 'present' }}\n".format(initiator_name, images, host_name)
+        return client
+
+    def generate_gw_ips(self, gw_quantity):
+        gw_list = self.get_gw_list(gw_quantity)
+        ip_list = []
+        for node in gw_list:
+            ip_list.append(node.private_ip)
+        ips = ",".join(ip_list)
+        gw_ip_config = "gateway_ip_list: {}\n".format(ips)
+        return gw_ip_config
+
+    def install_config_pkg(self):
+        for node in self.ceph_nodes:
+            if node.role == 'iscsi-gw':
+                node.exec_command(sudo=True, cmd='yum install -y ceph-iscsi-config', long_running=True)

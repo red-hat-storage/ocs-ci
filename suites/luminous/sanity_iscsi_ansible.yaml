@@ -1,0 +1,50 @@
+tests:
+   - test:
+      name: install ceph pre-requisities
+      module: install_prereq.py
+      abort-on-fail: true
+   
+   - test:
+      name: prepare ansible playbook for iscsi
+      module: ansible_prereq.py
+      abort-on-fail: true
+      config:
+            no_of_luns: 8
+            no_of_gateways: 4
+
+   - test:
+      name: ceph ansible
+      module: test_ansible.py
+      config:
+        ansi_config:
+            ceph_test: True
+            ceph_origin: distro
+            ceph_stable_release: luminous
+            ceph_repository: rhcs
+            osd_scenario: collocated
+            osd_auto_discovery: False
+            journal_size: 1024
+            ceph_stable: True
+            ceph_stable_rh_storage: True
+            public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
+            copy_admin_key: true
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 64
+                  osd_default_pool_size: 2
+                  osd_pool_default_pgp_num: 64
+                  mon_max_pg_per_osd: 1024
+                mon:
+                  mon_allow_pool_delete: true
+      desc: osd with collocated journal
+      destroy-cluster: False
+      abort-on-fail: true
+
+  #  - test:
+  #     name: Setup rhel client
+  #     module: setup_linux_client.py
+  #     abort-on-fail: true
+  #     config:
+  #           no_of_luns: 8
+  #     desc: Setup iscsi initiator on linux server

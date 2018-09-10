@@ -7,20 +7,28 @@ globals:
           - mon
           - mgr
       node2:
-        role: osd
+        role:
+          - osd
+          - iscsi-gw
         no-of-volumes: 3
         disk-size: 20
       node3:
-        role: osd
+        role:
+          - osd
+          - iscsi-gw
         no-of-volumes: 3
         disk-size: 20
       node4:
         role: iscsi-clients
       node5:
-        role: osd
+        role:
+          - osd
+          - iscsi-gw
         no-of-volumes: 3
         disk-size: 20
       node6:
-        role: osd
+        role:
+          - osd
+          - iscsi-gw
         no-of-volumes: 3
         disk-size: 20
