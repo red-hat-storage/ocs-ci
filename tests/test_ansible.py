@@ -19,6 +19,7 @@ def run(**kw):
     config = kw.get('config')
     bluestore = config.get('bluestore')
     k_and_m = config.get('ec-pool-k-m')
+    hotfix_repo = config.get('hotfix_repo')
     test_data = kw.get('test_data')
     ubuntu_repo = None
     ansible_dir = '/usr/share/ceph-ansible'
@@ -96,6 +97,7 @@ def run(**kw):
             else:
                 log.info("Using the cdn repo for the test")
                 setup_cdn_repos(ceph_nodes, build=config.get('build'))
+
         else:
             if config['ansi_config'].get('ceph_repository_type') != 'iso' or \
                     config['ansi_config'].get('ceph_repository_type') == 'iso' and \
@@ -110,7 +112,11 @@ def run(**kw):
                     ceph.exec_command(sudo=True, cmd='apt-get install -y chrony')
                     ceph.exec_command(sudo=True, cmd='pip install nose')
                 else:
-                    setup_repos(ceph, base_url, installer_url)
+                    if hotfix_repo:
+                        ceph.exec_command(sudo=True,
+                                          cmd='wget -O /etc/yum.repos.d/rh_repo.repo {repo}'.format(repo=hotfix_repo))
+                    else:
+                        setup_repos(ceph, base_url, installer_url)
             if config['ansi_config'].get('ceph_repository_type') == 'iso' and ceph.role == 'installer':
                 iso_file_url = get_iso_file_url(base_url)
                 ceph.exec_command(sudo=True, cmd='mkdir -p {}/iso'.format(ansible_dir))
@@ -167,6 +173,7 @@ def run(**kw):
             objectstore = ''
             if bluestore:
                 objectstore = 'osd_objectstore="bluestore"'
+
             osd_host = node.shortname + mon_interface + \
                 (" devices='" + json.dumps(devs) + "'" if not auto_discovey else '') + ' ' + objectstore
             osd_hosts.append(osd_host)
