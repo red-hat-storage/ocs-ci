@@ -1,16 +1,17 @@
-import rbd_mirror_utils as rbdmirror
 import logging
+import rbd_mirror_utils as rbdmirror
 
 log = logging.getLogger(__name__)
 
 
 def run(**kw):
     log.info("Starting mirroring")
-    mirror1 = rbdmirror.RbdMirror(kw.get('ceph_cluster_dict').get('ceph-rbd1'),
-                                  kw.get('cluster_name'))
-    mirror2 = rbdmirror.RbdMirror(kw.get('ceph_cluster_dict').get('ceph-rbd2'),
-                                  kw.get('cluster_name2'))
     config = kw.get('config')
+
+    mirror1 = rbdmirror.RbdMirror(kw.get('ceph_cluster_dict').get('ceph-rbd1'),
+                                  config)
+    mirror2 = rbdmirror.RbdMirror(kw.get('ceph_cluster_dict').get('ceph-rbd2'),
+                                  config)
     kw.get('test_data').update({'mirror1': mirror1, 'mirror2': mirror2})
 
     # Handling of clusters with same name
