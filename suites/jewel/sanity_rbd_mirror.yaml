@@ -66,6 +66,17 @@
       abort-on-fail: true
 
    - test:
+      name: Test CEPH-9470
+      module: CEPH-9470.py
+      clusters:
+        ceph-rbd1:
+          config:
+            imagesize: 500M
+            io-total: 25M
+      polarion-id: CEPH-9470
+      desc: Recovery of abrupt failure of primary cluster
+
+   - test:
       name: Test CEPH-9471
       module: CEPH-9471.py
       clusters:
@@ -83,18 +94,6 @@
         ceph-rbd1:
           config:
             imagesize: 500M
-            io-total: 50M
+            io-total: 25M
       polarion-id: CEPH-9475
       desc: Recovery of shutdown secondary cluster
-
-   - test:
-      name: Test CEPH-11489
-      module: CEPH-11489.py
-      clusters:
-        ceph-rbd1:
-          config:
-            imagesize: 500M
-            io-total: 10M
-            delay: 600
-      polarion-id: CEPH-11489
-      desc: Delayed replication
