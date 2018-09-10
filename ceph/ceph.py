@@ -1,5 +1,4 @@
 import logging
-import traceback
 from select import select
 from time import sleep
 
@@ -108,6 +107,63 @@ class NodeVolume(object):
         self.status = status
 
 
+class SSHConnectionManager(object):
+    def __init__(self, vmname, username, password, look_for_keys=False, outage_timeout=300):
+        self.vmname = vmname
+        self.username = username
+        self.password = password
+        self.look_for_keys = look_for_keys
+        self.__client = paramiko.SSHClient()
+        self.__client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.__transport = None
+        self.__outage_start_time = None
+        self.outage_timeout = datetime.timedelta(seconds=outage_timeout)
+
+    @property
+    def client(self):
+        return self.get_client()
+
+    def get_client(self):
+        if not (self.__transport and self.__transport.is_active()):
+            self.__connect()
+            self.__transport = self.__client.get_transport()
+
+        return self.__client
+
+    def __connect(self):
+        while True:
+            try:
+                self.__client.connect(self.vmname,
+                                      username=self.username,
+                                      password=self.password,
+                                      look_for_keys=self.look_for_keys)
+                break
+            except paramiko.AuthenticationException as e:
+                raise e
+            except Exception as e:
+                logger.warn('Connection outage: \n{error}'.format(error=e))
+                if not self.__outage_start_time:
+                    self.__outage_start_time = datetime.datetime.now()
+                if datetime.datetime.now() - self.__outage_start_time > self.outage_timeout:
+                    raise e
+                sleep(10)
+        self.__outage_start_time = None
+
+    @property
+    def transport(self):
+        return self.get_transport()
+
+    def get_transport(self):
+        self.__transport = self.client.get_transport()
+        return self.__transport
+
+    def __getstate__(self):
+        pickle_dict = self.__dict__.copy()
+        del pickle_dict['_SSHConnectionManager__transport']
+        del pickle_dict['_SSHConnectionManager__client']
+        return pickle_dict
+
+
 class CephNode(object):
 
     def __init__(self, **kw):
@@ -137,6 +193,12 @@ class CephNode(object):
                 volume.status = NodeVolume.ALLOCATED
         if kw.get('ceph_vmnode'):
             self.vm_node = kw['ceph_vmnode']
+        self.root_connection = SSHConnectionManager(self.vmname, 'root', self.root_passwd)
+        self.connection = SSHConnectionManager(self.vmname, self.username, self.password)
+        self.rssh = self.root_connection.get_client
+        self.rssh_transport = self.root_connection.get_transport
+        self.ssh = self.connection.get_client
+        self.ssh_transport = self.connection.get_transport
         self.run_once = False
 
     def get_free_volumes(self):
@@ -145,7 +207,7 @@ class CephNode(object):
     def get_allocated_volumes(self):
         return [volume for volume in self.voulume_list if volume.status == NodeVolume.ALLOCATED]
 
-    def connect(self, timeout=300):
+    def connect(self):
         """
         connect to ceph instance using paramiko ssh protocol
         eg: self.connect()
@@ -153,78 +215,22 @@ class CephNode(object):
         - set up hostname and shortname as attributes for tests to query
         """
         logger.info('Connecting {host_name} / {ip_address}'.format(host_name=self.vmname, ip_address=self.ip_address))
-        if self.run_once is True:
-            return
-        self.rssh = paramiko.SSHClient()
-        self.rssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        tout = datetime.timedelta(seconds=timeout)
-        starttime = datetime.datetime.now()
-        while True:
-            try:
-                self.rssh.connect(self.vmname,
-                                  username='root',
-                                  password=self.root_passwd,
-                                  look_for_keys=False)
-                self.rssh_transport = self.rssh.get_transport()
-            except Exception:
-                if datetime.datetime.now() - starttime > tout:
-                    raise RuntimeError("{traceback} \nFailed to connect in {timeout} on {ip_address}"
-                                       .format(timeout=tout, ip_address=self.ip_address,
-                                               traceback=traceback.format_exc()))
-                sleep(10)
-                continue
-            if not self.rssh_transport.is_active():
-                if datetime.datetime.now() - starttime <= tout:
-                    logger.warn("Transport status check failed, Reconnecting...")
-                    sleep(10)
-                    continue
-                else:
-                    raise RuntimeError(
-                        'Failed to establish active trasport on {ip_address}'.format(ip_address=self.ip_address))
-            break
-        stdin, stdout, stderr = self.rssh.exec_command("dmesg")
-        self.rssh_transport.set_keepalive(15)
+
+        stdin, stdout, stderr = self.rssh().exec_command("dmesg")
+        self.rssh_transport().set_keepalive(15)
         changepwd = 'echo ' + "'" + self.username + ":" + self.password + "'" \
                     + "|" + "chpasswd"
         logger.info("Running command %s", changepwd)
-        stdin, stdout, stderr = self.rssh.exec_command(changepwd)
+        stdin, stdout, stderr = self.rssh().exec_command(changepwd)
         logger.info(stdout.readlines())
-        self.rssh.exec_command(
+        self.rssh().exec_command(
             "echo 120 > /proc/sys/net/ipv4/tcp_keepalive_time")
-        self.rssh.exec_command(
+        self.rssh().exec_command(
             "echo 60 > /proc/sys/net/ipv4/tcp_keepalive_intvl")
-        self.rssh.exec_command(
+        self.rssh().exec_command(
             "echo 20 > /proc/sys/net/ipv4/tcp_keepalive_probes")
-        self.ssh = paramiko.SSHClient()
-        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        tout = datetime.timedelta(seconds=timeout)
-        starttime = datetime.datetime.now()
-        while True:
-            try:
-                self.ssh.connect(self.vmname,
-                                 password=self.password,
-                                 username=self.username,
-                                 look_for_keys=False)
-                self.ssh_transport = self.ssh.get_transport()
-            except Exception:
-                if datetime.datetime.now() - starttime > tout:
-                    raise RuntimeError("{traceback} \nFailed to connect in {timeout} on {ip_address}"
-                                       .format(timeout=tout, ip_address=self.ip_address,
-                                               traceback=traceback.format_exc()))
-                    raise
-                sleep(10)
-                continue
-            if not self.ssh_transport.is_active():
-                if datetime.datetime.now() - starttime <= tout:
-                    logger.warn("Transport status check failed, Reconnecting...")
-                    sleep(10)
-                    continue
-                else:
-                    raise RuntimeError(
-                        'Failed to establish active trasport on {ip_address}'.format(ip_address=self.ip_address))
-            break
         self.exec_command(cmd="ls / ; uptime ; date")
-        self.ssh_transport.set_keepalive(15)
+        self.ssh_transport().set_keepalive(15)
         out, err = self.exec_command(cmd="hostname")
         self.hostname = out.read().strip()
         shortname = self.hostname.split('.')
@@ -278,8 +284,6 @@ class CephNode(object):
         check_ec: False will run the command and not wait for exit code
 
         """
-        if not (self.ssh.get_transport().is_active() and self.rssh.get_transport().is_active()):
-            self.reconnect()
 
         if kw.get('sudo'):
             ssh = self.rssh
@@ -295,11 +299,11 @@ class CephNode(object):
         stdout = None
         stderr = None
         if self.run_once:
-            self.ssh_transport.set_keepalive(15)
-            self.rssh_transport.set_keepalive(15)
+            self.ssh_transport().set_keepalive(15)
+            self.rssh_transport().set_keepalive(15)
         if kw.get('long_running'):
             logger.info("long running command --")
-            channel = ssh.get_transport().open_session()
+            channel = ssh().get_transport().open_session()
             channel.exec_command(kw['cmd'])
             read = ''
             while True:
@@ -317,7 +321,7 @@ class CephNode(object):
                     logger.info(data)
             return read, ec
         try:
-            stdin, stdout, stderr = ssh.exec_command(
+            stdin, stdout, stderr = ssh().exec_command(
                 kw['cmd'], timeout=timeout)
         except SSHException as e:
             logger.error("Exception during cmd %s", str(e))
@@ -342,7 +346,7 @@ class CephNode(object):
             self.client = self.ssh
         file_name = kw['file_name']
         file_mode = kw['file_mode']
-        self.ftp = self.client.open_sftp()
+        self.ftp = self.client().open_sftp()
         remote_file = self.ftp.file(file_name, file_mode, -1)
         return remote_file
 
@@ -352,35 +356,8 @@ class CephNode(object):
             sleep(60)
 
     def reconnect(self):
-        self.rssh = paramiko.SSHClient()
-        self.rssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self.ssh = paramiko.SSHClient()
-        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        count = 0
-        while True:
-            self.rssh.connect(self.vmname,
-                              username='root',
-                              password=self.root_passwd,
-                              look_for_keys=False)
-            self.rssh_transport = self.rssh.get_transport()
-            if not self.rssh_transport.is_active() and count <= 3:
-                logger.info("Connect failed, Retrying...")
-                sleep(10)
-                count += 1
-            else:
-                break
-        while True:
-            self.ssh.connect(self.vmname,
-                             password=self.password,
-                             username=self.username,
-                             look_for_keys=False)
-            self.ssh_transport = self.ssh.get_transport()
-            if not self.ssh_transport.is_active() and count <= 3:
-                logger.info("Connect failed, Retrying...")
-                sleep(10)
-                count += 1
-            else:
-                break
+        # TODO: Deprecated. Left for compatibility with exisitng tests. Should be removed on refactoring.
+        pass
 
     def __getstate__(self):
         d = dict(self.__dict__)
@@ -389,4 +366,15 @@ class CephNode(object):
         del d['ssh']
         del d['rssh_transport']
         del d['ssh_transport']
+        del d['root_connection']
+        del d['connection']
         return d
+
+    def __setstate__(self, pickle_dict):
+        self.__dict__.update(pickle_dict)
+        self.root_connection = SSHConnectionManager(self.vmname, 'root', self.root_passwd)
+        self.connection = SSHConnectionManager(self.vmname, self.username, self.password)
+        self.rssh = self.root_connection.get_client
+        self.ssh = self.connection.get_client
+        self.rssh_transport = self.root_connection.get_transport
+        self.ssh_transport = self.connection.get_transport
