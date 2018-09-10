@@ -5,18 +5,24 @@ import random
 import string
 import logging
 import json
+
 from ceph.ceph import CommandFailed
+
 log = logging.getLogger(__name__)
 
 
 class RbdMirror:
-    def __init__(self, cluster, cluster_name):
+    def __init__(self, cluster, config):
 
-        self.rbd_client = 'client.admin'
-        self.cluster_name = cluster_name if cluster_name else 'ceph'
         self.ceph_nodes = cluster
-        self.cluster_spec = self.rbd_client + '@' + self.cluster_name
+        self.k_m = config.get('ec-pool-k-m', None)
+        self.ceph_version = int(config.get('rhbuild')[0])
+        self.cluster_name = 'ceph'
+        self.rbd_client = 'client.admin'
         self.ceph_args = ' --cluster {}'.format(self.cluster_name)
+        self.cluster_spec = self.rbd_client + '@' + self.cluster_name
+        self.datapool = None
+        self.flag = 0
 
         # Identifying Monitor And Client node
         for node in self.ceph_nodes:
@@ -27,23 +33,31 @@ class RbdMirror:
                 self.ceph_client = node
                 continue
 
+        if self.ceph_version > 2 and self.k_m:
+            self.datapool = 'rbd_datapool'
+            self.ec_profile = 'rbd_ec_profile'
+            self.set_ec_profile(profile=self.ec_profile)
+
     def exec_cmd(self, **kw):
-        cmd = kw.get('cmd')
-        node = kw.get('node') if kw.get('node') else self.ceph_client
+        try:
+            cmd = kw.get('cmd')
+            node = kw.get('node') if kw.get('node') else self.ceph_client
 
-        if kw.get('ceph_args', True):
-            cmd = cmd + self.ceph_args
+            if kw.get('ceph_args', True):
+                cmd = cmd + self.ceph_args
 
-        out, err = node.exec_command(
-            sudo=True, cmd=cmd, long_running=kw.get('long_running', False),
-            check_ec=kw.get('check_ec', True))
+            out, err = node.exec_command(
+                sudo=True, cmd=cmd, long_running=kw.get('long_running', False),
+                check_ec=kw.get('check_ec', True))
 
-        if kw.get('output', False):
-            return out.read()
+            if kw.get('output', False):
+                return out.read()
 
-        if out:
             return 0
-        else:
+
+        except CommandFailed as e:
+            log.info(e)
+            self.flag = 1
             return 1
 
     def copy_file(self, file_name, src, dest):
@@ -167,7 +181,9 @@ class RbdMirror:
 
     # Wait for required status
     def wait_for_status(self, **kw):
-        for _ in range(0, 30):
+        tout = datetime.timedelta(seconds=600)
+        starttime = datetime.datetime.now()
+        while True:
             if kw.get('poolname', False):
                 if kw.get('health_pattern'):
                     out = self.mirror_status('pool', kw.get('poolname'),
@@ -211,9 +227,11 @@ class RbdMirror:
                              .format(kw.get('imagespec'),
                                      self.cluster_name, out))
                     return out
-            time.sleep(20)
-        log.error('Required status can not be attained')
-        return 1
+            if datetime.datetime.now() - starttime <= tout:
+                time.sleep(20)
+            else:
+                log.error('Required status can not be attained')
+                return 1
 
     # Wait for replay to complete, check every 60 seconds
     def wait_for_replay_complete(self, imagespec):
@@ -275,20 +293,31 @@ class RbdMirror:
 
     # CLIs
     def benchwrite(self, **kw):
-        self.exec_cmd(
-            cmd='rbd bench {} --io-type write --io-threads 16 --io-total {} '
-                '--io-pattern rand'.format(kw.get('imagespec'),
-                                           kw.get('io', '500M')),
-            long_running=True)
+        if self.ceph_version < 3:
+            self.exec_cmd(
+                cmd='rbd bench-write --io-total {} {}'
+                    .format(kw.get('io', '500M'), kw.get('imagespec')),
+                long_running=True)
+        else:
+            self.exec_cmd(
+                cmd='rbd bench --io-type write --io-threads 16 --io-total {} {}'
+                    .format(kw.get('io', '500M'), kw.get('imagespec')),
+                long_running=True)
 
     def create_pool(self, **kw):
+        if self.ceph_version > 2 and self.k_m:
+            self.create_ecpool(profile=self.ec_profile, poolname=self.datapool)
         self.exec_cmd(cmd='ceph osd pool create {} 64 64'
                       .format(kw.get('poolname')))
 
     def create_image(self, **kw):
-        self.exec_cmd(cmd='rbd create -s {} {} '
-                      .format(kw.get('size', '2G'), kw.get('imagespec')) +
-                      '--image-feature exclusive-lock,journaling')
+        cmd = 'rbd create -s {} {} --image-feature exclusive-lock,journaling'\
+            .format(kw.get('size', '2G'), kw.get('imagespec'))
+
+        if kw.get('datapool', self.datapool):
+            cmd = cmd + ' --data-pool {}'.format(kw.get('datapool',
+                                                        self.datapool))
+        self.exec_cmd(cmd=cmd)
 
     def export_image(self, **kw):
         self.exec_cmd(cmd='rbd export {} {}'.
@@ -314,23 +343,13 @@ class RbdMirror:
 
     # Mirroring Status
     def mirror_status(self, *args):
-        timeout = 300
-        timeout = datetime.timedelta(seconds=timeout)
-        starttime = datetime.datetime.now()
-        while True:
-            try:
-                output = self.exec_cmd(output=True,
-                                       cmd="rbd mirror {} status {} --format=json"
-                                       .format(args[0], args[1]))
-                json_dict = json.loads(output)
-                return self.value(args[2], json_dict)
-            except CommandFailed as e:
-                if datetime.now() - starttime > timeout:
-                    log.error('Failed to get image status %s' % e)
-                    return 1
-                pass
-    # Add Peer
+        output = self.exec_cmd(output=True,
+                               cmd='rbd mirror {} status {} --format=json'
+                               .format(args[0], args[1]))
+        json_dict = json.loads(output)
+        return self.value(args[2], json_dict)
 
+    # Add Peer
     def peer_add(self, **kw):
         return self.exec_cmd(cmd='rbd mirror pool peer add {} {}'
                              .format(kw.get('poolname'),
@@ -376,3 +395,28 @@ class RbdMirror:
 
     def delete_image(self, imagespec):
         self.exec_cmd(cmd='rbd rm {}'.format(imagespec))
+
+    def set_ec_profile(self, profile):
+        self.exec_cmd(cmd='ceph osd erasure-code-profile rm {}'.format(profile))
+        self.exec_cmd(cmd='ceph osd erasure-code-profile set {} k={} m={}'
+                      .format(profile, self.k_m[0], self.k_m[2]))
+
+    def create_ecpool(self, **kw):
+        poolname = kw.get('poolname', self.datapool)
+        profile = kw.get('profile', self.ec_profile)
+        self.exec_cmd(cmd='ceph osd pool create {} 12 12 erasure {}'
+                      .format(poolname, profile))
+        self.exec_cmd(cmd='rbd pool init {}'.format(poolname))
+        self.exec_cmd(cmd='ceph osd pool set {} allow_ec_overwrites true'
+                      .format(poolname))
+
+    def clean_up(self, peercluster, **kw):
+        if kw.get('dir_name'):
+            self.exec_cmd(cmd='rm -rf {}'.format(kw.get('dir_name')))
+            peercluster.exec_cmd(cmd='rm -rf {}'.format(kw.get('dir_name')))
+        if kw.get('pools'):
+            pool_list = kw.get('pools')
+            pool_list.append(self.datapool)
+            for pool in pool_list:
+                self.delete_pool(poolname=pool)
+                peercluster.delete_pool(poolname=pool)
