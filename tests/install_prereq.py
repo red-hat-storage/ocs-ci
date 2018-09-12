@@ -55,9 +55,10 @@ def install_prereq(ceph, timeout=1800, skip_subscription=False, repo=False):
         pip_package_name = "python2-pip-9.0.3-1.fc28.noarch.rpm"
         ceph.exec_command(
             cmd='sudo yum install -y {base}/{package}'.format(base=base_dir_path, package=pip_package_name))
+        # TODO: remove GPG block if no issues as we already have it in ceph/utils.py
         # add GPG key
-        ceph.exec_command(
-            cmd='curl --insecure -O -L https://prodsec.redhat.com/keys/00da75f2.txt && sudo rpm --import 00da75f2.txt')
+        # ceph.exec_command(
+        # cmd='curl --insecure -O -L https://prodsec.redhat.com/keys/00da75f2.txt && sudo rpm --import 00da75f2.txt')
         config_ntp(ceph)
 
 
