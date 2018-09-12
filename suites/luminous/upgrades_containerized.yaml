@@ -117,7 +117,7 @@ tests:
       name: ceph ansible purge
       module: purge_cluster.py
       desc: Purge ceph cluster
-      destroy-cluster: False
+      recreate-cluster: True
 
    - test:
        name: install ceph pre-requisities
@@ -237,7 +237,7 @@ tests:
       name: ceph ansible purge
       module: purge_cluster.py
       desc: Purge ceph cluster
-      destroy-cluster: False
+      recreate-cluster: True
 
    - test:
        name: install ceph pre-requisities
