@@ -17,6 +17,7 @@ def run(**kw):
     test_data = kw.get('test_data')
     prev_install_version = test_data['install_version']
     upgrade_to_version = config.get('build')
+    skip_version_compare = config.get('skip_version_compare')
 
     ubuntu_repo = None
     ceph_installer = None
@@ -167,13 +168,16 @@ def run(**kw):
     num_osds = test_data['ceph-ansible']['num-osds']
     num_mons = test_data['ceph-ansible']['num-mons']
 
-    post_upgrade_versions = get_ceph_versions(ceph_nodes, containerized)
-    if not upgrade_to_version.startswith('2'):
-        for name, version in pre_upgrade_versions.iteritems():
-            if 'installer' not in name and post_upgrade_versions[name] == version:
-                log.error("Pre upgrade version matches post upgrade version")
-                log.error("{}: {} matches".format(name, version))
-                return 1
+    if skip_version_compare:
+        log.warn("Skipping version comparison.")
+    else:
+        post_upgrade_versions = get_ceph_versions(ceph_nodes, containerized)
+        if not upgrade_to_version.startswith('2'):
+            for name, version in pre_upgrade_versions.iteritems():
+                if 'installer' not in name and post_upgrade_versions[name] == version:
+                    log.error("Pre upgrade version matches post upgrade version")
+                    log.error("{}: {} matches".format(name, version))
+                    return 1
 
     # retrieve container count if containerized
     if containerized:

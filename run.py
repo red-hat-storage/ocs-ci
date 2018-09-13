@@ -50,6 +50,7 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--bluestore]
         [--use-ec-pool <k,m>]
         [--hotfix-repo <repo>]
+        [--skip-version-compare]
   run.py --cleanup=name [--osp-cred <file>]
         [--log-level <LEVEL>]
 
@@ -90,6 +91,7 @@ Options:
   --bluestore                       To specify bluestore as osd object store
   --use-ec-pool <k,m>               To use ec pools instead of replicated pools
   --hotfix-repo <repo>              To run sanity on hotfix build
+  --skip-version-compare            Skip verification that ceph versions change post upgrade
 """
 log = logging.getLogger(__name__)
 root = logging.getLogger()
@@ -213,6 +215,7 @@ def run(args):
     osp_image = args.get('--osp-image')
     bluestore = args.get('--bluestore', False)
     ec_pool_vals = args.get('--use-ec-pool', None)
+    skip_version_compare = args.get('--skip-version-compare', False)
     if console_log_level:
         ch.setLevel(logging.getLevelName(console_log_level.upper()))
 
@@ -439,6 +442,7 @@ def run(args):
                 if repo.startswith('http'):
                     config['add-repo'] = repo
             config['docker-insecure-registry'] = docker_insecure_registry
+            config['skip_version_compare'] = skip_version_compare
             if config and config.get('ansi_config'):
                 if docker_registry:
                     config.get('ansi_config')['ceph_docker_registry'] = str(docker_registry)
