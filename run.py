@@ -354,6 +354,7 @@ def run(args):
                 """.format(docker_registry=docker_registry,
                            docker_image=docker_image,
                            docker_tag=docker_tag))
+        log.info("Creating launch: {}".format(launch_name))
         service.start_launch(name=launch_name, start_time=timestamp(), description=launch_desc)
 
     if reuse is None:
@@ -405,7 +406,6 @@ def run(args):
         tc['suite-name'] = suite_name
         test_file = tc['file']
         report_portal_description = tc['desc'] or ''
-        log.info("rp desc type: {}".format(type(report_portal_description)))
         unique_test_name = create_unique_test_name(tc['name'], test_names)
         test_names.append(unique_test_name)
         tc['log-link'] = configure_logger(unique_test_name, run_dir)
@@ -419,6 +419,10 @@ def run(args):
         tc['status'] = 'Not Executed'
         start = time.time()
         for cluster_name in test.get('clusters', ceph_cluster_dict):
+            if len(test.get('clusters', ceph_cluster_dict)) > 1:
+                full_test_name = "{tname} ({cname})".format(tname=unique_test_name, cname=cluster_name)
+            else:
+                full_test_name = unique_test_name
             if test.get('clusters'):
                 config = test.get('clusters').get(cluster_name).get('config', {})
             else:
@@ -482,7 +486,8 @@ def run(args):
                 config['kernel-repo'] = os.environ.get('KERNEL-REPO-URL')
             try:
                 if post_to_report_portal:
-                    service.start_test_item(name=unique_test_name, description=report_portal_description,
+                    log.info("Starting test item: {}".format(full_test_name))
+                    service.start_test_item(name=full_test_name, description=report_portal_description,
                                             start_time=timestamp(), item_type="STEP")
                     service.log(time=timestamp(), message="Logfile location: {}".format(tc['log-link']), level="INFO")
                     service.log(time=timestamp(), message="Polarion ID: {}".format(tc['polarion-id']), level="INFO")
@@ -495,31 +500,33 @@ def run(args):
                 rc = 1
             if rc != 0:
                 break
-        elapsed = (time.time() - start)
-        tc['duration'] = elapsed
-        if rc == 0:
-            tc['status'] = 'Pass'
-            msg = "Test {} passed".format(test_mod)
-            log.info(msg)
-            print(msg)
-            if post_to_report_portal:
-                service.finish_test_item(end_time=timestamp(), status="PASSED")
-            if post_results:
-                post_to_polarion(tc=tc)
-        else:
-            tc['status'] = 'Failed'
-            msg = "Test {} failed".format(test_mod)
-            log.info(msg)
-            print(msg)
-            jenkins_rc = 1
-            if post_to_report_portal:
-                service.finish_test_item(end_time=timestamp(), status="FAILED")
-            if post_results:
-                post_to_polarion(tc=tc)
-            if test.get('abort-on-fail', False):
-                log.info("Aborting on test failure")
-                tcs.append(tc)
-                break
+            elapsed = (time.time() - start)
+            tc['duration'] = elapsed
+            if rc == 0:
+                tc['status'] = 'Pass'
+                msg = "Test {} passed".format(test_mod)
+                log.info(msg)
+                print(msg)
+                if post_to_report_portal:
+                    log.info("Finishing test item: {} (passed)".format(full_test_name))
+                    service.finish_test_item(end_time=timestamp(), status="PASSED")
+                if post_results:
+                    post_to_polarion(tc=tc)
+            else:
+                tc['status'] = 'Failed'
+                msg = "Test {} failed".format(test_mod)
+                log.info(msg)
+                print(msg)
+                jenkins_rc = 1
+                if post_to_report_portal:
+                    log.info("Finishing test item: {} (failed)".format(full_test_name))
+                    service.finish_test_item(end_time=timestamp(), status="FAILED")
+                if post_results:
+                    post_to_polarion(tc=tc)
+                if test.get('abort-on-fail', False):
+                    log.info("Aborting on test failure")
+                    tcs.append(tc)
+                    break
         if test.get('destroy-cluster') is True:
             cleanup_ceph_nodes(osp_cred, instances_name)
         if test.get('recreate-cluster') is True:
@@ -527,6 +534,7 @@ def run(args):
         tcs.append(tc)
     close_and_remove_filehandlers()
     if post_to_report_portal:
+        log.info("Finishing launch: {}".format(launch_name))
         service.finish_launch(end_time=timestamp())
         service.terminate()
     url_base = "http://magna002.ceph.redhat.com/cephci-jenkins"
