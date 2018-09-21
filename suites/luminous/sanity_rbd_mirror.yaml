@@ -55,7 +55,6 @@
                   mon_max_pg_per_osd: 1024
                 mon:
                   mon_allow_pool_delete: true
-      abort-on-fail: True
 
    - test:
       name: Setup RBD Mirror
