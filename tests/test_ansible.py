@@ -55,6 +55,9 @@ def run(**kw):
             open_firewall_port(ceph, port='6800-6820', protocol='tcp')
         if ceph.role == 'mds':
             open_firewall_port(ceph, port='6800', protocol='tcp')
+        if ceph.role == 'iscsi-gw':
+            open_firewall_port(ceph, port='3260', protocol='tcp')
+            open_firewall_port(ceph, port='5000-5001', protocol='tcp')
     for node in ceph_nodes:
         if node.role == 'installer':
             log.info("Setting installer node")
@@ -137,6 +140,7 @@ def run(**kw):
     mds_hosts = []
     mgr_hosts = []
     client_hosts = []
+    iscsi_gw_hosts = []
     num_osds = 0
     num_mons = 0
     num_mgrs = 0
@@ -186,6 +190,9 @@ def run(**kw):
         if node.role == 'client':
             client_host = node.shortname + ' client_interface=' + node.eth_interface
             client_hosts.append(client_host)
+        if node.role == 'iscsi-gw':
+            iscsi_gw_host = node.shortname
+            iscsi_gw_hosts.append(iscsi_gw_host)
 
     hosts_file = ''
     if mon_hosts:
@@ -206,6 +213,9 @@ def run(**kw):
     if client_hosts:
         client = '[clients]\n' + '\n'.join(client_hosts)
         hosts_file += client + '\n'
+    if iscsi_gw_hosts:
+        iscsi_gw = '[iscsigws]\n' + '\n'.join(iscsi_gw_hosts)
+        hosts_file += iscsi_gw + '\n'
 
     log.info('Generated hosts file: \n{file}'.format(file=hosts_file))
     host_file = ceph_installer.write_file(
@@ -235,8 +245,16 @@ def run(**kw):
     gvar = yaml.dump(config.get('ansi_config'), default_flow_style=False)
     log.info("global vars " + gvar)
     gvars_file = ceph_installer.write_file(
-        sudo=True, file_name='{}/group_vars/all.yml'.format(ansible_dir), file_mode='w')
+        sudo=True, file_name='{}/group_vars/all.yml'.format(ansible_dir), file_mode='a')
     gvars_file.write(gvar)
+    # add iscsi setting if it is necessary
+    if test_data["luns_setting"] and test_data["initiator_setting"]:
+        iscsi_file = ceph_installer.write_file(
+            sudo=True, file_name='{}/group_vars/iscsigws.yml'.format(ansible_dir), file_mode='a')
+        iscsi_file.write(test_data["luns_setting"])
+        iscsi_file.write(test_data["initiator_setting"])
+        iscsi_file.write(test_data["gw_ip_list"])
+        iscsi_file.flush()
     gvars_file.flush()
 
     if ceph_installer.pkg_type == 'rpm':
