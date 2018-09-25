@@ -248,7 +248,7 @@ def run(**kw):
         sudo=True, file_name='{}/group_vars/all.yml'.format(ansible_dir), file_mode='a')
     gvars_file.write(gvar)
     # add iscsi setting if it is necessary
-    if test_data["luns_setting"] and test_data["initiator_setting"]:
+    if test_data.get("luns_setting", None) and test_data.get("initiator_setting", None):
         iscsi_file = ceph_installer.write_file(
             sudo=True, file_name='{}/group_vars/iscsigws.yml'.format(ansible_dir), file_mode='a')
         iscsi_file.write(test_data["luns_setting"])
