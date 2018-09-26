@@ -27,7 +27,6 @@ def run(**kw):
                     log.info("writing from ENV " + repo)
                     repo = os.environ['KERNEL-REPO-URL']
                     p.spawn(update_kernel_and_reboot, cnode, repo)
-
     return 0
 
 

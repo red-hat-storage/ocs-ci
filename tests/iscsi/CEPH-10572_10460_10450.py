@@ -30,21 +30,17 @@ def run(**kw):
             rc.append(op)
 
     uuid = []
-    fstab = ""
     iscsi_initiators.exec_command(
         sudo=True, cmd="cp /etc/fstab /etc/fstab.backup")
     out, err = iscsi_initiators.exec_command(sudo=True, cmd="cat /etc/fstab")
     output = out.read()
-    output = output.rstrip("\n")
-    fstab = fstab + output
-    for i in range(len(device_list)):
+    fstab = output.rstrip("\n")
+    for device in device_list:
         out, err = iscsi_initiators.exec_command(
-            sudo=True, cmd="blkid /dev/mapper/mpa" + device_list[i] + ""
+            sudo=True, cmd="blkid /dev/mapper/mpa" + device + ""
             " -s UUID -o value", long_running=True)
         output = out.rstrip("\n")
         uuid.append(output)
-    print len(device_list)
-    print len(uuid)
     for i in range(no_of_luns):
         temp = "\nUUID=" + uuid[i] + "\t/mnt/" + \
                device_list[i] + "/\text4\t_netdev\t0 0"
@@ -53,51 +49,34 @@ def run(**kw):
         sudo=True, file_name='/etc/fstab', file_mode='w')
     fstab_file.write(fstab)
     fstab_file.flush()
-    out, err = iscsi_initiators.exec_command(cmd=" df -h |awk '{print $1}'")
-    count_df = out.read()
-    count_df = count_df.rstrip()
-    count_df = sorted(count_df.split())
-
+    mnted_disks = list_mnted_disks(iscsi_initiators)
     iscsi_initiators.exec_command(sudo=True, cmd="reboot", check_ec=False)
     sleep(200)
     iscsi_initiators.reconnect()
     iscsi_util.do_iptables_flush()
-    out, err = iscsi_initiators.exec_command(cmd=" df -h |awk '{print $1}'")
-    count_df_after_reboot = out.read()
-    count_df_after_reboot = count_df_after_reboot.rstrip()
-    count_df_after_reboot = sorted(count_df_after_reboot.split())
-    print len(count_df_after_reboot)
-    print count_df_after_reboot
-    print "return   " + str(rc)
-    rc = set(rc)
-    if len(rc) == 1 and count_df_after_reboot == count_df:
-        print rc
-        print count_df_after_reboot
-        print count_df
-        print len(count_df_after_reboot)
-        print len(count_df)
+    mnted_disks_after_reboot = list_mnted_disks(iscsi_initiators)
+    log.info("i/o exit code: {}, failover exit code{}".format(rc[0], rc[1]))
+    log.info("disks before reboot:\n" + str(mnted_disks))
+    log.info("disks after reboot:\n" + str(mnted_disks_after_reboot))
+    log.info("number number of disks before reboot:" + str(len(mnted_disks)))
+    log.info("number number of disks after reboot:" + str(len(mnted_disks_after_reboot)))
+    if sum(rc) == 0 and mnted_disks_after_reboot == mnted_disks:
         iscsi_util.umount_directory(device_list, iscsi_initiators)
-        iscsi_initiators.exec_command(
-            sudo=True, cmd="rm -rf /mnt/*", long_running=True)
+        iscsi_util.dissconect_linux_initiator(iscsi_initiators)
         iscsi_initiators.exec_command(
             sudo=True, cmd="mv /etc/fstab.backup /etc/fstab")
-        iscsi_initiators.exec_command(
-            sudo=True,
-            cmd="iscsiadm -m node -T iqn.2003-01.com.redhat.iscsi-"
-                "gw:ceph-igw -u",
-            long_running=True)
-        iscsi_initiators.exec_command(
-            sudo=True,
-            cmd="systemctl stop multipathd",
-            long_running=True)
         return 0
     else:
-        print rc
-        print count_df_after_reboot
-        print count_df
-        print len(count_df_after_reboot)
-        print len(count_df)
         return 1
+
+
+def list_mnted_disks(iscsi_initiator):
+    out, err = iscsi_initiator.exec_command(
+        sudo=True, cmd="df -h | grep '/dev/mapper/mpa'| awk '{print $1}'")
+    disks = out.read()
+    disks = disks.rstrip()
+    disks = sorted(disks.split())
+    return disks
 
 
 def do_failover(iscsi_initiators, device_list, ceph_nodes):
