@@ -9,7 +9,7 @@ from ceph.rados_utils import RadosHelper
 log = logging.getLogger(__name__)
 
 
-def run(**kw):
+def run(ceph_cluster, **kw):
     """
      CEPH-9311 - RADOS: Pyramid erasure codes (Local Repai     rable erasure codes):
      Bring down 2 osds (in case of k=4) from 2 localities      so that recovery happens from local repair code
@@ -35,29 +35,27 @@ def run(**kw):
     from "step 1" in the above mapping we can see that
     data chunk is divided into 2 localities which is
     anlogous to 2 data center. so in our case for ex
-    we have to bring down (3,7) OR (2,7) OR (2,6) OR (3,6)    ."""
+    we have to bring down (3,7) OR (2,7) OR (2,6) OR (3,6)    .
+
+    Args:
+        ceph_cluster (ceph.ceph.Ceph): ceph cluster
+    """
 
     log.info("Running test ceph-9311")
     ceph_nodes = kw.get('ceph_nodes')
     config = kw.get('config')
 
     mons = []
-    osds = []
-    role = 'mon'
+    role = 'client'
 
     for mnode in ceph_nodes:
         if mnode.role == role:
             mons.append(mnode)
 
-    role = 'osd'
-    for osd in ceph_nodes:
-        if osd.role == role:
-            osds.append(osd)
-
     ctrlr = mons[0]
     log.info("chosing mon {cmon} as ctrlrmon".format(cmon=ctrlr.hostname))
 
-    Helper = RadosHelper(ctrlr, config, log)
+    helper = RadosHelper(ctrlr, config, log)
 
     '''Create an LRC profile'''
     sufix = random.randint(0, 10000)
@@ -68,7 +66,7 @@ def run(**kw):
             ruleset-failure-domain=osd \
             crush-failure-domain=osd".format(LRCprofile=prof_name)
     try:
-        (out, err) = Helper.raw_cluster_cmd(profile)
+        (out, err) = helper.raw_cluster_cmd(profile)
         outbuf = out.read()
         log.info(outbuf)
         log.info("created profile {LRCprofile}".format(
@@ -80,7 +78,7 @@ def run(**kw):
     '''create LRC ec pool'''
     pool_name = "lrcpool{suf}".format(suf=sufix)
     try:
-        Helper.create_pool(pool_name, 1, prof_name)
+        helper.create_pool(pool_name, 1, prof_name)
         log.info("Pool {pname} created".format(pname=pool_name))
     except Exception:
         log.error("lrcpool create failed")
@@ -92,14 +90,14 @@ def run(**kw):
     '''
     oname = "UNIQUEOBJECT{i}".format(i=random.randint(0, 10000))
     cmd = "osd map {pname} {obj} --format json".format(pname=pool_name, obj=oname)
-    (out, err) = Helper.raw_cluster_cmd(cmd)
+    (out, err) = helper.raw_cluster_cmd(cmd)
     outbuf = out.read()
     log.info(outbuf)
     cmdout = json.loads(outbuf)
     # targt_pg = cmdout['pgid']
-    tosds = []
+    target_osds_ids = []
     for i in [2, 7]:
-        tosds.append(cmdout['up'][i])
+        target_osds_ids.append(cmdout['up'][i])
 
     # putobj = "sudo rados -p {pool} put {obj} {path}".format(
     #     pool=pool_name, obj=oname, path="/etc/hosts"
@@ -111,9 +109,12 @@ def run(**kw):
         )
         (out, err) = ctrlr.exec_command(cmd=putobj)
     '''Bringdown tosds'''
-    for osd in tosds:
-        Helper.get_osd_obj(osd, osds)
-        Helper.kill_osd(osd, "SIGTERM", osds)
+    osd_service_map_list = []
+    for osd_id in target_osds_ids:
+        target_osd_node = ceph_cluster.get_osd_by_id(osd_id).node
+        osd_service = ceph_cluster.get_osd_service_name(osd_id)
+        osd_service_map_list.append({'osd_node': target_osd_node, 'osd_service': osd_service})
+        helper.kill_osd(target_osd_node, osd_service)
         time.sleep(5)
 
         outbuf = "degrade"
@@ -122,7 +123,7 @@ def run(**kw):
         status = '-s --format json'
         while timeout:
             if 'active' not in outbuf:
-                (out, err) = Helper.raw_cluster_cmd(status)
+                (out, err) = helper.raw_cluster_cmd(status)
                 outbuf = out.read()
                 time.sleep(1)
                 timeout = timeout - 1
@@ -149,7 +150,7 @@ def run(**kw):
         (out, err) = ctrlr.exec_command(cmd=putobj)
         log.info(out.read())
     '''donewith the test ,revive osds'''
-    for osd in tosds:
-        Helper.revive_osd(osd, osds)
+    for osd_service_map in osd_service_map_list:
+        helper.revive_osd(osd_service_map.get('osd_node'), osd_service_map.get('osd_service'))
 
     return 0

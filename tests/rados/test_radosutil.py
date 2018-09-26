@@ -13,7 +13,7 @@ def run(**kw):
 
     mons = []
     osds = []
-    role = 'mon'
+    role = 'client'
     for mnode in ceph_nodes:
         if mnode.role == role:
             mons.append(mnode)
@@ -51,7 +51,7 @@ def run(**kw):
     ret=1
     try:
         log.info("TRYING KILL")
-        ret=Helper.kill_osd(1, "SIGTERM", osds)
+        ret=Helper.kill_osd(1, osds)
         log.info("ret={ret}".format(ret=ret))
     finally:
         return ret

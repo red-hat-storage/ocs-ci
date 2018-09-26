@@ -107,7 +107,7 @@ def do_rados_get(mon, pool, niter):
             dfd.close()
 
 
-def run(**kw):
+def run(ceph_cluster, **kw):
     """
      1. Create a LRC profile and then create a ec pool
             #ceph osd erasure-code-profile set $profile \
@@ -131,6 +131,9 @@ def run(**kw):
     3. Bring back primary
 
     4. Repeat the step 2 but this time kill some secondary osds
+
+    Args:
+        ceph_cluster (ceph.ceph.Ceph):
     """
 
     log.info("Running test CEPH-9281")
@@ -138,17 +141,11 @@ def run(**kw):
     config = kw.get('config')
 
     mons = []
-    osds = []
-    role = 'mon'
+    role = 'client'
 
     for mnode in ceph_nodes:
         if mnode.role == role:
             mons.append(mnode)
-
-    role = 'osd'
-    for osd in ceph_nodes:
-        if osd.role == role:
-            osds.append(osd)
 
     ctrlr = mons[0]
     log.info("chosing mon {cmon} as ctrlrmon".format(cmon=ctrlr.hostname))
@@ -193,29 +190,32 @@ def run(**kw):
             log.info(res)
 
     try:
-        pri_osd = helper.get_pg_primary(pool_name, 0)
-        log.info("PRIMARY={pri}".format(pri=pri_osd))
+        pri_osd_id = helper.get_pg_primary(pool_name, 0)
+        log.info("PRIMARY={pri}".format(pri=pri_osd_id))
     except Exception:
         log.error("getting primary failed")
         log.error(traceback.format_exc())
         return 1
 
     log.info("SIGTERM osd")
+    pri_osd = ceph_cluster.get_osd_by_id(pri_osd_id)
+    pri_osd_node = pri_osd.node
+    pri_osd_service = ceph_cluster.get_osd_service_name(pri_osd_id)
     try:
-        helper.kill_osd(pri_osd, "SIGTERM", osds)
+        helper.kill_osd(pri_osd_node, pri_osd_service)
         log.info("osd killed")
     except Exception:
         log.error("killing osd failed")
         log.error(traceback.format_exc())
     time.sleep(10)
-    if helper.is_up(pri_osd):
+    if helper.is_up(pri_osd_id):
         log.error("unexpected! osd is still up")
         return 1
     time.sleep(5)
-    log.info("Reviving osd {osd}".format(osd=pri_osd))
+    log.info("Reviving osd {osd}".format(osd=pri_osd_id))
 
     try:
-        if helper.revive_osd(pri_osd, osds):
+        if helper.revive_osd(pri_osd_node, pri_osd_service):
             log.error("revive failed")
             return 1
     except Exception:
@@ -223,7 +223,7 @@ def run(**kw):
         log.error(traceback.format_exc())
         return 1
     time.sleep(10)
-    if helper.is_up(pri_osd):
+    if helper.is_up(pri_osd_id):
         log.info("osd is UP")
     else:
         log.error("osd is DOWN")
@@ -231,35 +231,38 @@ def run(**kw):
 
     time.sleep(10)
     try:
-        rand_osd = helper.get_pg_random(pool_name, 0)
-        log.info("RANDOM OSD={rosd}".format(rosd=rand_osd))
+        rand_osd_id = helper.get_pg_random(pool_name, 0)
+        log.info("RANDOM OSD={rosd}".format(rosd=rand_osd_id))
     except Exception:
         log.error("getting  random osd failed")
         log.error(traceback.format_exc())
         return 1
     log.info("SIGTERM osd")
+    rand_osd = ceph_cluster.get_osd_by_id(rand_osd_id)
+    rand_osd_node = rand_osd.node
+    rand_osd_service = ceph_cluster.get_osd_service_name(rand_osd_id)
     try:
-        helper.kill_osd(rand_osd, "SIGTERM", osds)
+        helper.kill_osd(rand_osd_node, rand_osd_service)
         log.info("osd killed")
     except Exception:
         log.error("killing osd failed")
         log.error(traceback.format_exc())
     time.sleep(10)
-    if helper.is_up(rand_osd):
+    if helper.is_up(rand_osd_id):
         log.error("unexpected! osd is still up")
         return 1
     time.sleep(5)
-    log.info("Reviving osd {osd}".format(osd=rand_osd))
+    log.info("Reviving osd {osd}".format(osd=rand_osd_id))
     try:
-        if helper.revive_osd(rand_osd, osds):
+        if helper.revive_osd(rand_osd_node, rand_osd_service):
             log.error("revive failed")
             return 1
     except Exception:
         log.error("revive failed")
         log.error(traceback.format_exc())
         return 1
-    time.sleep(10)
-    if helper.is_up(pri_osd):
+    time.sleep(30)
+    if helper.is_up(pri_osd_id):
         log.info("osd is UP")
     else:
         log.error("osd is DOWN")

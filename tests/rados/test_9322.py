@@ -32,7 +32,7 @@ def run(**kw):
     mons = []
     osds = []
 
-    role = 'mon'
+    role = 'client'
     for mnode in ceph_nodes:
         if mnode.role == role:
             mons.append(mnode)
