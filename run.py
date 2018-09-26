@@ -21,8 +21,8 @@ from ceph.clients import WinNode
 from ceph.utils import create_ceph_nodes, cleanup_ceph_nodes, setup_cdn_repos
 from utils.polarion import post_to_polarion
 from utils.retry import retry
-from utils.utils import timestamp, create_run_dir, create_unique_test_name, create_report_portal_session,\
-    configure_logger, close_and_remove_filehandlers
+from utils.utils import timestamp, create_run_dir, create_unique_test_name, create_report_portal_session, \
+    configure_logger, close_and_remove_filehandlers, get_latest_container
 
 doc = """
 A simple test suite wrapper that executes tests based on yaml test configuration
@@ -50,6 +50,7 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--bluestore]
         [--use-ec-pool <k,m>]
         [--hotfix-repo <repo>]
+        [--ignore-latest-container]
         [--skip-version-compare]
   run.py --cleanup=name [--osp-cred <file>]
         [--log-level <LEVEL>]
@@ -91,6 +92,7 @@ Options:
   --bluestore                       To specify bluestore as osd object store
   --use-ec-pool <k,m>               To use ec pools instead of replicated pools
   --hotfix-repo <repo>              To run sanity on hotfix build
+  --ignore-latest-container         Skip getting latest nightly container
   --skip-version-compare            Skip verification that ceph versions change post upgrade
 """
 log = logging.getLogger(__name__)
@@ -215,6 +217,7 @@ def run(args):
     osp_image = args.get('--osp-image')
     bluestore = args.get('--bluestore', False)
     ec_pool_vals = args.get('--use-ec-pool', None)
+    ignore_latest_nightly_container = args.get('--ignore-latest-container', False)
     skip_version_compare = args.get('--skip-version-compare', False)
     if console_log_level:
         ch.setLevel(logging.getLevelName(console_log_level.upper()))
@@ -333,6 +336,20 @@ def run(args):
     ceph_ansible_version = ', '.join(list(set(ceph_ansible_version)))
     log.info("Testing Ceph Version: " + ceph_version)
     log.info("Testing Ceph Ansible Version: " + ceph_ansible_version)
+
+    if not os.environ.get('TOOL') and not ignore_latest_nightly_container:
+        major_version = re.match('\d+\.\d+', ceph_ansible_version).group(0)
+        try:
+            latest_container = get_latest_container(major_version)
+        except ValueError:
+            latest_container = get_latest_container('.'.join([major_version.split('.')[0], 'x']))
+        docker_registry = latest_container.get('docker_registry') if not docker_registry else docker_registry
+        docker_image = latest_container.get('docker_image') if not docker_image else docker_image
+        docker_tag = latest_container.get('docker_tag') if not docker_tag else docker_tag
+        log.info("Using latest nightly docker image \nRegistry: {registry} \nDocker image: {image}\nDocker tag:{tag}"
+                 .format(registry=docker_registry, image=docker_image, tag=docker_tag))
+        docker_insecure_registry = True
+        log.warn('Using Docker insecure registry registry')
 
     service = None
     suite_name = os.path.basename(suite_file).split(".")[0]
