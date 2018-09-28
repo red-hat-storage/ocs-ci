@@ -138,8 +138,6 @@ class SSHConnectionManager(object):
                                       password=self.password,
                                       look_for_keys=self.look_for_keys)
                 break
-            except paramiko.AuthenticationException as e:
-                raise e
             except Exception as e:
                 logger.warn('Connection outage: \n{error}'.format(error=e))
                 if not self.__outage_start_time:
