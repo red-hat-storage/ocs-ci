@@ -312,10 +312,10 @@ def run(args):
                 cluster_inventory = yaml.safe_load(inventory_stream)
             image_name = cluster_inventory.get('instance').get('create').get('image-name')
             distro.append(image_name.replace('.iso', ''))
+        # get COMPOSE ID and ceph version
+        id = requests.get(base_url + "/COMPOSE_ID")
+        compose_id = id.text
         if 'rhel' in image_name:
-            # get COMPOSE ID and ceph version
-            id = requests.get(base_url + "/COMPOSE_ID")
-            compose_id = id.text
             ceph_pkgs = requests.get(base_url +
                                      "/compose/Tools/x86_64/os/Packages/")
             m = re.search(r'ceph-common-(.*?)cp', ceph_pkgs.text)
@@ -338,7 +338,7 @@ def run(args):
     log.info("Testing Ceph Ansible Version: " + ceph_ansible_version)
 
     if not os.environ.get('TOOL') and not ignore_latest_nightly_container:
-        major_version = re.match('\d+\.\d+', ceph_ansible_version).group(0)
+        major_version = re.match('RHCEPH-(\d+\.\d+)', compose_id).group(1)
         try:
             latest_container = get_latest_container(major_version)
         except ValueError:
