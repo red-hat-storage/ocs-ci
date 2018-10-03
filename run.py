@@ -265,11 +265,11 @@ def run(args):
                 'http://download.engineering.redhat.com/rcm-guest/ceph-drops/3.1/latest-RHCEPH-3.1-Ubuntu/'
     elif rhbuild.startswith('3'):
         if base_url is None:
-            # default to latest RHCeph build 3.0
-            base_url = 'http://download.eng.bos.redhat.com/composes/auto/ceph-3.0-rhel-7/latest-RHCEPH-3-RHEL-7/'
+            # default to latest RHCeph build 3.2
+            base_url = 'http://download.eng.bos.redhat.com/composes/auto/ceph-3.2-rhel-7/latest-RHCEPH-3-RHEL-7/'
         if ubuntu_repo is None:
             ubuntu_repo = \
-                'http://download-node-02.eng.bos.redhat.com/rcm-guest/ceph-drops/3.0/latest-RHCEPH-3.0-Ubuntu/'
+                'http://download.eng.bos.redhat.com/rcm-guest/ceph-drops/3.2/latest-RHCEPH-3.2-Ubuntu/'
     if os.environ.get('TOOL') is not None:
         ci_message = json.loads(os.environ['CI_MESSAGE'])
         compose_id = ci_message['compose_id']
