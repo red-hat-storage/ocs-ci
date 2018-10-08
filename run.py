@@ -16,7 +16,7 @@ import requests
 import textwrap
 from docopt import docopt
 from libcloud.common.types import LibcloudError
-from ceph.ceph import CephNode
+from ceph.ceph import CephNode, Ceph
 from ceph.clients import WinNode
 from ceph.utils import create_ceph_nodes, cleanup_ceph_nodes, setup_cdn_repos
 from utility.polarion import post_to_polarion
@@ -156,8 +156,9 @@ def create_nodes(conf, inventory, osp_cred, run_id, report_portal_session=None, 
                                 hostname=node.hostname,
                                 ceph_vmnode=node)
                 ceph_nodes.append(ceph)
-        ceph_cluster_dict[cluster.get('ceph-cluster').get('name', 'ceph')] = ceph_nodes
-
+        cluster_name = cluster.get('ceph-cluster').get('name', 'ceph')
+        ceph_cluster_dict[cluster_name] = Ceph(cluster_name, ceph_nodes)
+    #TODO: refactor cluster dict to cluster list
     log.info('Done creating osp instances')
     log.info("Waiting for Floating IPs to be available")
     log.info("Sleeping 15 Seconds")

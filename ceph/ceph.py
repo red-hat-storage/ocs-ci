@@ -10,21 +10,69 @@ logger = logging.getLogger(__name__)
 
 
 class Ceph(object):
-    """
-    higher level ceph cluster object
-    still in development
-     - keep track of ceph nodes in cluster
-     - exec at once on all nodes of same ceph role
-     -
-    """
+    def __init__(self, name, node_list=None):
+        """
+        Ceph cluster representation. Contains list of cluster nodes.
+        Args:
+            name (str): cluster name
+            node_list (ceph.utils.CephVMNode): CephVMNode list
+        """
+        self.name = name
+        self.node_list = list(node_list)
 
-    def __init__(self, **kw):
-        self.nodes = kw['nodes']
-        self.osd_nodes = kw['osd_nodes']
-        self.mon_nodes = kw['mon_nodes']
-        self.mds_nodes = kw['mds_nodes']
-        self.clients = kw['clients']
-        self.roles = kw['roles']
+    def __eq__(self, ceph_cluster):
+        if hasattr(ceph_cluster, 'node_list'):
+            if all(atomic_node in ceph_cluster for atomic_node in self.node_list):
+                return True
+            else:
+                return False
+        else:
+            return False
+
+    def __ne__(self, ceph_cluster):
+        return not self.__eq__(ceph_cluster)
+
+    def __len__(self):
+        return len(self.node_list)
+
+    def __getitem__(self, key):
+        return self.node_list[key]
+
+    def __setitem__(self, key, value):
+        self.node_list[key] = value
+
+    def __delitem__(self, key):
+        del self.node_list[key]
+
+    def __iter__(self):
+        return iter(self.node_list)
+
+    def get_nodes(self, role=None):
+        """
+        Get node(s) by role. Return all nodes if role is not defined
+        Args:
+            role (str): node's role. Can be RoleContainer or str
+
+        Returns:
+            list: nodes
+        """
+        return [node for node in self.node_list if node.role == role] if role else list(self.node_list)
+
+    def get_ceph_objects(self, role=None):
+        """
+        Get Ceph Object by role. Returns all objects if role is not defined. Ceph object can be Ceph demon, client,
+        installer or generic entity. Pool role is never assigned to Ceph object and means that node has no Ceph objects
+        Args:
+            role (str): Ceph object's role as str
+
+        Returns:
+            list: ceph objects
+        """
+        node_list = self.get_nodes(role)
+        ceph_object_list = []
+        for node in node_list:
+            ceph_object_list.extend(node.get_ceph_objects(role))
+        return ceph_object_list
 
 
 class CommandFailed(Exception):
@@ -40,7 +88,7 @@ class RolesContainer(object):
 
     def __init__(self, role='pool'):
         if hasattr(role, '__iter__'):
-            self.role_list = role
+            self.role_list = role if len(role) > 0 else ['pool']
         else:
             self.role_list = [str(role)]
 
@@ -182,7 +230,8 @@ class CephNode(object):
         self.vmname = kw['hostname']
         vmshortname = self.vmname.split('.')
         self.vmshortname = vmshortname[0]
-        self.role = RolesContainer(kw['role'])
+        self.ceph_object_list = [CephObjectFactory(self).create_ceph_object(role) for role in kw['role'] if
+                                 role != 'pool']
         self.voulume_list = []
         if kw['no_of_volumes']:
             self.voulume_list = [NodeVolume(NodeVolume.FREE) for vol_id in xrange(kw['no_of_volumes'])]
@@ -199,11 +248,18 @@ class CephNode(object):
         self.ssh_transport = self.connection.get_transport
         self.run_once = False
 
+    @property
+    def role(self):
+        return RolesContainer([ceph_demon.role for ceph_demon in self.ceph_object_list if ceph_demon])
+
     def get_free_volumes(self):
         return [volume for volume in self.voulume_list if volume.status == NodeVolume.FREE]
 
     def get_allocated_volumes(self):
         return [volume for volume in self.voulume_list if volume.status == NodeVolume.ALLOCATED]
+
+    def get_ceph_demon(self, role=None):
+        return [ceph_demon for ceph_demon in self.ceph_object_list if ceph_demon.role == role] if role else list()
 
     def connect(self):
         """
@@ -376,3 +432,157 @@ class CephNode(object):
         self.ssh = self.connection.get_client
         self.rssh_transport = self.root_connection.get_transport
         self.ssh_transport = self.connection.get_transport
+
+    def get_ceph_objects(self, role=None):
+        """
+        Get Ceph objects list on the node
+        Args:
+            role(str): Ceph object role
+
+        Returns:
+            list: ceph objects
+
+        """
+        return [ceph_demon for ceph_demon in self.ceph_object_list if ceph_demon.role == role or not role]
+
+    def create_ceph_object(self, role):
+        """
+        Create ceph object on the node
+        Args:
+            role(str): ceph object role
+        """
+        self.ceph_object_list.append(CephObjectFactory(self).create_ceph_object(role))
+
+    def remove_ceph_object(self, ceph_object):
+        """
+        Removes ceph object form the node
+        Args:
+            ceph_object(CephObject): ceph object to remove
+        """
+        self.ceph_object_list.remove(ceph_object)
+
+
+class CephObject(object):
+    def __init__(self, role, node):
+        """
+        Generic Ceph object, works as proxy to exec_command method
+        Args:
+            role (str): role string
+            node (CephNode): node object
+        """
+        self.role = role
+        self.node = node
+
+    @property
+    def pkg_type(self):
+        return self.node.pkg_type
+
+    def exec_command(self, cmd, **kw):
+        """
+        Proxy to node's exec_command
+        Args:
+            cmd(str): command to execute
+            **kw: options
+
+        Returns:
+        node's exec_command resut
+        """
+        return self.node.exec_command(cmd=cmd, **kw)
+
+    def write_file(self, **kw):
+        """
+        Proxy to node's write file
+        Args:
+            **kw: options
+
+        Returns:
+            node's write_file resut
+        """
+        return self.node.write_file(**kw)
+
+
+class CephDemon(CephObject):
+    def __init__(self, role, node):
+        """
+        Ceph demon representation. Can be containerized.
+        Args:
+            role(str): Ceph demon type
+            node(CephNode): node object
+        """
+        super(CephDemon, self).__init__(role, node)
+        self.containerized = None
+
+    @property
+    def container_name(self):
+        return 'ceph-{role}-{host}'.format(role=self.role, host=self.node.hostmname) if self.containerized else ''
+
+    @property
+    def container_prefix(self):
+        return 'sudo docker {container_name} exec'.format(
+            container_name=self.container_name) if self.containerized else ''
+
+    def exec_command(self, cmd, **kw):
+        """
+        Proxy to node's exec_command with wrapper to run commands inside the container for containerized demons
+        Args:
+            cmd(str): command to execute
+            **kw: options
+
+        Returns:
+        node's exec_command resut
+        """
+        return self.node.exec_command(cmd=' '.join([self.container_prefix, cmd]),
+                                      **kw) if self.containerized else self.node.exec_command(cmd=cmd, **kw)
+
+
+class CephClient(CephObject):
+    def __init__(self, role, node):
+        """
+        Ceph client representation, works as proxy to exec_command method.
+        Args:
+            role(str): role string
+            node(CephNode): node object
+        """
+        super(CephClient, self).__init__(role, node)
+
+
+class CephInstaller(CephObject):
+    def __init__(self, role, node):
+        """
+        Ceph client representation, works as proxy to exec_command method
+        Args:
+            role(str): role string
+            node(CephNode): node object
+        """
+        super(CephInstaller, self).__init__(role, node)
+
+
+class CephObjectFactory(object):
+    DEMON_ROLES = ['mon', 'osd', 'mgr', 'rgw', 'mds']
+    CLIENT_ROLES = ['client']
+
+    def __init__(self, node):
+        """
+        Factory for Ceph objects.
+        Args:
+            node: node object
+        """
+        self.node = node
+
+    def create_ceph_object(self, role):
+        """
+        Create an appropriate Ceph object by role
+        Args:
+            role: role string
+
+        Returns:
+        Ceph object based on role
+        """
+        if role == 'installer':
+            return CephInstaller(role, self.node)
+        if role == self.CLIENT_ROLES:
+            return CephClient(role, self.node)
+        if role in self.DEMON_ROLES:
+            return CephDemon(role, self.node)
+        if role != 'pool':
+            return CephObject(role, self.node)
