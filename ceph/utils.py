@@ -408,6 +408,10 @@ def search_ethernet_interface(ceph_node, ceph_node_list):
 
 def open_firewall_port(ceph_node, port, protocol):
     if ceph_node.pkg_type == 'rpm':
+        try:
+            ceph_node.exec_command(sudo=True, cmd="rpm -qa | grep firewalld")
+        except CommandFailed:
+            ceph_node.exec_command(sudo=True, cmd="yum install firewalld", long_running=True)
         ceph_node.exec_command(sudo=True, cmd="systemctl enable firewalld")
         ceph_node.exec_command(sudo=True, cmd="systemctl start firewalld")
         ceph_node.exec_command(sudo=True, cmd="systemctl status firewalld")
