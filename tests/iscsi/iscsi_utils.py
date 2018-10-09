@@ -48,24 +48,24 @@ class IscsiUtils(object):
                 cmd="rpm -qa | grep ceph-iscsi-config",
                 check_ec=True)
 
-    def umount_directory(self, device_list, iscsi_initiators):
+    def umount_directory(self, device_list, iscsi_initiator):
         for i in range(len(device_list)):
-            iscsi_initiators.exec_command(
+            iscsi_initiator.exec_command(
                 sudo=True, cmd="umount -l /mnt/" + device_list[i])
             log.info("Umounting - mpa" + str(device_list[i]))
         time.sleep(10)
-        iscsi_initiators.exec_command(sudo=True, cmd="multipath -F")
+        iscsi_initiator.exec_command(sudo=True, cmd="multipath -F")
+        iscsi_initiator.exec_command(
+            sudo=True, cmd="rm -rf /mnt/*", long_running=True)
 
     def dissconect_linux_initiator(self, iscsi_initiator):
         iscsi_initiator.exec_command(
             sudo=True,
             cmd="iscsiadm -m node -T iqn.2003-01.com.redhat.iscsi-"
-                "gw:ceph-igw -u",
-            long_running=True)
+                "gw:ceph-igw -u")
         iscsi_initiator.exec_command(
             sudo=True,
-            cmd="systemctl stop multipathd",
-            long_running=True)
+            cmd="systemctl stop multipathd")
 
     def get_devicelist_luns(self, no_of_luns):
         for node in self.ceph_nodes:
@@ -299,26 +299,21 @@ trusted_ip_list = {0}
             io_size):
         if io_size is None:
             io_size = "1G"
-        for i in range(len(device_list)):
+        for device in device_list:
             iscsi_initiators.exec_command(
-                sudo=True, cmd="mkdir /mnt/" + device_list[i])
+                sudo=True, cmd="mkdir /mnt/" + device)
             iscsi_initiators.exec_command(
                 sudo=True,
-                cmd="mkfs.ext4 /dev/mapper/mpa" +
-                    device_list[i] +
-                    " -q",
+                cmd="mkfs.ext4 /dev/mapper/mpa{} -q".format(device),
                 long_running=True,
                 output=False)
             iscsi_initiators.exec_command(
                 sudo=True,
-                cmd="mount /dev/mapper/mpa" +
-                    device_list[i] +
-                    " /mnt/" +
-                    device_list[i],
+                cmd="mount /dev/mapper/mpa{0} /mnt/{0}".format(device),
                 long_running=True)
 
     def do_ios(self, iscsi_initiator, device_list):
-        command = "fio --rw=write --size=1G --iodepth=32 "\
+        command = "fio --rw=write --size=1G --iodepth=1 "\
             "--blocksize=4096 --ioengine=libaio "
         jobs = []
         for disk in device_list:
