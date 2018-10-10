@@ -411,7 +411,7 @@ def open_firewall_port(ceph_node, port, protocol):
         try:
             ceph_node.exec_command(sudo=True, cmd="rpm -qa | grep firewalld")
         except CommandFailed:
-            ceph_node.exec_command(sudo=True, cmd="yum install firewalld", long_running=True)
+            ceph_node.exec_command(sudo=True, cmd="yum install -y firewalld", long_running=True)
         ceph_node.exec_command(sudo=True, cmd="systemctl enable firewalld")
         ceph_node.exec_command(sudo=True, cmd="systemctl start firewalld")
         ceph_node.exec_command(sudo=True, cmd="systemctl status firewalld")
