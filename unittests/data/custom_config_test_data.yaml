@@ -1,0 +1,9 @@
+global:
+  osd_pool_default_pg_num: 64
+  osd_default_pool_size: 2
+  osd_pool_default_pgp_num: 64
+  mon_max_pg_per_osd: 2048
+  osd_journal_size: 10000
+mon:
+  mon_osd_full_ratio: .80
+  mon_osd_nearfull_ratio: .70

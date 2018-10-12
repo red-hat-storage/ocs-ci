@@ -9,8 +9,7 @@ import requests
 import yaml
 from reportportal_client import ReportPortalServiceAsync
 
-logger = logging.getLogger(__name__)
-log = logger
+log = logging.getLogger(__name__)
 
 # variables
 mounting_dir = '/mnt/cephfs/'
@@ -476,3 +475,54 @@ def get_latest_container(version):
     docker_registry, docker_image_tag = data.json()['repository'].split('/')
     docker_image, docker_tag = docker_image_tag.split(':')
     return {'docker_registry': docker_registry, 'docker_image': docker_image, 'docker_tag': docker_tag}
+
+
+def custom_ceph_config(suite_config, custom_config, custom_config_file):
+    """
+    Combines and returns custom configuration overrides for ceph.
+    Hierarchy is as follows:
+        custom_config > custom_config_file > suite_config
+
+    Args:
+        suite_config: ceph_conf_overrides that currently exist in the test suite
+        custom_config: custom config args provided by the cli (these all go to the global scope)
+        custom_config_file: path to custom config yaml file provided by the cli
+
+    Returns
+        New value to be used for ceph_conf_overrides in test config
+    """
+    log.debug("Suite config: {}".format(suite_config))
+    log.debug("Custom config: {}".format(custom_config))
+    log.debug("Custom config file: {}".format(custom_config_file))
+
+    full_custom_config = suite_config or {}
+    cli_config_dict = {}
+    custom_config_dict = {}
+
+    # retrieve custom config from file
+    if custom_config_file:
+        with open(custom_config_file) as f:
+            custom_config_dict = yaml.load(f)
+            log.info("File contents: {}".format(custom_config_dict))
+
+    # format cli configs into dict
+    if custom_config:
+        cli_config_dict = dict(item.split('=') for item in custom_config)
+
+    # combine file and cli configs
+    if cli_config_dict:
+        if not custom_config_dict.get('global'):
+            custom_config_dict['global'] = {}
+        for key, value in cli_config_dict.iteritems():
+            custom_config_dict['global'][key] = value
+
+    # combine file and suite configs
+    for key, value in custom_config_dict.iteritems():
+        subsection = {}
+        if full_custom_config.get(key):
+            subsection.update(full_custom_config[key])
+        subsection.update(value)
+        full_custom_config[key] = subsection
+
+    log.info("Full custom config: {}".format(full_custom_config))
+    return full_custom_config

@@ -7,6 +7,7 @@ import yaml
 from ceph.utils import setup_deb_repos, get_iso_file_url, setup_cdn_repos, write_docker_daemon_json, \
     search_ethernet_interface, open_firewall_port, setup_deb_cdn_repo
 from ceph.utils import setup_repos, check_ceph_healthly
+from utils.utils import custom_ceph_config
 
 logger = logging.getLogger(__name__)
 log = logger
@@ -17,12 +18,20 @@ def run(**kw):
     ceph_nodes = kw.get('ceph_nodes')
     log.info("Running ceph ansible test")
     config = kw.get('config')
-    bluestore = config.get('bluestore')
     k_and_m = config.get('ec-pool-k-m')
     hotfix_repo = config.get('hotfix_repo')
     test_data = kw.get('test_data')
     ubuntu_repo = None
     ansible_dir = '/usr/share/ceph-ansible'
+
+    # configure ceph_conf_overrides
+    ceph_conf_overrides = config.get('ansi_config').get('ceph_conf_overrides')
+    custom_config = test_data.get('custom-config')
+    custom_config_file = test_data.get('custom-config-file')
+    config['ansi_config']['ceph_conf_overrides'] = custom_ceph_config(
+        ceph_conf_overrides, custom_config, custom_config_file)
+    log.info("ceph_conf_overrides: \n{}".format(
+        yaml.dump(config['ansi_config']['ceph_conf_overrides'], default_flow_style=False)))
 
     if config.get('ubuntu_repo'):
         ubuntu_repo = config.get('ubuntu_repo')
@@ -174,12 +183,9 @@ def run(**kw):
             devs = [_dev for _dev in devs if _dev not in reserved_devs]
             num_osds = num_osds + len(devs)
             auto_discovey = config['ansi_config'].get('osd_auto_discovery', False)
-            objectstore = ''
-            if bluestore:
-                objectstore = 'osd_objectstore="bluestore"'
 
             osd_host = node.shortname + mon_interface + \
-                (" devices='" + json.dumps(devs) + "'" if not auto_discovey else '') + ' ' + objectstore
+                (" devices='" + json.dumps(devs) + "'" if not auto_discovey else '')
             osd_hosts.append(osd_host)
         if node.role == 'mds':
             mds_host = node.shortname + ' monitor_interface=' + node.eth_interface
