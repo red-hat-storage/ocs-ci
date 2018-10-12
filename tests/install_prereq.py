@@ -66,7 +66,7 @@ def setup_addition_repo(ceph, repo):
     log.info("Additing addition repo {repo} to {sn}".format(
              repo=repo, sn=ceph.shortname))
     ceph.exec_command(sudo=True,
-                      cmd='wget -O /etc/yum.repos.d/rh_add_repo.repo {repo}'.format(repo=repo))
+                      cmd='curl -o /etc/yum.repos.d/rh_add_repo.repo {repo}'.format(repo=repo))
     ceph.exec_command(sudo=True, cmd='yum update metadata')
 
 
