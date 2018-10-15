@@ -47,11 +47,12 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--log-level <LEVEL>]
         [--instances-name <name>]
         [--osp-image <image>]
-        [--bluestore]
         [--use-ec-pool <k,m>]
         [--hotfix-repo <repo>]
         [--ignore-latest-container]
         [--skip-version-compare]
+        [--custom-config <key>=<value>]...
+        [--custom-config-file <file>]
   run.py --cleanup=name [--osp-cred <file>]
         [--log-level <LEVEL>]
 
@@ -89,11 +90,12 @@ Options:
   --log-level <LEVEL>               Set logging level
   --instances-name <name>           Name that will be used for instances creation
   --osp-image <image>               Image for osp instances, default value is taken from conf file
-  --bluestore                       To specify bluestore as osd object store
   --use-ec-pool <k,m>               To use ec pools instead of replicated pools
   --hotfix-repo <repo>              To run sanity on hotfix build
   --ignore-latest-container         Skip getting latest nightly container
   --skip-version-compare            Skip verification that ceph versions change post upgrade
+  -c --custom-config <name>=<value> Add a custom config key/value to ceph_conf_overrides
+  --custom-config-file <file>       Add custom config yaml to ceph_conf_overrides
 """
 log = logging.getLogger(__name__)
 root = logging.getLogger()
@@ -215,10 +217,11 @@ def run(args):
     console_log_level = args.get('--log-level')
     instances_name = args.get('--instances-name')
     osp_image = args.get('--osp-image')
-    bluestore = args.get('--bluestore', False)
     ec_pool_vals = args.get('--use-ec-pool', None)
     ignore_latest_nightly_container = args.get('--ignore-latest-container', False)
     skip_version_compare = args.get('--skip-version-compare', False)
+    custom_config = args.get('--custom-config')
+    custom_config_file = args.get('--custom-config-file')
     if console_log_level:
         ch.setLevel(logging.getLevelName(console_log_level.upper()))
 
@@ -408,6 +411,8 @@ def run(args):
             setup_cdn_repos(cluster, build=rhbuild)
     # use ceph_test_data to pass around dynamic data between tests
     ceph_test_data = dict()
+    ceph_test_data['custom-config'] = custom_config
+    ceph_test_data['custom-config-file'] = custom_config_file
 
     for test in tests:
         test = test.get('test')
@@ -486,8 +491,6 @@ def run(args):
                     tc['docker-containers-list'].append('{docker_registry}/{docker_image}:{docker_tag}'.format(
                         docker_registry=cluster_docker_registry, docker_image=cluster_docker_image,
                         docker_tag=cluster_docker_tag))
-            if bluestore:
-                config['bluestore'] = bluestore
             if ec_pool_vals:
                 config['ec-pool-k-m'] = ec_pool_vals
             if args.get('--hotfix-repo'):
