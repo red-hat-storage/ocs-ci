@@ -23,14 +23,15 @@ def run(**kw):
     config = kw.get('config')
     skip_subscription = config.get('skip_subscription', False)
     repo = config.get('add-repo', False)
+    rhbuild = config.get('rhbuild')
     with parallel() as p:
         for ceph in ceph_nodes:
-            p.spawn(install_prereq, ceph, 1800, skip_subscription, repo)
+            p.spawn(install_prereq, ceph, 1800, skip_subscription, repo, rhbuild)
             time.sleep(20)
     return 0
 
 
-def install_prereq(ceph, timeout=1800, skip_subscription=False, repo=False):
+def install_prereq(ceph, timeout=1800, skip_subscription=False, repo=False, rhbuild=None):
     log.info("Waiting for cloud config to complete on " + ceph.hostname)
     ceph.exec_command(cmd='while [ ! -f /ceph-qa-ready ]; do sleep 15; done')
     log.info("cloud config to completed on " + ceph.hostname)
@@ -40,7 +41,7 @@ def install_prereq(ceph, timeout=1800, skip_subscription=False, repo=False):
         ceph.exec_command(cmd='sudo apt-get install -y ' + deb_all_pkgs, long_running=True)
     else:
         if not skip_subscription:
-            setup_subscription_manager(ceph)
+            setup_subscription_manager(ceph, rhbuild)
         if repo:
             setup_addition_repo(ceph, repo)
         ceph.exec_command(cmd='sudo yum install -y ' + rpm_all_pkgs, long_running=True)
@@ -70,7 +71,7 @@ def setup_addition_repo(ceph, repo):
     ceph.exec_command(sudo=True, cmd='yum update metadata')
 
 
-def setup_subscription_manager(ceph, timeout=1800):
+def setup_subscription_manager(ceph, rhbuild, timeout=1800):
     timeout = datetime.timedelta(seconds=timeout)
     starttime = datetime.datetime.now()
     log.info(
@@ -101,10 +102,17 @@ def setup_subscription_manager(ceph, timeout=1800):
                 wait = iter(x for x in itertools.count(1, 10))
                 time.sleep(next(wait))
     ceph.exec_command(cmd='sudo subscription-manager repos --disable=*', long_running=True)
-    ceph.exec_command(
-        cmd='sudo subscription-manager repos --enable=rhel-7-server-rpms \
-             --enable=rhel-7-server-optional-rpms \
-             --enable=rhel-7-server-ansible-2.4-rpms \
-             --enable=rhel-7-server-extras-rpms \
-             --enable=rhel-7-server-ansible-2.6-rpms',
-        long_running=True)
+    if rhbuild == "3.2":
+        ceph.exec_command(
+            cmd='sudo subscription-manager repos --enable=rhel-7-server-rpms \
+                --enable=rhel-7-server-optional-rpms \
+                --enable=rhel-7-server-ansible-2.6-rpms \
+                --enable=rhel-7-server-extras-rpms',
+            long_running=True)
+    else:
+        ceph.exec_command(
+            cmd='sudo subscription-manager repos --enable=rhel-7-server-rpms \
+                --enable=rhel-7-server-optional-rpms \
+                --enable=rhel-7-server-ansible-2.4-rpms \
+                --enable=rhel-7-server-extras-rpms',
+            long_running=True)
