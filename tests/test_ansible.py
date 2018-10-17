@@ -18,6 +18,7 @@ def run(**kw):
     ceph_nodes = kw.get('ceph_nodes')
     log.info("Running ceph ansible test")
     config = kw.get('config')
+    bluestore = config.get('bluestore')
     k_and_m = config.get('ec-pool-k-m')
     hotfix_repo = config.get('hotfix_repo')
     test_data = kw.get('test_data')
@@ -183,9 +184,12 @@ def run(**kw):
             devs = [_dev for _dev in devs if _dev not in reserved_devs]
             num_osds = num_osds + len(devs)
             auto_discovey = config['ansi_config'].get('osd_auto_discovery', False)
+            objectstore = ''
+            if bluestore:
+                objectstore = 'osd_objectstore="bluestore"'
 
             osd_host = node.shortname + mon_interface + \
-                (" devices='" + json.dumps(devs) + "'" if not auto_discovey else '')
+                (" devices='" + json.dumps(devs) + "'" if not auto_discovey else '') + ' ' + objectstore
             osd_hosts.append(osd_host)
         if node.role == 'mds':
             mds_host = node.shortname + ' monitor_interface=' + node.eth_interface
