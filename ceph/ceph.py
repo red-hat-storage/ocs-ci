@@ -4,6 +4,7 @@ from time import sleep
 
 import datetime
 import paramiko
+import yaml
 from paramiko.ssh_exception import SSHException
 
 logger = logging.getLogger(__name__)
@@ -738,6 +739,94 @@ class CephInstaller(CephObject):
             node(CephNode): node object
         """
         super(CephInstaller, self).__init__(role, node)
+        self.ansible_dir = '/usr/share/ceph-ansible'
+
+    def append_to_all_yml(self, content):
+        """
+        Adds content to all.yml
+        Args:
+            content(str): all.yml config as yml string
+        """
+        all_yml_file = self.write_file(
+            sudo=True, file_name='{}/group_vars/all.yml'.format(self.ansible_dir), file_mode='a')
+        all_yml_file.write(content)
+        all_yml_file.flush()
+
+    def get_all_yml(self):
+        """
+        Returns all.yml content
+        Returns:
+            dict: all.yml content
+
+        """
+        out, err = self.exec_command(sudo=True,
+                                     cmd='cat {ansible_dir}/group_vars/all.yml'.format(
+                                         ansible_dir=self.ansible_dir))
+        return yaml.safe_load(out.read())
+
+    def get_installed_ceph_versions(self):
+        """
+        Returns installed ceph versions
+        Returns:
+            str: ceph vsersions
+
+        """
+        if self.pkg_type == 'rpm':
+            out, rc = self.exec_command(cmd='rpm -qa | grep ceph')
+        else:
+            out, rc = self.exec_command(sudo=True, cmd='apt-cache search ceph')
+        return out.read()
+
+    def write_inventory_file(self, inventory_config):
+        """
+        Write inventory to hosts file for ansible use. Old file will be overwritten
+        Args:
+            inventory_config(str):invnetory config compatible with ceph-ansible
+        """
+        host_file = self.write_file(
+            sudo=True, file_name='{}/hosts'.format(self.ansible_dir), file_mode='w')
+        host_file.write(inventory_config)
+        host_file.flush()
+
+    def setup_ansible_site_yml(self, containerized):
+        """
+        Create proper site.yml from sample for containerized or non-containerized deployment
+        Args:
+            containerized(bool): use site-docker.yml.sample if True else site.yml.sample
+        """
+        if containerized:
+            self.exec_command(
+                sudo=True,
+                cmd='cp -R {ansible_dir}/site-docker.yml.sample {ansible_dir}/site.yml'.format(
+                    ansible_dir=self.ansible_dir))
+        else:
+            self.exec_command(
+                sudo=True, cmd='cp -R {ansible_dir}/site.yml.sample {ansible_dir}/site.yml'.format(
+                    ansible_dir=self.ansible_dir))
+
+    def install_ceph_ansible(self):
+        """
+        Installs ceph-ansible
+        """
+        if self.pkg_type == 'deb':
+            self.exec_command(
+                cmd='apt-get install -y ceph-ansible', sudo=True)
+        else:
+            self.exec_command(
+                cmd='yum install -y ceph-ansible', sudo=True)
+
+    def add_iscsi_settings(self, test_data):
+        """
+        Add iscsi config to iscsigws.yml
+        Args:
+            test_data: test data dict
+        """
+        iscsi_file = self.write_file(
+            sudo=True, file_name='{}/group_vars/iscsigws.yml'.format(self.ansible_dir), file_mode='a')
+        iscsi_file.write(test_data["luns_setting"])
+        iscsi_file.write(test_data["initiator_setting"])
+        iscsi_file.write(test_data["gw_ip_list"])
+        iscsi_file.flush()
 
 
 class CephObjectFactory(object):
