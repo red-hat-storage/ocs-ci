@@ -1,11 +1,16 @@
 import logging
+import json
+import re
 from select import select
 from time import sleep
 
 import datetime
+import requests
 import paramiko
 import yaml
 from paramiko.ssh_exception import SSHException
+
+from utility.utils import custom_ceph_config
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +25,10 @@ class Ceph(object):
         """
         self.name = name
         self.node_list = list(node_list)
+        self.use_cdn = False
+        self.custom_config_file = None
+        self.custom_config = None
+        self.allow_custom_ansible_config = True
 
     def __eq__(self, ceph_cluster):
         if hasattr(ceph_cluster, 'node_list'):
@@ -74,6 +83,540 @@ class Ceph(object):
         for node in node_list:
             ceph_object_list.extend(node.get_ceph_objects(role))
         return ceph_object_list
+
+    def get_ceph_object(self, role, order_id=0):
+        """
+        Returns single ceph object. If order id is provided returns that occurence from results list, otherwise returns
+        first occurence
+        Args:
+            role(str): Ceph object's role
+            order_id(int): order number of the ceph object
+
+        Returns:
+            CephObject: ceph object
+
+        """
+        try:
+            return self.get_ceph_objects(role)[order_id]
+        except IndexError:
+            return None
+
+    def setup_ceph_firewall(self):
+        """
+        Open required ports on nodes based on relevant ceph demons types
+        """
+        for node in self.get_nodes():
+            if node.role == 'mon':
+                node.open_firewall_port(port='6789', protocol='tcp')
+                # for upgrades from 2.5 to 3.x, we convert mon to mgr
+                # so lets open ports from 6800 to 6820
+                node.open_firewall_port(port='6800-6820', protocol='tcp')
+            if node.role == 'osd':
+                node.open_firewall_port(port='6800-7300', protocol='tcp')
+            if node.role == 'mgr':
+                node.open_firewall_port(port='6800-6820', protocol='tcp')
+            if node.role == 'mds':
+                node.open_firewall_port(port='6800', protocol='tcp')
+            if node.role == 'iscsi-gw':
+                node.open_firewall_port(port='3260', protocol='tcp')
+                node.open_firewall_port(port='5000-5001', protocol='tcp')
+
+    def setup_ssh_keys(self):
+        """
+        Generate and distribute ssh keys within cluster
+        """
+        keys = ''
+        hosts = ''
+        hostkeycheck = 'Host *\n\tStrictHostKeyChecking no\n\tServerAliveInterval 2400\n'
+        for ceph in self.get_nodes():
+            ceph.generate_id_rsa()
+            keys = keys + ceph.id_rsa_pub
+            hosts = hosts + ceph.ip_address + "\t" + ceph.hostname + "\t" + ceph.shortname + "\n"
+        for ceph in self.get_nodes():
+            keys_file = ceph.write_file(
+                file_name='.ssh/authorized_keys', file_mode='a')
+            hosts_file = ceph.write_file(
+                sudo=True, file_name='/etc/hosts', file_mode='a')
+            ceph.exec_command(
+                cmd='[ -f ~/.ssh/config ] && chmod 700 ~/.ssh/config',
+                check_ec=False)
+            ssh_config = ceph.write_file(file_name='.ssh/config', file_mode='a')
+            keys_file.write(keys)
+            hosts_file.write(hosts)
+            ssh_config.write(hostkeycheck)
+            keys_file.flush()
+            hosts_file.flush()
+            ssh_config.flush()
+            ceph.exec_command(cmd='chmod 600 ~/.ssh/authorized_keys')
+            ceph.exec_command(cmd='chmod 400 ~/.ssh/config')
+
+    def generate_ansible_inventory(self, bluestore=False):
+        """
+        Generate ansible inventory file content for given cluster
+        Args:
+            bluestore(bool): True for bluestore usage, dafault False
+
+        Returns:
+            str: inventory
+
+        """
+        mon_hosts = []
+        osd_hosts = []
+        rgw_hosts = []
+        mds_hosts = []
+        mgr_hosts = []
+        client_hosts = []
+        iscsi_gw_hosts = []
+        for node in self:
+            eth_interface = node.search_ethernet_interface(self)
+            if eth_interface is None:
+                err = 'Network test failed: No suitable interface is found on {node}.'.format(node=node.ip_address)
+                logger.error(err)
+                raise RuntimeError(err)
+            node.set_eth_interface(eth_interface)
+            mon_interface = ' monitor_interface=' + node.eth_interface + ' '
+            if node.role == 'mon':
+                mon_host = node.shortname + ' monitor_interface=' + node.eth_interface
+                mon_hosts.append(mon_host)
+                # num_mons += 1
+            if node.role == 'mgr' and self.ceph_stable_release != 'jewel':
+                mgr_host = node.shortname + ' monitor_interface=' + node.eth_interface
+                mgr_hosts.append(mgr_host)
+            if node.role == 'osd':
+                devs = self.get_osd_devices(node)
+                # num_osds = num_osds + len(devs)
+                auto_discovery = self.ansible_config.get('osd_auto_discovery', False)
+                objectstore = ''
+                if bluestore:
+                    objectstore = 'osd_objectstore="bluestore"'
+                osd_host = node.shortname + mon_interface + (
+                    " devices='" + json.dumps(devs) + "'" if not auto_discovery else '') + ' ' + objectstore
+                osd_hosts.append(osd_host)
+            if node.role == 'mds':
+                mds_host = node.shortname + ' monitor_interface=' + node.eth_interface
+                mds_hosts.append(mds_host)
+            if node.role == 'rgw':
+                rgw_host = node.shortname + ' radosgw_interface=' + node.eth_interface
+                rgw_hosts.append(rgw_host)
+            if node.role == 'client':
+                client_host = node.shortname + ' client_interface=' + node.eth_interface
+                client_hosts.append(client_host)
+            if node.role == 'iscsi-gw':
+                iscsi_gw_host = node.shortname
+                iscsi_gw_hosts.append(iscsi_gw_host)
+        hosts_file = ''
+        if mon_hosts:
+            mon = '[mons]\n' + '\n'.join(mon_hosts)
+            hosts_file += mon + '\n'
+        if mgr_hosts:
+            mgr = '[mgrs]\n' + '\n'.join(mgr_hosts)
+            hosts_file += mgr + '\n'
+        if osd_hosts:
+            osd = '[osds]\n' + '\n'.join(osd_hosts)
+            hosts_file += osd + '\n'
+        if mds_hosts:
+            mds = '[mdss]\n' + '\n'.join(mds_hosts)
+            hosts_file += mds + '\n'
+        if rgw_hosts:
+            rgw = '[rgws]\n' + '\n'.join(rgw_hosts)
+            hosts_file += rgw + '\n'
+        if client_hosts:
+            client = '[clients]\n' + '\n'.join(client_hosts)
+            hosts_file += client + '\n'
+        if iscsi_gw_hosts:
+            iscsi_gw = '[iscsigws]\n' + '\n'.join(iscsi_gw_hosts)
+            hosts_file += iscsi_gw + '\n'
+        logger.info('Generated hosts file: \n{file}'.format(file=hosts_file))
+        return hosts_file
+
+    def get_osd_devices(self, node):
+        """
+        Get osd devices list
+        Args:
+            node(CephNode): Ceph node with osd demon
+
+        Returns:
+            list: devices
+
+        """
+        devices = len(node.get_allocated_volumes())
+        devchar = 98
+        devs = []
+        for vol in range(0, devices):
+            dev = '/dev/vd' + chr(devchar)
+            devs.append(dev)
+            devchar += 1
+        reserved_devs = []
+        collocated = self.ansible_config.get('osd_scenario') == 'collocated'
+        if not collocated:
+            reserved_devs = \
+                [raw_journal_device for raw_journal_device in set(self.ansible_config.get('dedicated_devices'))]
+        devs = [_dev for _dev in devs if _dev not in reserved_devs]
+        return devs
+
+    def get_ceph_demons(self):
+        """
+        Get Ceph demons list
+        Returns:
+            list: list of CephDemon
+
+        """
+        return [ceph_demon for ceph_demon in self.get_ceph_objects() if type(ceph_demon) is CephDemon]
+
+    def set_ansible_config(self, ansible_config):
+        """
+        Set ansible config for all.yml
+        Args:
+            ansible_config(dict): Ceph Ansible all.yml config
+        """
+        if self.allow_custom_ansible_config:
+            ceph_conf_overrides = ansible_config.get('ceph_conf_overrides')
+            custom_config = self.custom_config
+            custom_config_file = self.custom_config_file
+            ansible_config['ceph_conf_overrides'] = custom_ceph_config(
+                ceph_conf_overrides, custom_config, custom_config_file)
+            logger.info("ceph_conf_overrides: \n{}".format(
+                yaml.dump(ansible_config.get('ceph_conf_overrides'), default_flow_style=False)))
+        self.__ansible_config = ansible_config
+        self.containerized = self.ansible_config.get('containerized_deployment', False)
+        for ceph_demon in self.get_ceph_demons():
+            ceph_demon.containerized = True if self.containerized else False
+        if self.ansible_config.get('fetch_directory') is None:
+            # default fetch directory is not writeable, lets use local one if not set
+            self.__ansible_config['fetch_directory'] = '~/fetch/'
+
+    def get_ansible_config(self):
+        """
+        Get Ansible config settings for all.yml
+        Returns:
+            dict: Ansible config
+
+        """
+        try:
+            self.__ansible_config
+        except AttributeError:
+            raise RuntimeError('Ceph ansible config is not set')
+        return self.__ansible_config
+
+    @property
+    def ansible_config(self):
+        return self.get_ansible_config()
+
+    @ansible_config.setter
+    def ansible_config(self, ansible_config):
+        self.set_ansible_config(ansible_config)
+
+    def setup_insecure_registry(self):
+        """
+        Update all ceph demons nodes to allow insecure registry use
+        """
+        if self.containerized and self.ansible_config.get('ceph_docker_registry'):
+            insecure_registry = '{{"insecure-registries" : ["{registry}"]}}'.format(
+                registry=self.ansible_config.get('ceph_docker_registry'))
+            logger.warn('Adding insecure registry:\n{registry}'.format(registry=insecure_registry))
+            for node in self.get_nodes():
+                node.write_docker_daemon_json(insecure_registry)
+
+    @property
+    def ceph_demon_stat(self):
+        """
+        Retrieves expected numbers for demons of each role
+        Returns:
+            dict: Ceph demon stats
+        """
+        ceph_demon_counter = {}
+        for demon in self.get_ceph_demons():
+            if demon.role == 'mgr' and self.ceph_stable_release == 'jewel':
+                continue
+            increment = len(self.get_osd_devices(demon.node)) if demon.role == 'osd' else 1
+            ceph_demon_counter[demon.role] = ceph_demon_counter[demon.role] + increment if ceph_demon_counter.get(
+                demon.role) else increment
+        return ceph_demon_counter
+
+    @property
+    def ceph_stable_release(self):
+        """
+        Retrieve ceph stable realease based on ansible config (jewel, luminous, etc.)
+        Returns:
+            str: Ceph stable release
+        """
+        return self.ansible_config['ceph_stable_release']
+
+    def get_metadata_list(self, role, client=None):
+        """
+        Returns metadata for demons of specified role
+        Args:
+            role(str): ceph demon role
+            client(CephObject): Client with keyring and ceph-common
+
+        Returns:
+            list: metadata as json object representation
+        """
+        if not client:
+            client = self.get_ceph_object('client') if self.get_ceph_object('client') else self.get_ceph_object('mon')
+
+        out, err = client.exec_command('sudo ceph {role} metadata -f json-pretty'.format(role=role))
+
+        return json.loads(out.read())
+
+    def get_osd_metadata(self, osd_id, client=None):
+        """
+        Retruns metadata for osd by given id
+        Args:
+            osd_id(int): osd id
+            client(CephObject): Client with keyring and ceph-common
+
+        Returns:
+            dict: osd metadata like:
+                 {
+                    "id": 8,
+                    "arch": "x86_64",
+                    "back_addr": "172.16.115.29:6801/1672",
+                    "back_iface": "eth0",
+                    "backend_filestore_dev_node": "vdd",
+                    "backend_filestore_partition_path": "/dev/vdd1",
+                    "ceph_version": "ceph version 12.2.5-42.el7cp (82d52d7efa6edec70f6a0fc306f40b89265535fb) luminous
+                            (stable)",
+                    "cpu": "Intel(R) Xeon(R) CPU E5-2690 v3 @ 2.60GHz",
+                    "default_device_class": "hdd",
+                    "distro": "rhel",
+                    "distro_description": "Red Hat Enterprise Linux",
+                    "distro_version": "7.5",
+                    "filestore_backend": "xfs",
+                    "filestore_f_type": "0x58465342",
+                    "front_addr": "172.16.115.29:6800/1672",
+                    "front_iface": "eth0",
+                    "hb_back_addr": "172.16.115.29:6802/1672",
+                    "hb_front_addr": "172.16.115.29:6803/1672",
+                    "hostname": "ceph-shmohan-1537910194970-node2-osd",
+                    "journal_rotational": "1",
+                    "kernel_description": "#1 SMP Wed Mar 21 18:14:51 EDT 2018",
+                    "kernel_version": "3.10.0-862.el7.x86_64",
+                    "mem_swap_kb": "0",
+                    "mem_total_kb": "3880928",
+                    "os": "Linux",
+                    "osd_data": "/var/lib/ceph/osd/ceph-8",
+                    "osd_journal": "/var/lib/ceph/osd/ceph-8/journal",
+                    "osd_objectstore": "filestore",
+                    "rotational": "1"
+                 }
+
+        """
+        metadata_list = self.get_metadata_list('osd', client)
+        for metadata in metadata_list:
+            if metadata.get('id') == osd_id:
+                return metadata
+        return None
+
+    def check_health(self, client=None, timeout=300):
+        """
+        Check if ceph is in healthy state
+
+        Args:
+           client(CephObject): ceph object with ceph-common and ceph-keyring
+           timeout (int): max time to check if cluster is not healthy within timeout period - return 1
+        Returns:
+           int: return 0 when ceph is in healthy state, else 1
+        """
+
+        if not client:
+            client = self.get_ceph_object('client') if self.get_ceph_object('client') else self.get_ceph_object('mon')
+
+        timeout = datetime.timedelta(seconds=timeout)
+        starttime = datetime.datetime.now()
+        lines = None
+        pending_states = ['peering', 'activating', 'creating']
+        valid_states = ['active+clean']
+
+        while datetime.datetime.now() - starttime <= timeout:
+            out, err = client.exec_command(cmd='sudo ceph -s')
+            lines = out.read()
+
+            if not any(state in lines for state in pending_states):
+                if all(state in lines for state in valid_states):
+                    break
+            sleep(5)
+        logger.info(lines)
+        if not all(state in lines for state in valid_states):
+            logger.error("Valid States are not found in the health check")
+            return 1
+        match = re.search(r"(\d+)\s+osds:\s+(\d+)\s+up,\s+(\d+)\s+in", lines)
+        all_osds = int(match.group(1))
+        up_osds = int(match.group(2))
+        in_osds = int(match.group(3))
+        if self.ceph_demon_stat['osd'] != all_osds:
+            logger.error("Not all osd's are up. Actual: %s / Expected: %s" % (all_osds, self.ceph_demon_stat['osd']))
+            return 1
+        if up_osds != in_osds:
+            logger.error("Not all osd's are in. Actual: %s / Expected: %s" % (up_osds, all_osds))
+            return 1
+
+        # attempt luminous pattern first, if it returns none attempt jewel pattern
+        match = re.search(r"(\d+) daemons, quorum", lines)
+        if not match:
+            match = re.search(r"(\d+) mons at", lines)
+        all_mons = int(match.group(1))
+        if all_mons != self.ceph_demon_stat['mon']:
+            logger.error("Not all monitors are in cluster")
+            return 1
+        if "HEALTH_ERR" in lines:
+            logger.error("HEALTH in ERROR STATE")
+            return 1
+        return 0
+
+    def distribute_all_yml(self):
+        """
+        Distributes ansible all.yml config across all installers
+        """
+        gvar = yaml.dump(self.ansible_config, default_flow_style=False)
+        for installer in self.get_ceph_objects('installer'):
+            installer.append_to_all_yml(gvar)
+        logger.info("updated all.yml: \n" + gvar)
+
+    def refresh_ansible_config_from_all_yml(self, installer=None):
+        """
+        Refreshes ansible config based on installer all.yml content
+        Args:
+            installer(CephInstaller): Ceph installer. Will use first available installer if omitted
+        """
+        if not installer:
+            installer = self.get_ceph_object('installer')
+        self.ansible_config = installer.get_all_yml()
+
+    def setup_packages(self, base_url, hotfix_repo, installer_url, ubuntu_repo, build=None):
+        """
+        Setup packages required for ceph-ansible istallation
+        Args:
+            base_url (str): rhel compose url
+            hotfix_repo (str): hotfix repo to use with priority
+            installer_url (str): installer url
+            ubuntu_repo (str): deb repo url
+            build (str): ceph-ansible build as numeric
+        """
+        if not build:
+            build = str(self.get_stable_release_number())
+        for node in self.get_nodes():
+            if self.use_cdn:
+                if node.pkg_type == 'deb':
+                    if node.role == 'installer':
+                        logger.info("Enabling tools repository")
+                        node.setup_deb_cdn_repo(build)
+                else:
+                    logger.info("Using the cdn repo for the test")
+                    node.setup_rhel_cdn_repos(build)
+            else:
+                if self.ansible_config.get('ceph_repository_type') != 'iso' or \
+                        self.ansible_config.get('ceph_repository_type') == 'iso' and \
+                        (node.role == 'installer'):
+                    if node.pkg_type == 'deb':
+                        node.setup_deb_repos(ubuntu_repo)
+                        sleep(15)
+                        # install python2 on xenial
+                        node.exec_command(sudo=True, cmd='sudo apt-get install -y python')
+                        node.exec_command(sudo=True, cmd='apt-get install -y python-pip')
+                        node.exec_command(sudo=True, cmd='apt-get install -y ntp')
+                        node.exec_command(sudo=True, cmd='apt-get install -y chrony')
+                        node.exec_command(sudo=True, cmd='pip install nose')
+                    else:
+                        if hotfix_repo:
+                            node.exec_command(sudo=True,
+                                              cmd='wget -O /etc/yum.repos.d/rh_repo.repo {repo}'.format(
+                                                  repo=hotfix_repo))
+                        else:
+                            node.setup_rhel_repos(base_url, installer_url)
+                if self.ansible_config.get('ceph_repository_type') == 'iso' and node.role == 'installer':
+                    iso_file_url = self.get_iso_file_url(base_url)
+                    node.exec_command(sudo=True, cmd='mkdir -p {}/iso'.format(node.ansible_dir))
+                    node.exec_command(sudo=True,
+                                      cmd='wget -O {}/iso/ceph.iso {}'.format(node.ansible_dir, iso_file_url))
+            logger.info("Updating metadata")
+            sleep(15)
+
+    def get_stable_release_number(self):
+        """
+        Retrurns stable release major number based on ansible config i.e jewel is 2
+        Returns:
+            int: stable release major number
+        """
+        if self.ceph_stable_release == 'jewel':
+            build = 2
+        if self.ceph_stable_release == 'luminous':
+            build = 3
+        return build
+
+    def create_rbd_pool(self, k_and_m):
+        """
+        Generate pools for later testing use
+        Args:
+            k_and_m(bool): ec-pool-k-m settings
+        """
+        ceph_mon = self.get_ceph_object('mon')
+        if self.ceph_stable_release != 'jewel':
+            if k_and_m:
+                pool_name = 'rbd'
+                ceph_mon.exec_command(
+                    cmd='sudo ceph osd erasure-code-profile set %s k=%s m=%s' %
+                        ('ec_profile', k_and_m[0], k_and_m[2]))
+                ceph_mon.exec_command(
+                    cmd='sudo ceph osd pool create %s 64 64 erasure ec_profile' %
+                        pool_name)
+                ceph_mon.exec_command(
+                    cmd='sudo ceph osd pool set %s allow_ec_overwrites true' %
+                        (pool_name))
+                ceph_mon.exec_command(
+                    sudo=True,
+                    cmd='ceph osd pool application enable %s rbd --yes-i-really-mean-it' %
+                        pool_name)
+            else:
+                ceph_mon.exec_command(
+                    sudo=True, cmd='ceph osd pool create rbd 64 64 ')
+                ceph_mon.exec_command(
+                    sudo=True,
+                    cmd='ceph osd pool application enable rbd rbd --yes-i-really-mean-it')
+
+    @staticmethod
+    def get_iso_file_url(base_url):
+        """
+        Retrurns iso url for given compose link
+        Args:
+            base_url(str): rhel compose
+
+        Returns:
+            str:  iso file url
+        """
+        iso_file_path = base_url + "compose/Tools/x86_64/iso/"
+        iso_dir_html = requests.get(iso_file_path, timeout=10).content
+        match = re.search('<a href="(.*?)">(.*?)-x86_64-dvd.iso</a>', iso_dir_html)
+        iso_file_name = match.group(1)
+        logger.info('Using {}'.format(iso_file_name))
+        iso_file = iso_file_path + iso_file_name
+        return iso_file
+
+    @staticmethod
+    def generate_repository_file(base_url, repos):
+        """
+        Generate rhel repository file for given repos
+        Args:
+            base_url(str): rhel compose url
+            repos(list): repos behind compose/ to process
+
+        Returns:
+            str: repository file content
+        """
+        repo_file = ''
+        for repo in repos:
+            repo_to_use = base_url + "compose/" + repo + "/x86_64/os/"
+            r = requests.get(repo_to_use, timeout=10)
+            logger.info("Checking %s", repo_to_use)
+            if r.status_code == 200:
+                logger.info("Using %s", repo_to_use)
+                header = "[ceph-" + repo + "]" + "\n"
+                name = "name=ceph-" + repo + "\n"
+                baseurl = "baseurl=" + repo_to_use + "\n"
+                gpgcheck = "gpgcheck=0\n"
+                enabled = "enabled=1\n\n"
+                repo_file = repo_file + header + name + baseurl + gpgcheck + enabled
+        return repo_file
 
 
 class CommandFailed(Exception):
