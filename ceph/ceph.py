@@ -461,6 +461,189 @@ class CephNode(object):
         """
         self.ceph_object_list.remove(ceph_object)
 
+    def open_firewall_port(self, port, protocol):
+        """
+        Opens firewall port on the node
+        Args:
+            port(str): port, can be range
+            protocol(str): protcol
+        """
+        if self.pkg_type == 'rpm':
+            try:
+                self.exec_command(sudo=True, cmd="rpm -qa | grep firewalld")
+            except CommandFailed:
+                self.exec_command(sudo=True, cmd="yum install -y firewalld", long_running=True)
+            self.exec_command(sudo=True, cmd="systemctl enable firewalld")
+            self.exec_command(sudo=True, cmd="systemctl start firewalld")
+            self.exec_command(sudo=True, cmd="systemctl status firewalld")
+            self.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port={port}/{protocol}"
+                              .format(port=port, protocol=protocol))
+            self.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port={port}/{protocol} --permanent"
+                              .format(port=port, protocol=protocol))
+        if self.pkg_type == 'deb':
+            # Ubuntu section stub
+            pass
+            # ceph_node.exec_command(sudo=True, cmd="ufw --force enable")
+            # ceph_node.exec_command(sudo=True, cmd="ufw status")
+            # ceph_node.exec_command(sudo=True, cmd="iptables -I INPUT -p {protocol} --dport {port} -j ACCEPT"
+            #                        .format(port=str(port).replace('-',':'), protocol=protocol))
+            # ceph_node.exec_command(sudo=True, cmd="update-locale LC_ALL=en_US.UTF-8"
+            #                        .format(port=str(port).replace('-', ':'), protocol=protocol))
+            # ceph_node.exec_command(cmd="sudo DEBIAN_FRONTEND=noninteractive apt-get -yq install iptables-persistent",
+            #                        long_running=True)
+
+    def search_ethernet_interface(self, ceph_node_list):
+        """
+        Search interface on the given node node which allows every node in the cluster accesible by it's shortname.
+
+        Args:
+            ceph_node_list (list): lsit of CephNode
+
+        Returns:
+            eth_interface (str): retturns None if no suitable interface found
+
+        """
+        logger.info('Searching suitable ethernet interface on {node}'.format(node=self.ip_address))
+        out, err = self.exec_command(cmd='sudo ls /sys/class/net | grep -v lo')
+        eth_interface_list = out.read().strip().split('\n')
+        for eth_interface in eth_interface_list:
+            try:
+                for ceph_node in ceph_node_list:
+                    self.exec_command(
+                        cmd='sudo ping -I {interface} -c 3 {ceph_node}'.format(interface=eth_interface,
+                                                                               ceph_node=ceph_node.shortname))
+                logger.info(
+                    'Suitable ethernet interface {eth_interface} found on {node}'.format(eth_interface=eth_interface,
+                                                                                         node=ceph_node.ip_address))
+                return eth_interface
+            except Exception:
+                continue
+        logger.info('No suitable ethernet interface found on {node}'.format(node=ceph_node.ip_address))
+        return None
+
+    def write_docker_daemon_json(self, json_text):
+        """
+        Write given string to /etc/docker/daemon/daemon
+        Args:
+            json_text (str): json as string
+        """
+        self.exec_command(cmd='sudo mkdir -p /etc/docker/ && sudo chown $USER /etc/docker && chmod 755 /etc/docker')
+        docker_daemon = self.write_file(file_name='/etc/docker/daemon.json', file_mode='w')
+        docker_daemon.write(json_text)
+        docker_daemon.flush()
+        docker_daemon.close()
+
+    def setup_deb_cdn_repos(self, build):
+        """
+        Setup cdn repositories for deb systems
+        Args:
+            build(str): rhcs version
+        """
+        user = 'redhat'
+        passwd = 'OgYZNpkj6jZAIF20XFZW0gnnwYBjYcmt7PeY76bLHec9'
+        num = build.split('.')[0]
+        cmd = 'umask 0077; echo deb https://{user}:{passwd}@rhcs.download.redhat.com/{num}-updates/Tools ' \
+              '$(lsb_release -sc) main | tee /etc/apt/sources.list.d/Tools.list'.format(user=user, passwd=passwd,
+                                                                                        num=num)
+        self.exec_command(sudo=True, cmd=cmd)
+        self.exec_command(sudo=True, cmd='wget -O - https://www.redhat.com/security/fd431d51.txt | apt-key add -')
+        self.exec_command(sudo=True, cmd='apt-get update')
+
+    def setup_rhel_cdn_repos(self, build):
+        """
+        Setup cdn repositories for rhel systems
+        Args:
+            build(str): rhcs version
+        """
+        repos_13x = ['rhel-7-server-rhceph-1.3-mon-rpms',
+                     'rhel-7-server-rhceph-1.3-osd-rpms',
+                     'rhel-7-server-rhceph-1.3-calamari-rpms',
+                     'rhel-7-server-rhceph-1.3-installer-rpms',
+                     'rhel-7-server-rhceph-1.3-tools-rpms']
+
+        repos_20 = ['rhel-7-server-rhceph-2-mon-rpms',
+                    'rhel-7-server-rhceph-2-osd-rpms',
+                    'rhel-7-server-rhceph-2-tools-rpms',
+                    'rhel-7-server-rhscon-2-agent-rpms',
+                    'rhel-7-server-rhscon-2-installer-rpms',
+                    'rhel-7-server-rhscon-2-main-rpms']
+
+        repos_30 = ['rhel-7-server-rhceph-3-mon-rpms',
+                    'rhel-7-server-rhceph-3-osd-rpms',
+                    'rhel-7-server-rhceph-3-tools-rpms',
+                    'rhel-7-server-extras-rpms']
+
+        repos = None
+        if build.startswith('1'):
+            repos = repos_13x
+        elif build.startswith('2'):
+            repos = repos_20
+        elif build.startswith('3'):
+            repos = repos_30
+        for repo in repos:
+            self.exec_command(
+                sudo=True, cmd='subscription-manager repos --enable={r}'.format(r=repo))
+
+    def setup_deb_repos(self, deb_repo):
+        """
+        Setup repositories for deb system
+        Args:
+            deb_repo(str): deb (Ubuntu) repository link
+        """
+        self.exec_command(cmd='sudo rm -f /etc/apt/sources.list.d/*')
+        repos = ['MON', 'OSD', 'Tools']
+        for repo in repos:
+            cmd = 'sudo echo deb ' + deb_repo + '/{0}'.format(repo) + \
+                  ' $(lsb_release -sc) main'
+            self.exec_command(cmd=cmd + ' > ' + "/tmp/{0}.list".format(repo))
+            self.exec_command(cmd='sudo cp /tmp/{0}.list'.format(repo) +
+                                  ' /etc/apt/sources.list.d/')
+        ds_keys = ['https://www.redhat.com/security/897da07a.txt',
+                   'https://www.redhat.com/security/f21541eb.txt',
+                   # 'https://prodsec.redhat.com/keys/00da75f2.txt',
+                   # TODO: replace file file.rdu.redhat.com/~kdreyer with prodsec.redhat.com when it's back
+                   'http://file.rdu.redhat.com/~kdreyer/keys/00da75f2.txt',
+                   'https://www.redhat.com/security/data/fd431d51.txt']
+
+        for key in ds_keys:
+            wget_cmd = 'sudo wget -O - ' + key + ' | sudo apt-key add -'
+            self.exec_command(cmd=wget_cmd)
+            self.exec_command(cmd='sudo apt-get update')
+
+    def setup_rhel_repos(self, base_url, installer_url=None):
+        """
+        Setup repositories for rhel
+        Args:
+            base_url (str): compose url for rhel
+            installer_url (str): installer repos url
+        """
+        repos = ['MON', 'OSD', 'Tools', 'Calamari', 'Installer']
+        base_repo = Ceph.generate_repository_file(base_url, repos)
+        base_file = self.write_file(
+            sudo=True,
+            file_name='/etc/yum.repos.d/rh_ceph.repo',
+            file_mode='w')
+        base_file.write(base_repo)
+        base_file.flush()
+        if installer_url is not None:
+            installer_repos = ['Agent', 'Main', 'Installer']
+            inst_repo = Ceph.generate_repository_file(installer_url, installer_repos)
+            logger.info("Setting up repo on %s", self.hostname)
+            inst_file = self.write_file(
+                sudo=True,
+                file_name='/etc/yum.repos.d/rh_ceph_inst.repo',
+                file_mode='w')
+            inst_file.write(inst_repo)
+            inst_file.flush()
+
+    def obtain_root_permissions(self, path):
+        """
+        Transfer ownership of root to current user for the path given. Recursive.
+        Args:
+            path(str): file path
+        """
+        self.exec_command(cmd='sudo chown -R $USER:$USER {path}'.format(path=path))
+
 
 class CephObject(object):
     def __init__(self, role, node):
