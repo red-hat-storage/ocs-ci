@@ -4,14 +4,13 @@ import traceback
 
 import os
 import re
-import requests
 import yaml
 from gevent import sleep
 from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
 from libcloud.common.exceptions import BaseHTTPError
 
-from ceph import RolesContainer, CommandFailed
+from ceph import RolesContainer, CommandFailed, Ceph
 from mita.openstack import CephVMNode
 from parallel import parallel
 
@@ -241,30 +240,11 @@ def check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container=None, timeou
 
 
 def generate_repo_file(base_url, repos):
-    repo_file = ''
-    for repo in repos:
-        repo_to_use = base_url + "compose/" + repo + "/x86_64/os/"
-        r = requests.get(repo_to_use, timeout=10)
-        log.info("Checking %s", repo_to_use)
-        if r.status_code == 200:
-            log.info("Using %s", repo_to_use)
-            header = "[ceph-" + repo + "]" + "\n"
-            name = "name=ceph-" + repo + "\n"
-            baseurl = "baseurl=" + repo_to_use + "\n"
-            gpgcheck = "gpgcheck=0\n"
-            enabled = "enabled=1\n\n"
-            repo_file = repo_file + header + name + baseurl + gpgcheck + enabled
-    return repo_file
+    return Ceph.generate_repository_file(base_url, repos)
 
 
 def get_iso_file_url(base_url):
-    iso_file_path = base_url + "compose/Tools/x86_64/iso/"
-    iso_dir_html = requests.get(iso_file_path, timeout=10).content
-    match = re.search('<a href="(.*?)">(.*?)-x86_64-dvd.iso</a>', iso_dir_html)
-    iso_file_name = match.group(1)
-    log.info('Using {}'.format(iso_file_name))
-    iso_file = iso_file_path + iso_file_name
-    return iso_file
+    return Ceph.get_iso_file_url(base_url)
 
 
 def create_ceph_conf(fsid, mon_hosts, pg_num='128', pgp_num='128', size='2',
@@ -373,63 +353,35 @@ def update_ca_cert(node, cert_url, timeout=120):
 
 
 def write_docker_daemon_json(json_text, node):
-    node.exec_command(cmd='sudo mkdir -p /etc/docker/ && sudo chown $USER /etc/docker && chmod 755 /etc/docker')
-    docker_daemon = node.write_file(file_name='/etc/docker/daemon.json', file_mode='w')
-    docker_daemon.write(json_text)
-    docker_daemon.flush()
-    docker_daemon.close()
+    """
+    Write given string to /etc/docker/daemon/daemon
+    Args:
+        json_text: json string
+        node (ceph.ceph.CephNode): Ceph node object
+    """
+    node.write_docker_daemon_json(json_text)
 
 
 def search_ethernet_interface(ceph_node, ceph_node_list):
     """
     Search interface on the given node node which allows every node in the cluster accesible by it's shortname.
-    :param ceph_node: CephNode object
-    :param ceph_node_list: Ceph cluster as CephNode objects list
-    :return: interface string or None if no sucessfull ping requests for every interface
+
+    Args:
+        ceph_node (ceph.ceph.CephNode): node where check is performed
+        ceph_node_list(list): node list to check
     """
-    log.info('Searching suitable ethernet interface on {node}'.format(node=ceph_node.ip_address))
-    ceph_current_node = ceph_node
-    out, err = ceph_current_node.exec_command(cmd='sudo ls /sys/class/net | grep -v lo')
-    eth_interface_list = out.read().strip().split('\n')
-    for eth_interface in eth_interface_list:
-        try:
-            for ceph_node in ceph_node_list:
-                ceph_current_node.exec_command(
-                    cmd='sudo ping -I {interface} -c 3 {ceph_node}'.format(interface=eth_interface,
-                                                                           ceph_node=ceph_node.shortname))
-            log.info('Suitable ethernet interface {eth_interface} found on {node}'.format(eth_interface=eth_interface,
-                                                                                          node=ceph_node.ip_address))
-            return eth_interface
-        except Exception:
-            continue
-    log.info('No suitable ethernet interface found on {node}'.format(node=ceph_node.ip_address))
-    return None
+    return ceph_node.search_ethernet_interface(ceph_node_list)
 
 
 def open_firewall_port(ceph_node, port, protocol):
-    if ceph_node.pkg_type == 'rpm':
-        try:
-            ceph_node.exec_command(sudo=True, cmd="rpm -qa | grep firewalld")
-        except CommandFailed:
-            ceph_node.exec_command(sudo=True, cmd="yum install -y firewalld", long_running=True)
-        ceph_node.exec_command(sudo=True, cmd="systemctl enable firewalld")
-        ceph_node.exec_command(sudo=True, cmd="systemctl start firewalld")
-        ceph_node.exec_command(sudo=True, cmd="systemctl status firewalld")
-        ceph_node.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port={port}/{protocol}"
-                               .format(port=port, protocol=protocol))
-        ceph_node.exec_command(sudo=True, cmd="firewall-cmd --zone=public --add-port={port}/{protocol} --permanent"
-                               .format(port=port, protocol=protocol))
-    if ceph_node.pkg_type == 'deb':
-        # Ubuntu section stub
-        pass
-        # ceph_node.exec_command(sudo=True, cmd="ufw --force enable")
-        # ceph_node.exec_command(sudo=True, cmd="ufw status")
-        # ceph_node.exec_command(sudo=True, cmd="iptables -I INPUT -p {protocol} --dport {port} -j ACCEPT"
-        #                        .format(port=str(port).replace('-',':'), protocol=protocol))
-        # ceph_node.exec_command(sudo=True, cmd="update-locale LC_ALL=en_US.UTF-8"
-        #                        .format(port=str(port).replace('-', ':'), protocol=protocol))
-        # ceph_node.exec_command(cmd="sudo DEBIAN_FRONTEND=noninteractive apt-get -yq install iptables-persistent",
-        #                        long_running=True)
+    """
+    Opens firewall ports for given node
+    Args:
+        ceph_node (ceph.ceph.CephNode): ceph node
+        port (str): port
+        protocol (str): protocol
+    """
+    ceph_node.open_firewall_port(port, protocol)
 
 
 def config_ntp(ceph_node):
@@ -515,8 +467,8 @@ def hard_reboot(gyaml, name=None):
 def get_root_permissions(node, path):
     """
     Transfer ownership of root to current user for the path given. Recursive.
-    :param node: ceph node
-    :param path: directory ot file path
-    :return: paramiko output streams
+    Args:
+        node(ceph.ceph.CephNode):
+        path: file path
     """
-    return node.exec_command(cmd='sudo chown -R $USER:$USER {path}'.format(path=path))
+    node.obtain_root_permissions(path)
