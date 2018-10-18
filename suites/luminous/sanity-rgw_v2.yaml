@@ -103,7 +103,6 @@ tests:
        desc: Basic versioning test, also called as test to enable bucket versioning
        polarion-id: CEPH-14261 # also applies to CEPH-10652
        module: sanity_rgw_v2.py
-       polarion-id:
        config:
            script-name: test_versioning_with_objects.py
            config-file-name: test_versioning_objects_enable.yaml
@@ -173,6 +172,25 @@ tests:
            script-name: test_bucket_lifecycle_config_ops.py
            config-file-name: test_bucket_lifecycle_config_read.yaml
            timeout: 300
+   - test:
+       name: Bucket Lifecycle Configuration Tests
+       desc: Disable lifecycle configuration on a given bucket
+       polarion-id: CEPH-11191
+       module: sanity_rgw_v2.py
+       config:
+         script-name: test_bucket_lifecycle_config_ops.py
+         config-file-name: test_bucket_lifecycle_config_disable.yaml
+         timeout: 300
+
+   - test:
+       name: Bucket Lifecycle Configuration Tests
+       desc: Modify lifecycle configuration on a given bucket
+       polarion-id: CEPH-11120
+       module: sanity_rgw_v2.py
+       config:
+         script-name: test_bucket_lifecycle_config_ops.py
+         config-file-name: test_bucket_lifecycle_config_modify.yaml
+         timeout: 300
 
    - test:
       name: ceph ansible purge
@@ -393,3 +411,108 @@ tests:
            script-name: test_bucket_request_payer.py
            config-file-name: test_bucket_request_payer_download.yaml
            timeout: 300
+
+   # Encryption tests
+
+   - test:
+       name: ceph ansible purge
+       polarion-id: CEPH-83571498
+       module: purge_cluster.py
+       config:
+         ansible-dir: /usr/share/ceph-ansible
+       desc: Purge ceph cluster
+
+   - test:
+       name: ceph ansible
+       module: test_ansible.py
+       config:
+         ansi_config:
+           ceph_test: True
+           ceph_origin: distro
+           ceph_stable_release: luminous
+           ceph_repository: rhcs
+           osd_scenario: collocated
+           osd_auto_discovery: False
+           journal_size: 1024
+           ceph_stable: True
+           ceph_stable_rh_storage: True
+           public_network: 172.16.0.0/12
+           fetch_directory: ~/fetch
+           copy_admin_key: true
+           ceph_conf_overrides:
+             global:
+               osd_pool_default_pg_num: 64
+               osd_default_pool_size: 2
+               osd_pool_default_pgp_num: 64
+               mon_max_pg_per_osd: 1024
+           cephfs_pools:
+           - name: "cephfs_data"
+             pgs: "8"
+           - name: "cephfs_metadata"
+             pgs: "8"
+       desc: test cluster setup using ceph-ansible
+       destroy-cluster: false
+       abort-on-fail: true
+
+   - test:
+       name: Object Encryption Tests
+       desc: Upload and Download objects using encryption [AES256 alogorith]
+       polarion-id: CEPH-11358,CEPH-11361
+       module: sanity_rgw_v2.py
+       config:
+         script-name: test_Mbuckets_with_Nobjects.py
+         config-file-name: test_Mbuckets_with_Nobjects_enc.yaml
+         timeout: 300
+
+   - test:
+       name: ceph ansible purge
+       polarion-id: CEPH-83571498
+       module: purge_cluster.py
+       config:
+         ansible-dir: /usr/share/ceph-ansible
+       desc: Purge ceph cluster
+
+   - test:
+       name: ceph ansible
+       module: test_ansible.py
+       config:
+         ansi_config:
+           ceph_test: True
+           ceph_origin: distro
+           ceph_stable_release: luminous
+           ceph_repository: rhcs
+           osd_scenario: collocated
+           osd_auto_discovery: False
+           journal_size: 1024
+           ceph_stable: True
+           ceph_stable_rh_storage: True
+           public_network: 172.16.0.0/12
+           fetch_directory: ~/fetch
+           copy_admin_key: true
+           ceph_conf_overrides:
+             global:
+               osd_pool_default_pg_num: 64
+               osd_default_pool_size: 2
+               osd_pool_default_pgp_num: 64
+               mon_max_pg_per_osd: 1024
+           cephfs_pools:
+           - name: "cephfs_data"
+             pgs: "8"
+           - name: "cephfs_metadata"
+             pgs: "8"
+       desc: test cluster setup using ceph-ansible
+       destroy-cluster: false
+       abort-on-fail: true
+
+   # AWS4 Auth tests
+
+   - test:
+       name: AWS4 Auth test
+       desc: AWS4 Auth test
+       polarion-id: CEPH-9637
+       module: sanity_rgw_v2.py
+       config:
+         script-name: test_Mbuckets_with_Nobjects.py
+         config-file-name: test_Mbuckets_with_Nobjects_aws4.yaml
+         timeout: 300
+
