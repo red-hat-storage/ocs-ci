@@ -4,7 +4,7 @@ import yaml
 
 from ceph.utils import setup_deb_repos, setup_cdn_repos, setup_deb_cdn_repo, write_docker_daemon_json
 from ceph.utils import setup_repos, check_ceph_healthly, get_ceph_versions
-from utils.utils import get_latest_container_image_tag
+from utility.utils import get_latest_container_image_tag
 
 log = logging.getLogger(__name__)
 

@@ -19,9 +19,9 @@ from libcloud.common.types import LibcloudError
 from ceph.ceph import CephNode
 from ceph.clients import WinNode
 from ceph.utils import create_ceph_nodes, cleanup_ceph_nodes, setup_cdn_repos
-from utils.polarion import post_to_polarion
-from utils.retry import retry
-from utils.utils import timestamp, create_run_dir, create_unique_test_name, create_report_portal_session, \
+from utility.polarion import post_to_polarion
+from utility.retry import retry
+from utility.utils import timestamp, create_run_dir, create_unique_test_name, create_report_portal_session, \
     configure_logger, close_and_remove_filehandlers, get_latest_container
 
 doc = """
