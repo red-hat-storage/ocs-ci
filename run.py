@@ -158,7 +158,7 @@ def create_nodes(conf, inventory, osp_cred, run_id, report_portal_session=None, 
                 ceph_nodes.append(ceph)
         cluster_name = cluster.get('ceph-cluster').get('name', 'ceph')
         ceph_cluster_dict[cluster_name] = Ceph(cluster_name, ceph_nodes)
-    #TODO: refactor cluster dict to cluster list
+    # TODO: refactor cluster dict to cluster list
     log.info('Done creating osp instances')
     log.info("Waiting for Floating IPs to be available")
     log.info("Sleeping 15 Seconds")
@@ -516,7 +516,8 @@ def run(args):
                                             start_time=timestamp(), item_type="STEP")
                     service.log(time=timestamp(), message="Logfile location: {}".format(tc['log-link']), level="INFO")
                     service.log(time=timestamp(), message="Polarion ID: {}".format(tc['polarion-id']), level="INFO")
-                rc = test_mod.run(ceph_nodes=ceph_cluster_dict[cluster_name], config=config, test_data=ceph_test_data,
+                rc = test_mod.run(ceph_cluster=ceph_cluster_dict[cluster_name],
+                                  ceph_nodes=ceph_cluster_dict[cluster_name], config=config, test_data=ceph_test_data,
                                   ceph_cluster_dict=ceph_cluster_dict, clients=clients)
             except BaseException:
                 if post_to_report_portal:
