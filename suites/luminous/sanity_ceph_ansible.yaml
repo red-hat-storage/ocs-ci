@@ -40,15 +40,6 @@ tests:
       abort-on-fail: true
 
    - test:
-      name: librbd workunit
-      module: test_workunit.py
-      config:
-            test_name: rbd/test_librbd_python.sh
-            branch: luminous
-            role: mon
-      desc: Test librbd unit tests
-
-   - test:
       name: rbd cli image
       module: rbd_system.py
       config:
@@ -74,15 +65,6 @@ tests:
             branch: master
       polarion-id: CEPH-83572724
       desc: CLI validation for miscellaneous rbd commands
-
-   - test:
-      name: rbd cli import_export
-      module: rbd_system.py
-      config:
-            test_name: cli/rbd_cli_import_export_diff.py
-            branch: master
-      polarion-id: CEPH-83572723
-      desc: CLI validation for import, export and diff related commands
 
    - test:
       name: check-ceph-health
@@ -150,15 +132,6 @@ tests:
       abort-on-fail: true
 
    - test:
-      name: librbd workunit
-      module: test_workunit.py
-      config:
-            test_name: rbd/test_librbd_python.sh
-            branch: luminous
-            role: mon
-      desc: Test librbd unit tests
-
-   - test:
       name: rbd cli image
       module: rbd_system.py
       config:
@@ -184,15 +157,6 @@ tests:
             branch: master
       polarion-id: CEPH-83572724
       desc: CLI validation for miscellaneous rbd commands
-
-   - test:
-      name: rbd cli import_export
-      module: rbd_system.py
-      config:
-            test_name: cli/rbd_cli_import_export_diff.py
-            branch: master
-      polarion-id: CEPH-83572723
-      desc: CLI validation for import, export and diff related commands
 
    - test:
       name: check-ceph-health
@@ -263,15 +227,6 @@ tests:
       abort-on-fail: true
 
    - test:
-      name: librbd workunit
-      module: test_workunit.py
-      config:
-            test_name: rbd/test_librbd_python.sh
-            branch: luminous
-            role: mon
-      desc: Test librbd unit tests
-
-   - test:
       name: rbd cli image
       module: rbd_system.py
       config:
@@ -297,15 +252,6 @@ tests:
             branch: master
       polarion-id: CEPH-83572724
       desc: CLI validation for miscellaneous rbd commands
-
-   - test:
-      name: rbd cli import_export
-      module: rbd_system.py
-      config:
-            test_name: cli/rbd_cli_import_export_diff.py
-            branch: master
-      polarion-id: CEPH-83572723
-      desc: CLI validation for import, export and diff related commands
 
    - test:
       name: check-ceph-health
@@ -377,15 +323,6 @@ tests:
         abort-on-fail: true
 
    - test:
-      name: librbd workunit
-      module: test_workunit.py
-      config:
-            test_name: rbd/test_librbd_python.sh
-            branch: luminous
-            role: mon
-      desc: Test librbd unit tests
-
-   - test:
       name: rbd cli image
       module: rbd_system.py
       config:
@@ -411,15 +348,6 @@ tests:
             branch: master
       polarion-id: CEPH-83572724
       desc: CLI validation for miscellaneous rbd commands
-
-   - test:
-      name: rbd cli import_export
-      module: rbd_system.py
-      config:
-            test_name: cli/rbd_cli_import_export_diff.py
-            branch: master
-      polarion-id: CEPH-83572723
-      desc: CLI validation for import, export and diff related commands
 
    - test:
       name: check-ceph-health
@@ -488,15 +416,6 @@ tests:
       abort-on-fail: true
 
    - test:
-      name: librbd workunit
-      module: test_workunit.py
-      config:
-            test_name: rbd/test_librbd_python.sh
-            branch: luminous
-            role: mon
-      desc: Test librbd unit tests
-
-   - test:
       name: rbd cli image
       module: rbd_system.py
       config:
@@ -522,15 +441,6 @@ tests:
             branch: master
       polarion-id: CEPH-83572724
       desc: CLI validation for miscellaneous rbd commands
-
-   - test:
-      name: rbd cli import_export
-      module: rbd_system.py
-      config:
-            test_name: cli/rbd_cli_import_export_diff.py
-            branch: master
-      polarion-id: CEPH-83572723
-      desc: CLI validation for import, export and diff related commands
 
    - test:
       name: check-ceph-health
@@ -597,15 +507,6 @@ tests:
       abort-on-fail: true
 
    - test:
-      name: librbd workunit
-      module: test_workunit.py
-      config:
-            test_name: rbd/test_librbd_python.sh
-            branch: luminous
-            role: mon
-      desc: Test librbd unit tests
-
-   - test:
       name: rbd cli image
       module: rbd_system.py
       config:
@@ -631,15 +532,6 @@ tests:
             branch: master
       polarion-id: CEPH-83572724
       desc: CLI validation for miscellaneous rbd commands
-
-   - test:
-      name: rbd cli import_export
-      module: rbd_system.py
-      config:
-            test_name: cli/rbd_cli_import_export_diff.py
-            branch: master
-      polarion-id: CEPH-83572723
-      desc: CLI validation for import, export and diff related commands
 
    - test:
       name: check-ceph-health
@@ -701,15 +593,6 @@ tests:
       abort-on-fail: true
 
    - test:
-      name: librbd workunit
-      module: test_workunit.py
-      config:
-            test_name: rbd/test_librbd_python.sh
-            branch: luminous
-            role: mon
-      desc: Test librbd unit tests
-
-   - test:
       name: rbd cli image
       module: rbd_system.py
       config:
@@ -735,15 +618,6 @@ tests:
             branch: master
       polarion-id: CEPH-83572724
       desc: CLI validation for miscellaneous rbd commands
-
-   - test:
-      name: rbd cli import_export
-      module: rbd_system.py
-      config:
-            test_name: cli/rbd_cli_import_export_diff.py
-            branch: master
-      polarion-id: CEPH-83572723
-      desc: CLI validation for import, export and diff related commands
 
    - test:
       name: check-ceph-health
