@@ -321,7 +321,7 @@ def run(args):
         # get COMPOSE ID and ceph version
         id = requests.get(base_url + "/COMPOSE_ID")
         compose_id = id.text
-        if 'rhel' in image_name:
+        if 'rhel' in image_name.lower():
             ceph_pkgs = requests.get(base_url +
                                      "/compose/Tools/x86_64/os/Packages/")
             m = re.search(r'ceph-common-(.*?)cp', ceph_pkgs.text)
