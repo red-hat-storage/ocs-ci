@@ -149,7 +149,6 @@ def run(**kw):
     rgw_hosts = []
     mds_hosts = []
     mgr_hosts = []
-    nfss_hosts = []
     client_hosts = []
     iscsi_gw_hosts = []
     num_osds = 0
@@ -195,9 +194,6 @@ def run(**kw):
         if node.role == 'mds':
             mds_host = node.shortname + ' monitor_interface=' + node.eth_interface
             mds_hosts.append(mds_host)
-        if node.role == 'nfs':
-            nfs_host = node.shortname + ' monitor_interface=' + node.eth_interface
-            nfss_hosts.append(nfs_host)
         if node.role == 'rgw':
             rgw_host = node.shortname + ' radosgw_interface=' + node.eth_interface
             rgw_hosts.append(rgw_host)
@@ -224,9 +220,6 @@ def run(**kw):
     if rgw_hosts:
         rgw = '[rgws]\n' + '\n'.join(rgw_hosts)
         hosts_file += rgw + '\n'
-    if nfss_hosts:
-        nfs = '[nfss]\n' + '\n'.join(nfss_hosts)
-        hosts_file += nfs + '\n'
     if client_hosts:
         client = '[clients]\n' + '\n'.join(client_hosts)
         hosts_file += client + '\n'
