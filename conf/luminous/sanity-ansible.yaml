@@ -32,9 +32,7 @@ globals:
        node12:
          role: rgw
        node13:
-         role:
-          - client
-          - nfs
+         role: client
        node14:
          role: mgr
        node15:
