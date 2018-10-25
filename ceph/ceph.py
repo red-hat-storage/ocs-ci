@@ -183,6 +183,7 @@ class Ceph(object):
         rgw_hosts = []
         mds_hosts = []
         mgr_hosts = []
+        nfs_hosts = []
         client_hosts = []
         iscsi_gw_hosts = []
         for node in self:
@@ -213,6 +214,9 @@ class Ceph(object):
             if node.role == 'mds':
                 mds_host = node.shortname + ' monitor_interface=' + node.eth_interface
                 mds_hosts.append(mds_host)
+            if node.role == 'nfs' and self.rhcs_version >= '3':
+                nfs_host = node.shortname + ' monitor_interface=' + node.eth_interface
+                nfs_hosts.append(nfs_host)
             if node.role == 'rgw':
                 rgw_host = node.shortname + ' radosgw_interface=' + node.eth_interface
                 rgw_hosts.append(rgw_host)
@@ -235,6 +239,9 @@ class Ceph(object):
         if mds_hosts:
             mds = '[mdss]\n' + '\n'.join(mds_hosts)
             hosts_file += mds + '\n'
+        if nfs_hosts:
+            nfs = '[nfss]\n' + '\n'.join(nfs_hosts)
+            hosts_file += nfs + '\n'
         if rgw_hosts:
             rgw = '[rgws]\n' + '\n'.join(rgw_hosts)
             hosts_file += rgw + '\n'
@@ -1379,7 +1386,7 @@ class CephInstaller(CephObject):
 
 
 class CephObjectFactory(object):
-    DEMON_ROLES = ['mon', 'osd', 'mgr', 'rgw', 'mds']
+    DEMON_ROLES = ['mon', 'osd', 'mgr', 'rgw', 'mds', 'nfs']
     CLIENT_ROLES = ['client']
 
     def __init__(self, node):
