@@ -1,6 +1,6 @@
 import os
 
-from utils.utils import custom_ceph_config
+from utility.utils import custom_ceph_config
 
 suite_config = {'global': {'osd_pool_default_pg_num': 64,
                            'osd_default_pool_size': 2,

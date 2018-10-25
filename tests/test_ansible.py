@@ -1,338 +1,94 @@
 import datetime
-import json
 import logging
-from time import sleep
-import yaml
-
-from ceph.utils import setup_deb_repos, get_iso_file_url, setup_cdn_repos, write_docker_daemon_json, \
-    search_ethernet_interface, open_firewall_port, setup_deb_cdn_repo
-from ceph.utils import setup_repos, check_ceph_healthly
-from utils.utils import custom_ceph_config
 
 logger = logging.getLogger(__name__)
 log = logger
 
 
-def run(**kw):
+def run(ceph_cluster, **kw):
+    """
+    Runs ceph-ansible deployment
+    Args:
+        ceph_cluster (ceph.ceph.Ceph): Ceph cluster object
+    """
     log.info("Running test")
-    ceph_nodes = kw.get('ceph_nodes')
     log.info("Running ceph ansible test")
     config = kw.get('config')
     bluestore = config.get('bluestore')
     k_and_m = config.get('ec-pool-k-m')
     hotfix_repo = config.get('hotfix_repo')
     test_data = kw.get('test_data')
-    ubuntu_repo = None
-    ansible_dir = '/usr/share/ceph-ansible'
 
-    # configure ceph_conf_overrides
-    ceph_conf_overrides = config.get('ansi_config').get('ceph_conf_overrides')
-    custom_config = test_data.get('custom-config')
-    custom_config_file = test_data.get('custom-config-file')
-    config['ansi_config']['ceph_conf_overrides'] = custom_ceph_config(
-        ceph_conf_overrides, custom_config, custom_config_file)
-    log.info("ceph_conf_overrides: \n{}".format(
-        yaml.dump(config['ansi_config']['ceph_conf_overrides'], default_flow_style=False)))
+    ubuntu_repo = config.get('ubuntu_repo', None)
+    base_url = config.get('base_url', None)
+    installer_url = config.get('installer_url', None)
+    ceph_cluster.ansible_config = config['ansi_config']
+    ceph_cluster.custom_config = test_data.get('custom-config')
+    ceph_cluster.custom_config_file = test_data.get('custom-config-file')
 
-    if config.get('ubuntu_repo'):
-        ubuntu_repo = config.get('ubuntu_repo')
-    if config.get('base_url'):
-        base_url = config.get('base_url')
-    installer_url = None
-    if config.get('installer_url'):
-        installer_url = config.get('installer_url')
+    ceph_cluster.use_cdn = config.get('use_cdn')
+    build = config.get('build', config.get('rhbuild'))
+
     if config.get('skip_setup') is True:
         log.info("Skipping setup of ceph cluster")
         return 0
 
-    # remove mgr role from nodes if build is 2.x
-    build = config.get('build', config.get('rhbuild'))
     test_data['install_version'] = build
-    if build.startswith('2'):
-        ceph_nodes = [node for node in ceph_nodes if node.role != 'mgr']
 
-    ceph_installer = None
-    ceph_mon = None
-    for ceph in ceph_nodes:
-        if ceph.role == 'mon':
-            open_firewall_port(ceph, port='6789', protocol='tcp')
-            # for upgrades from 2.5 to 3.x, we convert mon to mgr
-            # so lets open ports from 6800 to 6820
-            open_firewall_port(ceph, port='6800-6820', protocol='tcp')
-        if ceph.role == 'osd':
-            open_firewall_port(ceph, port='6800-7300', protocol='tcp')
-        if ceph.role == 'mgr':
-            open_firewall_port(ceph, port='6800-6820', protocol='tcp')
-        if ceph.role == 'mds':
-            open_firewall_port(ceph, port='6800', protocol='tcp')
-        if ceph.role == 'iscsi-gw':
-            open_firewall_port(ceph, port='3260', protocol='tcp')
-            open_firewall_port(ceph, port='5000-5001', protocol='tcp')
-    for node in ceph_nodes:
-        if node.role == 'installer':
-            log.info("Setting installer node")
-            ceph_installer = node
-            break
-    keys = ''
-    hosts = ''
-    hostkeycheck = 'Host *\n\tStrictHostKeyChecking no\n\tServerAliveInterval 2400\n'
+    ceph_installer = ceph_cluster.get_ceph_object('installer')
+    ansible_dir = ceph_installer.ansible_dir
 
-    for ceph in ceph_nodes:
-        ceph.generate_id_rsa()
-        keys = keys + ceph.id_rsa_pub
-        hosts = hosts + ceph.ip_address + "\t" + ceph.hostname \
-            + "\t" + ceph.shortname + "\n"
+    ceph_cluster.setup_ceph_firewall()
 
-    for ceph in ceph_nodes:
-        keys_file = ceph.write_file(
-            file_name='.ssh/authorized_keys', file_mode='a')
-        hosts_file = ceph.write_file(
-            sudo=True, file_name='/etc/hosts', file_mode='a')
-        ceph.exec_command(
-            cmd='[ -f ~/.ssh/config ] && chmod 700 ~/.ssh/config',
-            check_ec=False)
-        ssh_config = ceph.write_file(file_name='.ssh/config', file_mode='a')
-        keys_file.write(keys)
-        hosts_file.write(hosts)
-        ssh_config.write(hostkeycheck)
-        keys_file.flush()
-        hosts_file.flush()
-        ssh_config.flush()
-        ceph.exec_command(cmd='chmod 600 ~/.ssh/authorized_keys')
-        ceph.exec_command(cmd='chmod 400 ~/.ssh/config')
+    ceph_cluster.setup_ssh_keys()
 
-    for ceph in ceph_nodes:
-        if config.get('use_cdn'):
-            if ceph.pkg_type == 'deb':
-                if ceph.role == 'installer':
-                    log.info("Enabling tools repository")
-                    setup_deb_cdn_repo(ceph, config.get('build'))
-            else:
-                log.info("Using the cdn repo for the test")
-                setup_cdn_repos(ceph_nodes, build=config.get('build'))
+    ceph_cluster.setup_packages(base_url, hotfix_repo, installer_url, ubuntu_repo)
 
-        else:
-            if config['ansi_config'].get('ceph_repository_type') != 'iso' or \
-                    config['ansi_config'].get('ceph_repository_type') == 'iso' and \
-                    (ceph.role == 'installer'):
-                if ceph.pkg_type == 'deb':
-                    setup_deb_repos(ceph, ubuntu_repo)
-                    sleep(15)
-                    # install python2 on xenial
-                    ceph.exec_command(sudo=True, cmd='sudo apt-get install -y python')
-                    ceph.exec_command(sudo=True, cmd='apt-get install -y python-pip')
-                    ceph.exec_command(sudo=True, cmd='apt-get install -y ntp')
-                    ceph.exec_command(sudo=True, cmd='apt-get install -y chrony')
-                    ceph.exec_command(sudo=True, cmd='pip install nose')
-                else:
-                    if hotfix_repo:
-                        ceph.exec_command(sudo=True,
-                                          cmd='wget -O /etc/yum.repos.d/rh_repo.repo {repo}'.format(repo=hotfix_repo))
-                    else:
-                        setup_repos(ceph, base_url, installer_url)
-            if config['ansi_config'].get('ceph_repository_type') == 'iso' and ceph.role == 'installer':
-                iso_file_url = get_iso_file_url(base_url)
-                ceph.exec_command(sudo=True, cmd='mkdir -p {}/iso'.format(ansible_dir))
-                ceph.exec_command(sudo=True, cmd='wget -O {}/iso/ceph.iso {}'.format(ansible_dir, iso_file_url))
-        log.info("Updating metadata")
-        sleep(15)
-    if ceph_installer.pkg_type == 'deb':
-        ceph_installer.exec_command(
-            sudo=True, cmd='apt-get install -y ceph-ansible')
-    else:
-        ceph_installer.exec_command(
-            sudo=True, cmd='yum install -y ceph-ansible')
-    sleep(4)
-    sleep(2)
-    mon_hosts = []
-    osd_hosts = []
-    rgw_hosts = []
-    mds_hosts = []
-    mgr_hosts = []
-    client_hosts = []
-    iscsi_gw_hosts = []
-    num_osds = 0
-    num_mons = 0
-    num_mgrs = 0
-    for node in ceph_nodes:
-        eth_interface = search_ethernet_interface(node, ceph_nodes)
-        if eth_interface is None:
-            log.error('No suitable interface is found on {node}'.format(node=node.ip_address))
-            return 1
-        node.set_eth_interface(eth_interface)
-        mon_interface = ' monitor_interface=' + node.eth_interface + ' '
-        if node.role == 'mon':
-            mon_host = node.shortname + ' monitor_interface=' + node.eth_interface
-            mon_hosts.append(mon_host)
-            num_mons += 1
-        if node.role == 'mgr':
-            mgr_host = node.shortname + ' monitor_interface=' + node.eth_interface
-            mgr_hosts.append(mgr_host)
-            num_mgrs += 1
-        if node.role == 'osd':
-            devices = len(node.get_allocated_volumes())
-            devchar = 98
-            devs = []
-            for vol in range(0, devices):
-                dev = '/dev/vd' + chr(devchar)
-                devs.append(dev)
-                devchar += 1
-            reserved_devs = []
-            if config['ansi_config'].get('osd_scenario') == 'non-collocated':
-                reserved_devs = \
-                    [raw_journal_device for raw_journal_device in set(config['ansi_config'].get('dedicated_devices'))]
-            devs = [_dev for _dev in devs if _dev not in reserved_devs]
-            num_osds = num_osds + len(devs)
-            auto_discovey = config['ansi_config'].get('osd_auto_discovery', False)
-            objectstore = ''
-            if bluestore:
-                objectstore = 'osd_objectstore="bluestore"'
+    ceph_installer.install_ceph_ansible()
 
-            osd_host = node.shortname + mon_interface + \
-                (" devices='" + json.dumps(devs) + "'" if not auto_discovey else '') + ' ' + objectstore
-            osd_hosts.append(osd_host)
-        if node.role == 'mds':
-            mds_host = node.shortname + ' monitor_interface=' + node.eth_interface
-            mds_hosts.append(mds_host)
-        if node.role == 'rgw':
-            rgw_host = node.shortname + ' radosgw_interface=' + node.eth_interface
-            rgw_hosts.append(rgw_host)
-        if node.role == 'client':
-            client_host = node.shortname + ' client_interface=' + node.eth_interface
-            client_hosts.append(client_host)
-        if node.role == 'iscsi-gw':
-            iscsi_gw_host = node.shortname
-            iscsi_gw_hosts.append(iscsi_gw_host)
+    hosts_file = ceph_cluster.generate_ansible_inventory(bluestore)
+    ceph_installer.write_inventory_file(hosts_file)
 
-    hosts_file = ''
-    if mon_hosts:
-        mon = '[mons]\n' + '\n'.join(mon_hosts)
-        hosts_file += mon + '\n'
-    if mgr_hosts:
-        mgr = '[mgrs]\n' + '\n'.join(mgr_hosts)
-        hosts_file += mgr + '\n'
-    if osd_hosts:
-        osd = '[osds]\n' + '\n'.join(osd_hosts)
-        hosts_file += osd + '\n'
-    if mds_hosts:
-        mds = '[mdss]\n' + '\n'.join(mds_hosts)
-        hosts_file += mds + '\n'
-    if rgw_hosts:
-        rgw = '[rgws]\n' + '\n'.join(rgw_hosts)
-        hosts_file += rgw + '\n'
-    if client_hosts:
-        client = '[clients]\n' + '\n'.join(client_hosts)
-        hosts_file += client + '\n'
-    if iscsi_gw_hosts:
-        iscsi_gw = '[iscsigws]\n' + '\n'.join(iscsi_gw_hosts)
-        hosts_file += iscsi_gw + '\n'
-
-    log.info('Generated hosts file: \n{file}'.format(file=hosts_file))
-    host_file = ceph_installer.write_file(
-        sudo=True, file_name='{}/hosts'.format(ansible_dir), file_mode='w')
-    host_file.write(hosts_file)
-    host_file.flush()
-    if config.get('ansi_config').get('containerized_deployment') and config.get('docker-insecure-registry') and \
-            config.get('ansi_config').get('ceph_docker_registry'):
-        insecure_registry = '{{"insecure-registries" : ["{registry}"]}}'.format(
-            registry=config.get('ansi_config').get('ceph_docker_registry'))
-        log.warn('Adding insecure registry:\n{registry}'.format(registry=insecure_registry))
-        for node in ceph_nodes:
-            write_docker_daemon_json(insecure_registry, node)
+    if config.get('docker-insecure-registry'):
+        ceph_cluster.setup_insecure_registry()
 
     # use the provided sample file as main site.yml
-    if config.get('ansi_config').get('containerized_deployment') is True:
-        ceph_installer.exec_command(
-            sudo=True,
-            cmd='cp -R {ansible_dir}/site-docker.yml.sample {ansible_dir}/site.yml'.format(ansible_dir=ansible_dir))
-    else:
-        ceph_installer.exec_command(
-            sudo=True, cmd='cp -R {ansible_dir}/site.yml.sample {ansible_dir}/site.yml'.format(ansible_dir=ansible_dir))
+    ceph_installer.setup_ansible_site_yml(ceph_cluster.containerized)
 
-    if config.get('ansi_config').get('fetch_directory') is None:
-        # default fetch directory is not writeable, lets use local one if not set
-        config['ansi_config']['fetch_directory'] = '~/fetch/'
-    gvar = yaml.dump(config.get('ansi_config'), default_flow_style=False)
-    log.info("global vars " + gvar)
-    gvars_file = ceph_installer.write_file(
-        sudo=True, file_name='{}/group_vars/all.yml'.format(ansible_dir), file_mode='a')
-    gvars_file.write(gvar)
+    ceph_cluster.distribute_all_yml()
+
     # add iscsi setting if it is necessary
     if test_data.get("luns_setting", None) and test_data.get("initiator_setting", None):
-        iscsi_file = ceph_installer.write_file(
-            sudo=True, file_name='{}/group_vars/iscsigws.yml'.format(ansible_dir), file_mode='a')
-        iscsi_file.write(test_data["luns_setting"])
-        iscsi_file.write(test_data["initiator_setting"])
-        iscsi_file.write(test_data["gw_ip_list"])
-        iscsi_file.flush()
-    gvars_file.flush()
+        ceph_installer.add_iscsi_settings(test_data)
 
-    if ceph_installer.pkg_type == 'rpm':
-        out, rc = ceph_installer.exec_command(cmd='rpm -qa | grep ceph')
-    else:
-        out, rc = ceph_installer.exec_command(sudo=True, cmd='apt-cache search ceph')
-    log.info("Ceph versions " + out.read())
+    log.info("Ceph versions " + ceph_installer.get_installed_ceph_versions())
+
     out, rc = ceph_installer.exec_command(
         cmd='cd {} ; ANSIBLE_STDOUT_CALLBACK=debug; ansible-playbook -vv -i hosts site.yml'.format(ansible_dir),
         long_running=True)
 
     # manually handle client creation in a containerized deployment (temporary)
-    if config.get('ansi_config').get('containerized_deployment') is True:
-        for node in ceph_nodes:
-            if node.role == 'client':
-                log.info("Manually installing client node")
-                node.exec_command(sudo=True, cmd="yum install -y ceph-common")
+    if ceph_cluster.containerized:
+        for node in ceph_cluster.get_ceph_objects('client'):
+            log.info("Manually installing client node")
+            node.exec_command(sudo=True, cmd="yum install -y ceph-common")
 
     if rc != 0:
         log.error("Failed during deployment")
         return rc
 
-    # Add all clients
-    for node in ceph_nodes:
-        if node.role == 'mon':
-            ceph_mon = node
-            break
-    mon_container = None
-    if config.get('ansi_config').get('containerized_deployment') is True:
-        mon_container = 'ceph-mon-{host}'.format(host=ceph_mon.hostname)
     # check if all osd's are up and in
     timeout = 300
     if config.get('timeout'):
         timeout = datetime.timedelta(seconds=config.get('timeout'))
     # add test_data for later use by upgrade test etc
+    num_osds = ceph_cluster.ceph_demon_stat['osd']
+    num_mons = ceph_cluster.ceph_demon_stat['mon']
     test_data['ceph-ansible'] = {'num-osds': num_osds, 'num-mons': num_mons, 'rhbuild': build}
 
     # create rbd pool used by tests/workunits
-    if not build.startswith('2'):
-        if config.get('ansi_config').get('containerized_deployment') is True:
-            ceph_mon.exec_command(
-                sudo=True, cmd='docker exec {container} ceph osd pool create rbd 64 64'.format(container=mon_container))
-            ceph_mon.exec_command(
-                sudo=True, cmd='docker exec {container} ceph osd pool application enable rbd rbd --yes-i-really-mean-it'
-                    .format(container=mon_container))
-        else:
-            if k_and_m:
-                pool_name = 'rbd'
-                ceph_mon.exec_command(
-                    cmd='sudo ceph osd erasure-code-profile set %s k=%s m=%s' %
-                    ('ec_profile', k_and_m[0], k_and_m[2]))
-                ceph_mon.exec_command(
-                    cmd='sudo ceph osd pool create %s 64 64 erasure ec_profile' %
-                    pool_name)
-                ceph_mon.exec_command(
-                    cmd='sudo ceph osd pool set %s allow_ec_overwrites true' %
-                        (pool_name))
-                ceph_mon.exec_command(
-                    sudo=True,
-                    cmd='ceph osd pool application enable %s rbd --yes-i-really-mean-it' %
-                    pool_name)
-            else:
-                ceph_mon.exec_command(
-                    sudo=True, cmd='ceph osd pool create rbd 64 64 ')
-                ceph_mon.exec_command(
-                    sudo=True,
-                    cmd='ceph osd pool application enable rbd rbd --yes-i-really-mean-it')
+    ceph_cluster.create_rbd_pool(k_and_m)
 
-    if check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container, timeout) != 0:
+    if ceph_cluster.check_health(timeout=timeout) != 0:
         return 1
     return rc

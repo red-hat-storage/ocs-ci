@@ -16,12 +16,12 @@ import requests
 import textwrap
 from docopt import docopt
 from libcloud.common.types import LibcloudError
-from ceph.ceph import CephNode
+from ceph.ceph import CephNode, Ceph
 from ceph.clients import WinNode
 from ceph.utils import create_ceph_nodes, cleanup_ceph_nodes, setup_cdn_repos
-from utils.polarion import post_to_polarion
-from utils.retry import retry
-from utils.utils import timestamp, create_run_dir, create_unique_test_name, create_report_portal_session, \
+from utility.polarion import post_to_polarion
+from utility.retry import retry
+from utility.utils import timestamp, create_run_dir, create_unique_test_name, create_report_portal_session, \
     configure_logger, close_and_remove_filehandlers, get_latest_container
 
 doc = """
@@ -156,8 +156,9 @@ def create_nodes(conf, inventory, osp_cred, run_id, report_portal_session=None, 
                                 hostname=node.hostname,
                                 ceph_vmnode=node)
                 ceph_nodes.append(ceph)
-        ceph_cluster_dict[cluster.get('ceph-cluster').get('name', 'ceph')] = ceph_nodes
-
+        cluster_name = cluster.get('ceph-cluster').get('name', 'ceph')
+        ceph_cluster_dict[cluster_name] = Ceph(cluster_name, ceph_nodes)
+    # TODO: refactor cluster dict to cluster list
     log.info('Done creating osp instances')
     log.info("Waiting for Floating IPs to be available")
     log.info("Sleeping 15 Seconds")
@@ -515,7 +516,8 @@ def run(args):
                                             start_time=timestamp(), item_type="STEP")
                     service.log(time=timestamp(), message="Logfile location: {}".format(tc['log-link']), level="INFO")
                     service.log(time=timestamp(), message="Polarion ID: {}".format(tc['polarion-id']), level="INFO")
-                rc = test_mod.run(ceph_nodes=ceph_cluster_dict[cluster_name], config=config, test_data=ceph_test_data,
+                rc = test_mod.run(ceph_cluster=ceph_cluster_dict[cluster_name],
+                                  ceph_nodes=ceph_cluster_dict[cluster_name], config=config, test_data=ceph_test_data,
                                   ceph_cluster_dict=ceph_cluster_dict, clients=clients)
             except BaseException:
                 if post_to_report_portal:
