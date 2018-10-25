@@ -28,6 +28,7 @@ def run(ceph_cluster, **kw):
 
     ceph_cluster.use_cdn = config.get('use_cdn')
     build = config.get('build', config.get('rhbuild'))
+    ceph_cluster.rhcs_version = build
 
     if config.get('skip_setup') is True:
         log.info("Skipping setup of ceph cluster")
