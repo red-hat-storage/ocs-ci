@@ -1,6 +1,7 @@
 import logging
 import json
 import re
+from distutils.version import LooseVersion
 from select import select
 from time import sleep
 
@@ -16,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 class Ceph(object):
+    DEFAULT_RHCS_VERSION = '3.2'
+
     def __init__(self, name, node_list=None):
         """
         Ceph cluster representation. Contains list of cluster nodes.
@@ -29,6 +32,7 @@ class Ceph(object):
         self.custom_config_file = None
         self.custom_config = None
         self.allow_custom_ansible_config = True
+        self.__rhcs_version = None
 
     def __eq__(self, ceph_cluster):
         if hasattr(ceph_cluster, 'node_list'):
@@ -56,6 +60,20 @@ class Ceph(object):
 
     def __iter__(self):
         return iter(self.node_list)
+
+    @property
+    def rhcs_version(self):
+        """
+        Get rhcs version, will return DEFAULT_RHCS_VERSION if not set
+        Returns:
+            LooseVersion: rhcs version of given cluster
+
+        """
+        return LooseVersion(str(self.__rhcs_version if self.__rhcs_version else self.DEFAULT_RHCS_VERSION))
+
+    @rhcs_version.setter
+    def rhcs_version(self, version):
+        self.__rhcs_version = version
 
     def get_nodes(self, role=None):
         """
@@ -179,7 +197,7 @@ class Ceph(object):
                 mon_host = node.shortname + ' monitor_interface=' + node.eth_interface
                 mon_hosts.append(mon_host)
                 # num_mons += 1
-            if node.role == 'mgr' and self.ceph_stable_release != 'jewel':
+            if node.role == 'mgr' and self.rhcs_version >= '3':
                 mgr_host = node.shortname + ' monitor_interface=' + node.eth_interface
                 mgr_hosts.append(mgr_host)
             if node.role == 'osd':
@@ -326,7 +344,7 @@ class Ceph(object):
         """
         ceph_demon_counter = {}
         for demon in self.get_ceph_demons():
-            if demon.role == 'mgr' and self.ceph_stable_release == 'jewel':
+            if demon.role == 'mgr' and self.rhcs_version < '3':
                 continue
             increment = len(self.get_osd_devices(demon.node)) if demon.role == 'osd' else 1
             ceph_demon_counter[demon.role] = ceph_demon_counter[demon.role] + increment if ceph_demon_counter.get(
@@ -494,7 +512,7 @@ class Ceph(object):
             build (str): ceph-ansible build as numeric
         """
         if not build:
-            build = str(self.get_stable_release_number())
+            build = self.rhcs_version
         for node in self.get_nodes():
             if self.use_cdn:
                 if node.pkg_type == 'deb':
@@ -532,18 +550,6 @@ class Ceph(object):
             logger.info("Updating metadata")
             sleep(15)
 
-    def get_stable_release_number(self):
-        """
-        Retrurns stable release major number based on ansible config i.e jewel is 2
-        Returns:
-            int: stable release major number
-        """
-        if self.ceph_stable_release == 'jewel':
-            build = 2
-        if self.ceph_stable_release == 'luminous':
-            build = 3
-        return build
-
     def create_rbd_pool(self, k_and_m):
         """
         Generate pools for later testing use
@@ -551,7 +557,7 @@ class Ceph(object):
             k_and_m(bool): ec-pool-k-m settings
         """
         ceph_mon = self.get_ceph_object('mon')
-        if self.ceph_stable_release != 'jewel':
+        if self.rhcs_version >= '3':
             if k_and_m:
                 pool_name = 'rbd'
                 ceph_mon.exec_command(
