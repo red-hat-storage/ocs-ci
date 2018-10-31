@@ -1247,7 +1247,7 @@ class CephDemon(CephObject):
 
     @property
     def container_name(self):
-        return 'ceph-{role}-{host}'.format(role=self.role, host=self.node.hostmname) if self.containerized else ''
+        return 'ceph-{role}-{host}'.format(role=self.role, host=self.node.hostname) if self.containerized else ''
 
     @property
     def container_prefix(self):
