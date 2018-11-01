@@ -1258,7 +1258,7 @@ class CephDemon(CephObject):
 
     @property
     def container_prefix(self):
-        return 'sudo docker {container_name} exec'.format(
+        return 'sudo docker exec {container_name}'.format(
             container_name=self.container_name) if self.containerized else ''
 
     def exec_command(self, cmd, **kw):
