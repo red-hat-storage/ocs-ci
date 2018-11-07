@@ -75,16 +75,22 @@ class Ceph(object):
     def rhcs_version(self, version):
         self.__rhcs_version = version
 
-    def get_nodes(self, role=None):
+    def get_nodes(self, role=None, ignore=None):
         """
         Get node(s) by role. Return all nodes if role is not defined
         Args:
-            role (str): node's role. Can be RoleContainer or str
+            role (str): node's role. Can be RoleContainer or str. Takes precedence over ignore
+            ignore (str): node's role to ignore from the list. Can be RoleContainer or str
 
         Returns:
             list: nodes
         """
-        return [node for node in self.node_list if node.role == role] if role else list(self.node_list)
+        if role:
+            return [node for node in self.node_list if node.role == role]
+        elif ignore:
+            return [node for node in self.node_list if node.role != ignore]
+        else:
+            return list(self.node_list)
 
     def get_ceph_objects(self, role=None):
         """

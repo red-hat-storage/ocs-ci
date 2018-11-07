@@ -166,12 +166,11 @@ def get_container_counts(ceph_cluster):
 
     """
     container_counts = {}
-    for node in ceph_cluster.get_nodes():
-        if node.role != 'installer':
-            out, rc = node.exec_command(sudo=True, cmd='docker ps | grep $(hostname) | wc -l')
-            count = int(out.read().rstrip())
-            log.info("{} has {} containers running".format(node.shortname, count))
-            container_counts.update({node.shortname: count})
+    for node in ceph_cluster.get_nodes(ignore="installer"):
+        out, rc = node.exec_command(sudo=True, cmd='docker ps | grep $(hostname) | wc -l')
+        count = int(out.read().rstrip())
+        log.info("{} has {} containers running".format(node.shortname, count))
+        container_counts.update({node.shortname: count})
     return container_counts
 
 
@@ -216,11 +215,11 @@ def configure_insecure_registry(ceph_cluster, registry):
     insecure_registry = '{{"insecure-registries" : ["{registry}"]}}'.format(
         registry=registry)
     log.warn('Adding insecure registry:\n{registry}'.format(registry=insecure_registry))
-    for node in ceph_cluster.get_nodes():
-        if node.role != 'installer':
-            write_docker_daemon_json(insecure_registry, node)
-            log.info("Restarting docker on {node}".format(node=node.shortname))
-            node.exec_command(sudo=True, cmd='systemctl restart docker')
+    for node in ceph_cluster.get_nodes(ignore="installer"):
+        log.info("node: {}".format(node.shortname))
+        write_docker_daemon_json(insecure_registry, node)
+        log.info("Restarting docker on {node}".format(node=node.shortname))
+        node.exec_command(sudo=True, cmd='systemctl restart docker')
 
 
 def collocate_mons_with_mgrs(ceph_cluster, ansible_dir):
