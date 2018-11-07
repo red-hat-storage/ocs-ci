@@ -1372,22 +1372,22 @@ class CephInstaller(CephObject):
         """
         Installs ceph-ansible
         """
-        self.exec_command(
-            cmd='sudo subscription-manager repos --disable=rhel-7-server-ansible-*-rpms',
-            long_running=True)
-
-        if rhbuild == "3.2":
-            self.exec_command(
-                cmd='sudo subscription-manager repos --enable=rhel-7-server-ansible-2.6-rpms',
-                long_running=True)
-        else:
-            self.exec_command(
-                cmd='sudo subscription-manager repos --enable=rhel-7-server-ansible-2.4-rpms',
-                long_running=True)
-
         if self.pkg_type == 'deb':
             self.exec_command(sudo=True, cmd='apt-get install -y ceph-ansible')
         else:
+            self.exec_command(
+                cmd='sudo subscription-manager repos --disable=rhel-7-server-ansible-*-rpms',
+                long_running=True)
+
+            if rhbuild == "3.2":
+                self.exec_command(
+                    cmd='sudo subscription-manager repos --enable=rhel-7-server-ansible-2.6-rpms',
+                    long_running=True)
+            else:
+                self.exec_command(
+                    cmd='sudo subscription-manager repos --enable=rhel-7-server-ansible-2.4-rpms',
+                    long_running=True)
+
             if kw.get('upgrade'):
                 self.exec_command(sudo=True, cmd='yum update metadata')
                 self.exec_command(sudo=True, cmd='yum update -y ceph-ansible')
