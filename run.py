@@ -164,9 +164,9 @@ def create_nodes(conf, inventory, osp_cred, run_id, report_portal_session=None, 
     log.info("Sleeping 15 Seconds")
     time.sleep(15)
     for cluster_name, cluster in ceph_cluster_dict.iteritems():
-        for inctance in cluster:
+        for instance in cluster:
             try:
-                inctance.connect()
+                instance.connect()
             except BaseException:
                 if report_portal_session:
                     report_portal_session.finish_test_item(end_time=timestamp(), status="FAILED")
