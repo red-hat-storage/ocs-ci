@@ -74,6 +74,9 @@ class Ceph(object):
     @rhcs_version.setter
     def rhcs_version(self, version):
         self.__rhcs_version = version
+        luminous_demons = self.get_ceph_objects('mgr') + self.get_ceph_objects('nfs')
+        for luminous_demon in luminous_demons:  # type: CephDemon
+            luminous_demon.is_active = False if self.rhcs_version < '3' else True
 
     def get_nodes(self, role=None, ignore=None):
         """
@@ -209,7 +212,7 @@ class Ceph(object):
                 mgr_hosts.append(mgr_host)
             if node.role == 'osd':
                 devs = self.get_osd_devices(node)
-                # num_osds = num_osds + len(devs)
+                self.setup_osd_devices(devs, node)
                 auto_discovery = self.ansible_config.get('osd_auto_discovery', False)
                 objectstore = ''
                 if bluestore:
@@ -282,17 +285,41 @@ class Ceph(object):
         if not collocated:
             reserved_devs = \
                 [raw_journal_device for raw_journal_device in set(self.ansible_config.get('dedicated_devices'))]
+        if len(node.get_free_volumes()) >= len(reserved_devs):
+            for _ in reserved_devs:
+                node.get_free_volumes()[0].status = NodeVolume.ALLOCATED
         devs = [_dev for _dev in devs if _dev not in reserved_devs]
         return devs
 
-    def get_ceph_demons(self):
+    def setup_osd_devices(self, devices, node):
+        # TODO: move to CephNode
+        """
+        Sets osd devices on a node
+        Args:
+            devices (list): list of devices (/dev/vdb, /dev/vdc)
+            node (CephNode): Ceph node
+        """
+        devices = list(devices)
+        for osd_demon in node.get_ceph_objects('osd'):  # type: CephOsd
+            device = devices.pop() if len(devices) > 0 else None
+            if device:
+                osd_demon.device = device[device.rfind('/') + 1::]
+            else:
+                osd_demon.device = None
+
+    def get_ceph_demons(self, role=None):
         """
         Get Ceph demons list
         Returns:
             list: list of CephDemon
 
         """
-        return [ceph_demon for ceph_demon in self.get_ceph_objects() if type(ceph_demon) is CephDemon]
+        node_list = self.get_nodes(role)
+        ceph_demon_list = []
+        for node in node_list:  # type: CephNode
+            ceph_demon_list.extend(node.get_ceph_demons(role))
+        return ceph_demon_list
+        # return [ceph_demon for ceph_demon in self.get_ceph_objects() if isinstance(ceph_demon, CephDemon)]
 
     def set_ansible_config(self, ansible_config):
         """
@@ -315,6 +342,9 @@ class Ceph(object):
         if self.ansible_config.get('fetch_directory') is None:
             # default fetch directory is not writeable, lets use local one if not set
             self.__ansible_config['fetch_directory'] = '~/fetch/'
+        for node in self.get_nodes('osd'):
+            devices = self.get_osd_devices(node)
+            self.setup_osd_devices(devices, node)
 
     def get_ansible_config(self):
         """
@@ -359,7 +389,7 @@ class Ceph(object):
         for demon in self.get_ceph_demons():
             if demon.role == 'mgr' and self.rhcs_version < '3':
                 continue
-            increment = len(self.get_osd_devices(demon.node)) if demon.role == 'osd' else 1
+            increment = 1  # len(self.get_osd_devices(demon.node)) if demon.role == 'osd' else 1
             ceph_demon_counter[demon.role] = ceph_demon_counter[demon.role] + increment if ceph_demon_counter.get(
                 demon.role) else increment
         return ceph_demon_counter
@@ -639,6 +669,116 @@ class Ceph(object):
                 repo_file = repo_file + header + name + baseurl + gpgcheck + enabled
         return repo_file
 
+    def get_osd_container_name_by_id(self, osd_id, client=None):
+        """
+        Args:
+            osd_id:
+            client:
+
+        Returns:
+
+        """
+        return self.get_osd_by_id(osd_id, client).container_name
+
+    def get_osd_by_id(self, osd_id, client=None):
+        """
+
+        Args:
+            osd_id:
+            client:
+
+        Returns:
+            CephDemon:
+
+        """
+        hostname = self.get_osd_metadata(osd_id).get('hostname')
+        node = self.get_node_by_hostname(hostname)
+        osd_device = self.get_osd_device(osd_id)
+        osd_demon_list = [osd_demon for osd_demon in node.get_ceph_objects('osd') if osd_demon.device == osd_device]
+        return osd_demon_list[0] if len(osd_demon_list) > 0 else None
+
+    def get_osd_service_name(self, osd_id, client=None):
+        """
+
+        Args:
+            osd_id:
+            client:
+
+        Returns:
+
+        """
+        osd_demon = self.get_osd_by_id(osd_id, client)
+        if osd_demon is None:
+            raise RuntimeError('Unable to locate osd@{id} demon'.format(id=osd_id))
+        if not osd_demon.containerized:
+            osd_service_id = osd_id
+        else:
+            osd_service_id = self.get_osd_device(osd_id)
+        osd_service_name = 'ceph-osd@{id}'.format(id=osd_service_id)
+        return osd_service_name
+
+    def get_osd_device(self, osd_id, client=None):
+        """
+
+        Args:
+            osd_id:
+            client:
+
+        Returns:
+
+        """
+        osd_metadata = self.get_osd_metadata(osd_id, client)
+        if osd_metadata.get('osd_objectstore') == 'filestore':
+            osd_device = osd_metadata.get('backend_filestore_dev_node')
+        elif osd_metadata.get('osd_objectstore') == 'bluestore':
+            osd_device = osd_metadata.get('bluefs_db_dev_node')
+        else:
+            raise RuntimeError('Unable to detect filestore type for osd #{osd_id}'.format(osd_id=osd_id))
+        return osd_device
+
+    def get_node_by_hostname(self, hostname):
+        """
+        Returns Ceph node by it's hostname
+        Args:
+            hostname (str): hostname
+        """
+        node_list = [node for node in self.get_nodes() if node.hostname == hostname]
+        return node_list[0] if len(node_list) > 0 else None
+
+    def get_osd_data_partition_path(self, osd_id, client=None):
+        """
+        Returns data partition path by given osd id
+        Args:
+            osd_id (int): osd id
+            client (CephObject): client, optional
+
+        Returns:
+            str: data partition path
+
+        """
+        osd_metadata = self.get_osd_metadata(osd_id, client)
+        osd_data = osd_metadata.get('osd_data')
+        osd_object = self.get_osd_by_id(osd_id, client)
+        out, err = osd_object.exec_command('ceph-volume simple scan {osd_data} --stdout'.format(osd_data=osd_data),
+                                           check_ec=False)
+        simple_scan = out.read()
+        simple_scan = json.loads(simple_scan[simple_scan.index('{')::])
+        return simple_scan.get('data').get('path')
+
+    def get_osd_data_partition(self, osd_id, client=None):
+        """
+        Returns data partition by given osd id
+        Args:
+            osd_id (int): osd id
+            client (CephObject): client, optional
+
+        Returns:
+            str: data path
+
+        """
+        osd_partition_path = self.get_osd_data_partition_path(osd_id, client)
+        return osd_partition_path[osd_partition_path.rfind('/') + 1::]
+
 
 class CommandFailed(Exception):
     pass
@@ -795,14 +935,15 @@ class CephNode(object):
         self.vmname = kw['hostname']
         vmshortname = self.vmname.split('.')
         self.vmshortname = vmshortname[0]
-        self.ceph_object_list = [CephObjectFactory(self).create_ceph_object(role) for role in kw['role'] if
-                                 role != 'pool']
         self.voulume_list = []
         if kw['no_of_volumes']:
             self.voulume_list = [NodeVolume(NodeVolume.FREE) for vol_id in xrange(kw['no_of_volumes'])]
-        if self.role == 'osd':
-            for volume in self.voulume_list:
-                volume.status = NodeVolume.ALLOCATED
+
+        self.ceph_object_list = [CephObjectFactory(self).create_ceph_object(role) for role in kw['role'] if
+                                 role != 'pool']
+        while len(self.get_ceph_objects('osd')) > 0 and len(self.get_free_volumes()) > 0:
+            self.ceph_object_list.append(CephObjectFactory(self).create_ceph_object('osd'))
+
         if kw.get('ceph_vmnode'):
             self.vm_node = kw['ceph_vmnode']
         self.root_connection = SSHConnectionManager(self.vmname, 'root', self.root_passwd)
@@ -823,8 +964,17 @@ class CephNode(object):
     def get_allocated_volumes(self):
         return [volume for volume in self.voulume_list if volume.status == NodeVolume.ALLOCATED]
 
-    def get_ceph_demon(self, role=None):
-        return [ceph_demon for ceph_demon in self.ceph_object_list if ceph_demon.role == role] if role else list()
+    def get_ceph_demons(self, role=None):
+        """
+         Get Ceph demons list. Only active (those which will be part of the cluster) demons are shown.
+         Returns:
+             list: list of CephDemon
+
+         """
+        return [ceph_demon for ceph_demon in self.get_ceph_objects(role) if
+                isinstance(ceph_demon, CephDemon) and ceph_demon.is_active]
+
+    # return [ceph_demon for ceph_demon in self.ceph_object_list if ceph_demon.role == role] if role else list()
 
     def connect(self):
         """
@@ -1015,8 +1165,13 @@ class CephNode(object):
         Create ceph object on the node
         Args:
             role(str): ceph object role
+
+        Returns:
+            CephObject|CephDemon: created ceph object
         """
-        self.ceph_object_list.append(CephObjectFactory(self).create_ceph_object(role))
+        ceph_object = CephObjectFactory(self).create_ceph_object(role)
+        self.ceph_object_list.append(ceph_object)
+        return ceph_object
 
     def remove_ceph_object(self, ceph_object):
         """
@@ -1025,6 +1180,8 @@ class CephNode(object):
             ceph_object(CephObject): ceph object to remove
         """
         self.ceph_object_list.remove(ceph_object)
+        if ceph_object.role == 'osd':
+            self.get_allocated_volumes()[0].status = NodeVolume.FREE
 
     def open_firewall_port(self, port, protocol):
         """
@@ -1259,10 +1416,17 @@ class CephDemon(CephObject):
         """
         super(CephDemon, self).__init__(role, node)
         self.containerized = None
+        self.__custom_container_name = None
+        self.is_active = True
 
     @property
     def container_name(self):
-        return 'ceph-{role}-{host}'.format(role=self.role, host=self.node.hostname) if self.containerized else ''
+        return ('ceph-{role}-{host}'.format(role=self.role, host=self.node.hostname)
+                if not self.__custom_container_name else self.__custom_container_name) if self.containerized else ''
+
+    @container_name.setter
+    def container_name(self, name):
+        self.__custom_container_name = name
 
     @property
     def container_prefix(self):
@@ -1279,8 +1443,28 @@ class CephDemon(CephObject):
         Returns:
         node's exec_command resut
         """
-        return self.node.exec_command(cmd=' '.join([self.container_prefix, cmd]),
+        return self.node.exec_command(cmd=' '.join([self.container_prefix, cmd.replace('sudo', '')]),
                                       **kw) if self.containerized else self.node.exec_command(cmd=cmd, **kw)
+
+    def ceph_demon_by_container_name(self, container_name):
+        self.exec_command(cmd='sudo docker info')
+
+
+class CephOsd(CephDemon):
+    def __init__(self, node, device=None):
+        """
+        Represents single osd instance associated with a device.
+        Args:
+            node (CephNode): ceph node
+            device (str): device, can be left unset but must be set during inventory file configuration
+        """
+        super(CephOsd, self).__init__('osd', node)
+        self.device = device
+
+    @property
+    def container_name(self):
+        return 'ceph-{role}-{host}-{device}'.format(role=self.role, host=self.node.hostname,
+                                                    device=self.device) if self.containerized else ''
 
 
 class CephClient(CephObject):
@@ -1433,6 +1617,13 @@ class CephObjectFactory(object):
             return CephInstaller(role, self.node)
         if role == self.CLIENT_ROLES:
             return CephClient(role, self.node)
+        if role == 'osd':
+            free_volume_list = self.node.get_free_volumes()
+            if len(free_volume_list) > 0:
+                free_volume_list[0].status = NodeVolume.ALLOCATED
+            else:
+                raise RuntimeError('Insufficient of free volumes')
+            return CephOsd(self.node)
         if role in self.DEMON_ROLES:
             return CephDemon(role, self.node)
         if role != 'pool':
