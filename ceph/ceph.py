@@ -1094,11 +1094,11 @@ class CephNode(object):
         """
         Setup cdn repositories for deb systems
         Args:
-            build(str): rhcs version
+            build(str|LooseVersion): rhcs version
         """
         user = 'redhat'
         passwd = 'OgYZNpkj6jZAIF20XFZW0gnnwYBjYcmt7PeY76bLHec9'
-        num = build.split('.')[0]
+        num = str(build).split('.')[0]
         cmd = 'umask 0077; echo deb https://{user}:{passwd}@rhcs.download.redhat.com/{num}-updates/Tools ' \
               '$(lsb_release -sc) main | tee /etc/apt/sources.list.d/Tools.list'.format(user=user, passwd=passwd,
                                                                                         num=num)
@@ -1110,7 +1110,7 @@ class CephNode(object):
         """
         Setup cdn repositories for rhel systems
         Args:
-            build(str): rhcs version
+            build(str|LooseVersion): rhcs version
         """
         repos_13x = ['rhel-7-server-rhceph-1.3-mon-rpms',
                      'rhel-7-server-rhceph-1.3-osd-rpms',
@@ -1131,11 +1131,11 @@ class CephNode(object):
                     'rhel-7-server-extras-rpms']
 
         repos = None
-        if build.startswith('1'):
+        if '2' > build >= '1':
             repos = repos_13x
-        elif build.startswith('2'):
+        elif '3' > build >= '2':
             repos = repos_20
-        elif build.startswith('3'):
+        elif '4' > build >= '3':
             repos = repos_30
         for repo in repos:
             self.exec_command(
