@@ -952,13 +952,13 @@ class CephNode(object):
 
     def write_file(self, **kw):
         if kw.get('sudo'):
-            self.client = self.rssh
+            client = self.rssh
         else:
-            self.client = self.ssh
+            client = self.ssh
         file_name = kw['file_name']
         file_mode = kw['file_mode']
-        self.ftp = self.client().open_sftp()
-        remote_file = self.ftp.file(file_name, file_mode, -1)
+        ftp = client().open_sftp()
+        remote_file = ftp.file(file_name, file_mode, -1)
         return remote_file
 
     def _keep_alive(self):
