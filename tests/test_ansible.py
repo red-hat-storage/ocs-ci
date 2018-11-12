@@ -1,8 +1,7 @@
 import datetime
 import logging
 
-logger = logging.getLogger(__name__)
-log = logger
+log = logging.getLogger(__name__)
 
 
 def run(ceph_cluster, **kw):
@@ -45,7 +44,7 @@ def run(ceph_cluster, **kw):
 
     ceph_cluster.setup_packages(base_url, hotfix_repo, installer_url, ubuntu_repo)
 
-    ceph_installer.install_ceph_ansible()
+    ceph_installer.install_ceph_ansible(build)
 
     hosts_file = ceph_cluster.generate_ansible_inventory(bluestore)
     ceph_installer.write_inventory_file(hosts_file)
@@ -62,7 +61,7 @@ def run(ceph_cluster, **kw):
     if test_data.get("luns_setting", None) and test_data.get("initiator_setting", None):
         ceph_installer.add_iscsi_settings(test_data)
 
-    log.info("Ceph versions " + ceph_installer.get_installed_ceph_versions())
+    log.info("Ceph ansible version " + ceph_installer.get_installed_ceph_versions())
 
     out, rc = ceph_installer.exec_command(
         cmd='cd {} ; ANSIBLE_STDOUT_CALLBACK=debug; ansible-playbook -vv -i hosts site.yml'.format(ansible_dir),

@@ -75,16 +75,22 @@ class Ceph(object):
     def rhcs_version(self, version):
         self.__rhcs_version = version
 
-    def get_nodes(self, role=None):
+    def get_nodes(self, role=None, ignore=None):
         """
         Get node(s) by role. Return all nodes if role is not defined
         Args:
-            role (str): node's role. Can be RoleContainer or str
+            role (str): node's role. Can be RoleContainer or str. Takes precedence over ignore
+            ignore (str): node's role to ignore from the list. Can be RoleContainer or str
 
         Returns:
             list: nodes
         """
-        return [node for node in self.node_list if node.role == role] if role else list(self.node_list)
+        if role:
+            return [node for node in self.node_list if node.role == role]
+        elif ignore:
+            return [node for node in self.node_list if node.role != ignore]
+        else:
+            return list(self.node_list)
 
     def get_ceph_objects(self, role=None):
         """
@@ -554,7 +560,9 @@ class Ceph(object):
                     node.exec_command(sudo=True, cmd='mkdir -p {}/iso'.format(node.ansible_dir))
                     node.exec_command(sudo=True,
                                       cmd='wget -O {}/iso/ceph.iso {}'.format(node.ansible_dir, iso_file_url))
-            logger.info("Updating metadata")
+            if node.pkg_type == 'rpm':
+                logger.info("Updating metadata")
+                node.exec_command(sudo=True, cmd='yum update metadata')
             sleep(15)
 
     def create_rbd_pool(self, k_and_m):
@@ -1360,16 +1368,31 @@ class CephInstaller(CephObject):
                 sudo=True, cmd='cp -R {ansible_dir}/site.yml.sample {ansible_dir}/site.yml'.format(
                     ansible_dir=self.ansible_dir))
 
-    def install_ceph_ansible(self):
+    def install_ceph_ansible(self, rhbuild, **kw):
         """
         Installs ceph-ansible
         """
         if self.pkg_type == 'deb':
-            self.exec_command(
-                cmd='apt-get install -y ceph-ansible', sudo=True)
+            self.exec_command(sudo=True, cmd='apt-get install -y ceph-ansible')
         else:
             self.exec_command(
-                cmd='yum install -y ceph-ansible', sudo=True)
+                cmd='sudo subscription-manager repos --disable=rhel-7-server-ansible-*-rpms',
+                long_running=True)
+
+            if rhbuild == "3.2":
+                self.exec_command(
+                    cmd='sudo subscription-manager repos --enable=rhel-7-server-ansible-2.6-rpms',
+                    long_running=True)
+            else:
+                self.exec_command(
+                    cmd='sudo subscription-manager repos --enable=rhel-7-server-ansible-2.4-rpms',
+                    long_running=True)
+
+            if kw.get('upgrade'):
+                self.exec_command(sudo=True, cmd='yum update metadata')
+                self.exec_command(sudo=True, cmd='yum update -y ceph-ansible')
+            else:
+                self.exec_command(sudo=True, cmd='yum install -y ceph-ansible')
 
     def add_iscsi_settings(self, test_data):
         """

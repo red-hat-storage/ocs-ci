@@ -3,11 +3,12 @@ import itertools
 import logging
 import time
 import traceback
+
 from ceph.parallel import parallel
 from ceph.utils import config_ntp
 from ceph.utils import update_ca_cert
+
 log = logging.getLogger(__name__)
-# rpm_pkgs = ['wget', 'git', 'epel-release', 'redhat-lsb', 'python-virtualenv', 'python-nose']
 rpm_pkgs = ['wget', 'git', 'python-virtualenv', 'redhat-lsb', 'python-nose', 'ntp']
 deb_pkgs = ['wget', 'git', 'python-virtualenv', 'lsb-release', 'ntp']
 epel_rpm = 'https://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-9.noarch.rpm'
@@ -41,7 +42,7 @@ def install_prereq(ceph, timeout=1800, skip_subscription=False, repo=False, rhbu
         ceph.exec_command(cmd='sudo apt-get install -y ' + deb_all_pkgs, long_running=True)
     else:
         if not skip_subscription:
-            setup_subscription_manager(ceph, rhbuild)
+            setup_subscription_manager(ceph)
         if repo:
             setup_addition_repo(ceph, repo)
         ceph.exec_command(cmd='sudo yum install -y ' + rpm_all_pkgs, long_running=True)
@@ -71,7 +72,7 @@ def setup_addition_repo(ceph, repo):
     ceph.exec_command(sudo=True, cmd='yum update metadata')
 
 
-def setup_subscription_manager(ceph, rhbuild, timeout=1800):
+def setup_subscription_manager(ceph, timeout=1800):
     timeout = datetime.timedelta(seconds=timeout)
     starttime = datetime.datetime.now()
     log.info(
@@ -102,17 +103,8 @@ def setup_subscription_manager(ceph, rhbuild, timeout=1800):
                 wait = iter(x for x in itertools.count(1, 10))
                 time.sleep(next(wait))
     ceph.exec_command(cmd='sudo subscription-manager repos --disable=*', long_running=True)
-    if rhbuild == "3.2":
-        ceph.exec_command(
-            cmd='sudo subscription-manager repos --enable=rhel-7-server-rpms \
-                --enable=rhel-7-server-optional-rpms \
-                --enable=rhel-7-server-ansible-2.6-rpms \
-                --enable=rhel-7-server-extras-rpms',
-            long_running=True)
-    else:
-        ceph.exec_command(
-            cmd='sudo subscription-manager repos --enable=rhel-7-server-rpms \
-                --enable=rhel-7-server-optional-rpms \
-                --enable=rhel-7-server-ansible-2.4-rpms \
-                --enable=rhel-7-server-extras-rpms',
-            long_running=True)
+    ceph.exec_command(
+        cmd='sudo subscription-manager repos --enable=rhel-7-server-rpms \
+             --enable=rhel-7-server-optional-rpms \
+             --enable=rhel-7-server-extras-rpms',
+        long_running=True)
