@@ -616,11 +616,8 @@ def email_results(results_list, run_id, send_to_cephci=False):
                                log_link=log_link,
                                test_results=results_list)
 
-        # part1 = MIMEText(results_text, 'plain')
-        part2 = MIMEText(html, 'html')
-
-        # msg.attach(part1)
-        msg.attach(part2)
+        part1 = MIMEText(html, 'html')
+        msg.attach(part1)
 
         s = smtplib.SMTP('localhost')
         s.sendmail(sender, recipients, msg.as_string())

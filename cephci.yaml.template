@@ -7,3 +7,6 @@ polarion:
   endpoint: some_url
   username: some_user
   password: some_password
+
+email:
+  address: your_user_name@redhat.com
