@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style>
+    table.full-table{
+        font-family: arial, sans-serif;
+        border-collapse: collapse;
+        width: 100%;
+    }
+
+    td, th {
+        border: 1px solid #dddddd;
+        text-align: left;
+        padding: 8px;
+    }
+    table.half-table{
+        font-family: arial, sans-serif;
+        border-collapse: collapse;
+        width: 50%;
+    }
+
+    td, th {
+        border: 1px solid #dddddd;
+        text-align: left;
+        padding: 8px;
+    }
+    </style>
+</head>
+<body>
+    <h2>General Information</h2>
+    <table class="half-table">
+        <tr>
+            <th>Ceph Version</th>
+            <td>{{ test_results[0]['ceph-version'] }}</td>
+        </tr>
+        <tr>
+            <th>Ceph-Ansible Version</th>
+            <td>{{ test_results[0]['ceph-ansible-version'] }}</td>
+        </tr>
+        <tr>
+            <th>Distro</th>
+            <td>{{ test_results[0]['distro'] }}</td>
+        </tr>
+        <tr>
+            <th>Logs</th>
+            <td>{{ log_link }}</td>
+        </tr>
+    </table>
+    <h2>Test Results</h2>
+    <table class="full-table">
+        <tr>
+            <th>Test Name</th>
+            <th>Test Description</th>
+            <th>Duration</th>
+            <th>Status</th>
+        </tr>
+        {% for test in test_results %}
+            <tr>
+                <td>{{ test.name }}</td>
+                <td>{{ test.desc }}</td>
+                <td>{{ test.duration }}</td>
+                <td>{{ test.status }}</td>
+            </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

@@ -4,7 +4,7 @@ import os
 from tempfile import NamedTemporaryFile
 from subprocess import call
 from jinja2 import Environment, FileSystemLoader
-from yaml import load
+from utility.utils import get_cephci_config
 
 log = logging.getLogger(__name__)
 
@@ -22,14 +22,7 @@ def post_to_polarion(tc):
       None
     """
     current_dir = os.getcwd()
-    home_dir = os.path.expanduser("~")
-    cfg_file = os.path.join(home_dir, ".cephci.yaml")
-    try:
-        with open(cfg_file, 'r') as yml:
-            polarion_cred = load(yml)['polarion']
-    except IOError:
-        log.error("Please create ~/.cephci.yaml from the cephci.yaml.template. See README for more information.")
-        raise
+    polarion_cred = get_cephci_config()['polarion']
 
     if tc['polarion-id'] is not None:
         # add polarion attributes

@@ -167,6 +167,6 @@ Report Portal and Polarion Results
 ```
 cp cephci.yaml.template ~/.cephci.yaml
 ```
-Posting results to report portal or polarion requires a .cephci.yaml file in your user's home directory.
+Receiving results emails or posting results to report portal/polarion requires a .cephci.yaml file in your user's home directory.
 The required keys are in the template. Values are placeholders and should be replaced by legitimate values.
-Values are only necessary if you plan on posting to that particular service.
+Values for report portal or polarion are only necessary if you plan on posting to that particular service.
