@@ -1,12 +1,16 @@
 import getpass
 import logging
+import os
 import random
+import smtplib
 import time
 import traceback
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
-import os
 import requests
 import yaml
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from reportportal_client import ReportPortalServiceAsync
 
 log = logging.getLogger(__name__)
@@ -396,14 +400,7 @@ def create_report_portal_session():
     Returns:
         The session object
     """
-    home_dir = os.path.expanduser("~")
-    cfg_file = os.path.join(home_dir, ".cephci.yaml")
-    try:
-        with open(cfg_file, "r") as yml:
-            cfg = yaml.load(yml)['report-portal']
-    except IOError:
-        log.error("Please create ~/.cephci.yaml from the cephci.yaml.template. See README for more information.")
-        raise
+    cfg = get_cephci_config()['report-portal']
 
     return ReportPortalServiceAsync(
         endpoint=cfg['endpoint'], project=cfg['project'], token=cfg['token'], error_handler=error_handler)
@@ -570,3 +567,83 @@ def osd_ops(ceph_nodes, get_osd_devices):
         devs.append(dev)
 
     return osd_nodes, devs
+
+
+def email_results(results_list, run_id, send_to_cephci=False):
+    """
+    Email results of test run to QE
+
+    Args:
+        results_list (list): test case results info
+        run_id (str): id of the test run
+        send_to_cephci (bool): send to cephci@redhat.com as well as user email
+
+    Returns: None
+
+    """
+    cfg = get_cephci_config()['email']
+
+    sender = "cephci@redhat.com"
+    recipients = []
+    if cfg['address']:
+        recipients = [cfg['address']]
+    else:
+        log.warn("No email address configured in ~/.cephci.yaml. "
+                 "Please configure if you would like to receive run result emails.")
+
+    if send_to_cephci:
+        recipients.append(sender)
+
+    if recipients:
+        run_name = "cephci-run-{id}".format(id=run_id)
+        log_link = "http://magna002.ceph.redhat.com/cephci-jenkins/{run}/".format(run=run_name)
+
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = "cephci results for {run}".format(run=run_name)
+        msg['From'] = sender
+        msg['To'] = ", ".join(recipients)
+
+        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        template_dir = os.path.join(project_dir, 'templates')
+
+        env = Environment(
+            loader=FileSystemLoader(template_dir),
+            autoescape=select_autoescape(['html', 'xml'])
+        )
+        template = env.get_template('result-email-template.html')
+
+        html = template.render(run_name=run_name,
+                               log_link=log_link,
+                               test_results=results_list)
+
+        # part1 = MIMEText(results_text, 'plain')
+        part2 = MIMEText(html, 'html')
+
+        # msg.attach(part1)
+        msg.attach(part2)
+
+        s = smtplib.SMTP('localhost')
+        s.sendmail(sender, recipients, msg.as_string())
+        s.quit()
+
+        log.info("Results have been emailed to {recipients}".format(recipients=recipients))
+
+
+def get_cephci_config():
+    """
+    Receives the data from ~/.cephci.yaml.
+
+    Returns:
+        (dict) configuration from ~/.cephci.yaml
+
+    """
+    home_dir = os.path.expanduser("~")
+    cfg_file = os.path.join(home_dir, ".cephci.yaml")
+    try:
+        with open(cfg_file, "r") as yml:
+            cfg = yaml.load(yml)
+    except IOError:
+        log.error("Please create ~/.cephci.yaml from the cephci.yaml.template. "
+                  "See README for more information.")
+        raise
+    return cfg

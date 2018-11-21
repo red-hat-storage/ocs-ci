@@ -22,7 +22,7 @@ from ceph.utils import create_ceph_nodes, cleanup_ceph_nodes, setup_cdn_repos
 from utility.polarion import post_to_polarion
 from utility.retry import retry
 from utility.utils import timestamp, create_run_dir, create_unique_test_name, create_report_portal_session, \
-    configure_logger, close_and_remove_filehandlers, get_latest_container
+    configure_logger, close_and_remove_filehandlers, get_latest_container, email_results
 
 doc = """
 A simple test suite wrapper that executes tests based on yaml test configuration
@@ -564,6 +564,7 @@ def run(args):
     run_dir_name = run_dir.split('/')[-1]
     print("\nAll test logs located here: {base}/{dir}".format(base=url_base, dir=run_dir_name))
     print_results(tcs)
+    email_results(tcs, run_id, send_to_cephci=post_results)
     return jenkins_rc
 
 
