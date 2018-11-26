@@ -17,7 +17,7 @@ tests:
         ceph_rhcs_version: 2
         ceph_stable_release: jewel
         ceph_rhcs_cdn_debian_repo: https://redhat:OgYZNpkj6jZAIF20XFZW0gnnwYBjYcmt7PeY76bLHec9@rhcs.download.redhat.com
-        ceph_rhcs_cdn_debian_repo_version: /2-release/
+        ceph_rhcs_cdn_debian_repo_version: /2-updates/
         osd_scenario: collocated
         osd_auto_discovery: False
         journal_size: 1024
@@ -48,7 +48,7 @@ tests:
         ceph_rhcs_version: 3
         ceph_stable_release: luminous
         ceph_rhcs_cdn_debian_repo: https://redhat:OgYZNpkj6jZAIF20XFZW0gnnwYBjYcmt7PeY76bLHec9@rhcs.download.redhat.com
-        ceph_rhcs_cdn_debian_repo_version: /3-release/
+        ceph_rhcs_cdn_debian_repo_version: /3-updates/
         osd_scenario: collocated
         osd_auto_discovery: True
         upgrade_ceph_packages: True
@@ -152,7 +152,7 @@ tests:
         ceph_rhcs_version: 2
         ceph_stable_release: jewel
         ceph_rhcs_cdn_debian_repo: https://redhat:OgYZNpkj6jZAIF20XFZW0gnnwYBjYcmt7PeY76bLHec9@rhcs.download.redhat.com
-        ceph_rhcs_cdn_debian_repo_version: /2-release/
+        ceph_rhcs_cdn_debian_repo_version: /2-updates/
         osd_scenario: collocated
         osd_auto_discovery: False
         journal_size: 1024
@@ -169,8 +169,8 @@ tests:
             rgw crypt require ssl: false
             rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo=
               testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
-  desc: test cluster setup using ceph-ansible
-  abort-on-fail: True
+    desc: test cluster setup using ceph-ansible
+    abort-on-fail: True
 - test:
     name: ceph ansible upgrade to rhcs 3 stable
     module: test_ansible_upgrade.py
@@ -185,7 +185,7 @@ tests:
         ceph_rhcs_version: 3
         ceph_stable_release: luminous
         ceph_rhcs_cdn_debian_repo: https://redhat:OgYZNpkj6jZAIF20XFZW0gnnwYBjYcmt7PeY76bLHec9@rhcs.download.redhat.com
-        ceph_rhcs_cdn_debian_repo_version: /3-release/
+        ceph_rhcs_cdn_debian_repo_version: /3-updates/
         osd_scenario: collocated
         osd_auto_discovery: False
         public_network: 172.16.0.0/12
@@ -211,7 +211,7 @@ tests:
         ceph_repository: rhcs
         ceph_stable_release: luminous
         ceph_rhcs_cdn_debian_repo: https://redhat:OgYZNpkj6jZAIF20XFZW0gnnwYBjYcmt7PeY76bLHec9@rhcs.download.redhat.com
-        ceph_rhcs_cdn_debian_repo_version: /3-release/
+        ceph_rhcs_cdn_debian_repo_version: /3-updates/
         osd_scenario: collocated
         osd_auto_discovery: False
         public_network: 172.16.0.0/12
@@ -315,7 +315,7 @@ tests:
         ceph_rhcs_version: 3
         ceph_stable_release: luminous
         ceph_rhcs_cdn_debian_repo: https://redhat:OgYZNpkj6jZAIF20XFZW0gnnwYBjYcmt7PeY76bLHec9@rhcs.download.redhat.com
-        ceph_rhcs_cdn_debian_repo_version: /3-release/
+        ceph_rhcs_cdn_debian_repo_version: /3-updates/
         osd_scenario: collocated
         osd_auto_discovery: False
         public_network: 172.16.0.0/12
@@ -340,7 +340,7 @@ tests:
         ceph_repository: rhcs
         ceph_stable_release: luminous
         ceph_rhcs_cdn_debian_repo: https://redhat:OgYZNpkj6jZAIF20XFZW0gnnwYBjYcmt7PeY76bLHec9@rhcs.download.redhat.com
-        ceph_rhcs_cdn_debian_repo_version: /3-release/
+        ceph_rhcs_cdn_debian_repo_version: /3-updates/
         osd_scenario: collocated
         osd_auto_discovery: False
         public_network: 172.16.0.0/12
