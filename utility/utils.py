@@ -581,11 +581,10 @@ def email_results(results_list, run_id, send_to_cephci=False):
     Returns: None
 
     """
-    cfg = get_cephci_config()['email']
-
+    cfg = get_cephci_config().get('email')
     sender = "cephci@redhat.com"
     recipients = []
-    if cfg['address']:
+    if cfg and cfg.get('address'):
         recipients = [cfg['address']]
     else:
         log.warn("No email address configured in ~/.cephci.yaml. "
