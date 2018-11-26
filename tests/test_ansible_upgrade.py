@@ -18,7 +18,7 @@ def run(ceph_cluster, **kw):
     prev_install_version = test_data['install_version']
     skip_version_compare = config.get('skip_version_compare')
     containerized = config.get('ansi_config').get('containerized_deployment')
-    build = config.get('build', '3')
+    build = config.get('build', config.get('rhbuild'))
 
     ubuntu_repo = config.get('ubuntu_repo')
     hotfix_repo = config.get('hotfix_repo')
@@ -107,6 +107,7 @@ def run(ceph_cluster, **kw):
     # set build to new version
     log.info("Setting install_version to {build}".format(build=build))
     test_data['install_version'] = build
+    ceph_cluster.rhcs_version = build
 
     # check if all mon's and osd's are in correct state
     num_osds = ceph_cluster.ceph_demon_stat['osd']
@@ -244,4 +245,10 @@ def collocate_mons_with_mgrs(ceph_cluster, ansible_dir):
     host_file.write(mgr_block)
     host_file.flush()
 
-    log.info(mgr_block)
+    host_file = ceph_installer.write_file(sudo=True, file_name='{}/hosts'.format(ansible_dir), file_mode='r')
+    host_contents = ""
+    with host_file:
+        for line in host_file:
+            host_contents += line
+    host_file.flush()
+    log.info("Hosts file: \n{}".format(host_contents))
