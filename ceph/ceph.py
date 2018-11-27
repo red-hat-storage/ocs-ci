@@ -79,8 +79,8 @@ class Ceph(object):
         """
         Get node(s) by role. Return all nodes if role is not defined
         Args:
-            role (str): node's role. Can be RoleContainer or str. Takes precedence over ignore
-            ignore (str): node's role to ignore from the list. Can be RoleContainer or str
+            role (str, RolesContainer): node's role. Takes precedence over ignore
+            ignore (str, RolesContainer): node's role to ignore from the list
 
         Returns:
             list: nodes
@@ -110,8 +110,8 @@ class Ceph(object):
 
     def get_ceph_object(self, role, order_id=0):
         """
-        Returns single ceph object. If order id is provided returns that occurence from results list, otherwise returns
-        first occurence
+        Returns single ceph object. If order id is provided returns that occurrence from results list, otherwise returns
+        first occurrence
         Args:
             role(str): Ceph object's role
             order_id(int): order number of the ceph object
@@ -531,7 +531,7 @@ class Ceph(object):
                 if node.pkg_type == 'deb':
                     if node.role == 'installer':
                         logger.info("Enabling tools repository")
-                        node.setup_deb_cdn_repo(build)
+                        node.setup_deb_cdn_repos(build)
                 else:
                     logger.info("Using the cdn repo for the test")
                     node.setup_rhel_cdn_repos(build)
