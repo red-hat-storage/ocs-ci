@@ -564,7 +564,8 @@ def run(args):
     run_dir_name = run_dir.split('/')[-1]
     print("\nAll test logs located here: {base}/{dir}".format(base=url_base, dir=run_dir_name))
     print_results(tcs)
-    email_results(tcs, run_id, send_to_cephci=post_results)
+    send_to_cephci = post_results or post_to_report_portal
+    email_results(tcs, run_id, send_to_cephci)
     return jenkins_rc
 
 
