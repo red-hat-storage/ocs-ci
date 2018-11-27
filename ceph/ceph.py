@@ -11,7 +11,7 @@ import paramiko
 import yaml
 from paramiko.ssh_exception import SSHException
 
-from utility.utils import custom_ceph_config
+from utility.utils import custom_ceph_config, create_lvm
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +187,8 @@ class Ceph(object):
             str: inventory
 
         """
+        lvm = self.ansible_config.get('osd_scenario') == 'lvm'
+        lvm_vols = create_lvm(self, self.get_osd_devices) if lvm else None
         mon_hosts = []
         osd_hosts = []
         rgw_hosts = []
@@ -215,10 +217,16 @@ class Ceph(object):
                 self.setup_osd_devices(devs, node)
                 auto_discovery = self.ansible_config.get('osd_auto_discovery', False)
                 objectstore = ''
+                lvm_volumes = ''
+                devices = ''
                 if bluestore:
                     objectstore = 'osd_objectstore="bluestore"'
-                osd_host = node.shortname + mon_interface + (
-                    " devices='" + json.dumps(devs) + "'" if not auto_discovery else '') + ' ' + objectstore
+                if lvm:
+                    lvm_volumes = 'lvm_volumes=' + '"[' + lvm_vols + ']"' + ' '
+                else:
+                    devices = (" devices='" + json.dumps(devs) + "'" if not auto_discovery else '')
+
+                osd_host = node.shortname + mon_interface + devices + lvm_volumes + objectstore
                 osd_hosts.append(osd_host)
             if node.role == 'mds':
                 mds_host = node.shortname + ' monitor_interface=' + node.eth_interface
@@ -282,7 +290,8 @@ class Ceph(object):
             devchar += 1
         reserved_devs = []
         collocated = self.ansible_config.get('osd_scenario') == 'collocated'
-        if not collocated:
+        lvm = self.ansible_config.get('osd_scenario') == 'lvm'
+        if not collocated and not lvm:
             reserved_devs = \
                 [raw_journal_device for raw_journal_device in set(self.ansible_config.get('dedicated_devices'))]
         if len(node.get_free_volumes()) >= len(reserved_devs):
