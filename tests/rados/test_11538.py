@@ -8,11 +8,11 @@ from ceph.rados_utils import RadosHelper
 log = logging.getLogger(__name__)
 
 
-def get_ms_type(osd, osds, Helper):
+def get_ms_type(osd, osds, ceph_cluster):
     """
     check what's the default messenger
     """
-    tosd = Helper.get_osd_obj(osd, osds)
+    tosd = ceph_cluster.get_osd_by_id(osd, osds)
     probe_ms = "sudo ceph --admin-daemon /var/run/ceph/ceph-osd.{oid}.asok \
                 config show --format json".format(oid=osd)
     (out, err) = tosd.exec_command(cmd=probe_ms)
@@ -22,7 +22,7 @@ def get_ms_type(osd, osds, Helper):
     return jconfig['ms_type']
 
 
-def run(**kw):
+def run(ceph_cluster, **kw):
     """
     CEPH-11538:
     Check for default messenger i.e. async messenger
@@ -32,6 +32,9 @@ def run(**kw):
     will have simple messenger
     2. add ms_type = async for enabling async and check io
     3. add ms_type=simple for enabling simple and check io
+
+    Args:
+        ceph_cluster (ceph.ceph.Ceph): ceph cluster
     """
     log.info("Running CEPH-11538")
     log.info(run.__doc__)
@@ -40,7 +43,7 @@ def run(**kw):
     mons = []
     osds = []
 
-    role = 'mon'
+    role = 'client'
     for mnode in ceph_nodes:
         if mnode.role == role:
             mons.append(mnode)
@@ -71,7 +74,7 @@ def run(**kw):
     targt_osd = cmdout['up'][0]
 
     '''check what's the default messenger'''
-    mstype = get_ms_type(targt_osd, osds, helper)
+    mstype = get_ms_type(targt_osd, osds, ceph_cluster)
     if mstype != "async+posix":
         log.error("default on luminous should be async but\
                    we have {mstype}".format(mstype=mstype))
@@ -84,7 +87,7 @@ def run(**kw):
 
     time.sleep(4)
     '''check whether ms_type changed'''
-    mstype = get_ms_type(targt_osd, osds, helper)
+    mstype = get_ms_type(targt_osd, osds, ceph_cluster)
     if "simple" == mstype:
         log.info("successfull changed to simple")
     else:
@@ -97,7 +100,7 @@ def run(**kw):
     log.info(out.read())
     time.sleep(4)
     '''check whether ms_type changed'''
-    mstype = get_ms_type(targt_osd, osds, helper)
+    mstype = get_ms_type(targt_osd, osds, ceph_cluster)
     if "async+posix" == mstype:
         log.info("successfull changed to async+posix")
     else:

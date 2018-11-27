@@ -171,49 +171,14 @@ class RadosHelper:
         return int(j['acting'][random.randint(0, len(j['acting']) - 1)])
         assert False
 
-    def get_osd_host(self, osd_id):
-        """
-        :returns: hostname which has this osd
-        """
-        self.log("Inside get_osd_host")
-        (out, err) = self.raw_cluster_cmd("osd", "tree", '--format=json')
-        tree = json.loads(out.read())
-        print tree
-        for node in tree['nodes']:
-            if node['type'] == 'host':
-                if osd_id in node['children']:
-                    return node['name']
-        self.log("couldn't get osd host")
-        return None
-
-    def get_osd_obj(self, id, osds):
-        """
-        :returns: osd object from the list corresponding to osd id
-        """
-        self.log("Inside get osd obj")
-        osd_host = self.get_osd_host(id)
-        if osd_host is None:
-            self.log("coudn't get osd obj")
-            return None
-
-        for osd in osds:
-            if osd.hostname == osd_host:
-                return osd
-        return None
-
-    def kill_osd(self, osd_id, sig_type, osds=[]):
+    def kill_osd(self, osd_node, osd_service):
         """
         :params: id , type of signal, list of osd objects
             type: "SIGKILL", "SIGTERM", "SIGHUP" etc.
         :returns: 1 or 0
         """
         self.log("Inside KILL_OSD")
-        osd_node = self.get_osd_obj(osd_id, osds)
-        if osd_node is None:
-            self.log("coudn't get osd node, abort killing")
-            return 1
-        kill_cmd = 'sudo systemctl kill -s {s_type} ceph-osd@{id}'.format(
-            s_type=sig_type, id=osd_id)
+        kill_cmd = 'sudo systemctl stop {osd_service}'.format(osd_service=osd_service)
         self.log("kill cmd will be run on {osd}".format(osd=osd_node.hostname))
         print kill_cmd
         try:
@@ -237,22 +202,50 @@ class RadosHelper:
             if osd_id == osd['osd']:
                 return osd['up']
 
-    def revive_osd(self, osd_id, osds):
+    def revive_osd(self, osd_node, osd_service):
         """
         :returns: 0 if revive success,1 if fail
         """
-        if self.is_up(osd_id):
-            return 0
-        osd_host = self.get_osd_obj(osd_id, osds)
-        if osd_host:
-            revive_cmd = 'sudo systemctl start ceph-osd@{id}'.format(
-                id=osd_id)
+        # if self.is_up(osd_id):
+        #     return 0
+        if osd_node:
+            revive_cmd = 'sudo systemctl start {osd_service}'.format(
+                osd_service=osd_service)
             print revive_cmd
             try:
-                osd_host.exec_command(cmd=revive_cmd)
+                osd_node.exec_command(cmd=revive_cmd)
                 return 0
             except Exception:
                 self.log("failed to revive")
                 self.log(traceback.format_exc())
                 return 1
         return 1
+
+    def get_mgr_proxy_container(self, node, docker_image, proxy_container='mgr_proxy'):
+        """
+        Returns mgr dummy container to access containerized storage
+        Args:
+            node (ceph.ceph.CephNode): ceph node
+            docker_image(str): repository/image:tag
+
+        Returns:
+            ceph.ceph.CephDemon: mgr object
+        """
+        out, err = node.exec_command(cmd='sudo docker inspect {container}'.format(container=proxy_container),
+                                     check_ec=False)
+        if err.read():
+            node.exec_command(
+                cmd='sudo /usr/bin/docker-current run -d --rm --net=host --privileged=true --pid=host --memory=1839m '
+                    '--cpu-quota=100000 -v /dev:/dev -v /etc/localtime:/etc/localtime:ro -v '
+                    '/var/lib/ceph:/var/lib/ceph:z '
+                    '-v /etc/ceph:/etc/ceph:z -v /var/run/ceph:/var/run/ceph:z -e CEPH_DAEMON=MGR  '
+                    '--name={container} {docker_image}'.format(container=proxy_container, docker_image=docker_image))
+            mgr_object = node.create_ceph_object('mgr')
+            mgr_object.containerized = True
+            mgr_object.container_name = proxy_container
+        else:
+            mgr_object = \
+                [mgr_object for mgr_object in node.get_ceph_objects('mgr') if
+                 mgr_object.containerized and mgr_object.container_name == proxy_container][0]
+
+        return mgr_object

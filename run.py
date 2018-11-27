@@ -396,10 +396,7 @@ def run(args):
         ceph_clusters_file = 'rerun/ceph-snapshot-' + timestamp()
         if not os.path.exists(os.path.dirname(ceph_clusters_file)):
             os.makedirs(os.path.dirname(ceph_clusters_file))
-        cn = open(ceph_clusters_file, 'w+b')
-        pickle.dump(ceph_cluster_dict, cn)
-        cn.close()
-        log.info("ceph_clusters_file %s", ceph_clusters_file)
+        store_cluster_state(ceph_cluster_dict, ceph_clusters_file)
 
     sys.path.append(os.path.abspath('tests'))
     sys.path.append(os.path.abspath('tests/rados'))
@@ -524,6 +521,9 @@ def run(args):
                     service.log(time=timestamp(), message=traceback.format_exc(), level="ERROR")
                 log.error(traceback.format_exc())
                 rc = 1
+            finally:
+                if store:
+                    store_cluster_state(ceph_cluster_dict, ceph_clusters_file)
             if rc != 0:
                 break
         elapsed = (time.time() - start)
@@ -567,6 +567,13 @@ def run(args):
     send_to_cephci = post_results or post_to_report_portal
     email_results(tcs, run_id, send_to_cephci)
     return jenkins_rc
+
+
+def store_cluster_state(ceph_cluster_object, ceph_clusters_file_name):
+    cn = open(ceph_clusters_file_name, 'w+b')
+    pickle.dump(ceph_cluster_object, cn)
+    cn.close()
+    log.info("ceph_clusters_file %s", ceph_clusters_file_name)
 
 
 if __name__ == '__main__':

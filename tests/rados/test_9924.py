@@ -9,10 +9,7 @@ from ceph.rados_utils import RadosHelper
 log = logging.getLogger(__name__)
 
 
-def run(**kw):
-
-    log.info("Running CEPH-9924")
-    log.info(run.__doc__)
+def run(ceph_cluster, **kw):
     """
     CEPH-9925 - [RADOS]:
     Rewrite a known omap item of a replica and list-inconsistent-obj
@@ -26,21 +23,18 @@ def run(**kw):
         which object is inconsistent
         6. Run rados list-inconsistent-obj <pg>	>shud report omap
         digest mismarch error
+    Args:
+        ceph_cluster (ceph.ceph.Ceph): ceph cluster
     """
-
+    log.info("Running CEPH-9924")
+    log.info(run.__doc__)
     ceph_nodes = kw.get('ceph_nodes')
     config = kw.get('config')
     mons = []
-    osds = []
-    role = 'mon'
+    role = 'client'
     for mnode in ceph_nodes:
         if mnode.role == role:
             mons.append(mnode)
-
-    role = 'osd'
-    for osd in ceph_nodes:
-        if osd.role == role:
-            osds.append(osd)
 
     ctrlr = mons[0]
     log.info("chosing mon {cmon} as ctrlrmon".format(
@@ -97,33 +91,62 @@ def run(**kw):
     cmdout = json.loads(outbuf)
     targt_pg = cmdout['pgid']
     '''Considering non primary osd'''
-    targt_osd = cmdout['up'][1]
-    ctx = helper.get_osd_obj(targt_osd, osds)
-    helper.kill_osd(targt_osd, "SIGTERM", osds)
+    targt_osd_id = cmdout['up'][1]
+    target_osd = ceph_cluster.get_osd_by_id(targt_osd_id)
+    target_osd_node = target_osd.node
+    cot_environment = target_osd_node
+    osd_service = ceph_cluster.get_osd_service_name(targt_osd_id)
+    partition_path = ceph_cluster.get_osd_data_partition_path(targt_osd_id)
+    helper.kill_osd(target_osd_node, osd_service)
     time.sleep(10)
+    osd_metadata = ceph_cluster.get_osd_metadata(targt_osd_id)
+    osd_data = osd_metadata.get('osd_data')
+    osd_journal = osd_metadata.get('osd_journal')
+
+    if ceph_cluster.containerized:
+        # target_osd_node.exec_command(cmd='sudo yum install -y ceph-osd', check_ec=False)
+        docker_image_string = '{docker_registry}/{docker_image}:{docker_tag}'.format(
+            docker_registry=ceph_cluster.ansible_config.get('ceph_docker_registry'),
+            docker_image=ceph_cluster.ansible_config.get('ceph_docker_image'),
+            docker_tag=ceph_cluster.ansible_config.get('ceph_docker_image_tag'))
+        cot_environment = helper.get_mgr_proxy_container(target_osd_node, docker_image_string)
+        out, err = cot_environment.exec_command(
+            cmd='mount | grep "{partition_path} "'.format(partition_path=partition_path),
+            check_ec=False)
+        device_mount_data = out.read()  # type: str
+        if not device_mount_data:
+            cot_environment.exec_command(
+                cmd='sudo mount {partition_path} {directory}'.format(partition_path=partition_path, directory=osd_data))
+
+    # docker_image_string = '{docker_registry}/{docker_image}:{docker_tag}'.format(
+    #     docker_registry=ceph_cluster.ansible_config.get('ceph_docker_registry'),
+    #     docker_image=ceph_cluster.ansible_config.get('ceph_docker_image'),
+    #     docker_tag=ceph_cluster.ansible_config.get('ceph_docker_image_tag'))
+    # mgr_proxy = helper.get_mgr_container_proxy(target_osd_node, docker_image_string)
+
     slist_cmd = "sudo ceph-objectstore-tool --data-path \
-            /var/lib/ceph/osd/ceph-{id} --journal-path \
-            /var/lib/ceph/osd/ceph-{id}/journal \
-            --pgid {pgid} {obj} list-omap".format(id=targt_osd,
-                                                  obj=oname, pgid=targt_pg)
-    (out, err) = ctx.exec_command(cmd=slist_cmd)
+            {osd_data} --journal-path \
+            {osd_journal} \
+            --pgid {pgid} {obj} list-omap".format(osd_data=osd_data, osd_journal=osd_journal, obj=oname, pgid=targt_pg)
+    (out, err) = cot_environment.exec_command(cmd=slist_cmd)
     outbuf = out.read()
     keylist = outbuf.split()
     log.info(outbuf)
     '''corrupting an omap key by rewriting the omap key with different value'''
     corrupt_cmd = "sudo ceph-objectstore-tool --data-path \
-            /var/lib/ceph/osd/ceph-{id} --journal-path \
-            /var/lib/ceph/osd/ceph-{id}/journal \
+            {osd_data} --journal-path \
+            {osd_journal} \
                    --pgid {pgid} {obj} set-omap \
-                   {outbuf} {path}".format(id=targt_osd,
+                   {outbuf} {path}".format(osd_data=osd_data,
+                                           osd_journal=osd_journal,
                                            obj=oname, pgid=targt_pg,
                                            outbuf=keylist[0],
                                            path='/etc/hosts')
-    (out, err) = ctx.exec_command(cmd=corrupt_cmd)
+    (out, err) = cot_environment.exec_command(cmd=corrupt_cmd)
     outbuf = out.read()
     log.info(outbuf)
 
-    helper.revive_osd(targt_osd, osds)
+    helper.revive_osd(target_osd_node, osd_service)
     time.sleep(10)
     run_scrub = "pg deep-scrub {pgid}".format(pgid=targt_pg)
     (out, err) = helper.raw_cluster_cmd(run_scrub)
