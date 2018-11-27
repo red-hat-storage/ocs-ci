@@ -203,4 +203,9 @@ tests:
        polarion-id: CEPH-11335
        desc: Mount CephFS on multiple clients and perform client eviction
        abort-on-fail: false
-
+   - test:
+       name: cephfs-osd-power-failre
+       module: CEPH-11262.py
+       polarion-id: CEPH-11262
+       desc: Mount CephFS on multiple clients and do multiple client IOs, parallely do osd power failre
+       abort-on-fail: false

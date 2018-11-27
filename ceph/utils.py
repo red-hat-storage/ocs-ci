@@ -1,7 +1,7 @@
 import datetime
 import logging
 import traceback
-
+import time
 import os
 import re
 import yaml
@@ -461,6 +461,30 @@ def hard_reboot(gyaml, name=None):
             log.info('Hard-rebooting %s' % node.name)
             driver.ex_hard_reboot_node(node)
 
+    return 0
+
+
+def node_power_failure(gyaml, sleep_time=300, name=None):
+    user = os.getlogin()
+    if name is None:
+        name = 'ceph-' + user
+    driver = get_openstack_driver(gyaml)
+    for node in driver.list_nodes():
+        if node.name.startswith(name):
+            log.info('Doing power-off on %s' % node.name)
+            driver.ex_stop_node(node)
+            time.sleep(20)
+            op = driver.ex_get_node_details(node)
+            if op.state == 'stopped':
+                log.info('Node stopped successfully')
+            time.sleep(sleep_time)
+            log.info('Doing power-on on %s' % node.name)
+            driver.ex_start_node(node)
+            time.sleep(20)
+            op = driver.ex_get_node_details(node)
+            if op.state == 'running':
+                log.info('Node restarted successfully')
+            time.sleep(20)
     return 0
 
 
