@@ -2,6 +2,7 @@ import logging
 
 import yaml
 
+from ceph.ceph import RolesContainer
 from ceph.utils import get_ceph_versions
 from ceph.utils import write_docker_daemon_json
 from utility.utils import get_latest_container_image_tag
@@ -213,11 +214,14 @@ def configure_insecure_registry(ceph_cluster, registry):
     Returns: None
 
     """
-    insecure_registry = '{{"insecure-registries" : ["{registry}"]}}'.format(
-        registry=registry)
+    insecure_registry = '{{"insecure-registries" : ["{registry}"]}}'.format(registry=registry)
     log.warn('Adding insecure registry:\n{registry}'.format(registry=insecure_registry))
-    for node in ceph_cluster.get_nodes(ignore="installer"):
-        log.info("node: {}".format(node.shortname))
+    role_list = ["installer"]
+    if ceph_cluster.rhcs_version < '3':
+        role_list.append('mgr')
+    ignored_roles = RolesContainer(role_list)
+    log.info("Roles ignored for insecure registry configuration: {roles}".format(roles=ignored_roles))
+    for node in ceph_cluster.get_nodes(ignore=ignored_roles):
         write_docker_daemon_json(insecure_registry, node)
         log.info("Restarting docker on {node}".format(node=node.shortname))
         node.exec_command(sudo=True, cmd='systemctl restart docker')
