@@ -14,7 +14,7 @@ tests:
             ceph_origin: distro
             ceph_stable_release: luminous
             ceph_repository: rhcs
-            osd_scenario: collocated
+            osd_scenario: lvm
             osd_auto_discovery: False
             journal_size: 1024
             ceph_stable: True
@@ -126,7 +126,7 @@ tests:
             ceph_origin: distro
             ceph_stable_release: luminous
             ceph_repository: rhcs
-            osd_scenario: collocated
+            osd_scenario: lvm
             dmcrypt: True
             osd_auto_discovery: False
             journal_size: 1024
@@ -474,7 +474,7 @@ tests:
             ceph_origin: distro
             ceph_stable_release: luminous
             ceph_repository: rhcs
-            osd_scenario: collocated
+            osd_scenario: lvm
             osd_auto_discovery: False
             ceph_rhcs_iso_install: true
             ceph_rhcs_iso_path: ~/ceph-ansible/iso/ceph.iso
@@ -588,7 +588,7 @@ tests:
             ceph_origin: distro
             ceph_stable_release: luminous
             ceph_repository: rhcs
-            osd_scenario: collocated
+            osd_scenario: lvm
             dmcrypt: True
             osd_auto_discovery: True
             journal_size: 1024
@@ -701,7 +701,7 @@ tests:
             ceph_origin: distro
             ceph_stable_release: luminous
             ceph_repository: rhcs
-            osd_scenario: collocated
+            osd_scenario: lvm
             osd_auto_discovery: False
             journal_size: 1024
             ceph_stable: True
@@ -743,7 +743,7 @@ tests:
             ceph_origin: distro
             ceph_stable_release: luminous
             ceph_repository: rhcs
-            osd_scenario: collocated
+            osd_scenario: lvm
             osd_auto_discovery: False
             journal_size: 1024
             ceph_stable: True
@@ -788,7 +788,7 @@ tests:
             ceph_origin: distro
             ceph_stable_release: luminous
             ceph_repository: rhcs
-            osd_scenario: collocated
+            osd_scenario: lvm
             osd_auto_discovery: False
             journal_size: 1024
             ceph_stable: True
@@ -834,7 +834,7 @@ tests:
             ceph_origin: distro
             ceph_stable_release: luminous
             ceph_repository: rhcs
-            osd_scenario: collocated
+            osd_scenario: lvm
             osd_auto_discovery: False
             journal_size: 1024
             ceph_stable: True
