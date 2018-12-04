@@ -107,7 +107,7 @@ def run(ceph_cluster, **kw):
 
     ceph_cluster.setup_packages(base_url, hotfix_repo, installer_url, ubuntu_repo)
 
-    ceph_installer.install_ceph_ansible()
+    ceph_installer.install_ceph_ansible(build)
 
     hosts_file = ceph_cluster.generate_ansible_inventory(bluestore)
     ceph_installer.write_inventory_file(hosts_file)
