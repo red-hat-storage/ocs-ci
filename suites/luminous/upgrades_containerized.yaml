@@ -7,6 +7,7 @@ tests:
     name: containerized ceph ansible
     module: test_ansible.py
     config:
+      use_cdn: True
       build: '2.0'
       ansi_config:
         ceph_test: True
@@ -42,7 +43,6 @@ tests:
     module: test_ansible_upgrade.py
     polarion-id: CEPH-83572823
     config:
-      build: '3.x'
       ansi_config:
         ceph_test: True
         osd_scenario: collocated
@@ -126,6 +126,7 @@ tests:
 - test:
     name: containerized ceph ansible
     module: test_ansible.py
+    use_cdn: True
     config:
       ansi_config:
         ceph_test: True
@@ -163,7 +164,6 @@ tests:
     module: test_ansible_upgrade.py
     polarion-id: CEPH-83572730
     config:
-      build: '3.x'
       ansi_config:
         ceph_test: True
         ceph_origin: distro

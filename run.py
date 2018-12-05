@@ -356,7 +356,7 @@ def run(args):
         log.info("Using latest nightly docker image \nRegistry: {registry} \nDocker image: {image}\nDocker tag:{tag}"
                  .format(registry=docker_registry, image=docker_image, tag=docker_tag))
         docker_insecure_registry = True
-        log.warn('Using Docker insecure registry registry')
+        log.warn('Using Docker insecure registry setting')
 
     service = None
     suite_name = os.path.basename(suite_file).split(".")[0]

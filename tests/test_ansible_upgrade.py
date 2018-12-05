@@ -20,6 +20,7 @@ def run(ceph_cluster, **kw):
     skip_version_compare = config.get('skip_version_compare')
     containerized = config.get('ansi_config').get('containerized_deployment')
     build = config.get('build', config.get('rhbuild'))
+    log.info("Build for upgrade: {build}".format(build=build))
 
     ubuntu_repo = config.get('ubuntu_repo')
     hotfix_repo = config.get('hotfix_repo')
