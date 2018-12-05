@@ -15,13 +15,6 @@ from reportportal_client import ReportPortalServiceAsync
 
 log = logging.getLogger(__name__)
 
-vg_name = 'vg%s'
-lv_name = 'lv%s'
-size = '100%FREE'
-data = "{'data':'%s',"
-data_vg = "'data_vg':'%s'},"
-
-
 # variables
 mounting_dir = '/mnt/cephfs/'
 clients = []
@@ -530,43 +523,6 @@ def custom_ceph_config(suite_config, custom_config, custom_config_file):
 
     log.info("Full custom config: {}".format(full_custom_config))
     return full_custom_config
-
-
-def create_lvm(ceph_nodes, get_osd_devices):
-    osd_nodes, devs = osd_ops(ceph_nodes, get_osd_devices)
-    lvm_volms = []
-    for osd in osd_nodes:
-        for dev in devs[0]:
-            log.info('creating pv on %s' % osd.hostname)
-            osd.exec_command(cmd='sudo pvcreate %s' % dev)
-            log.info('creating vg  %s' % osd.hostname)
-            osd.exec_command(cmd='sudo vgcreate %s %s' % (vg_name % devs[0].index(dev), dev))
-            log.info('creating lv %s' % osd.hostname)
-            osd.exec_command(cmd="sudo lvcreate -n %s -l %s %s " % (lv_name % devs[0].index(dev),
-                                                                    size, vg_name % devs[0].index(dev)))
-            val1 = data % (lv_name % devs[0].index(dev))
-            val2 = data_vg % (vg_name % (devs[0].index(dev)))
-            lvm_volms.append(val1)
-            lvm_volms.append(val2)
-
-    lvm_volms = ''.join(lvm_volms[0:6])
-    return lvm_volms.rstrip(',')
-
-
-def osd_ops(ceph_nodes, get_osd_devices):
-    role = 'osd'
-    osd_nodes = []
-    for node in ceph_nodes:
-        if node.role == role:
-            log.info('installing lvm util')
-            node.exec_command(cmd='sudo yum install -y lvm2')
-            osd_nodes.append(node)
-    devs = []
-    for node in osd_nodes:
-        dev = get_osd_devices(node)
-        devs.append(dev)
-
-    return osd_nodes, devs
 
 
 def email_results(results_list, run_id, send_to_cephci=False):
