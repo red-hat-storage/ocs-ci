@@ -1,6 +1,6 @@
 instance:
   create:
-    image-name: rhel-7.6-server-x86_64-latest
+    image-name: rhel-7.6-server-x86_64-released
     vm-size: m1.medium
 
   setup: |
