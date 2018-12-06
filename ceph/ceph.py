@@ -1565,6 +1565,7 @@ class CephInstaller(CephObject):
         """
         Installs ceph-ansible
         """
+        logger.info("Installing ceph-ansible")
         if self.pkg_type == 'deb':
             self.exec_command(sudo=True, cmd='apt-get install -y ceph-ansible')
         else:
@@ -1583,9 +1584,16 @@ class CephInstaller(CephObject):
 
             if kw.get('upgrade'):
                 self.exec_command(sudo=True, cmd='yum update metadata')
-                self.exec_command(sudo=True, cmd='yum update -y ceph-ansible')
+                self.exec_command(sudo=True, cmd='yum update -y ansible ceph-ansible')
             else:
                 self.exec_command(sudo=True, cmd='yum install -y ceph-ansible')
+
+        if self.pkg_type == 'deb':
+            out, rc = self.exec_command(cmd='dpkg -s ceph-ansible')
+        else:
+            out, rc = self.exec_command(cmd='rpm -qa | grep ceph-ansible')
+        output = out.read().rstrip()
+        logger.info("Installed ceph-ansible: {version}".format(version=output))
 
     def add_iscsi_settings(self, test_data):
         """

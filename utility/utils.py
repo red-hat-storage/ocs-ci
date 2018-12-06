@@ -453,12 +453,12 @@ def get_latest_container_image_tag(version):
         version: version to get the latest image tag for (2.x, 3.0, or 3.x)
 
     Returns:
-        Image tag of the latest compose for the given version
+        str: Image tag of the latest compose for the given version
 
     """
     image_tag = get_latest_container(version).get('docker_tag')
     log.info("Found image tag: {image_tag}".format(image_tag=image_tag))
-    return image_tag
+    return str(image_tag)
 
 
 def get_latest_container(version):
