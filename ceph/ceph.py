@@ -11,7 +11,7 @@ import paramiko
 import yaml
 from paramiko.ssh_exception import SSHException
 
-from utility.utils import custom_ceph_config, create_lvm
+from utility.utils import custom_ceph_config
 
 logger = logging.getLogger(__name__)
 
@@ -187,8 +187,6 @@ class Ceph(object):
             str: inventory
 
         """
-        lvm = self.ansible_config.get('osd_scenario') == 'lvm'
-        lvm_vols = create_lvm(self, self.get_osd_devices) if lvm else None
         mon_hosts = []
         osd_hosts = []
         rgw_hosts = []
@@ -197,7 +195,7 @@ class Ceph(object):
         nfs_hosts = []
         client_hosts = []
         iscsi_gw_hosts = []
-        for node in self:
+        for node in self:  # type: CephNode
             eth_interface = node.search_ethernet_interface(self)
             if eth_interface is None:
                 err = 'Network test failed: No suitable interface is found on {node}.'.format(node=node.ip_address)
@@ -213,20 +211,20 @@ class Ceph(object):
                 mgr_host = node.shortname + ' monitor_interface=' + node.eth_interface
                 mgr_hosts.append(mgr_host)
             if node.role == 'osd':
-                devs = self.get_osd_devices(node)
-                self.setup_osd_devices(devs, node)
+                devices = self.get_osd_devices(node)
+                self.setup_osd_devices(devices, node)
                 auto_discovery = self.ansible_config.get('osd_auto_discovery', False)
                 objectstore = ''
-                lvm_volumes = ''
-                devices = ''
                 if bluestore:
                     objectstore = 'osd_objectstore="bluestore"'
-                if lvm:
-                    lvm_volumes = 'lvm_volumes=' + '"[' + lvm_vols + ']"' + ' '
+                if self.ansible_config.get('osd_scenario') == 'lvm':
+                    devices_prefix = 'lvm_volumes'
+                    devices = node.create_lvm(devices)
                 else:
-                    devices = (" devices='" + json.dumps(devs) + "'" if not auto_discovery else '')
-
-                osd_host = node.shortname + mon_interface + devices + lvm_volumes + objectstore
+                    devices_prefix = 'devices'
+                devices = (" {devices_prefix}='{devices}'".format(devices_prefix=devices_prefix, devices=json.dumps(
+                    devices)) if not auto_discovery else '')
+                osd_host = node.shortname + mon_interface + devices + objectstore
                 osd_hosts.append(osd_host)
             if node.role == 'mds':
                 mds_host = node.shortname + ' monitor_interface=' + node.eth_interface
@@ -925,6 +923,10 @@ class SSHConnectionManager(object):
 
 
 class CephNode(object):
+    class LvmConfig(object):
+        vg_name = 'vg%s'
+        lv_name = 'lv%s'
+        size = '100%FREE'
 
     def __init__(self, **kw):
         """
@@ -1374,6 +1376,37 @@ class CephNode(object):
             path(str): file path
         """
         self.exec_command(cmd='sudo chown -R $USER:$USER {path}'.format(path=path))
+
+    def create_lvm(self, devices):
+        """
+        Creates lvm volumes and returns device list suitable for ansible config
+        Args:
+            devices (list): device list
+
+        Returns (list): lvm volumes list
+
+        """
+        self.install_lvm_util()
+        lvm_volms = []
+        for dev in devices:
+            logger.info('creating pv on %s' % self.hostname)
+            self.exec_command(cmd='sudo pvcreate %s' % dev)
+            logger.info('creating vg  %s' % self.hostname)
+            self.exec_command(cmd='sudo vgcreate %s %s' % (self.LvmConfig.vg_name % devices.index(dev), dev))
+            logger.info('creating lv %s' % self.hostname)
+            self.exec_command(cmd="sudo lvcreate -n %s -l %s %s " % (self.LvmConfig.lv_name % devices.index(dev),
+                                                                     self.LvmConfig.size,
+                                                                     self.LvmConfig.vg_name % devices.index(dev)))
+            lvm_volms.append({'data': self.LvmConfig.lv_name % devices.index(dev),
+                              'data_vg': self.LvmConfig.vg_name % (devices.index(dev))})
+        return lvm_volms
+
+    def install_lvm_util(self):
+        """
+        Installs lvm util
+        """
+        logger.info('installing lvm util')
+        self.exec_command(cmd='sudo yum install -y lvm2')
 
 
 class CephObject(object):
