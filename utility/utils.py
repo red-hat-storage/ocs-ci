@@ -574,11 +574,15 @@ def email_results(results_list, run_id, send_to_cephci=False):
         part1 = MIMEText(html, 'html')
         msg.attach(part1)
 
-        s = smtplib.SMTP('localhost')
-        s.sendmail(sender, recipients, msg.as_string())
-        s.quit()
+        try:
+            s = smtplib.SMTP('localhost')
+            s.sendmail(sender, recipients, msg.as_string())
+            s.quit()
+            log.info("Results have been emailed to {recipients}".format(recipients=recipients))
 
-        log.info("Results have been emailed to {recipients}".format(recipients=recipients))
+        except Exception as e:
+            print("\n")
+            log.exception(e.message)
 
 
 def get_cephci_config():
