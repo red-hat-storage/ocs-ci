@@ -1508,6 +1508,14 @@ class CephOsd(CephDemon):
         return 'ceph-{role}-{host}-{device}'.format(role=self.role, host=self.node.hostname,
                                                     device=self.device) if self.containerized else ''
 
+    @property
+    def is_active(self):
+        return True if self.device else False
+
+    @is_active.setter
+    def is_active(self, value):
+        pass
+
 
 class CephClient(CephObject):
     def __init__(self, role, node):
