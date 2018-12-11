@@ -126,8 +126,8 @@ tests:
 - test:
     name: containerized ceph ansible
     module: test_ansible.py
-    use_cdn: True
     config:
+      use_cdn: True
       ansi_config:
         ceph_test: True
         ceph_origin: distro
