@@ -10,8 +10,9 @@ import requests
 import paramiko
 import yaml
 from paramiko.ssh_exception import SSHException
+import pickle
 
-from utility.utils import custom_ceph_config
+from utility.utils import custom_ceph_config, pvcreate, vgcreate, lvcreate, chk_lvm_exists
 
 logger = logging.getLogger(__name__)
 
@@ -214,9 +215,11 @@ class Ceph(object):
                 devices = self.get_osd_devices(node)
                 self.setup_osd_devices(devices, node)
                 auto_discovery = self.ansible_config.get('osd_auto_discovery', False)
-                objectstore = ''
                 if bluestore:
-                    objectstore = 'osd_objectstore="bluestore"'
+                    objectstore = 'osd_objectstore="bluestore"' + ' '
+                else:
+                    objectstore = 'osd_objectstore="filestore"' + ' '
+
                 if self.ansible_config.get('osd_scenario') == 'lvm':
                     devices_prefix = 'lvm_volumes'
                     devices = node.create_lvm(devices)
@@ -229,7 +232,7 @@ class Ceph(object):
             if node.role == 'mds':
                 mds_host = node.shortname + ' monitor_interface=' + node.eth_interface
                 mds_hosts.append(mds_host)
-            if node.role == 'nfs' and self.rhcs_version >= '3':
+            if node.role == 'nfs' and self.rhcs_version >= '3' and node.pkg_type == 'rpm':
                 nfs_host = node.shortname + ' monitor_interface=' + node.eth_interface
                 nfs_hosts.append(nfs_host)
             if node.role == 'rgw':
@@ -926,7 +929,7 @@ class CephNode(object):
     class LvmConfig(object):
         vg_name = 'vg%s'
         lv_name = 'lv%s'
-        size = '100%FREE'
+        size = '{}%FREE'
 
     def __init__(self, **kw):
         """
@@ -1388,17 +1391,35 @@ class CephNode(object):
         """
         self.install_lvm_util()
         lvm_volms = []
-        for dev in devices:
-            logger.info('creating pv on %s' % self.hostname)
-            self.exec_command(cmd='sudo pvcreate %s' % dev)
-            logger.info('creating vg  %s' % self.hostname)
-            self.exec_command(cmd='sudo vgcreate %s %s' % (self.LvmConfig.vg_name % devices.index(dev), dev))
-            logger.info('creating lv %s' % self.hostname)
-            self.exec_command(cmd="sudo lvcreate -n %s -l %s %s " % (self.LvmConfig.lv_name % devices.index(dev),
-                                                                     self.LvmConfig.size,
-                                                                     self.LvmConfig.vg_name % devices.index(dev)))
-            lvm_volms.append({'data': self.LvmConfig.lv_name % devices.index(dev),
-                              'data_vg': self.LvmConfig.vg_name % (devices.index(dev))})
+        file_Name = 'osd_scenarios_%s'
+        exists = chk_lvm_exists(self)
+        if exists == 0:
+            '''
+            for script test_ansible_roll_over.py, which adds new OSD,
+            to prevent creation of lvms on the existing osd, using this chk_lvm_exists()
+
+            '''
+            logger.info('lvms configured already ')
+            fileObject = open(file_Name % self.hostname, 'r')
+            existing_osd_scenarios = pickle.load(fileObject)
+            lvm_volms.append(existing_osd_scenarios)
+            fileObject.close()
+        else:
+            for dev in devices:
+                logger.info('creating pv on %s' % self.hostname)
+                pvcreate(self, dev)
+                logger.info('creating vg  %s' % self.hostname)
+                vgname = vgcreate(self, self.LvmConfig.vg_name % devices.index(dev), dev)
+                logger.info('creating lv %s' % self.hostname)
+                lvname = lvcreate(self, self.LvmConfig.lv_name % devices.index(dev),
+                                  self.LvmConfig.vg_name % devices.index(dev),
+                                  self.LvmConfig.size.format(100))
+
+                lvm_volms.append({'data': lvname,
+                                  'data_vg': vgname})
+        fileObject = open(file_Name % self.hostname, 'wb')
+        pickle.dump(lvm_volms, fileObject)
+        fileObject.close()
         return lvm_volms
 
     def install_lvm_util(self):
@@ -1406,7 +1427,10 @@ class CephNode(object):
         Installs lvm util
         """
         logger.info('installing lvm util')
-        self.exec_command(cmd='sudo yum install -y lvm2')
+        if self.pkg_type == 'rpm':
+            self.exec_command(cmd='sudo yum install -y lvm2')
+        else:
+            self.exec_command(cmd='sudo apt-get install -y lvm2')
 
 
 class CephObject(object):
@@ -1583,7 +1607,17 @@ class CephInstaller(CephObject):
         """
         host_file = self.write_file(
             sudo=True, file_name='{}/hosts'.format(self.ansible_dir), file_mode='w')
+        logger.info(inventory_config)
         host_file.write(inventory_config)
+        host_file.flush()
+
+        out, rc = self.exec_command(sudo=True, cmd='cat {}/hosts'.format(self.ansible_dir))
+        out = out.read().rstrip('\n')
+        out = re.sub('\]+', ']', out)
+        out = re.sub('\[+', '[', out)
+        host_file = self.write_file(
+            sudo=True, file_name='{}/hosts'.format(self.ansible_dir), file_mode='w')
+        host_file.write(out)
         host_file.flush()
 
     def setup_ansible_site_yml(self, containerized):

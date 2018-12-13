@@ -15,6 +15,13 @@ from reportportal_client import ReportPortalServiceAsync
 
 log = logging.getLogger(__name__)
 
+vg_name = 'vg%s'
+lv_name = 'lv%s'
+size = '{}%FREE'
+data_lv = 'data-lv%s'
+db_lv = 'db-lv%s'
+wal_lv = 'wal-lv%s'
+
 # variables
 mounting_dir = '/mnt/cephfs/'
 clients = []
@@ -603,3 +610,27 @@ def get_cephci_config():
                   "See README for more information.")
         raise
     return cfg
+
+
+def chk_lvm_exists(node):
+    out, rc = node.exec_command(cmd="lsblk")
+    out = out.read()
+    if 'lvm' in out:
+        print out
+        return 0
+    else:
+        return 1
+
+
+def pvcreate(node, devices):
+    node.exec_command(cmd='sudo pvcreate %s' % devices)
+
+
+def vgcreate(node, vg_name, devices):
+    node.exec_command(cmd='sudo vgcreate %s %s' % (vg_name, devices))
+    return vg_name
+
+
+def lvcreate(node, lv_name, vg_name, size):
+    node.exec_command(cmd="sudo lvcreate -n %s -l %s %s " % (lv_name, size, vg_name))
+    return lv_name
