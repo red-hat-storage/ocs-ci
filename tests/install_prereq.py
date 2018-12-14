@@ -7,6 +7,7 @@ import traceback
 from ceph.parallel import parallel
 from ceph.utils import config_ntp
 from ceph.utils import update_ca_cert
+from utility.retry import retry
 
 log = logging.getLogger(__name__)
 rpm_pkgs = ['wget', 'git', 'python-virtualenv', 'redhat-lsb', 'python-nose', 'ntp']
@@ -53,19 +54,21 @@ def install_prereq(ceph, timeout=1800, skip_subscription=False, repo=False, rhbu
         # install epel package
         ceph.exec_command(cmd='sudo yum clean metadata')
         # finally install python2-pip directly using rpm since its available only in epel
-        base_dir_path = "http://dl.fedoraproject.org/pub/fedora-secondary/releases/28/Everything/i386/os/Packages/p"
-        pip_package_name = "python2-pip-9.0.3-1.fc28.noarch.rpm"
-        ceph.exec_command(
-            cmd='sudo yum install -y {base}/{package}'.format(base=base_dir_path, package=pip_package_name))
-        # TODO: remove GPG block if no issues as we already have it in ceph/utils.py
-        # add GPG key
-        # ceph.exec_command(
-        # cmd='curl --insecure -O -L https://prodsec.redhat.com/keys/00da75f2.txt && sudo rpm --import 00da75f2.txt')
+        install_pip(ceph)
         config_ntp(ceph)
 
 
+@retry(Exception, tries=5, delay=10)
+def install_pip(ceph):
+    log.info("Installing pip on {host}".format(host=ceph.hostname))
+    base_dir_path = "http://dl.fedoraproject.org/pub/fedora-secondary/releases/28/Everything/i386/os/Packages/p"
+    pip_package_name = "python2-pip-9.0.3-1.fc28.noarch.rpm"
+    ceph.exec_command(
+        cmd='sudo yum install -y {base}/{package}'.format(base=base_dir_path, package=pip_package_name))
+
+
 def setup_addition_repo(ceph, repo):
-    log.info("Additing addition repo {repo} to {sn}".format(
+    log.info("Adding addition repo {repo} to {sn}".format(
              repo=repo, sn=ceph.shortname))
     ceph.exec_command(sudo=True,
                       cmd='curl -o /etc/yum.repos.d/rh_add_repo.repo {repo}'.format(repo=repo))
