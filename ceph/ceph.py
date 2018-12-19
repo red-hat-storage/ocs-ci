@@ -216,9 +216,9 @@ class Ceph(object):
                 self.setup_osd_devices(devices, node)
                 auto_discovery = self.ansible_config.get('osd_auto_discovery', False)
                 if bluestore:
-                    objectstore = 'osd_objectstore="bluestore"' + ' '
+                    objectstore = ' osd_objectstore="bluestore"' + ' '
                 else:
-                    objectstore = 'osd_objectstore="filestore"' + ' '
+                    objectstore = ' osd_objectstore="filestore"' + ' '
 
                 if self.ansible_config.get('osd_scenario') == 'lvm':
                     devices_prefix = 'lvm_volumes'
