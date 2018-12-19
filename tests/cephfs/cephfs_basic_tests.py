@@ -1,20 +1,21 @@
-import traceback
-from tests.cephfs.cephfs_utils import FsUtils
-import timeit
-from ceph.ceph import CommandFailed
 import logging
 import random
 import string
+import timeit
+import traceback
+
+from ceph.ceph import CommandFailed
+from tests.cephfs.cephfs_utils import FsUtils
 
 logger = logging.getLogger(__name__)
 log = logger
 
 
-def run(**kw):
+def run(ceph_cluster, **kw):
     try:
         start = timeit.default_timer()
-        ceph_nodes = kw.get('ceph_nodes')
-        fs_util = FsUtils(ceph_nodes)
+
+        fs_util = FsUtils(ceph_cluster)
         client_info, rc = fs_util.get_clients()
         if rc == 0:
             log.info("Got client info")
@@ -28,10 +29,10 @@ def run(**kw):
         client2.append(client_info['fuse_clients'][1])
         client3.append(client_info['kernel_clients'][0])
         client4.append(client_info['kernel_clients'][1])
-        rc1 = fs_util.auth_list(client1, client_info['mon_node'])
-        rc2 = fs_util.auth_list(client2, client_info['mon_node'])
-        rc3 = fs_util.auth_list(client3, client_info['mon_node'])
-        rc4 = fs_util.auth_list(client4, client_info['mon_node'])
+        rc1 = fs_util.auth_list(client1)
+        rc2 = fs_util.auth_list(client2)
+        rc3 = fs_util.auth_list(client3)
+        rc4 = fs_util.auth_list(client4)
         print rc1, rc2, rc3, rc4
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
@@ -77,45 +78,45 @@ def run(**kw):
         results = []
         return_counts = []
         log.info("Create files and directories of 1000 depth and 1000 breadth")
-        for node in client_info['fuse_clients']:
-            node.exec_command(
+        for client in client_info['fuse_clients']:
+            client.exec_command(
                 cmd='sudo mkdir %s%s' %
-                (client_info['mounting_dir'], dir1))
-            node.exec_command(
+                    (client_info['mounting_dir'], dir1))
+            client.exec_command(
                 cmd='sudo mkdir %s%s' %
-                (client_info['mounting_dir'], dir2))
-            node.exec_command(
+                    (client_info['mounting_dir'], dir2))
+            client.exec_command(
                 cmd='sudo mkdir %s%s' %
-                (client_info['mounting_dir'], dir3))
+                    (client_info['mounting_dir'], dir3))
             log.info('Execution of testcase %s started' % tc1)
-            out, rc = node.exec_command(
+            out, rc = client.exec_command(
                 cmd='sudo crefi %s%s --fop create --multi -b 1000 -d 1000 '
                     '-n 1 -T 5 --random --min=1K --max=10K' %
-                (client_info['mounting_dir'], dir1), long_running=True)
+                    (client_info['mounting_dir'], dir1), long_running=True)
             log.info('Execution of testcase %s ended' % tc1)
-            if node.exit_status == 0:
+            if client.node.exit_status == 0:
                 results.append("TC %s passed" % tc1)
 
             log.info('Execution of testcase %s started' % tc2)
-            node.exec_command(
+            client.exec_command(
                 cmd='sudo cp -r  %s%s/* %s%s/' %
-                (client_info['mounting_dir'], dir1,
-                 client_info['mounting_dir'], dir2))
-            node.exec_command(
+                    (client_info['mounting_dir'], dir1,
+                     client_info['mounting_dir'], dir2))
+            client.exec_command(
                 cmd="diff -qr  %s%s %s%s/" %
-                (client_info['mounting_dir'], dir1,
-                 client_info['mounting_dir'], dir2))
+                    (client_info['mounting_dir'], dir1,
+                     client_info['mounting_dir'], dir2))
             log.info('Execution of testcase %s ended' % tc2)
-            if node.exit_status == 0:
+            if client.node.exit_status == 0:
                 results.append("TC %s passed" % tc2)
 
             log.info('Execution of testcase %s started' % tc3)
-            out, rc = node.exec_command(
+            out, rc = client.exec_command(
                 cmd='sudo mv  %s%s/* %s%s/' %
-                (client_info['mounting_dir'], dir1,
-                 client_info['mounting_dir'], dir3))
+                    (client_info['mounting_dir'], dir1,
+                     client_info['mounting_dir'], dir3))
             log.info('Execution of testcase %s ended' % tc3)
-            if node.exit_status == 0:
+            if client.node.exit_status == 0:
                 results.append("TC %s passed" % tc3)
             log.info('Execution of testcase %s started' % tc4)
             for client in client_info['clients']:
@@ -123,17 +124,17 @@ def run(**kw):
                     client.exec_command(
                         cmd='sudo dd if=/dev/zero of=%s%s.txt bs=100M '
                             'count=5' %
-                        (client_info['mounting_dir'], client.hostname))
+                            (client_info['mounting_dir'], client.node.hostname))
                     out1, rc1 = client.exec_command(
                         cmd='sudo  ls -c -ltd -- %s%s.*' %
-                        (client_info['mounting_dir'], client.hostname))
+                            (client_info['mounting_dir'], client.node.hostname))
                     client.exec_command(
                         cmd='sudo dd if=/dev/zero of=%s%s.txt bs=200M '
                             'count=5' %
-                        (client_info['mounting_dir'], client.hostname))
+                            (client_info['mounting_dir'], client.node.hostname))
                     out2, rc2 = client.exec_command(
                         cmd='sudo  ls -c -ltd -- %s%s.*' %
-                        (client_info['mounting_dir'], client.hostname))
+                            (client_info['mounting_dir'], client.node.hostname))
                     a = out1.read()
                     print "------------"
                     b = out2.read()

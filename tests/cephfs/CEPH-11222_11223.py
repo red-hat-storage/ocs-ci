@@ -1,24 +1,25 @@
-from tests.cephfs.cephfs_utils import FsUtils
-import timeit
-from ceph.ceph import CommandFailed
-import traceback
+import logging
 import random
 import string
-import logging
+import timeit
+import traceback
+
+from ceph.ceph import CommandFailed
 from ceph.parallel import parallel
 from ceph.utils import check_ceph_healthly
+from tests.cephfs.cephfs_utils import FsUtils
+
 logger = logging.getLogger(__name__)
 log = logger
 
 
-def run(**kw):
+def run(ceph_cluster, **kw):
     try:
         start = timeit.default_timer()
         tc = '11222'
         dir_name = 'dir'
         log.info("Running cephfs %s test case" % (tc))
-        ceph_nodes = kw.get('ceph_nodes')
-        fs_util = FsUtils(ceph_nodes)
+        fs_util = FsUtils(ceph_cluster)
         config = kw.get('config')
         num_of_osds = config.get('num_of_osds')
         client_info, rc = fs_util.get_clients()
@@ -34,10 +35,10 @@ def run(**kw):
         client2.append(client_info['fuse_clients'][1])
         client3.append(client_info['kernel_clients'][0])
         client4.append(client_info['kernel_clients'][1])
-        rc1 = fs_util.auth_list(client1, client_info['mon_node'])
-        rc2 = fs_util.auth_list(client2, client_info['mon_node'])
-        rc3 = fs_util.auth_list(client3, client_info['mon_node'])
-        rc4 = fs_util.auth_list(client4, client_info['mon_node'])
+        rc1 = fs_util.auth_list(client1)
+        rc2 = fs_util.auth_list(client2)
+        rc3 = fs_util.auth_list(client3)
+        rc4 = fs_util.auth_list(client4)
         print rc1, rc2, rc3, rc4
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
@@ -81,12 +82,12 @@ def run(**kw):
             log.info("Creating directory:")
             client.exec_command(
                 cmd='sudo mkdir %s%s' %
-                (client_info['mounting_dir'], dir1))
+                    (client_info['mounting_dir'], dir1))
             log.info("Creating directories with breadth and depth:")
             out, rc = client.exec_command(
                 cmd='sudo crefi %s%s --fop create --multi -b 10 -d 10 '
                     '--random --min=1K --max=10K' %
-                (client_info['mounting_dir'], dir1))
+                    (client_info['mounting_dir'], dir1))
             print out.read()
             break
 
@@ -131,7 +132,7 @@ def run(**kw):
         for client in client_info['clients']:
             client.exec_command(
                 cmd='sudo rm -rf %s%s' %
-                (client_info['mounting_dir'], dir1))
+                    (client_info['mounting_dir'], dir1))
             break
 
         for client in client_info['clients']:
@@ -139,14 +140,14 @@ def run(**kw):
             out, rc = client.exec_command(
                 cmd='sudo crefi %s%s --fop create --multi -b 10 -d 10 '
                     '--random --min=1K --max=10K' %
-                (client_info['mounting_dir'], dir1))
+                    (client_info['mounting_dir'], dir1))
             print out.read()
             log.info("Renaming the dirs:")
             out, rc = client.exec_command(
                 cmd='sudo crefi '
-                '%s%s --fop rename --multi -b 10 -d 10 --random '
-                '--min=1K --max=10K' %
-                (client_info['mounting_dir'], dir1))
+                    '%s%s --fop rename --multi -b 10 -d 10 --random '
+                    '--min=1K --max=10K' %
+                    (client_info['mounting_dir'], dir1))
             print out.read()
 
             break
@@ -192,7 +193,7 @@ def run(**kw):
                 client_info['mon_node']), None, 300)
         client1[0].exec_command(
             cmd='sudo mkdir %s%s' %
-            (client_info['mounting_dir'], dir_name))
+                (client_info['mounting_dir'], dir_name))
         with parallel() as p:
             p.spawn(
                 fs_util.read_write_IO,
