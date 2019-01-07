@@ -17,7 +17,7 @@ def run(**kw):
         ceph_nodes, utils.clients)
     num_of_dirs = num_of_dirs / 5
     utils.activate_multiple_mdss(mds_nodes)
-    print "###################################################################################"
+    print("###################################################################################")
     log.info("Execution of Test case 11229 started:")
     tc = '11129'
     with parallel() as p:
@@ -36,7 +36,7 @@ def run(**kw):
     tc = utils.rc_verify(tc, utils.RC)
     utils.output.append(tc)
 
-    print "###################################################################################"
+    print("###################################################################################")
     log.info("Execution of Test case 11228 started:")
     tc = '11128'
 
@@ -51,7 +51,7 @@ def run(**kw):
     log.info("Execution of Test case 11228 ended:")
     tc = utils.rc_verify(tc, utils.RC)
     utils.output.append(tc)
-    print "###################################################################################"
+    print("###################################################################################")
     log.info("Execution of Test case 11230 started:")
     tc = '11130'
     with parallel() as p:
@@ -71,21 +71,21 @@ def run(**kw):
 
     tc = utils.rc_verify(tc, utils.RC)
     utils.output.append(tc)
-    print "###################################################################################"
-    print "TESTS completed"
-    print "Results:"
+    print("###################################################################################")
+    print("TESTS completed")
+    print("Results:")
     for i in utils.output:
-        print i
-    for i, j in utils.failure.iteritems():
-        print "client: %s Failure:%s " % (i, j)
+        print(i)
+    for i, j in utils.failure.items():
+        print("client: %s Failure:%s " % (i, j))
 
-    print'Script execution time:------'
+    print('Script execution time:------')
     stop = timeit.default_timer()
     total_time = stop - start
 
     mins, secs = divmod(total_time, 60)
     hours, mins = divmod(mins, 60)
 
-    print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
+    print("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
 
     return 0

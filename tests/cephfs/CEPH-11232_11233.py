@@ -35,7 +35,7 @@ def run(ceph_cluster, **kw):
         rc2 = fs_util.auth_list(client2)
         rc3 = fs_util.auth_list(client3)
         rc4 = fs_util.auth_list(client4)
-        print rc1, rc2, rc3, rc4
+        print(rc1, rc2, rc3, rc4)
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
         else:
@@ -90,7 +90,7 @@ def run(ceph_cluster, **kw):
 
         result = fs_util.rc_verify('', return_counts)
         if 'Data validation success' in result:
-            print "Data validation success"
+            print("Data validation success")
             tc = '11232 and 11233'
             log.info("Execution of Test cases %s started:" % (tc))
             fs_util.allow_dir_fragmentation(client_info['mds_nodes'])
@@ -99,7 +99,7 @@ def run(ceph_cluster, **kw):
                 out, rc = node.exec_command(
                     cmd='sudo mkdir %s%s' %
                         (client_info['mounting_dir'], dir_name))
-                print out.read()
+                print(out.read().decode())
                 break
             active_mds_node_1, active_mds_node_2, rc = fs_util.get_active_mdss(
                 client_info['mds_nodes'])
@@ -180,7 +180,7 @@ def run(ceph_cluster, **kw):
                 raise CommandFailed("Mds info command failed")
 
             log.info("Execution of Test case 11232 and 11233 ended:")
-            print "Results:"
+            print("Results:")
             if node1_before_io != node1_after_io and \
                     node1_after_io != node1_after_del:
                 log.info("Test case %s Passed" % (tc))
@@ -205,13 +205,13 @@ def run(ceph_cluster, **kw):
                 log.info('Cleaning up successfull')
             else:
                 return 1
-        print'Script execution time:------'
+        print('Script execution time:------')
         stop = timeit.default_timer()
         total_time = stop - start
         mins, secs = divmod(total_time, 60)
         hours, mins = divmod(mins, 60)
 
-        print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
+        print("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
 
         return 0
     except CommandFailed as e:

@@ -141,7 +141,7 @@ def create_nodes(conf, inventory, osp_cred, run_id, report_portal_session=None, 
         ceph_vmnodes = create_ceph_nodes(cluster, inventory, osp_cred, run_id, instances_name)
         ceph_nodes = []
         clients = []
-        for node in ceph_vmnodes.itervalues():
+        for node in ceph_vmnodes.values():
             if node.role == 'win-iscsi-clients':
                 clients.append(WinNode(ip_address=node.ip_address,
                                        private_ip=node.get_private_ip()))
@@ -164,7 +164,7 @@ def create_nodes(conf, inventory, osp_cred, run_id, report_portal_session=None, 
     log.info("Waiting for Floating IPs to be available")
     log.info("Sleeping 15 Seconds")
     time.sleep(15)
-    for cluster_name, cluster in ceph_cluster_dict.iteritems():
+    for cluster_name, cluster in ceph_cluster_dict.items():
         for instance in cluster:
             try:
                 instance.connect()
@@ -184,7 +184,7 @@ def print_results(tc):
         duration='DURATION',
         status='STATUS'
     )
-    print header
+    print(header)
     for test in tc:
         if test.get('duration'):
             dur = str(test['duration'])
@@ -192,7 +192,7 @@ def print_results(tc):
             dur = '0s'
         line = '{name:<20s}   {desc:50s}   {duration:20s}   {status:>15s}'.format(
             name=test['name'], desc=test['desc'], duration=dur, status=test['status'], )
-        print line
+        print(line)
 
 
 def run(args):
@@ -394,7 +394,7 @@ def run(args):
         ceph_store_nodes = open(reuse, 'rb')
         ceph_cluster_dict = pickle.load(ceph_store_nodes)
         ceph_store_nodes.close()
-        for cluster_name, cluster in ceph_cluster_dict.iteritems():
+        for cluster_name, cluster in ceph_cluster_dict.items():
             for node in cluster:
                 node.reconnect()
     if store:

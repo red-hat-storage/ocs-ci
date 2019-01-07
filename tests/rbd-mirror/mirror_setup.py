@@ -1,5 +1,5 @@
 import logging
-import rbd_mirror_utils as rbdmirror
+from . import rbd_mirror_utils as rbdmirror
 
 log = logging.getLogger(__name__)
 

@@ -31,7 +31,7 @@ def resurrect_traceback(exc):
     else:
         return
 
-    raise exc_info[0], exc_info[1], exc_info[2]
+    raise exc_info[0](exc_info[1]).with_traceback(exc_info[2])
 
 
 class parallel(object):
@@ -96,7 +96,7 @@ class parallel(object):
     def __iter__(self):
         return self
 
-    def next(self):
+    def __next__(self):
         if not self.any_spawned or self.iteration_stopped:
             raise StopIteration()
         result = self.results.get()

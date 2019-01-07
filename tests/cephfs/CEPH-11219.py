@@ -38,7 +38,7 @@ def run(ceph_cluster, **kw):
         rc2 = fs_util.auth_list(client2)
         rc3 = fs_util.auth_list(client3)
         rc4 = fs_util.auth_list(client4)
-        print rc1, rc2, rc3, rc4
+        print(rc1, rc2, rc3, rc4)
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
         else:
@@ -95,7 +95,7 @@ def run(ceph_cluster, **kw):
 
         result = fs_util.rc_verify('', return_counts)
         if result == 'Data validation success':
-            print "Data validation success"
+            print("Data validation success")
             dirs, rc = fs_util.mkdir(
                 client1, 0, 3, client_info['mounting_dir'], dir_name)
             if rc == 0:
@@ -198,11 +198,11 @@ def run(ceph_cluster, **kw):
                     client_info['mon_node']), None, 300)
 
             log.info("Execution of Test case CEPH-%s ended" % (tc))
-            print "Results:"
+            print("Results:")
             result = fs_util.rc_verify(tc, return_counts)
             if cluster_health_beforeIO == cluster_health_afterIO:
-                print result
-            print '-----------------------------------------'
+                print(result)
+            print('-----------------------------------------')
             with parallel() as p:
                 p.spawn(
                     fs_util.stress_io,
@@ -236,7 +236,7 @@ def run(ceph_cluster, **kw):
                     0,
                     1,
                     iotype='crefi')
-            print '-------------------------------------------------------'
+            print('-------------------------------------------------------')
             with parallel() as p:
                 p.spawn(
                     fs_util.read_write_IO,
@@ -252,7 +252,7 @@ def run(ceph_cluster, **kw):
                     'g',
                     'read',
                     dir_name=dirs[0])
-            print '-------------------------------------------------------'
+            print('-------------------------------------------------------')
             with parallel() as p:
                 p.spawn(
                     fs_util.stress_io,
@@ -286,7 +286,7 @@ def run(ceph_cluster, **kw):
                     0,
                     1,
                     iotype='crefi')
-            print '-------------------------------------------------------'
+            print('-------------------------------------------------------')
             with parallel() as p:
                 p.spawn(
                     fs_util.read_write_IO,
@@ -302,7 +302,7 @@ def run(ceph_cluster, **kw):
                     'g',
                     'read',
                     dir_name=dirs[0])
-            print '-------------------------------------------------------'
+            print('-------------------------------------------------------')
             log.info('Cleaning up!-----')
             if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
                 rc = fs_util.client_clean_up(
@@ -326,15 +326,15 @@ def run(ceph_cluster, **kw):
                     return 1
 
         log.info("Execution of Test case CEPH-%s ended" % (tc))
-        print "Results:"
+        print("Results:")
         result = fs_util.rc_verify(tc, return_counts)
-        print result
-        print'Script execution time:------'
+        print(result)
+        print('Script execution time:------')
         stop = timeit.default_timer()
         total_time = stop - start
         mins, secs = divmod(total_time, 60)
         hours, mins = divmod(mins, 60)
-        print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
+        print("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
         return 0
 
     except CommandFailed as e:

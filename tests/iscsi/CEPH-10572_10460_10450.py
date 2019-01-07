@@ -132,7 +132,7 @@ def do_failover(iscsi_initiators, device_list, ceph_nodes):
             active_device_status = out.read()
             active_device_status = active_device_status.rstrip("\n")
             active_device_status = active_device_status.split()
-            print active_device_status
+            print(active_device_status)
             if (active_device_status[1] == "active"):
                 rc = "active"
                 break
@@ -148,9 +148,9 @@ def do_failover(iscsi_initiators, device_list, ceph_nodes):
         else:
             log.info("failed device didn't came up to active")
             rc = "not"
-    print active_device_status
-    print active_device
-    print active_device_after_reboot
+    print(active_device_status)
+    print(active_device)
+    print(active_device_after_reboot)
     if active_device[1] != active_device_after_reboot[1] and rc == "active":
         return 0
     else:

@@ -22,7 +22,7 @@ def run(ceph_cluster, **kw):
     mon_short_name_list = [ceph_node.shortname for ceph_node in ceph_cluster.get_nodes('mon')]
     for _mon_to_kill in mon_to_kill_list:
         matcher = re.compile(_mon_to_kill)
-        matched_short_names = filter(matcher.match, mon_short_name_list)
+        matched_short_names = list(filter(matcher.match, mon_short_name_list))
         if len(matched_short_names) > 0:
             shrinked_nodes = [ceph_node for ceph_node in ceph_cluster if ceph_node.shortname in matched_short_names]
             for ceph_node in shrinked_nodes:

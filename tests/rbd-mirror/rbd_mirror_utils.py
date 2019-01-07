@@ -74,7 +74,7 @@ class RbdMirror:
 
     # Finding required details from json output
     def find(self, key, dictionary):
-        for k, v in dictionary.iteritems():
+        for k, v in dictionary.items():
             if k == key:
                 yield v
             elif isinstance(v, dict):
@@ -200,7 +200,7 @@ class RbdMirror:
                     state_pattern = kw.get('state', 'total')
                     num_image = 0
                     if 'total' in state_pattern:
-                        for k, v in out.iteritems():
+                        for k, v in out.items():
                             num_image = num_image + v
                     else:
                         num_image = out[state_pattern]
@@ -279,8 +279,8 @@ class RbdMirror:
         rmt_md5 = peercluster.exec_cmd(
             ceph_args=False, output=True,
             cmd='md5sum {}'.format(export_path))
-        print local_md5
-        print rmt_md5
+        print(local_md5)
+        print(rmt_md5)
         if local_md5 == rmt_md5:
             log.info('Data is consistent')
             self.exec_cmd(ceph_args=False, cmd='rm -f {}'.format(export_path))
@@ -386,7 +386,7 @@ class RbdMirror:
 
     def random_string(self):
         temp_str = ''.join(
-            [random.choice(string.ascii_letters) for _ in xrange(10)])
+            [random.choice(string.ascii_letters) for _ in range(10)])
         return temp_str
 
     def delete_pool(self, poolname):

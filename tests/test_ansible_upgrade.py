@@ -149,7 +149,7 @@ def compare_ceph_versions(pre_upgrade_versions, post_upgrade_versions):
     Returns: 1 if any non-installer version is the same post-upgrade, 0 if versions change.
 
     """
-    for name, version in pre_upgrade_versions.iteritems():
+    for name, version in pre_upgrade_versions.items():
         if 'installer' not in name and post_upgrade_versions[name] == version:
             log.error("Pre upgrade version matches post upgrade version")
             log.error("{}: {} matches".format(name, version))
@@ -193,7 +193,7 @@ def compare_container_counts(pre_upgrade_counts, post_upgrade_counts, prev_insta
     log.info("Pre upgrade container counts: {}".format(pre_upgrade_counts))
     log.info("Post upgrade container counts: {}".format(post_upgrade_counts))
 
-    for node, count in post_upgrade_counts.iteritems():
+    for node, count in post_upgrade_counts.items():
         if prev_install_version.startswith('2'):
             # subtract 1 since mgr containers are now collocated on mons
             if '-mon' in node:
@@ -242,7 +242,7 @@ def collocate_mons_with_mgrs(ceph_cluster, ansible_dir):
     log.info("Adding mons as mgrs in hosts file")
     mon_nodes = [node for node in ceph_cluster.get_nodes(role="mon")]
     ceph_installer = ceph_cluster.get_nodes(role="installer")[0]
-    mgr_block = '[mgrs]\n'
+    mgr_block = '\n[mgrs]\n'
     for node in mon_nodes:
         mgr_block += node.shortname + ' monitor_interface=' + node.eth_interface + '\n'
 

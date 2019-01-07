@@ -74,7 +74,7 @@ class WinNode(object):
 
     def create_disk(self, number):
         letters = list(string.ascii_uppercase)[3:3 + number]
-        for disk, part in zip(letters, range(1, 1 + number)):
+        for disk, part in zip(letters, list(range(1, 1 + number))):
             self.win_exec("Initialize-Disk -Number {} -PartitionStyle MBR".format(part))
             self.win_exec("New-Partition -DiskNumber {0} -UseMaximumSize -DriveLetter {1}".format(part, disk))
             self.win_exec("Get-Volume -DriveLetter {}".format(disk))

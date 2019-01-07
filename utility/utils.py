@@ -232,9 +232,9 @@ def mkdir_pinning(clients, range1, range2, dir_name, pin_val):
                     client.exec_command(
                         cmd='sudo setfattr -n ceph.dir.pin -v %s %s%s_%d' % (pin_val, mounting_dir, dir_name, num))
                 else:
-                    print "PIn val not given"
-                print out.read()
-                print time.time()
+                    print("Pin val not given")
+                print(out.read())
+                print(time.time())
             break
     except Exception as e:
         log.error(e)
@@ -272,9 +272,9 @@ def pinned_dir_io(clients, mds_fail_over, num_of_files, range1, range2):
                     mds_fail_over(mds_nodes)
                 out, err = client.exec_command(cmd='sudo crefi -n %d %sdir_%d' % (num_of_files, mounting_dir, num))
                 rc = out.channel.recv_exit_status()
-                print out.read()
+                print(out.read())
                 RC.append(rc)
-                print time.time()
+                print(time.time())
                 if rc == 0:
                     log.info("Client IO is going on,success")
                 else:
@@ -510,11 +510,11 @@ def custom_ceph_config(suite_config, custom_config, custom_config_file):
     if cli_config_dict:
         if not custom_config_dict.get('global'):
             custom_config_dict['global'] = {}
-        for key, value in cli_config_dict.iteritems():
+        for key, value in cli_config_dict.items():
             custom_config_dict['global'][key] = value
 
     # combine file and suite configs
-    for key, value in custom_config_dict.iteritems():
+    for key, value in custom_config_dict.items():
         subsection = {}
         if full_custom_config.get(key):
             subsection.update(full_custom_config[key])

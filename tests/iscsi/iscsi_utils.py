@@ -104,10 +104,10 @@ class IscsiUtils(object):
                 output = out
                 output = output.rstrip("\n")
 
-                device_list = filter(bool, output.split("mpa"))
+                device_list = list(filter(bool, output.split("mpa")))
                 time.sleep(10)
                 if (len(device_list) == no_of_luns):
-                    device_list = map(lambda s: s.strip(), device_list)
+                    device_list = [s.strip() for s in device_list]
                     device_list.sort(key=len)
                     return device_list
 
@@ -403,7 +403,7 @@ node.session.scan = auto
         job_options = "[global]\`nruntime=3600\`nrw=randwrite\`nsize=64m\`n"\
             "iodepth=32\`nblocksize=4096\`nioengine=windowsaio\`nthreads=4\`n"
         letters = list(string.ascii_uppercase)[3:3 + num_jobs]
-        for disk, job in zip(letters, range(num_jobs)):
+        for disk, job in zip(letters, list(range(num_jobs))):
             job = self.get_fio_job_config(job, disk)
             job_options += job
         return job_options

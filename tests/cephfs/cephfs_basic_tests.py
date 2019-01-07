@@ -33,7 +33,7 @@ def run(ceph_cluster, **kw):
         rc2 = fs_util.auth_list(client2)
         rc3 = fs_util.auth_list(client3)
         rc4 = fs_util.auth_list(client4)
-        print rc1, rc2, rc3, rc4
+        print(rc1, rc2, rc3, rc4)
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
         else:
@@ -136,7 +136,7 @@ def run(ceph_cluster, **kw):
                         cmd='sudo  ls -c -ltd -- %s%s.*' %
                             (client_info['mounting_dir'], client.node.hostname))
                     a = out1.read()
-                    print "------------"
+                    print("------------")
                     b = out2.read()
                     if a != b:
                         return_counts.append(out1.channel.recv_exit_status())
@@ -145,14 +145,14 @@ def run(ceph_cluster, **kw):
                         raise CommandFailed("Metadata info command failed")
                     break
             log.info('Execution of testcase %s ended' % tc4)
-            print return_counts
+            print(return_counts)
             rc_set = set(return_counts)
             if len(rc_set) == 1:
                 results.append("TC %s passed" % tc4)
 
-            print "Testcase Results:"
+            print("Testcase Results:")
             for res in results:
-                print res
+                print(res)
             break
         log.info('Cleaning up!-----')
         if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
@@ -167,12 +167,12 @@ def run(ceph_cluster, **kw):
             log.info('Cleaning up successfull')
         else:
             return 1
-        print'Script execution time:------'
+        print('Script execution time:------')
         stop = timeit.default_timer()
         total_time = stop - start
         mins, secs = divmod(total_time, 60)
         hours, mins = divmod(mins, 60)
-        print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
+        print("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
 
         return 0
     except CommandFailed as e:

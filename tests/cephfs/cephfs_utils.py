@@ -139,7 +139,7 @@ class FsUtils(object):
         p_flag = None
         fs_info = self.get_fs_info(mons[0])
         if kwargs:
-            for i, j in kwargs.items():
+            for i, j in list(kwargs.items()):
                 if i == 'path':
                     self.path = j
                 if i == 'permission':
@@ -265,7 +265,7 @@ class FsUtils(object):
     def fuse_mount(self, fuse_clients, mounting_dir, **kwargs):
         self.sub_dir = ''
         if kwargs:
-            for key, val in kwargs.items():
+            for key, val in list(kwargs.items()):
                 if key == 'new_client':
                     new_client_hostname = val
                 if key == 'sub_dir':
@@ -336,7 +336,7 @@ class FsUtils(object):
             **kwargs):
         sub_dir = ''
         if kwargs:
-            for key, val in kwargs.items():
+            for key, val in list(kwargs.items()):
                 if key == 'new_client':
                     new_client_hostname = val
                 if key == 'sub_dir':
@@ -524,7 +524,7 @@ class FsUtils(object):
                                 "--runtime=300 " \
                                 "--verify=meta"
                 if kwargs:
-                    for i, j in kwargs.items():
+                    for i, j in list(kwargs.items()):
                         self.dir_name = j
                 else:
                     self.dir_name = ''
@@ -703,7 +703,7 @@ finally:
                     out, rc = client.exec_command(
                         cmd='sudo mkdir %s%s_%d' %
                             (mounting_dir, dir_name, num))
-                    print out.read()
+                    print(out.read())
                     out, rc = client.exec_command(
                         cmd='sudo ls %s | grep %s' %
                             (mounting_dir, dir_name))
@@ -785,7 +785,7 @@ finally:
         return active_mds_1, active_mds_2, 0
 
     def get_mds_info(self, active_mds_node_1, active_mds_node_2, **kwargs):
-        for key, val in kwargs.items():
+        for key, val in list(kwargs.items()):
             if val == 'get subtrees':
                 out_1, err_1 = active_mds_node_1.exec_command(
                     cmd="sudo ceph --admin-daemon /var/run/ceph/ceph-mds.%s."
@@ -824,12 +824,12 @@ finally:
             if rc == 0:
                 if 'fnum' in kwargs:
                     self.num_files = kwargs['fnum']
-                    print self.num_files
+                    print(self.num_files)
                 if 'fsize' in kwargs:
                     self.file_size = kwargs['fsize']
                 if 'fname' in kwargs:
                     self.file_name = kwargs['fname']
-                for key, val in kwargs.items():
+                for key, val in list(kwargs.items()):
                     if val == 'touch':
                         if self.file_name != '':
                             out, rc = client.exec_command(
@@ -1003,14 +1003,14 @@ finally:
                         out, rc = client.exec_command(
                             cmd='sudo rm -rf %s%s_%d/*' %
                                 (mounting_dir, dir_name, num))
-                    print out.read()
+                    print(out.read())
                     self.return_counts = self.io_verify(client)
 
             break
         return self.return_counts, 0
 
     def fstab_entry(self, clients, mounting_dir, **kwargs):
-        for key, val in kwargs.items():
+        for key, val in list(kwargs.items()):
             if val == 'doEntry':
                 for client in clients:
                     out, rc = client.exec_command(cmd='mount')
@@ -1047,7 +1047,7 @@ ceph.conf=/etc/ceph/ceph.conf,_netdev,defaults  0 0
                             cmd='sudo cat /etc/fstab')
                         out = out.read()
                     if kwargs:
-                        for key, val in kwargs.items():
+                        for key, val in list(kwargs.items()):
                             if key == 'mon_node_ip':
                                 mon_node_ip = val
 
@@ -1201,7 +1201,7 @@ mds standby for rank = 1
         '''
         for mds nodes
         '''
-        for key, val in kwargs.items():
+        for key, val in list(kwargs.items()):
             if val == 'add_rank':
                 for mds in mds_nodes:
                     out, rc = mds.exec_command(
@@ -1278,9 +1278,9 @@ mds standby for rank = 1
             log.info("Client IO is going on,success")
         else:
             self.return_counts.update({client.node.hostname: client.node.exit_status})
-            print '------------------------------------'
-            print self.return_counts
-            print '------------------------------------'
+            print('------------------------------------')
+            print(self.return_counts)
+            print('------------------------------------')
             log.error("Client IO got interrupted")
         return self.return_counts
 
@@ -1345,7 +1345,7 @@ mds standby for rank = 1
             **kwargs):
         self.clients[0].exec_command('sudo ceph fs flag set enable_multiple true')
         if kwargs:
-            for k, v in kwargs.items():
+            for k, v in list(kwargs.items()):
                 if v == 'erasure_pool':
                     for mds in mds_nodes:
                         log.info(
@@ -1476,7 +1476,7 @@ mds standby for rank = 1
                     else:
                         self.return_counts.update(
                             {mds.node.hostname: mds.node.exit_status})
-                        print self.return_counts
+                        print(self.return_counts)
                         log.error("Setting max mds attr failed")
                         return self.return_counts, 1
             if attrs[1]:
@@ -1487,7 +1487,7 @@ mds standby for rank = 1
                     cmd='sudo ceph fs get %s| grep %s' %
                         (fs_name, attrs[1]))
                 out = out.read().rstrip()
-                print out
+                print(out)
                 if 'max_file_size	65536' in out:
                     log.info("max file size attr tested successfully")
                     log.info("Reverting:")
@@ -1504,13 +1504,13 @@ mds standby for rank = 1
                     else:
                         self.return_counts.update(
                             {mds.node.hostname: mds.node.exit_status})
-                        print self.return_counts
+                        print(self.return_counts)
                         log.error("max file size attr failed")
                         return self.return_counts, 1
                 else:
                     self.return_counts.update(
                         {mds.node.hostname: mds.node.exit_status})
-                    print self.return_counts
+                    print(self.return_counts)
                     return self.return_counts, 1
 
             if attrs[2]:
@@ -1524,20 +1524,20 @@ mds standby for rank = 1
                         cmd='sudo ceph fs set %s %s 0 --yes-i-really-mean-it' %
                             (fs_name, attrs[2]))
                     if 'disabled new snapshots' in rc.read():
-                        print out.read()
+                        print(out.read())
                         log.info("Reverted allow_new_snaps successfully")
                         self.return_counts.update(
                             {mds.node.hostname: mds.node.exit_status})
                     else:
                         self.return_counts.update(
                             {mds.node.hostname: mds.node.exit_status})
-                        print self.return_counts
+                        print(self.return_counts)
                         log.error('failed to revert new snap shots attr')
                         return self.return_counts, 1
                 else:
                     self.return_counts.update(
                         {mds.node.hostname: mds.node.exit_status})
-                    print self.return_counts
+                    print(self.return_counts)
                     log.error('failed to enable new snap shots')
                     return self.return_counts, 1
 
@@ -1559,13 +1559,13 @@ mds standby for rank = 1
                     else:
                         self.return_counts.update(
                             {mds.node.hostname: mds.node.exit_status})
-                        print self.return_counts
+                        print(self.return_counts)
                         log.error("inline data attr failed")
                         return self.return_counts, 1
                 else:
                     self.return_counts.update(
                         {mds.node.hostname: mds.node.exit_status})
-                    print self.return_counts
+                    print(self.return_counts)
                     log.error("inline data attr failed")
                     return self.return_counts, 1
 
@@ -1586,14 +1586,14 @@ mds standby for rank = 1
                     else:
                         self.return_counts.update(
                             {mds.node.hostname: mds.node.exit_status})
-                        print self.return_counts
+                        print(self.return_counts)
                         log.error("cluster_down attr set failed")
                         return self.return_counts, 1
 
                 else:
                     self.return_counts.update(
                         {mds.node.hostname: mds.node.exit_status})
-                    print self.return_counts
+                    print(self.return_counts)
                     log.error("cluster_down attr set failed")
                     return self.return_counts, 1
 
@@ -1616,14 +1616,14 @@ mds standby for rank = 1
                     else:
                         self.return_counts.update(
                             {mds.node.hostname: mds.node.exit_status})
-                        print self.return_counts
+                        print(self.return_counts)
                         log.error("allow_multimds attr failed")
                         return self.return_counts, 1
 
                 else:
                     self.return_counts.update(
                         {mds.node.hostname: mds.node.exit_status})
-                    print self.return_counts
+                    print(self.return_counts)
                     log.error("allow_multimds attr failed")
                     return self.return_counts, 1
 
@@ -1649,12 +1649,12 @@ mds standby for rank = 1
                     else:
                         self.return_counts.update(
                             {mds.node.hostname: mds.node.exit_status})
-                        print self.return_counts
+                        print(self.return_counts)
                         log.error("allow_dirfrags set attr failed")
                         return self.return_counts, 1
                 else:
                     self.return_counts.update({mds.node.hostname: mds.node.exit_status})
-                    print self.return_counts
+                    print(self.return_counts)
                     log.error("allow_dirfrags set attr failed")
                     return self.return_counts, 1
 
@@ -1687,13 +1687,13 @@ mds standby for rank = 1
                     else:
                         self.return_counts.update(
                             {mds.node.hostname: mds.node.exit_status})
-                        print self.return_counts
+                        print(self.return_counts)
                         log.error("metadata load balancer attr failed")
                         return self.return_counts, 1
                 else:
                     self.return_counts.update(
                         {mds.node.hostname: mds.node.exit_status})
-                    print self.return_counts
+                    print(self.return_counts)
                     log.error("metadata load balancer attr failed")
                     return self.return_counts, 1
 
@@ -1724,14 +1724,14 @@ mds standby for rank = 1
                     else:
                         self.return_counts.update(
                             {mds.node.hostname: mds.node.exit_status})
-                        print self.return_counts
+                        print(self.return_counts)
                         log.error("standby_count_wanted setting failed")
                         return self.return_counts, 1
 
                 else:
                     self.return_counts.update(
                         {mds.node.hostname: mds.node.exit_status})
-                    print self.return_counts
+                    print(self.return_counts)
                     log.error("standby_count_wanted setting failed")
                     return self.return_counts, 1
 
@@ -1774,7 +1774,7 @@ mds standby for rank = 1
                         client.exec_command(cmd='sudo kill -9 %s' % (id))
                         return 0
                 except Exception as e:
-                    print e
+                    print(e)
                     pass
 
     def manual_evict(self, active_mds_node, rank):
@@ -1846,7 +1846,7 @@ mds standby for rank = 1
             ip_add = self.manual_evict(active_mds, rank)
             out, rc = active_mds.exec_command(
                 cmd='sudo ceph osd blacklist ls')
-            print out.read()
+            print(out.read())
             if ip_add not in out.read():
                 return 0
 
@@ -1899,7 +1899,7 @@ mds standby for rank = 1
             mounting_dir,
             *args, **kwargs):
         if kwargs:
-            for k, v in kwargs.items():
+            for k, v in list(kwargs.items()):
                 if k == 'client_name':
                     client_name = v
             for client in fuse_clients:

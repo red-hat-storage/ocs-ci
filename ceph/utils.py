@@ -146,7 +146,7 @@ def cleanup_ceph_nodes(osp_cred, pattern=None, timeout=300):
                     log.error(e, exc_info=True)
                     errors.update({volume.name: e.message})
         if errors:
-            for vol, err in errors.iteritems():
+            for vol, err in errors.items():
                 log.error("Error destroying {vol}: {err}".format(vol=vol, err=err))
             raise RuntimeError("Encountered errors during volume deletion. Volume names and messages have been logged.")
 

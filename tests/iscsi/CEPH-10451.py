@@ -29,10 +29,10 @@ def run(**kw):
         for op in p:
             rc.append(op)
 
-    print "return   " + str(rc)
+    print("return   " + str(rc))
     rc = set(rc)
     if len(rc) == 1:
-        print rc
+        print(rc)
         iscsi_util.umount_directory(device_list, iscsi_initiators)
         iscsi_initiators.exec_command(
             sudo=True,
@@ -45,7 +45,7 @@ def run(**kw):
             long_running=True)
         return 0
     else:
-        print rc
+        print(rc)
         return 1
 
 
@@ -96,7 +96,7 @@ def do_failover(iscsi_initiators, device_list, ceph_nodes):
             active_device_status = out.read()
             active_device_status = active_device_status.rstrip("\n")
             active_device_status = active_device_status.split()
-            print active_device_status
+            print(active_device_status)
             if (active_device_status[1] == "active"):
                 rc = "active"
                 break
@@ -112,8 +112,8 @@ def do_failover(iscsi_initiators, device_list, ceph_nodes):
         else:
             log.info("failed device didn't came up to active")
             rc = "not"
-    print active_device_status
-    print active_device
+    print(active_device_status)
+    print(active_device)
     if rc == "active":
 
         return 0

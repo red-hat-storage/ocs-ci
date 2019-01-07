@@ -53,7 +53,7 @@ class Rbd:
 
     def random_string(self):
         temp_str = ''.join(
-            [random.choice(string.ascii_letters) for _ in xrange(10)])
+            [random.choice(string.ascii_letters) for _ in range(10)])
         return temp_str
 
     def create_pool(self, poolname):

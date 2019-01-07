@@ -48,7 +48,7 @@ def do_rados_put(mon, pool, nobj):
     log.info("src file is {src}".format(src=src))
 
     for i in range(nobj):
-        print "running command on {mon}".format(mon=mon.hostname)
+        print("running command on {mon}".format(mon=mon.hostname))
         put_cmd = "sudo rados put -p {pname} obj{i} {src}".format(
             pname=pool, i=i, src=src)
         log.info("cmd is {pcmd}".format(pcmd=put_cmd))
@@ -96,9 +96,9 @@ def do_rados_get(mon, pool, niter):
             dcsum = hashlib.md5(dfd.read()).hexdigest()
             log.info("csum of obj {objname}={dcsum}".format(
                 objname=obj, dcsum=dcsum))
-            print type(fcsum)
-            print "fcsum=", fcsum
-            print type(dcsum)
+            print(type(fcsum))
+            print("fcsum=", fcsum)
+            print(type(dcsum))
             if fcsum != dcsum:
                 log.error("checksum mismatch for obj {obj}".format(
                     obj=obj))

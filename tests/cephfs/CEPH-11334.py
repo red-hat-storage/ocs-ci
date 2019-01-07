@@ -171,12 +171,12 @@ def run(ceph_cluster, **kw):
             log.info('Cleaning up successfull')
         else:
             return 1
-        print'Script execution time:------'
+        print('Script execution time:------')
         stop = timeit.default_timer()
         total_time = stop - start
         mins, secs = divmod(total_time, 60)
         hours, mins = divmod(mins, 60)
-        print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
+        print("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
         return 0
 
     except CommandFailed as e:
