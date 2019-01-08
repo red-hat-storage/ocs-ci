@@ -11,8 +11,11 @@ import paramiko
 import yaml
 from paramiko.ssh_exception import SSHException
 import pickle
+import random
 
-from utility.utils import custom_ceph_config, pvcreate, vgcreate, lvcreate, chk_lvm_exists
+from utility.utils import custom_ceph_config
+from utility import lvm_utils
+
 
 logger = logging.getLogger(__name__)
 
@@ -178,12 +181,13 @@ class Ceph(object):
             ceph.exec_command(cmd='chmod 600 ~/.ssh/authorized_keys')
             ceph.exec_command(cmd='chmod 400 ~/.ssh/config')
 
-    def generate_ansible_inventory(self, bluestore=False):
+    def generate_ansible_inventory(self, device_to_add=None, mixed_lvm_confs=None, bluestore=False):
         """
         Generate ansible inventory file content for given cluster
         Args:
+            device_to_add(str): To add new osd to the cluster, default None
+            mixed_lvm_confs(str): To configure multiple mixed lvm configs, default None
             bluestore(bool): True for bluestore usage, dafault False
-
         Returns:
             str: inventory
 
@@ -196,6 +200,14 @@ class Ceph(object):
         nfs_hosts = []
         client_hosts = []
         iscsi_gw_hosts = []
+        osd_scenario_list = [
+            lvm_utils.osd_scenario1,
+            lvm_utils.osd_scenario1_dmcrypt,
+            lvm_utils.osd_scenario2,
+            lvm_utils.osd_scenario2_dmcrypt,
+            lvm_utils.osd_scenario3,
+            lvm_utils.osd_scenario3_dmcrypt]
+
         for node in self:  # type: CephNode
             eth_interface = node.search_ethernet_interface(self)
             if eth_interface is None:
@@ -215,19 +227,43 @@ class Ceph(object):
                 devices = self.get_osd_devices(node)
                 self.setup_osd_devices(devices, node)
                 auto_discovery = self.ansible_config.get('osd_auto_discovery', False)
+                dmcrypt = ''
                 if bluestore:
                     objectstore = ' osd_objectstore="bluestore"' + ' '
                 else:
                     objectstore = ' osd_objectstore="filestore"' + ' '
 
-                if self.ansible_config.get('osd_scenario') == 'lvm':
+                if self.ansible_config.get('osd_scenario') == 'lvm' and not mixed_lvm_confs:
                     devices_prefix = 'lvm_volumes'
                     devices = node.create_lvm(devices)
+                elif self.ansible_config.get('osd_scenario') == 'lvm' and mixed_lvm_confs:
+                    '''
+                    adding new OSD to cluster,shows only 2 disks free,
+                    need to change this code after issue gets resolved
+                    https://gitlab.cee.redhat.com/ceph/cephci/issues/17
+                    '''
+                    devices_prefix = 'lvm_volumes'
+                    dmcrypt = ''
+                    if 'pool' in node.hostname:
+                        logger.info(node.hostname)
+                        devices = node.create_lvm(devices[0:1] if not device_to_add else
+                                                  device_to_add.split(), num=random.randint(1, 10)
+                                                  if device_to_add else None,
+                                                  check_lvm=False if device_to_add else True)
+                    else:
+                        lvm_vols = node.multiple_lvm_scenarios(devices, osd_scenario_list[-1])
+                        osd_scenario_list.pop()
+                        devices = '"[' + lvm_vols.get(node.hostname)[0] + ']"'
+                        dmcrypt_opt = lvm_vols.get(node.hostname)[1]
+                        dmcrypt = "dmcrypt='True'" + ' ' if dmcrypt_opt.get('dmcrypt') else ''
                 else:
                     devices_prefix = 'devices'
-                devices = (" {devices_prefix}='{devices}'".format(devices_prefix=devices_prefix, devices=json.dumps(
-                    devices)) if not auto_discovery else '')
-                osd_host = node.shortname + mon_interface + devices + objectstore
+                if mixed_lvm_confs and len(devices) > 2:
+                    devices = " {devices_prefix}={devices}".format(devices_prefix=devices_prefix, devices=devices) + ' '
+                else:
+                    devices = (" {devices_prefix}='{devices}'".format(devices_prefix=devices_prefix, devices=json.dumps(
+                        devices)) if not auto_discovery else '') + ' '
+                osd_host = node.shortname + mon_interface + devices + objectstore + dmcrypt
                 osd_hosts.append(osd_host)
             if node.role == 'mds':
                 mds_host = node.shortname + ' monitor_interface=' + node.eth_interface
@@ -930,6 +966,9 @@ class CephNode(object):
         vg_name = 'vg%s'
         lv_name = 'lv%s'
         size = '{}%FREE'
+        data_lv = 'data-lv%s'
+        db_lv = 'db-lv%s'
+        wal_lv = 'wal-lv%s'
 
     def __init__(self, **kw):
         """
@@ -1380,11 +1419,13 @@ class CephNode(object):
         """
         self.exec_command(cmd='sudo chown -R $USER:$USER {path}'.format(path=path))
 
-    def create_lvm(self, devices):
+    def create_lvm(self, devices, num=None, check_lvm=True):
         """
         Creates lvm volumes and returns device list suitable for ansible config
         Args:
-            devices (list): device list
+        :param devices: list of devices
+        :param num: number to concatenate with pv,vg and lv names
+        :param check_lvm: To check if lvm exists is optional, by default checking is enabled
 
         Returns (list): lvm volumes list
 
@@ -1392,7 +1433,7 @@ class CephNode(object):
         self.install_lvm_util()
         lvm_volms = []
         file_Name = 'osd_scenarios_%s'
-        exists = chk_lvm_exists(self)
+        exists = self.chk_lvm_exists() if check_lvm else 1
         if exists == 0:
             '''
             for script test_ansible_roll_over.py, which adds new OSD,
@@ -1400,27 +1441,49 @@ class CephNode(object):
 
             '''
             logger.info('lvms configured already ')
-            fileObject = open(file_Name % self.hostname, 'r')
+            fileObject = open(file_Name % self.hostname, 'rb')
             existing_osd_scenarios = pickle.load(fileObject)
             lvm_volms.append(existing_osd_scenarios)
             fileObject.close()
         else:
             for dev in devices:
+                number = devices.index(dev) if not num else num
                 logger.info('creating pv on %s' % self.hostname)
-                pvcreate(self, dev)
+                lvm_utils.pvcreate(self, dev)
                 logger.info('creating vg  %s' % self.hostname)
-                vgname = vgcreate(self, self.LvmConfig.vg_name % devices.index(dev), dev)
+                vgname = lvm_utils.vgcreate(self, self.LvmConfig.vg_name % number, dev)
                 logger.info('creating lv %s' % self.hostname)
-                lvname = lvcreate(self, self.LvmConfig.lv_name % devices.index(dev),
-                                  self.LvmConfig.vg_name % devices.index(dev),
-                                  self.LvmConfig.size.format(100))
-
+                lvname = lvm_utils.lvcreate(self, self.LvmConfig.lv_name % number,
+                                            self.LvmConfig.vg_name % number,
+                                            self.LvmConfig.size.format(100))
                 lvm_volms.append({'data': lvname,
                                   'data_vg': vgname})
-        fileObject = open(file_Name % self.hostname, 'wb')
-        pickle.dump(lvm_volms, fileObject)
-        fileObject.close()
+
+        if check_lvm:
+            fileObject = open(file_Name % self.hostname, 'wb')
+            pickle.dump(lvm_volms, fileObject)
+            fileObject.close()
+        else:
+            '''
+            to retain the existing osd scenario generated
+            while adding new OSD node
+            '''
+            fileObject = open(file_Name % self.hostname, 'rb')
+            existing_osd_scenario = pickle.load(fileObject)
+            lvm_volms.append({'data': existing_osd_scenario[0]['data'],
+                              'data_vg': existing_osd_scenario[0]['data_vg']})
+            fileObject.close()
+
         return lvm_volms
+
+    def chk_lvm_exists(self):
+        out, rc = self.exec_command(cmd="lsblk")
+        out = out.read()
+        if 'lvm' in out:
+            print out
+            return 0
+        else:
+            return 1
 
     def install_lvm_util(self):
         """
@@ -1431,6 +1494,50 @@ class CephNode(object):
             self.exec_command(cmd='sudo yum install -y lvm2')
         else:
             self.exec_command(cmd='sudo apt-get install -y lvm2')
+
+    def multiple_lvm_scenarios(self, devices, scenario):
+        """
+        Creates lvm volumes,generates osd scenarios and returns dict, suitable for ansible config
+        Args:
+            devices (list): device list
+            scenario (func): osd scenario to be generated
+        Returns (dict): generated osd scenario
+
+        """
+        self.install_lvm_util()
+        osd_scenarios = {}
+        devices_str = ' '.join(devices)  # devices in single string eg: /dev/vdb /dev/vdc /dev/vdd
+        file_Name = "osd_scenarios_%s"
+        '''
+        device1,device2,device3 --> devices of the node
+        '''
+        devices_dict = {
+            'devices': devices_str,
+            'device1': devices[0],
+            'device2': devices[1],
+            'device3': devices[2]}
+        exists = self.chk_lvm_exists()
+        if exists == 0:
+            '''
+            for script test_ansible_roll_over.py, which adds new OSD,
+            to prevent creation of lvms on the existing osd, using this chk_lvm_exists()
+
+            '''
+            logger.info('lvms configured already')
+            fileObject = open(file_Name % self.hostname, 'r')
+            existing_osd_scenarios = pickle.load(fileObject)
+            osd_scenarios.update(existing_osd_scenarios)
+            fileObject.close()
+
+        else:
+            scenario, dmcryt = scenario(self, devices_dict)
+            osd_scenarios.update({self.hostname: [scenario, {'dmcrypt': dmcryt}]})
+            logger.info('generated scenario on %s %s' % (self.hostname, scenario))
+
+        fileObject = open(file_Name % self.hostname, 'wb')
+        pickle.dump(osd_scenarios, fileObject)
+        fileObject.close()
+        return osd_scenarios
 
 
 class CephObject(object):
