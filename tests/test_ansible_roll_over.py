@@ -61,6 +61,8 @@ def run(ceph_cluster, **kw):
     ubuntu_repo = config.get('ubuntu_repo', None)
     base_url = config.get('base_url', None)
     installer_url = config.get('installer_url', None)
+    mixed_lvm_configs = config.get('is_mixed_lvm_configs', None)
+    device_to_add = config.get('device', None)
     ceph_cluster.ansible_config = config['ansi_config']
 
     ceph_cluster.use_cdn = config.get('use_cdn')
@@ -88,7 +90,7 @@ def run(ceph_cluster, **kw):
             if len(osds_required) > len(free_volumes):
                 raise RuntimeError(
                     'Insufficient volumes on the {node_name} node. Rquired: {required} - Found: {found}'.format(
-                        node_name=matched_ceph_node.shotrtname, required=len(osds_required),
+                        node_name=matched_ceph_node.shortname, required=len(osds_required),
                         found=len(free_volumes)))
             log.debug('osds_required: {}'.format(osds_required))
             log.debug('matched_ceph_node.shortname: {}'.format(matched_ceph_node.shortname))
@@ -109,7 +111,8 @@ def run(ceph_cluster, **kw):
 
     ceph_installer.install_ceph_ansible(build)
 
-    hosts_file = ceph_cluster.generate_ansible_inventory(bluestore)
+    hosts_file = ceph_cluster.generate_ansible_inventory(
+        device_to_add, mixed_lvm_configs, bluestore=True if bluestore else False)
     ceph_installer.write_inventory_file(hosts_file)
 
     if config.get('docker-insecure-registry'):
@@ -127,8 +130,8 @@ def run(ceph_cluster, **kw):
     log.info("Ceph versions " + ceph_installer.get_installed_ceph_versions())
 
     out, rc = ceph_installer.exec_command(
-        cmd='cd {} ; ANSIBLE_STDOUT_CALLBACK=debug; ansible-playbook -vv -i hosts site.yml'.format(ansible_dir),
-        long_running=True)
+        cmd='cd {} ; ANSIBLE_STDOUT_CALLBACK=debug; ansible-playbook -vv -i hosts site.yml --limit {daemon}'.format(
+            ansible_dir, daemon=demon + 's'), long_running=True)
 
     # manually handle client creation in a containerized deployment (temporary)
     if ceph_cluster.containerized:
