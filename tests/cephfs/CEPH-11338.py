@@ -1,21 +1,20 @@
-from tests.cephfs.cephfs_utils import FsUtils
-import timeit
-from ceph.ceph import CommandFailed
 import logging
+import timeit
 import traceback
 
+from ceph.ceph import CommandFailed
+from tests.cephfs.cephfs_utils import FsUtils
 
 logger = logging.getLogger(__name__)
 log = logger
 
 
-def run(**kw):
+def run(ceph_cluster, **kw):
     try:
         start = timeit.default_timer()
         dir_name = 'dir'
         log.info("Running cephfs 11338 test case")
-        ceph_nodes = kw.get('ceph_nodes')
-        fs_util = FsUtils(ceph_nodes)
+        fs_util = FsUtils(ceph_cluster)
         client_info, rc = fs_util.get_clients()
         if rc == 0:
             log.info("Got client info")
@@ -27,10 +26,10 @@ def run(**kw):
         client2.append(client_info['fuse_clients'][1])
         client3.append(client_info['kernel_clients'][0])
         client4.append(client_info['kernel_clients'][1])
-        rc1 = fs_util.auth_list(client1, client_info['mon_node'])
-        rc2 = fs_util.auth_list(client2, client_info['mon_node'])
-        rc3 = fs_util.auth_list(client3, client_info['mon_node'])
-        rc4 = fs_util.auth_list(client4, client_info['mon_node'])
+        rc1 = fs_util.auth_list(client1)
+        rc2 = fs_util.auth_list(client2)
+        rc3 = fs_util.auth_list(client3)
+        rc4 = fs_util.auth_list(client4)
         print rc1, rc2, rc3, rc4
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
@@ -68,36 +67,15 @@ def run(**kw):
         '''
         new clients with restrictions
         '''
-        new_client1_name = client_info['fuse_clients'][0].hostname + \
-            '_%s' % (dirs[0])
-        new_client2_name = client_info['fuse_clients'][1].hostname + \
-            '_%s' % (dirs[0])
-        new_client3_name = client_info['kernel_clients'][0].hostname + \
-            '_%s' % (dirs[1])
-        new_client3_mouting_dir = '/mnt/%s_%s/' % (
-            client_info['kernel_clients'][0].hostname, dirs[1])
-        new_client2_mouting_dir = '/mnt/%s_%s/' % (
-            client_info['fuse_clients'][1].hostname, dirs[0])
-        new_client1_mouting_dir = '/mnt/%s_%s/' % (
-            client_info['fuse_clients'][0].hostname, dirs[0])
-        rc1 = fs_util.auth_list(
-            client1,
-            client_info['mon_node'],
-            path=dirs[0],
-            permission='rw',
-            mds=True)
-        rc2 = fs_util.auth_list(
-            client2,
-            client_info['mon_node'],
-            path=dirs[0],
-            permission='r',
-            mds=True)
-        rc3 = fs_util.auth_list(
-            client3,
-            client_info['mon_node'],
-            path=dirs[1],
-            permission='*',
-            mds=True)
+        new_client1_name = client_info['fuse_clients'][0].node.hostname + '_%s' % (dirs[0])
+        new_client2_name = client_info['fuse_clients'][1].node.hostname + '_%s' % (dirs[0])
+        new_client3_name = client_info['kernel_clients'][0].node.hostname + '_%s' % (dirs[1])
+        new_client3_mouting_dir = '/mnt/%s_%s/' % (client_info['kernel_clients'][0].node.hostname, dirs[1])
+        new_client2_mouting_dir = '/mnt/%s_%s/' % (client_info['fuse_clients'][1].node.hostname, dirs[0])
+        new_client1_mouting_dir = '/mnt/%s_%s/' % (client_info['fuse_clients'][0].node.hostname, dirs[0])
+        rc1 = fs_util.auth_list(client1, path=dirs[0], permission='rw', mds=True)
+        rc2 = fs_util.auth_list(client2, path=dirs[0], permission='r', mds=True)
+        rc3 = fs_util.auth_list(client3, path=dirs[1], permission='*', mds=True)
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
         else:
@@ -201,13 +179,11 @@ def run(**kw):
 
         fs_util.auth_list(
             client1,
-            client_info['mon_node'],
             path=dirs[0],
             permission='rw',
             osd=True)
         fs_util.auth_list(
             client3,
-            client_info['mon_node'],
             path=dirs[1],
             permission='r',
             osd=True)
@@ -235,21 +211,19 @@ def run(**kw):
             if client_info['kernel_clients'][0].pkg_type == 'rpm':
                 client_info['kernel_clients'][0].exec_command(
                     cmd='sudo dd if=/dev/zero of=%s/file bs=10M count=10' %
-                    new_client3_mouting_dir)
+                        new_client3_mouting_dir)
 
         except CommandFailed as e:
             log.info(e)
             log.info('Permissions set  for client %s is working properly' % (
-                client_info['kernel_clients'][0].hostname + '_' + (dirs[1])))
+                client_info['kernel_clients'][0].node.hostname + '_' + (dirs[1])))
 
         fs_util.client_clean_up(
             client1,
             '',
             new_client1_mouting_dir,
             'umount',
-            client_name=client_info['fuse_clients'][0].hostname +
-            '_%s' %
-            (dirs[0]))
+            client_name=client_info['fuse_clients'][0].node.hostname + '_%s' % (dirs[0]))
 
         fs_util.client_clean_up(
             '',
@@ -257,79 +231,27 @@ def run(**kw):
             new_client3_mouting_dir,
             'umount',
             client_name=new_client3_name)
-        fs_util.auth_list(
-            client1,
-            client_info['mon_node'],
-            path=dirs[0],
-            layout_quota='p_flag')
-        fs_util.auth_list(
-            client3,
-            client_info['mon_node'],
-            path=dirs[1],
-            layout_quota='!p_flag')
+        fs_util.auth_list(client1, path=dirs[0], layout_quota='p_flag')
+        fs_util.auth_list(client3, path=dirs[1], layout_quota='!p_flag')
 
-        fs_util.fuse_mount(
-            client1,
-            new_client1_mouting_dir,
-            new_client=new_client1_name)
-        fs_util.kernel_mount(
-            client3,
-            new_client3_mouting_dir,
-            client_info['mon_node_ip'],
-            new_client=new_client3_name)
+        fs_util.fuse_mount(client1, new_client1_mouting_dir, new_client=new_client1_name)
+        fs_util.kernel_mount(client3, new_client3_mouting_dir, client_info['mon_node_ip'], new_client=new_client3_name)
         file_name = 'file1'
-        client_info['fuse_clients'][0].exec_command(
-            cmd='sudo touch %s/%s' %
-            (new_client1_mouting_dir, file_name))
-        client_info['fuse_clients'][0].exec_command(
-            cmd='sudo mkdir  %s/%s' %
-            (new_client1_mouting_dir, dirs[0]))
+        client_info['fuse_clients'][0].exec_command(cmd='sudo touch %s/%s' % (new_client1_mouting_dir, file_name))
+        client_info['fuse_clients'][0].exec_command(cmd='sudo mkdir  %s/%s' % (new_client1_mouting_dir, dirs[0]))
 
         try:
-            fs_util.setfattr(
-                client3,
-                'stripe_unit',
-                '1048576',
-                new_client3_mouting_dir,
-                file_name)
-            fs_util.setfattr(
-                client3,
-                'max_bytes',
-                '100000000',
-                new_client3_mouting_dir,
-                dirs[1])
+            fs_util.setfattr(client3, 'stripe_unit', '1048576', new_client3_mouting_dir, file_name)
+            fs_util.setfattr(client3, 'max_bytes', '100000000', new_client3_mouting_dir, dirs[1])
         except CommandFailed as e:
             log.info('Permission denied for setting attrs,success')
-        fs_util.setfattr(
-            client1,
-            'stripe_unit',
-            '1048576',
-            new_client1_mouting_dir,
-            file_name)
-        fs_util.setfattr(
-            client1,
-            'max_bytes',
-            '100000000',
-            new_client1_mouting_dir,
-            dirs[0])
-        fs_util.client_clean_up(
-            client1,
-            '',
-            new_client1_mouting_dir,
-            'umount',
-            client_name=new_client1_name)
+        fs_util.setfattr(client1, 'stripe_unit', '1048576', new_client1_mouting_dir, file_name)
+        fs_util.setfattr(client1, 'max_bytes', '100000000', new_client1_mouting_dir, dirs[0])
+        fs_util.client_clean_up(client1, '', new_client1_mouting_dir, 'umount', client_name=new_client1_name)
 
-        fs_util.client_clean_up(
-            '',
-            client3,
-            new_client3_mouting_dir,
-            'umount',
-            client_name=new_client3_name)
-        fs_util.client_clean_up(
-            client_info['fuse_clients'],
-            client_info['kernel_clients'],
-            client_info['mounting_dir'],
-            'umount')
+        fs_util.client_clean_up('', client3, new_client3_mouting_dir, 'umount', client_name=new_client3_name)
+        fs_util.client_clean_up(client_info['fuse_clients'], client_info['kernel_clients'], client_info['mounting_dir'],
+                                'umount')
         print'Script execution time:------'
         stop = timeit.default_timer()
         total_time = stop - start

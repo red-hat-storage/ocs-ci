@@ -1,22 +1,22 @@
-from tests.cephfs.cephfs_utils import FsUtils
-from ceph.parallel import parallel
-import timeit
-from ceph.ceph import CommandFailed
-import traceback
 import logging
+import timeit
+import traceback
+
+from ceph.ceph import CommandFailed
+from ceph.parallel import parallel
+from tests.cephfs.cephfs_utils import FsUtils
 
 logger = logging.getLogger(__name__)
 log = logger
 
 
-def run(**kw):
+def run(ceph_cluster, **kw):
     try:
         start = timeit.default_timer()
         tc = '11230'
         dir_name = 'dir'
         log.info("Running cephfs %s test case" % (tc))
-        ceph_nodes = kw.get('ceph_nodes')
-        fs_util = FsUtils(ceph_nodes)
+        fs_util = FsUtils(ceph_cluster)
         client_info, rc = fs_util.get_clients()
         if rc == 0:
             log.info("Got client info")
@@ -31,10 +31,10 @@ def run(**kw):
         client3.append(client_info['kernel_clients'][0])
         client4.append(client_info['kernel_clients'][1])
 
-        rc1 = fs_util.auth_list(client1, client_info['mon_node'])
-        rc2 = fs_util.auth_list(client2, client_info['mon_node'])
-        rc3 = fs_util.auth_list(client3, client_info['mon_node'])
-        rc4 = fs_util.auth_list(client4, client_info['mon_node'])
+        rc1 = fs_util.auth_list(client1)
+        rc2 = fs_util.auth_list(client2)
+        rc3 = fs_util.auth_list(client3)
+        rc4 = fs_util.auth_list(client4)
         print rc1, rc2, rc3, rc4
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
@@ -103,8 +103,8 @@ def run(**kw):
             for client in client1:
                 client.exec_command(
                     cmd='sudo mkdir %s%s_{1..50}' %
-                    (client_info['mounting_dir'], dir_name))
-                if client.exit_status == 0:
+                        (client_info['mounting_dir'], dir_name))
+                if client.node.exit_status == 0:
                     log.info("directories created succcessfully")
                 else:
                     raise CommandFailed("directories creation failed")

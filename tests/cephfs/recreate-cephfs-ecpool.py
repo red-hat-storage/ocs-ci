@@ -1,15 +1,16 @@
-from tests.cephfs.cephfs_utils import FsUtils
 import logging
 import time
+
+from tests.cephfs.cephfs_utils import FsUtils
+
 logger = logging.getLogger(__name__)
 log = logger
 
 
-def run(**kw):
-    ceph_nodes = kw.get('ceph_nodes')
+def run(ceph_cluster, **kw):
     new_fs_name = 'cephfs_ec'
     new_fs_datapool = 'ec_data_pool'
-    fs_util = FsUtils(ceph_nodes)
+    fs_util = FsUtils(ceph_cluster)
     client_info, rc = fs_util.get_clients()
     config = kw.get('config')
     bluestore = config.get('bluestore')

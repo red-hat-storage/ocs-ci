@@ -1,25 +1,25 @@
-from tests.cephfs.cephfs_utils import FsUtils
-from ceph.parallel import parallel
-import timeit
-from ceph.ceph import CommandFailed
-import traceback
 import logging
+import timeit
+import traceback
+
+from ceph.ceph import CommandFailed
+from ceph.parallel import parallel
 from ceph.utils import check_ceph_healthly
+from tests.cephfs.cephfs_utils import FsUtils
 
 logger = logging.getLogger(__name__)
 log = logger
 
 
-def run(**kw):
+def run(ceph_cluster, **kw):
     try:
         start = timeit.default_timer()
         tc = '11254-fuse_clients'
         dir_name = 'dir'
         log.info("Running cephfs %s test case" % (tc))
-        ceph_nodes = kw.get('ceph_nodes')
         config = kw.get('config')
         num_of_osds = config.get('num_of_osds')
-        fs_util = FsUtils(ceph_nodes)
+        fs_util = FsUtils(ceph_cluster)
         client_info, rc = fs_util.get_clients()
         if rc == 0:
             log.info("Got client info")
@@ -31,10 +31,10 @@ def run(**kw):
         client2.append(client_info['fuse_clients'][1])
         client3.append(client_info['kernel_clients'][0])
         client4.append(client_info['kernel_clients'][1])
-        rc1 = fs_util.auth_list(client1, client_info['mon_node'])
-        rc2 = fs_util.auth_list(client2, client_info['mon_node'])
-        rc3 = fs_util.auth_list(client3, client_info['mon_node'])
-        rc4 = fs_util.auth_list(client4, client_info['mon_node'])
+        rc1 = fs_util.auth_list(client1)
+        rc2 = fs_util.auth_list(client2)
+        rc3 = fs_util.auth_list(client3)
+        rc4 = fs_util.auth_list(client4)
         print rc1, rc2, rc3, rc4
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
@@ -84,7 +84,7 @@ def run(**kw):
         client1[0].exec_command(
             cmd='sudo mkdir %s%s' %
                 (client_info['mounting_dir'], dir_name))
-        if client1[0].exit_status == 0:
+        if client1[0].node.exit_status == 0:
             log.info("Dir created")
         else:
             fs_util.client_clean_up(
