@@ -15,6 +15,7 @@ import re
 import requests
 import textwrap
 from docopt import docopt
+from getpass import getuser
 from libcloud.common.types import LibcloudError
 from ceph.ceph import CephNode, Ceph
 from ceph.clients import WinNode
@@ -369,8 +370,10 @@ def run(args):
             ceph version: {ceph_version}
             ceph-ansible version: {ceph_ansible_version}
             compose-id: {compose_id}
+            invoked-by: {user}
             """.format(ceph_version=ceph_version,
                        ceph_ansible_version=ceph_ansible_version,
+                       user=getuser(),
                        compose_id=compose_id))
         if docker_image and docker_registry and docker_tag:
             launch_desc = launch_desc + textwrap.dedent(
@@ -378,8 +381,10 @@ def run(args):
                 docker registry: {docker_registry}
                 docker image: {docker_image}
                 docker tag: {docker_tag}
+                invoked-by: {user}
                 """.format(docker_registry=docker_registry,
                            docker_image=docker_image,
+                           user=getuser(),
                            docker_tag=docker_tag))
         service.start_launch(name=launch_name, start_time=timestamp(), description=launch_desc)
 
