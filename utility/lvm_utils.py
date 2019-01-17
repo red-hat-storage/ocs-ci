@@ -19,11 +19,13 @@ def make_partition(osd, device, start=None, end=None, gpt=False):
 
 def osd_scenario1(osd, devices_dict, dmcrypt=False):
     """
-
-    :param osd: osd node
-    :param devices_dict: dict of devices of the osd node supplied
-    :param dmcrypt: False by default
-    :return: generated scenario, dmcrypt
+    OSD scenario type1 generator
+    Args:
+        osd: osd node
+        devices_dict: dict of devices of the osd node supplied
+        dmcrypt: False by default
+    Returns:
+        generated scenario, dmcrypt
     """
 
     pvcreate(osd, devices_dict.get('devices'))
@@ -92,10 +94,13 @@ def osd_scenario1(osd, devices_dict, dmcrypt=False):
 
 def osd_scenario1_dmcrypt(osd, devices_dict):
     """
-
-    :param osd: osd node
-    :param devices_dict: dict of devices of the osd node supplied
-    :return: generated scenario, dmcrypt
+    OSD scenario type2 generator
+    Args:
+        osd: osd node
+        devices_dict: dict of devices of the osd node supplied
+        dmcrypt: False by default
+    Returns:
+        generated scenario, dmcrypt(overridden to True)
     """
     scenario, _ = osd_scenario1(osd, devices_dict)
     dmcrypt = True
@@ -104,11 +109,13 @@ def osd_scenario1_dmcrypt(osd, devices_dict):
 
 def osd_scenario2(osd, devices_dict, dmcrypt=False):
     """
-
-    :param osd:  osd node
-    :param devices_dict: dict of devices of the osd node supplied
-    :param dmcrypt:  False by default
-    :return: generated scenario, dmcrypt
+    OSD scenario type3 generator
+    Args:
+        osd: osd node
+        devices_dict: dict of devices of the osd node supplied
+        dmcrypt: False by default
+    Returns:
+        generated scenario, dmcrypt
     """
     make_partition(osd, devices_dict.get('device1'), gpt=True)
     make_partition(osd, devices_dict.get('device1'), '1', '80%')
@@ -129,9 +136,13 @@ def osd_scenario2(osd, devices_dict, dmcrypt=False):
 
 def osd_scenario2_dmcrypt(osd, devices_dict):
     """
-    :param osd: osd node
-    :param devices_dict: dict of devices of the osd node supplied
-    :return: generated scenario, dmcrypt
+    OSD scenario type4 generator
+    Args:
+        osd: osd node
+        devices_dict: dict of devices of the osd node supplied
+        dmcrypt: False by default
+    Returns:
+        generated scenario, dmcrypt(overridden to True)
     """
     scenario, _ = osd_scenario2(osd, devices_dict)
     dmcrypt = True
@@ -140,10 +151,13 @@ def osd_scenario2_dmcrypt(osd, devices_dict):
 
 def osd_scenario3(osd, devices_dict, dmcrypt=False):
     """
-    :param osd:  osd node
-    :param devices_dict: dict of devices of the osd node supplied
-    :param dmcrypt: False by default
-    :return: generated scenario, dmcrypt
+    OSD scenario type5 generator
+    Args:
+        osd: osd node
+        devices_dict: dict of devices of the osd node supplied
+        dmcrypt: False by default
+    Returns:
+        generated scenario, dmcrypt
     """
     pvcreate(osd, devices_dict.get('devices'))
     vgname = vgcreate(osd, osd.LvmConfig.vg_name % '1', devices_dict.get('device2'))
@@ -182,9 +196,13 @@ def osd_scenario3(osd, devices_dict, dmcrypt=False):
 
 def osd_scenario3_dmcrypt(osd, devices_dict):
     """
-    :param osd: osd node
-    :param devices_dict: dict of devices of the osd node supplied
-    :return: generated scenario, dmcrypt
+    OSD scenario type6 generator
+    Args:
+        osd: osd node
+        devices_dict: dict of devices of the osd node supplied
+        dmcrypt: False by default
+    Returns:
+        generated scenario, dmcrypt(overridden to True)
     """
     scenario, _ = osd_scenario3(osd, devices_dict)
     dmcrypt = True

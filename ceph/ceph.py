@@ -1423,9 +1423,9 @@ class CephNode(object):
         """
         Creates lvm volumes and returns device list suitable for ansible config
         Args:
-        :param devices: list of devices
-        :param num: number to concatenate with pv,vg and lv names
-        :param check_lvm: To check if lvm exists is optional, by default checking is enabled
+            devices: list of devices
+            num: number to concatenate with pv,vg and lv names
+            check_lvm: To check if lvm exists is optional, by default checking is enabled
 
         Returns (list): lvm volumes list
 
