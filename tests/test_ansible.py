@@ -13,7 +13,7 @@ def run(ceph_cluster, **kw):
     log.info("Running test")
     log.info("Running ceph ansible test")
     config = kw.get('config')
-    bluestore = config.get('bluestore')
+    bluestore = config.get('bluestore', False)
     k_and_m = config.get('ec-pool-k-m')
     hotfix_repo = config.get('hotfix_repo')
     test_data = kw.get('test_data')
@@ -21,6 +21,9 @@ def run(ceph_cluster, **kw):
     ubuntu_repo = config.get('ubuntu_repo', None)
     base_url = config.get('base_url', None)
     installer_url = config.get('installer_url', None)
+    mixed_lvm_configs = config.get('is_mixed_lvm_configs', None)
+    device_to_add = config.get('device', None)
+
     ceph_cluster.ansible_config = config['ansi_config']
     ceph_cluster.custom_config = test_data.get('custom-config')
     ceph_cluster.custom_config_file = test_data.get('custom-config-file')
@@ -45,8 +48,8 @@ def run(ceph_cluster, **kw):
     ceph_cluster.setup_packages(base_url, hotfix_repo, installer_url, ubuntu_repo)
 
     ceph_installer.install_ceph_ansible(build)
-
-    hosts_file = ceph_cluster.generate_ansible_inventory(bluestore)
+    hosts_file = ceph_cluster.generate_ansible_inventory(
+        device_to_add, mixed_lvm_configs, bluestore=True if bluestore else False)
     ceph_installer.write_inventory_file(hosts_file)
 
     if config.get('docker-insecure-registry'):
