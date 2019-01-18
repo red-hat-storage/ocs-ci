@@ -118,7 +118,7 @@ def run(ceph_cluster, **kw):
 
     # compare pre and post upgrade versions
     if skip_version_compare:
-        log.warn("Skipping version comparison.")
+        log.warning("Skipping version comparison.")
     else:
         if not jewel_minor_update:
             post_upgrade_versions = get_ceph_versions(ceph_nodes, containerized)
@@ -134,7 +134,6 @@ def run(ceph_cluster, **kw):
                                                         prev_install_version)
         if container_count_fail:
             return container_count_fail
-
     return ceph_cluster.check_health(timeout=config.get('timeout', 300))
 
 
@@ -171,7 +170,7 @@ def get_container_counts(ceph_cluster):
     container_counts = {}
     for node in ceph_cluster.get_nodes(ignore="installer"):
         out, rc = node.exec_command(sudo=True, cmd='docker ps | grep $(hostname) | wc -l')
-        count = int(out.read().rstrip())
+        count = int(out.read().decode().rstrip())
         log.info("{} has {} containers running".format(node.shortname, count))
         container_counts.update({node.shortname: count})
     return container_counts
@@ -216,7 +215,7 @@ def configure_insecure_registry(ceph_cluster, registry):
 
     """
     insecure_registry = '{{"insecure-registries" : ["{registry}"]}}'.format(registry=registry)
-    log.warn('Adding insecure registry:\n{registry}'.format(registry=insecure_registry))
+    log.warning('Adding insecure registry:\n{registry}'.format(registry=insecure_registry))
     role_list = ["installer"]
     if ceph_cluster.rhcs_version < '3':
         role_list.append('mgr')

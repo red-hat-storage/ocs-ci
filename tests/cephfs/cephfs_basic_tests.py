@@ -65,16 +65,16 @@ def run(ceph_cluster, **kw):
         tc4 = '11295'
         dir1 = ''.join(
             random.choice(
-                string.lowercase +
-                string.digits) for _ in range(10))
+                string.ascii_lowercase
+                + string.digits) for _ in range(10))
         dir2 = ''.join(
             random.choice(
-                string.lowercase +
-                string.digits) for _ in range(10))
+                string.ascii_lowercase
+                + string.digits) for _ in range(10))
         dir3 = ''.join(
             random.choice(
-                string.lowercase +
-                string.digits) for _ in range(10))
+                string.ascii_lowercase
+                + string.digits) for _ in range(10))
         results = []
         return_counts = []
         log.info("Create files and directories of 1000 depth and 1000 breadth")

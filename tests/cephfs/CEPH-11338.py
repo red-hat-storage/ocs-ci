@@ -133,7 +133,7 @@ def run(ceph_cluster, **kw):
         try:
             _, rc = fs_util.stress_io(
                 client2, new_client2_mouting_dir, '', 0, 1, iotype='touch')
-        except CommandFailed as e:
+        except CommandFailed:
             log.info(
                 'Permissions set  for client %s is working properly' %
                 new_client2_name)
@@ -243,7 +243,7 @@ def run(ceph_cluster, **kw):
         try:
             fs_util.setfattr(client3, 'stripe_unit', '1048576', new_client3_mouting_dir, file_name)
             fs_util.setfattr(client3, 'max_bytes', '100000000', new_client3_mouting_dir, dirs[1])
-        except CommandFailed as e:
+        except CommandFailed:
             log.info('Permission denied for setting attrs,success')
         fs_util.setfattr(client1, 'stripe_unit', '1048576', new_client1_mouting_dir, file_name)
         fs_util.setfattr(client1, 'max_bytes', '100000000', new_client1_mouting_dir, dirs[0])

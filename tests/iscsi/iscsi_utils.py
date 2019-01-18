@@ -396,12 +396,12 @@ node.session.scan = auto
         multipath_file.flush()
 
     def get_fio_job_config(self, number, disk):
-        config = "[job{0}]\`nname=job{0}\`nfilename={1}\\\:fiofile\`n".format(number, disk)
+        config = r"[job{0}]\`nname=job{0}\`nfilename={1}\\\:fiofile\`n".format(number, disk)
         return config
 
     def get_fio_jobs(self, num_jobs):
-        job_options = "[global]\`nruntime=3600\`nrw=randwrite\`nsize=64m\`n"\
-            "iodepth=32\`nblocksize=4096\`nioengine=windowsaio\`nthreads=4\`n"
+        job_options = r"[global]\`nruntime=3600\`nrw=randwrite\`nsize=64m\`n"\
+            r"iodepth=32\`nblocksize=4096\`nioengine=windowsaio\`nthreads=4\`n"
         letters = list(string.ascii_uppercase)[3:3 + num_jobs]
         for disk, job in zip(letters, list(range(num_jobs))):
             job = self.get_fio_job_config(job, disk)

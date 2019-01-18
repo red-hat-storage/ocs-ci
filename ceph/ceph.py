@@ -463,7 +463,7 @@ class Ceph(object):
 
         out, err = client.exec_command('sudo ceph {role} metadata -f json-pretty'.format(role=role))
 
-        return json.loads(out.read())
+        return json.loads(out.read().decode())
 
     def get_osd_metadata(self, osd_id, client=None):
         """
@@ -536,7 +536,7 @@ class Ceph(object):
 
         while datetime.datetime.now() - starttime <= timeout:
             out, err = client.exec_command(cmd='sudo ceph -s')
-            lines = out.read()
+            lines = out.read().decode()
 
             if not any(state in lines for state in pending_states):
                 if all(state in lines for state in valid_states):
@@ -806,7 +806,7 @@ class Ceph(object):
         osd_object = self.get_osd_by_id(osd_id, client)
         out, err = osd_object.exec_command('ceph-volume simple scan {osd_data} --stdout'.format(osd_data=osd_data),
                                            check_ec=False)
-        simple_scan = out.read()
+        simple_scan = out.read().decode()
         simple_scan = json.loads(simple_scan[simple_scan.index('{')::])
         return simple_scan.get('data').get('path')
 
@@ -837,22 +837,16 @@ class RolesContainer(object):
     """
 
     def __init__(self, role='pool'):
-        if hasattr(role, '__iter__'):
-            self.role_list = role if len(role) > 0 else ['pool']
-        else:
+        if isinstance(role, str):
             self.role_list = [str(role)]
+        else:
+            self.role_list = role if len(role) > 0 else ['pool']
 
     def __eq__(self, role):
-        if hasattr(role, '__iter__'):
-            if all(atomic_role in role for atomic_role in self.role_list):
-                return True
-            else:
-                return False
+        if isinstance(role, str):
+            return role in self.role_list
         else:
-            if role in self.role_list:
-                return True
-            else:
-                return False
+            return all(atomic_role in role for atomic_role in self.role_list)
 
     def __ne__(self, role):
         return not self.__eq__(role)
@@ -987,9 +981,9 @@ class CephNode(object):
         self.vmname = kw['hostname']
         vmshortname = self.vmname.split('.')
         self.vmshortname = vmshortname[0]
-        self.voulume_list = []
+        self.volume_list = []
         if kw['no_of_volumes']:
-            self.voulume_list = [NodeVolume(NodeVolume.FREE) for vol_id in xrange(kw['no_of_volumes'])]
+            self.volume_list = [NodeVolume(NodeVolume.FREE) for vol_id in range(kw['no_of_volumes'])]
 
         self.ceph_object_list = [CephObjectFactory(self).create_ceph_object(role) for role in kw['role'] if
                                  role != 'pool']
@@ -1011,10 +1005,10 @@ class CephNode(object):
         return RolesContainer([ceph_demon.role for ceph_demon in self.ceph_object_list if ceph_demon])
 
     def get_free_volumes(self):
-        return [volume for volume in self.voulume_list if volume.status == NodeVolume.FREE]
+        return [volume for volume in self.volume_list if volume.status == NodeVolume.FREE]
 
     def get_allocated_volumes(self):
-        return [volume for volume in self.voulume_list if volume.status == NodeVolume.ALLOCATED]
+        return [volume for volume in self.volume_list if volume.status == NodeVolume.ALLOCATED]
 
     def get_ceph_demons(self, role=None):
         """
@@ -1053,7 +1047,7 @@ class CephNode(object):
         self.exec_command(cmd="ls / ; uptime ; date")
         self.ssh_transport().set_keepalive(15)
         out, err = self.exec_command(cmd="hostname")
-        self.hostname = out.read().strip()
+        self.hostname = out.read().strip().decode()
         shortname = self.hostname.split('.')
         self.shortname = shortname[0]
         logger.info("hostname and shortname set to %s and %s", self.hostname,
@@ -1074,7 +1068,7 @@ class CephNode(object):
         """
         out, _ = self.exec_command(
             cmd="/sbin/ifconfig eth0 | grep 'inet ' | awk '{ print $2}'")
-        self.internal_ip = out.read().strip()
+        self.internal_ip = out.read().strip().decode()
 
     def set_eth_interface(self, eth_interface):
         """
@@ -1092,7 +1086,7 @@ class CephNode(object):
         self.exec_command(
             cmd="ssh-keygen -b 2048 -f ~/.ssh/id_rsa -t rsa -q -N ''")
         out1, _ = self.exec_command(cmd="cat ~/.ssh/id_rsa.pub")
-        self.id_rsa_pub = out1.read()
+        self.id_rsa_pub = out1.read().decode()
 
     def exec_command(self, **kw):
         """
@@ -1134,12 +1128,12 @@ class CephNode(object):
                 rl, wl, xl = select([channel], [], [channel], 4200)
                 if len(rl) > 0:
                     data = channel.recv(1024)
-                    read = read + data
-                    logger.info(data)
+                    read += data.decode()
+                    logger.info(data.decode())
                 if len(xl) > 0:
                     data = channel.recv(1024)
-                    read = read + data
-                    logger.info(data)
+                    read += data.decode()
+                    logger.info(data.decode())
             return read, ec
         try:
             stdin, stdout, stderr = ssh().exec_command(
@@ -1155,7 +1149,7 @@ class CephNode(object):
                 logger.info("Command completed successfully")
             else:
                 logger.error("Error during cmd %s, timeout %d", exit_status, timeout)
-                raise CommandFailed(kw['cmd'] + " Error:  " + str(stderr.read()) + ' ' + str(self.ip_address))
+                raise CommandFailed(kw['cmd'] + " Error:  " + str(stderr.read().decode()) + ' ' + str(self.ip_address))
             return stdout, stderr
         else:
             return stdout, stderr
@@ -1279,7 +1273,7 @@ class CephNode(object):
         """
         logger.info('Searching suitable ethernet interface on {node}'.format(node=self.ip_address))
         out, err = self.exec_command(cmd='sudo ls /sys/class/net | grep -v lo')
-        eth_interface_list = out.read().strip().split('\n')
+        eth_interface_list = out.read().strip().decode().split('\n')
         for eth_interface in eth_interface_list:
             try:
                 for ceph_node in ceph_node_list:
@@ -1373,8 +1367,8 @@ class CephNode(object):
             cmd = 'sudo echo deb ' + deb_repo + '/{0}'.format(repo) + \
                   ' $(lsb_release -sc) main'
             self.exec_command(cmd=cmd + ' > ' + "/tmp/{0}.list".format(repo))
-            self.exec_command(cmd='sudo cp /tmp/{0}.list'.format(repo) +
-                                  ' /etc/apt/sources.list.d/')
+            self.exec_command(cmd='sudo cp /tmp/{0}.list'.format(repo)
+                                  + ' /etc/apt/sources.list.d/')
         ds_keys = ['https://www.redhat.com/security/897da07a.txt',
                    'https://www.redhat.com/security/f21541eb.txt',
                    # 'https://prodsec.redhat.com/keys/00da75f2.txt',
@@ -1693,7 +1687,7 @@ class CephInstaller(CephObject):
         out, err = self.exec_command(sudo=True,
                                      cmd='cat {ansible_dir}/group_vars/all.yml'.format(
                                          ansible_dir=self.ansible_dir))
-        return yaml.safe_load(out.read())
+        return yaml.safe_load(out.read().decode())
 
     def get_installed_ceph_versions(self):
         """
@@ -1706,7 +1700,7 @@ class CephInstaller(CephObject):
             out, rc = self.exec_command(cmd='rpm -qa | grep ceph')
         else:
             out, rc = self.exec_command(sudo=True, cmd='apt-cache search ceph')
-        return out.read()
+        return out.read().decode()
 
     def write_inventory_file(self, inventory_config):
         """
@@ -1721,9 +1715,9 @@ class CephInstaller(CephObject):
         host_file.flush()
 
         out, rc = self.exec_command(sudo=True, cmd='cat {}/hosts'.format(self.ansible_dir))
-        out = out.read().rstrip('\n')
-        out = re.sub('\]+', ']', out)
-        out = re.sub('\[+', '[', out)
+        out = out.read().decode().rstrip('\n')
+        out = re.sub(r'\]+', ']', out)
+        out = re.sub(r'\[+', '[', out)
         host_file = self.write_file(
             sudo=True, file_name='{}/hosts'.format(self.ansible_dir), file_mode='w')
         host_file.write(out)
@@ -1776,7 +1770,7 @@ class CephInstaller(CephObject):
             out, rc = self.exec_command(cmd='dpkg -s ceph-ansible')
         else:
             out, rc = self.exec_command(cmd='rpm -qa | grep ceph-ansible')
-        output = out.read().rstrip()
+        output = out.read().decode().rstrip()
         logger.info("Installed ceph-ansible: {version}".format(version=output))
 
     def add_iscsi_settings(self, test_data):

@@ -111,10 +111,10 @@ class FsUtils(object):
                             'https://github.com/bengland2/smallfile.git')
         self.mounting_dir = ''.join(
             random.choice(
-                string.lowercase +
-                string.digits) for _ in range(10))
+                string.ascii_lowercase
+                + string.digits) for _ in range(10))
         self.mounting_dir = '/mnt/cephfs_' + self.mounting_dir + '/'
-        # seperating clients for fuse and kernel
+        # separating clients for fuse and kernel
         self.fuse_clients = self.clients[0:2]
         self.kernel_clients = self.clients[2:4]
         self.result_vals.update({'clients': self.clients})
@@ -384,6 +384,7 @@ class FsUtils(object):
                                     cmd='sudo rm -rf %s/*' %
                                         (op), timeout=300)
                             except CommandFailed as e:
+                                log.info(e)
                                 pass
                             client.exec_command(
                                 cmd='sudo umount %s -l' %

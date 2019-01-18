@@ -92,8 +92,8 @@ class RbdMirror:
         self.ceph_args = ' --cluster {}'.format(self.cluster_name)
         self.exec_cmd(
             ceph_args=False,
-            cmd="grep -v 'CLUSTER=ceph' /etc/sysconfig/ceph | tee temp " +
-                "&& mv temp /etc/sysconfig/ceph")
+            cmd="grep -v 'CLUSTER=ceph' /etc/sysconfig/ceph | tee temp "
+                + "&& mv temp /etc/sysconfig/ceph")
         self.exec_cmd(
             ceph_args=False,
             cmd="echo 'CLUSTER={}' | tee -a /etc/sysconfig/ceph"
@@ -102,8 +102,8 @@ class RbdMirror:
                       cmd="ln -s /etc/ceph/ceph.conf /etc/ceph/{}.conf"
                       .format(name))
         self.exec_cmd(ceph_args=False, node=self.ceph_mon,
-                      cmd="ln -s /etc/ceph/ceph.client.admin.keyring " +
-                          "/etc/ceph/{}.client.admin.keyring".format(name))
+                      cmd="ln -s /etc/ceph/ceph.client.admin.keyring "
+                          + "/etc/ceph/{}.client.admin.keyring".format(name))
 
     # Enable, Start or Stop Rbd Mirror Daemon
     def mirror_daemon(self, enable=None, start=None, stop=None, restart=None):

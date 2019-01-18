@@ -171,8 +171,7 @@ def run(ceph_cluster, **kw):
                         client1,
                         0,
                         10,
-                        client_info['mounting_dir'] +
-                        'testdir/',
+                        client_info['mounting_dir'] + 'testdir/',
                         dir_name,
                         0)
 

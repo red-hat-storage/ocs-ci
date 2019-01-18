@@ -226,7 +226,7 @@ def run(ceph_cluster, **kw):
         for client in client_info['fuse_clients']:
             file_name = ''.join(
                 random.choice(
-                    string.lowercase +
+                    string.ascii_lowercase +
                     string.digits) for _ in range(255))
             client.exec_command(
                 cmd="sudo touch '%s%s/%s'" %
@@ -235,8 +235,8 @@ def run(ceph_cluster, **kw):
             if client.pkg_type == 'rpm':
                 file_name = ''.join(
                     random.choice(
-                        string.lowercase +
-                        string.digits) for _ in range(255))
+                        string.ascii_lowercase
+                        + string.digits) for _ in range(255))
                 client.exec_command(
                     cmd="sudo touch '%s%s/%s'" %
                         (client_info['mounting_dir'], dir_name, file_name))
