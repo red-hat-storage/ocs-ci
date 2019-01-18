@@ -88,6 +88,17 @@
       desc: Recovery of shutdown primary cluster
 
    - test:
+      name: Test CEPH-9474
+      module: CEPH-9474.py
+      clusters:
+        ceph-rbd1:
+          config:
+            imagesize: 500M
+            io-total: 25M
+      polarion-id: CEPH-9474
+      desc: Recovery of abrupt failure of secondary cluster
+
+   - test:
       name: Test CEPH-9475
       module: CEPH-9475.py
       clusters:
