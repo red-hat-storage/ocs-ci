@@ -2,17 +2,19 @@ import logging
 import time
 
 from ceph.parallel import parallel
+from ceph.utils import hard_reboot
 
 log = logging.getLogger(__name__)
 
 
 def run(**kw):
-    log.info("Starting CEPH-9475")
+    log.info("Starting CEPH-9474")
     mirror1 = kw.get('test_data')['mirror1']
     mirror2 = kw.get('test_data')['mirror2']
     config = kw.get('config')
-    poolname = mirror1.random_string() + '9475pool'
-    imagename = mirror1.random_string() + '9475image'
+    osd_cred = config.get('osp_cred')
+    poolname = mirror1.random_string() + '9474pool'
+    imagename = mirror1.random_string() + '9474image'
     imagespec = poolname + '/' + imagename
 
     mirror1.create_pool(poolname=poolname)
@@ -24,11 +26,9 @@ def run(**kw):
     mirror2.wait_for_status(imagespec=imagespec, state_pattern='up+replaying')
 
     with parallel() as p:
-        for node in mirror2.ceph_nodes:
-            p.spawn(mirror2.exec_cmd, ceph_args=False, cmd='reboot',
-                    node=node, check_ec=False)
         p.spawn(mirror1.benchwrite, imagespec=imagespec,
                 io=config.get('io-total'))
+        p.spawn(hard_reboot, osd_cred, name='ceph-rbd2')
     time.sleep(10)
     rc = mirror1.check_data(peercluster=mirror2, imagespec=imagespec)
     if rc == 0:
