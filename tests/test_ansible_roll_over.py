@@ -53,7 +53,7 @@ def run(ceph_cluster, **kw):
     log.info("Running test")
     log.info("Running ceph ansible test")
     config = kw.get('config')
-    bluestore = config.get('bluestore')
+    filestore = config.get('filestore')
     k_and_m = config.get('ec-pool-k-m')
     hotfix_repo = config.get('hotfix_repo')
     test_data = kw.get('test_data')
@@ -112,7 +112,7 @@ def run(ceph_cluster, **kw):
     ceph_installer.install_ceph_ansible(build)
 
     hosts_file = ceph_cluster.generate_ansible_inventory(
-        device_to_add, mixed_lvm_configs, bluestore=True if bluestore else False)
+        device_to_add, mixed_lvm_configs, filestore)
     ceph_installer.write_inventory_file(hosts_file)
 
     if config.get('docker-insecure-registry'):

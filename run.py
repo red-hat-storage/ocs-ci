@@ -48,7 +48,7 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--log-level <LEVEL>]
         [--instances-name <name>]
         [--osp-image <image>]
-        [--bluestore]
+        [--filestore]
         [--use-ec-pool <k,m>]
         [--hotfix-repo <repo>]
         [--ignore-latest-container]
@@ -92,7 +92,7 @@ Options:
   --log-level <LEVEL>               Set logging level
   --instances-name <name>           Name that will be used for instances creation
   --osp-image <image>               Image for osp instances, default value is taken from conf file
-  --bluestore                       To specify bluestore as osd object store
+  --filestore                       To specify filestore as osd object store
   --use-ec-pool <k,m>               To use ec pools instead of replicated pools
   --hotfix-repo <repo>              To run sanity on hotfix build
   --ignore-latest-container         Skip getting latest nightly container
@@ -221,7 +221,7 @@ def run(args):
     console_log_level = args.get('--log-level')
     instances_name = args.get('--instances-name')
     osp_image = args.get('--osp-image')
-    bluestore = args.get('--bluestore', False)
+    filestore = args.get('--filestore', False)
     ec_pool_vals = args.get('--use-ec-pool', None)
     ignore_latest_nightly_container = args.get('--ignore-latest-container', False)
     skip_version_compare = args.get('--skip-version-compare', False)
@@ -497,8 +497,8 @@ def run(args):
                     tc['docker-containers-list'].append('{docker_registry}/{docker_image}:{docker_tag}'.format(
                         docker_registry=cluster_docker_registry, docker_image=cluster_docker_image,
                         docker_tag=cluster_docker_tag))
-            if bluestore:
-                config['bluestore'] = bluestore
+            if filestore:
+                config['filestore'] = filestore
             if ec_pool_vals:
                 config['ec-pool-k-m'] = ec_pool_vals
             if args.get('--hotfix-repo'):

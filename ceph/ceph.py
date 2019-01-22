@@ -181,13 +181,13 @@ class Ceph(object):
             ceph.exec_command(cmd='chmod 600 ~/.ssh/authorized_keys')
             ceph.exec_command(cmd='chmod 400 ~/.ssh/config')
 
-    def generate_ansible_inventory(self, device_to_add=None, mixed_lvm_confs=None, bluestore=False):
+    def generate_ansible_inventory(self, device_to_add=None, mixed_lvm_confs=None, filestore=False):
         """
         Generate ansible inventory file content for given cluster
         Args:
             device_to_add(str): To add new osd to the cluster, default None
             mixed_lvm_confs(str): To configure multiple mixed lvm configs, default None
-            bluestore(bool): True for bluestore usage, dafault False
+            filestore(bool): True for filestore usage, dafault False
         Returns:
             str: inventory
 
@@ -228,9 +228,8 @@ class Ceph(object):
                 self.setup_osd_devices(devices, node)
                 auto_discovery = self.ansible_config.get('osd_auto_discovery', False)
                 dmcrypt = ''
-                if bluestore:
-                    objectstore = ' osd_objectstore="bluestore"' + ' '
-                else:
+                objectstore = ''
+                if filestore:
                     objectstore = ' osd_objectstore="filestore"' + ' '
 
                 if self.ansible_config.get('osd_scenario') == 'lvm' and not mixed_lvm_confs:
