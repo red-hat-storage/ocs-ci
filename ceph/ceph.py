@@ -1474,9 +1474,9 @@ class CephNode(object):
 
     def chk_lvm_exists(self):
         out, rc = self.exec_command(cmd="lsblk")
-        out = out.read()
+        out = out.read().decode()
         if 'lvm' in out:
-            print out
+            print(out.read().decode())
             return 0
         else:
             return 1
@@ -1559,7 +1559,7 @@ class CephObject(object):
             **kw: options
 
         Returns:
-        node's exec_command resut
+        node's exec_command result
         """
         return self.node.exec_command(cmd=cmd, **kw)
 
@@ -1570,7 +1570,7 @@ class CephObject(object):
             **kw: options
 
         Returns:
-            node's write_file resut
+            node's write_file result
         """
         return self.node.write_file(**kw)
 

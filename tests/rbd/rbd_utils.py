@@ -42,7 +42,7 @@ class Rbd:
                 check_ec=kw.get('check_ec', True))
 
             if kw.get('output', False):
-                return out.read()
+                return out.read().decode()
 
             return 0
 

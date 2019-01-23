@@ -37,7 +37,7 @@ class FsUtils(object):
         for node in self.clients:
             out, rc = node.exec_command(
                 cmd="sudo ceph mon dump  | awk {'print $2'} ")
-            self.mon_node_ip = out.read().rstrip('\n')
+            self.mon_node_ip = out.read().decode().rstrip('\n')
             self.mon_node_ip = self.mon_node_ip.split('\n')
             self.mon_node_ip = self.mon_node_ip[-3].strip('/0') + ' ' + self.mon_node_ip[-2].strip('/0') + ' ' + \
                 self.mon_node_ip[-1].strip('/0')
@@ -48,20 +48,20 @@ class FsUtils(object):
             node = client.node
             if node.pkg_type == 'rpm':
                 out, rc = node.exec_command(cmd='sudo rpm -qa | grep -w attr')
-                output = out.read()
+                output = out.read().decode()
                 output.split()
                 if 'attr' not in output:
                     node.exec_command(cmd='sudo yum install -y attr')
 
                 out, rc = node.exec_command(
                     cmd='sudo pip  list --format=legacy')
-                output = out.read()
+                output = out.read().decode()
                 output.split()
                 if 'crefi' not in output:
                     node.exec_command(cmd='sudo pip install crefi')
 
                 out, rc = node.exec_command(cmd="sudo ls /home/cephuser")
-                output = out.read()
+                output = out.read().decode()
                 output.split()
                 if 'smallfile' not in output:
                     node.exec_command(
@@ -69,7 +69,7 @@ class FsUtils(object):
                             'smallfile.git')
 
                 out, rc = node.exec_command(cmd='sudo rpm -qa')
-                output = out.read()
+                output = out.read().decode()
                 if 'fio' not in output:
                     node.exec_command(
                         cmd='sudo yum install -y fio')
@@ -83,27 +83,27 @@ class FsUtils(object):
             elif node.pkg_type == 'deb':
                 node.exec_command(cmd='sudo pip install --upgrade pip')
                 out, rc = node.exec_command(cmd='sudo apt list libattr1-dev')
-                out = out.read().split()
+                out = out.read().decode().split()
                 if 'libattr1-dev/xenial,now' not in out:
                     node.exec_command(
                         cmd='sudo apt-get install -y libattr1-dev')
                 out, rc = node.exec_command(cmd='sudo apt list attr')
-                out = out.read().split()
+                out = out.read().decode().split()
                 if 'attr/xenial,now' not in out:
                     node.exec_command(cmd='sudo apt-get install -y attr')
                 out, rc = node.exec_command(cmd='sudo apt list fio')
-                out = out.read().split()
+                out = out.read().decode().split()
                 if 'fio/xenial,now' not in out:
                     node.exec_command(cmd='sudo apt-get install -y fio')
                 out, rc = node.exec_command(
                     cmd='sudo pip list')
-                output = out.read()
+                output = out.read().decode()
                 output.split()
                 if 'crefi' not in output:
                     node.exec_command(cmd='sudo pip install crefi')
 
                 out, rc = node.exec_command(cmd="sudo ls /home/cephuser")
-                output = out.read()
+                output = out.read().decode()
                 output.split()
                 if 'smallfile' not in output:
                     node.exec_command(
@@ -156,7 +156,7 @@ class FsUtils(object):
                         p_flag = 'rw'
             for client in clients:
                 out, rc = client.exec_command(cmd='sudo ceph auth list')
-                out = out.read().rstrip('\n')
+                out = out.read().decode().rstrip('\n')
                 out = out.split()
                 if 'client.%s_%s' % (client.node.hostname, self.path) in out:
                     client.exec_command(
@@ -207,7 +207,7 @@ class FsUtils(object):
                         sudo=True, cmd='cat /etc/ceph/ceph.client.%s_%s.keyring' %
                                        (client.node.hostname, self.path))
                     self.rc_list.append(mon.node.exit_status)
-                    keyring = out.read()
+                    keyring = out.read().decode()
                     key_file = client.write_file(
                         sudo=True, file_name='/etc/ceph/ceph.client.%s_%s.keyring' %
                                              (client.node.hostname, self.path), file_mode='w')
@@ -224,7 +224,7 @@ class FsUtils(object):
         else:
             for client in clients:
                 out, rc = client.exec_command(cmd='sudo ceph auth list')
-                out = out.read().rstrip('\n')
+                out = out.read().decode().rstrip('\n')
                 out = out.split()
                 if 'client.%s' % (client.node.hostname) in out:
                     client.exec_command(
@@ -246,7 +246,7 @@ class FsUtils(object):
                         sudo=True, cmd='cat /etc/ceph/ceph.client.%s.keyring' %
                                        (client.node.hostname))
                     self.rc_list.append(mon.node.exit_status)
-                    keyring = out.read()
+                    keyring = out.read().decode()
                     key_file = client.write_file(
                         sudo=True, file_name='/etc/ceph/ceph.client.%s.keyring' %
                                              (client.node.hostname), file_mode='w')
@@ -286,7 +286,7 @@ class FsUtils(object):
                         cmd="sudo ceph-fuse -n client.%s %s " %
                             (new_client_hostname, mounting_dir))
                 out, rc = client.exec_command(cmd='mount')
-                mount_output = out.read()
+                mount_output = out.read().decode()
                 mount_output = mount_output.split()
                 log.info("Checking if fuse mount is is passed of failed:")
                 assert mounting_dir.rstrip('/') in mount_output
@@ -297,7 +297,7 @@ class FsUtils(object):
                 try:
                     out, rc = client.exec_command(
                         cmd="sudo mount | grep '/mnt' | awk {'print $3'}")
-                    out = out.read().rstrip('\n')
+                    out = out.read().decode().rstrip('\n')
                     out = out.split()
                     if mounting_dir.rstrip('/') not in out:
                         for op in out:
@@ -322,7 +322,7 @@ class FsUtils(object):
                     cmd="sudo ceph-fuse -n client.%s %s" %
                         (client.node.hostname, mounting_dir))
                 out, rc = client.exec_command(cmd='mount')
-                mount_output = out.read().rstrip('\n')
+                mount_output = out.read().decode().rstrip('\n')
                 mount_output = mount_output.split()
                 log.info("Checking if fuse mount is is passed of failed:")
                 assert mounting_dir.rstrip('/') in mount_output
@@ -348,7 +348,7 @@ class FsUtils(object):
                     out, rc = client.exec_command(
                         cmd='sudo ceph auth get-key client.%s' %
                             (new_client_hostname))
-                    secret_key = out.read().rstrip('\n')
+                    secret_key = out.read().decode().rstrip('\n')
                     key_file = client.write_file(
                         sudo=True, file_name='/etc/ceph/%s.secret' %
                                              (new_client_hostname), file_mode='w')
@@ -360,7 +360,7 @@ class FsUtils(object):
                                 mon_node_ip[0], mon_node_ip[1], mon_node_ip[2], sub_dir, mounting_dir,
                                 new_client_hostname, new_client_hostname))
                     out, rc = client.exec_command(cmd='mount')
-                    mount_output = out.read()
+                    mount_output = out.read().decode()
                     mount_output = mount_output.split()
                     log.info("Checking if kernel mount is is passed of failed:")
                     assert mounting_dir.rstrip('/') in mount_output
@@ -375,7 +375,7 @@ class FsUtils(object):
                 try:
                     out, rc = client.exec_command(
                         cmd="sudo mount | grep '/mnt' | awk {'print $3'}")
-                    out = out.read().rstrip('\n')
+                    out = out.read().decode().rstrip('\n')
                     out = out.split()
                     if mounting_dir.rstrip('/') not in out:
                         for op in out:
@@ -403,7 +403,7 @@ class FsUtils(object):
                     out, rc = client.exec_command(
                         cmd='sudo ceph auth get-key client.%s' %
                             (client.node.hostname))
-                    secret_key = out.read().rstrip('\n')
+                    secret_key = out.read().decode().rstrip('\n')
                     key_file = client.write_file(
                         sudo=True,
                         file_name='/etc/ceph/%s.secret' % (client.node.hostname),
@@ -417,7 +417,7 @@ class FsUtils(object):
                                 mon_node_ip[0], mon_node_ip[1], mon_node_ip[2], mounting_dir,
                                 client.node.hostname, client.node.hostname))
                     out, rc = client.exec_command(cmd='mount')
-                    mount_output = out.read().rstrip('\n')
+                    mount_output = out.read().decode().rstrip('\n')
                     mount_output = mount_output.split()
                     log.info("Checking if kernel mount is is passed of failed:")
                     assert mounting_dir.rstrip('/') in mount_output
@@ -440,7 +440,7 @@ class FsUtils(object):
         out, rc = node.exec_command(
             cmd='sudo ceph auth get-key client.%s' %
                 (nfs_client_name))
-        secret_key = out.read().rstrip('\n')
+        secret_key = out.read().decode().rstrip('\n')
 
         conf = """
     NFS_CORE_PARAM
@@ -653,7 +653,7 @@ finally:
             to_lock_code.flush()
             out, rc = client.exec_command(
                 cmd="sudo python /home/cephuser/file_lock.py")
-            output = out.read()
+            output = out.read().decode()
             output.split()
             if 'Errno 11' in output:
                 log.info("File locking achieved, data is not corrupted")
@@ -665,7 +665,7 @@ finally:
             out, rc = client.exec_command(
                 cmd="sudo md5sum %sto_test_file_lock | awk '{print $1}'" %
                     (mounting_dir))
-            md5sum_file_lock = out.read()
+            md5sum_file_lock = out.read().decode()
             return md5sum_file_lock, 0
 
     def mkdir_bulk(self, clients, range1, range2, mounting_dir, dir_name):
@@ -704,11 +704,11 @@ finally:
                     out, rc = client.exec_command(
                         cmd='sudo mkdir %s%s_%d' %
                             (mounting_dir, dir_name, num))
-                    print(out.read())
+                    print(out.read().decode())
                     out, rc = client.exec_command(
                         cmd='sudo ls %s | grep %s' %
                             (mounting_dir, dir_name))
-                    self.dirs = out.read()
+                    self.dirs = out.read().decode()
             break
         return self.dirs, 0
 
@@ -717,7 +717,7 @@ finally:
             fs_info = self.get_fs_info(node)
             log.info("Activating Multiple MDSs:")
             out, rc = node.exec_command(cmd="ceph -v | awk {'print $3'}")
-            out = out.read()
+            out = out.read().decode()
             if out.startswith('10.'):
                 log.info('multimds is not supported in 2.x')
                 return 0
@@ -751,7 +751,7 @@ finally:
                 out, rc = node.exec_command(
                     cmd="sudo ceph mds stat --format=json-pretty | grep active"
                         " | awk {'print $2'}")
-                out = out.read()
+                out = out.read().decode()
                 count = out.count('active')
                 if count == 2:
                     log.info("Failing MDS %d" % (rand))
@@ -770,11 +770,11 @@ finally:
             out, rc = mds.exec_command(
                 cmd="sudo ceph mds stat | grep -o -P '(?<=0=)."
                     "*(?==up:active,)'")
-            active_mds_1_name = out.read().rstrip('\n')
+            active_mds_1_name = out.read().decode().rstrip('\n')
             out, rc = mds.exec_command(
                 cmd="sudo ceph mds stat | grep -o -P '(?<=1=)."
                     "*(?==up:active)'")
-            active_mds_2_name = out.read().rstrip('\n')
+            active_mds_2_name = out.read().decode().rstrip('\n')
             break
 
         for mds in mdss:
@@ -796,7 +796,7 @@ finally:
                     cmd="sudo ceph --admin-daemon /var/run/ceph/ceph-mds.%s."
                         "asok %s| grep path" %
                         (active_mds_node_2.node.hostname, val))
-                return out_1.read().rstrip('\n'), out_2.read().rstrip('\n'), 0
+                return out_1.read().decode().rstrip('\n'), out_2.read().decode().rstrip('\n'), 0
 
             elif val == 'session ls':
                 out_1, err_1 = active_mds_node_1.exec_command(
@@ -807,7 +807,7 @@ finally:
                     cmd="sudo ceph --admin-daemon /var/run/ceph/ceph-mds.%s."
                         "asok %s" %
                         (active_mds_node_2.node.hostname, val))
-                return out_1.read().rstrip('\n'), out_2.read().rstrip('\n'), 0
+                return out_1.read().decode().rstrip('\n'), out_2.read().decode().rstrip('\n'), 0
 
     def stress_io(
             self,
@@ -1004,7 +1004,7 @@ finally:
                         out, rc = client.exec_command(
                             cmd='sudo rm -rf %s%s_%d/*' %
                                 (mounting_dir, dir_name, num))
-                    print(out.read())
+                    print(out.read().decode())
                     self.return_counts = self.io_verify(client)
 
             break
@@ -1015,14 +1015,14 @@ finally:
             if val == 'doEntry':
                 for client in clients:
                     out, rc = client.exec_command(cmd='mount')
-                    mount_output = out.read()
+                    mount_output = out.read().decode()
                     mount_output.split()
                     if 'fuse' in mount_output:
                         client.exec_command(
                             cmd='sudo cp /etc/fstab /etc/fstab1')
                         out, rc = client.exec_command(
                             cmd='sudo cat /etc/fstab')
-                        out = out.read()
+                        out = out.read().decode()
                         fuse_fstab = """
 {old_entry}
 #DEVICE         PATH                 TYPE           OPTIONS
@@ -1046,7 +1046,7 @@ ceph.conf=/etc/ceph/ceph.conf,_netdev,defaults  0 0
                             cmd='sudo cp /etc/fstab /etc/fstab1')
                         out, rc = client.exec_command(
                             cmd='sudo cat /etc/fstab')
-                        out = out.read()
+                        out = out.read().decode()
                     if kwargs:
                         for key, val in list(kwargs.items()):
                             if key == 'mon_node_ip':
@@ -1142,7 +1142,7 @@ os.system('sudo systemctl start  network')
                 self.reboot_node(ceph_daemon)
         elif ceph_daemon.role == 'mds':
             out, rc = ceph_daemon.exec_command(cmd='sudo ceph -s')
-            if ceph_daemon.node.hostname in out.read():
+            if ceph_daemon.node.hostname in out.read().decode():
                 self.reboot_node(ceph_daemon)
 
         else:
@@ -1154,7 +1154,7 @@ os.system('sudo systemctl start  network')
         if ceph_daemon.role == 'mds' and op == 'active_mds_restart':
             try:
                 out, rc = ceph_daemon.exec_command(cmd='sudo ceph -s')
-                out = out.read().rstrip('\n')
+                out = out.read().decode().rstrip('\n')
                 if ceph_daemon.node.hostname in out:
                     ceph_daemon.node.exec_command(
                         cmd='sudo systemctl restart ceph-%s@%s.service' %
@@ -1210,7 +1210,7 @@ mds standby for rank = 1
                                        ' /etc/ceph/ceph1.conf')
                     out, rc = mds.exec_command(
                         sudo=True, cmd='cat /etc/ceph/ceph.conf')
-                    mds_conf_file = out.read()
+                    mds_conf_file = out.read().decode()
                     key_file = mds.write_file(
                         sudo=True,
                         file_name='/etc/ceph/ceph.conf',
@@ -1229,7 +1229,7 @@ mds standby for rank = 1
                                        '/etc/ceph/ceph1.conf')
                     out, rc = mon.exec_command(
                         sudo=True, cmd='cat /etc/ceph/ceph.conf')
-                    mon_conf_file = out.read()
+                    mon_conf_file = out.read().decode()
                     key_file = mon.write_file(
                         sudo=True,
                         file_name='/etc/ceph/ceph.conf',
@@ -1256,7 +1256,7 @@ mds standby for rank = 1
 
     def pid_kill(self, node, daemon):
         out, rc = node.exec_command(cmd='pgrep -u ceph %s ' % (daemon))
-        out = out.read().split('\n')
+        out = out.read().decode().split('\n')
         out.pop()
         for pid in out:
             node.exec_command(cmd='sudo kill -9 %s' % pid)
@@ -1265,7 +1265,7 @@ mds standby for rank = 1
 
     def check_mount_exists(self, client):
         out, rc = client.exec_command(cmd='mount')
-        mount_output = out.read()
+        mount_output = out.read().decode()
         mount_output = mount_output.split()
         if self.result_vals['mounting_dir'].rstrip('/') in mount_output:
             return 0
@@ -1301,15 +1301,15 @@ mds standby for rank = 1
     def get_fs_info(self, mon):
         out, rc = mon.exec_command(
             cmd=" sudo ceph fs ls | awk {' print $2'} ")
-        fs_name = out.read().rstrip()
+        fs_name = out.read().decode().rstrip()
         fs_name = fs_name.strip(',')
         out, rc = mon.exec_command(
             cmd=" sudo ceph fs ls | awk {' print $5'} ")
-        metadata_pool_name = out.read().rstrip()
+        metadata_pool_name = out.read().decode().rstrip()
         metadata_pool_name = metadata_pool_name.strip(',')
         out, rc = mon.exec_command(
             cmd=" sudo ceph fs ls | awk {' print $8'} ")
-        data_pool_name = out.read().rstrip()
+        data_pool_name = out.read().decode().rstrip()
         data_pool_name = data_pool_name.strip('[')
         output_dict = {
             'fs_name': fs_name,
@@ -1367,7 +1367,7 @@ mds standby for rank = 1
 
             for mds in mds_nodes:
                 out, rc = mds.exec_command(cmd='sudo ceph fs ls')
-                if fs_name in out.read():
+                if fs_name in out.read().decode():
                     log.info("New cephfs created")
                     self.return_counts.update({mds.node.hostname: mds.node.exit_status})
                     return self.return_counts, 0
@@ -1389,7 +1389,7 @@ mds standby for rank = 1
                 break
             for mds in mds_nodes:
                 out, rc = mds.exec_command(cmd='sudo ceph fs ls')
-                if fs_name in out.read():
+                if fs_name in out.read().decode():
                     log.info("New cephfs created")
                     self.return_counts.update({mds.node.hostname: mds.node.exit_status})
                     return self.return_counts, 0
@@ -1418,7 +1418,7 @@ mds standby for rank = 1
             cmd='sudo ceph fs add_data_pool %s  %s' %
                 (fs_name, pool_name))
         out, rc = mon.exec_command(cmd='sudo ceph fs ls')
-        output = out.read().split()
+        output = out.read().decode().split()
         if pool_name in output:
             log.info("adding new pool to cephfs successfull")
             self.return_counts.update(
@@ -1430,7 +1430,7 @@ mds standby for rank = 1
             cmd='sudo ceph fs rm_data_pool %s %s' %
                 (fs_name, pool_name))
         out, rc = ceph_object.exec_command(cmd='sudo ceph fs ls')
-        output = out.read().split()
+        output = out.read().decode().split()
         if pool_name not in output:
             log.info(
                 "removing pool %s to cephfs successfull" %
@@ -1459,7 +1459,7 @@ mds standby for rank = 1
                 out, rc = mds.exec_command(
                     cmd='sudo ceph fs get %s| grep %s' %
                         (fs_name, attrs[0]))
-                out = out.read().rstrip().replace('\t', '')
+                out = out.read().decode().rstrip().replace('\t', '')
                 if "max_mds2" in out:
                     log.info("max mds attr passed")
                     log.info("Reverting:")
@@ -1469,7 +1469,7 @@ mds standby for rank = 1
                     out, rc = mds.exec_command(
                         cmd='sudo ceph fs get %s| grep %s' %
                             (fs_name, attrs[0]))
-                    out = out.read().rstrip().replace('\t', '')
+                    out = out.read().decode().rstrip().replace('\t', '')
                     if "max_mds1" in out:
                         log.info("Setting max mds to 1")
                         self.return_counts.update(
@@ -1487,7 +1487,7 @@ mds standby for rank = 1
                 out, rc = mds.exec_command(
                     cmd='sudo ceph fs get %s| grep %s' %
                         (fs_name, attrs[1]))
-                out = out.read().rstrip()
+                out = out.read().decode().rstrip()
                 print(out)
                 if 'max_file_size	65536' in out:
                     log.info("max file size attr tested successfully")
@@ -1498,7 +1498,7 @@ mds standby for rank = 1
                     out, rc = mds.exec_command(
                         cmd='sudo ceph fs get %s| grep %s' %
                             (fs_name, attrs[1]))
-                    if max_file_size in out.read():
+                    if max_file_size in out.read().decode():
                         log.info("max file size attr reverted successfully")
                         self.return_counts.update(
                             {mds.node.hostname: mds.node.exit_status})
@@ -1518,14 +1518,14 @@ mds standby for rank = 1
                 out, rc = mds.exec_command(
                     cmd='sudo ceph fs set %s %s 1 --yes-i-really-mean-it' %
                         (fs_name, attrs[2]))
-                if 'enabled new snapshots' in rc.read():
+                if 'enabled new snapshots' in rc.read().decode():
                     log.info('allow new snap flag is set successfully')
                     log.info("Reverting:")
                     out, rc = mds.exec_command(
                         cmd='sudo ceph fs set %s %s 0 --yes-i-really-mean-it' %
                             (fs_name, attrs[2]))
-                    if 'disabled new snapshots' in rc.read():
-                        print(out.read())
+                    if 'disabled new snapshots' in rc.read().decode():
+                        print(out.read().decode())
                         log.info("Reverted allow_new_snaps successfully")
                         self.return_counts.update(
                             {mds.node.hostname: mds.node.exit_status})
@@ -1546,13 +1546,13 @@ mds standby for rank = 1
                 out, rc = mds.exec_command(
                     cmd='sudo ceph fs set %s %s 1 --yes-i-really-mean-it' %
                         (fs_name, attrs[3]))
-                if 'inline data enabled' in rc.read():
+                if 'inline data enabled' in rc.read().decode():
                     log.info("inline data set succesafully")
                     log.info("Reverting:")
                     out, rc = mds.exec_command(
                         cmd='sudo ceph fs set %s %s 0 --yes-i-really-mean-it' %
                             (fs_name, attrs[3]))
-                    if 'inline data disabled' in rc.read():
+                    if 'inline data disabled' in rc.read().decode():
                         log.info("inline data disabled successfully")
                         self.return_counts.update(
                             {mds.node.hostname: mds.node.exit_status})
@@ -1574,13 +1574,13 @@ mds standby for rank = 1
                 out, rc = mds.exec_command(
                     cmd='sudo ceph fs set %s %s 1' %
                         (fs_name, attrs[4]))
-                if 'marked down' in rc.read():
+                if 'marked down' in rc.read().decode():
                     log.info("cluster_down attr set successfully")
                     log.info("Reverting:")
                     out, rc = mds.exec_command(
                         cmd='sudo ceph fs set %s %s 0' %
                             (fs_name, attrs[4]))
-                    if 'marked up' in rc.read():
+                    if 'marked up' in rc.read().decode():
                         log.info("cluster_down attr reverted successfully")
                         self.return_counts.update(
                             {mds.node.hostname: mds.node.exit_status})
@@ -1602,14 +1602,14 @@ mds standby for rank = 1
                 out, rc = mds.exec_command(
                     cmd='sudo ceph fs set %s  %s 1' %
                         (fs_name, attrs[5]))
-                if 'enabled creation of more than 1 active MDS' in rc.read():
+                if 'enabled creation of more than 1 active MDS' in rc.read().decode():
                     log.info("allow_multimds attr set successfully")
                     log.info("Reverting:")
                     out, rc = mds.exec_command(
                         cmd='sudo ceph fs set %s %s 0' %
                             (fs_name, attrs[5]))
                     if 'disallowed increasing the cluster size past ' \
-                       '1' in rc.read():
+                       '1' in rc.read().decode():
                         log.info("allow_multimds attr reverted successfully")
                         self.return_counts.update(
                             {mds.node.hostname: mds.node.exit_status})
@@ -1635,13 +1635,13 @@ mds standby for rank = 1
                 out, rc = mds.exec_command(
                     cmd='sudo ceph fs set %s  %s 1' %
                         (fs_name, attrs[6]))
-                if 'enabled directory fragmentation' in rc.read():
+                if 'enabled directory fragmentation' in rc.read().decode():
                     log.info("directory fragmentation enabled successfully")
                     log.info("disabling directorty fragmenation")
                     out, rc = mds.exec_command(
                         cmd='sudo ceph fs set %s %s 0' %
                             (fs_name, attrs[6]))
-                    if 'disallowed new directory fragmentation' in rc.read():
+                    if 'disallowed new directory fragmentation' in rc.read().decode():
                         log.info(
                             "directorty fragmenation disabled successfully")
                         self.return_counts.update(
@@ -1667,7 +1667,7 @@ mds standby for rank = 1
                 out, rc = mds.exec_command(
                     cmd='sudo ceph fs get %s| grep %s' %
                         (fs_name, attrs[7]))
-                out = out.read().rstrip()
+                out = out.read().decode().rstrip()
                 if 'balancer	2' in out:
                     log.info("metadata load balancer attr set successfully ")
                     log.info("reverting:")
@@ -1677,7 +1677,7 @@ mds standby for rank = 1
                     out, rc = mds.exec_command(
                         cmd='sudo ceph fs get %s| grep %s' %
                             (fs_name, attrs[7]))
-                    out = out.read().rstrip()
+                    out = out.read().decode().rstrip()
 
                     if 'balancer	1' in out:
                         log.info(
@@ -1706,7 +1706,7 @@ mds standby for rank = 1
                 out, rc = mds.exec_command(
                     cmd='sudo ceph fs get %s' %
                         (fs_name))
-                out = out.read().rstrip()
+                out = out.read().decode().rstrip()
                 if 'standby_count_wanted	2' in out:
                     log.info("standby_count_wanted attr set successfully")
                     log.info("Reverting:")
@@ -1716,7 +1716,7 @@ mds standby for rank = 1
                     out, rc = mds.exec_command(
                         cmd='sudo ceph fs get %s' %
                             (fs_name))
-                    out = out.read().rstrip()
+                    out = out.read().decode().rstrip()
                     if 'standby_count_wanted	1' in out:
                         log.info(
                             "standby_count_wanted attr reverted successfully")
@@ -1766,7 +1766,7 @@ mds standby for rank = 1
     def auto_evict(self, active_mds_node, clients, rank):
         grep_pid_cmd = """sudo ceph tell mds.%d client ls | grep '"pid":'"""
         out, rc = active_mds_node.exec_command(cmd=grep_pid_cmd % (rank))
-        out = out.read()
+        out = out.read().decode()
         client_pid = re.findall(r"\d+", out)
         while True:
             for client in clients:
@@ -1783,14 +1783,14 @@ mds standby for rank = 1
         sudo ceph tell mds.%d client ls | grep '"id":'
         """
         out, rc = active_mds_node.exec_command(cmd=grep_cmd % (rank))
-        out = out.read()
+        out = out.read().decode()
         client_ids = re.findall(r"\d+", out)
         grep_cmd = """
                sudo ceph tell mds.%d client ls | grep '"inst":'
                """
         log.info("Getting IP address of Evicted client")
         out, rc = active_mds_node.exec_command(cmd=grep_cmd % (rank))
-        out = out.read()
+        out = out.read().decode()
         op = re.findall(r"\d+.+\d+.", out)
         ip_add = op[0]
         ip_add = ip_add.split(' ')
@@ -1805,11 +1805,11 @@ mds standby for rank = 1
     def osd_blacklist(self, active_mds_node, ip_add):
         out, rc = active_mds_node.exec_command(
             cmd='sudo ceph osd blacklist ls')
-        if ip_add in out.read():
+        if ip_add in out.read().decode():
             active_mds_node.exec_command(
                 cmd='sudo ceph osd blacklist rm %s' %
                     (ip_add))
-            if 'listed 0 entries' in out.read():
+            if 'listed 0 entries' in out.read().decode():
                 log.info(
                     "Evicted client %s unblacklisted successfully" %
                     (ip_add))
@@ -1847,8 +1847,8 @@ mds standby for rank = 1
             ip_add = self.manual_evict(active_mds, rank)
             out, rc = active_mds.exec_command(
                 cmd='sudo ceph osd blacklist ls')
-            print(out.read())
-            if ip_add not in out.read():
+            print(out.read().decode())
+            if ip_add not in out.read().decode():
                 return 0
 
     def getfattr(self, clients, mounting_dir, file_name):
@@ -1859,7 +1859,7 @@ mds standby for rank = 1
             out, rc = client.exec_command(
                 cmd='sudo getfattr -n ceph.file.layout %s%s' %
                     (mounting_dir, file_name))
-            out = out.read()
+            out = out.read().decode()
             out = out.split()
             out[3] = out[3].strip("ceph.file.layout=")
             self.result_vals.update({'stripe_unit': out[3]})
@@ -1890,7 +1890,7 @@ mds standby for rank = 1
     def get_osd_count(self, mon_node):
         out, rc = mon_node.exec_command(
             cmd="sudo ceph -s| grep osds| awk {'print $2'}")
-        osd_count = out.read().rstrip('\n')
+        osd_count = out.read().decode().rstrip('\n')
         return osd_count
 
     def client_clean_up(

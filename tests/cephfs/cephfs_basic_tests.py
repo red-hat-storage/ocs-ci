@@ -135,9 +135,9 @@ def run(ceph_cluster, **kw):
                     out2, rc2 = client.exec_command(
                         cmd='sudo  ls -c -ltd -- %s%s.*' %
                             (client_info['mounting_dir'], client.node.hostname))
-                    a = out1.read()
+                    a = out1.read().decode()
                     print("------------")
-                    b = out2.read()
+                    b = out2.read().decode()
                     if a != b:
                         return_counts.append(out1.channel.recv_exit_status())
                         return_counts.append(out2.channel.recv_exit_status())

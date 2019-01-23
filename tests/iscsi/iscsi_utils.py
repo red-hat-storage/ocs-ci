@@ -71,7 +71,7 @@ class IscsiUtils(object):
         for node in self.ceph_nodes:
             if node.role == 'osd':
                 out, err = node.exec_command(sudo=True, cmd="hostname -I")
-                osd = out.read()
+                osd = out.read().decode()
                 break
         t1 = datetime.datetime.now()
         time_plus_5 = t1 + datetime.timedelta(minutes=5)
@@ -233,7 +233,7 @@ trusted_ip_list = {0}
                 out, err = node.exec_command(
                     sudo=True, cmd='cat /etc/iscsi/'
                                    'initiatorname.iscsi', check_ec=False)
-                output = out.read()
+                output = out.read().decode()
                 out = output.split('=')
                 name = out[1].rstrip("\n")
                 if full:

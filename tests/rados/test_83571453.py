@@ -54,7 +54,7 @@ def run(ceph_cluster, **kw):
                                                  k=k, m=m)
     try:
         (out, err) = helper.raw_cluster_cmd(prof_cmd)
-        outbuf = out.read()
+        outbuf = out.read().decode()
         log.info(outbuf)
         log.info("created profile {ec}".format(
             ec=profile))
@@ -84,7 +84,7 @@ def run(ceph_cluster, **kw):
         pname=pname, obj=oname
     )
     (out, err) = helper.raw_cluster_cmd(cmd)
-    outbuf = out.read()
+    outbuf = out.read().decode()
     log.info(outbuf)
     cmdout = json.loads(outbuf)
     targt_pg = cmdout['pgid']
@@ -129,7 +129,7 @@ def run(ceph_cluster, **kw):
         out, err = cot_environment.exec_command(
             cmd='mount | grep "{partition_path} "'.format(partition_path=partition_path),
             check_ec=False)
-        device_mount_data = out.read()  # type: str
+        device_mount_data = out.read().decode()  # type: str
         if not device_mount_data:
             cot_environment.exec_command(
                 cmd='sudo mount {partition_path} {directory}'.format(partition_path=partition_path, directory=osd_data))
@@ -140,7 +140,7 @@ def run(ceph_cluster, **kw):
             --head --op list {obj}".format(osd_data=osd_data, osd_journal=osd_journal,
                                            obj=oname)
     (out, err) = cot_environment.exec_command(cmd=slist_cmd)
-    outbuf = out.read()
+    outbuf = out.read().decode()
     log.info(outbuf)
     corrupt_cmd = "sudo ceph-objectstore-tool --data-path \
             {osd_data} --journal-path \
@@ -148,20 +148,20 @@ def run(ceph_cluster, **kw):
             {outbuf} clear-snapset \
             corrupt".format(osd_data=osd_data, osd_journal=osd_journal, outbuf="'" + (outbuf) + "'")
     (out, err) = cot_environment.exec_command(cmd=corrupt_cmd)
-    outbuf = out.read()
+    outbuf = out.read().decode()
     log.info(outbuf)
 
     helper.revive_osd(target_osd_node, osd_service)
     time.sleep(10)
     run_scrub = "pg deep-scrub {pgid}".format(pgid=targt_pg)
     (out, err) = helper.raw_cluster_cmd(run_scrub)
-    outbuf = out.read()
+    outbuf = out.read().decode()
     log.info(outbuf)
 
     while 'HEALTH_ERR' and 'active+clean+inconsistent' not in outbuf:
         status = "-s --format json"
         (out, err) = helper.raw_cluster_cmd(status)
-        outbuf = out.read()
+        outbuf = out.read().decode()
     log.info("HEALTH_ERR found as expected")
     log.info("inconsistent foud as expected")
 
@@ -170,7 +170,7 @@ def run(ceph_cluster, **kw):
     while timeout:
         incon_pg = "sudo rados list-inconsistent-pg {pname}".format(pname=pname)
         (out, err) = ctrlr.exec_command(cmd=incon_pg)
-        outbuf = out.read()
+        outbuf = out.read().decode()
         log.info(outbuf)
         if targt_pg not in outbuf:
             time.sleep(1)
@@ -188,7 +188,7 @@ def run(ceph_cluster, **kw):
         incon_obj = "sudo rados list-inconsistent-snapset \
                      {pg}".format(pg=targt_pg)
         (out, err) = ctrlr.exec_command(cmd=incon_obj)
-        outbuf = out.read()
+        outbuf = out.read().decode()
         log.info(outbuf)
         if oname not in outbuf:
             time.sleep(1)

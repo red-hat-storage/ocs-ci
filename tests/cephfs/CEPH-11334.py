@@ -128,22 +128,22 @@ def run(ceph_cluster, **kw):
             out, rc = client.exec_command(
                 cmd="sudo getfattr -n ceph.file.layout.pool %s%s" %
                     (client_info['mounting_dir'], file_name))
-            if vals['pool'] in out.read():
+            if vals['pool'] in out.read().decode():
                 log.info("reading pool by getfattr successfull")
             out, rc = client.exec_command(
                 cmd="sudo getfattr -n ceph.file.layout.stripe_unit  %s%s" %
                     (client_info['mounting_dir'], file_name))
-            if vals['stripe_unit'] in out.read():
+            if vals['stripe_unit'] in out.read().decode():
                 log.info("reading stripe_unit by getfattr successfull")
             out, rc = client.exec_command(
                 cmd="sudo getfattr -n ceph.file.layout.stripe_count  %s%s" %
                     (client_info['mounting_dir'], file_name))
-            if vals['stripe_count'] in out.read():
+            if vals['stripe_count'] in out.read().decode():
                 log.info("reading stripe_count by getfattr successfull")
             out, rc = client.exec_command(
                 cmd="sudo getfattr -n ceph.file.layout.object_size  %s%s" %
                     (client_info['mounting_dir'], file_name))
-            if vals['object_size'] in out.read():
+            if vals['object_size'] in out.read().decode():
                 log.info("reading object_size by getfattr successfull")
             break
         rc = fs_util.remove_pool_from_fs(

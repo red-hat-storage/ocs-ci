@@ -51,7 +51,7 @@ class RbdMirror:
                 check_ec=kw.get('check_ec', True))
 
             if kw.get('output', False):
-                return out.read()
+                return out.read().decode()
 
             return 0
 
@@ -62,7 +62,7 @@ class RbdMirror:
 
     def copy_file(self, file_name, src, dest):
         out, err = src.exec_command(sudo=True, cmd='cat {}'.format(file_name))
-        contents = out.read()
+        contents = out.read().decode()
         key_file = dest.write_file(sudo=True, file_name=file_name,
                                    file_mode='w')
         key_file.write(contents)

@@ -53,6 +53,6 @@ def run(ceph_cluster, **kw):
         cmd='sudo python ' + test_folder_path + script_dir + script_name + ' -c ' +
             test_folder + config_dir + config_file_name,
         timeout=timeout)
-    log.info(out.read())
-    log.error(err.read())
+    log.info(out.read().decode())
+    log.error(err.read().decode())
     return 0

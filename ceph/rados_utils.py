@@ -53,7 +53,7 @@ class RadosHelper:
         """
         (out, err) = self.raw_cluster_cmd('osd', 'dump', '--format=json')
         print(type(out))
-        outbuf = out.read()
+        outbuf = out.read().decode()
         return json.loads('\n'.join(outbuf.split('\n')[1:]))
 
     def create_pool(self, pool_name, pg_num=16,
@@ -118,7 +118,7 @@ class RadosHelper:
             'get',
             pool_name,
             prop)
-        outbuf = output.read()
+        outbuf = output.read().decode()
         return int(outbuf.split()[1])
 
     def get_pool_dump(self, pool):
@@ -155,7 +155,7 @@ class RadosHelper:
         """
         pg_str = self.get_pgid(pool, pgnum)
         (output, err) = self.raw_cluster_cmd("pg", "map", pg_str, '--format=json')
-        outbuf = output.read()
+        outbuf = output.read().decode()
         j = json.loads('\n'.join(outbuf.split('\n')[1:]))
         return int(j['acting'][0])
         assert False
@@ -166,7 +166,7 @@ class RadosHelper:
         """
         pg_str = self.get_pgid(pool, pgnum)
         (output, err) = self.raw_cluster_cmd("pg", "map", pg_str, '--format=json')
-        outbuf = output.read()
+        outbuf = output.read().decode()
         j = json.loads('\n'.join(outbuf.split('\n')[1:]))
         return int(j['acting'][random.randint(0, len(j['acting']) - 1)])
         assert False
@@ -194,7 +194,7 @@ class RadosHelper:
         :return 1 if up, 0 if down
         """
         (output, err) = self.raw_cluster_cmd("osd", "dump", '--format=json')
-        outbuf = output.read()
+        outbuf = output.read().decode()
         jbuf = json.loads(outbuf)
         self.log(jbuf)
 

@@ -64,7 +64,7 @@ enabled=1
     kernel_repo.write(kernel_repo_file)
     kernel_repo.flush()
     o, e = client.exec_command(cmd='uname -a')
-    log.info(o.read())
+    log.info(o.read().decode())
     client.exec_command(cmd='sudo yum update metadata')
     o, e = client.exec_command(cmd='sudo yum update -y kernel')
     client.exec_command(cmd='sudo reboot', check_ec=False)
@@ -74,4 +74,4 @@ enabled=1
         sudo=True,
         cmd="rm -f /etc/yum.repos.d/rh_7_nightly.repo")
     o, e = client.exec_command(cmd='uname -a')
-    log.info(o.read())
+    log.info(o.read().decode())

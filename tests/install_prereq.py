@@ -95,7 +95,7 @@ def setup_subscription_manager(ceph, timeout=1800):
                 try:
                     out, err = ceph.exec_command(
                         cmd='cat /var/log/rhsm/rhsm.log', timeout=120)
-                    rhsm_log = out.read()
+                    rhsm_log = out.read().decode()
                 except BaseException:
                     rhsm_log = 'No Log Available'
                 raise RuntimeError(

@@ -62,7 +62,7 @@ def run(**kw):
                                                  k=k, m=m, l=l)
         try:
             (out, err) = helper.raw_cluster_cmd(profile)
-            outbuf = out.read()
+            outbuf = out.read().decode()
             log.info(outbuf)
             log.info("created profile {LRC}".format(
                 LRC=prof_name))

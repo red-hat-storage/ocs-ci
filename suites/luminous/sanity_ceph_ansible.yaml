@@ -1,6 +1,6 @@
 tests:
    - test:
-      name: install ceph pre-requisities
+      name: install ceph pre-requisites
       module: install_prereq.py
       abort-on-fail: true
 
@@ -91,7 +91,7 @@ tests:
 #        recreate-cluster: True
 #
 #   - test:
-#       name: install ceph pre-requisities
+#       name: install ceph pre-requisites
 #       module: install_prereq.py
 #       abort-on-fail: true
 
@@ -183,7 +183,7 @@ tests:
 #        recreate-cluster: True
 #
 #   - test:
-#       name: install ceph pre-requisities
+#       name: install ceph pre-requisites
 #       module: install_prereq.py
 #       abort-on-fail: true
 
@@ -278,7 +278,7 @@ tests:
 #        recreate-cluster: True
 #
 #   - test:
-#       name: install ceph pre-requisities
+#       name: install ceph pre-requisites
 #       module: install_prereq.py
 #       abort-on-fail: true
 
@@ -374,7 +374,7 @@ tests:
 #        recreate-cluster: True
 #
 #   - test:
-#       name: install ceph pre-requisities
+#       name: install ceph pre-requisites
 #       module: install_prereq.py
 #       abort-on-fail: true
 
@@ -467,7 +467,7 @@ tests:
 #        recreate-cluster: True
 #
 #   - test:
-#       name: install ceph pre-requisities
+#       name: install ceph pre-requisites
 #       module: install_prereq.py
 #       abort-on-fail: true
 
