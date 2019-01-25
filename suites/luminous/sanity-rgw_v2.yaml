@@ -101,7 +101,7 @@ tests:
    - test:
        name: Versioning Tests
        desc: Basic versioning test, also called as test to enable bucket versioning
-       polarion-id: CEPH-14261 # also applies to CEPH-10652
+       polarion-id: CEPH-14261, CEPH-9222  # also applies to CEPH-10652
        module: sanity_rgw_v2.py
        config:
            script-name: test_versioning_with_objects.py
@@ -143,6 +143,15 @@ tests:
            script-name: test_versioning_with_objects.py
            config-file-name: test_versioning_objects_acls.yaml
            timeout: 300
+   - test:
+       name: Versioning Tests
+       desc: Deletes on an object in versioning enabled or suspended container by a new user
+       polarion-id: CEPH-9226
+       module: sanity_rgw_v2.py
+       config:
+         script-name: test_versioning_with_objects.py
+         config-file-name: test_versioning_objects_delete_from_another_user.yaml
+         timeout: 300
    # BucketPolicy Tests
    - test:
        name: Bucket Policy Tests
@@ -533,3 +542,4 @@ tests:
          script-name: test_Mbuckets_with_Nobjects.py
          config-file-name: test_Mbuckets_with_Nobjects_aws4.yaml
          timeout: 300
+
