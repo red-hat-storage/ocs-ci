@@ -543,3 +543,64 @@ tests:
          config-file-name: test_Mbuckets_with_Nobjects_aws4.yaml
          timeout: 300
 
+   # v1 tests
+
+   # ACLs tests
+
+   - test:
+       name: ACLs Test
+       desc: Test basic acls
+       module: sanity_rgw_v2.py
+       config:
+         test-version: v1
+         script-name: test_acls.py
+         config-file-name: test_acls.yaml
+         timeout: 300
+
+   - test:
+       name: ACLs Test
+       desc: Test acls on all users
+       module: sanity_rgw_v2.py
+       config:
+         test-version: v1
+         script-name: test_acls_all_usrs.py
+         config-file-name: test_acls_all_usrs.yaml
+         timeout: 300
+
+   - test:
+       name: ACLs Test
+       desc: Test acls with copy objects on different users
+       module: sanity_rgw_v2.py
+       config:
+         test-version: v1
+         script-name: test_acls_copy_obj.py
+         config-file-name: test_acls_copy_obj.yaml
+         timeout: 300
+
+   - test:
+       name: ACLs Test
+       desc: Test acls reset
+       module: sanity_rgw_v2.py
+       config:
+         test-version: v1
+         script-name: test_acls_reset.py
+         config-file-name: test_acls_reset.yaml
+         timeout: 300
+
+   # multipart test
+
+   - test:
+       name: ACLs Test
+       desc: Test acls reset
+       module: sanity_rgw_v2.py
+       config:
+         test-version: v1
+         script-name: test_multipart_upload_cancel.py
+         config-file-name: test_multipart_upload_cancel.yaml
+         timeout: 300
+
+
+
+
+
+

@@ -2,6 +2,11 @@ import logging
 
 log = logging.getLogger(__name__)
 
+DIR = {"v1": {"script": "/ceph-qe-scripts/rgw/v1/tests/s3/",
+              "config": "/ceph-qe-scripts/rgw/v1/tests/s3/yamls/"},
+       "v2": {"script": "/ceph-qe-scripts/rgw/v2/tests/s3_swift/",
+              "config": "/ceph-qe-scripts/rgw/v2/tests/s3_swift/configs/"}}
+
 
 def run(ceph_cluster, **kw):
     """
@@ -40,10 +45,13 @@ def run(ceph_cluster, **kw):
     config = kw.get('config')
     script_name = config.get('script-name')
     config_file_name = config.get('config-file-name')
+    test_version = config.get('test-version', 'v2')
+    script_dir = DIR[test_version]['script']
+    config_dir = DIR[test_version]['config']
     timeout = config.get('timeout', 300)
     out, err = rgw_ceph_object.exec_command(
-        cmd='sudo python ' + test_folder_path + '/ceph-qe-scripts/rgw/v2/tests/s3_swift/' + script_name + ' -c ' +
-            test_folder + '/ceph-qe-scripts/rgw/v2/tests/s3_swift/configs/' + config_file_name,
+        cmd='sudo python ' + test_folder_path + script_dir + script_name + ' -c ' +
+            test_folder + config_dir + config_file_name,
         timeout=timeout)
     log.info(out.read())
     log.error(err.read())
