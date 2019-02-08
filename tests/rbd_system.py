@@ -22,7 +22,11 @@ def run(**kw):
     config = kw.get('config')
     script_name = config.get('test_name')
     timeout = config.get('timeout', 1800)
-    command = 'sudo python ~/' + test_folder + '/ceph-qe-scripts/rbd/system/' + script_name
+    if config.get('ec-pool-k-m', None):
+        ec_pool_arg = ' --ec-pool-k-m ' + config.get('ec-pool-k-m')
+    else:
+        ec_pool_arg = ''
+    command = 'sudo python ~/' + test_folder + '/ceph-qe-scripts/rbd/system/' + script_name + ec_pool_arg
     stdout, stderr = client_node.exec_command(cmd=command, timeout=timeout, check_ec=False)
     output = stdout.read()
     if output:
