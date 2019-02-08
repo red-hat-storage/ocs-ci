@@ -10,7 +10,7 @@ tests:
         ansi_config:
             ceph_test: True
             ceph_origin: distro
-            ceph_stable_release: luminous
+            ceph_stable_release: jewel
             ceph_repository: rhcs
             osd_scenario: collocated
             osd_auto_discovery: False

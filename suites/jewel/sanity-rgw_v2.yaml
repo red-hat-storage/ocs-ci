@@ -11,7 +11,7 @@ tests:
         ansi_config:
             ceph_test: True
             ceph_origin: distro
-            ceph_stable_release: luminous
+            ceph_stable_release: jewel
             ceph_repository: rhcs
             osd_scenario: collocated
             osd_auto_discovery: False
@@ -329,4 +329,3 @@ tests:
            script-name: test_swift_basic_ops.py
            config-file-name: test_swift_basic_ops.yaml
            timeout: 300
-
