@@ -18,7 +18,7 @@ tests:
         ansi_config:
             ceph_test: True
             ceph_origin: distro
-            ceph_stable_release: luminous
+            ceph_stable_release: jewel
             ceph_repository: rhcs
             osd_scenario: collocated
             osd_auto_discovery: False
@@ -87,7 +87,7 @@ tests:
         ansi_config:
             ceph_test: True
             ceph_origin: distro
-            ceph_stable_release: luminous
+            ceph_stable_release: jewel
             ceph_repository: rhcs
             osd_scenario: collocated
             osd_auto_discovery: False
@@ -146,7 +146,7 @@ tests:
         ansi_config:
             ceph_test: True
             ceph_origin: distro
-            ceph_stable_release: luminous
+            ceph_stable_release: jewel
             ceph_repository: rhcs
             osd_scenario: collocated
             osd_auto_discovery: False
@@ -189,4 +189,3 @@ tests:
       polarion-id: CEPH-10451
       abort-on-fail: false
       desc: Fail an Recover Active-NonOptimized path
-
