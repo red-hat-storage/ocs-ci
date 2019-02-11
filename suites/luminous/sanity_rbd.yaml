@@ -1,8 +1,8 @@
 tests:
    - test:
-       name: install ceph pre-requisites
-       module: install_prereq.py
-       abort-on-fail: true
+      name: install ceph pre-requisites
+      module: install_prereq.py
+      abort-on-fail: true
 
    - test:
       name: ceph ansible
@@ -13,7 +13,7 @@ tests:
             ceph_origin: distro
             ceph_stable_release: luminous
             ceph_repository: rhcs
-            osd_scenario: collocated
+            osd_scenario: lvm
             osd_auto_discovery: False
             journal_size: 1024
             ceph_stable: True
@@ -34,7 +34,7 @@ tests:
                 pgs: "8"
               - name: "cephfs_metadata"
                 pgs: "8"
-      desc: osd with collocated journal
+      desc: setup cluster using ceph ansible
       destroy-cluster: false
       abort-on-fail: true
 
