@@ -39,7 +39,7 @@ tests:
       abort-on-fail: true
 
    - test:
-      name: rbd cli image
+      name: test_83572722
       module: rbd_system.py
       config:
             test_name: cli/rbd_cli_image.py
@@ -48,25 +48,7 @@ tests:
       desc: CLI validation for image related commands
 
    - test:
-      name: rbd cli snap_clone
-      module: rbd_system.py
-      config:
-            test_name: cli/rbd_cli_snap_clone.py
-            branch: master
-      polarion-id: CEPH-83572725
-      desc: CLI validation for snap and clone related commands
-
-   - test:
-      name: rbd cli misc
-      module: rbd_system.py
-      config:
-            test_name: cli/rbd_cli_misc.py
-            branch: master
-      polarion-id: CEPH-83572724
-      desc: CLI validation for miscellaneous rbd commands
-
-   - test:
-      name: rbd cli import_export
+      name: test_83572723
       module: rbd_system.py
       config:
             test_name: cli/rbd_cli_import_export_diff.py
@@ -75,7 +57,25 @@ tests:
       desc: CLI validation for import, export and diff related commands
 
    - test:
-      name: Export during various operation
+      name: test_83572725
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_snap_clone.py
+            branch: master
+      polarion-id: CEPH-83572725
+      desc: CLI validation for snap and clone related commands
+
+   - test:
+      name: test_83572724
+      module: rbd_system.py
+      config:
+            test_name: cli/rbd_cli_misc.py
+            branch: master
+      polarion-id: CEPH-83572724
+      desc: CLI validation for miscellaneous rbd commands
+
+   - test:
+      name: test_9876-9880
       module: rbd_faster_exports.py
       config:
             io-total: 100M
