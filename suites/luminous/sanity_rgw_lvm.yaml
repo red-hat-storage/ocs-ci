@@ -1,0 +1,721 @@
+tests:
+   - test:
+       name: install ceph pre-requisities
+       module: install_prereq.py
+       abort-on-fail: true
+
+   - test:
+      name: ceph ansible
+      module: test_ansible.py
+      config:
+        ansi_config:
+            ceph_test: True
+            ceph_origin: distro
+            ceph_stable_release: luminous
+            ceph_repository: rhcs
+            osd_scenario: lvm
+            osd_auto_discovery: False
+            journal_size: 1024
+            ceph_stable: True
+            ceph_stable_rh_storage: True
+            public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
+            copy_admin_key: true
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 64
+                  osd_default_pool_size: 2
+                  osd_pool_default_pgp_num: 64
+                  mon_max_pg_per_osd: 1024
+            cephfs_pools:
+              - name: "cephfs_data"
+                pgs: "8"
+              - name: "cephfs_metadata"
+                pgs: "8"
+      desc: test cluster setup using ceph-ansible
+      destroy-cluster: false
+      abort-on-fail: true
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+            cmd: ceph -s
+            sudo: True
+      desc: Check for ceph health debug info
+   # Basic Bucket Operation Tests
+   - test:
+       name: Mbuckets
+       desc: test to create "M" no of buckets
+       polarion-id: CEPH-9789
+       module: sanity_rgw.py
+       config:
+           script-name: test_Mbuckets_with_Nobjects.py
+           config-file-name: test_Mbuckets.yaml
+           timeout: 300
+   - test:
+       name: Mbuckets_with_Nobjects
+       desc: test to create "M" no of buckets and "N" no of objects
+       polarion-id: CEPH-9789
+       module: sanity_rgw.py
+       config:
+           script-name: test_Mbuckets_with_Nobjects.py
+           config-file-name: test_Mbuckets_with_Nobjects.yaml
+           timeout: 300
+
+   - test:
+       name: Mbuckets_with_Nobjects
+       desc: test to create "M" no of buckets and "N" no of objects with encryption
+       module: sanity_rgw.py
+       config:
+         script-name: test_Mbuckets_with_Nobjects.py
+         config-file-name: test_Mbuckets_with_Nobjects_compression.yaml
+         timeout: 300
+
+
+   - test:
+       name: Mbuckets_with_Nobjects_delete
+       desc: test to create "M" no of buckets and "N" no of objects with delete
+       module: sanity_rgw.py
+       polarion-id: CEPH-14237
+       config:
+           script-name: test_Mbuckets_with_Nobjects.py
+           config-file-name: test_Mbuckets_with_Nobjects_delete.yaml
+           timeout: 300
+   - test:
+       name: Mbuckets_with_Nobjects_download
+       desc: test to create "M" no of buckets and "N" no of objects with download
+       module: sanity_rgw.py
+       polarion-id: CEPH-14237
+       config:
+           script-name: test_Mbuckets_with_Nobjects.py
+           config-file-name: test_Mbuckets_with_Nobjects_download.yaml
+           timeout: 300
+   - test:
+       name: Mbuckets_with_Nobjects with sharing enabled
+       desc: test to perform bucket ops with sharding operations
+       module: sanity_rgw.py
+       polarion-id: CEPH-9245
+       config:
+           script-name: test_Mbuckets_with_Nobjects.py
+           config-file-name: test_Mbuckets_with_Nobjects_sharding.yaml
+           timeout: 300
+
+   # multipart test
+
+   - test:
+       name: Mbuckets_with_Nobjects
+       desc: test to create "M" no of buckets and "N" no of objects with multipart upload
+       module: sanity_rgw.py
+       config:
+         script-name: test_Mbuckets_with_Nobjects.py
+         config-file-name: test_Mbuckets_with_Nobjects_multipart.yaml
+         timeout: 300
+
+   # Versioning Tests
+
+   - test:
+       name: Versioning Tests
+       desc: test to enable versioning
+       module: sanity_rgw.py
+       config:
+         script-name: test_versioning_with_objects.py
+         config-file-name: test_versioning_enable.yaml
+         timeout: 300
+
+   - test:
+       name: Versioning Tests
+       desc: test to enable versioning objects copy
+       polarion-id: CEPH-14264  # also applies to [CEPH-10646]
+       module: sanity_rgw.py
+       config:
+           script-name: test_versioning_with_objects.py
+           config-file-name: test_versioning_objects_copy.yaml
+           timeout: 300
+   - test:
+       name: Versioning Tests
+       desc: Basic versioning test, also called as test to enable bucket versioning
+       polarion-id: CEPH-14261, CEPH-9222  # also applies to CEPH-10652
+       module: sanity_rgw.py
+       config:
+           script-name: test_versioning_with_objects.py
+           config-file-name: test_versioning_objects_enable.yaml
+           timeout: 300
+   - test:
+       name: Versioning Tests
+       desc: test to suspend versioning objects
+       polarion-id: CEPH-14263
+       module: sanity_rgw.py
+       config:
+           script-name: test_versioning_with_objects.py
+           config-file-name: test_versioning_objects_suspend.yaml
+           timeout: 300
+   - test:
+       name: Versioning Tests
+       desc: test to delete versioning objects
+       polarion-id: CEPH-14262
+       module: sanity_rgw.py
+       config:
+           script-name: test_versioning_with_objects.py
+           config-file-name: test_versioning_objects_delete.yaml
+           timeout: 300
+   - test:
+       name: Versioning Tests
+       desc: test to overwrite objects after suspending versioning
+       polarion-id: CEPH-9199,CEPH-9223
+       module: sanity_rgw.py
+       config:
+           script-name: test_versioning_with_objects.py
+           config-file-name: test_versioning_objects_suspend_re-upload.yaml
+           timeout: 300
+   - test:
+       name: Versioning Tests
+       desc: test_versioning_suspend
+       module: sanity_rgw.py
+       config:
+         script-name: test_versioning_with_objects.py
+         config-file-name: test_versioning_suspend.yaml
+         timeout: 300
+   - test:
+       name: Versioning Tests
+       desc: check to test to overwrite objects suspend from another user
+       module: sanity_rgw.py
+       config:
+         script-name: test_versioning_with_objects.py
+         config-file-name: test_versioning_objects_suspend_from_another_user.yaml
+         timeout: 300
+   - test:
+       name: Versioning Tests
+       desc: GET object/acl/info operations on different object versions
+       polarion-id: CEPH-9190
+       module: sanity_rgw.py
+       config:
+           script-name: test_versioning_with_objects.py
+           config-file-name: test_versioning_objects_acls.yaml
+           timeout: 300
+   - test:
+       name: Versioning Tests
+       desc: Deletes on an object in versioning enabled or suspended container by a new user
+       polarion-id: CEPH-9226
+       module: sanity_rgw.py
+       config:
+         script-name: test_versioning_with_objects.py
+         config-file-name: test_versioning_objects_delete_from_another_user.yaml
+         timeout: 300
+   - test:
+       name: Versioning Tests
+       desc: Versioning with copy objects
+       polarion-id: CEPH-9221
+       module: sanity_rgw.py
+       config:
+         script-name: test_versioning_copy_objects.py
+         config-file-name: test_versioning_copy_objects.yaml
+         timeout: 300
+
+   # BucketPolicy Tests
+   - test:
+       name: Bucket Policy Tests
+       desc: CEPH-11215 Modify existing bucket policy to replace the existing policy
+       polarion-id: CEPH-11215
+       module: sanity_rgw.py
+       config:
+           script-name: test_bucket_policy_ops.py
+           config-file-name: test_bucket_policy_replace.yaml
+           timeout: 300
+   - test:
+       name: Bucket Policy Tests
+       desc: Delete bucket policy
+       polarion-id: CEPH-11213
+       module: sanity_rgw.py
+       config:
+           script-name: test_bucket_policy_ops.py
+           config-file-name: test_bucket_policy_delete.yaml
+           timeout: 300
+   - test:
+       name: Bucket Policy Tests
+       desc: Modify existing bucket policy to add a new policy in addition existing policy
+       polarion-id: CEPH-11214
+       module: sanity_rgw.py
+       config:
+           script-name: test_bucket_policy_ops.py
+           config-file-name: test_bucket_policy_modify.yaml
+           timeout: 300
+   # Bucket Lifecycle Tests
+   - test:
+       name: Bucket Lifecycle Configuration Tests
+       desc: Read lifecycle configuration on a given bucket
+       polarion-id: CEPH-11181
+       module: sanity_rgw.py
+       config:
+           script-name: test_bucket_lifecycle_config_ops.py
+           config-file-name: test_bucket_lifecycle_config_read.yaml
+           timeout: 300
+   - test:
+       name: Bucket Lifecycle Configuration Tests
+       desc: Test lifecycle with version enabled bucket containing multiple object versions
+       polarion-id: CEPH-11188
+       module: sanity_rgw.py
+       config:
+         script-name: test_bucket_lifecycle_config_ops.py
+         config-file-name: test_bucket_lifecycle_config_versioning.yaml
+         timeout: 300
+   - test:
+       name: Bucket Lifecycle Configuration Tests
+       desc: Disable lifecycle configuration on a given bucket
+       polarion-id: CEPH-11191
+       module: sanity_rgw.py
+       config:
+         script-name: test_bucket_lifecycle_config_ops.py
+         config-file-name: test_bucket_lifecycle_config_disable.yaml
+         timeout: 300
+
+   - test:
+       name: Bucket Lifecycle Configuration Tests
+       desc: Modify lifecycle configuration on a given bucket
+       polarion-id: CEPH-11120
+       module: sanity_rgw.py
+       config:
+         script-name: test_bucket_lifecycle_config_ops.py
+         config-file-name: test_bucket_lifecycle_config_modify.yaml
+         timeout: 300
+
+   - test:
+      name: ceph ansible purge
+      polarion-id: CEPH-83571498
+      module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
+      desc: Purge ceph cluster
+
+   - test:
+      name: ceph ansible
+      module: test_ansible.py
+      config:
+        ansi_config:
+            ceph_test: True
+            ceph_origin: distro
+            ceph_stable_release: luminous
+            ceph_repository: rhcs
+            osd_scenario: lvm
+            osd_auto_discovery: False
+            journal_size: 1024
+            ceph_stable: True
+            ceph_stable_rh_storage: True
+            public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
+            copy_admin_key: true
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 64
+                  osd_default_pool_size: 2
+                  osd_pool_default_pgp_num: 64
+                  mon_max_pg_per_osd: 1024
+            cephfs_pools:
+              - name: "cephfs_data"
+                pgs: "8"
+              - name: "cephfs_metadata"
+                pgs: "8"
+      desc: test cluster setup using ceph-ansible
+      destroy-cluster: false
+      abort-on-fail: true
+   - test:
+      name: check-ceph-health
+      module: exec.py
+      config:
+            cmd: ceph -s
+            sudo: True
+      desc: Check for ceph health debug info
+
+    # Multi Tenant Tests
+   - test:
+       name: Multi Tenancy Tests
+       desc: User and container access in same and different tenants
+       polarion-id: CEPH-9740,CEPH-9741
+       module: sanity_rgw.py
+       config:
+           script-name: test_multitenant_user_access.py
+           config-file-name: test_multitenant_access.yaml
+           timeout: 300
+
+   - test:
+      name: ceph ansible purge
+      polarion-id: CEPH-83571498
+      module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
+      desc: Purge ceph cluster
+
+   - test:
+      name: ceph ansible
+      module: test_ansible.py
+      config:
+        ansi_config:
+            ceph_test: True
+            ceph_origin: distro
+            ceph_stable_release: luminous
+            ceph_repository: rhcs
+            osd_scenario: lvm
+            osd_auto_discovery: False
+            journal_size: 1024
+            ceph_stable: True
+            ceph_stable_rh_storage: True
+            public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
+            copy_admin_key: true
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 64
+                  osd_default_pool_size: 2
+                  osd_pool_default_pgp_num: 64
+                  mon_max_pg_per_osd: 1024
+            cephfs_pools:
+              - name: "cephfs_data"
+                pgs: "8"
+              - name: "cephfs_metadata"
+                pgs: "8"
+      desc: test cluster setup using ceph-ansible
+      destroy-cluster: false
+      abort-on-fail: true
+
+   - test:
+       name: Multi Tenancy Tests
+       desc: Generate secret for tenant user
+       polarion-id: CEPH-9739
+       module: sanity_rgw.py
+       config:
+           script-name: test_tenant_user_secret_key.py
+           config-file-name: test_tenantuser_secretkey_gen.yaml
+           timeout: 300
+
+   - test:
+      name: ceph ansible purge
+      polarion-id: CEPH-83571498
+      module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
+      desc: Purge ceph cluster
+
+   - test:
+      name: ceph ansible
+      module: test_ansible.py
+      config:
+        ansi_config:
+            ceph_test: True
+            ceph_origin: distro
+            ceph_stable_release: luminous
+            ceph_repository: rhcs
+            osd_scenario: lvm
+            osd_auto_discovery: False
+            journal_size: 1024
+            ceph_stable: True
+            ceph_stable_rh_storage: True
+            public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
+            copy_admin_key: true
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 64
+                  osd_default_pool_size: 2
+                  osd_pool_default_pgp_num: 64
+                  mon_max_pg_per_osd: 1024
+            cephfs_pools:
+              - name: "cephfs_data"
+                pgs: "8"
+              - name: "cephfs_metadata"
+                pgs: "8"
+      desc: test cluster setup using ceph-ansible
+      destroy-cluster: false
+      abort-on-fail: true
+
+   - test:
+       name: Swift based tests
+       desc: RGW lifecycle operations using swift
+       polarion-id: CEPH-11019
+       module: sanity_rgw.py
+       config:
+           script-name: test_swift_basic_ops.py
+           config-file-name: test_swift_basic_ops.yaml
+           timeout: 300
+
+   - test:
+      name: ceph ansible purge
+      polarion-id: CEPH-83571498
+      module: purge_cluster.py
+      config:
+            ansible-dir: /usr/share/ceph-ansible
+      desc: Purge ceph cluster
+
+   - test:
+      name: ceph ansible
+      module: test_ansible.py
+      config:
+        ansi_config:
+            ceph_test: True
+            ceph_origin: distro
+            ceph_stable_release: luminous
+            ceph_repository: rhcs
+            osd_scenario: lvm
+            osd_auto_discovery: False
+            journal_size: 1024
+            ceph_stable: True
+            ceph_stable_rh_storage: True
+            public_network: 172.16.0.0/12
+            fetch_directory: ~/fetch
+            copy_admin_key: true
+            ceph_conf_overrides:
+                global:
+                  osd_pool_default_pg_num: 64
+                  osd_default_pool_size: 2
+                  osd_pool_default_pgp_num: 64
+                  mon_max_pg_per_osd: 1024
+            cephfs_pools:
+              - name: "cephfs_data"
+                pgs: "8"
+              - name: "cephfs_metadata"
+                pgs: "8"
+      desc: test cluster setup using ceph-ansible
+      destroy-cluster: false
+      abort-on-fail: true
+
+   # Bucket Request Payer tests
+
+   - test:
+       name: Bucket Request Payer Tests
+       desc: Basic test for bucket request payer
+       polarion-id: CEPH-10344,CEPH-10346,CEPH-10351
+       module: sanity_rgw.py
+       config:
+           script-name: test_bucket_request_payer.py
+           config-file-name: test_bucket_request_payer.yaml
+           timeout: 300
+
+   - test:
+       name: Bucket Request Payer Tests
+       desc: Basic test for bucket request payer with object download
+       polarion-id: CEPH-10347
+       module: sanity_rgw.py
+       config:
+           script-name: test_bucket_request_payer.py
+           config-file-name: test_bucket_request_payer_download.yaml
+           timeout: 300
+
+   # resharding tests
+
+   - test:
+       name: ceph ansible purge
+       polarion-id: CEPH-83571498
+       module: purge_cluster.py
+       config:
+         ansible-dir: /usr/share/ceph-ansible
+       desc: Purge ceph cluster
+
+   - test:
+       name: ceph ansible
+       module: test_ansible.py
+       config:
+         ansi_config:
+           ceph_test: True
+           ceph_origin: distro
+           ceph_stable_release: luminous
+           ceph_repository: rhcs
+           osd_scenario: lvm
+           osd_auto_discovery: False
+           journal_size: 1024
+           ceph_stable: True
+           ceph_stable_rh_storage: True
+           public_network: 172.16.0.0/12
+           fetch_directory: ~/fetch
+           copy_admin_key: true
+           ceph_conf_overrides:
+             global:
+               osd_pool_default_pg_num: 64
+               osd_default_pool_size: 2
+               osd_pool_default_pgp_num: 64
+               mon_max_pg_per_osd: 1024
+           cephfs_pools:
+           - name: "cephfs_data"
+             pgs: "8"
+           - name: "cephfs_metadata"
+             pgs: "8"
+       desc: test cluster setup using ceph-ansible
+       destroy-cluster: false
+       abort-on-fail: true
+
+   - test:
+       name: Resharding tests
+       desc: Reshading test - online
+       polarion-id: CEPH-83571740
+       module: sanity_rgw.py
+       config:
+         script-name: test_dynamic_bucket_resharding.py
+         config-file-name: test_dynamic_resharding_online.yaml
+         timeout: 300
+
+   - test:
+       name: Resharding tests
+       desc: Reshading test - offline
+       polarion-id: CEPH-83571740
+       module: sanity_rgw.py
+       config:
+         script-name: test_bucket_request_payer.py
+         config-file-name: test_dynamic_resharding_offline.yaml
+         timeout: 300
+
+   # Encryption tests
+
+   - test:
+       name: ceph ansible purge
+       polarion-id: CEPH-83571498
+       module: purge_cluster.py
+       config:
+         ansible-dir: /usr/share/ceph-ansible
+       desc: Purge ceph cluster
+
+   - test:
+       name: ceph ansible
+       module: test_ansible.py
+       config:
+         ansi_config:
+           ceph_test: True
+           ceph_origin: distro
+           ceph_stable_release: luminous
+           ceph_repository: rhcs
+           osd_scenario: lvm
+           osd_auto_discovery: False
+           journal_size: 1024
+           ceph_stable: True
+           ceph_stable_rh_storage: True
+           public_network: 172.16.0.0/12
+           fetch_directory: ~/fetch
+           copy_admin_key: true
+           ceph_conf_overrides:
+             global:
+               osd_pool_default_pg_num: 64
+               osd_default_pool_size: 2
+               osd_pool_default_pgp_num: 64
+               mon_max_pg_per_osd: 1024
+           cephfs_pools:
+           - name: "cephfs_data"
+             pgs: "8"
+           - name: "cephfs_metadata"
+             pgs: "8"
+       desc: test cluster setup using ceph-ansible
+       destroy-cluster: false
+       abort-on-fail: true
+
+   - test:
+       name: Object Encryption Tests
+       desc: Upload and Download objects using encryption [AES256 alogorith]
+       polarion-id: CEPH-11358,CEPH-11361
+       module: sanity_rgw.py
+       config:
+         script-name: test_Mbuckets_with_Nobjects.py
+         config-file-name: test_Mbuckets_with_Nobjects_enc.yaml
+         timeout: 300
+
+   - test:
+       name: ceph ansible purge
+       polarion-id: CEPH-83571498
+       module: purge_cluster.py
+       config:
+         ansible-dir: /usr/share/ceph-ansible
+       desc: Purge ceph cluster
+
+   - test:
+       name: ceph ansible
+       module: test_ansible.py
+       config:
+         ansi_config:
+           ceph_test: True
+           ceph_origin: distro
+           ceph_stable_release: luminous
+           ceph_repository: rhcs
+           osd_scenario: lvm
+           osd_auto_discovery: False
+           journal_size: 1024
+           ceph_stable: True
+           ceph_stable_rh_storage: True
+           public_network: 172.16.0.0/12
+           fetch_directory: ~/fetch
+           copy_admin_key: true
+           ceph_conf_overrides:
+             global:
+               osd_pool_default_pg_num: 64
+               osd_default_pool_size: 2
+               osd_pool_default_pgp_num: 64
+               mon_max_pg_per_osd: 1024
+           cephfs_pools:
+           - name: "cephfs_data"
+             pgs: "8"
+           - name: "cephfs_metadata"
+             pgs: "8"
+       desc: test cluster setup using ceph-ansible
+       destroy-cluster: false
+       abort-on-fail: true
+
+   # AWS4 Auth tests
+
+   - test:
+       name: AWS4 Auth test
+       desc: AWS4 Auth test
+       polarion-id: CEPH-9637
+       module: sanity_rgw.py
+       config:
+         script-name: test_Mbuckets_with_Nobjects.py
+         config-file-name: test_Mbuckets_with_Nobjects_aws4.yaml
+         timeout: 300
+
+   # v1 tests
+
+   # ACLs tests
+
+   - test:
+       name: ACLs Test
+       desc: Test basic acls
+       module: sanity_rgw.py
+       config:
+         test-version: v1
+         script-name: test_acls.py
+         config-file-name: test_acls.yaml
+         timeout: 300
+
+   - test:
+       name: ACLs Test
+       desc: Test acls on all users
+       module: sanity_rgw.py
+       config:
+         test-version: v1
+         script-name: test_acls_all_usrs.py
+         config-file-name: test_acls_all_usrs.yaml
+         timeout: 300
+
+   - test:
+       name: ACLs Test
+       desc: Test acls with copy objects on different users
+       module: sanity_rgw.py
+       config:
+         test-version: v1
+         script-name: test_acls_copy_obj.py
+         config-file-name: test_acls_copy_obj.yaml
+         timeout: 300
+
+   - test:
+       name: ACLs Test
+       desc: Test acls reset
+       module: sanity_rgw.py
+       config:
+         test-version: v1
+         script-name: test_acls_reset.py
+         config-file-name: test_acls_reset.yaml
+         timeout: 300
+
+   # multipart test
+
+   - test:
+       name: ACLs Test
+       desc: Test multipart upload->cancel->reupload
+       module: sanity_rgw.py
+       config:
+         test-version: v1
+         script-name: test_multipart_upload_cancel.py
+         config-file-name: test_multipart_upload_cancel.yaml
+         timeout: 300
