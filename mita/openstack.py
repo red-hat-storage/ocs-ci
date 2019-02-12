@@ -61,11 +61,11 @@ class CephVMNode(object):
         self.driver = OpenStack(
             self.username,
             self.password,
-            secure=False,
             ex_force_auth_url=self.auth_url,
             ex_force_auth_version=self.auth_version,
             ex_tenant_name=self.tenant_name,
-            ex_force_service_region=self.service_region
+            ex_force_service_region=self.service_region,
+            ex_domain_name='redhat.com'
         )
         return self.driver
 
