@@ -41,7 +41,7 @@ def run(ceph_cluster, **kw):
         rgw_node.exec_command(
             cmd='sudo docker cp ~/get-pip.py {container}:/get-pip.py'.format(container=rgw_ceph_object.container_name))
         rgw_ceph_object.exec_command('python /get-pip.py')
-    rgw_ceph_object.exec_command(cmd='sudo pip install boto3 names PyYaml ConfigParser python-swiftclient swiftly')
+    rgw_ceph_object.exec_command(cmd='sudo pip install boto boto3 names PyYaml ConfigParser python-swiftclient swiftly')
     config = kw.get('config')
     script_name = config.get('script-name')
     config_file_name = config.get('config-file-name')
