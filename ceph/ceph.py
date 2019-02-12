@@ -1283,6 +1283,9 @@ class CephNode(object):
         for eth_interface in eth_interface_list:
             try:
                 for ceph_node in ceph_node_list:
+                    if self.vmname == ceph_node.vmname:
+                        logger.info("Skipping ping check on localhost")
+                        continue
                     self.exec_command(
                         cmd='sudo ping -I {interface} -c 3 {ceph_node}'.format(interface=eth_interface,
                                                                                ceph_node=ceph_node.shortname))
