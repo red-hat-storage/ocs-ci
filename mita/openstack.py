@@ -34,6 +34,14 @@ class InvalidHostName(Exception):
     pass
 
 
+class NodeErrorState(Exception):
+    pass
+
+
+class GetIPError(Exception):
+    pass
+
+
 class CephVMNode(object):
 
     def __init__(self, **kw):
@@ -108,10 +116,40 @@ class CephVMNode(object):
         logger.info("created node: %s", new_node)
         # wait for the new node to become available
         logger.info("Waiting for node %s to become available", name)
-        driver.wait_until_running([new_node])
-        logger.info(" ... available")
-        logger.info("Attaching floating ip")
-        self.attach_floating_ip()
+        sleep(15)
+        all_nodes = driver.list_nodes()
+        new_node_state = [node.state for node in all_nodes if node.uuid == new_node.uuid]
+        timeout = datetime.timedelta(seconds=240)
+        starttime = datetime.datetime.now()
+        while True:
+            logger.info("Waiting for node %s to become available", name)
+            all_nodes = driver.list_nodes()
+            new_node_state = [node.state for node in all_nodes if node.uuid == new_node.uuid]
+            if new_node_state[0] == 'running':
+                break
+            if datetime.datetime.now() - starttime > timeout:
+                logger.info("Failed to bring the node in running state in {timeout}s".format(timeout=timeout))
+                raise NodeErrorState("Failed to bring up the node in Running state " + self.name)
+            sleep(30)
+        new_node_list = [node for node in all_nodes if node.uuid == new_node.uuid]
+        new_node = new_node_list[0]
+        starttime = datetime.datetime.now()
+        while True:
+            try:
+                ip_address = str(new_node.private_ips[0])
+            except IndexError:
+                if datetime.datetime.now() - starttime > timeout:
+                    logger.info("Failed to get host ip_address in {timeout}s".format(timeout=timeout))
+                    raise GetIPError("Unable to get IP for " + self.name)
+                else:
+                    sleep(10)
+                    new_node_list = [node for node in all_nodes if node.uuid == new_node.uuid]
+                    new_node = new_node_list[0]
+            if ip_address is not None:
+                break
+        logger.info("Attaching internal private ip %s", ip_address)
+        self.ip_address = ip_address
+        self.hostname = name
         self.volumes = []
         if self.no_of_volumes:
             total_vols = self.no_of_volumes
