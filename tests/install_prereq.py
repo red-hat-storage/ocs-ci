@@ -85,8 +85,8 @@ def setup_subscription_manager(ceph, timeout=1800):
             ceph.exec_command(
                 cmd='sudo subscription-manager --force register  '
                     '--serverurl=subscription.rhsm.stage.redhat.com:443/subscription  '
-                    '--baseurl=https://cdn.redhat.com --username=qa@redhat.com --password=redhatqa '
-                    '--auto-attach && sudo subscription-manager attach --pool=8a85f98c604a34cd01604c3895912891',
+                    '--baseurl=https://cdn.redhat.com --username=cephuser --password=cephuser '
+                    '--auto-attach',
                 timeout=720)
 
             break
