@@ -74,7 +74,9 @@ class CephVMNode(object):
         driver = self.get_driver()
         images = driver.list_images()
         sizes = driver.list_sizes()
+        networks = driver.ex_list_networks()
         available_sizes = [s for s in sizes if s.name == self.vm_size]
+        network = [n for n in networks if n.name == 'provider_net_quicklab']
         if not available_sizes:
             logger.error(
                 "provider does not have a matching 'size' for %s",
@@ -89,7 +91,8 @@ class CephVMNode(object):
         try:
             new_node = driver.create_node(
                 name=name, image=image, size=vm_size,
-                ex_userdata=self.cloud_data
+                ex_userdata=self.cloud_data,
+                networks=[network[0]],
             )
         except SSLError:
             new_node = None
