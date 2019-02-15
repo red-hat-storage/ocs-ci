@@ -94,7 +94,8 @@ def get_openstack_driver(yaml):
         ex_force_auth_url=auth_url,
         ex_force_auth_version=auth_version,
         ex_tenant_name=tenant_name,
-        ex_force_service_region=service_region
+        ex_force_service_region=service_region,
+        ex_domain_name='redhat.com'
     )
     return driver
 

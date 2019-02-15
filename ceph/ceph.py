@@ -906,8 +906,8 @@ class NodeVolume(object):
 
 
 class SSHConnectionManager(object):
-    def __init__(self, vmname, username, password, look_for_keys=False, outage_timeout=300):
-        self.vmname = vmname
+    def __init__(self, ip_address, username, password, look_for_keys=False, outage_timeout=300):
+        self.ip_address = ip_address
         self.username = username
         self.password = password
         self.look_for_keys = look_for_keys
@@ -931,7 +931,7 @@ class SSHConnectionManager(object):
     def __connect(self):
         while True:
             try:
-                self.__client.connect(self.vmname,
+                self.__client.connect(self.ip_address,
                                       username=self.username,
                                       password=self.password,
                                       look_for_keys=self.look_for_keys)
@@ -998,8 +998,8 @@ class CephNode(object):
 
         if kw.get('ceph_vmnode'):
             self.vm_node = kw['ceph_vmnode']
-        self.root_connection = SSHConnectionManager(self.vmname, 'root', self.root_passwd)
-        self.connection = SSHConnectionManager(self.vmname, self.username, self.password)
+        self.root_connection = SSHConnectionManager(self.ip_address, 'root', self.root_passwd)
+        self.connection = SSHConnectionManager(self.ip_address, self.username, self.password)
         self.rssh = self.root_connection.get_client
         self.rssh_transport = self.root_connection.get_transport
         self.ssh = self.connection.get_client
@@ -1193,8 +1193,8 @@ class CephNode(object):
 
     def __setstate__(self, pickle_dict):
         self.__dict__.update(pickle_dict)
-        self.root_connection = SSHConnectionManager(self.vmname, 'root', self.root_passwd)
-        self.connection = SSHConnectionManager(self.vmname, self.username, self.password)
+        self.root_connection = SSHConnectionManager(self.ip_address, 'root', self.root_passwd)
+        self.connection = SSHConnectionManager(self.ip_address, self.username, self.password)
         self.rssh = self.root_connection.get_client
         self.ssh = self.connection.get_client
         self.rssh_transport = self.root_connection.get_transport
@@ -1283,6 +1283,9 @@ class CephNode(object):
         for eth_interface in eth_interface_list:
             try:
                 for ceph_node in ceph_node_list:
+                    if self.vmname == ceph_node.vmname:
+                        logger.info("Skipping ping check on localhost")
+                        continue
                     self.exec_command(
                         cmd='sudo ping -I {interface} -c 3 {ceph_node}'.format(interface=eth_interface,
                                                                                ceph_node=ceph_node.shortname))
