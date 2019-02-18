@@ -15,7 +15,8 @@ def run(ceph_cluster, **kw):
         ceph_cluster (ceph.ceph.Ceph): ceph cluster
     """
     log.info("Running test")
-    log.info("Running rgw tests v2")
+    config = kw.get('config')
+    log.info("Running rgw tests %s" % config.get('test-version', 'v2'))
     rgw_ceph_object = ceph_cluster.get_ceph_object('rgw')
     git_url = 'http://gitlab.cee.redhat.com/ceph/ceph-qe-scripts.git'
     branch = ' -b master'
@@ -42,7 +43,6 @@ def run(ceph_cluster, **kw):
             cmd='sudo docker cp ~/get-pip.py {container}:/get-pip.py'.format(container=rgw_ceph_object.container_name))
         rgw_ceph_object.exec_command('python /get-pip.py')
     rgw_ceph_object.exec_command(cmd='sudo pip install boto boto3 names PyYaml ConfigParser python-swiftclient swiftly')
-    config = kw.get('config')
     script_name = config.get('script-name')
     config_file_name = config.get('config-file-name')
     test_version = config.get('test-version', 'v2')
