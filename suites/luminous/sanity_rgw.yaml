@@ -103,7 +103,7 @@ tests:
    # multipart test
 
    - test:
-       name: Mbuckets_with_Nobjects
+       name: Mbuckets_with_Nobjects_with_multipart
        desc: test to create "M" no of buckets and "N" no of objects with multipart upload
        module: sanity_rgw.py
        config:
@@ -556,7 +556,7 @@ tests:
        polarion-id: CEPH-83571740
        module: sanity_rgw.py
        config:
-         script-name: test_bucket_request_payer.py
+         script-name: test_dynamic_bucket_resharding.py
          config-file-name: test_dynamic_resharding_offline.yaml
          timeout: 300
 
@@ -669,7 +669,7 @@ tests:
    # ACLs tests
 
    - test:
-       name: ACLs Test
+       name: ACLs Test[v1]
        desc: Test basic acls
        module: sanity_rgw.py
        config:
@@ -679,7 +679,7 @@ tests:
          timeout: 300
 
    - test:
-       name: ACLs Test
+       name: ACLs Test[v1]
        desc: Test acls on all users
        module: sanity_rgw.py
        config:
@@ -689,7 +689,7 @@ tests:
          timeout: 300
 
    - test:
-       name: ACLs Test
+       name: ACLs Test[v1]
        desc: Test acls with copy objects on different users
        module: sanity_rgw.py
        config:
@@ -699,7 +699,7 @@ tests:
          timeout: 300
 
    - test:
-       name: ACLs Test
+       name: ACLs Test[v1]
        desc: Test acls reset
        module: sanity_rgw.py
        config:
@@ -711,7 +711,7 @@ tests:
    # multipart test
 
    - test:
-       name: ACLs Test
+       name: Multipart Test[v1]
        desc: Test multipart upload->cancel->reupload
        module: sanity_rgw.py
        config:
