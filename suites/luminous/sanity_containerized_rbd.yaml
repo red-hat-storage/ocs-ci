@@ -5,7 +5,7 @@ tests:
       abort-on-fail: true
 
    - test:
-      name: ceph ansible
+      name: containerized ceph ansible
       module: test_ansible.py
       config:
         ansi_config:
@@ -19,7 +19,10 @@ tests:
             ceph_stable: True
             ceph_stable_rh_storage: True
             public_network: 172.16.0.0/12
-            fetch_directory: ~/fetch
+            ceph_docker_image: rhceph/rhceph-3-rhel7
+            ceph_docker_image_tag: latest
+            containerized_deployment: true
+            ceph_docker_registry: registry.access.redhat.com
             copy_admin_key: true
             ceph_conf_overrides:
                 global:
@@ -34,8 +37,8 @@ tests:
                 pgs: "8"
               - name: "cephfs_metadata"
                 pgs: "8"
-      desc: setup cluster using ceph ansible
-      destroy-cluster: false
+      desc: setup containerized cluster using ceph ansible
+      destroy-cluster: False
       abort-on-fail: true
 
    - test:

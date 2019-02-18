@@ -83,7 +83,8 @@ class Rbd:
             self.exec_cmd(cmd='rm -rf {}'.format(kw.get('dir_name')))
         if kw.get('pools'):
             pool_list = kw.get('pools')
-            pool_list.append(self.datapool)
+            if self.datapool:
+                pool_list.append(self.datapool)
             for pool in pool_list:
                 self.exec_cmd(cmd='ceph osd pool delete {pool} {pool} '
                                   '--yes-i-really-really-mean-it'
