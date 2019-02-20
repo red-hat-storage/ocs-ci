@@ -30,7 +30,7 @@ def run(ceph_cluster, **kw):
         rc2 = fs_util.auth_list(client2)
         rc3 = fs_util.auth_list(client3)
         rc4 = fs_util.auth_list(client4)
-        print rc1, rc2, rc3, rc4
+        print(rc1, rc2, rc3, rc4)
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
         else:
@@ -133,7 +133,7 @@ def run(ceph_cluster, **kw):
         try:
             _, rc = fs_util.stress_io(
                 client2, new_client2_mouting_dir, '', 0, 1, iotype='touch')
-        except CommandFailed as e:
+        except CommandFailed:
             log.info(
                 'Permissions set  for client %s is working properly' %
                 new_client2_name)
@@ -243,7 +243,7 @@ def run(ceph_cluster, **kw):
         try:
             fs_util.setfattr(client3, 'stripe_unit', '1048576', new_client3_mouting_dir, file_name)
             fs_util.setfattr(client3, 'max_bytes', '100000000', new_client3_mouting_dir, dirs[1])
-        except CommandFailed as e:
+        except CommandFailed:
             log.info('Permission denied for setting attrs,success')
         fs_util.setfattr(client1, 'stripe_unit', '1048576', new_client1_mouting_dir, file_name)
         fs_util.setfattr(client1, 'max_bytes', '100000000', new_client1_mouting_dir, dirs[0])
@@ -252,12 +252,12 @@ def run(ceph_cluster, **kw):
         fs_util.client_clean_up('', client3, new_client3_mouting_dir, 'umount', client_name=new_client3_name)
         fs_util.client_clean_up(client_info['fuse_clients'], client_info['kernel_clients'], client_info['mounting_dir'],
                                 'umount')
-        print'Script execution time:------'
+        print('Script execution time:------')
         stop = timeit.default_timer()
         total_time = stop - start
         mins, secs = divmod(total_time, 60)
         hours, mins = divmod(mins, 60)
-        print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
+        print("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
         return 0
 
     except CommandFailed as e:

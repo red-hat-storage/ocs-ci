@@ -67,7 +67,7 @@ def run(ceph_cluster, **kw):
             crush-failure-domain=osd".format(LRCprofile=prof_name)
     try:
         (out, err) = helper.raw_cluster_cmd(profile)
-        outbuf = out.read()
+        outbuf = out.read().decode()
         log.info(outbuf)
         log.info("created profile {LRCprofile}".format(
             LRCprofile=prof_name))
@@ -91,7 +91,7 @@ def run(ceph_cluster, **kw):
     oname = "UNIQUEOBJECT{i}".format(i=random.randint(0, 10000))
     cmd = "osd map {pname} {obj} --format json".format(pname=pool_name, obj=oname)
     (out, err) = helper.raw_cluster_cmd(cmd)
-    outbuf = out.read()
+    outbuf = out.read().decode()
     log.info(outbuf)
     cmdout = json.loads(outbuf)
     # targt_pg = cmdout['pgid']
@@ -124,7 +124,7 @@ def run(ceph_cluster, **kw):
         while timeout:
             if 'active' not in outbuf:
                 (out, err) = helper.raw_cluster_cmd(status)
-                outbuf = out.read()
+                outbuf = out.read().decode()
                 time.sleep(1)
                 timeout = timeout - 1
             else:
@@ -141,14 +141,14 @@ def run(ceph_cluster, **kw):
             path="/etc/hosts"
         )
         (out, err) = ctrlr.exec_command(cmd=putobj)
-        log.info(out.read())
+        log.info(out.read().decode())
     for i in range(10):
         putobj = "sudo rados -p {pool} get {obj} {path}".format(
             pool=pool_name, obj="{oname}{i}".format(oname=oname, i=i),
             path="/tmp/{obj}{i}".format(obj=oname, i=i)
         )
         (out, err) = ctrlr.exec_command(cmd=putobj)
-        log.info(out.read())
+        log.info(out.read().decode())
     '''donewith the test ,revive osds'''
     for osd_service_map in osd_service_map_list:
         helper.revive_osd(osd_service_map.get('osd_node'), osd_service_map.get('osd_service'))

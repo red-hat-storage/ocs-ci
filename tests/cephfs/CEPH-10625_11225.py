@@ -33,7 +33,7 @@ def run(ceph_cluster, **kw):
         rc2 = fs_util.auth_list(client2)
         rc3 = fs_util.auth_list(client3)
         rc4 = fs_util.auth_list(client4)
-        print rc1, rc2, rc3, rc4
+        print(rc1, rc2, rc3, rc4)
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
         else:
@@ -226,8 +226,8 @@ def run(ceph_cluster, **kw):
         for client in client_info['fuse_clients']:
             file_name = ''.join(
                 random.choice(
-                    string.lowercase +
-                    string.digits) for _ in range(255))
+                    string.ascii_lowercase
+                    + string.digits) for _ in range(255))
             client.exec_command(
                 cmd="sudo touch '%s%s/%s'" %
                     (client_info['mounting_dir'], dir_name, file_name))
@@ -235,8 +235,8 @@ def run(ceph_cluster, **kw):
             if client.pkg_type == 'rpm':
                 file_name = ''.join(
                     random.choice(
-                        string.lowercase +
-                        string.digits) for _ in range(255))
+                        string.ascii_lowercase
+                        + string.digits) for _ in range(255))
                 client.exec_command(
                     cmd="sudo touch '%s%s/%s'" %
                         (client_info['mounting_dir'], dir_name, file_name))
@@ -285,12 +285,12 @@ def run(ceph_cluster, **kw):
         else:
             return 1
         log.info("Execution of Test cases CEPH-%s ended:" % (tc))
-        print'Script execution time:------'
+        print('Script execution time:------')
         stop = timeit.default_timer()
         total_time = stop - start
         mins, secs = divmod(total_time, 60)
         hours, mins = divmod(mins, 60)
-        print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
+        print("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
         return 0
     except CommandFailed as e:
         log.info(e)

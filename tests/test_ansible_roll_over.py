@@ -76,7 +76,7 @@ def run(ceph_cluster, **kw):
             osds_required = [demon for demon in demon_list if demon == 'osd']
             short_name_list = [ceph_node.shortname for ceph_node in ceph_cluster.get_nodes()]
             matcher = re.compile(node_name)
-            matched_short_names = filter(matcher.match, short_name_list)
+            matched_short_names = list(filter(matcher.match, short_name_list))
             if len(matched_short_names) > 1:
                 raise RuntimeError('Multiple nodes are matching node-name {node_name}: \n{matched_short_names}'.format(
                     node_name=node_name, matched_short_names=matched_short_names))

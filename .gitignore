@@ -10,3 +10,4 @@ ven*
 *.iml
 config.yaml
 .vscode
+*.bak

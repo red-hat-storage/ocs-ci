@@ -39,7 +39,8 @@ def run(ceph_cluster, **kw):
         rc2 = fs_util.auth_list(client2)
         rc3 = fs_util.auth_list(client3)
         rc4 = fs_util.auth_list(client4)
-        print rc1, rc2, rc3, rc4
+        print(rc1, rc2, rc3, rc4)
+
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
         else:
@@ -102,7 +103,7 @@ def run(ceph_cluster, **kw):
 
         result = fs_util.rc_verify('', return_counts)
         if result == 'Data validation success':
-            print "Data validation success"
+            print("Data validation success")
             fs_util.activate_multiple_mdss(client_info['mds_nodes'])
             log.info("Execution of Test case CEPH-%s started:" % (tc))
             for client in client1:
@@ -222,9 +223,9 @@ def run(ceph_cluster, **kw):
                 for op in p:
                     return_counts, rc = op
             log.info("Execution of Test case CEPH-%s ended:" % (tc))
-            print "Results:"
+            print("Results:")
             result = fs_util.rc_verify(tc, return_counts)
-            print result
+            print(result)
             log.info('Cleaning up!-----')
             if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
                 rc_client = fs_util.client_clean_up(
@@ -244,12 +245,12 @@ def run(ceph_cluster, **kw):
                 log.info('Cleaning up successfull')
             else:
                 return 1
-        print'Script execution time:------'
+        print('Script execution time:------')
         stop = timeit.default_timer()
         total_time = stop - start
         mins, secs = divmod(total_time, 60)
         hours, mins = divmod(mins, 60)
-        print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
+        print("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
         return 0
 
     except CommandFailed as e:

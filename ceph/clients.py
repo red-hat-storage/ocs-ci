@@ -63,7 +63,7 @@ class WinNode(object):
 
     def connect_to_target(self, ip, username, password):
         command = "Connect-IscsiTarget -NodeAddress iqn.2003-01.com.redhat.iscsi-gw:ceph-igw"\
-            " -IsMultipathEnabled \$True -TargetPortalAddress {}  -AuthenticationType ONEWAYCHAP"\
+            r" -IsMultipathEnabled \$True -TargetPortalAddress {}  -AuthenticationType ONEWAYCHAP"\
             " -ChapUsername {} -ChapSecret {}".format(ip, username, password)
         self.win_exec(command)
 
@@ -74,7 +74,7 @@ class WinNode(object):
 
     def create_disk(self, number):
         letters = list(string.ascii_uppercase)[3:3 + number]
-        for disk, part in zip(letters, range(1, 1 + number)):
+        for disk, part in zip(letters, list(range(1, 1 + number))):
             self.win_exec("Initialize-Disk -Number {} -PartitionStyle MBR".format(part))
             self.win_exec("New-Partition -DiskNumber {0} -UseMaximumSize -DriveLetter {1}".format(part, disk))
             self.win_exec("Get-Volume -DriveLetter {}".format(disk))

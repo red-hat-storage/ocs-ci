@@ -31,7 +31,8 @@ def post_to_polarion(tc):
         tc['test_run_id'] = tc['ceph-version'] + "_" + tc['suite-name'] + "_" + tc['distro'] + "_Automated_Smoke_Runs"
         tc['test_run_id'] = tc['test_run_id'].replace('.', '_')
         log.info("Updating test run: %s " % tc['test_run_id'])
-        tc['ceph-build'] = '_'.join(filter(None, [tc['ceph-version'], tc['ceph-ansible-version'], tc['compose-id']]))
+        tc['ceph-build'] = '_'.join(
+            [_f for _f in [tc['ceph-version'], tc['ceph-ansible-version'], tc['compose-id']] if _f])
         if tc.get('docker-containers-list'):
             tc['docker-container'] = '\ncontainer: {container}'.format(
                 container=','.join(list(set(tc.get('docker-containers-list')))))

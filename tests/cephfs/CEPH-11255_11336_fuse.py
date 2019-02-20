@@ -39,7 +39,7 @@ def run(ceph_cluster, **kw):
         rc2 = fs_util.auth_list(client2)
         rc3 = fs_util.auth_list(client3)
         rc4 = fs_util.auth_list(client4)
-        print rc1, rc2, rc3, rc4
+        print(rc1, rc2, rc3, rc4)
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
         else:
@@ -151,7 +151,7 @@ def run(ceph_cluster, **kw):
                 p.spawn(fs_util.heartbeat_map, node)
                 for op in p:
                     res.append(op)
-        print res
+        print(res)
         with parallel() as p:
             p.spawn(fs_util.read_write_IO, client1,
                     client_info['mounting_dir'], 'g', 'write')
@@ -333,12 +333,12 @@ def run(ceph_cluster, **kw):
             if rc == 0:
                 log.info('Cleaning up successfull')
         log.info("Execution of Test cases CEPH-%s ended:" % (tc))
-        print'Script execution time:------'
+        print('Script execution time:------')
         stop = timeit.default_timer()
         total_time = stop - start
         mins, secs = divmod(total_time, 60)
         hours, mins = divmod(mins, 60)
-        print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
+        print("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
         return 0
 
     except CommandFailed as e:

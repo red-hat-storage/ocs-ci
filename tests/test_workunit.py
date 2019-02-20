@@ -46,7 +46,7 @@ def run(**kw):
     cmd1 = 'mkdir cephtest ; cd cephtest ; {git_cmd}'.format(git_cmd=git_cmd)
     client.exec_command(cmd='rm -rf cephtest', timeout=60)
     out, err = client.exec_command(cmd=cmd1, timeout=600)
-    log.info(out.read())
+    log.info(out.read().decode())
     if client.exit_status != 0:
         log.error("Failed during git clone")
         return 1
@@ -66,8 +66,8 @@ def run(**kw):
                 "Command completed on remote node %d",
                 out.channel.recv_exit_status())
             running = False
-            log.info(out.read())
-            log.info(err.read())
+            log.info(out.read().decode())
+            log.info(err.read().decode())
         else:
             log.info("Still running...")
     ec = client.exit_status

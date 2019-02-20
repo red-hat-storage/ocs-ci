@@ -43,7 +43,7 @@ def get_client_info(ceph_nodes, clients):
         if node.role == 'mon':
             mon_node = node
             out, err = mon_node.exec_command(cmd='sudo hostname -I')
-            mon_node_ip = out.read().rstrip('\n')
+            mon_node_ip = out.read().decode().rstrip('\n')
             break
     for node in ceph_nodes:
         if node.role == 'mds':
@@ -65,7 +65,7 @@ def auth_list(clients, mon_node):
                 "osd 'allow rw pool=cephfs_data' -o /etc/ceph/ceph.client.%s.keyring" % (node.hostname, node.hostname))
         out, err = mon_node.exec_command(
             sudo=True, cmd='cat /etc/ceph/ceph.client.%s.keyring' % (node.hostname))
-        keyring = out.read()
+        keyring = out.read().decode()
         key_file = node.write_file(
             sudo=True,
             file_name='/etc/ceph/ceph.client.%s.keyring' % (node.hostname),
@@ -87,7 +87,7 @@ def fuse_mount(fuse_clients, mounting_dir):
             log.info("Mounting fs with ceph-fuse on client %s:" % (client.hostname))
             client.exec_command(cmd="sudo ceph-fuse -n client.%s %s" % (client.hostname, mounting_dir))
             out, err = client.exec_command(cmd='mount')
-            mount_output = out.read()
+            mount_output = out.read().decode()
             mount_output.split()
             log.info("Checking if fuse mount is is passed of failed:")
             if 'fuse' in mount_output:
@@ -103,13 +103,13 @@ def kernel_mount(mounting_dir, mon_node_ip, kernel_clients):
     try:
         for client in kernel_clients:
             out, err = client.exec_command(cmd='sudo ceph auth get-key client.%s' % (client.hostname))
-            secret_key = out.read().rstrip('\n')
+            secret_key = out.read().decode().rstrip('\n')
             mon_node_ip = mon_node_ip.replace(" ", "")
             client.exec_command(
                 cmd='sudo mount -t ceph %s:6789:/ %s -o name=%s,secret=%s' % (
                     mon_node_ip, mounting_dir, client.hostname, secret_key))
             out, err = client.exec_command(cmd='mount')
-            mount_output = out.read()
+            mount_output = out.read().decode()
             mount_output.split()
             log.info("Checking if kernel mount is is passed of failed:")
             if '%s:6789:/' % (mon_node_ip) in mount_output:
@@ -193,7 +193,7 @@ finally:
         to_lock_code.write(to_lock_file)
         to_lock_code.flush()
         out, err = client.exec_command(cmd="sudo python /home/cephuser/file_lock.py")
-        output = out.read()
+        output = out.read().decode()
         output.split()
         if 'Errno 11' in output:
             log.info("File locking achieved, data is not corrupted")
@@ -204,7 +204,7 @@ finally:
 
         out, err = client.exec_command(cmd="sudo md5sum %sto_test_file_lock | awk '{print $1}'" % (mounting_dir))
 
-        md5sum_file_lock.append(out.read())
+        md5sum_file_lock.append(out.read().decode())
 
     except Exception as e:
         log.error(e)
@@ -232,9 +232,9 @@ def mkdir_pinning(clients, range1, range2, dir_name, pin_val):
                     client.exec_command(
                         cmd='sudo setfattr -n ceph.dir.pin -v %s %s%s_%d' % (pin_val, mounting_dir, dir_name, num))
                 else:
-                    print "PIn val not given"
-                print out.read()
-                print time.time()
+                    print("Pin val not given")
+                print(out.read().decode())
+                print(time.time())
             break
     except Exception as e:
         log.error(e)
@@ -272,9 +272,9 @@ def pinned_dir_io(clients, mds_fail_over, num_of_files, range1, range2):
                     mds_fail_over(mds_nodes)
                 out, err = client.exec_command(cmd='sudo crefi -n %d %sdir_%d' % (num_of_files, mounting_dir, num))
                 rc = out.channel.recv_exit_status()
-                print out.read()
+                print(out.read().decode())
                 RC.append(rc)
-                print time.time()
+                print(time.time())
                 if rc == 0:
                     log.info("Client IO is going on,success")
                 else:
@@ -510,11 +510,11 @@ def custom_ceph_config(suite_config, custom_config, custom_config_file):
     if cli_config_dict:
         if not custom_config_dict.get('global'):
             custom_config_dict['global'] = {}
-        for key, value in cli_config_dict.iteritems():
+        for key, value in cli_config_dict.items():
             custom_config_dict['global'][key] = value
 
     # combine file and suite configs
-    for key, value in custom_config_dict.iteritems():
+    for key, value in custom_config_dict.items():
         subsection = {}
         if full_custom_config.get(key):
             subsection.update(full_custom_config[key])
@@ -543,8 +543,8 @@ def email_results(results_list, run_id, send_to_cephci=False):
     if cfg and cfg.get('address'):
         recipients = [cfg['address']]
     else:
-        log.warn("No email address configured in ~/.cephci.yaml. "
-                 "Please configure if you would like to receive run result emails.")
+        log.warning("No email address configured in ~/.cephci.yaml. "
+                    "Please configure if you would like to receive run result emails.")
 
     if send_to_cephci:
         recipients.append(sender)
@@ -582,7 +582,7 @@ def email_results(results_list, run_id, send_to_cephci=False):
 
         except Exception as e:
             print("\n")
-            log.exception(e.message)
+            log.exception(e)
 
 
 def get_cephci_config():

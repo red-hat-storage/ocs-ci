@@ -1,8 +1,8 @@
+import binascii
 import json
 import logging
-import time
-
 import os
+import time
 
 from ceph.ceph import CommandFailed
 from ceph.utils import open_firewall_port
@@ -38,7 +38,7 @@ def run(**kw):
         return exit_status
 
     else:
-        log.warn("No client node in cluster, skipping s3 tests.")
+        log.warning("No client node in cluster, skipping s3 tests.")
         return 0
 
 
@@ -71,7 +71,7 @@ def setup_s3_tests(client_node, rgw_node, config):
     tenant_info = create_s3_user(client_node, 'tenant', email=True)
 
     log.info("Creating configuration file")
-    port = 8080
+    port = '8080'
     s3_config = '''
 [DEFAULT]
 host = {host}
@@ -140,7 +140,7 @@ def create_s3_user(client_node, display_name, email=False):
         user_info dict
 
     """
-    uid = os.urandom(32).encode('hex')
+    uid = binascii.hexlify(os.urandom(32)).decode()
     log.info("Creating user: {display_name}".format(display_name=display_name))
     cmd = "radosgw-admin user create --uid={uid} --display_name={display_name}".format(
         uid=uid, display_name=display_name)
@@ -148,7 +148,7 @@ def create_s3_user(client_node, display_name, email=False):
         cmd += " --email={email}@foo.bar".format(email=uid)
 
     out, err = client_node.exec_command(sudo=True, cmd=cmd)
-    user_info = json.loads(out.read())
+    user_info = json.loads(out.read().decode())
 
     return user_info
 
@@ -169,12 +169,12 @@ def execute_s3_tests(client_node):
         out, err = client_node.exec_command(
             cmd="cd s3-tests; S3TEST_CONF=config.yaml ./virtualenv/bin/nosetests -v -a '!fails_on_rgw,!lifecycle'",
             timeout=3600)
-        log.info(out.read())
-        log.info(err.read())
+        log.info(out.read().decode())
+        log.info(err.read().decode())
         return 0
     except CommandFailed as e:
-        log.warn("Received CommandFailed")
-        log.warn(e.message)
+        log.warning("Received CommandFailed")
+        log.warning(e)
         time.sleep(30)
         return 1
 

@@ -36,7 +36,7 @@ def run(ceph_cluster, **kw):
         rc2 = fs_util.auth_list(client2)
         rc3 = fs_util.auth_list(client3)
         rc4 = fs_util.auth_list(client4)
-        print rc1, rc2, rc3, rc4
+        print(rc1, rc2, rc3, rc4)
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
         else:
@@ -72,8 +72,8 @@ def run(ceph_cluster, **kw):
 
         dir1 = ''.join(
             random.choice(
-                string.lowercase +
-                string.digits) for _ in range(10))
+                string.ascii_lowercase
+                + string.digits) for _ in range(10))
         for client in client_info['clients']:
             log.info("Creating directory:")
             client.exec_command(
@@ -84,7 +84,7 @@ def run(ceph_cluster, **kw):
                 cmd='sudo crefi %s%s --fop create --multi -b 10 -d 10 '
                     '--random --min=1K --max=10K' %
                     (client_info['mounting_dir'], dir1))
-            print out.read()
+            print(out.read().decode())
             break
 
         with parallel() as p:
@@ -123,7 +123,7 @@ def run(ceph_cluster, **kw):
             for op in p:
                 return_counts, rc = op
         result1 = fs_util.rc_verify('', return_counts)
-        print result1
+        print(result1)
 
         for client in client_info['clients']:
             client.exec_command(
@@ -137,14 +137,14 @@ def run(ceph_cluster, **kw):
                 cmd='sudo crefi %s%s --fop create --multi -b 10 -d 10 '
                     '--random --min=1K --max=10K' %
                     (client_info['mounting_dir'], dir1))
-            print out.read()
+            print(out.read().decode())
             log.info("Renaming the dirs:")
             out, rc = client.exec_command(
                 cmd='sudo crefi '
                     '%s%s --fop rename --multi -b 10 -d 10 --random '
                     '--min=1K --max=10K' %
                     (client_info['mounting_dir'], dir1))
-            print out.read()
+            print(out.read().decode())
 
             break
         with parallel() as p:
@@ -183,11 +183,11 @@ def run(ceph_cluster, **kw):
             for op in p:
                 return_counts, rc = op
         result2 = fs_util.rc_verify('', return_counts)
-        print result2
+        print(result2)
         cluster_health_afterIO = check_ceph_healthly(
             client_info['mon_node'], 12, 1, None, 300)
         if cluster_health_beforeIO == cluster_health_afterIO:
-            print "Testcase %s passed" % (tc)
+            print("Testcase %s passed" % (tc))
             log.info('Cleaning up!-----')
             if client3[0].pkg_type != 'deb' and client4[0].pkg_type != 'deb':
                 rc = fs_util.client_clean_up(
@@ -203,13 +203,13 @@ def run(ceph_cluster, **kw):
                     'umount')
             if rc == 0:
                 log.info('Cleaning up successfull')
-        print'Script execution time:------'
+        print('Script execution time:------')
         stop = timeit.default_timer()
         total_time = stop - start
         mins, secs = divmod(total_time, 60)
         hours, mins = divmod(mins, 60)
 
-        print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
+        print("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
         return 0
 
     except CommandFailed as e:

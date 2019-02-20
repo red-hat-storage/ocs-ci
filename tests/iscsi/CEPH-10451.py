@@ -29,10 +29,10 @@ def run(**kw):
         for op in p:
             rc.append(op)
 
-    print "return   " + str(rc)
+    print("return   " + str(rc))
     rc = set(rc)
     if len(rc) == 1:
-        print rc
+        print(rc)
         iscsi_util.umount_directory(device_list, iscsi_initiators)
         iscsi_initiators.exec_command(
             sudo=True,
@@ -45,7 +45,7 @@ def run(**kw):
             long_running=True)
         return 0
     else:
-        print rc
+        print(rc)
         return 1
 
 
@@ -58,7 +58,7 @@ def do_failover(iscsi_initiators, device_list, ceph_nodes):
         '" "'
         " '{print $(NF - 4)}'")
 
-    active_device = out.read()
+    active_device = out.read().decode()
     active_device = active_device.rstrip("\n")
     active_device = active_device.split()
     out, err = iscsi_initiators.exec_command(
@@ -73,7 +73,7 @@ def do_failover(iscsi_initiators, device_list, ceph_nodes):
     for node in ceph_nodes:
         if node.role == "osd":
             out, err = node.exec_command(cmd="hostname -I")
-            output = out.read()
+            output = out.read().decode()
             output = output.rstrip()
             if output == ip_to_restart[1]:
                 node.exec_command(sudo=True, cmd="reboot", check_ec=False)
@@ -93,10 +93,10 @@ def do_failover(iscsi_initiators, device_list, ceph_nodes):
                 "|awk -F "
                 '" "'
                 " '{print $(NF - 2)}'")
-            active_device_status = out.read()
+            active_device_status = out.read().decode()
             active_device_status = active_device_status.rstrip("\n")
             active_device_status = active_device_status.split()
-            print active_device_status
+            print(active_device_status)
             if (active_device_status[1] == "active"):
                 rc = "active"
                 break
@@ -104,7 +104,7 @@ def do_failover(iscsi_initiators, device_list, ceph_nodes):
                 for node in ceph_nodes:
                     if node.role == "osd":
                         out, err = node.exec_command(cmd="hostname -I")
-                        output = out.read()
+                        output = out.read().decode()
                         output = output.rstrip()
                         if output == ip_to_restart[1]:
                             node.exec_command(sudo=True, cmd="iptables -F")
@@ -112,8 +112,8 @@ def do_failover(iscsi_initiators, device_list, ceph_nodes):
         else:
             log.info("failed device didn't came up to active")
             rc = "not"
-    print active_device_status
-    print active_device
+    print(active_device_status)
+    print(active_device)
     if rc == "active":
 
         return 0

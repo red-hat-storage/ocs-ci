@@ -23,7 +23,7 @@ def run(**kw):
 
     idx = 0
     mon = mons[idx]
-    print mon.hostname
+    print(mon.hostname)
 
     helper = RadosHelper(mon, config,
                          log)

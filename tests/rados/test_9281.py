@@ -33,7 +33,7 @@ def prepare_sdata(mon):
         log.error(traceback.format_exc())
 
     sfd.seek(0)
-    fcsum = hashlib.md5(sfd.read()).hexdigest()
+    fcsum = hashlib.md5(sfd.read().decode()).hexdigest()
     log.info("md5 digest = {fcsum}".format(fcsum=fcsum))
     sfd.close()
 
@@ -48,13 +48,13 @@ def do_rados_put(mon, pool, nobj):
     log.info("src file is {src}".format(src=src))
 
     for i in range(nobj):
-        print "running command on {mon}".format(mon=mon.hostname)
+        print("running command on {mon}".format(mon=mon.hostname))
         put_cmd = "sudo rados put -p {pname} obj{i} {src}".format(
             pname=pool, i=i, src=src)
         log.info("cmd is {pcmd}".format(pcmd=put_cmd))
         try:
             (out, err) = mon.exec_command(cmd=put_cmd)
-            out.read()
+            out.read().decode()
         except Exception:
             log.error(traceback.format_exc)
             return 1
@@ -93,12 +93,12 @@ def do_rados_get(mon, pool, niter):
                     obj=obj))
                 log.error(traceback.format_exc)
             dfd = mon.write_file(file_name=file_name, file_mode='r')
-            dcsum = hashlib.md5(dfd.read()).hexdigest()
+            dcsum = hashlib.md5(dfd.read().decode()).hexdigest()
             log.info("csum of obj {objname}={dcsum}".format(
                 objname=obj, dcsum=dcsum))
-            print type(fcsum)
-            print "fcsum=", fcsum
-            print type(dcsum)
+            print(type(fcsum))
+            print("fcsum=", fcsum)
+            print(type(dcsum))
             if fcsum != dcsum:
                 log.error("checksum mismatch for obj {obj}".format(
                     obj=obj))
@@ -162,7 +162,7 @@ def run(ceph_cluster, **kw):
         crush-failure-domain=osd".format(LRCprofile=prof_name)
     try:
         (out, err) = helper.raw_cluster_cmd(profile)
-        outbuf = out.read()
+        outbuf = out.read().decode()
         log.info(outbuf)
         log.info("created profile {LRCprofile}".format(
             LRCprofile=prof_name))

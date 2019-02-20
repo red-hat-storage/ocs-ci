@@ -141,7 +141,7 @@ def create_nodes(conf, inventory, osp_cred, run_id, report_portal_session=None, 
         ceph_vmnodes = create_ceph_nodes(cluster, inventory, osp_cred, run_id, instances_name)
         ceph_nodes = []
         clients = []
-        for node in ceph_vmnodes.itervalues():
+        for node in ceph_vmnodes.values():
             if node.role == 'win-iscsi-clients':
                 clients.append(WinNode(ip_address=node.ip_address,
                                        private_ip=node.get_private_ip()))
@@ -164,7 +164,7 @@ def create_nodes(conf, inventory, osp_cred, run_id, report_portal_session=None, 
     log.info("Waiting for Floating IPs to be available")
     log.info("Sleeping 15 Seconds")
     time.sleep(15)
-    for cluster_name, cluster in ceph_cluster_dict.iteritems():
+    for cluster_name, cluster in ceph_cluster_dict.items():
         for instance in cluster:
             try:
                 instance.connect()
@@ -184,15 +184,17 @@ def print_results(tc):
         duration='DURATION',
         status='STATUS'
     )
-    print header
+    print(header)
     for test in tc:
         if test.get('duration'):
             dur = str(test['duration'])
         else:
             dur = '0s'
-        line = '{name:<20s}   {desc:50s}   {duration:20s}   {status:>15s}'.format(
-            name=test['name'], desc=test['desc'], duration=dur, status=test['status'], )
-        print line
+        name = test['name']
+        desc = test['desc'] or "None"
+        status = test['status']
+        line = f'{name:<20s}   {desc:50s}   {dur:20s}   {status:>15s}'
+        print(line)
 
 
 def run(args):
@@ -300,7 +302,7 @@ def run(args):
             docker_image, docker_tag = docker_image_tag.split(':')
             log.info("\nUsing docker registry from ci message: {registry} \nDocker image: {image}\nDocker tag:{tag}"
                      .format(registry=docker_registry, image=docker_image, tag=docker_tag))
-            log.warn('Using Docker insecure registry setting')
+            log.warning('Using Docker insecure registry setting')
             docker_insecure_registry = True
         if product_name == 'ceph':
             # is a rhceph compose
@@ -324,16 +326,14 @@ def run(args):
         id = requests.get(base_url + "/COMPOSE_ID")
         compose_id = id.text
         if 'rhel' in image_name.lower():
-            ceph_pkgs = requests.get(base_url +
-                                     "/compose/Tools/x86_64/os/Packages/")
+            ceph_pkgs = requests.get(base_url + "/compose/Tools/x86_64/os/Packages/")
             m = re.search(r'ceph-common-(.*?)cp', ceph_pkgs.text)
             ceph_version.append(m.group(1))
             m = re.search(r'ceph-ansible-(.*?)cp', ceph_pkgs.text)
             ceph_ansible_version.append(m.group(1))
             log.info("Compose id is: " + compose_id)
         else:
-            ubuntu_pkgs = requests.get(ubuntu_repo +
-                                       "/Tools/dists/xenial/main/binary-amd64/Packages")
+            ubuntu_pkgs = requests.get(ubuntu_repo + "/Tools/dists/xenial/main/binary-amd64/Packages")
             m = re.search(r'ceph\nVersion: (.*)', ubuntu_pkgs.text)
             ceph_version.append(m.group(1))
             m = re.search(r'ceph-ansible\nVersion: (.*)', ubuntu_pkgs.text)
@@ -346,7 +346,7 @@ def run(args):
     log.info("Testing Ceph Ansible Version: " + ceph_ansible_version)
 
     if not os.environ.get('TOOL') and not ignore_latest_nightly_container:
-        major_version = re.match('RHCEPH-(\d+\.\d+)', compose_id).group(1)
+        major_version = re.match(r'RHCEPH-(\d+\.\d+)', compose_id).group(1)
         try:
             latest_container = get_latest_container(major_version)
         except ValueError:
@@ -357,7 +357,7 @@ def run(args):
         log.info("Using latest nightly docker image \nRegistry: {registry} \nDocker image: {image}\nDocker tag:{tag}"
                  .format(registry=docker_registry, image=docker_image, tag=docker_tag))
         docker_insecure_registry = True
-        log.warn('Using Docker insecure registry setting')
+        log.warning('Using Docker insecure registry setting')
 
     service = None
     suite_name = os.path.basename(suite_file).split(".")[0]
@@ -394,7 +394,7 @@ def run(args):
         ceph_store_nodes = open(reuse, 'rb')
         ceph_cluster_dict = pickle.load(ceph_store_nodes)
         ceph_store_nodes.close()
-        for cluster_name, cluster in ceph_cluster_dict.iteritems():
+        for cluster_name, cluster in ceph_cluster_dict.items():
             for node in cluster:
                 node.reconnect()
     if store:
@@ -436,7 +436,6 @@ def run(args):
         tc['suite-name'] = suite_name
         test_file = tc['file']
         report_portal_description = tc['desc'] or ''
-        log.info("rp desc type: {}".format(type(report_portal_description)))
         unique_test_name = create_unique_test_name(tc['name'], test_names)
         test_names.append(unique_test_name)
         tc['log-link'] = configure_logger(unique_test_name, run_dir)

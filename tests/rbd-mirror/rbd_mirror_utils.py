@@ -51,7 +51,7 @@ class RbdMirror:
                 check_ec=kw.get('check_ec', True))
 
             if kw.get('output', False):
-                return out.read()
+                return out.read().decode()
 
             return 0
 
@@ -62,7 +62,7 @@ class RbdMirror:
 
     def copy_file(self, file_name, src, dest):
         out, err = src.exec_command(sudo=True, cmd='cat {}'.format(file_name))
-        contents = out.read()
+        contents = out.read().decode()
         key_file = dest.write_file(sudo=True, file_name=file_name,
                                    file_mode='w')
         key_file.write(contents)
@@ -74,7 +74,7 @@ class RbdMirror:
 
     # Finding required details from json output
     def find(self, key, dictionary):
-        for k, v in dictionary.iteritems():
+        for k, v in dictionary.items():
             if k == key:
                 yield v
             elif isinstance(v, dict):
@@ -92,8 +92,8 @@ class RbdMirror:
         self.ceph_args = ' --cluster {}'.format(self.cluster_name)
         self.exec_cmd(
             ceph_args=False,
-            cmd="grep -v 'CLUSTER=ceph' /etc/sysconfig/ceph | tee temp " +
-                "&& mv temp /etc/sysconfig/ceph")
+            cmd="grep -v 'CLUSTER=ceph' /etc/sysconfig/ceph | tee temp "
+                + "&& mv temp /etc/sysconfig/ceph")
         self.exec_cmd(
             ceph_args=False,
             cmd="echo 'CLUSTER={}' | tee -a /etc/sysconfig/ceph"
@@ -102,8 +102,8 @@ class RbdMirror:
                       cmd="ln -s /etc/ceph/ceph.conf /etc/ceph/{}.conf"
                       .format(name))
         self.exec_cmd(ceph_args=False, node=self.ceph_mon,
-                      cmd="ln -s /etc/ceph/ceph.client.admin.keyring " +
-                          "/etc/ceph/{}.client.admin.keyring".format(name))
+                      cmd="ln -s /etc/ceph/ceph.client.admin.keyring "
+                          + "/etc/ceph/{}.client.admin.keyring".format(name))
 
     # Enable, Start or Stop Rbd Mirror Daemon
     def mirror_daemon(self, enable=None, start=None, stop=None, restart=None):
@@ -200,7 +200,7 @@ class RbdMirror:
                     state_pattern = kw.get('state', 'total')
                     num_image = 0
                     if 'total' in state_pattern:
-                        for k, v in out.iteritems():
+                        for k, v in out.items():
                             num_image = num_image + v
                     else:
                         num_image = out[state_pattern]
@@ -279,8 +279,8 @@ class RbdMirror:
         rmt_md5 = peercluster.exec_cmd(
             ceph_args=False, output=True,
             cmd='md5sum {}'.format(export_path))
-        print local_md5
-        print rmt_md5
+        print(local_md5)
+        print(rmt_md5)
         if local_md5 == rmt_md5:
             log.info('Data is consistent')
             self.exec_cmd(ceph_args=False, cmd='rm -f {}'.format(export_path))
@@ -386,7 +386,7 @@ class RbdMirror:
 
     def random_string(self):
         temp_str = ''.join(
-            [random.choice(string.ascii_letters) for _ in xrange(10)])
+            [random.choice(string.ascii_letters) for _ in range(10)])
         return temp_str
 
     def delete_pool(self, poolname):

@@ -32,7 +32,7 @@ def run(ceph_cluster, **kw):
         rc2 = fs_util.auth_list(client2)
         rc3 = fs_util.auth_list(client3)
         rc4 = fs_util.auth_list(client4)
-        print rc1, rc2, rc3, rc4
+        print(rc1, rc2, rc3, rc4)
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info("got auth keys")
         else:
@@ -83,7 +83,7 @@ def run(ceph_cluster, **kw):
                 return_counts, rc = op
 
         result = fs_util.rc_verify('', return_counts)
-        print result
+        print(result)
 
         log.info("Performing Auto Eviction:")
         mds1_before_evict, _, rc = fs_util.get_mds_info(
@@ -102,7 +102,7 @@ def run(ceph_cluster, **kw):
             log.info("Auto eviction Passed")
         else:
             raise CommandFailed("Auto eviction Failed")
-        print "-------------------------------------------------------"
+        print("-------------------------------------------------------")
         if client3[0].pkg_type == 'deb' and client4[0].pkg_type == 'deb':
             for client in client_info['fuse_clients']:
                 client.exec_command(
@@ -168,15 +168,15 @@ def run(ceph_cluster, **kw):
                 return_counts, rc = op
 
         result = fs_util.rc_verify('', return_counts)
-        print result
+        print(result)
         log.info("Performing Manual eviction:")
         ip_addr = fs_util.manual_evict(active_mds_node_1, 0)
         mds1_after_evict, _, rc = fs_util.get_mds_info(
             active_mds_node_1, active_mds_node_2, info='session ls')
-        print mds1_before_evict
-        print '------------------------'
-        print mds1_after_evict
-        print '-----------------------'
+        print(mds1_before_evict)
+        print('------------------------')
+        print(mds1_after_evict)
+        print('-----------------------')
         if mds1_before_evict != mds1_after_evict:
             log.info("Manual eviction success")
         else:
@@ -187,7 +187,7 @@ def run(ceph_cluster, **kw):
             log.info("Removing client from OSD blacklisting successfull")
         else:
             raise CommandFailed("Removing client from OSD blacklisting Failed")
-        print '-' * 10
+        print('-' * 10)
 
         if client3[0].pkg_type == 'deb' and client4[0].pkg_type == 'deb':
             for client in client_info['fuse_clients']:
@@ -254,7 +254,7 @@ def run(ceph_cluster, **kw):
                 return_counts, rc = op
 
         result = fs_util.rc_verify('', return_counts)
-        print result
+        print(result)
         log.info("Performing configuring blacklisting:")
         rc = fs_util.config_blacklist_manual_evict(active_mds_node_1, 0)
         if rc == 0:
@@ -264,7 +264,7 @@ def run(ceph_cluster, **kw):
         else:
             raise CommandFailed(
                 "Configure blacklisting for manual evict failed")
-        print '-' * 10
+        print('-' * 10)
         rc = fs_util.config_blacklist_auto_evict(active_mds_node_1, 0)
         if rc == 0:
             log.info("Configure blacklisting for auto evict success")
@@ -353,13 +353,13 @@ def run(ceph_cluster, **kw):
                     cmd='sudo rm -rf %s' %
                         (client_info['mounting_dir']))
 
-        print 'Script execution time:------'
+        print('Script execution time:------')
         stop = timeit.default_timer()
         total_time = stop - start
         mins, secs = divmod(total_time, 60)
         hours, mins = divmod(mins, 60)
 
-        print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
+        print("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
 
         return 0
 

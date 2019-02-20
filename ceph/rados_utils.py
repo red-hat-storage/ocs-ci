@@ -33,9 +33,9 @@ class RadosHelper:
         ]
 
         ceph_args.extend(args)
-        print ceph_args
+        print(ceph_args)
         clstr_cmd = " ".join(str(x) for x in ceph_args)
-        print clstr_cmd
+        print(clstr_cmd)
         (stdout, stderr) = self.mon.exec_command(cmd=clstr_cmd)
         return stdout, stderr
 
@@ -52,8 +52,8 @@ class RadosHelper:
         :returns: the python object
         """
         (out, err) = self.raw_cluster_cmd('osd', 'dump', '--format=json')
-        print type(out)
-        outbuf = out.read()
+        print(type(out))
+        outbuf = out.read().decode()
         return json.loads('\n'.join(outbuf.split('\n')[1:]))
 
     def create_pool(self, pool_name, pg_num=16,
@@ -68,7 +68,7 @@ class RadosHelper:
             erasure coded pool using the profile
         :param erasure_code_use_overwrites: if true, allow overwrites
         """
-        assert isinstance(pool_name, basestring)
+        assert isinstance(pool_name, str)
         assert isinstance(pg_num, int)
         assert pool_name not in self.pools
         self.log("creating pool_name %s" % (pool_name,))
@@ -110,15 +110,15 @@ class RadosHelper:
         :param prop: property to be checked.
         :returns: property as an int value.
         """
-        assert isinstance(pool_name, basestring)
-        assert isinstance(prop, basestring)
+        assert isinstance(pool_name, str)
+        assert isinstance(prop, str)
         (output, err) = self.raw_cluster_cmd(
             'osd',
             'pool',
             'get',
             pool_name,
             prop)
-        outbuf = output.read()
+        outbuf = output.read().decode()
         return int(outbuf.split()[1])
 
     def get_pool_dump(self, pool):
@@ -155,7 +155,7 @@ class RadosHelper:
         """
         pg_str = self.get_pgid(pool, pgnum)
         (output, err) = self.raw_cluster_cmd("pg", "map", pg_str, '--format=json')
-        outbuf = output.read()
+        outbuf = output.read().decode()
         j = json.loads('\n'.join(outbuf.split('\n')[1:]))
         return int(j['acting'][0])
         assert False
@@ -166,7 +166,7 @@ class RadosHelper:
         """
         pg_str = self.get_pgid(pool, pgnum)
         (output, err) = self.raw_cluster_cmd("pg", "map", pg_str, '--format=json')
-        outbuf = output.read()
+        outbuf = output.read().decode()
         j = json.loads('\n'.join(outbuf.split('\n')[1:]))
         return int(j['acting'][random.randint(0, len(j['acting']) - 1)])
         assert False
@@ -180,7 +180,7 @@ class RadosHelper:
         self.log("Inside KILL_OSD")
         kill_cmd = 'sudo systemctl stop {osd_service}'.format(osd_service=osd_service)
         self.log("kill cmd will be run on {osd}".format(osd=osd_node.hostname))
-        print kill_cmd
+        print(kill_cmd)
         try:
             osd_node.exec_command(cmd=kill_cmd)
             return 0
@@ -194,7 +194,7 @@ class RadosHelper:
         :return 1 if up, 0 if down
         """
         (output, err) = self.raw_cluster_cmd("osd", "dump", '--format=json')
-        outbuf = output.read()
+        outbuf = output.read().decode()
         jbuf = json.loads(outbuf)
         self.log(jbuf)
 
@@ -211,7 +211,7 @@ class RadosHelper:
         if osd_node:
             revive_cmd = 'sudo systemctl start {osd_service}'.format(
                 osd_service=osd_service)
-            print revive_cmd
+            print(revive_cmd)
             try:
                 osd_node.exec_command(cmd=revive_cmd)
                 return 0

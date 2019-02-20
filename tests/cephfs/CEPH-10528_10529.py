@@ -34,7 +34,7 @@ def run(ceph_cluster, **kw):
         rc2 = fs_util.auth_list(client2)
         rc3 = fs_util.auth_list(client3)
         rc4 = fs_util.auth_list(client4)
-        print rc1, rc2, rc3, rc4
+        print(rc1, rc2, rc3, rc4)
         if rc1 == 0 and rc2 == 0 and rc3 == 0 and rc4 == 0:
             log.info('got auth keys')
         else:
@@ -90,9 +90,9 @@ def run(ceph_cluster, **kw):
                 (return_counts, rc) = op
 
         log.info('Test completed for CEPH-%s' % tc)
-        print 'Results:'
+        print('Results:')
         result = fs_util.rc_verify(tc, return_counts)
-        print result
+        print(result)
 
         tc = '10529'
         log.info('Test for CEPH-%s will start:' % tc)
@@ -132,13 +132,13 @@ def run(ceph_cluster, **kw):
             log.info('Cleaning up successfull')
         else:
             raise CommandFailed('Cleanup failed')
-        print 'Script execution time:------'
+        print('Script execution time:------')
         stop = timeit.default_timer()
         total_time = stop - start
         (mins, secs) = divmod(total_time, 60)
         (hours, mins) = divmod(mins, 60)
 
-        print 'Hours:%d Minutes:%d Seconds:%f' % (hours, mins, secs)
+        print('Hours:%d Minutes:%d Seconds:%f' % (hours, mins, secs))
 
         return 0
 

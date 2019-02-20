@@ -26,5 +26,5 @@ def run(**kw):
     out, err = rgw_node.exec_command(
         cmd='sudo python ~/' + test_folder + '/ceph-qe-scripts/rgw/tests/s3/' + script_name,
         timeout=timeout)
-    log.info(out.read())
+    log.info(out.read().decode())
     return 0

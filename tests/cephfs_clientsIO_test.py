@@ -34,8 +34,8 @@ def run(**kw):
     sorted(md5sum_list2)
 
     log.info("Test completed for CEPH-10528:")
-    print md5sum_list1
-    print md5sum_list2
+    print(md5sum_list1)
+    print(md5sum_list2)
     if md5sum_list1 == md5sum_list2:
         log.info("Data consistancy found, Test case CEPH-10528 passed")
     else:
@@ -46,9 +46,9 @@ def run(**kw):
     with parallel() as p:
         for client in fuse_clients:
             p.spawn(utils.file_locking, client)
-    print "-----------------------------------------"
+    print("-----------------------------------------")
 
-    print md5sum_file_lock
+    print(md5sum_file_lock)
 
     if md5sum_file_lock[0] == md5sum_file_lock[1]:
 
@@ -59,12 +59,12 @@ def run(**kw):
 
     log.info("Test completed for CEPH-10529")
 
-    print'Script execution time:------'
+    print('Script execution time:------')
 
     stop = timeit.default_timer()
     total_time = stop - start
     mins, secs = divmod(total_time, 60)
     hours, mins = divmod(mins, 60)
-    print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
+    print("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
 
     return 0

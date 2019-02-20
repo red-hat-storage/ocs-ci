@@ -33,7 +33,7 @@ def run(**kw):
     iscsi_initiators.exec_command(
         sudo=True, cmd="cp /etc/fstab /etc/fstab.backup")
     out, err = iscsi_initiators.exec_command(sudo=True, cmd="cat /etc/fstab")
-    output = out.read()
+    output = out.read().decode()
     fstab = output.rstrip("\n")
     for device in device_list:
         out, err = iscsi_initiators.exec_command(
@@ -73,7 +73,7 @@ def run(**kw):
 def list_mnted_disks(iscsi_initiator):
     out, err = iscsi_initiator.exec_command(
         sudo=True, cmd="df -h | grep '/dev/mapper/mpa'| awk '{print $1}'")
-    disks = out.read()
+    disks = out.read().decode()
     disks = disks.rstrip()
     disks = sorted(disks.split())
     return disks
@@ -86,7 +86,7 @@ def do_failover(iscsi_initiators, device_list, ceph_nodes):
         "|grep -A 1 status=active |awk -F "
         '" "'" '{print $(NF - 4)}'")
 
-    active_device = out.read()
+    active_device = out.read().decode()
     active_device = active_device.rstrip("\n")
     active_device = active_device.split()
     out, err = iscsi_initiators.exec_command(
@@ -101,7 +101,7 @@ def do_failover(iscsi_initiators, device_list, ceph_nodes):
     for node in ceph_nodes:
         if node.role == "osd":
             out, err = node.exec_command(cmd="hostname -I")
-            output = out.read()
+            output = out.read().decode()
             output = output.rstrip()
             if output == ip_to_restart[1]:
                 node.exec_command(sudo=True, cmd="reboot", check_ec=False)
@@ -113,7 +113,7 @@ def do_failover(iscsi_initiators, device_list, ceph_nodes):
         "|grep -A 1 status=active |awk -F "
         '" "'" '{print $(NF - 4)}'")
 
-    active_device_after_reboot = out.read()
+    active_device_after_reboot = out.read().decode()
     active_device_after_reboot = active_device_after_reboot.rstrip("\n")
     active_device_after_reboot = active_device_after_reboot.split()
     t1 = datetime.datetime.now()
@@ -129,10 +129,10 @@ def do_failover(iscsi_initiators, device_list, ceph_nodes):
                 "|awk -F "
                 '" "'
                 " '{print $(NF - 2)}'")
-            active_device_status = out.read()
+            active_device_status = out.read().decode()
             active_device_status = active_device_status.rstrip("\n")
             active_device_status = active_device_status.split()
-            print active_device_status
+            print(active_device_status)
             if (active_device_status[1] == "active"):
                 rc = "active"
                 break
@@ -140,7 +140,7 @@ def do_failover(iscsi_initiators, device_list, ceph_nodes):
                 for node in ceph_nodes:
                     if node.role == "osd":
                         out, err = node.exec_command(cmd="hostname -I")
-                        output = out.read()
+                        output = out.read().decode()
                         output = output.rstrip()
                         if output == ip_to_restart[1]:
                             node.exec_command(sudo=True, cmd="iptables -F")
@@ -148,9 +148,9 @@ def do_failover(iscsi_initiators, device_list, ceph_nodes):
         else:
             log.info("failed device didn't came up to active")
             rc = "not"
-    print active_device_status
-    print active_device
-    print active_device_after_reboot
+    print(active_device_status)
+    print(active_device)
+    print(active_device_after_reboot)
     if active_device[1] != active_device_after_reboot[1] and rc == "active":
         return 0
     else:

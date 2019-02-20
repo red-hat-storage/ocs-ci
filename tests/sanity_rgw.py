@@ -50,9 +50,9 @@ def run(ceph_cluster, **kw):
     config_dir = DIR[test_version]['config']
     timeout = config.get('timeout', 300)
     out, err = rgw_ceph_object.exec_command(
-        cmd='sudo python ' + test_folder_path + script_dir + script_name + ' -c ' +
-            test_folder + config_dir + config_file_name,
+        cmd='sudo python ' + test_folder_path + script_dir + script_name + ' -c '
+            + test_folder + config_dir + config_file_name,
         timeout=timeout)
-    log.info(out.read())
-    log.error(err.read())
+    log.info(out.read().decode())
+    log.error(err.read().decode())
     return 0

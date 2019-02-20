@@ -10,9 +10,9 @@ from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
 from libcloud.common.exceptions import BaseHTTPError
 
-from ceph import RolesContainer, CommandFailed, Ceph
+from .ceph import RolesContainer, CommandFailed, Ceph
 from mita.openstack import CephVMNode
-from parallel import parallel
+from .parallel import parallel
 
 log = logging.getLogger(__name__)
 
@@ -146,7 +146,7 @@ def cleanup_ceph_nodes(osp_cred, pattern=None, timeout=300):
                     log.error(e, exc_info=True)
                     errors.update({volume.name: e.message})
         if errors:
-            for vol, err in errors.iteritems():
+            for vol, err in errors.items():
                 log.error("Error destroying {vol}: {err}".format(vol=vol, err=err))
             raise RuntimeError("Encountered errors during volume deletion. Volume names and messages have been logged.")
 
@@ -205,7 +205,7 @@ def check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container=None, timeou
             out, err = ceph_mon.exec_command(cmd='sudo docker exec {container} ceph -s'.format(container=mon_container))
         else:
             out, err = ceph_mon.exec_command(cmd='sudo ceph -s')
-        lines = out.read()
+        lines = out.read().decode()
 
         if not any(state in lines for state in pending_states):
             if all(state in lines for state in valid_states):
@@ -278,8 +278,7 @@ def setup_deb_repos(node, ubuntu_repo):
         cmd = 'sudo echo deb ' + ubuntu_repo + '/{0}'.format(repo) + \
               ' $(lsb_release -sc) main'
         node.exec_command(cmd=cmd + ' > ' + "/tmp/{0}.list".format(repo))
-        node.exec_command(cmd='sudo cp /tmp/{0}.list'.format(repo) +
-                              ' /etc/apt/sources.list.d/')
+        node.exec_command(cmd='sudo cp /tmp/{0}.list /etc/apt/sources.list.d/'.format(repo))
     ds_keys = ['https://www.redhat.com/security/897da07a.txt',
                'https://www.redhat.com/security/f21541eb.txt',
                # 'https://prodsec.redhat.com/keys/00da75f2.txt',
@@ -417,7 +416,7 @@ def get_ceph_versions(ceph_nodes, containerized=False):
                     out, rc = node.exec_command(cmd='rpm -qa | grep ceph-ansible')
                 else:
                     out, rc = node.exec_command(cmd='dpkg -s ceph-ansible')
-                output = out.read().rstrip()
+                output = out.read().decode().rstrip()
                 log.info(output)
                 versions_dict.update({node.shortname: output})
 
@@ -428,7 +427,7 @@ def get_ceph_versions(ceph_nodes, containerized=False):
                         pass
                     else:
                         out, rc = node.exec_command(sudo=True, cmd='docker ps --format "{{.Names}}"')
-                        output = out.read()
+                        output = out.read().decode()
                         containers = [container for container in output.split('\n') if container != '']
                         log.info("Containers: {}".format(containers))
 
@@ -436,13 +435,13 @@ def get_ceph_versions(ceph_nodes, containerized=False):
                         out, rc = node.exec_command(
                             sudo=True, cmd='sudo docker exec {container} ceph --version'.format(
                                 container=container_name))
-                        output = out.read().rstrip()
+                        output = out.read().decode().rstrip()
                         log.info(output)
                         versions_dict.update({container_name: output})
 
                 else:
                     out, rc = node.exec_command(cmd='ceph --version')
-                    output = out.read().rstrip()
+                    output = out.read().decode().rstrip()
                     log.info(output)
                     versions_dict.update({node.shortname: output})
 

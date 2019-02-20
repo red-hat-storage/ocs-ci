@@ -71,7 +71,7 @@ class IscsiUtils(object):
         for node in self.ceph_nodes:
             if node.role == 'osd':
                 out, err = node.exec_command(sudo=True, cmd="hostname -I")
-                osd = out.read()
+                osd = out.read().decode()
                 break
         t1 = datetime.datetime.now()
         time_plus_5 = t1 + datetime.timedelta(minutes=5)
@@ -104,10 +104,10 @@ class IscsiUtils(object):
                 output = out
                 output = output.rstrip("\n")
 
-                device_list = filter(bool, output.split("mpa"))
+                device_list = list(filter(bool, output.split("mpa")))
                 time.sleep(10)
                 if (len(device_list) == no_of_luns):
-                    device_list = map(lambda s: s.strip(), device_list)
+                    device_list = [s.strip() for s in device_list]
                     device_list.sort(key=len)
                     return device_list
 
@@ -233,7 +233,7 @@ trusted_ip_list = {0}
                 out, err = node.exec_command(
                     sudo=True, cmd='cat /etc/iscsi/'
                                    'initiatorname.iscsi', check_ec=False)
-                output = out.read()
+                output = out.read().decode()
                 out = output.split('=')
                 name = out[1].rstrip("\n")
                 if full:
@@ -396,14 +396,14 @@ node.session.scan = auto
         multipath_file.flush()
 
     def get_fio_job_config(self, number, disk):
-        config = "[job{0}]\`nname=job{0}\`nfilename={1}\\\:fiofile\`n".format(number, disk)
+        config = r"[job{0}]\`nname=job{0}\`nfilename={1}\\\:fiofile\`n".format(number, disk)
         return config
 
     def get_fio_jobs(self, num_jobs):
-        job_options = "[global]\`nruntime=3600\`nrw=randwrite\`nsize=64m\`n"\
-            "iodepth=32\`nblocksize=4096\`nioengine=windowsaio\`nthreads=4\`n"
+        job_options = r"[global]\`nruntime=3600\`nrw=randwrite\`nsize=64m\`n"\
+            r"iodepth=32\`nblocksize=4096\`nioengine=windowsaio\`nthreads=4\`n"
         letters = list(string.ascii_uppercase)[3:3 + num_jobs]
-        for disk, job in zip(letters, range(num_jobs)):
+        for disk, job in zip(letters, list(range(num_jobs))):
             job = self.get_fio_job_config(job, disk)
             job_options += job
         return job_options

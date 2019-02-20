@@ -28,10 +28,10 @@ def run(**kw):
         ec_pool_arg = ''
     command = 'sudo python ~/' + test_folder + '/ceph-qe-scripts/rbd/system/' + script_name + ec_pool_arg
     stdout, stderr = client_node.exec_command(cmd=command, timeout=timeout, check_ec=False)
-    output = stdout.read()
+    output = stdout.read().decode()
     if output:
         log.info(output)
-    output = stderr.read()
+    output = stderr.read().decode()
     if output:
         log.error(output)
     ec = client_node.exit_status

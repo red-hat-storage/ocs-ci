@@ -3,7 +3,7 @@
       name: pre-req
       module: install_prereq.py
       abort-on-fail: true
-      desc: install ceph pre requisities
+      desc: install ceph pre requisites
 
    - test:
       name: setup dual cluster using ceph-ansible

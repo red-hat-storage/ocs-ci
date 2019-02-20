@@ -101,7 +101,7 @@ def run(ceph_cluster, **kw):
                 (client_info['mounting_dir'], 'testdir'))
 
         if result == 'Data validation success':
-            print "Data validation success"
+            print("Data validation success")
             fs_util.activate_multiple_mdss(client_info['mds_nodes'])
             log.info("Execution of Test case CEPH-%s started:" % (tc))
             num_of_dirs = int(num_of_dirs / 5)
@@ -171,8 +171,7 @@ def run(ceph_cluster, **kw):
                         client1,
                         0,
                         10,
-                        client_info['mounting_dir'] +
-                        'testdir/',
+                        client_info['mounting_dir'] + 'testdir/',
                         dir_name,
                         0)
 
@@ -312,12 +311,12 @@ def run(ceph_cluster, **kw):
                 log.info('Cleaning up successfull')
             else:
                 return 1
-        print'Script execution time:------'
+        print('Script execution time:------')
         stop = timeit.default_timer()
         total_time = stop - start
         mins, secs = divmod(total_time, 60)
         hours, mins = divmod(mins, 60)
-        print ("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
+        print("Hours:%d Minutes:%d Seconds:%f" % (hours, mins, secs))
         return 0
 
     except CommandFailed as e:
