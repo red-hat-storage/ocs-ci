@@ -19,7 +19,7 @@ setup(
         'reportportal-client==3.2.0',
         'requests==2.21.0',
         'paramiko==2.4.2',
-        'pyyaml==3.13',
+        'pyyaml>=4.2b1',
         'jinja2==2.10',
     ],
     zip_safe=True,
