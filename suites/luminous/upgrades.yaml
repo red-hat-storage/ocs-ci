@@ -21,7 +21,6 @@ tests:
         osd_scenario: collocated
         osd_auto_discovery: False
         journal_size: 1024
-        public_network: 172.16.0.0/12
         copy_admin_key: True
         ceph_conf_overrides:
           global:
@@ -52,7 +51,6 @@ tests:
         osd_scenario: collocated
         osd_auto_discovery: True
         upgrade_ceph_packages: True
-        public_network: 172.16.0.0/12
         copy_admin_key: True
         ceph_conf_overrides:
           global:
@@ -156,7 +154,6 @@ tests:
         osd_scenario: collocated
         osd_auto_discovery: False
         journal_size: 1024
-        public_network: 172.16.0.0/12
         copy_admin_key: True
         ceph_conf_overrides:
           global:
@@ -188,7 +185,6 @@ tests:
         ceph_rhcs_cdn_debian_repo_version: /3-updates/
         osd_scenario: collocated
         osd_auto_discovery: False
-        public_network: 172.16.0.0/12
         copy_admin_key: True
         upgrade_ceph_packages: True
         ceph_conf_overrides:
@@ -214,7 +210,6 @@ tests:
         ceph_rhcs_cdn_debian_repo_version: /3-updates/
         osd_scenario: collocated
         osd_auto_discovery: False
-        public_network: 172.16.0.0/12
         copy_admin_key: True
         upgrade_ceph_packages: True
         ceph_conf_overrides:
@@ -318,7 +313,6 @@ tests:
         ceph_rhcs_cdn_debian_repo_version: /3-updates/
         osd_scenario: collocated
         osd_auto_discovery: False
-        public_network: 172.16.0.0/12
         copy_admin_key: True
         ceph_conf_overrides:
           global:
@@ -343,7 +337,6 @@ tests:
         ceph_rhcs_cdn_debian_repo_version: /3-updates/
         osd_scenario: collocated
         osd_auto_discovery: False
-        public_network: 172.16.0.0/12
         copy_admin_key: True
         upgrade_ceph_packages: True
         ceph_conf_overrides:

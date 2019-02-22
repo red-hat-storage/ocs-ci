@@ -19,7 +19,6 @@ tests:
             journal_size: 1024
             ceph_stable: True
             ceph_stable_rh_storage: True
-            public_network: 172.16.0.0/12
             ceph_docker_image: rhceph/rhceph-3-rhel7
             ceph_docker_image_tag: latest
             containerized_deployment: true
@@ -226,7 +225,6 @@ tests:
             journal_size: 1024
             ceph_stable: True
             ceph_stable_rh_storage: True
-            public_network: 172.16.0.0/12
             ceph_docker_image: rhceph/rhceph-3-rhel7
             ceph_docker_image_tag: latest
             containerized_deployment: true
@@ -295,7 +293,6 @@ tests:
             journal_size: 1024
             ceph_stable: True
             ceph_stable_rh_storage: True
-            public_network: 172.16.0.0/12
             ceph_docker_image: rhceph/rhceph-3-rhel7
             ceph_docker_image_tag: latest
             containerized_deployment: true
@@ -355,7 +352,6 @@ tests:
             journal_size: 1024
             ceph_stable: True
             ceph_stable_rh_storage: True
-            public_network: 172.16.0.0/12
             ceph_docker_image: rhceph/rhceph-3-rhel7
             ceph_docker_image_tag: latest
             containerized_deployment: true
@@ -415,7 +411,6 @@ tests:
             journal_size: 1024
             ceph_stable: True
             ceph_stable_rh_storage: True
-            public_network: 172.16.0.0/12
             ceph_docker_image: rhceph/rhceph-3-rhel7
             ceph_docker_image_tag: latest
             containerized_deployment: true
@@ -489,7 +484,6 @@ tests:
             journal_size: 1024
             ceph_stable: True
             ceph_stable_rh_storage: True
-            public_network: 172.16.0.0/12
             ceph_docker_image: rhceph/rhceph-3-rhel7
             ceph_docker_image_tag: latest
             containerized_deployment: true
@@ -549,7 +543,6 @@ tests:
             journal_size: 1024
             ceph_stable: True
             ceph_stable_rh_storage: True
-            public_network: 172.16.0.0/12
             ceph_docker_image: rhceph/rhceph-3-rhel7
             ceph_docker_image_tag: latest
             containerized_deployment: true
