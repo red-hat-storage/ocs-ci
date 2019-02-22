@@ -1,6 +1,8 @@
 import datetime
 import logging
 
+from ceph.utils import get_public_network
+
 log = logging.getLogger(__name__)
 
 
@@ -23,6 +25,7 @@ def run(ceph_cluster, **kw):
     installer_url = config.get('installer_url', None)
     mixed_lvm_configs = config.get('is_mixed_lvm_configs', None)
     device_to_add = config.get('device', None)
+    config['ansi_config']['public_network'] = get_public_network()
 
     ceph_cluster.ansible_config = config['ansi_config']
     ceph_cluster.custom_config = test_data.get('custom-config')

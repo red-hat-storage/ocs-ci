@@ -4,7 +4,7 @@ import yaml
 
 from ceph.ceph import RolesContainer
 from ceph.utils import get_ceph_versions
-from ceph.utils import write_docker_daemon_json
+from ceph.utils import write_docker_daemon_json, get_public_network
 from utility.utils import get_latest_container_image_tag
 
 log = logging.getLogger(__name__)
@@ -26,6 +26,8 @@ def run(ceph_cluster, **kw):
     hotfix_repo = config.get('hotfix_repo')
     base_url = config.get('base_url')
     installer_url = config.get('installer_url')
+    config['ansi_config']['public_network'] = get_public_network()
+
     ceph_cluster.ansible_config = config['ansi_config']
     ceph_cluster.custom_config = test_data.get('custom-config')
     ceph_cluster.custom_config_file = test_data.get('custom-config-file')
