@@ -84,7 +84,7 @@ class CephVMNode(object):
         sizes = driver.list_sizes()
         networks = driver.ex_list_networks()
         available_sizes = [s for s in sizes if s.name == self.vm_size]
-        network = [n for n in networks if n.name == 'provider_net_quicklab']
+        network = [n for n in networks if n.name == 'provider_net_cci_4']
         if not available_sizes:
             logger.error(
                 "provider does not have a matching 'size' for %s",

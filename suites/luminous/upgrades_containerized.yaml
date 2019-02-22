@@ -16,7 +16,6 @@ tests:
         journal_size: 1024
         ceph_stable: True
         ceph_stable_rh_storage: True
-        public_network: 172.16.0.0/12
         ceph_docker_image: rhceph/rhceph-2-rhel7
         ceph_docker_tag: 2.5
         containerized_deployment: True
@@ -50,7 +49,6 @@ tests:
         journal_size: 1024
         ceph_stable: True
         ceph_stable_rh_storage: True
-        public_network: 172.16.0.0/12
         containerized_deployment: True
         docker-insecure-registry: True
         ceph_docker_registry: brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888
@@ -138,7 +136,6 @@ tests:
         journal_size: 1024
         ceph_stable: True
         ceph_stable_rh_storage: True
-        public_network: 172.16.0.0/12
         ceph_docker_image: rhceph/rhceph-3-rhel7
         containerized_deployment: True
         ceph_docker_registry: registry.access.redhat.com
@@ -174,7 +171,6 @@ tests:
         journal_size: 1024
         ceph_stable: True
         ceph_stable_rh_storage: True
-        public_network: 172.16.0.0/12
         containerized_deployment: True
         docker-insecure-registry: True
         ceph_docker_registry: brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888

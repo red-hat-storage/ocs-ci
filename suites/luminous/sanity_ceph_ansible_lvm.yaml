@@ -19,7 +19,6 @@ tests:
             journal_size: 1024
             ceph_stable: True
             ceph_stable_rh_storage: True
-            public_network: 172.16.0.0/12
             fetch_directory: ~/fetch
             copy_admin_key: true
             ceph_conf_overrides:
@@ -111,7 +110,6 @@ tests:
             journal_size: 1024
             ceph_stable: True
             ceph_stable_rh_storage: True
-            public_network: 172.16.0.0/12
             fetch_directory: ~/fetch
             copy_admin_key: true
             ceph_conf_overrides:
@@ -147,7 +145,6 @@ tests:
               journal_size: 1024
               ceph_stable: True
               ceph_stable_rh_storage: True
-              public_network: 172.16.0.0/12
               fetch_directory: ~/fetch
               copy_admin_key: true
               ceph_conf_overrides:
@@ -186,7 +183,6 @@ tests:
               journal_size: 1024
               ceph_stable: True
               ceph_stable_rh_storage: True
-              public_network: 172.16.0.0/12
               fetch_directory: ~/fetch
               copy_admin_key: true
               ceph_conf_overrides:
@@ -226,7 +222,6 @@ tests:
               journal_size: 1024
               ceph_stable: True
               ceph_stable_rh_storage: True
-              public_network: 172.16.0.0/12
               fetch_directory: ~/fetch
               copy_admin_key: true
               ceph_conf_overrides:
