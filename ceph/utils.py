@@ -496,3 +496,13 @@ def get_root_permissions(node, path):
         path: file path
     """
     node.obtain_root_permissions(path)
+
+
+def get_public_network():
+    """
+    Get the configured public network subnet for nodes in the cluster.
+
+    Returns:
+        (str) public network subnet
+    """
+    return "10.0.144.0/22"  # TODO: pull from configuration file
