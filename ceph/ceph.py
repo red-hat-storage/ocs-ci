@@ -1476,7 +1476,6 @@ class CephNode(object):
         out, rc = self.exec_command(cmd="lsblk")
         out = out.read().decode()
         if 'lvm' in out:
-            print(out.read().decode())
             return 0
         else:
             return 1
@@ -1520,7 +1519,7 @@ class CephNode(object):
 
             '''
             logger.info('lvms configured already')
-            fileObject = open(file_Name % self.hostname, 'r')
+            fileObject = open(file_Name % self.hostname, 'rb')
             existing_osd_scenarios = pickle.load(fileObject)
             osd_scenarios.update(existing_osd_scenarios)
             fileObject.close()
