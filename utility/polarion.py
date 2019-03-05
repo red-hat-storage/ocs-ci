@@ -52,7 +52,7 @@ def post_to_polarion(tc):
             f = NamedTemporaryFile(delete=False)
             test_results = j2_env.get_template('importer-template.xml').render(tc=tc)
             log.info("updating results for %s " % id)
-            f.write(test_results)
+            f.write(test_results.encode())
             f.close()
             url = polarion_cred.get('url')
             user = polarion_cred.get('username')
