@@ -7,9 +7,9 @@ except ImportError:
     from setuptools import setup, find_packages
 
 setup(
-    name='cephci',
+    name='rookci',
     version='0.1',
-    description='Ceph CI tests that run in jenkins using openstack provider',
+    description='Rook CI tests that run in jenkins and standalone mode using openstack provider',
     author='Vasu Kulkarni',
     author_email='vasu@redhat.com',
     install_requires=[
