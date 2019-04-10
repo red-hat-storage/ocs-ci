@@ -21,6 +21,7 @@ setup(
         'paramiko==2.4.2',
         'pyyaml>=4.2b1',
         'jinja2==2.10',
+        'kubernetes',
     ],
     zip_safe=True,
     include_package_data=True,
