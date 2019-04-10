@@ -57,6 +57,8 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--custom-config-file <file>]
   run.py --cleanup=name [--osp-cred <file>]
         [--log-level <LEVEL>]
+  run.py --suite FILE
+        [--log-level <LEVEL>]
 
 Options:
   -h --help                         show this screen
@@ -70,7 +72,7 @@ Options:
   --osp-cred <file>                 openstack credentials as separate file
   --rhbuild <1.3.0>                 ceph downstream version
                                     eg: 1.3.0, 2.0, 2.1 etc
-  --use-cdn                         whether to use cdn or not [deafult: false]
+  --use-cdn                         whether to use cdn or not [default: false]
   --rhs-con-repo <repo>             location of rhs console repo
                                     Top level location of console compose
   --rhs-ceph-repo <repo>            location of rhs-ceph repo
@@ -82,8 +84,8 @@ Options:
   --reuse <file>                    use the stored vm state for rerun
   --skip-cluster                    skip cluster creation from ansible/ceph-deploy
   --skip-subscription               skip subscription manager if using beta rhel images
-  --docker-registry <registry>      Docker registry, deafult value is taken from ansible config
-  --docker-image <image>            Docker image, deafult value is taken from ansible config
+  --docker-registry <registry>      Docker registry, default value is taken from ansible config
+  --docker-image <image>            Docker image, default value is taken from ansible config
   --docker-tag <tag>                Docker tag, default value is 'latest'
   --insecure-registry               Disable security check for docker registry
   --post-results                    Post results to polarion, needs Polarion IDs
@@ -209,7 +211,7 @@ def run(args):
     base_url = args.get('--rhs-ceph-repo', None)
     ubuntu_repo = args.get('--ubuntu-repo', None)
     kernel_repo = args.get('--kernel-repo', None)
-    rhbuild = args.get('--rhbuild')
+    rhbuild = args.get('--rhbuild', '')
     docker_registry = args.get('--docker-registry', None)
     docker_image = args.get('--docker-image', None)
     docker_tag = args.get('--docker-tag', None)
@@ -258,6 +260,8 @@ def run(args):
         inventory.get('instance').get('create').update({'image-name': osp_image})
 
     compose_id = None
+    if not rhbuild:
+        rhbuild = ''
     if rhbuild.startswith('2'):
         if base_url is None:
             # use latest as default when nothing is specified in cli
@@ -309,87 +313,89 @@ def run(args):
             base_url = compose_url
             log.info("using base url" + base_url)
 
-    image_name = inventory.get('instance').get('create').get('image-name')
-    ceph_version = []
-    ceph_ansible_version = []
-    distro = []
-    if inventory.get('instance').get('create'):
-        distro.append(inventory.get('instance').get('create').get('image-name'))
-    for cluster in conf.get('globals'):
-        if cluster.get('ceph-cluster').get('inventory'):
-            cluster_inventory_path = os.path.abspath(cluster.get('ceph-cluster').get('inventory'))
-            with open(cluster_inventory_path, 'r') as inventory_stream:
-                cluster_inventory = yaml.safe_load(inventory_stream)
-            image_name = cluster_inventory.get('instance').get('create').get('image-name')
-            distro.append(image_name.replace('.iso', ''))
-        # get COMPOSE ID and ceph version
-        id = requests.get(base_url + "/COMPOSE_ID")
-        compose_id = id.text
-        if 'rhel' in image_name.lower():
-            ceph_pkgs = requests.get(base_url + "/compose/Tools/x86_64/os/Packages/")
-            m = re.search(r'ceph-common-(.*?)cp', ceph_pkgs.text)
-            ceph_version.append(m.group(1))
-            m = re.search(r'ceph-ansible-(.*?)cp', ceph_pkgs.text)
-            ceph_ansible_version.append(m.group(1))
-            log.info("Compose id is: " + compose_id)
-        else:
-            ubuntu_pkgs = requests.get(ubuntu_repo + "/Tools/dists/xenial/main/binary-amd64/Packages")
-            m = re.search(r'ceph\nVersion: (.*)', ubuntu_pkgs.text)
-            ceph_version.append(m.group(1))
-            m = re.search(r'ceph-ansible\nVersion: (.*)', ubuntu_pkgs.text)
-            ceph_ansible_version.append(m.group(1))
+    # image_name = inventory.get('instance').get('create').get('image-name')
+    # ceph_version = []
+    # ceph_ansible_version = []
+    # distro = []
+    # if inventory.get('instance').get('create'):
+    #     distro.append(inventory.get('instance').get('create').get('image-name'))
+    # for cluster in conf.get('globals'):
+    #     if cluster.get('ceph-cluster').get('inventory'):
+    #         cluster_inventory_path = os.path.abspath(cluster.get('ceph-cluster').get('inventory'))
+    #         with open(cluster_inventory_path, 'r') as inventory_stream:
+    #             cluster_inventory = yaml.safe_load(inventory_stream)
+    #         image_name = cluster_inventory.get('instance').get('create').get('image-name')
+    #         distro.append(image_name.replace('.iso', ''))
+    #     # get COMPOSE ID and ceph version
+    #     id = requests.get(base_url + "/COMPOSE_ID")
+    #     compose_id = id.text
+    #     if 'rhel' in image_name.lower():
+    #         ceph_pkgs = requests.get(base_url + "/compose/Tools/x86_64/os/Packages/")
+    #         m = re.search(r'ceph-common-(.*?)cp', ceph_pkgs.text)
+    #         ceph_version.append(m.group(1))
+    #         m = re.search(r'ceph-ansible-(.*?)cp', ceph_pkgs.text)
+    #         ceph_ansible_version.append(m.group(1))
+    #         log.info("Compose id is: " + compose_id)
+    #     else:
+    #         ubuntu_pkgs = requests.get(ubuntu_repo + "/Tools/dists/xenial/main/binary-amd64/Packages")
+    #         m = re.search(r'ceph\nVersion: (.*)', ubuntu_pkgs.text)
+    #         ceph_version.append(m.group(1))
+    #         m = re.search(r'ceph-ansible\nVersion: (.*)', ubuntu_pkgs.text)
+    #         ceph_ansible_version.append(m.group(1))
 
-    distro = ','.join(list(set(distro)))
-    ceph_version = ', '.join(list(set(ceph_version)))
-    ceph_ansible_version = ', '.join(list(set(ceph_ansible_version)))
-    log.info("Testing Ceph Version: " + ceph_version)
-    log.info("Testing Ceph Ansible Version: " + ceph_ansible_version)
+    # distro = ','.join(list(set(distro)))
+    # ceph_version = ', '.join(list(set(ceph_version)))
+    # ceph_ansible_version = ', '.join(list(set(ceph_ansible_version)))
+    # log.info("Testing Ceph Version: " + ceph_version)
+    # log.info("Testing Ceph Ansible Version: " + ceph_ansible_version)
 
-    if not os.environ.get('TOOL') and not ignore_latest_nightly_container:
-        major_version = re.match(r'RHCEPH-(\d+\.\d+)', compose_id).group(1)
-        try:
-            latest_container = get_latest_container(major_version)
-        except ValueError:
-            latest_container = get_latest_container('.'.join([major_version.split('.')[0], 'x']))
-        docker_registry = latest_container.get('docker_registry') if not docker_registry else docker_registry
-        docker_image = latest_container.get('docker_image') if not docker_image else docker_image
-        docker_tag = latest_container.get('docker_tag') if not docker_tag else docker_tag
-        log.info("Using latest nightly docker image \nRegistry: {registry} \nDocker image: {image}\nDocker tag:{tag}"
-                 .format(registry=docker_registry, image=docker_image, tag=docker_tag))
-        docker_insecure_registry = True
-        log.warning('Using Docker insecure registry setting')
+    # if not os.environ.get('TOOL') and not ignore_latest_nightly_container:
+    #     major_version = re.match(r'RHCEPH-(\d+\.\d+)', compose_id).group(1)
+    #     try:
+    #         latest_container = get_latest_container(major_version)
+    #     except ValueError:
+    #         latest_container = get_latest_container('.'.join([major_version.split('.')[0], 'x']))
+    #     docker_registry = latest_container.get('docker_registry') if not docker_registry else docker_registry
+    #     docker_image = latest_container.get('docker_image') if not docker_image else docker_image
+    #     docker_tag = latest_container.get('docker_tag') if not docker_tag else docker_tag
+    #     log.info("Using latest nightly docker image \nRegistry: {registry} \nDocker image: {image}\nDocker tag:{tag}"
+    #              .format(registry=docker_registry, image=docker_image, tag=docker_tag))
+    #     docker_insecure_registry = True
+    #     log.warning('Using Docker insecure registry setting')
 
-    service = None
-    suite_name = os.path.basename(suite_file).split(".")[0]
-    if post_to_report_portal:
-        log.info("Creating report portal session")
-        service = create_report_portal_session()
-        launch_name = "{suite_name} ({distro})".format(suite_name=suite_name, distro=distro)
-        launch_desc = textwrap.dedent(
-            """
-            ceph version: {ceph_version}
-            ceph-ansible version: {ceph_ansible_version}
-            compose-id: {compose_id}
-            invoked-by: {user}
-            """.format(ceph_version=ceph_version,
-                       ceph_ansible_version=ceph_ansible_version,
-                       user=getuser(),
-                       compose_id=compose_id))
-        if docker_image and docker_registry and docker_tag:
-            launch_desc = launch_desc + textwrap.dedent(
-                """
-                docker registry: {docker_registry}
-                docker image: {docker_image}
-                docker tag: {docker_tag}
-                invoked-by: {user}
-                """.format(docker_registry=docker_registry,
-                           docker_image=docker_image,
-                           user=getuser(),
-                           docker_tag=docker_tag))
-        service.start_launch(name=launch_name, start_time=timestamp(), description=launch_desc)
+    # service = None
+    # suite_name = os.path.basename(suite_file).split(".")[0]
+    # if post_to_report_portal:
+    #     log.info("Creating report portal session")
+    #     service = create_report_portal_session()
+    #     launch_name = "{suite_name} ({distro})".format(suite_name=suite_name, distro=distro)
+    #     launch_desc = textwrap.dedent(
+    #         """
+    #         ceph version: {ceph_version}
+    #         ceph-ansible version: {ceph_ansible_version}
+    #         compose-id: {compose_id}
+    #         invoked-by: {user}
+    #         """.format(ceph_version=ceph_version,
+    #                    ceph_ansible_version=ceph_ansible_version,
+    #                    user=getuser(),
+    #                    compose_id=compose_id))
+    #     if docker_image and docker_registry and docker_tag:
+    #         launch_desc = launch_desc + textwrap.dedent(
+    #             """
+    #             docker registry: {docker_registry}
+    #             docker image: {docker_image}
+    #             docker tag: {docker_tag}
+    #             invoked-by: {user}
+    #             """.format(docker_registry=docker_registry,
+    #                        docker_image=docker_image,
+    #                        user=getuser(),
+    #                        docker_tag=docker_tag))
+    #     service.start_launch(name=launch_name, start_time=timestamp(), description=launch_desc)
 
     if reuse is None:
-        ceph_cluster_dict, clients = create_nodes(conf, inventory, osp_cred, run_id, service, instances_name)
+        pass
+        # ceph_cluster_dict, clients = create_nodes(conf, inventory, osp_cred, run_id, service, instances_name)
+        ceph_cluster_dict, clients = {}, []  # TODO: remove me
     else:
         ceph_store_nodes = open(reuse, 'rb')
         ceph_cluster_dict = pickle.load(ceph_store_nodes)
@@ -429,11 +435,11 @@ def run(args):
         tc['file'] = test.get('module')
         tc['polarion-id'] = test.get('polarion-id')
         tc['rhbuild'] = rhbuild
-        tc['ceph-version'] = ceph_version
-        tc['ceph-ansible-version'] = ceph_ansible_version
+        # tc['ceph-version'] = ceph_version
+        # tc['ceph-ansible-version'] = ceph_ansible_version
         tc['compose-id'] = compose_id
-        tc['distro'] = distro
-        tc['suite-name'] = suite_name
+        # tc['distro'] = distro
+        # tc['suite-name'] = suite_name
         test_file = tc['file']
         report_portal_description = tc['desc'] or ''
         unique_test_name = create_unique_test_name(tc['name'], test_names)
@@ -448,88 +454,92 @@ def run(args):
         tc['duration'] = '0s'
         tc['status'] = 'Not Executed'
         start = time.time()
-        for cluster_name in test.get('clusters', ceph_cluster_dict):
-            if test.get('clusters'):
-                config = test.get('clusters').get(cluster_name).get('config', {})
-            else:
-                config = test.get('config', {})
-            if not config.get('base_url'):
-                config['base_url'] = base_url
-            config['rhbuild'] = rhbuild
-            if 'ubuntu_repo' in locals():
-                config['ubuntu_repo'] = ubuntu_repo
-            if not config.get('use_cdn'):
-                config['use_cdn'] = use_cdn
-            if skip_setup is True:
-                config['skip_setup'] = True
-            if skip_subscription is True:
-                config['skip_subscription'] = True
-            if args.get('--add-repo'):
-                repo = args.get('--add-repo')
-                if repo.startswith('http'):
-                    config['add-repo'] = repo
-            config['docker-insecure-registry'] = docker_insecure_registry
-            config['skip_version_compare'] = skip_version_compare
-            if config and config.get('ansi_config'):
-                if docker_registry:
-                    config.get('ansi_config')['ceph_docker_registry'] = str(docker_registry)
-                if docker_image:
-                    config.get('ansi_config')['ceph_docker_image'] = str(docker_image)
-                if docker_tag:
-                    config.get('ansi_config')['ceph_docker_image_tag'] = str(docker_tag)
+        rc = 1
+        # for cluster_name in test.get('clusters', ceph_cluster_dict):
+        if test.get('clusters'):
+            config = test.get('clusters').get(cluster_name).get('config', {})
+        else:
+            config = test.get('config', {})
+        if not config.get('base_url'):
+            config['base_url'] = base_url
+        config['rhbuild'] = rhbuild
+        if 'ubuntu_repo' in locals():
+            config['ubuntu_repo'] = ubuntu_repo
+        if not config.get('use_cdn'):
+            config['use_cdn'] = use_cdn
+        if skip_setup is True:
+            config['skip_setup'] = True
+        if skip_subscription is True:
+            config['skip_subscription'] = True
+        if args.get('--add-repo'):
+            repo = args.get('--add-repo')
+            if repo.startswith('http'):
+                config['add-repo'] = repo
+        config['docker-insecure-registry'] = docker_insecure_registry
+        config['skip_version_compare'] = skip_version_compare
+        if config and config.get('ansi_config'):
+            if docker_registry:
+                config.get('ansi_config')['ceph_docker_registry'] = str(docker_registry)
+            if docker_image:
+                config.get('ansi_config')['ceph_docker_image'] = str(docker_image)
+            if docker_tag:
+                config.get('ansi_config')['ceph_docker_image_tag'] = str(docker_tag)
+            cluster_docker_registry = config.get('ansi_config').get('ceph_docker_registry')
+            cluster_docker_image = config.get('ansi_config').get('ceph_docker_image')
+            cluster_docker_tag = config.get('ansi_config').get('ceph_docker_image_tag')
+            if cluster_docker_registry:
                 cluster_docker_registry = config.get('ansi_config').get('ceph_docker_registry')
+                report_portal_description = report_portal_description + '\ndocker registry: {docker_registry}' \
+                    .format(docker_registry=cluster_docker_registry)
+            if cluster_docker_image:
                 cluster_docker_image = config.get('ansi_config').get('ceph_docker_image')
+                report_portal_description = report_portal_description + '\ndocker image: {docker_image}' \
+                    .format(docker_image=cluster_docker_image)
+            if cluster_docker_tag:
                 cluster_docker_tag = config.get('ansi_config').get('ceph_docker_image_tag')
-                if cluster_docker_registry:
-                    cluster_docker_registry = config.get('ansi_config').get('ceph_docker_registry')
-                    report_portal_description = report_portal_description + '\ndocker registry: {docker_registry}' \
-                        .format(docker_registry=cluster_docker_registry)
-                if cluster_docker_image:
-                    cluster_docker_image = config.get('ansi_config').get('ceph_docker_image')
-                    report_portal_description = report_portal_description + '\ndocker image: {docker_image}' \
-                        .format(docker_image=cluster_docker_image)
-                if cluster_docker_tag:
-                    cluster_docker_tag = config.get('ansi_config').get('ceph_docker_image_tag')
-                    report_portal_description = report_portal_description + '\ndocker tag: {docker_tag}' \
-                        .format(docker_tag=cluster_docker_tag)
-                if cluster_docker_image and cluster_docker_registry:
-                    tc['docker-containers-list'].append('{docker_registry}/{docker_image}:{docker_tag}'.format(
-                        docker_registry=cluster_docker_registry, docker_image=cluster_docker_image,
-                        docker_tag=cluster_docker_tag))
-            if filestore:
-                config['filestore'] = filestore
-            if ec_pool_vals:
-                config['ec-pool-k-m'] = ec_pool_vals
-            if args.get('--hotfix-repo'):
-                hotfix_repo = args.get('--hotfix-repo')
-                if hotfix_repo.startswith('http'):
-                    config['hotfix_repo'] = hotfix_repo
-            if kernel_repo is not None:
-                config['kernel-repo'] = kernel_repo
-            if osp_cred:
-                config['osp_cred'] = osp_cred
-            # if Kernel Repo is defined in ENV then set the value in config
-            if os.environ.get('KERNEL-REPO-URL') is not None:
-                config['kernel-repo'] = os.environ.get('KERNEL-REPO-URL')
-            try:
-                if post_to_report_portal:
-                    service.start_test_item(name=unique_test_name, description=report_portal_description,
-                                            start_time=timestamp(), item_type="STEP")
-                    service.log(time=timestamp(), message="Logfile location: {}".format(tc['log-link']), level="INFO")
-                    service.log(time=timestamp(), message="Polarion ID: {}".format(tc['polarion-id']), level="INFO")
-                rc = test_mod.run(ceph_cluster=ceph_cluster_dict[cluster_name],
-                                  ceph_nodes=ceph_cluster_dict[cluster_name], config=config, test_data=ceph_test_data,
-                                  ceph_cluster_dict=ceph_cluster_dict, clients=clients)
-            except BaseException:
-                if post_to_report_portal:
-                    service.log(time=timestamp(), message=traceback.format_exc(), level="ERROR")
-                log.error(traceback.format_exc())
-                rc = 1
-            finally:
-                if store:
-                    store_cluster_state(ceph_cluster_dict, ceph_clusters_file)
-            if rc != 0:
-                break
+                report_portal_description = report_portal_description + '\ndocker tag: {docker_tag}' \
+                    .format(docker_tag=cluster_docker_tag)
+            if cluster_docker_image and cluster_docker_registry:
+                tc['docker-containers-list'].append('{docker_registry}/{docker_image}:{docker_tag}'.format(
+                    docker_registry=cluster_docker_registry, docker_image=cluster_docker_image,
+                    docker_tag=cluster_docker_tag))
+        if filestore:
+            config['filestore'] = filestore
+        if ec_pool_vals:
+            config['ec-pool-k-m'] = ec_pool_vals
+        if args.get('--hotfix-repo'):
+            hotfix_repo = args.get('--hotfix-repo')
+            if hotfix_repo.startswith('http'):
+                config['hotfix_repo'] = hotfix_repo
+        if kernel_repo is not None:
+            config['kernel-repo'] = kernel_repo
+        # if osp_cred:
+        #     config['osp_cred'] = osp_cred
+        # if Kernel Repo is defined in ENV then set the value in config
+        if os.environ.get('KERNEL-REPO-URL') is not None:
+            config['kernel-repo'] = os.environ.get('KERNEL-REPO-URL')
+
+        try:
+            # if post_to_report_portal:
+            #     service.start_test_item(name=unique_test_name, description=report_portal_description,
+            #                             start_time=timestamp(), item_type="STEP")
+            #     service.log(time=timestamp(), message="Logfile location: {}".format(tc['log-link']), level="INFO")
+            #     service.log(time=timestamp(), message="Polarion ID: {}".format(tc['polarion-id']), level="INFO")
+            clients = []  # TODO: remove me
+            fake_cluster = "fake cluster"
+            rc = test_mod.run(ceph_cluster=fake_cluster,
+                              ceph_nodes=fake_cluster, config=config, test_data=ceph_test_data,
+                              ceph_cluster_dict=ceph_cluster_dict, clients=clients)
+        except Exception:
+            # if post_to_report_portal:
+            #     service.log(time=timestamp(), message=traceback.format_exc(), level="ERROR")
+            log.error(traceback.format_exc())
+            rc = 1
+        finally:
+            if store:
+                store_cluster_state(ceph_cluster_dict, ceph_clusters_file)
+        if rc != 0:
+            break
         elapsed = (time.time() - start)
         tc['duration'] = elapsed
         if rc == 0:
@@ -537,18 +547,18 @@ def run(args):
             msg = "Test {} passed".format(test_mod)
             log.info(msg)
             print(msg)
-            if post_to_report_portal:
-                service.finish_test_item(end_time=timestamp(), status="PASSED")
-            if post_results:
-                post_to_polarion(tc=tc)
+            # if post_to_report_portal:
+            #     service.finish_test_item(end_time=timestamp(), status="PASSED")
+            # if post_results:
+            #     post_to_polarion(tc=tc)
         else:
             tc['status'] = 'Failed'
             msg = "Test {} failed".format(test_mod)
             log.info(msg)
             print(msg)
             jenkins_rc = 1
-            if post_to_report_portal:
-                service.finish_test_item(end_time=timestamp(), status="FAILED")
+            # if post_to_report_portal:
+            #     service.finish_test_item(end_time=timestamp(), status="FAILED")
             if post_results:
                 post_to_polarion(tc=tc)
             if test.get('abort-on-fail', False):
@@ -557,19 +567,19 @@ def run(args):
                 break
         if test.get('destroy-cluster') is True:
             cleanup_ceph_nodes(osp_cred, instances_name)
-        if test.get('recreate-cluster') is True:
-            ceph_cluster_dict, clients = create_nodes(conf, inventory, osp_cred, run_id, service, instances_name)
+        # if test.get('recreate-cluster') is True:
+        #     ceph_cluster_dict, clients = create_nodes(conf, inventory, osp_cred, run_id, service, instances_name)
         tcs.append(tc)
     close_and_remove_filehandlers()
-    if post_to_report_portal:
-        service.finish_launch(end_time=timestamp())
-        service.terminate()
-    url_base = "http://magna002.ceph.redhat.com/cephci-jenkins"
+    # if post_to_report_portal:
+    #     service.finish_launch(end_time=timestamp())
+    #     service.terminate()
+    url_base = "http://magna002.ceph.redhat.com/cephci-jenkins"  # TODO: need a new directory for ocs test logs?
     run_dir_name = run_dir.split('/')[-1]
     print("\nAll test logs located here: {base}/{dir}".format(base=url_base, dir=run_dir_name))
     print_results(tcs)
     send_to_cephci = post_results or post_to_report_portal
-    email_results(tcs, run_id, send_to_cephci)
+    # email_results(tcs, run_id, send_to_cephci)
     return jenkins_rc
 
 
