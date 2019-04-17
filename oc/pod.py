@@ -2,13 +2,14 @@
 
 Each pod in the openshift cluster will have a corresponding pod object.
 Few assumptions:
-    oc cluseter is up and running
+    oc cluster is up and running
 
 """
 
 import logging
 
 from .pod_exec import Exec, CmdObj
+from .Exceptions import CommandFailed
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +17,12 @@ logger = logging.getLogger(__name__)
 class Pod(object):
     """Handles per pod related context
 
-    Attributes:
-        name (str):      name of the pod in oc cluster
-        namespace(str):  openshift namespace where this pod lives
-        labels (list):      list of oc labels associated with pod
-        roles (list):       This could be oc roles like Master, etcd OR
-                            ceph roles like mon, osd etc
+        Attributes:
+            name (str):      name of the pod in oc cluster
+            namespace(str):  openshift namespace where this pod lives
+            labels (list):   list of oc labels associated with pod
+            roles (list):    This could be oc roles like Master, etcd OR
+                             ceph roles like mon, osd etc
 
 
     """
@@ -29,12 +30,12 @@ class Pod(object):
     def __init__(self, name=None, namespace=None, labels=None, roles=None):
         """Context detail per pod
 
-        Args:
-            name (string):      name of the pod in oc cluster
-            namespace (string): namespace in which pod lives
-            labels (list):      list of oc labels associated with pod
-            roles (list):       This could be oc roles like Master, etcd OR
-                                ceph roles like mon, osd etc
+            Args:
+                name (string):      name of the pod in oc cluster
+                namespace (string): namespace in which pod lives
+                labels (list):      list of oc labels associated with pod
+                roles (list):       This could be oc roles like Master, etcd OR
+                                   ceph roles like mon, osd etc
 
         """
         self._name = name
@@ -79,14 +80,24 @@ class Pod(object):
         timeout = kw.get('timeout', 60)
         wait = kw.get('wait', True)         # default synchronous execution
         check_ec = kw.get('check_ec', True)
+        long_running = kw.get('long_running', False)
 
-        cmd_obj = CmdObj(cmd, timeout, wait, check_ec)
+        cmd_obj = CmdObj(
+            cmd,
+            timeout,
+            wait,
+            check_ec,
+            long_running,
+        )
+
         runner = Exec()
-        stdout, stderr, err = runner.run(self.name,
-                                         self.namespace,
-                                         cmd_obj)
+        stdout, stderr, err = runner.run(
+            self.name,
+            self.namespace,
+            cmd_obj,
+        )
 
         if check_ec:
-            return (stdout, stderr, err)
+            return stdout, stderr, err
         else:
-            return (stdout, stderr)
+            return stdout, stderr
