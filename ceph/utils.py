@@ -1,17 +1,23 @@
 import datetime
 import logging
-import traceback
-import time
 import os
+import pickle
 import re
+import time
+import traceback
+
 import yaml
 from gevent import sleep
+from libcloud.common.exceptions import BaseHTTPError
+from libcloud.common.types import LibcloudError
 from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
-from libcloud.common.exceptions import BaseHTTPError
 
-from .ceph import RolesContainer, CommandFailed, Ceph
 from mita.openstack import CephVMNode
+from utility.retry import retry
+from utility.utils import create_unique_test_name, timestamp
+from .ceph import RolesContainer, CommandFailed, Ceph, CephNode
+from .clients import WinNode
 from .parallel import parallel
 
 log = logging.getLogger(__name__)
@@ -506,3 +512,63 @@ def get_public_network():
         (str) public network subnet
     """
     return "10.0.144.0/22"  # TODO: pull from configuration file
+
+
+@retry(LibcloudError, tries=5, delay=15)
+def create_nodes(conf, inventory, osp_cred, run_id, report_portal_session=None, instances_name=None):
+    if report_portal_session:
+        name = create_unique_test_name("ceph node creation")
+        desc = "Ceph cluster preparation"
+        report_portal_session.start_test_item(name=name,
+                                              description=desc,
+                                              start_time=timestamp(),
+                                              item_type="STEP")
+    log.info("Destroying existing osp instances")
+    cleanup_ceph_nodes(osp_cred, instances_name)
+    ceph_cluster_dict = {}
+    log.info('Creating osp instances')
+    for cluster in conf.get('globals'):
+        ceph_vmnodes = create_ceph_nodes(cluster, inventory, osp_cred, run_id, instances_name)
+        ceph_nodes = []
+        clients = []
+        for node in ceph_vmnodes.values():
+            if node.role == 'win-iscsi-clients':
+                clients.append(WinNode(ip_address=node.ip_address,
+                                       private_ip=node.get_private_ip()))
+            else:
+                ceph = CephNode(username='cephuser',
+                                password='cephuser',
+                                root_password='passwd',
+                                root_login=node.root_login,
+                                role=node.role,
+                                no_of_volumes=node.no_of_volumes,
+                                ip_address=node.ip_address,
+                                private_ip=node.get_private_ip(),
+                                hostname=node.hostname,
+                                ceph_vmnode=node)
+                ceph_nodes.append(ceph)
+        cluster_name = cluster.get('ceph-cluster').get('name', 'ceph')
+        ceph_cluster_dict[cluster_name] = Ceph(cluster_name, ceph_nodes)
+    # TODO: refactor cluster dict to cluster list
+    log.info('Done creating osp instances')
+    log.info("Waiting for Floating IPs to be available")
+    log.info("Sleeping 15 Seconds")
+    time.sleep(15)
+    for cluster_name, cluster in ceph_cluster_dict.items():
+        for instance in cluster:
+            try:
+                instance.connect()
+            except BaseException:
+                if report_portal_session:
+                    report_portal_session.finish_test_item(end_time=timestamp(), status="FAILED")
+                raise
+    if report_portal_session:
+        report_portal_session.finish_test_item(end_time=timestamp(), status="PASSED")
+    return ceph_cluster_dict, clients
+
+
+def store_cluster_state(ceph_cluster_object, ceph_clusters_file_name):
+    cn = open(ceph_clusters_file_name, 'w+b')
+    pickle.dump(ceph_cluster_object, cn)
+    cn.close()
+    log.info("ceph_clusters_file %s", ceph_clusters_file_name)

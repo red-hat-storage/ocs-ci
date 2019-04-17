@@ -1,0 +1,4 @@
+aws:
+  cluster:
+    workers: 6
+    masters: 6

@@ -4,7 +4,7 @@ import os
 from tempfile import NamedTemporaryFile
 from subprocess import call
 from jinja2 import Environment, FileSystemLoader
-from utility.utils import get_cephci_config
+from utility.utils import get_ocsci_config
 
 log = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ def post_to_polarion(tc):
       None
     """
     current_dir = os.getcwd()
-    polarion_cred = get_cephci_config()['polarion']
+    polarion_cred = get_ocsci_config()['polarion']
 
     if tc['polarion-id'] is not None:
         # add polarion attributes
