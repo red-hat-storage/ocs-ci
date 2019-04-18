@@ -11,7 +11,7 @@ Rest of the information you can find in those sections
 * [Code review](./code_review.md) - information about code review best
     practices for the OCS-CI project
 
-* [Code guidelines](./code_guidelines.md) - information about code conventions and
+* [Code guidelines](./coding_guidelines.md) - information about code conventions and
     best practices for writing code in the OCS-CI project.
     **Has to be followed for new PRs!**
 
