@@ -1,0 +1,15 @@
+# Code review best practicies in OCS-CI
+
+**Lets use the following guidelines for Code Reviews:**
+
+*  Run couple of real tests before submitting for library changes.
+    For test changes, they should be run on at least one environment before
+    pull request is submitted.
+* It is better to submit small changes in core libraries to avoid regression.
+* Request review from few of project maintainers. At the start of the effort,
+    please request review from: `@petr-balogh, @RazTamir, @shylesh,
+    @vasukulkarni, @clacroix12, @ebenahar, @dahorak`
+* Thumbs up, LGTM indicates that change looks OK, but change needs to be
+    approved  from github by at least 2 project mainteiners before merge.
+* All comments should be addressed or responded and once comment is considered
+    as closed we should Resolve conversation to close the comment.
