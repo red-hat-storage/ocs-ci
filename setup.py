@@ -7,9 +7,9 @@ except ImportError:
     from setuptools import setup, find_packages
 
 setup(
-    name='rookci',
+    name='ocs-ci',
     version='0.1',
-    description='Rook CI tests that run in jenkins and standalone mode using openstack provider',
+    description='OCS CI tests that run in jenkins and standalone mode using aws provider',
     author='Vasu Kulkarni',
     author_email='vasu@redhat.com',
     install_requires=[
@@ -20,7 +20,7 @@ setup(
         'requests==2.21.0',
         'paramiko==2.4.2',
         'pyyaml>=4.2b1',
-        'jinja2==2.10',
+        'jinja2==2.10.1',
         'kubernetes',
     ],
     zip_safe=True,

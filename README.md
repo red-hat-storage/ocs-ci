@@ -18,6 +18,24 @@ It is recommended that you use a python virtual environment to install the neces
 2. Install requirements with `pip install -r requirements.txt`
 
 #### Initial Setup
+##### OCS-CI config
+Configure your ocs-ci.yaml file:
+
+This file is used to allow configuration around a number of things within ocs-ci.
+The template can be found at the top level of the repository, `ocs-ci.yaml.template`.
+The required keys are in the template. Values are placeholders and should be replaced by legitimate values.
+Values for report portal or polarion are only required if you plan on posting to that particular service.
+
+Move a copy of the template to your user directory and edit it from there with the proper values.
+```
+cp ocs-ci.yaml.template ~/.ocs-ci.yaml
+```
+##### Pull Secret
+In order to deploy a cluster to AWS with the Openshift Installer,
+you will need to download the pull secret for your account.
+Download this file from [openshift.com](https://cloud.openshift.com/clusters/install)
+and place in the `data` directory at the root level of the project.
+If there is no `data` directory, create one.
 
 ## Tests
 
@@ -68,7 +86,7 @@ python run.py --cred ~/aws.yml --suite suites/ocs_basic_install.yml
 
 ## Results
 **WIP**
-In order to post results properly or receive results emails you must first configure your `~/.ocsci.yaml` file.
+In order to post results properly or receive results emails you must first configure your `~/.ocs-ci.yaml` file.
 Please see the [Initial Setup](#initial-setup) section of the readme if you haven't done that.
 
 #### Polarion
@@ -83,6 +101,6 @@ Results are posted to report portal if the `--report-portal` argument is passed 
 
 #### Email
 **WIP**
-A result email is automatically sent to the address configured in your `~/.ocsci.yaml` file.
+A result email is automatically sent to the address configured in your `~/.ocs-ci.yaml` file.
 In addition to personally configured emails, if the `--post-results` or `--report-portal` arguments are
-passed to `run.py` an email will also be sent to `ocsci@redhat.com`
+passed to `run.py` an email will also be sent to QE (email pending)
