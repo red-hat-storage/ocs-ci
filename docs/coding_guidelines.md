@@ -6,6 +6,7 @@ Lets follow the following guidelines for the Core Libraries and Test Scripts
 * Each Python Class is well documented for inheritence, methods and
     attributes, Add sufficent comments for code block that is easy
     to understand for others to review.
+    Use [Google Style of Python Docstrings](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html)
 * Code Readablity takes priority, Lets avoid crazy hacks and tricks 
     and stick to straight forward code blocks that are easy to
     understand for all.
@@ -37,7 +38,8 @@ Lets follow the following guidelines for the Core Libraries and Test Scripts
 
 ```python
 def function(
-    param1, param2, param3, param4
+    parameter1, parameter2, parameter3, parameter4, parameter5,
+    parameter6, parameter7='Default value of param7'
 ):
     print(
         "Hello, I am long string which can be easily splitted like "
