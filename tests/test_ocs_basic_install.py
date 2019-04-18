@@ -17,12 +17,22 @@ TOP_DIR = os.path.dirname(THIS_DIR)
 def run(**kwargs):
     log.info("Running OCS basic installation")
     config = kwargs.get('config')
+    test_data = kwargs.get('test_data')
+    cluster_conf = kwargs.get('cluster_conf')
+
+    workers, masters = None, None
+    if cluster_conf:
+        workers = cluster_conf.get('aws').get('cluster').get('workers')
+        masters = cluster_conf.get('aws').get('cluster').get('masters')
 
     # Generate install-config from template
     log.info("Generating install-config")
-    cid = random.randint(10000, 99999)
-    cluster_dir_parent = "/tmp"
-    cluster_name = f"cluster-{cid}"
+    cluster_dir_parent = "/tmp"  # TODO: determine better place to create cluster directories, perhaps in project dir?
+    if test_data.get('cluster_name'):
+        cluster_name = test_data.get('cluster-name')
+    else:
+        cid = random.randint(10000, 99999)
+        cluster_name = f'ocs-ci-cluster-{cid}'
     cluster_path = os.path.join(cluster_dir_parent, cluster_name)
     run_cmd(f"mkdir {cluster_path}")
 
@@ -30,8 +40,12 @@ def run(**kwargs):
     with open(pull_secret_path, "r") as f:
         pull_secret = f.readline()
 
-    data = {"cluster_name": f'ocs-ci-{cluster_name}',
+    data = {"cluster_name": cluster_name,
             "pull_secret": pull_secret}
+    if workers:
+        data.update({'worker_replicas': workers})
+    if masters:
+        data.update({'master_replicas': masters})
     template = render_template("install-config.yaml.j2", data)
     log.info(f"Install config: \n{template}")
     install_config = os.path.join(cluster_path, "install-config.yaml")
@@ -59,6 +73,7 @@ def run(**kwargs):
     run_cmd("oc cluster-info")
 
     # TODO: Create cluster object, add to test_data for other tests to utilize
+    # TODO: Use Rook to install ceph on the cluster
 
     # Destroy cluster (if configured)
     destroy_cmd = f"./openshift-install destroy cluster --dir {cluster_path} --log-level debug"

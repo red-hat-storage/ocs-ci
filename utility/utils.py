@@ -30,6 +30,7 @@ active_mdss = []
 RC = []
 failure = {}
 output = []
+unique_test_names = []
 
 
 # function for getting the clients
@@ -393,7 +394,7 @@ def create_report_portal_session():
     Returns:
         The session object
     """
-    cfg = get_cephci_config()['report-portal']
+    cfg = get_ocsci_config()['report-portal']
 
     return ReportPortalServiceAsync(
         endpoint=cfg['endpoint'], project=cfg['project'], token=cfg['token'], error_handler=error_handler)
@@ -420,22 +421,24 @@ def error_handler(exc_info):
     traceback.print_exception(*exc_info)
 
 
-def create_unique_test_name(test_name, name_list):
+def create_unique_test_name(test_name):
     """
     Creates a unique test name using the actual test name and an increasing integer for each duplicate test name.
 
     Args:
         test_name: name of the test
-        name_list: list of names to compare test name against
 
     Returns:
         unique name for the test case
     """
+    global unique_test_names
     base = "_".join(test_name.split())
     num = 0
-    while "{base}_{num}".format(base=base, num=num) in name_list:
+    while "{base}_{num}".format(base=base, num=num) in unique_test_names:
         num += 1
-    return "{base}_{num}".format(base=base, num=num)
+    name = "{base}_{num}".format(base=base, num=num)
+    unique_test_names.append(name)
+    return name
 
 
 def get_latest_container_image_tag(version):
@@ -537,17 +540,18 @@ def email_results(results_list, run_id, send_to_cephci=False):
     Returns: None
 
     """
-    cfg = get_cephci_config().get('email')
-    sender = "cephci@redhat.com"
+    cfg = get_ocsci_config().get('email')
+    sender = "ocs-ci@redhat.com"
     recipients = []
     if cfg and cfg.get('address'):
         recipients = [cfg['address']]
     else:
-        log.warning("No email address configured in ~/.cephci.yaml. "
+        log.warning("No email address configured in ~/.ocs-ci.yaml. "
                     "Please configure if you would like to receive run result emails.")
 
     if send_to_cephci:
-        recipients.append(sender)
+        pass  # TODO: determine email address to use for ocs-ci results and append to recipients
+        # recipients.append(sender)
 
     if recipients:
         run_name = "cephci-run-{id}".format(id=run_id)
@@ -585,21 +589,21 @@ def email_results(results_list, run_id, send_to_cephci=False):
             log.exception(e)
 
 
-def get_cephci_config():
+def get_ocsci_config():
     """
-    Receives the data from ~/.cephci.yaml.
+    Receives the data from ~/.ocs-ci.yaml.
 
     Returns:
-        (dict) configuration from ~/.cephci.yaml
+        (dict) configuration from ~/.ocs-ci.yaml
 
     """
     home_dir = os.path.expanduser("~")
-    cfg_file = os.path.join(home_dir, ".cephci.yaml")
+    cfg_file = os.path.join(home_dir, ".ocs-ci.yaml")
     try:
         with open(cfg_file, "r") as yml:
             cfg = yaml.load(yml)
     except IOError:
-        log.error("Please create ~/.cephci.yaml from the cephci.yaml.template. "
+        log.error("Please create ~/.ocs-ci.yaml from the ocs-ci.yaml.template. "
                   "See README for more information.")
         raise
     return cfg
