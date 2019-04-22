@@ -3,9 +3,10 @@ from kubernetes import client, config
 os.sys.path.append(os.path.dirname(os.getcwd()))
 
 from oc import pod, pod_exec
+from tests import test_radosbench as radosbench
 
 
-def main():
+def run():
     config.load_kube_config()
     v1 = client.CoreV1Api()
     ret = v1.list_pod_for_all_namespaces(
@@ -18,14 +19,9 @@ def main():
         name = i.metadata.name
         break
 
-    cmd = "ceph osd df"
-    po = pod.Pod(name, namespace)
+    po = pod.Pod(name, namespace, roles=['client'])
 
-    out, err, ret = po.exec_command(cmd=cmd, timeout=20)
-    if out:
-        print (out)
-    if err:
-        print (err)
-    print (ret)
-
-
+    return radosbench.run(
+        ceph_pods=[po],
+        config={'time': 10, 'cleanup': False}
+    )
