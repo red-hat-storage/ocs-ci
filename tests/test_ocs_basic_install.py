@@ -1,5 +1,6 @@
 import logging
 import os
+import platform
 import random
 import subprocess
 import sys
@@ -59,7 +60,13 @@ def run(**kwargs):
     else:
         log.info("Downloading openshift installer")
         ver = config.get('installer-version')
-        url = f"https://github.com/openshift/installer/releases/download/{ver}/openshift-install-linux-amd64"
+        if platform.system() == "Darwin":
+            os_type = "darwin"
+        elif platform.system() == "Linux":
+            os_type = "linux"
+        else:
+            os_type = None
+        url = f"https://github.com/openshift/installer/releases/download/{ver}/openshift-install-{os_type}-amd64"
         download_file(url, installer_filename)
         run_cmd(f"chmod +x {installer_filename}")
 
@@ -113,6 +120,7 @@ def download_file(url, filename):
     Args:
         url: URL of the file to download
         filename: Name of the file to write the download to
+
 
     """
     with open(filename, "wb") as f:
