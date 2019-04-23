@@ -66,7 +66,7 @@ def function(
 print("These are new style of Python formatting:")
 "My string {}".format("value")
 "My string {var_name}".format(var_name="value")
-f"This is the best and proffered way {var_name}"  # from Python 3.6
+f"This is the best and preferred way {var_name}"  # from Python 3.6
 
 print("This is old style of formatting and should be avoided:")
 "My string %s" % variable
