@@ -27,14 +27,16 @@ Lets follow the following guidelines for the Core Libraries and Test Scripts
             # use ocs_context to deal with cluster
             # run your test steps
             if test_failed:
-                return False
+                return 1
             else:
-                return Pass
+                return 0
 ```
 
 * Do not use backslashes in the code for line breaker!
 * Line length should be maximum 79 characters!
-* Try to follow this convention for brackets and indentions like in example below if the line doesn't fit in 79 chars!  (This makes code much more readable):
+* Try to follow this convention for brackets and indentions like in example
+    below if the line doesn't fit in 79 chars!  (This makes code much more
+    readable):
 
 ```python
 def function(
