@@ -1,4 +1,2 @@
 class CommandFailed(Exception):
     pass
-
-

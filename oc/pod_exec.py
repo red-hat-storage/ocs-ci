@@ -43,7 +43,7 @@ CmdObj = namedtuple('CmdObj', [
     'wait',
     'check_ec',
     'long_running',
-    ])
+])
 
 
 def register_class(cls):

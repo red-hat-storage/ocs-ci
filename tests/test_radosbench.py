@@ -1,6 +1,6 @@
 import logging
 import random
-import sys
+
 log = logging.getLogger(__name__)
 
 
