@@ -28,7 +28,7 @@ A simple test suite wrapper that executes tests based on yaml test configuration
         [--post-results]
         [--report-portal]
         [--log-level <LEVEL>]
-        [--instances-name <NAME>]
+        [--cluster-name <NAME>]
         [--no-email]
   run.py --cleanup=NAME [--osp-cred <FILE>]
         [--log-level <LEVEL>]
@@ -46,7 +46,7 @@ Options:
                                     in test suite yaml. Requires config file, see README.
   --report-portal                   Post results to report portal. Requires config file, see README.
   --log-level <LEVEL>               Set logging level
-  --instances-name <name>           Name that will be used for instances creation
+  --cluster-name <name>             Name that will be used for cluster creation
   --no-email                        Do not send results email at the end of the run
 """
 log = logging.getLogger(__name__)
@@ -100,7 +100,7 @@ def run(args):
     cleanup_name = args.get('--cleanup', None)
     post_to_report_portal = args.get('--report-portal', False)
     console_log_level = args.get('--log-level')
-    instances_name = args.get('--instances-name')
+    cluster_name = args.get('--cluster-name')
     send_email = not args.get('--no-email', False)
 
     if console_log_level:
@@ -146,8 +146,8 @@ def run(args):
     tcs = []
     jenkins_rc = 0
     test_data = dict()
-    if instances_name:
-        test_data['cluster-name'] = instances_name
+    if cluster_name:
+        test_data['cluster-name'] = cluster_name
 
     for test in tests:
         test = test.get('test')
