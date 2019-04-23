@@ -2,7 +2,7 @@ import os
 from kubernetes import client, config
 os.sys.path.append(os.path.dirname(os.getcwd()))
 
-from oc import pod, pod_exec
+from oc import pod
 
 
 def main():
@@ -23,9 +23,7 @@ def main():
 
     out, err, ret = po.exec_command(cmd=cmd, timeout=20)
     if out:
-        print (out)
+        print(out)
     if err:
-        print (err)
-    print (ret)
-
-
+        print(err)
+    print(ret)
