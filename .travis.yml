@@ -1,3 +1,4 @@
+dist: xenial  # required for Python >= 3.7
 language: python
 # we care only about python 3.7
 python:
