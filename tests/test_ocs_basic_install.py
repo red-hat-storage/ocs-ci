@@ -28,7 +28,7 @@ def run(**kwargs):
     # Generate install-config from template
     log.info("Generating install-config")
     cluster_dir_parent = "/tmp"  # TODO: determine better place to create cluster directories, perhaps in project dir?
-    if test_data.get('cluster_name'):
+    if test_data.get('cluster-name'):
         cluster_name = test_data.get('cluster-name')
     else:
         cid = random.randint(10000, 99999)
