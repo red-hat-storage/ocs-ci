@@ -15,7 +15,7 @@ Rest of the information you can find in those sections
     best practices for writing code in the OCS-CI project.
     **Has to be followed for new PRs!**
 
-* [Getting started](./getting_started.md) - Getting started with our testing fremework OCS-CI
+* [Getting started](./getting_started.md) - Getting started with our testing framework OCS-CI
 
 * [Usage](./usage.md) - information about usage of OCS-CI framework
 

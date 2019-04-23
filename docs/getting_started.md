@@ -39,6 +39,7 @@ you will need to download the pull secret for your account.
 Download this file from [openshift.com](https://cloud.openshift.com/clusters/install)
 and place in the `data` directory at the root level of the project.
 If there is no `data` directory, create one.
+The name of the file should be `pull-secret`.
 
 ## Tests
 

@@ -15,7 +15,7 @@ Lets follow the following guidelines for the Core Libraries and Test Scripts
 * Helper functions that are useful to wide variety of tests should
     reside in utils and/or should be carefully reviewed to check if
     they can actually be methods.
-* test_scripts will reside in test/ folders and will define run
+* test_scripts will reside in test/ folders and will define `run`
     function
 * test_scripts should return non zero exit status for failure and 0
     for 'pass'

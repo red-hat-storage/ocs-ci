@@ -19,7 +19,7 @@ There are a few arguments that are required ocs test execution:
 
 Some non-required arguments that we end up using a lot:
 
-* `--log level <level>` - set the log level that is output to stdout.
+* `--log-level <level>` - set the log level that is output to stdout.
 
 ## Examples
 
