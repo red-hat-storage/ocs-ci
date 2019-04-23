@@ -9,7 +9,6 @@ Few assumptions:
 import logging
 
 from .pod_exec import Exec, CmdObj
-from .Exceptions import CommandFailed
 
 logger = logging.getLogger(__name__)
 
