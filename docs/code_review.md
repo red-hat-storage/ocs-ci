@@ -1,4 +1,4 @@
-# Code review best practicies in OCS-CI
+# Code review best practices in OCS-CI
 
 **Lets use the following guidelines for Code Reviews:**
 
@@ -10,12 +10,12 @@
     please request review from: `@petr-balogh, @RazTamir, @shylesh,
     @vasukulkarni, @clacroix12, @ebenahar, @dahorak`
 * Thumbs up, LGTM indicates that change looks OK, but change needs to be
-    approved  from github by at least 2 project mainteiners before merge.
+    approved  from github by at least 2 project maintainers before merge.
 * All comments should be addressed or responded and once comment is considered
     as closed we should Resolve conversation to close the comment.
 * If some fixes required from the comment, please do not do
-    `git commit --ammend` and `git push --force` as we loose the history of
+    `git commit --amend` and `git push --force` as we lose the history of
     changes and it's hard for reviewer to see what was really changed from the
-    last comment. Instead of force pushing, please do anothher commit with
+    last comment. Instead of force pushing, please do another commit with
     commit message `Fixing comments from PR` and at the end we will do
     **Squash and merge** in github.
