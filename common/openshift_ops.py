@@ -91,7 +91,7 @@ class OCP(object):
         body = {
             'kind': 'Project',
             'apiVersion': 'project.openshift.io/v1',
-            'metadata': {'name': project}
+            'metadata': {'name': project},
         }
         try:
             self.v1_projects.create(body)
