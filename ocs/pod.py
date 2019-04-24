@@ -8,7 +8,7 @@ Few assumptions:
 
 import logging
 
-from .pod_exec import Exec, CmdObj
+from ocs.pod_exec import Exec, CmdObj
 
 logger = logging.getLogger(__name__)
 

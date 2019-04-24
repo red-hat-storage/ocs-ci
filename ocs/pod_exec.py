@@ -17,7 +17,7 @@ dispatcher class Exec.
 from collections import namedtuple
 import logging
 
-from .Exceptions import CommandFailed
+from ocs.exceptions import CommandFailed
 
 # Upstream KubernetesClient
 from kubernetes import config
