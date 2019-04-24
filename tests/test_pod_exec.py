@@ -2,7 +2,7 @@ import os
 from kubernetes import client, config
 os.sys.path.append(os.path.dirname(os.getcwd()))
 
-from oc import pod
+from ocs import pod
 
 
 def main():
