@@ -18,10 +18,10 @@ class OCP(object):
 
         self.v1_service_list = dyn_client.resources.get(
             api_version='v1', kind='ServiceList'
-            )
+        )
         self.v1_projects = dyn_client.resources.get(
             api_version='project.openshift.io/v1', kind='Project'
-            )
+        )
 
     def get_projects(self):
         """Gets all the projects in the cluster.
