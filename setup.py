@@ -22,6 +22,7 @@ setup(
         'pyyaml>=4.2b1',
         'jinja2==2.10.1',
         'kubernetes',
+        'openshift',
     ],
     zip_safe=True,
     include_package_data=True,
