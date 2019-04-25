@@ -1,7 +1,7 @@
 import logging
 from collections import defaultdict
 from kubernetes import config
-from openshift.dynamic import DynamicClient
+from openshift.dynamic import DynamicClient, exceptions
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ class OCP(object):
             ret = self.v1_projects.get()
             return [each.metadata.name for each in ret.items]
         except Exception as err:
-            raise Exception(err) 
+            raise Exception(err)
 
     def get_services(self):
         """Gets all the services in the cluster.
@@ -47,8 +47,8 @@ class OCP(object):
         services = defaultdict(list)
         try:
             ret = self.v1_service_list.get()
-            "{services[each.metadata.namespace].append(each.metadata.name)"
-            "for each in ret.items}"
+            {services[each.metadata.namespace].append(each.metadata.name)
+                for each in ret.items}
             return services
         except Exception as err:
             raise Exception(err)
