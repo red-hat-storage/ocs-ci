@@ -601,9 +601,11 @@ def get_ocsci_config():
     cfg_file = os.path.join(home_dir, ".ocs-ci.yaml")
     try:
         with open(cfg_file, "r") as yml:
-            cfg = yaml.load(yml)
+            cfg = yaml.safe_load(yml)
     except IOError:
-        log.error("Please create ~/.ocs-ci.yaml from the ocs-ci.yaml.template. "
-                  "See README for more information.")
+        log.error(
+            "Please create ~/.ocs-ci.yaml from the ocs-ci.yaml.template. "
+            "See README for more information."
+        )
         raise
     return cfg
