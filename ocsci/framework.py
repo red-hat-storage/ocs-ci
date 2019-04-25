@@ -14,9 +14,9 @@ log = logging.getLogger(__name__)
 
 class TestCase(object):
     """
-        Generic test case object to contain configuration details from suite.
-        Handles test execution as well as pre and post execution steps
-        for Report Portal and Polarion.
+    Generic test case object to contain configuration details from suite.
+    Handles test execution as well as pre and post execution steps
+    for Report Portal and Polarion.
 
     Attributes
         name (str): name of test case
