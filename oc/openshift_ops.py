@@ -30,11 +30,8 @@ class OCP(object):
             list: List of projects
 
         """
-        try:
-            ret = self.v1_projects.get()
-            return [each.metadata.name for each in ret.items]
-        except Exception as err:
-            raise Exception(err)
+        ret = self.v1_projects.get()
+        return [each.metadata.name for each in ret.items]
 
     def get_services(self):
         """Gets all the services in the cluster.
@@ -45,13 +42,12 @@ class OCP(object):
 
         """
         services = defaultdict(list)
-        try:
-            ret = self.v1_service_list.get()
-            {services[each.metadata.namespace].append(each.metadata.name)
-                for each in ret.items}
-            return services
-        except Exception as err:
-            raise Exception(err)
+        ret = self.v1_service_list.get()
+        {
+            services[each.metadata.namespace].append(each.metadata.name)
+            for each in ret.items
+        }
+        return services
 
     def get_services_in_namespace(self, namespace):
         """Gets the services in a namespace
@@ -60,11 +56,8 @@ class OCP(object):
             list: list of services in a namespace
 
         """
-        try:
-            ret = self.v1_service_list.get(namespace=namespace)
-            return [each.metadata.name for each in ret.items]
-        except Exception as err:
-            raise Exception(err)
+        ret = self.v1_service_list.get(namespace=namespace)
+        return [each.metadata.name for each in ret.items]
 
     def create_project(self, project):
         """creates new project.
@@ -88,6 +81,7 @@ class OCP(object):
         except exceptions.ConflictError:
             log.info("project %s might already exists", project)
         except Exception as err:
+            log.error("Error while creating project %s: %s", project, err)
             raise Exception(err)
 
         return _rc
