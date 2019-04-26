@@ -23,6 +23,7 @@ setup(
         'jinja2==2.10.1',
         'kubernetes',
         'openshift',
+        'boto3',
     ],
     zip_safe=True,
     include_package_data=True,
