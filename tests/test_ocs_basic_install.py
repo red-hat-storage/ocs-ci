@@ -7,6 +7,7 @@ import sys
 
 import requests
 import yaml
+from ocs.exceptions import UnsupportedOSType
 from jinja2 import Environment, FileSystemLoader
 
 log = logging.getLogger(__name__)
@@ -65,7 +66,7 @@ def run(**kwargs):
         elif platform.system() == "Linux":
             os_type = "linux"
         else:
-            os_type = None
+            raise UnsupportedOSType
         url = f"https://github.com/openshift/installer/releases/download/{ver}/openshift-install-{os_type}-amd64"
         download_file(url, installer_filename)
         run_cmd(f"chmod +x {installer_filename}")
