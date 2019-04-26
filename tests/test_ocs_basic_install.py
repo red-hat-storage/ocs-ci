@@ -1,9 +1,10 @@
+import json
 import logging
 import os
 import platform
 import random
+import shlex
 import subprocess
-import sys
 import time
 
 import ocs.defaults as default
@@ -15,7 +16,6 @@ from ocs.exceptions import CommandFailed
 
 from ocs.exceptions import CommandFailed
 from utility.aws import AWS
-
 
 log = logging.getLogger(__name__)
 
@@ -96,8 +96,16 @@ def run(**kwargs):
     run_cmd("oc cluster-info")
 
     # TODO: Create cluster object, add to test_data for other tests to utilize
-    # TODO: Add volumes to worker nodes to support OSDs
-    # TODO: Use Rook to install ceph on the cluster
+    # Determine worker pattern and create eb2 volumes
+    with open(os.path.join(cluster_path, "terraform.tfvars")) as f:
+        tfvars = json.load(f)
+
+    cluster_id = tfvars['cluster_id']
+    worker_pattern = f'{cluster_id}-worker*'
+    log.info(f'Worker pattern: {worker_pattern}')
+    create_eb2_volumes(worker_pattern)
+
+    # Use Rook to install Ceph cluster
     # retrieve rook config from cluster_conf
     rook_data = {}
     if cluster_conf:
@@ -105,6 +113,7 @@ def run(**kwargs):
 
     # render templates and create resources
     create_rook_resource('common.yaml', rook_data, cluster_path)
+    # TODO: hit error on this label cmd, investigate
     run_cmd(
         'oc label namespace openshift-storage '
         '"openshift.io/cluster-monitoring=true"'
@@ -115,7 +124,7 @@ def run(**kwargs):
         "-n openshift-storage"
     )
     create_rook_resource('operator-openshift.yaml', rook_data, cluster_path)
-    wait_time = 120
+    wait_time = 5
     log.info(f"Waiting {wait_time} seconds...")
     time.sleep(wait_time)
     run_cmd(
@@ -138,12 +147,13 @@ def run(**kwargs):
     )
     create_rook_resource('cluster.yaml', rook_data, cluster_path)
     create_rook_resource('toolbox.yaml', rook_data, cluster_path)
-    # TODO: need to split storage-manifest before passing to create?
-    # create_rook_resource('storage-manifest.yaml', rook_data, cluster_path)
-    # TODO: create service-monitor from template (need template)
-    # create_rook_resource("service-monitor.yaml", rook_data, cluster_path)
-    # TODO: create prometheus-rules from template (need template)
-    # create_rook_resource("prometheus-rules.yaml", rook_data, cluster_path)
+    log.info(f"Waiting {wait_time} seconds...")
+    time.sleep(wait_time)
+    create_rook_resource('storage-manifest.yaml', rook_data, cluster_path)
+    create_rook_resource("service-monitor.yaml", rook_data, cluster_path)
+    create_rook_resource("prometheus-rules.yaml", rook_data, cluster_path)
+
+    log.info("Done creating rook resources, ceph cluster should be up!")
 
     # Destroy cluster (if configured)
     destroy_cmd = (
@@ -164,7 +174,7 @@ def run(**kwargs):
         log.info(f"Cluster directory is located here: {cluster_path}")
         log.info(
             f"Skipping cluster destroy. "
-            f"To manually destroy the cluster execute the following cmd: "
+            f"To manually destroy the cluster execute the following cmd:\n"
             f"{destroy_cmd}"
         )
 
@@ -182,13 +192,19 @@ def run_cmd(cmd, **kwargs):
         CommandFailed: In case the command execution fails
     """
     log.info(f"Executing command: {cmd}")
+    if isinstance(cmd, str):
+        cmd = shlex.split(cmd)
     r = subprocess.run(
-        cmd.split(),
-        stdout=sys.stdout,
-        stderr=sys.stderr,
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.PIPE,
         **kwargs
     )
-    if r.returncode != 0:
+    log.debug(f"CMD output: {r.stdout}")
+    if r.stderr:
+        log.error(f"CMD error:: {r.stderr}")
+    if r.returncode:
         raise CommandFailed(
             f"Error during execution of command: {cmd}"
         )
@@ -278,8 +294,7 @@ def create_rook_resource(template_name, rook_data, cluster_path):
     with open(cfg_file, "w") as f:
         f.write(template)
     log.info(f"Creating rook resource from {template_name}")
-    # TODO: logging this just for testing purposes, change to run_cmd
-    log.info(f"oc create -f {cfg_file}")
+    run_cmd(f"oc create -f {cfg_file}")
 
 
 def create_eb2_volumes(worker_pattern, size=100):
@@ -294,6 +309,9 @@ def create_eb2_volumes(worker_pattern, size=100):
     aws = AWS()
     worker_instances = aws.get_instances_by_name_pattern(worker_pattern)
     for worker in worker_instances:
+        log.info(
+            f"Creating and attaching {size} GB volume to {worker['name']}"
+        )
         aws.create_volume_and_attach(
             availability_zone=worker['avz'],
             instance_id=worker['id'],

@@ -11,7 +11,7 @@ class AWSTimeoutException(Exception):
     pass
 
 
-class AWS():
+class AWS(object):
     """
     This is wrapper class for AWS
     """

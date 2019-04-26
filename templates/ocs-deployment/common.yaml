@@ -7,7 +7,7 @@
 # for "cluster-specific resources". The resources below that section will need to be created for each namespace
 # where the operator needs to manage the cluster. The resources above that section do not be created again.
 ###################################################################################################################
-
+---
 # Namespace where the operator and other rook resources are created
 apiVersion: v1
 kind: Namespace
@@ -615,4 +615,4 @@ subjects:
 - kind: ServiceAccount
   name: rook-ceph-mgr
   namespace: {{ cluster_namespace | default('openshift-storage') }}
----
+

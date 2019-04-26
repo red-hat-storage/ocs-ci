@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,7 +19,7 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
       - name: rook-ceph-tools
-        image: {{ rook_image | default('rook/ceph:master') }}
+        image: {{ rook_image | default('rook/ceph:v0.9.0-519.g111610e') }}
         command: ["/tini"]
         args: ["-g", "--", "/usr/local/bin/toolbox.sh"]
         imagePullPolicy: IfNotPresent
@@ -57,3 +58,4 @@ spec:
             items:
             - key: data
               path: mon-endpoints
+

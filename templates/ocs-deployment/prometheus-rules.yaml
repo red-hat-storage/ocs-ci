@@ -1,3 +1,4 @@
+---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -5,8 +6,9 @@ metadata:
     prometheus: k8s
     role: alert-rules
   name: prometheus-ceph-rules
-  namespace: openshift-storage
+  namespace: "{{ cluster_namespace | default('openshift-storage') }}"
 spec:
+{% raw %}
   groups:
   - name: ceph.rules
     rules:
@@ -115,3 +117,5 @@ spec:
       for: 5m
       labels:
         severity: critical
+{% endraw %}
+
