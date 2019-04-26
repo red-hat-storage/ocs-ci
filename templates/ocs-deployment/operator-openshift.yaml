@@ -6,7 +6,7 @@
 #   oc create -f operator-openshift.yaml
 #   oc create -f cluster.yaml
 #################################################################################################################
-
+---
 kind: SecurityContextConstraints
 # older versions of openshift have "apiVersion: v1"
 apiVersion: security.openshift.io/v1
@@ -47,10 +47,10 @@ users:
   # A user needs to be added for each rook service account.
   # This assumes running in the default sample "rook-ceph" namespace.
   # If other namespaces or service accounts are configured, they need to be updated here.
-  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}::rook-ceph-system
-  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}::default
-  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}::rook-ceph-mgr
-  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}::rook-ceph-osd
+  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-ceph-system
+  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:default
+  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-ceph-mgr
+  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-ceph-osd
 ---
 # The deployment for the rook operator
 apiVersion: apps/v1
@@ -74,7 +74,7 @@ spec:
       serviceAccountName: rook-ceph-system
       containers:
       - name: rook-ceph-operator
-        image: {{ rook_image | default('rook/ceph:master') }}
+        image: {{ rook_image | default('rook/ceph:v0.9.0-519.g111610e') }}
         args: ["ceph", "operator"]
         volumeMounts:
         - mountPath: /var/lib/rook
@@ -122,34 +122,37 @@ spec:
         # http://docs.ceph.com/docs/master/cephfs/experimental-features/#multiple-filesystems-within-a-ceph-cluster
         # which might cause mons to crash as seen in https://github.com/rook/rook/issues/1027
         - name: ROOK_ALLOW_MULTIPLE_FILESYSTEMS
-          value: "false"
+          value: "{{ rook_allow_multiple_filesystems | default('true') }}"
         # The logging level for the operator: INFO | DEBUG
         - name: ROOK_LOG_LEVEL
-          value: "INFO"
+          value: "{{ rook_log_level | default('INFO') }}"
         # The interval to check if every mon is in the quorum.
         - name: ROOK_MON_HEALTHCHECK_INTERVAL
-          value: "45s"
+          value: "{{ rook_mon_healthcheck_interval | default('30s') }}"
         # The duration to wait before trying to failover or remove/replace the
         # current mon with a new mon (useful for compensating flapping network).
         - name: ROOK_MON_OUT_TIMEOUT
-          value: "600s"
+          value: "{{ rook_mon_out_timeout | default('40s') }}"
         # The duration between discovering devices in the rook-discover daemonset.
         - name: ROOK_DISCOVER_DEVICES_INTERVAL
-          value: "60m"
+          value: "{{ rook_discover_devices_interval | default('60m') }}"
         # Whether to start pods as privileged that mount a host path, which includes the Ceph mon and osd pods.
         # This is necessary to workaround the anyuid issues when running on OpenShift.
         # For more details see https://github.com/rook/rook/issues/1314#issuecomment-355799641
         - name: ROOK_HOSTPATH_REQUIRES_PRIVILEGED
-          value: "true"
+          value: "{{ rook_hostpath_requires_privileged | default('true') }}"
         # In some situations SELinux relabelling breaks (times out) on large filesystems, and doesn't work with cephfs ReadWriteMany volumes (last relabel wins).
         # Disable it here if you have similar issues.
         # For more details see https://github.com/rook/rook/issues/2417
         - name: ROOK_ENABLE_SELINUX_RELABELING
-          value: "true"
+          value: "{{ rook_enable_selinux_relabeling | default('true') }}"
         # In large volumes it will take some time to chown all the files. Disable it here if you have performance issues.
         # For more details see https://github.com/rook/rook/issues/2254
         - name: ROOK_ENABLE_FSGROUP
-          value: "true"
+          value: "{{ rook_enable_fsgroup | default('true') }}"
+        # Disable automatic orchestration when new devices are discovered
+        - name: ROOK_DISABLE_DEVICE_HOTPLUG
+          value: "{{ rook_disable_device_hotplug | default('false') }}"
         # The name of the node to pass with the downward API
         - name: NODE_NAME
           valueFrom:
@@ -170,3 +173,4 @@ spec:
         emptyDir: {}
       - name: default-config-dir
         emptyDir: {}
+

@@ -12,7 +12,7 @@
 apiVersion: ceph.rook.io/v1
 kind: CephCluster
 metadata:
-  name: {{ cluster_name | default('openshift-storage') }}
+  name: rook-ceph
   namespace: {{ cluster_namespace | default('openshift-storage') }}
 spec:
   cephVersion:
@@ -23,7 +23,7 @@ spec:
     image: {{ ceph_image | default('ceph/ceph:v14.2.0-20190410') }}
     # Whether to allow unsupported versions of Ceph. Currently luminous, mimic and nautilus are supported, with the recommendation to upgrade to nautilus.
     # Do not set to true in production.
-    allowUnsupported: {{ allow_unsupported_ceph | default(False) }}
+    allowUnsupported: {{ allow_unsupported_ceph | default('true') }}
   # The path on the host where configuration files will be persisted. Must be specified.
   # Important: if you reinstall the cluster, make sure you delete this directory from each host or else the mons will fail to start on the new cluster.
   # In Minikube, the '/data' directory is configured to persist across reboots. Use "/data/rook" in Minikube environment.
@@ -34,7 +34,7 @@ spec:
     allowMultiplePerNode: false
   # enable the ceph dashboard for viewing cluster status
   dashboard:
-    enabled: {{ dashboard_enabled | default(True) }}
+    enabled: {{ dashboard_enabled | default('true') }}
     # serve the dashboard under a subpath (useful when you are accessing the dashboard via a reverse proxy)
     # urlPrefix: /ceph-dashboard
     # serve the dashboard at the given port.
@@ -91,9 +91,9 @@ spec:
 #    mon:
 #    osd:
   storage: # cluster level storage configuration and selection
-    useAllNodes: {{ storage_use_all_nodes | default(True) }}
-    useAllDevices: {{ storage_use_all_devices | default(True) }}
-{% if not notstorage_use_all_nodes | default(True) %}
+    useAllNodes: {{ storage_use_all_nodes | default('true') }}
+    useAllDevices: {{ storage_use_all_devices | default('true') }}
+{% if not notstorage_use_all_nodes|default(True) in ('true', True) %}
     nodes:
     {{ storage_nodes_definitions | to_nice_yaml | indent(4) }}
 {% endif %}
@@ -133,3 +133,4 @@ spec:
 #        storeType: filestore
 #    - name: "172.17.4.301"
 #      deviceFilter: "^sd."
+
