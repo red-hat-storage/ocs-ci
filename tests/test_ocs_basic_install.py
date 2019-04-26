@@ -14,6 +14,8 @@ from jinja2 import Environment, FileSystemLoader
 from ocs.exceptions import CommandFailed
 
 from ocs.exceptions import CommandFailed
+from utility.aws import AWS
+
 
 log = logging.getLogger(__name__)
 
@@ -257,7 +259,7 @@ def load_config_data(data_path):
 
 
 def create_rook_resource(template_name, rook_data, cluster_path):
-    """"
+    """
     Create a rook resource after rendering the specified template with
     the rook data from cluster_conf.
 
@@ -278,4 +280,24 @@ def create_rook_resource(template_name, rook_data, cluster_path):
     log.info(f"Creating rook resource from {template_name}")
     # TODO: logging this just for testing purposes, change to run_cmd
     log.info(f"oc create -f {cfg_file}")
->>>>>>> 2993ae6... Coady's changes for ocs deployment
+
+
+def create_eb2_volumes(worker_pattern, size=100):
+    """
+    Create volumes on workers
+
+    Args:
+        worker_pattern (string): worker name pattern e.g.:
+            cluster-55jx2-worker*
+        size (int): size in GB (default: 100)
+    """
+    aws = AWS()
+    worker_instances = aws.get_instances_by_name_pattern(worker_pattern)
+    for worker in worker_instances:
+        aws.create_volume_and_attach(
+            availability_zone=worker['avz'],
+            instance_id=worker['id'],
+            name=f"{worker['name']}_extra_volume",
+            size=size,
+        )
+
