@@ -5,11 +5,13 @@ monkey.patch_all()
 import yaml
 import sys
 import os
+import platform
 import logging
 import textwrap
 import urllib3
 from docopt import docopt
 from getpass import getuser
+from ocsci.enums import ReturnCode
 from utility.utils import (
     timestamp, create_run_dir, create_report_portal_session, email_results,
     close_and_remove_filehandlers
@@ -116,6 +118,11 @@ def run(args):
     if cleanup_name:
         pass  # TODO: cleanup cluster and skip test execution
 
+    # Check if we are running on windows and bail out sooner
+    if platform.system() == "Windows":
+        log.error("Windows OS is not supported by Openshift Installer")
+        return ReturnCode.UNSUPPORTED_WINDOWS_RUN
+
     if suite_file:
         suites_path = os.path.abspath(suite_file)
         with open(suites_path, 'r') as suite_stream:
@@ -204,5 +211,5 @@ def run(args):
 if __name__ == '__main__':
     args = docopt(doc)
     rc = run(args)
-    log.info("Final rc of test run %d" % rc)
-    sys.exit(rc)
+    log.info("Final rc of test run %d", rc.value)
+    sys.exit(rc.value)
