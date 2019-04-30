@@ -11,7 +11,7 @@ import textwrap
 import urllib3
 from docopt import docopt
 from getpass import getuser
-from ocsci.enums import ReturnCode
+from ocsci.enums import ReturnCode, TestStatus
 from utility.utils import (
     timestamp, create_run_dir, create_report_portal_session, email_results,
     close_and_remove_filehandlers, configure_logger,
@@ -172,13 +172,13 @@ def run(args):
     sys.path.append(os.path.abspath('tests'))
     tests = suite.get('tests')
     tcs = []
-    jenkins_rc = 0
+    jenkins_rc = TestStatus.FAILED
     test_data = dict()
     if cluster_name:
         test_data['cluster-name'] = cluster_name
 
     for test in tests:
-        config = test.get('config', {})
+        config = test.get('test').get('config', {})
         test_kwargs = dict()
         test_kwargs.update({'config': config})
         test_kwargs.update({'test_data': test_data})
@@ -193,9 +193,12 @@ def run(args):
         )
         tc.execute()
         tcs.append(tc)
-        if tc.abort_on_fail:
+        if tc.abort_on_fail and tc.status == TestStatus.FAILED:
             log.info("Aborting on test failure")
             break
+
+    if all([tc.status == TestStatus.PASSED for tc in tcs]):
+        jenkins_rc = TestStatus.PASSED
 
     close_and_remove_filehandlers()
     if post_to_report_portal:
