@@ -14,7 +14,7 @@ from getpass import getuser
 from ocsci.enums import ReturnCode
 from utility.utils import (
     timestamp, create_run_dir, create_report_portal_session, email_results,
-    close_and_remove_filehandlers
+    close_and_remove_filehandlers, configure_logger,
 )
 from ocsci.framework import TestCase
 
@@ -54,27 +54,35 @@ Options:
   --cluster-name <name>             Name that will be used for cluster creation
   --no-email                        Do not send results email
 """
+
 log = logging.getLogger(__name__)
-root = logging.getLogger()
-root.setLevel(logging.INFO)
-
-formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-
-ch = logging.StreamHandler(sys.stdout)
-ch.setLevel(logging.ERROR)
-ch.setFormatter(formatter)
-root.addHandler(ch)
 
 run_id = timestamp()
 run_dir = create_run_dir(run_id)
-startup_log = os.path.join(run_dir, "startup.log")
-print("Startup log location: {}".format(startup_log))
-handler = logging.FileHandler(startup_log)
-handler.setLevel(logging.INFO)
-handler.setFormatter(formatter)
-root.addHandler(handler)
+
+
+def set_logger(console_log_level=logging.INFO):
+    """
+    Set all related to logger
+
+    Args:
+        console_log_level (int) = Log level number (default: logging.INFO)
+    """
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+    logging.basicConfig(level=logging.DEBUG)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setLevel(logging.INFO)
+    stream_handler.setFormatter(formatter)
+    if console_log_level:
+        log_level = logging.getLevelName(console_log_level.upper())
+        stream_handler.setLevel(log_level)
+    root_logger.addHandler(stream_handler)
+    configure_logger("startup", run_dir)
 
 
 def print_results(tc):
@@ -108,12 +116,8 @@ def run(args):
     post_results = args.get('--post-results')
     cleanup_name = args.get('--cleanup', None)
     post_to_report_portal = args.get('--report-portal', False)
-    console_log_level = args.get('--log-level')
     cluster_name = args.get('--cluster-name')
     send_email = not args.get('--no-email', False)
-
-    if console_log_level:
-        ch.setLevel(logging.getLevelName(console_log_level.upper()))
 
     if cleanup_name:
         pass  # TODO: cleanup cluster and skip test execution
@@ -198,9 +202,11 @@ def run(args):
         rp_service.finish_launch(end_time=timestamp())
         rp_service.terminate()
     # TODO: need a new directory for ocs test logs?
-    url_base = "http://magna002.ceph.redhat.com/cephci-jenkins"
-    run_dir_name = run_dir.split('/')[-1]
-    print(f"\nAll test logs located here: {url_base}/{run_dir_name}")
+    # Once fixed, we can reuse code commented out below.
+    # url_base = "http://magna002.ceph.redhat.com/cephci-jenkins"
+    # run_dir_name = run_dir.split('/')[-1]
+    # print(f"\nAll test logs located here: {url_base}/{run_dir_name}")
+    print(f"\nAll test logs located here: {run_dir}/")
     print_results(tcs)
     send_to_qe = post_results or post_to_report_portal
     if send_email:
@@ -210,6 +216,8 @@ def run(args):
 
 if __name__ == '__main__':
     args = docopt(doc)
+    console_log_level = args.get('--log-level')
+    set_logger(console_log_level=console_log_level)
     rc = run(args)
     log.info("Final rc of test run %d", rc.value)
     sys.exit(rc.value)
