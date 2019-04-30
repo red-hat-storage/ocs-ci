@@ -56,20 +56,24 @@ def run(**kwargs):
 
     # Download installer
     installer_filename = "openshift-install"
+    tarball = f"{installer_filename}.tar.gz"
     if os.path.isfile(installer_filename):
         log.info("Installer exists, skipping download")
     else:
         log.info("Downloading openshift installer")
-        ver = config.get('installer-version')
+        ver = config.get('installer-version', '4.1.0-rc.0')
         if platform.system() == "Darwin":
-            os_type = "darwin"
+            os_type = "mac"
         elif platform.system() == "Linux":
             os_type = "linux"
         else:
             raise UnsupportedOSType
-        url = f"https://github.com/openshift/installer/releases/download/{ver}/openshift-install-{os_type}-amd64"
-        download_file(url, installer_filename)
-        run_cmd(f"chmod +x {installer_filename}")
+        url = (
+            f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
+            f"{ver}/openshift-install-{os_type}-{ver}.tar.gz"
+        )
+        download_file(url, tarball)
+        run_cmd(f"tar xzvf {tarball}")
 
     # Deploy cluster
     log.info("Deploying cluster")
@@ -93,6 +97,7 @@ def run(**kwargs):
         log.info(f"Removing cluster directory: {cluster_path}")
         os.remove(cluster_path)
         os.remove(installer_filename)
+        os.remove(tarball)
     else:
         log.info(f"Cluster directory is located here: {cluster_path}")
         log.info(f"Skipping cluster destroy. To manually destroy the cluster execute the following cmd: {destroy_cmd}")
