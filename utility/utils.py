@@ -311,7 +311,7 @@ def rc_verify(tc, RC):
 #     BOLD = '\033[1m'
 
 
-def configure_logger(test_name, run_dir, level=logging.INFO):
+def configure_logger(test_name, run_dir, level=logging.DEBUG):
     """
     Configures a new FileHandler for the root logger.
 
