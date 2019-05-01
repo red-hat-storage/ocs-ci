@@ -9,6 +9,7 @@ import requests
 import yaml
 from ocs.exceptions import UnsupportedOSType
 from jinja2 import Environment, FileSystemLoader
+from ocs.exceptions import CommandFailedException
 
 log = logging.getLogger(__name__)
 
@@ -163,7 +164,3 @@ def load_config_data(data_path):
     """
     with open(data_path, "r") as data_descriptor:
         return yaml.load(data_descriptor, Loader=yaml.FullLoader)
-
-
-class CommandFailedException(Exception):
-    pass
