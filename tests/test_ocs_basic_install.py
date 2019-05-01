@@ -113,6 +113,8 @@ def run_cmd(cmd, **kwargs):
     Args:
         cmd: command to run
 
+    Raises:
+        CommandFailed: In case the command execution fails
     """
     log.info(f"Executing command: {cmd}")
     r = subprocess.run(cmd.split(), stdout=sys.stdout, stderr=sys.stderr, **kwargs)
