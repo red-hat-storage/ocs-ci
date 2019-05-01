@@ -9,7 +9,7 @@ import requests
 import yaml
 from ocs.exceptions import UnsupportedOSType
 from jinja2 import Environment, FileSystemLoader
-from ocs.exceptions import CommandFailedException
+from ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 
@@ -117,7 +117,7 @@ def run_cmd(cmd, **kwargs):
     log.info(f"Executing command: {cmd}")
     r = subprocess.run(cmd.split(), stdout=sys.stdout, stderr=sys.stderr, **kwargs)
     if r.returncode != 0:
-        raise CommandFailedException(f"Error during execution of command: {cmd}")
+        raise CommandFailed(f"Error during execution of command: {cmd}")
 
 
 def download_file(url, filename):

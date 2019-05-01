@@ -4,7 +4,3 @@ class CommandFailed(Exception):
 
 class UnsupportedOSType(Exception):
     pass
-
-
-class CommandFailedException(Exception):
-    pass
