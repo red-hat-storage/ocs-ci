@@ -1,5 +1,4 @@
 import logging
-from collections import defaultdict
 from kubernetes import config
 from openshift.dynamic import DynamicClient, exceptions
 
@@ -7,7 +6,8 @@ log = logging.getLogger(__name__)
 
 
 class OCP(object):
-    """Class which contains various utility functions for interacting
+    """
+    Class which contains various utility functions for interacting
     with OpenShift
 
     """
@@ -24,7 +24,8 @@ class OCP(object):
         )
 
     def get_projects(self):
-        """Gets all the projects in the cluster.
+        """
+        Gets all the projects in the cluster
 
         Returns:
             list: List of projects
@@ -34,23 +35,25 @@ class OCP(object):
         return [each.metadata.name for each in ret.items]
 
     def get_services(self):
-        """Gets all the services in the cluster.
+        """
+        Gets all the services in the cluster
 
         Returns:
             dict: defaultdict of services, key represents the namespace
                   and value represents the services
 
         """
-        services = defaultdict(list)
         ret = self.v1_service_list.get()
-        {
-            services[each.metadata.namespace].append(each.metadata.name)
-            for each in ret.items
+        services = {
+            each.metadata.namespace: each.metadata.name for each in
+            ret.items
         }
+
         return services
 
     def get_services_in_namespace(self, namespace):
-        """Gets the services in a namespace
+        """
+        Gets the services in a namespace
 
         Returns:
             list: list of services in a namespace
@@ -60,7 +63,8 @@ class OCP(object):
         return [each.metadata.name for each in ret.items]
 
     def create_project(self, project):
-        """creates new project.
+        """
+        Creates new project
 
         Args:
             project (str): project name
