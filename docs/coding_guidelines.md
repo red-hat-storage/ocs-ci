@@ -86,8 +86,7 @@ def my_example(arg1, arg2):
 
     Args:
         arg1 (<type of argument>): Description of what this argument is and if
-        the
-            line is too long we will indent according to this (4 spaces)
+            the line is too long we will indent according to this (4 spaces)
         arg2 (int): This argument is an integer
 
     Raises:
