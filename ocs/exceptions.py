@@ -4,3 +4,7 @@ class CommandFailed(Exception):
 
 class UnsupportedOSType(Exception):
     pass
+
+
+class CephHealthException(Exception):
+    pass
