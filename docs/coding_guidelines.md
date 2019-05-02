@@ -74,6 +74,31 @@ print("This is old style of formatting and should be avoided:")
 "My string %s" % variable
 ```
 
+* **Docstring**:
+* Use capital letters properly
+* Every docstring should describing easily what the function/class/etc. do
+* The description should be as follow:
+```python
+def my_example(arg1, arg2=10):
+    """
+    This function is for showing how a proper docstring should
+    look like
+
+    Args:
+        arg1 (<type of argument>): Description of what this argument is and if
+            the line is too long we will indent according to this (4 spaces)
+        arg2 (int): This argument is an integer (default: 10)
+
+    Raises:
+        ExampleException: you get it
+
+    Returns:
+        bool: description of when returns False and when True.
+            But this can also return anything else like int, str, list, etc.
+    """
+    pass
+```
+
 * **Logging**: let the logger format log message for you:
 
 ```python
