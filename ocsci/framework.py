@@ -111,8 +111,7 @@ class TestCase(object):
         try:
             self._setup()
             rc = self.test_mod.run(**self.test_kwargs)
-            self.end = time.time()
-            self.duration = self.end - self.start
+            # TODO: have test modules return correct TestStatus enum
             if rc == 0:
                 self.status = TestStatus.PASSED
             else:
@@ -140,5 +139,6 @@ class TestCase(object):
         if self.post_results:
             post_to_polarion(self.__dict__)
             # TODO: update post_to_polarion to look for correct keys
-
+        self.end = time.time()
+        self.duration = self.end - self.start
         log.debug(f"Test case info:\n{pformat(self.__dict__)}")

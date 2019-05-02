@@ -10,12 +10,13 @@ import time
 import ocs.defaults as default
 import requests
 import yaml
-from ocs.exceptions import UnsupportedOSType
 from jinja2 import Environment, FileSystemLoader
 from ocs.exceptions import CommandFailed
 
-from ocs.exceptions import CommandFailed
+from ocs.exceptions import CommandFailed, CephHealthException
+from ocs.exceptions import UnsupportedOSType
 from utility.aws import AWS
+from utility.retry import retry
 
 log = logging.getLogger(__name__)
 
@@ -113,7 +114,6 @@ def run(**kwargs):
 
     # render templates and create resources
     create_rook_resource('common.yaml', rook_data, cluster_path)
-    # TODO: hit error on this label cmd, investigate
     run_cmd(
         'oc label namespace openshift-storage '
         '"openshift.io/cluster-monitoring=true"'
@@ -153,7 +153,10 @@ def run(**kwargs):
     create_rook_resource("service-monitor.yaml", rook_data, cluster_path)
     create_rook_resource("prometheus-rules.yaml", rook_data, cluster_path)
 
-    log.info("Done creating rook resources, ceph cluster should be up!")
+    # Verify health of ceph cluster
+    # TODO: move destroy cluster logic to new CLI usage pattern?
+    log.info("Done creating rook resources, waiting for HEALTH_OK")
+    rc = ceph_health_check()
 
     # Destroy cluster (if configured)
     destroy_cmd = (
@@ -163,11 +166,8 @@ def run(**kwargs):
     )
     if config.get("destroy-cluster"):
         log.info("Destroying cluster")
-        # run this twice to ensure all resources are destroyed
         run_cmd(destroy_cmd)
-        run_cmd(destroy_cmd)
-        log.info(f"Removing cluster directory: {cluster_path}")
-        os.remove(cluster_path)
+        # TODO: destroy volumes created
         os.remove(installer_filename)
         os.remove(tarball)
     else:
@@ -178,7 +178,7 @@ def run(**kwargs):
             f"{destroy_cmd}"
         )
 
-    return 0
+    return rc
 
 
 def run_cmd(cmd, **kwargs):
@@ -188,8 +188,13 @@ def run_cmd(cmd, **kwargs):
     Args:
         cmd: command to run
 
+<<<<<<< HEAD
     Raises:
         CommandFailed: In case the command execution fails
+=======
+    Returns:
+        decoded stdout of command
+>>>>>>> da29d2d... Verify health of ceph cluster after deployment
     """
     log.info(f"Executing command: {cmd}")
     if isinstance(cmd, str):
@@ -201,13 +206,14 @@ def run_cmd(cmd, **kwargs):
         stdin=subprocess.PIPE,
         **kwargs
     )
-    log.debug(f"CMD output: {r.stdout}")
+    log.debug(f"CMD output: {r.stdout.decode()}")
     if r.stderr:
-        log.error(f"CMD error:: {r.stderr}")
+        log.error(f"CMD error:: {r.stderr.decode()}")
     if r.returncode:
         raise CommandFailed(
             f"Error during execution of command: {cmd}"
         )
+    return r.stdout.decode()
 
 
 def download_file(url, filename):
@@ -317,5 +323,40 @@ def create_eb2_volumes(worker_pattern, size=100):
             instance_id=worker['id'],
             name=f"{worker['name']}_extra_volume",
             size=size,
+        )
+
+
+@retry((CephHealthException, CommandFailed), tries=20, delay=30, backoff=1)
+def ceph_health_check():
+    """
+    Exec `ceph health` cmd on tools pod to determine health of cluster.
+
+    Raises:
+        CephHealthException: if the ceph health returned is not HEALTH_OK
+        CommandFailed: if the command to retrieve the tools pod name or the
+            command to get ceph health returns a non-zero exit code
+    Returns:
+        0 if HEALTH_OK
+
+    """
+    # TODO: grab namespace-name from rook data, default to openshift-storage
+    namespace = "openshift-storage"
+    run_cmd(
+        f"oc wait --for condition=ready pod "
+        f"-l app=rook-ceph-tools "
+        f"-n {namespace} "
+        f"--timeout=120s"
+    )
+    tools_pod = run_cmd(
+        f"oc -n {namespace} get pod -l 'app=rook-ceph-tools' "
+        f"-o jsonpath='{{.items[0].metadata.name}}'"
+    )
+    health = run_cmd(f"oc -n {namespace} exec {tools_pod} ceph health")
+    if health.strip() == "HEALTH_OK":
+        log.info("HEALTH_OK, install successful.")
+        return 0
+    else:
+        raise CephHealthException(
+            f"Ceph cluster health is not OK. Health: {health}"
         )
 
