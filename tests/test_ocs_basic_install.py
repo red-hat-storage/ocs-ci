@@ -5,6 +5,7 @@ import random
 import subprocess
 import sys
 
+import ocs.defaults as default
 import requests
 import yaml
 from ocs.exceptions import UnsupportedOSType
@@ -62,7 +63,7 @@ def run(**kwargs):
         log.info("Installer exists, skipping download")
     else:
         log.info("Downloading openshift installer")
-        ver = config.get('installer-version', '4.1.0-rc.0')
+        ver = config.get('installer-version', default.INSTALLER_VERSION)
         if platform.system() == "Darwin":
             os_type = "mac"
         elif platform.system() == "Linux":
@@ -78,7 +79,10 @@ def run(**kwargs):
 
     # Deploy cluster
     log.info("Deploying cluster")
-    run_cmd(f"./openshift-install create cluster --dir {cluster_path} --log-level debug")
+    run_cmd(
+        f"./openshift-install create cluster --dir {cluster_path} "
+        f"--log-level debug"
+    )
 
     # Test cluster access
     log.info("Testing access to cluster")
@@ -89,7 +93,10 @@ def run(**kwargs):
     # TODO: Use Rook to install ceph on the cluster
 
     # Destroy cluster (if configured)
-    destroy_cmd = f"./openshift-install destroy cluster --dir {cluster_path} --log-level debug"
+    destroy_cmd = (
+        f"./openshift-install destroy cluster --dir {cluster_path} --log-level"
+        f" debug"
+    )
     if config.get("destroy-cluster"):
         log.info("Destroying cluster")
         # run this twice to ensure all resources are destroyed
@@ -101,7 +108,10 @@ def run(**kwargs):
         os.remove(tarball)
     else:
         log.info(f"Cluster directory is located here: {cluster_path}")
-        log.info(f"Skipping cluster destroy. To manually destroy the cluster execute the following cmd: {destroy_cmd}")
+        log.info(
+            f"Skipping cluster destroy. To manually destroy the cluster "
+            f"execute the following cmd: {destroy_cmd}"
+        )
 
     return 0
 
@@ -117,7 +127,9 @@ def run_cmd(cmd, **kwargs):
         CommandFailed: In case the command execution fails
     """
     log.info(f"Executing command: {cmd}")
-    r = subprocess.run(cmd.split(), stdout=sys.stdout, stderr=sys.stderr, **kwargs)
+    r = subprocess.run(
+        cmd.split(), stdout=sys.stdout, stderr=sys.stderr, **kwargs
+    )
     if r.returncode != 0:
         raise CommandFailed(f"Error during execution of command: {cmd}")
 
@@ -149,7 +161,10 @@ def render_template(template_path, data):
     Returns: rendered template
 
     """
-    j2_env = Environment(loader=FileSystemLoader(os.path.join(TOP_DIR, 'templates')), trim_blocks=True)
+    j2_env = Environment(
+        loader=FileSystemLoader(os.path.join(TOP_DIR, 'templates')),
+        trim_blocks=True
+    )
     j2_template = j2_env.get_template(template_path)
     return j2_template.render(**data)
 
