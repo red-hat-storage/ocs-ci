@@ -3,25 +3,18 @@ import logging
 import os
 import platform
 import random
-import shlex
-import subprocess
 import time
 
 import ocs.defaults as default
-import requests
-import yaml
-from jinja2 import Environment, FileSystemLoader
-from ocs.exceptions import CommandFailed
-
 from ocs.exceptions import CommandFailed, CephHealthException
 from ocs.exceptions import UnsupportedOSType
+from ocs.utils import create_oc_resource
+from utility import templating
 from utility.aws import AWS
 from utility.retry import retry
+from utility.utils import run_cmd, download_file
 
 log = logging.getLogger(__name__)
-
-THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-TOP_DIR = os.path.dirname(THIS_DIR)
 
 
 def run(**kwargs):
@@ -30,10 +23,12 @@ def run(**kwargs):
     test_data = kwargs.get('test_data')
     cluster_conf = kwargs.get('cluster_conf')
 
-    workers, masters = None, None
+    workers = masters = aws_region = None
     if cluster_conf:
-        workers = cluster_conf.get('aws').get('cluster').get('workers')
-        masters = cluster_conf.get('aws').get('cluster').get('masters')
+        cluster_details = cluster_conf.get('aws', {}).get('cluster', {})
+        workers = cluster_details.get('workers')
+        masters = cluster_details.get('masters')
+        aws_region = cluster_details.get('region', default.AWS_REGION)
 
     # Generate install-config from template
     log.info("Generating install-config")
@@ -44,9 +39,9 @@ def run(**kwargs):
     cluster_name = f'{base_name}-{cid}'
 
     cluster_path = os.path.join(cluster_dir_parent, cluster_name)
-    run_cmd(f"mkdir {cluster_path}")
+    run_cmd(f"mkdir -p {cluster_path}")
 
-    pull_secret_path = os.path.join(TOP_DIR, "data", "pull-secret")
+    pull_secret_path = os.path.join(templating.TOP_DIR, "data", "pull-secret")
     with open(pull_secret_path, "r") as f:
         pull_secret = f.readline()
 
@@ -56,7 +51,11 @@ def run(**kwargs):
         data.update({'worker_replicas': workers})
     if masters:
         data.update({'master_replicas': masters})
-    template = render_template("install-config.yaml.j2", data)
+    if aws_region:
+        data.update({'region': aws_region})
+
+    _templating = templating.Templating()
+    template = _templating.render_template("install-config.yaml.j2", data)
     log.info(f"Install config: \n{template}")
     install_config = os.path.join(cluster_path, "install-config.yaml")
     with open(install_config, "w") as f:
@@ -97,14 +96,15 @@ def run(**kwargs):
     run_cmd("oc cluster-info")
 
     # TODO: Create cluster object, add to test_data for other tests to utilize
-    # Determine worker pattern and create eb2 volumes
+    # Determine worker pattern and create ebs volumes
     with open(os.path.join(cluster_path, "terraform.tfvars")) as f:
         tfvars = json.load(f)
 
     cluster_id = tfvars['cluster_id']
     worker_pattern = f'{cluster_id}-worker*'
     log.info(f'Worker pattern: {worker_pattern}')
-    create_eb2_volumes(worker_pattern)
+    region_name = aws_region if aws_region else default.AWS_REGION
+    create_ebs_volumes(worker_pattern, region_name=region_name)
 
     # Use Rook to install Ceph cluster
     # retrieve rook config from cluster_conf
@@ -113,7 +113,7 @@ def run(**kwargs):
         rook_data = cluster_conf.get('rook', {})
 
     # render templates and create resources
-    create_rook_resource('common.yaml', rook_data, cluster_path)
+    create_oc_resource('common.yaml', rook_data, cluster_path, _templating)
     run_cmd(
         'oc label namespace openshift-storage '
         '"openshift.io/cluster-monitoring=true"'
@@ -123,7 +123,9 @@ def run(**kwargs):
         "system:serviceaccount:openshift-monitoring:prometheus-k8s "
         "-n openshift-storage"
     )
-    create_rook_resource('operator-openshift.yaml', rook_data, cluster_path)
+    create_oc_resource(
+        'operator-openshift.yaml', rook_data, cluster_path, _templating
+    )
     wait_time = 5
     log.info(f"Waiting {wait_time} seconds...")
     time.sleep(wait_time)
@@ -145,13 +147,19 @@ def run(**kwargs):
         "-n openshift-storage "
         "--timeout=120s"
     )
-    create_rook_resource('cluster.yaml', rook_data, cluster_path)
-    create_rook_resource('toolbox.yaml', rook_data, cluster_path)
+    create_oc_resource('cluster.yaml', rook_data, cluster_path, _templating)
+    create_oc_resource('toolbox.yaml', rook_data, cluster_path, _templating)
     log.info(f"Waiting {wait_time} seconds...")
     time.sleep(wait_time)
-    create_rook_resource('storage-manifest.yaml', rook_data, cluster_path)
-    create_rook_resource("service-monitor.yaml", rook_data, cluster_path)
-    create_rook_resource("prometheus-rules.yaml", rook_data, cluster_path)
+    create_oc_resource(
+        'storage-manifest.yaml', rook_data, cluster_path, _templating
+    )
+    create_oc_resource(
+        "service-monitor.yaml", rook_data, cluster_path, _templating
+    )
+    create_oc_resource(
+        "prometheus-rules.yaml", rook_data, cluster_path, _templating
+    )
 
     # Verify health of ceph cluster
     # TODO: move destroy cluster logic to new CLI usage pattern?
@@ -181,138 +189,21 @@ def run(**kwargs):
     return rc
 
 
-def run_cmd(cmd, **kwargs):
-    """
-    Run an arbitrary command locally
-
-    Args:
-        cmd: command to run
-
-<<<<<<< HEAD
-    Raises:
-        CommandFailed: In case the command execution fails
-=======
-    Returns:
-        decoded stdout of command
->>>>>>> da29d2d... Verify health of ceph cluster after deployment
-    """
-    log.info(f"Executing command: {cmd}")
-    if isinstance(cmd, str):
-        cmd = shlex.split(cmd)
-    r = subprocess.run(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        stdin=subprocess.PIPE,
-        **kwargs
-    )
-    log.debug(f"CMD output: {r.stdout.decode()}")
-    if r.stderr:
-        log.error(f"CMD error:: {r.stderr.decode()}")
-    if r.returncode:
-        raise CommandFailed(
-            f"Error during execution of command: {cmd}"
-        )
-    return r.stdout.decode()
-
-
-def download_file(url, filename):
-    """
-    Download a file from a specified url
-
-    Args:
-        url: URL of the file to download
-        filename: Name of the file to write the download to
-
-
-    """
-    with open(filename, "wb") as f:
-        r = requests.get(url)
-        f.write(r.content)
-    assert r.ok
-
-
-def to_nice_yaml(a, indent=2, *args, **kw):
-    """Make verbose, human readable yaml"""
-    # TODO: elaborate more in docstring on what this actually does
-    transformed = yaml.dump(
-        a,
-        Dumper=yaml.Dumper,
-        indent=indent,
-        allow_unicode=True,
-        default_flow_style=False,
-        **kw
-    )
-    return transformed
-
-
-def render_template(template_path, data):
-    """
-    Render a template with the given data.
-
-    Args:
-        template_path: location of the j2 template
-        data: the data to be formatted into the template
-
-    Returns: rendered template
-
-    """
-    j2_env = Environment(
-        loader=FileSystemLoader(os.path.join(TOP_DIR, 'templates')),
-        trim_blocks=True
-    )
-    j2_env.filters['to_nice_yaml'] = to_nice_yaml
-    j2_template = j2_env.get_template(template_path)
-    return j2_template.render(**data)
-
-
-def load_config_data(data_path):
-    """
-    Loads YAML data from the specified path
-
-    Args:
-        data_path: location of the YAML data file
-
-    Returns: loaded YAML data
-
-    """
-    with open(data_path, "r") as data_descriptor:
-        return yaml.load(data_descriptor, Loader=yaml.FullLoader)
-
-
-def create_rook_resource(template_name, rook_data, cluster_path):
-    """
-    Create a rook resource after rendering the specified template with
-    the rook data from cluster_conf.
-
-    Args:
-        template_name: name of the ocs-deployment config template.
-        rook_data: rook specific config from cluster_conf
-        cluster_path: path to cluster directory, where files will be written
-    """
-    base_name = template_name.split('.')[0]
-    template_path = os.path.join('ocs-deployment', template_name)
-    template = render_template(
-        template_path,
-        rook_data.get(base_name, {})
-    )
-    cfg_file = os.path.join(cluster_path, template_name)
-    with open(cfg_file, "w") as f:
-        f.write(template)
-    log.info(f"Creating rook resource from {template_name}")
-    run_cmd(f"oc create -f {cfg_file}")
-
-
-def create_eb2_volumes(worker_pattern, size=100):
+def create_ebs_volumes(
+    worker_pattern,
+    size=100,
+    region_name=default.AWS_REGION
+):
     """
     Create volumes on workers
 
     Args:
-        worker_pattern (string): worker name pattern e.g.:
+        worker_pattern (string): Worker name pattern e.g.:
             cluster-55jx2-worker*
-        size (int): size in GB (default: 100)
+        size (int): Size in GB (default: 100)
+        region_name (str): Region name (default: default.AWS_REGION)
     """
-    aws = AWS()
+    aws = AWS(region_name)
     worker_instances = aws.get_instances_by_name_pattern(worker_pattern)
     for worker in worker_instances:
         log.info(
@@ -332,8 +223,8 @@ def ceph_health_check():
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
     Raises:
-        CephHealthException: if the ceph health returned is not HEALTH_OK
-        CommandFailed: if the command to retrieve the tools pod name or the
+        CephHealthException: If the ceph health returned is not HEALTH_OK
+        CommandFailed: If the command to retrieve the tools pod name or the
             command to get ceph health returns a non-zero exit code
     Returns:
         0 if HEALTH_OK
@@ -359,4 +250,3 @@ def ceph_health_check():
         raise CephHealthException(
             f"Ceph cluster health is not OK. Health: {health}"
         )
-

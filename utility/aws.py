@@ -1,6 +1,8 @@
 import logging
 import time
 
+import ocs.defaults as default
+
 import boto3
 
 
@@ -18,6 +20,16 @@ class AWS(object):
 
     _ec2_client = None
     _ec2_resource = None
+    _region_name = None
+
+    def __init__(self, region_name=default.AWS_REGION):
+        """
+        Constructor for AWS class
+
+        Args:
+            region_name (str): Name of AWS region (default: us-east-2)
+        """
+        self._region_name = region_name
 
     @property
     def ec2_client(self):
@@ -27,7 +39,10 @@ class AWS(object):
             boto3.client: instance of ec2
         """
         if not self._ec2_client:
-            self._ec2_client = boto3.client('ec2')
+            self._ec2_client = boto3.client(
+                'ec2',
+                region_name=self._region_name,
+            )
         return self._ec2_client
 
     @property
@@ -38,7 +53,10 @@ class AWS(object):
             boto3.resource instance of ec2 resource
         """
         if not self._ec2_resource:
-            self._ec2_resource = boto3.resource('ec2')
+            self._ec2_resource = boto3.resource(
+                'ec2',
+                region_name=self._region_name,
+            )
         return self._ec2_resource
 
     def get_instances_by_name_pattern(self, pattern):
@@ -63,9 +81,9 @@ class AWS(object):
             Filters=[
                 {
                     'Name': 'tag:Name',
-                    'Values': [pattern]
-                }
-            ]
+                    'Values': [pattern],
+                },
+            ],
         )['Reservations']
         instances = []
         for instance in instances_response:
@@ -124,21 +142,24 @@ class AWS(object):
                             'Key': 'Name',
                             'Value': name,
                         },
-                    ]
+                    ],
                 },
-            ]
+            ],
         )
         logger.debug("Response of volume creation: %s", volume_response)
         volume = self.ec2_resource.Volume(volume_response['VolumeId'])
         for x in range(timeout):
             volume.reload()
+            logger.debug(
+                "Volume id: %s has status: %s", volume.volume_id, volume.state
+            )
             if volume.state == 'available':
                 break
             if x == timeout - 1:
                 raise AWSTimeoutException(
-                    "Reached timeout %s for volume creation, volume state is "
-                    "still: %s for volume ID: %s", timeout, volume.state,
-                    volume_response['VolumeId']
+                    f"Reached timeout {timeout} for volume creation, volume "
+                    f"state is still: {volume.state} for volume ID: "
+                    f"{volume.volume_id}"
                 )
             time.sleep(1)
         attach_response = volume.attach_to_instance(
@@ -146,3 +167,74 @@ class AWS(object):
             InstanceId=instance_id,
         )
         logger.debug("Response of attaching volume: %s", attach_response)
+
+    def get_volumes_by_name_pattern(self, pattern):
+        """
+        Get volumes by pattern
+
+        Args:
+            pattern (str): Pattern of volume name (e.g. '*cl-vol-*')
+
+        Returns:
+            dict: Volume information like id and attachments
+        """
+        volumes_response = self.ec2_client.describe_volumes(
+            Filters=[
+                {
+                    'Name': 'tag:Name',
+                    'Values': [pattern],
+                },
+            ],
+        )
+        volumes = []
+        for volume in volumes_response['Volumes']:
+            volumes.append(
+                dict(
+                    id=volume['VolumeId'],
+                    attachments=volume['Attachments'],
+                )
+            )
+        return volumes
+
+    def detach_and_delete_volume(self, volume, timeout=120):
+        """
+        Detach volume if attached and then delete it from AWS
+
+        Args:
+            volume (dict): Dict of volume details
+            timeout (int): Timeout in seconds for API calls
+        """
+        ec2_volume = self.ec2_resource.Volume(volume['id'])
+        if volume['attachments']:
+            attachment = volume['attachments'][0]
+            logger.info(
+                "Detaching volume: %s Instance: %s", volume['id'],
+                attachment['InstanceId']
+            )
+            response_detach = ec2_volume.detach_from_instance(
+                Device=attachment['Device'],
+                InstanceId=attachment['InstanceId'],
+                Force=True,
+            )
+            logger.debug("Detach response: %s", response_detach)
+        for x in range(timeout):
+            ec2_volume.reload()
+            logger.debug(
+                "Volume id: %s has status: %s", ec2_volume.volume_id,
+                ec2_volume.state
+            )
+            if ec2_volume.state == 'available':
+                break
+            if x == timeout - 1:
+                raise AWSTimeoutException(
+                    f"Reached timeout {timeout}s for volume detach/delete for "
+                    f"volume ID: {volume['id']}, Volume state: "
+                    f"{ec2_volume.state}"
+                )
+            time.sleep(1)
+        logger.info("Deleting volume: %s", ec2_volume.volume_id)
+        delete_response = ec2_volume.delete()
+        logger.debug(
+            "Delete response for volume: %s is: %s", ec2_volume.volume_id,
+            delete_response
+        )
