@@ -15,7 +15,7 @@ from libcloud.compute.types import Provider
 
 from mita.openstack import CephVMNode
 from utility.retry import retry
-from utility.utils import create_unique_test_name, timestamp
+from utility.utils import create_unique_test_name, timestamp, run_cmd
 from .ceph import RolesContainer, CommandFailed, Ceph, CephNode
 from .clients import WinNode
 from .parallel import parallel
@@ -572,3 +572,37 @@ def store_cluster_state(ceph_cluster_object, ceph_clusters_file_name):
     pickle.dump(ceph_cluster_object, cn)
     cn.close()
     log.info("ceph_clusters_file %s", ceph_clusters_file_name)
+
+
+def create_oc_resource(
+    template_name,
+    rook_data,
+    cluster_path,
+    _templating,
+    template_dir="ocs-deployment",
+):
+    """
+    Create an oc resource after rendering the specified template with
+    the rook data from cluster_conf.
+
+    Args:
+        template_name (str): Name of the ocs-deployment config template
+        rook_data (dict): Rook specific config from cluster_conf
+        cluster_path (str): Path to cluster directory, where files will be
+            written
+        _templating (Templating): Object of Templating class used for
+            templating
+        template_dir (str): Directory under templates dir where template
+            exists
+    """
+    base_name = template_name.split('.')[0]
+    template_path = os.path.join(template_dir, template_name)
+    template = _templating.render_template(
+        template_path,
+        rook_data.get(base_name, {})
+    )
+    cfg_file = os.path.join(cluster_path, template_name)
+    with open(cfg_file, "w") as f:
+        f.write(template)
+    log.info(f"Creating rook resource from {template_name}")
+    run_cmd(f"oc create -f {cfg_file}")
