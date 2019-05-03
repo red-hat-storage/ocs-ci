@@ -17,30 +17,29 @@ class Pod(object):
     """Handles per pod related context
 
         Attributes:
-            name (str):      name of the pod in oc cluster
-            namespace(str):  openshift namespace where this pod lives
-            labels (list):   list of oc labels associated with pod
+            _name (str):      name of the pod in oc cluster
+            _namespace(str):  openshift namespace where this pod lives
+            labels (dict):   A dict of oc labels associated with pod
             roles (list):    This could be oc roles like Master, etcd OR
                              ceph roles like mon, osd etc
 
 
     """
 
-    def __init__(self, name=None, namespace=None, labels=None, roles=None):
+    def __init__(self, name=None, namespace=None, labels=None, roles=[]):
         """Context detail per pod
 
             Args:
                 name (string):      name of the pod in oc cluster
                 namespace (string): namespace in which pod lives
-                labels (list):      list of oc labels associated with pod
+                labels (dict):      dictionary of oc labels associated with pod
                 roles (list):       This could be oc roles like Master, etcd OR
-                                   ceph roles like mon, osd etc
-
+                    ceph roles like mon, osd etc.
         """
         self._name = name
         self._namespace = namespace
-        self.labels = labels
-        self.roles = roles
+        self._labels = labels
+        self._roles = roles
         # TODO: get backend config !!
 
     @property
@@ -50,6 +49,22 @@ class Pod(object):
     @property
     def namespace(self):
         return self._namespace
+
+    @property
+    def roles(self):
+        return self._roles
+
+    @property
+    def labels(self):
+        return self._labels
+
+    def set_role(self, role):
+        """
+        Set a role for this pod
+        Args:
+            role (str): New role to be assigned for this pod
+        """
+        self._roles.append(role)
 
     def exec_command(self, **kw):
         """ Handles execution of a command on a pod
