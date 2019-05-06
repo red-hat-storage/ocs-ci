@@ -1,5 +1,5 @@
 apiVersion: {{ api_version | default('v1beta4') }}
-baseDomain: {{ base_domain | default('devcluster.openshift.com') }}
+baseDomain: {{ base_domain | default('qe.rh-ocs.com') }}
 compute:
 - name: worker
   platform: {}
@@ -21,5 +21,5 @@ networking:
   - 172.30.0.0/16
 platform:
   aws:
-    region: {{ region | default('us-west-1') }}
+    region: {{ region | default('us-east-2') }}
 pullSecret: '{{ pull_secret }}' # Use double quotes inside pullSecret data!
