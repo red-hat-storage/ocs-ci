@@ -4,5 +4,4 @@ tests:
     desc: Minimal installation of OCS
     module: test_ocs_basic_install.py
     config:
-      installer-version: v0.16.1
       destroy-cluster: False

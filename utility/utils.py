@@ -2,7 +2,9 @@ import getpass
 import logging
 import os
 import random
+import shlex
 import smtplib
+import subprocess
 import time
 import traceback
 from email.mime.multipart import MIMEMultipart
@@ -12,6 +14,8 @@ import requests
 import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from reportportal_client import ReportPortalServiceAsync
+
+from ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 
@@ -609,3 +613,52 @@ def get_ocsci_config():
         )
         raise
     return cfg
+
+
+def run_cmd(cmd, **kwargs):
+    """
+    Run an arbitrary command locally
+
+    Args:
+        cmd (str): command to run
+
+    Raises:
+        CommandFailed: In case the command execution fails
+
+    Returns:
+        (str) Decoded stdout of command
+
+    """
+    log.info(f"Executing command: {cmd}")
+    if isinstance(cmd, str):
+        cmd = shlex.split(cmd)
+    r = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.PIPE,
+        **kwargs
+    )
+    log.debug(f"CMD output: {r.stdout.decode()}")
+    if r.stderr:
+        log.error(f"CMD error:: {r.stderr.decode()}")
+    if r.returncode:
+        raise CommandFailed(
+            f"Error during execution of command: {cmd}"
+        )
+    return r.stdout.decode()
+
+
+def download_file(url, filename):
+    """
+    Download a file from a specified url
+
+    Args:
+        url (str): URL of the file to download
+        filename (str): Name of the file to write the download to
+
+    """
+    with open(filename, "wb") as f:
+        r = requests.get(url)
+        f.write(r.content)
+    assert r.ok
