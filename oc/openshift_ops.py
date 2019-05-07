@@ -22,6 +22,68 @@ class OCP(object):
         self.v1_projects = dyn_client.resources.get(
             api_version='project.openshift.io/v1', kind='Project'
         )
+        self.v1_pods = dyn_client.resources.get(
+            api_version='v1', kind='Pod'
+        )
+
+    def get_pods(self, **kw):
+        """
+        Get pods in specific namespace or across oc cluster.
+
+        Args:
+            **kw: ex: namespace=rook-ceph, label_selector='x==y'
+
+        Returns:
+            list: of pods names, if no namespace provided then this function
+                returns all pods across openshift cluster.
+        """
+        resource = self.v1_pods
+
+        try:
+            pod_data = resource.get(**kw)
+            log.info(pod_data)
+        except exceptions.NotFoundError:
+            log.error("Failed to get pods: resource not found.")
+            raise
+        except Exception:
+            log.error("Unexpected error.")
+            raise
+
+        return [item.metadata.name for item in pod_data.items]
+
+    def get_labels(self, pod_name, pod_namespace):
+        """
+        Get labels from specific pod
+
+        Args:
+            pod_name (str): Name of pod in oc cluster
+            pod_namespace (str): pod namespace in which the pod lives
+
+        Raises:
+            NotFoundError: If resource not found
+
+        Returns:
+            dict: All the openshift labels on a given pod
+        """
+
+        resource = self.v1_pods.status
+
+        try:
+            pod_meta = resource.get(
+                name=pod_name,
+                namespace=pod_namespace,
+            )
+        except exceptions.NotFoundError:
+            log.error("Failed to get pods: resource not found.")
+            raise
+        except Exception:
+            log.error("Unexpected error")
+            raise
+
+        data = pod_meta['metadata']['labels']
+        pod_labels = {k: v for k, v in data.items()}
+
+        return pod_labels
 
     def get_projects(self):
         """
