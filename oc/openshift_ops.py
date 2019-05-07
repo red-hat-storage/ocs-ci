@@ -1,6 +1,11 @@
+import os
 import logging
+
 from kubernetes import config
 from openshift.dynamic import DynamicClient, exceptions
+
+from ocs.exceptions import CommandFailed
+from utility.utils import run_cmd
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +89,34 @@ class OCP(object):
         pod_labels = {k: v for k, v in data.items()}
 
         return pod_labels
+
+    @staticmethod
+    def set_kubeconfig(kubeconfig_path):
+        """
+        Export environment variable KUBECONFIG for future calls of OC commands
+        or other API calls
+
+        Args:
+            kubeconfig_path (str): path to kubeconfig file to be exported
+
+        Returns:
+            boolean: True if successfully connected to cluster, False otherwise
+        """
+        # Test cluster access
+        log.info("Testing access to cluster with %s", kubeconfig_path)
+        if not os.path.isfile(kubeconfig_path):
+            log.warning(
+                "The kubeconfig file %s doesn't exist!", kubeconfig_path
+            )
+            return False
+        os.environ['KUBECONFIG'] = kubeconfig_path
+        try:
+            run_cmd("oc cluster-info")
+        except CommandFailed as ex:
+            log.error("Cluster is not ready to use: %s", ex)
+            return False
+        log.info("Access to cluster is OK!")
+        return True
 
     def get_projects(self):
         """
