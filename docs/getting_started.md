@@ -5,6 +5,9 @@
 
 1. Python 3.7
 2. AWS Account credentials when testing with AWS platforms
+   check default section in ~/.aws/credentials for access/secret key.
+3. OC client binary is installed on your localhost in /usr/local/bin or
+   /usr/bin(running oc version on terminal should display version > 3.11).
 
 ## Installing
 
