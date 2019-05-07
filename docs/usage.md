@@ -5,7 +5,7 @@
 `run.py` is the main script for ocs-ci. You can view the full usage details by passing in the `--help` argument.
 
 ```bash
-python3 run.py --help
+python run.py --help
 ```
 
 ## Required Arguments
@@ -33,14 +33,14 @@ Some non-required arguments that we end up using a lot:
 * Run OCS install suite:
 
 ```bash
-python3 run.py --cred ~/aws.yml --suite suites/ocs_basic_install.yml \
+python run.py --cred ~/aws.yml --suite suites/ocs_basic_install.yml \
      --log-level info
 ```
 
 * Run with specific name of cluster and cluster directory without sendig email:
 
 ```bash
-python3 run.py --cluster-name=my-testing-cluster \
+python run.py --cluster-name=my-testing-cluster \
     --suite=suites/custom-test.yml --cluster-path=/home/your_login/my-testing-cluster \
     --no-email
 ```
