@@ -6,8 +6,11 @@
 1. Python 3.7
 2. AWS Account credentials when testing with AWS platforms
    check default section in ~/.aws/credentials for access/secret key.
-3. OC client binary is installed on your localhost in /usr/local/bin or
+   (https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html)
+3. oc client binary is installed on your localhost in /usr/local/bin or
    /usr/bin(running oc version on terminal should display version > 3.11).
+   Latest client can be downloaded from - 
+     https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/
 
 ## Installing
 
