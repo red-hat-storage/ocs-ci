@@ -1,4 +1,5 @@
 import getpass
+import json
 import logging
 import os
 import random
@@ -16,6 +17,8 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from reportportal_client import ReportPortalServiceAsync
 
 from ocs.exceptions import CommandFailed
+from ocsci.enums import TestStatus
+from .aws import AWS
 
 log = logging.getLogger(__name__)
 
@@ -662,3 +665,55 @@ def download_file(url, filename):
         r = requests.get(url)
         f.write(r.content)
     assert r.ok
+
+
+def destroy_cluster(cluster_path):
+    """
+    Destroy existing cluster resources in AWS.
+
+    Args:
+        cluster_path (str): filepath to cluster directory to be destroyed
+
+    Returns:
+        TestStatus: enum for status of cluster deletion
+
+    """
+    destroy_cmd = (
+        f"./openshift-install destroy cluster "
+        f"--dir {cluster_path} "
+        f"--log-level debug"
+    )
+    installer_filename = "openshift-install"
+    tarball = f"{installer_filename}.tar.gz"
+
+    try:
+        cluster_path = os.path.normpath(cluster_path)
+
+        # Retrieve cluster name and aws region from metadata
+        metadata_file = os.path.join(cluster_path, "metadata.json")
+        with open(metadata_file) as f:
+            metadata = json.loads(f.read())
+        cluster_name = metadata.get("clusterName")
+        region_name = metadata.get("aws").get("region")
+
+        # Execute destroy cluster using OpenShift installer
+        log.info(f"Destroying cluster defined in {cluster_path}")
+        run_cmd(destroy_cmd)
+
+        # Find and delete volumes
+        aws = AWS(region_name)
+        volume_pattern = f"{cluster_name}*"
+        log.debug(f"Finding volumes with pattern: {volume_pattern}")
+        volumes = aws.get_volumes_by_name_pattern(volume_pattern)
+        log.debug(f"Found volumes: \n {volumes}")
+        for volume in volumes:
+            aws.detach_and_delete_volume(volume)
+
+        # Remove installer and tarball
+        os.remove(installer_filename)
+        os.remove(tarball)
+        return TestStatus.PASSED
+
+    except Exception:
+        log.error(traceback.format_exc())
+        return TestStatus.FAILED

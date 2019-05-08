@@ -16,7 +16,7 @@ from ocsci.enums import ReturnCode, TestStatus
 from ocs import defaults as default
 from utility.utils import (
     timestamp, create_run_dir, create_report_portal_session, email_results,
-    close_and_remove_filehandlers, configure_logger,
+    close_and_remove_filehandlers, configure_logger, destroy_cluster
 )
 from ocsci.framework import TestCase
 
@@ -35,7 +35,7 @@ A simple test suite wrapper that executes tests based on yaml test config.
         [--cluster-name <NAME>]
         [--cluster-path <PATH>]
         [--no-email]
-  run.py --cleanup=NAME [--osp-cred <FILE>]
+  run.py --destroy PATH
         [--log-level <LEVEL>]
 
 Options:
@@ -44,7 +44,7 @@ Options:
                                     defaults
   -s <suite> --suite <suite>        test suite to run
                                     eg: -s smoke or -s rbd
-  -f <tests> --filter <tests>       filter tests based on the patter
+  -f <tests> --filter <tests>       filter tests based on the pattern
                                     eg: -f 'rbd' will run tests that have 'rbd'
   --store                           store the current vm state for reuse
   --reuse <file>                    use the stored vm state for rerun
@@ -58,6 +58,8 @@ Options:
   --cluster-path <path>             Path of existing cluster data or where to
                                     create cluster folder
   --no-email                        Do not send results email
+  --destroy <PATH>                  Destroy cluster using given path to the
+                                    cluster directory
 """
 
 log = logging.getLogger(__name__)
@@ -119,14 +121,14 @@ def run(args):
     store = args.get('--store', False)
     reuse = args.get('--reuse', None)
     post_results = args.get('--post-results')
-    cleanup_name = args.get('--cleanup', None)
+    destroy_path = args.get('--destroy', None)
     post_to_report_portal = args.get('--report-portal', False)
     cluster_name = args.get('--cluster-name')
     cluster_path = args.get('--cluster-path')
     send_email = not args.get('--no-email', False)
 
-    if cleanup_name:
-        pass  # TODO: cleanup cluster and skip test execution
+    if destroy_path:
+        return destroy_cluster(destroy_path)
 
     # Check if we are running on windows and bail out sooner
     if platform.system() == "Windows":

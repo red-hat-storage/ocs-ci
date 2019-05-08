@@ -177,26 +177,6 @@ def run(**kwargs):
     log.info("Done creating rook resources, waiting for HEALTH_OK")
     rc = ceph_health_check()
 
-    # Destroy cluster (if configured)
-    destroy_cmd = (
-        f"./openshift-install destroy cluster "
-        f"--dir {cluster_path} "
-        f"--log-level debug"
-    )
-    if config.get("destroy-cluster"):
-        log.info("Destroying cluster")
-        run_cmd(destroy_cmd)
-        # TODO: destroy volumes created
-        os.remove(installer_filename)
-        os.remove(tarball)
-    else:
-        log.info(f"Cluster directory is located here: {cluster_path}")
-        log.info(
-            f"Skipping cluster destroy. "
-            f"To manually destroy the cluster execute the following cmd:\n"
-            f"{destroy_cmd}"
-        )
-
     return rc
 
 
