@@ -122,7 +122,7 @@ def run(args):
     cleanup_name = args.get('--cleanup', None)
     post_to_report_portal = args.get('--report-portal', False)
     cluster_name = args.get('--cluster-name')
-    cluster_path = args.get('--cluster-path', None)
+    cluster_path = args.get('--cluster-path')
     send_email = not args.get('--no-email', False)
 
     if cleanup_name:
