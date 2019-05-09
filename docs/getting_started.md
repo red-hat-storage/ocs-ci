@@ -5,7 +5,7 @@
 
 1. Python 3.7
 2. Configure AWS Account credentials when testing with AWS platforms,
-   check default section in ~/.aws/credentials for access/secret key
+   check default section in `~/.aws/credentials` for access/secret key
    [check aws-configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
 3. oc client binary is installed on your localhost and binary is listed in $PATH
    (running oc version on terminal should display version > 3.11).
