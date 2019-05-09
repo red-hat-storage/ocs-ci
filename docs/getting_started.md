@@ -10,9 +10,13 @@
 
 It is recommended that you use a python virtual environment to install the necessary dependencies
 
-1. Setup a python 3.7 virtual environment. This is actually quite easy to do now.
-    * `python3.7 -m venv <path/to/venv>`
-    * `source <path/to/venv>/bin/activate`
+1. Setup a python 3.7 virtual environment. This is actually quite easy to do
+    now. Use hidden `.venv` or normal `venv` folder for virtual env as we are
+    ignoring this in flake8 configurtation in tox.
+
+    * `python3.7 -m .venv <path/to/venv>`
+    * `source <path/to/.venv>/bin/activate`
+
 2. Install requirements with `pip install -r requirements.txt`
 
 ## Initial Setup
