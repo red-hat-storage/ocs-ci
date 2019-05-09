@@ -5,3 +5,4 @@ tests:
     module: test_ocs_basic_install.py
     config:
       destroy-cluster: False
+    abort-on-fail: True
