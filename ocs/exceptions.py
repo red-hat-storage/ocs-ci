@@ -8,3 +8,7 @@ class UnsupportedOSType(Exception):
 
 class CephHealthException(Exception):
     pass
+
+
+class UnknownTestStatusException(Exception):
+    pass

@@ -18,7 +18,9 @@ Lets follow the following guidelines for the Core Libraries and Test Scripts
 * test_scripts will reside in test/ folders and will define `run`
     function
 * test_scripts should return non zero exit status for failure and 0
-    for 'pass'
+    for 'pass'. The recommended way is to directly return the TestStatus
+    from Enum TestStatus which you can import from [enums](../ocsci/enums.py)
+    module. We are trying to transform int Unix RC to TestStatus automatically.
 
 **ex: test_scripts/test_ocs_operator.py**
 
@@ -27,9 +29,9 @@ Lets follow the following guidelines for the Core Libraries and Test Scripts
             # use ocs_context to deal with cluster
             # run your test steps
             if test_failed:
-                return 1
+                return TestStatus.FAILED
             else:
-                return 0
+                return TestStatus.PASSED
 ```
 
 * Do not use backslashes in the code for line breaker!

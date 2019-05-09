@@ -5,6 +5,7 @@ import time
 import traceback
 from pprint import pformat
 
+from ocs.exceptions import UnknownTestStatusException
 from utility.polarion import post_to_polarion
 from utility.utils import create_unique_test_name, configure_logger, timestamp
 from .enums import TestStatus
@@ -37,13 +38,13 @@ class TestCase(object):
         post_results (bool): post to Polarion after test execution or not
     """
     def __init__(
-            self,
-            specs,
-            suite_name,
-            run_dir,
-            test_kwargs,
-            rp_service,
-            post_results=False
+        self,
+        specs,
+        suite_name,
+        run_dir,
+        test_kwargs,
+        rp_service,
+        post_results=False
     ):
         """
         Initializes the TestCase class with information about the test.
@@ -101,6 +102,23 @@ class TestCase(object):
                 level="INFO"
             )
 
+    @staticmethod
+    def rc_to_status(rc):
+        """
+        Transform int unix return code to TestStatus
+
+        Args:
+            rc (int): Return code
+
+        Returns:
+            Enum: one of Test status from TestStatus Enum. If return code
+                differ from what we have defined in TestStatus it returns
+                TestStatus.FAILED
+        """
+        if rc in TestStatus._value2member_map_:
+            return TestStatus._value2member_map_[rc]
+        return TestStatus.FAILED
+
     def execute(self):
         """
         Actual test case execution phase.
@@ -110,12 +128,14 @@ class TestCase(object):
         log.info(f"Executing test case: {self.unique_name}")
         try:
             self._setup()
-            rc = self.test_mod.run(**self.test_kwargs)
-            # TODO: have test modules return correct TestStatus enum
-            if rc == 0:
-                self.status = TestStatus.PASSED
-            else:
-                self.status = TestStatus.FAILED
+            test_status = self.test_mod.run(**self.test_kwargs)
+            if isinstance(test_status, int):
+                test_status = self.rc_to_status(test_status)
+            if not isinstance(test_status, TestStatus):
+                raise UnknownTestStatusException(
+                    f"This is unknown Test Status: {test_status}"
+                )
+            self.status = test_status
         except Exception:
             log.error(traceback.format_exc())
             self.status = TestStatus.FAILED
