@@ -30,6 +30,38 @@ class OCP(object):
         self.v1_pods = dyn_client.resources.get(
             api_version='v1', kind='Pod'
         )
+        self.v1_deployments = dyn_client.resources.get(
+            api_version='v1', kind='Deployment'
+        )
+        self.v1_services = dyn_client.resources.get(
+            api_version='v1', kind='Service'
+        )
+
+    @staticmethod
+    def call_api(method, **kw):
+        """
+        This function makes generic REST calls
+
+        Args:
+            method(str): one of the GET, CREATE, PATCH, POST, DELETE
+            **kw: Based on context of the call kw will be populated by caller
+
+        Returns:
+            ResourceInstance object
+        """
+        # Get the resource type on which we want to operate
+        resource = kw.pop('resource')
+
+        if method == "GET":
+            return resource.get(**kw)
+        elif method == "CREATE":
+            return resource.create(**kw)
+        elif method == "PATCH":
+            return resource.patch(**kw)
+        elif method == "DELETE":
+            return resource.delete(**kw)
+        elif method == "POST":
+            return resource.post(**kw)
 
     def get_pods(self, **kw):
         """
