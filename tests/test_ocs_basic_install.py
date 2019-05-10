@@ -37,10 +37,11 @@ def run(**kwargs):
     # TODO: determine better place to create cluster directories - (log dir?)
     cluster_dir_parent = "/tmp"
     cluster_name = test_data.get('cluster-name')
+    base_cluster_name = test_data.get('cluster-name', default.CLUSTER_NAME)
     cluster_path = test_data.get('cluster-path')
     cid = random.randint(10000, 99999)
     if not (cluster_name and cluster_path):
-        cluster_name = f"{default.CLUSTER_NAME}-{cid}"
+        cluster_name = f"{base_cluster_name}-{cid}"
     if not cluster_path:
         cluster_path = os.path.join(cluster_dir_parent, cluster_name)
     # Test cluster access and if exist just skip the deployment.
