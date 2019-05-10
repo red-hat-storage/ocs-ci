@@ -160,7 +160,7 @@ def run(**kwargs):
     create_oc_resource(
         "prometheus-rules.yaml", rook_data, cluster_path, _templating
     )
-
+    create_oc_resource('filesystem.yaml', rook_data, cluster_path, _templating)
     # Verify health of ceph cluster
     # TODO: move destroy cluster logic to new CLI usage pattern?
     log.info("Done creating rook resources, waiting for HEALTH_OK")
