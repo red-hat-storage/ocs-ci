@@ -3,6 +3,8 @@ tests:
     name: install OCS
     desc: Minimal installation of OCS
     module: test_ocs_basic_install.py
-    config:
-      destroy-cluster: False
     abort-on-fail: True
+- test:
+    name: destroy OCS cluster
+    desc: Destroy OCS cluster defined in cluster_path
+    module: test_destroy_cluster.py

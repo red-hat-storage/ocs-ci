@@ -35,7 +35,8 @@ A simple test suite wrapper that executes tests based on yaml test config.
         [--cluster-name <NAME>]
         [--cluster-path <PATH>]
         [--no-email]
-  run.py --destroy PATH
+        [--no-destroy]
+  run.py --destroy --cluster-path PATH
         [--log-level <LEVEL>]
 
 Options:
@@ -58,8 +59,9 @@ Options:
   --cluster-path <path>             Path of existing cluster data or where to
                                     create cluster folder
   --no-email                        Do not send results email
-  --destroy <PATH>                  Destroy cluster using given path to the
+  --destroy                         Destroy cluster using given path to the
                                     cluster directory
+  --no-destroy                      Do not execute cluster destroy
 """
 
 log = logging.getLogger(__name__)
@@ -121,14 +123,15 @@ def run(args):
     store = args.get('--store', False)
     reuse = args.get('--reuse', None)
     post_results = args.get('--post-results')
-    destroy_path = args.get('--destroy', None)
+    destroy = args.get('--destroy', False)
     post_to_report_portal = args.get('--report-portal', False)
     cluster_name = args.get('--cluster-name')
     cluster_path = args.get('--cluster-path')
     send_email = not args.get('--no-email', False)
+    no_destroy = args.get('--no-destroy', False)
 
-    if destroy_path:
-        return destroy_cluster(destroy_path)
+    if destroy:
+        return destroy_cluster(cluster_path)
 
     # Check if we are running on windows and bail out sooner
     if platform.system() == "Windows":
@@ -182,6 +185,7 @@ def run(args):
     tcs = []
     jenkins_rc = TestStatus.FAILED
     test_data = dict()
+    test_data['no-destroy'] = no_destroy
     if cluster_name:
         test_data['cluster-name'] = cluster_name
     if cluster_path:

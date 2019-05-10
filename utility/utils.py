@@ -2,6 +2,7 @@ import getpass
 import json
 import logging
 import os
+import platform
 import random
 import shlex
 import smtplib
@@ -16,7 +17,8 @@ import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from reportportal_client import ReportPortalServiceAsync
 
-from ocs.exceptions import CommandFailed
+from ocs import defaults
+from ocs.exceptions import CommandFailed, UnsupportedOSType
 from ocsci.enums import TestStatus
 from .aws import AWS
 
@@ -683,8 +685,6 @@ def destroy_cluster(cluster_path):
         f"--dir {cluster_path} "
         f"--log-level debug"
     )
-    installer_filename = "openshift-install"
-    tarball = f"{installer_filename}.tar.gz"
 
     try:
         cluster_path = os.path.normpath(cluster_path)
@@ -695,6 +695,10 @@ def destroy_cluster(cluster_path):
             metadata = json.loads(f.read())
         cluster_name = metadata.get("clusterName")
         region_name = metadata.get("aws").get("region")
+
+        # Download installer
+        installer = download_openshift_installer()
+        tarball = f"{installer}.tar.gz"
 
         # Execute destroy cluster using OpenShift installer
         log.info(f"Destroying cluster defined in {cluster_path}")
@@ -710,10 +714,43 @@ def destroy_cluster(cluster_path):
             aws.detach_and_delete_volume(volume)
 
         # Remove installer and tarball
-        os.remove(installer_filename)
+        os.remove(installer)
         os.remove(tarball)
         return TestStatus.PASSED
 
     except Exception:
         log.error(traceback.format_exc())
         return TestStatus.FAILED
+
+
+def download_openshift_installer(version=defaults.INSTALLER_VERSION):
+    """
+    Download the openshift installer
+
+    Args:
+        version (str): version of the installer to download
+
+    Returns:
+        str: name of the installer binary after being unpacked
+
+    """
+    installer_filename = "openshift-install"
+    tarball = f"{installer_filename}.tar.gz"
+    if os.path.isfile(installer_filename):
+        log.info("Installer exists, skipping download")
+    else:
+        log.info("Downloading openshift installer")
+        if platform.system() == "Darwin":
+            os_type = "mac"
+        elif platform.system() == "Linux":
+            os_type = "linux"
+        else:
+            raise UnsupportedOSType
+        url = (
+            f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
+            f"{version}/openshift-install-{os_type}-{version}.tar.gz"
+        )
+        download_file(url, tarball)
+        run_cmd(f"tar xzvf {tarball}")
+
+    return installer_filename
