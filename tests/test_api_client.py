@@ -6,7 +6,6 @@ perform a basic functionality check using api-client
 
 import logging
 import yaml
-import os
 
 
 from ocs import api_client as ac
@@ -62,4 +61,3 @@ def run():
     client = ac.get_api_client("OCRESTClient")
     log.info(f"Using api-client {client.name}")
     return create_simple_service(client)
-

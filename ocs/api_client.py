@@ -128,7 +128,7 @@ class APIClientBase(metaclass=ABCMeta):
 
 # All openshift REST client specific imports here
 from oc import openshift_ops
-from openshift.dynamic import DynamicClient, exceptions
+from openshift.dynamic import exceptions
 
 
 class OCRESTClient(APIClientBase):
@@ -245,11 +245,11 @@ class OCCLIClient(APIClientBase):
         return "OCCLIClient"
 
 
-class KubClient(APIClientBase):
+class KubeClient(APIClientBase):
     """
     All activities using upstream kubernetes python client
     """
 
     @property
     def name(self):
-        return "KubClient"
+        return "KubeClient"
