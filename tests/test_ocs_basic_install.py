@@ -21,10 +21,15 @@ log = logging.getLogger(__name__)
 
 def run(**kwargs):
     log.info("Running OCS basic installation")
-    config = kwargs.get('config')
     test_data = kwargs.get('test_data')
+    cluster_path = test_data.get('cluster-path')
+    # Test cluster access and if exist just skip the deployment.
+    if cluster_path and OCP.set_kubeconfig(
+        os.path.join(cluster_path, default.KUBECONFIG_LOCATION)
+    ):
+        return TestStatus.SKIPPED
+    config = kwargs.get('config')
     cluster_conf = kwargs.get('cluster_conf')
-
     workers = masters = aws_region = None
     if cluster_conf:
         cluster_details = cluster_conf.get('aws', {}).get('cluster', {})
@@ -38,17 +43,11 @@ def run(**kwargs):
     cluster_dir_parent = "/tmp"
     cluster_name = test_data.get('cluster-name')
     base_cluster_name = test_data.get('cluster-name', default.CLUSTER_NAME)
-    cluster_path = test_data.get('cluster-path')
     cid = random.randint(10000, 99999)
     if not (cluster_name and cluster_path):
         cluster_name = f"{base_cluster_name}-{cid}"
     if not cluster_path:
         cluster_path = os.path.join(cluster_dir_parent, cluster_name)
-    # Test cluster access and if exist just skip the deployment.
-    if OCP.set_kubeconfig(
-        os.path.join(cluster_path, default.KUBECONFIG_LOCATION)
-    ):
-        return TestStatus.SKIPPED
     run_cmd(f"mkdir -p {cluster_path}")
     pull_secret_path = os.path.join(templating.TOP_DIR, "data", "pull-secret")
     with open(pull_secret_path, "r") as f:
