@@ -11,7 +11,9 @@ import textwrap
 import urllib3
 from docopt import docopt
 from getpass import getuser
+from oc.openshift_ops import OCP
 from ocsci.enums import ReturnCode, TestStatus
+from ocs import defaults as default
 from utility.utils import (
     timestamp, create_run_dir, create_report_portal_session, email_results,
     close_and_remove_filehandlers, configure_logger,
@@ -31,6 +33,7 @@ A simple test suite wrapper that executes tests based on yaml test config.
         [--report-portal]
         [--log-level <LEVEL>]
         [--cluster-name <NAME>]
+        [--cluster-path <PATH>]
         [--no-email]
   run.py --cleanup=NAME [--osp-cred <FILE>]
         [--log-level <LEVEL>]
@@ -52,6 +55,8 @@ Options:
                                     Requires config file, see README.
   --log-level <LEVEL>               Set logging level
   --cluster-name <name>             Name that will be used for cluster creation
+  --cluster-path <path>             Path of existing cluster data or where to
+                                    create cluster folder
   --no-email                        Do not send results email
 """
 
@@ -117,6 +122,7 @@ def run(args):
     cleanup_name = args.get('--cleanup', None)
     post_to_report_portal = args.get('--report-portal', False)
     cluster_name = args.get('--cluster-name')
+    cluster_path = args.get('--cluster-path')
     send_email = not args.get('--no-email', False)
 
     if cleanup_name:
@@ -176,6 +182,11 @@ def run(args):
     test_data = dict()
     if cluster_name:
         test_data['cluster-name'] = cluster_name
+    if cluster_path:
+        OCP.set_kubeconfig(
+            os.path.join(cluster_path, default.KUBECONFIG_LOCATION)
+        )
+        test_data['cluster-path'] = cluster_path
 
     for test in tests:
         config = test.get('test').get('config', {})
