@@ -6,9 +6,11 @@ import random
 import time
 
 import ocs.defaults as default
+from oc.openshift_ops import OCP
 from ocs.exceptions import CommandFailed, CephHealthException
 from ocs.exceptions import UnsupportedOSType
 from ocs.utils import create_oc_resource
+from ocsci.enums import TestStatus
 from utility import templating
 from utility.aws import AWS
 from utility.retry import retry
@@ -19,10 +21,15 @@ log = logging.getLogger(__name__)
 
 def run(**kwargs):
     log.info("Running OCS basic installation")
-    config = kwargs.get('config')
     test_data = kwargs.get('test_data')
+    cluster_path = test_data.get('cluster-path')
+    # Test cluster access and if exist just skip the deployment.
+    if cluster_path and OCP.set_kubeconfig(
+        os.path.join(cluster_path, default.KUBECONFIG_LOCATION)
+    ):
+        return TestStatus.SKIPPED
+    config = kwargs.get('config')
     cluster_conf = kwargs.get('cluster_conf')
-
     workers = masters = aws_region = None
     if cluster_conf:
         cluster_details = cluster_conf.get('aws', {}).get('cluster', {})
@@ -34,19 +41,22 @@ def run(**kwargs):
     log.info("Generating install-config")
     # TODO: determine better place to create cluster directories - (log dir?)
     cluster_dir_parent = "/tmp"
-    base_name = test_data.get('cluster-name', 'ocs-ci-cluster')
+    cluster_name = test_data.get('cluster-name')
+    base_cluster_name = test_data.get('cluster-name', default.CLUSTER_NAME)
     cid = random.randint(10000, 99999)
-    cluster_name = f'{base_name}-{cid}'
-
-    cluster_path = os.path.join(cluster_dir_parent, cluster_name)
+    if not (cluster_name and cluster_path):
+        cluster_name = f"{base_cluster_name}-{cid}"
+    if not cluster_path:
+        cluster_path = os.path.join(cluster_dir_parent, cluster_name)
     run_cmd(f"mkdir -p {cluster_path}")
-
     pull_secret_path = os.path.join(templating.TOP_DIR, "data", "pull-secret")
     with open(pull_secret_path, "r") as f:
         pull_secret = f.readline()
 
-    data = {"cluster_name": cluster_name,
-            "pull_secret": pull_secret}
+    data = {
+        "cluster_name": cluster_name,
+        "pull_secret": pull_secret,
+    }
     if workers:
         data.update({'worker_replicas': workers})
     if masters:
@@ -91,9 +101,10 @@ def run(**kwargs):
     )
 
     # Test cluster access
-    log.info("Testing access to cluster")
-    os.environ['KUBECONFIG'] = f"{cluster_path}/auth/kubeconfig"
-    run_cmd("oc cluster-info")
+    if not OCP.set_kubeconfig(
+        os.path.join(cluster_path, default.KUBECONFIG_LOCATION)
+    ):
+        return TestStatus.FAILED
 
     # TODO: Create cluster object, add to test_data for other tests to utilize
     # Determine worker pattern and create ebs volumes
