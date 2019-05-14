@@ -10,6 +10,8 @@ import smtplib
 import subprocess
 import time
 import traceback
+import string
+from utility import templating
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -870,3 +872,38 @@ def update_dict_recursively(d, u):
         else:
             d = {k: u[k]}
     return d
+
+
+def get_random_str(size=13):
+    """
+    generates the random string of 13 characters
+
+    Returns:
+         str : string of random 13 characters
+
+    """
+    chars = string.ascii_lowercase + string.digits
+    return ''.join(random.choice(chars) for _ in range(size))
+
+
+def generate_data(template_name, data, template_dir="ocs-deployment"):
+    """
+    generates the data from given template (yaml)
+
+    Args:
+        template_name (str): name of the template (yaml)
+        data (dict) : data to replace in the template
+
+    Returns:
+        dict: dictionary format of data
+
+    Example:
+        generate_data("pvc.yaml", pvc_data)
+    """
+    _templating = templating.Templating()
+    template_path = os.path.join(template_dir, template_name)
+    template = _templating.render_template(
+        template_path,
+        data
+    )
+    return yaml.load(template)

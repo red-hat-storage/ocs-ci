@@ -21,3 +21,6 @@ ENV_DATA = {
     'ceph_image': CEPH_IMAGE,
     'rook_image': ROOK_IMAGE,
 }
+k8s_api_version = 'storage.k8s.io/v1'
+rook_api_version = 'ceph.rook.io/v1'
+ocp_api_version = 'project.openshift.io/v1'
