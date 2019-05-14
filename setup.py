@@ -24,6 +24,8 @@ setup(
         'kubernetes<9.0.0,>=8.0.0',  # to satisfy openshift package requirement
         'openshift',
         'boto3',
+        'munch',
+        'ipdb'
     ],
     zip_safe=True,
     include_package_data=True,
