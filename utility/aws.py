@@ -176,7 +176,7 @@ class AWS(object):
             pattern (str): Pattern of volume name (e.g. '*cl-vol-*')
 
         Returns:
-            dict: Volume information like id and attachments
+            list: Volume information like id and attachments
         """
         volumes_response = self.ec2_client.describe_volumes(
             Filters=[
