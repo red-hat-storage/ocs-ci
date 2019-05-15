@@ -1,20 +1,18 @@
 import json
 import logging
 import os
-import platform
 import random
 import time
 
 import ocs.defaults as default
 from oc.openshift_ops import OCP
 from ocs.exceptions import CommandFailed, CephHealthException
-from ocs.exceptions import UnsupportedOSType
 from ocs.utils import create_oc_resource
 from ocsci.enums import TestStatus
 from utility import templating
 from utility.aws import AWS
 from utility.retry import retry
-from utility.utils import run_cmd, download_file
+from utility.utils import run_cmd, download_openshift_installer
 
 log = logging.getLogger(__name__)
 
@@ -72,30 +70,13 @@ def run(**kwargs):
         f.write(template)
 
     # Download installer
-    installer_filename = "openshift-install"
-    tarball = f"{installer_filename}.tar.gz"
-    if os.path.isfile(installer_filename):
-        log.info("Installer exists, skipping download")
-    else:
-        log.info("Downloading openshift installer")
-        ver = config.get('installer-version', default.INSTALLER_VERSION)
-        if platform.system() == "Darwin":
-            os_type = "mac"
-        elif platform.system() == "Linux":
-            os_type = "linux"
-        else:
-            raise UnsupportedOSType
-        url = (
-            f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
-            f"{ver}/openshift-install-{os_type}-{ver}.tar.gz"
-        )
-        download_file(url, tarball)
-        run_cmd(f"tar xzvf {tarball}")
+    version = config.get('installer-version', default.INSTALLER_VERSION)
+    installer = download_openshift_installer(version)
 
     # Deploy cluster
     log.info("Deploying cluster")
     run_cmd(
-        f"./openshift-install create cluster "
+        f"./{installer} create cluster "
         f"--dir {cluster_path} "
         f"--log-level debug"
     )
@@ -176,26 +157,6 @@ def run(**kwargs):
     # TODO: move destroy cluster logic to new CLI usage pattern?
     log.info("Done creating rook resources, waiting for HEALTH_OK")
     rc = ceph_health_check()
-
-    # Destroy cluster (if configured)
-    destroy_cmd = (
-        f"./openshift-install destroy cluster "
-        f"--dir {cluster_path} "
-        f"--log-level debug"
-    )
-    if config.get("destroy-cluster"):
-        log.info("Destroying cluster")
-        run_cmd(destroy_cmd)
-        # TODO: destroy volumes created
-        os.remove(installer_filename)
-        os.remove(tarball)
-    else:
-        log.info(f"Cluster directory is located here: {cluster_path}")
-        log.info(
-            f"Skipping cluster destroy. "
-            f"To manually destroy the cluster execute the following cmd:\n"
-            f"{destroy_cmd}"
-        )
 
     return rc
 

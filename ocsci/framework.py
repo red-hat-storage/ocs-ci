@@ -7,7 +7,9 @@ from pprint import pformat
 
 from ocs.exceptions import UnknownTestStatusException
 from utility.polarion import post_to_polarion
-from utility.utils import create_unique_test_name, configure_logger, timestamp
+from utility.utils import (
+    create_unique_test_name, configure_logger, timestamp, destroy_cluster
+)
 from .enums import TestStatus
 
 log = logging.getLogger(__name__)
@@ -75,6 +77,7 @@ class TestCase(object):
         self.test_kwargs = test_kwargs
         self.rp_service = rp_service
         self.post_results = post_results
+        self.destroy_cluster = specs.get('destroy-cluster', False)
 
     def _setup(self):
         """
@@ -161,4 +164,9 @@ class TestCase(object):
             # TODO: update post_to_polarion to look for correct keys
         self.end = time.time()
         self.duration = self.end - self.start
+
+        if self.destroy_cluster:
+            cluster_path = self.test_kwargs['test_data']['cluster-path']
+            destroy_cluster(cluster_path)
+
         log.debug(f"Test case info:\n{pformat(self.__dict__)}")
