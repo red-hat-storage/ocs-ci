@@ -10,6 +10,10 @@ methods to be implemented in derived classes which are specific to api client
 import logging
 from abc import ABCMeta, abstractmethod
 
+from openshift.dynamic import exceptions
+
+from oc import openshift_ops
+
 logger = logging.getLogger(__name__)
 
 
@@ -126,11 +130,6 @@ class APIClientBase(metaclass=ABCMeta):
         raise NotImplementedError("get_labels method is not implemented")
 
 
-# All openshift REST client specific imports here
-from oc import openshift_ops
-from openshift.dynamic import exceptions
-
-
 class OCRESTClient(APIClientBase):
     """ All activities using openshift REST client"""
 
@@ -140,7 +139,7 @@ class OCRESTClient(APIClientBase):
 
     @property
     def name(self):
-        return "OCRESTClient"
+        return self.__class__.__name__
 
     def get_pods(self, **kwargs):
         """
@@ -154,7 +153,7 @@ class OCRESTClient(APIClientBase):
                 returns all pods across openshift cluster
         """
 
-        resource = self.rest_client.v1_pods
+        resource = self.rest_client.pods
 
         try:
             kwargs.update({'resource': resource})
@@ -183,7 +182,7 @@ class OCRESTClient(APIClientBase):
             dict: All the labels on a pod
         """
 
-        resource = self.rest_client.v1_pods.status
+        resource = self.rest_client.pods.status
         try:
             pod_meta = self.api_get(
                 resource=resource,
@@ -212,7 +211,7 @@ class OCRESTClient(APIClientBase):
         if 'body' not in kw:
             logger.error("create must have body ")
 
-        resource = self.rest_client.v1_services
+        resource = self.rest_client.services
         kw.update({'resource': resource})
         return self.api_create(**kw)
 
@@ -220,13 +219,13 @@ class OCRESTClient(APIClientBase):
         return self.rest_client.call_api("GET", **kw)
 
     def api_post(self, **kw):
-        pass
+        return super().api_post(**kw)
 
     def api_delete(self, **kw):
-        pass
+        return super().api_delete(**kw)
 
     def api_patch(self, **kw):
-        pass
+        return super().api_patch(**kw)
 
     def api_create(self, **kw):
         return self.rest_client.call_api("CREATE", **kw)
@@ -242,7 +241,7 @@ class OCCLIClient(APIClientBase):
 
     @property
     def name(self):
-        return "OCCLIClient"
+        return self.__class__.__name__
 
 
 class KubeClient(APIClientBase):
@@ -252,4 +251,4 @@ class KubeClient(APIClientBase):
 
     @property
     def name(self):
-        return "KubeClient"
+        return self.__class__.__name__

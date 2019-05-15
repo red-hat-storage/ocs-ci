@@ -6,6 +6,7 @@ from openshift.dynamic import DynamicClient, exceptions
 
 from ocs.exceptions import CommandFailed
 from utility.utils import run_cmd
+import ocs.defaults as default
 
 log = logging.getLogger(__name__)
 
@@ -27,14 +28,14 @@ class OCP(object):
         self.v1_projects = dyn_client.resources.get(
             api_version='project.openshift.io/v1', kind='Project'
         )
-        self.v1_pods = dyn_client.resources.get(
-            api_version='v1', kind='Pod'
+        self.pods = dyn_client.resources.get(
+            api_version=default.API_VERSION, kind='Pod'
         )
-        self.v1_deployments = dyn_client.resources.get(
-            api_version='v1', kind='Deployment'
+        self.deployments = dyn_client.resources.get(
+            api_version=default.API_VERSION, kind='Deployment'
         )
-        self.v1_services = dyn_client.resources.get(
-            api_version='v1', kind='Service'
+        self.services = dyn_client.resources.get(
+            api_version=default.API_VERSION, kind='Service'
         )
 
     @staticmethod
@@ -74,7 +75,7 @@ class OCP(object):
             list: of pods names, if no namespace provided then this function
                 returns all pods across openshift cluster.
         """
-        resource = self.v1_pods
+        resource = self.pods
 
         try:
             pod_data = resource.get(**kw)
@@ -103,7 +104,7 @@ class OCP(object):
             dict: All the openshift labels on a given pod
         """
 
-        resource = self.v1_pods.status
+        resource = self.pods.status
 
         try:
             pod_meta = resource.get(
