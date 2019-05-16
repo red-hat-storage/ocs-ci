@@ -34,6 +34,11 @@ Some non-required arguments that we end up using a lot:
     contains all the installation/authentication information about cluster.
     `Use this parameter when running on already deployed cluster!` You can
     pass the cluster path from previous execution if was created automatically.
+* `--conf` - with this configuration you can overwrite the default parameters
+    for cluster and deployment. See the example of such file
+    [here](../conf/ocs_basic_install.yml).
+* `--no-destroy` - this will prevent you to destroy your cluster at the end of
+    the execution. (Recommended if you want to re-run on the same cluster)
 
 ## Examples
 
@@ -43,7 +48,7 @@ Some non-required arguments that we end up using a lot:
 python run.py --suite suites/ocs_basic_install.yml --log-level info
 ```
 
-* Run with specific name of cluster and cluster directory without sendig email:
+* Run with specific name of cluster and cluster directory without sending email:
 
 ```bash
 python run.py --cluster-name=my-testing-cluster \
