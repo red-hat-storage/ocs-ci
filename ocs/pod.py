@@ -2,13 +2,13 @@
 
 Each pod in the openshift cluster will have a corresponding pod object.
 Few assumptions:
-    oc cluseter is up and running
+    oc cluster is up and running
 
 """
 
 import logging
 
-from .pod_exec import Exec, CmdObj
+from ocs.pod_exec import Exec, CmdObj
 
 logger = logging.getLogger(__name__)
 
@@ -16,31 +16,30 @@ logger = logging.getLogger(__name__)
 class Pod(object):
     """Handles per pod related context
 
-    Attributes:
-        name (str):      name of the pod in oc cluster
-        namespace(str):  openshift namespace where this pod lives
-        labels (list):      list of oc labels associated with pod
-        roles (list):       This could be oc roles like Master, etcd OR
-                            ceph roles like mon, osd etc
+        Attributes:
+            _name (str):      name of the pod in oc cluster
+            _namespace(str):  openshift namespace where this pod lives
+            labels (dict):   A dict of oc labels associated with pod
+            roles (list):    This could be oc roles like Master, etcd OR
+                             ceph roles like mon, osd etc
 
 
     """
 
-    def __init__(self, name=None, namespace=None, labels=None, roles=None):
+    def __init__(self, name=None, namespace=None, labels=None, roles=[]):
         """Context detail per pod
 
-        Args:
-            name (string):      name of the pod in oc cluster
-            namespace (string): namespace in which pod lives
-            labels (list):      list of oc labels associated with pod
-            roles (list):       This could be oc roles like Master, etcd OR
-                                ceph roles like mon, osd etc
-
+            Args:
+                name (string):      name of the pod in oc cluster
+                namespace (string): namespace in which pod lives
+                labels (dict):      dictionary of oc labels associated with pod
+                roles (list):       This could be oc roles like Master, etcd OR
+                    ceph roles like mon, osd etc.
         """
         self._name = name
         self._namespace = namespace
-        self.labels = labels
-        self.roles = roles
+        self._labels = labels
+        self._roles = roles
         # TODO: get backend config !!
 
     @property
@@ -50,6 +49,22 @@ class Pod(object):
     @property
     def namespace(self):
         return self._namespace
+
+    @property
+    def roles(self):
+        return self._roles
+
+    @property
+    def labels(self):
+        return self._labels
+
+    def set_role(self, role):
+        """
+        Set a role for this pod
+        Args:
+            role (str): New role to be assigned for this pod
+        """
+        self._roles.append(role)
 
     def exec_command(self, **kw):
         """ Handles execution of a command on a pod
@@ -79,14 +94,24 @@ class Pod(object):
         timeout = kw.get('timeout', 60)
         wait = kw.get('wait', True)         # default synchronous execution
         check_ec = kw.get('check_ec', True)
+        long_running = kw.get('long_running', False)
 
-        cmd_obj = CmdObj(cmd, timeout, wait, check_ec)
+        cmd_obj = CmdObj(
+            cmd,
+            timeout,
+            wait,
+            check_ec,
+            long_running,
+        )
+
         runner = Exec()
-        stdout, stderr, err = runner.run(self.name,
-                                         self.namespace,
-                                         cmd_obj)
+        stdout, stderr, err = runner.run(
+            self.name,
+            self.namespace,
+            cmd_obj,
+        )
 
         if check_ec:
-            return (stdout, stderr, err)
+            return stdout, stderr, err
         else:
-            return (stdout, stderr)
+            return stdout, stderr

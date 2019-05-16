@@ -1,155 +1,224 @@
+import json
 import logging
 import os
 import random
-import subprocess
-import sys
+import time
 
-import requests
-import yaml
-from jinja2 import Environment, FileSystemLoader
+import ocs.defaults as default
+from oc.openshift_ops import OCP
+from ocs.exceptions import CommandFailed, CephHealthException
+from ocs.utils import create_oc_resource
+from ocsci.enums import TestStatus
+from utility import templating
+from utility.aws import AWS
+from utility.retry import retry
+from utility.utils import run_cmd, download_openshift_installer
 
 log = logging.getLogger(__name__)
-
-THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-TOP_DIR = os.path.dirname(THIS_DIR)
 
 
 def run(**kwargs):
     log.info("Running OCS basic installation")
-    config = kwargs.get('config')
     test_data = kwargs.get('test_data')
+    cluster_path = test_data.get('cluster-path')
+    # Test cluster access and if exist just skip the deployment.
+    if cluster_path and OCP.set_kubeconfig(
+        os.path.join(cluster_path, default.KUBECONFIG_LOCATION)
+    ):
+        return TestStatus.SKIPPED
+    config = kwargs.get('config')
     cluster_conf = kwargs.get('cluster_conf')
-
-    workers, masters = None, None
+    workers = masters = aws_region = None
     if cluster_conf:
-        workers = cluster_conf.get('aws').get('cluster').get('workers')
-        masters = cluster_conf.get('aws').get('cluster').get('masters')
+        cluster_details = cluster_conf.get('aws', {}).get('cluster', {})
+        workers = cluster_details.get('workers')
+        masters = cluster_details.get('masters')
+        aws_region = cluster_details.get('region', default.AWS_REGION)
 
     # Generate install-config from template
     log.info("Generating install-config")
-    cluster_dir_parent = "/tmp"  # TODO: determine better place to create cluster directories, perhaps in project dir?
-    if test_data.get('cluster_name'):
-        cluster_name = test_data.get('cluster-name')
-    else:
-        cid = random.randint(10000, 99999)
-        cluster_name = f'ocs-ci-cluster-{cid}'
-    cluster_path = os.path.join(cluster_dir_parent, cluster_name)
-    run_cmd(f"mkdir {cluster_path}")
-
-    pull_secret_path = os.path.join(TOP_DIR, "data", "pull-secret")
+    # TODO: determine better place to create cluster directories - (log dir?)
+    cluster_dir_parent = "/tmp"
+    cluster_name = test_data.get('cluster-name')
+    base_cluster_name = test_data.get('cluster-name', default.CLUSTER_NAME)
+    cid = random.randint(10000, 99999)
+    if not (cluster_name and cluster_path):
+        cluster_name = f"{base_cluster_name}-{cid}"
+    if not cluster_path:
+        cluster_path = os.path.join(cluster_dir_parent, cluster_name)
+    run_cmd(f"mkdir -p {cluster_path}")
+    pull_secret_path = os.path.join(templating.TOP_DIR, "data", "pull-secret")
     with open(pull_secret_path, "r") as f:
         pull_secret = f.readline()
 
-    data = {"cluster_name": cluster_name,
-            "pull_secret": pull_secret}
+    data = {
+        "cluster_name": cluster_name,
+        "pull_secret": pull_secret,
+    }
     if workers:
         data.update({'worker_replicas': workers})
     if masters:
         data.update({'master_replicas': masters})
-    template = render_template("install-config.yaml.j2", data)
+    if aws_region:
+        data.update({'region': aws_region})
+
+    _templating = templating.Templating()
+    template = _templating.render_template("install-config.yaml.j2", data)
     log.info(f"Install config: \n{template}")
     install_config = os.path.join(cluster_path, "install-config.yaml")
     with open(install_config, "w") as f:
         f.write(template)
 
     # Download installer
-    installer_filename = "openshift-install"
-    if os.path.isfile(installer_filename):
-        log.info("Installer exists, skipping download")
-    else:
-        log.info("Downloading openshift installer")
-        ver = config.get('installer-version')
-        url = f"https://github.com/openshift/installer/releases/download/{ver}/openshift-install-linux-amd64"
-        download_file(url, installer_filename)
-        run_cmd(f"chmod +x {installer_filename}")
+    version = config.get('installer-version', default.INSTALLER_VERSION)
+    installer = download_openshift_installer(version)
 
     # Deploy cluster
     log.info("Deploying cluster")
-    run_cmd(f"./openshift-install create cluster --dir {cluster_path} --log-level debug")
+    run_cmd(
+        f"./{installer} create cluster "
+        f"--dir {cluster_path} "
+        f"--log-level debug"
+    )
 
     # Test cluster access
-    log.info("Testing access to cluster")
-    os.environ['KUBECONFIG'] = f"{cluster_path}/auth/kubeconfig"
-    run_cmd("oc cluster-info")
+    if not OCP.set_kubeconfig(
+        os.path.join(cluster_path, default.KUBECONFIG_LOCATION)
+    ):
+        return TestStatus.FAILED
 
     # TODO: Create cluster object, add to test_data for other tests to utilize
-    # TODO: Use Rook to install ceph on the cluster
+    # Determine worker pattern and create ebs volumes
+    with open(os.path.join(cluster_path, "terraform.tfvars")) as f:
+        tfvars = json.load(f)
 
-    # Destroy cluster (if configured)
-    destroy_cmd = f"./openshift-install destroy cluster --dir {cluster_path} --log-level debug"
-    if config.get("destroy-cluster"):
-        log.info("Destroying cluster")
-        # run this twice to ensure all resources are destroyed
-        run_cmd(destroy_cmd)
-        run_cmd(destroy_cmd)
-        log.info(f"Removing cluster directory: {cluster_path}")
-        os.remove(cluster_path)
-        os.remove(installer_filename)
+    cluster_id = tfvars['cluster_id']
+    worker_pattern = f'{cluster_id}-worker*'
+    log.info(f'Worker pattern: {worker_pattern}')
+    region_name = aws_region if aws_region else default.AWS_REGION
+    create_ebs_volumes(worker_pattern, region_name=region_name)
+
+    # Use Rook to install Ceph cluster
+    # retrieve rook config from cluster_conf
+    rook_data = {}
+    if cluster_conf:
+        rook_data = cluster_conf.get('rook', {})
+
+    # render templates and create resources
+    create_oc_resource('common.yaml', rook_data, cluster_path, _templating)
+    run_cmd(
+        'oc label namespace openshift-storage '
+        '"openshift.io/cluster-monitoring=true"'
+    )
+    run_cmd(
+        "oc policy add-role-to-user view "
+        "system:serviceaccount:openshift-monitoring:prometheus-k8s "
+        "-n openshift-storage"
+    )
+    create_oc_resource(
+        'operator-openshift.yaml', rook_data, cluster_path, _templating
+    )
+    wait_time = 5
+    log.info(f"Waiting {wait_time} seconds...")
+    time.sleep(wait_time)
+    run_cmd(
+        "oc wait --for condition=ready pod "
+        "-l app=rook-ceph-operator "
+        "-n openshift-storage "
+        "--timeout=120s"
+    )
+    run_cmd(
+        "oc wait --for condition=ready pod "
+        "-l app=rook-ceph-agent "
+        "-n openshift-storage "
+        "--timeout=120s"
+    )
+    run_cmd(
+        "oc wait --for condition=ready pod "
+        "-l app=rook-discover "
+        "-n openshift-storage "
+        "--timeout=120s"
+    )
+    create_oc_resource('cluster.yaml', rook_data, cluster_path, _templating)
+    create_oc_resource('toolbox.yaml', rook_data, cluster_path, _templating)
+    log.info(f"Waiting {wait_time} seconds...")
+    time.sleep(wait_time)
+    create_oc_resource(
+        'storage-manifest.yaml', rook_data, cluster_path, _templating
+    )
+    create_oc_resource(
+        "service-monitor.yaml", rook_data, cluster_path, _templating
+    )
+    create_oc_resource(
+        "prometheus-rules.yaml", rook_data, cluster_path, _templating
+    )
+
+    # Verify health of ceph cluster
+    # TODO: move destroy cluster logic to new CLI usage pattern?
+    log.info("Done creating rook resources, waiting for HEALTH_OK")
+    rc = ceph_health_check()
+
+    return rc
+
+
+def create_ebs_volumes(
+    worker_pattern,
+    size=100,
+    region_name=default.AWS_REGION
+):
+    """
+    Create volumes on workers
+
+    Args:
+        worker_pattern (string): Worker name pattern e.g.:
+            cluster-55jx2-worker*
+        size (int): Size in GB (default: 100)
+        region_name (str): Region name (default: default.AWS_REGION)
+    """
+    aws = AWS(region_name)
+    worker_instances = aws.get_instances_by_name_pattern(worker_pattern)
+    for worker in worker_instances:
+        log.info(
+            f"Creating and attaching {size} GB volume to {worker['name']}"
+        )
+        aws.create_volume_and_attach(
+            availability_zone=worker['avz'],
+            instance_id=worker['id'],
+            name=f"{worker['name']}_extra_volume",
+            size=size,
+        )
+
+
+@retry((CephHealthException, CommandFailed), tries=20, delay=30, backoff=1)
+def ceph_health_check():
+    """
+    Exec `ceph health` cmd on tools pod to determine health of cluster.
+
+    Raises:
+        CephHealthException: If the ceph health returned is not HEALTH_OK
+        CommandFailed: If the command to retrieve the tools pod name or the
+            command to get ceph health returns a non-zero exit code
+    Returns:
+        0 if HEALTH_OK
+
+    """
+    # TODO: grab namespace-name from rook data, default to openshift-storage
+    namespace = "openshift-storage"
+    run_cmd(
+        f"oc wait --for condition=ready pod "
+        f"-l app=rook-ceph-tools "
+        f"-n {namespace} "
+        f"--timeout=120s"
+    )
+    tools_pod = run_cmd(
+        f"oc -n {namespace} get pod -l 'app=rook-ceph-tools' "
+        f"-o jsonpath='{{.items[0].metadata.name}}'"
+    )
+    health = run_cmd(f"oc -n {namespace} exec {tools_pod} ceph health")
+    if health.strip() == "HEALTH_OK":
+        log.info("HEALTH_OK, install successful.")
+        return 0
     else:
-        log.info(f"Cluster directory is located here: {cluster_path}")
-        log.info(f"Skipping cluster destroy. To manually destroy the cluster execute the following cmd: {destroy_cmd}")
-
-    return 0
-
-
-def run_cmd(cmd, **kwargs):
-    """
-    Run an arbitrary command locally
-
-    Args:
-        cmd: command to run
-
-    """
-    log.info(f"Executing command: {cmd}")
-    r = subprocess.run(cmd.split(), stdout=sys.stdout, stderr=sys.stderr, **kwargs)
-    if r.returncode != 0:
-        raise CommandFailedException(f"Error during execution of command: {cmd}")
-
-
-def download_file(url, filename):
-    """
-    Download a file from a specified url
-
-    Args:
-        url: URL of the file to download
-        filename: Name of the file to write the download to
-
-    """
-    with open(filename, "wb") as f:
-        r = requests.get(url)
-        f.write(r.content)
-    assert r.ok
-
-
-def render_template(template_path, data):
-    """
-    Render a template with the given data.
-
-    Args:
-        template_path: location of the j2 template
-        data: the data to be formatted into the template
-
-    Returns: rendered template
-
-    """
-    j2_env = Environment(loader=FileSystemLoader(os.path.join(TOP_DIR, 'templates')), trim_blocks=True)
-    j2_template = j2_env.get_template(template_path)
-    return j2_template.render(**data)
-
-
-def load_config_data(data_path):
-    """
-    Loads YAML data from the specified path
-
-    Args:
-        data_path: location of the YAML data file
-
-    Returns: loaded YAML data
-
-    """
-    with open(data_path, "r") as data_descriptor:
-        return yaml.load(data_descriptor, Loader=yaml.FullLoader)
-
-
-class CommandFailedException(Exception):
-    pass
+        raise CephHealthException(
+            f"Ceph cluster health is not OK. Health: {health}"
+        )

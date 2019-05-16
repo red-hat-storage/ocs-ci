@@ -17,6 +17,8 @@ dispatcher class Exec.
 from collections import namedtuple
 import logging
 
+from ocs.exceptions import CommandFailed
+
 # Upstream KubernetesClient
 from kubernetes import config
 from kubernetes.client import Configuration
@@ -39,8 +41,9 @@ CmdObj = namedtuple('CmdObj', [
     'cmd',
     'timeout',
     'wait',
-    'check_ec'
-    ])
+    'check_ec',
+    'long_running',
+])
 
 
 def register_class(cls):
@@ -74,10 +77,8 @@ class Exec(object):
         """
         # Get api-client specific object
         apiclnt = _clsmap[self.oc_client]()
-        logger.info("Instantiated api-client {}".format(self.oc_client))
-        return apiclnt.run(podname,
-                           namespace,
-                           cmd_obj)
+        logger.info(f"Instantiated api-client {self.oc_client}")
+        return apiclnt.run(podname, namespace, cmd_obj)
 
 
 @register_class
@@ -104,8 +105,10 @@ class KubClient(object):
         ret = None
 
         try:
-            resp = self.api.read_namespaced_pod(name=podname,
-                                                namespace=namespace)
+            resp = self.api.read_namespaced_pod(
+                name=podname,
+                namespace=namespace
+            )
             logger.info(resp)
         except ApiException as ex:
             if ex.status != 404:
@@ -113,18 +116,28 @@ class KubClient(object):
 
         # run command in bash
         bash = ['/bin/bash']
-        resp = stream(self.api.connect_get_namespaced_pod_exec,
-                      podname,
-                      namespace,
-                      command=bash,
-                      stderr=True, stdin=True,
-                      stdout=True, tty=False,
-                      _preload_content=False)
+        resp = stream(
+            self.api.connect_get_namespaced_pod_exec,
+            podname,
+            namespace,
+            command=bash,
+            stderr=True,
+            stdin=True,
+            stdout=True,
+            tty=False,
+            _preload_content=False
+        )
         done = False
+        outbuf = ''
         while resp.is_open():
             resp.update(timeout=1)
             if resp.peek_stdout():
-                stdout = resp.read_stdout(timeout=60)
+                stdout = resp.read_stdout(timeout=cmd_obj.timeout)
+                outbuf = outbuf + stdout
+                if cmd_obj.long_running:
+                    while resp.peek_stdout(timeout=cmd_obj.timeout):
+                        stdout = resp.read_stdout(timeout=cmd_obj.timeout)
+                        outbuf = outbuf + stdout
             if resp.peek_stderr():
                 stderr = resp.read_stderr(timeout=60)
             if not done:
@@ -133,9 +146,27 @@ class KubClient(object):
                 done = True
             else:
                 break
+        """
+        Couple of glitches in capturing return value.
+        Rest api doesn't return ret value of the command
+        hence this workaround.
+        we can fix this once we have facility to capture err code
+        """
         if cmd_obj.check_ec:
             resp.write_stdin("echo $?\n")
-            ret = int(resp.readline_stdout(timeout=5))
-        resp.close()
+            try:
+                ret = int(resp.readline_stdout(timeout=5))
+            except (ValueError, TypeError):
+                logger.error(
+                    f"TimeOut: Command timedout after {cmd_obj.timeout}"
+                )
+                raise CommandFailed(
+                    f"Failed to run \"{cmd_obj.cmd}\""
+                )
+            finally:
+                resp.close()
 
-        return (stdout, stderr, ret)
+        if outbuf:
+            stdout = outbuf
+
+        return stdout, stderr, ret

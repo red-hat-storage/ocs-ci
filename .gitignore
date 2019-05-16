@@ -11,5 +11,5 @@ ven*
 config.yaml
 .vscode
 *.bak
-openshift-install
+openshift-install*
 data/pull-secret

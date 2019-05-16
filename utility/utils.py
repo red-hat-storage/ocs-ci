@@ -1,8 +1,12 @@
 import getpass
+import json
 import logging
 import os
+import platform
 import random
+import shlex
 import smtplib
+import subprocess
 import time
 import traceback
 from email.mime.multipart import MIMEMultipart
@@ -12,6 +16,11 @@ import requests
 import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from reportportal_client import ReportPortalServiceAsync
+
+from ocs import defaults
+from ocs.exceptions import CommandFailed, UnsupportedOSType
+from ocsci.enums import TestStatus
+from .aws import AWS
 
 log = logging.getLogger(__name__)
 
@@ -311,7 +320,7 @@ def rc_verify(tc, RC):
 #     BOLD = '\033[1m'
 
 
-def configure_logger(test_name, run_dir, level=logging.INFO):
+def configure_logger(test_name, run_dir, level=logging.DEBUG):
     """
     Configures a new FileHandler for the root logger.
 
@@ -601,9 +610,147 @@ def get_ocsci_config():
     cfg_file = os.path.join(home_dir, ".ocs-ci.yaml")
     try:
         with open(cfg_file, "r") as yml:
-            cfg = yaml.load(yml)
+            cfg = yaml.safe_load(yml)
     except IOError:
-        log.error("Please create ~/.ocs-ci.yaml from the ocs-ci.yaml.template. "
-                  "See README for more information.")
+        log.error(
+            "Please create ~/.ocs-ci.yaml from the ocs-ci.yaml.template. "
+            "See README for more information."
+        )
         raise
     return cfg
+
+
+def run_cmd(cmd, **kwargs):
+    """
+    Run an arbitrary command locally
+
+    Args:
+        cmd (str): command to run
+
+    Raises:
+        CommandFailed: In case the command execution fails
+
+    Returns:
+        (str) Decoded stdout of command
+
+    """
+    log.info(f"Executing command: {cmd}")
+    if isinstance(cmd, str):
+        cmd = shlex.split(cmd)
+    r = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.PIPE,
+        **kwargs
+    )
+    log.debug(f"CMD output: {r.stdout.decode()}")
+    if r.stderr:
+        log.error(f"CMD error:: {r.stderr.decode()}")
+    if r.returncode:
+        raise CommandFailed(
+            f"Error during execution of command: {cmd}"
+        )
+    return r.stdout.decode()
+
+
+def download_file(url, filename):
+    """
+    Download a file from a specified url
+
+    Args:
+        url (str): URL of the file to download
+        filename (str): Name of the file to write the download to
+
+    """
+    with open(filename, "wb") as f:
+        r = requests.get(url)
+        f.write(r.content)
+    assert r.ok
+
+
+def destroy_cluster(cluster_path):
+    """
+    Destroy existing cluster resources in AWS.
+
+    Args:
+        cluster_path (str): filepath to cluster directory to be destroyed
+
+    Returns:
+        TestStatus: enum for status of cluster deletion
+
+    """
+    destroy_cmd = (
+        f"./openshift-install destroy cluster "
+        f"--dir {cluster_path} "
+        f"--log-level debug"
+    )
+
+    try:
+        cluster_path = os.path.normpath(cluster_path)
+
+        # Retrieve cluster name and aws region from metadata
+        metadata_file = os.path.join(cluster_path, "metadata.json")
+        with open(metadata_file) as f:
+            metadata = json.loads(f.read())
+        cluster_name = metadata.get("clusterName")
+        region_name = metadata.get("aws").get("region")
+
+        # Download installer
+        installer = download_openshift_installer()
+        tarball = f"{installer}.tar.gz"
+
+        # Execute destroy cluster using OpenShift installer
+        log.info(f"Destroying cluster defined in {cluster_path}")
+        run_cmd(destroy_cmd)
+
+        # Find and delete volumes
+        aws = AWS(region_name)
+        volume_pattern = f"{cluster_name}*"
+        log.debug(f"Finding volumes with pattern: {volume_pattern}")
+        volumes = aws.get_volumes_by_name_pattern(volume_pattern)
+        log.debug(f"Found volumes: \n {volumes}")
+        for volume in volumes:
+            aws.detach_and_delete_volume(volume)
+
+        # Remove installer and tarball
+        os.remove(installer)
+        os.remove(tarball)
+        return TestStatus.PASSED
+
+    except Exception:
+        log.error(traceback.format_exc())
+        return TestStatus.FAILED
+
+
+def download_openshift_installer(version=defaults.INSTALLER_VERSION):
+    """
+    Download the openshift installer
+
+    Args:
+        version (str): version of the installer to download
+
+    Returns:
+        str: name of the installer binary after being unpacked
+
+    """
+    installer_filename = "openshift-install"
+    tarball = f"{installer_filename}.tar.gz"
+    if os.path.isfile(installer_filename):
+        log.info("Installer exists, skipping download")
+    else:
+        log.info("Downloading openshift installer")
+        if platform.system() == "Darwin":
+            os_type = "mac"
+        elif platform.system() == "Linux":
+            os_type = "linux"
+        else:
+            raise UnsupportedOSType
+        url = (
+            f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
+            f"{version}/openshift-install-{os_type}-{version}.tar.gz"
+        )
+        download_file(url, tarball)
+        run_cmd(f"tar xzvf {tarball}")
+
+    return installer_filename
