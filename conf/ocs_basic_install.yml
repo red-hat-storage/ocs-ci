@@ -1,4 +1,11 @@
-aws:
-  cluster:
-    workers: 6
-    masters: 6
+---
+# This is example of the config for deployment which allows you to overwrite
+# the default values from templates.
+env_data:
+  # take a look at deployment templates variables, here you is the place you
+  # can overwrite all the vars you want.
+  platform: 'aws'
+  workers: 3  # here you can define diff number of workers
+  masters: 3
+  ceph_image: "quay.io/rhceph-dev/rhceph-4.0-rhel-8"
+  rook_image: "quay.io/rhceph-dev/rook"
