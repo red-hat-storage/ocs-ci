@@ -12,7 +12,7 @@ from ocsci.enums import TestStatus
 from utility import templating
 from utility.aws import AWS
 from utility.retry import retry
-from utility.utils import run_cmd, download_openshift_installer
+from utility.utils import run_cmd, get_openshift_installer
 
 log = logging.getLogger(__name__)
 
@@ -69,14 +69,15 @@ def run(**kwargs):
     with open(install_config, "w") as f:
         f.write(template)
 
-    # Download installer
-    version = config.get('installer-version', default.INSTALLER_VERSION)
-    installer = download_openshift_installer(version)
+    # Download installer and client
+    installer = get_openshift_installer(
+        version=config.get('installer-version', default.INSTALLER_VERSION)
+    )
 
     # Deploy cluster
     log.info("Deploying cluster")
     run_cmd(
-        f"./{installer} create cluster "
+        f"{installer} create cluster "
         f"--dir {cluster_path} "
         f"--log-level debug"
     )

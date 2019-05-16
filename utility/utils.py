@@ -680,8 +680,11 @@ def destroy_cluster(cluster_path):
         TestStatus: enum for status of cluster deletion
 
     """
+    # Download installer
+    installer = get_openshift_installer()
+
     destroy_cmd = (
-        f"./openshift-install destroy cluster "
+        f"{installer} destroy cluster "
         f"--dir {cluster_path} "
         f"--log-level debug"
     )
@@ -696,10 +699,6 @@ def destroy_cluster(cluster_path):
         cluster_name = metadata.get("clusterName")
         region_name = metadata.get("aws").get("region")
 
-        # Download installer
-        installer = download_openshift_installer()
-        tarball = f"{installer}.tar.gz"
-
         # Execute destroy cluster using OpenShift installer
         log.info(f"Destroying cluster defined in {cluster_path}")
         run_cmd(destroy_cmd)
@@ -713,9 +712,8 @@ def destroy_cluster(cluster_path):
         for volume in volumes:
             aws.detach_and_delete_volume(volume)
 
-        # Remove installer and tarball
+        # Remove installer
         os.remove(installer)
-        os.remove(tarball)
         return TestStatus.PASSED
 
     except Exception:
@@ -723,21 +721,22 @@ def destroy_cluster(cluster_path):
         return TestStatus.FAILED
 
 
-def download_openshift_installer(version=defaults.INSTALLER_VERSION):
+def get_openshift_installer(version=defaults.INSTALLER_VERSION):
     """
-    Download the openshift installer
+    Get path of the openshift installer binary, download it if not available.
 
     Args:
         version (str): version of the installer to download
 
     Returns:
-        str: name of the installer binary after being unpacked
+        str: path of the installer binary
 
     """
     installer_filename = "openshift-install"
-    tarball = f"{installer_filename}.tar.gz"
-    if os.path.isfile(installer_filename):
+    installer_binary_path = os.path.join(defaults.BIN_DIR, installer_filename)
+    if os.path.isfile(installer_binary_path):
         log.info("Installer exists, skipping download")
+        # TODO: check installer version
     else:
         log.info("Downloading openshift installer")
         if platform.system() == "Darwin":
@@ -750,7 +749,19 @@ def download_openshift_installer(version=defaults.INSTALLER_VERSION):
             f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
             f"{version}/openshift-install-{os_type}-{version}.tar.gz"
         )
+        # Prepare BIN_DIR
+        try:
+            os.mkdir(defaults.BIN_DIR)
+        except FileExistsError:
+            pass
+        # record current working directory and switch to BIN_DIR
+        previous_dir = os.getcwd()
+        os.chdir(defaults.BIN_DIR)
+        tarball = f"{installer_filename}.tar.gz"
         download_file(url, tarball)
         run_cmd(f"tar xzvf {tarball}")
+        os.remove(tarball)
+        # return to the previous working directory
+        os.chdir(previous_dir)
 
-    return installer_filename
+    return installer_binary_path
