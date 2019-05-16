@@ -11,7 +11,6 @@ import time
 import traceback
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import jinja2
 
 import requests
 import yaml
@@ -19,7 +18,9 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from reportportal_client import ReportPortalServiceAsync
 
 from ocs import defaults
-from ocs.exceptions import CommandFailed, UnsupportedOSType
+from ocs.exceptions import (
+    CommandFailed, UnsupportedOSType, TimeoutExpiredError,
+)
 from ocsci.enums import TestStatus
 from .aws import AWS
 
@@ -757,29 +758,6 @@ def download_openshift_installer(version=defaults.INSTALLER_VERSION):
     return installer_filename
 
 
-def generate_yaml_from_template(file_, **kwargs):
-    """
-    Generate dictionary from yaml file
-
-    Args:
-        file_ (str): Template Yaml file path
-
-    Keyword Args:
-        All jinja2 attributes
-
-    Returns:
-        dict: Generated from template file
-
-    Examples:
-        generate_yaml_from_template(file_='path/to/file/name', pv_data_dict')
-    """
-    with open(file_, 'r') as stream:
-        data = stream.read()
-    template = jinja2.Template(data)
-    out = template.render(**kwargs)
-    return yaml.safe_load(out)
-
-
 def delete_file(file_name):
     """
     Delete file_name
@@ -788,16 +766,6 @@ def delete_file(file_name):
         file_name (str): Path to the file you want to delete
     """
     os.remove(file_name)
-
-
-class TimeoutExpiredError(Exception):
-    message = 'Timed Out'
-
-    def __init__(self, *value):
-        self.value = value
-
-    def __str__(self):
-        return f"{self.message}: {self.value}"
 
 
 class TimeoutSampler(object):

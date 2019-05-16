@@ -8,7 +8,7 @@ import yaml
 
 from ocs import exceptions
 from ocs import ocp
-from utility import utils
+from utility import utils, templating
 from ocsci.enums import TestStatus
 
 
@@ -26,7 +26,9 @@ def create_pv(**kwargs):
     """
     Create a new Persistent Volume
     """
-    file_y = utils.generate_yaml_from_template(PV_YAML, **kwargs)
+    file_y = templating.generate_yaml_from_jinja2_template_with_data(
+        PV_YAML, **kwargs
+    )
     with open(TEMP_YAML_FILE, 'w') as yaml_file:
         yaml.dump(file_y, yaml_file, default_flow_style=False)
         log.info(f"Creating new Persistent Volume")

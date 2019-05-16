@@ -10,7 +10,7 @@ from ocs import ocp
 from munch import munchify
 from ocs import exceptions
 from ocsci.enums import TestStatus
-from utility import utils
+from utility import utils, templating
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +26,9 @@ def create_ceph_fs(**kwargs):
     """
     Create a new Ceph File System
     """
-    file_y = utils.generate_yaml_from_template(PV_YAML, **kwargs)
+    file_y = templating.generate_yaml_from_jinja2_template_with_data(
+        PV_YAML, **kwargs
+    )
     with open(TEMP_YAML_FILE, 'w') as yaml_file:
         yaml.dump(file_y, yaml_file, default_flow_style=False)
     log.info(f"Creating a new Ceph FileSystem")
