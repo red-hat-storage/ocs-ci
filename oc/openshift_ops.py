@@ -5,7 +5,7 @@ from kubernetes import config
 from openshift.dynamic import DynamicClient, exceptions
 
 from ocs.exceptions import CommandFailed
-from utility.utils import run_cmd
+from utility.utils import run_cmd, get_openshift_client
 
 log = logging.getLogger(__name__)
 
@@ -111,7 +111,8 @@ class OCP(object):
             return False
         os.environ['KUBECONFIG'] = kubeconfig_path
         try:
-            run_cmd("oc cluster-info")
+            oc = get_openshift_client()
+            run_cmd(f"{oc} cluster-info")
         except CommandFailed as ex:
             log.error("Cluster is not ready to use: %s", ex)
             return False

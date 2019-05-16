@@ -765,3 +765,47 @@ def get_openshift_installer(version=defaults.INSTALLER_VERSION):
         os.chdir(previous_dir)
 
     return installer_binary_path
+
+def get_openshift_client(version=defaults.CLIENT_VERSION):
+    """
+    Get path of the openshift client binary, download it if not available.
+
+    Args:
+        version (str): version of the client to download
+
+    Returns:
+        str: path of the client binary
+
+    """
+    client_binary_path = os.path.join(defaults.BIN_DIR, 'oc')
+    if os.path.isfile(client_binary_path):
+        log.info("Client exists, skipping download")
+        # TODO: check client version
+    else:
+        log.info("Downloading openshift client")
+        if platform.system() == "Darwin":
+            os_type = "mac"
+        elif platform.system() == "Linux":
+            os_type = "linux"
+        else:
+            raise UnsupportedOSType
+        url = (
+            f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
+            f"{version}/openshift-client-{os_type}-{version}.tar.gz"
+        )
+        # Prepare BIN_DIR
+        try:
+            os.mkdir(defaults.BIN_DIR)
+        except FileExistsError:
+            pass
+        # record current working directory and switch to BIN_DIR
+        previous_dir = os.getcwd()
+        os.chdir(defaults.BIN_DIR)
+        tarball = "openshift-client.tar.gz"
+        download_file(url, tarball)
+        run_cmd(f"tar xzvf {tarball}")
+        os.remove(tarball)
+        # return to the previous working directory
+        os.chdir(previous_dir)
+
+    return client_binary_path
