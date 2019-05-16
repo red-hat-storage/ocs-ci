@@ -6,6 +6,7 @@ from openshift.dynamic import DynamicClient, exceptions
 
 from ocs.exceptions import CommandFailed
 from utility.utils import run_cmd
+import ocs.defaults as default
 
 log = logging.getLogger(__name__)
 
@@ -27,9 +28,41 @@ class OCP(object):
         self.v1_projects = dyn_client.resources.get(
             api_version='project.openshift.io/v1', kind='Project'
         )
-        self.v1_pods = dyn_client.resources.get(
-            api_version='v1', kind='Pod'
+        self.pods = dyn_client.resources.get(
+            api_version=default.API_VERSION, kind='Pod'
         )
+        self.deployments = dyn_client.resources.get(
+            api_version=default.API_VERSION, kind='Deployment'
+        )
+        self.services = dyn_client.resources.get(
+            api_version=default.API_VERSION, kind='Service'
+        )
+
+    @staticmethod
+    def call_api(method, **kw):
+        """
+        This function makes generic REST calls
+
+        Args:
+            method(str): one of the GET, CREATE, PATCH, POST, DELETE
+            **kw: Based on context of the call kw will be populated by caller
+
+        Returns:
+            ResourceInstance object
+        """
+        # Get the resource type on which we want to operate
+        resource = kw.pop('resource')
+
+        if method == "GET":
+            return resource.get(**kw)
+        elif method == "CREATE":
+            return resource.create(**kw)
+        elif method == "PATCH":
+            return resource.patch(**kw)
+        elif method == "DELETE":
+            return resource.delete(**kw)
+        elif method == "POST":
+            return resource.post(**kw)
 
     def get_pods(self, **kw):
         """
@@ -42,7 +75,7 @@ class OCP(object):
             list: of pods names, if no namespace provided then this function
                 returns all pods across openshift cluster.
         """
-        resource = self.v1_pods
+        resource = self.pods
 
         try:
             pod_data = resource.get(**kw)
@@ -71,7 +104,7 @@ class OCP(object):
             dict: All the openshift labels on a given pod
         """
 
-        resource = self.v1_pods.status
+        resource = self.pods.status
 
         try:
             pod_meta = resource.get(
