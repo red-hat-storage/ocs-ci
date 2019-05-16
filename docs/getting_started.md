@@ -46,8 +46,9 @@ cp ocs-ci.yaml.template ~/.ocs-ci.yaml
 In order to deploy a cluster to AWS with the Openshift Installer,
 you will need to download the pull secret for your account.
 Download this file from [openshift.com](https://cloud.openshift.com/clusters/install)
-and place in the `data` directory at the root level of the project.
-If there is no `data` directory, create one.
+and place in the `data` directory at the root level of the project
+If there is no `data` directory, create one or you can place the file in
+`$HOME/ocsci-data/`.
 The name of the file should be `pull-secret`.
 
 ## Tests

@@ -7,9 +7,10 @@ from copy import deepcopy
 
 import ocs.defaults as default
 from oc.openshift_ops import OCP
-from ocs.exceptions import CommandFailed, CephHealthException
+from ocs.exceptions import CommandFailed, CephHealthException, PullSecretFileNotFound
 from ocs.utils import create_oc_resource
 from ocsci.enums import TestStatus
+from os.path import expanduser
 from utility import templating
 from utility.aws import AWS
 from utility.retry import retry
@@ -44,8 +45,16 @@ def run(**kwargs):
     if not cluster_path:
         cluster_path = os.path.join(cluster_dir_parent, cluster_name)
     run_cmd(f"mkdir -p {cluster_path}")
-    pull_secret_path = os.path.join(templating.TOP_DIR, "data", "pull-secret")
-    with open(pull_secret_path, "r") as f:
+    pull_secret_file = os.path.join(templating.TOP_DIR, "data", "pull-secret")
+    if not os.path.isfile(pull_secret_file):
+        home_dir = expanduser("~")
+        pull_secret_file = os.path.join(home_dir, "ocsci-data", "pull-secret")
+    if not os.path.isfile(pull_secret_file):
+        log.error(
+            "Please ensure pull-secret file exists, check getting-started guide"
+        )
+        raise PullSecretFileNotFound
+    with open(pull_secret_file, "r") as f:
         pull_secret = f.readline()
     custom_env_data.update(
         {
