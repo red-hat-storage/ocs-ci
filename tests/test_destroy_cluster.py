@@ -1,6 +1,6 @@
 import logging
 
-from ocsci.enums import TestStatus
+from ocsci.enums import StatusOfTest
 from utility.utils import destroy_cluster
 
 log = logging.getLogger(__name__)
@@ -12,7 +12,7 @@ def run(**kwargs):
 
     if test_data.get('no-destroy'):
         log.info("Skipping cluster destroy")
-        return TestStatus.SKIPPED
+        return StatusOfTest.SKIPPED
     else:
         cluster_path = test_data.get('cluster-path')
         return destroy_cluster(cluster_path)

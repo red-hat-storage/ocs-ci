@@ -25,7 +25,13 @@ setup(
         'openshift',
         'boto3',
         'munch',
+        'pytest',
     ],
+    entry_points={
+        'pytest11': [
+            'ocscilib = pytest_customization.plugins.ocscilib',
+        ]
+    },
     zip_safe=True,
     include_package_data=True,
     packages=find_packages(exclude=['ez_setup']),

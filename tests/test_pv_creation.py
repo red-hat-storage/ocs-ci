@@ -9,7 +9,7 @@ import yaml
 from ocs import exceptions
 from ocs import ocp
 from utility import utils, templating
-from ocsci.enums import TestStatus
+from ocsci.enums import StatusOfTest
 
 
 log = logging.getLogger(__name__)
@@ -76,4 +76,4 @@ def run(**kwargs):
     assert delete_pv(pv_name)
     assert not verify_pv_exist(pv_name)
     utils.delete_file(TEMP_YAML_FILE)
-    return TestStatus.PASSED
+    return StatusOfTest.PASSED
