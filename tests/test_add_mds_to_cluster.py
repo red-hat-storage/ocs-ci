@@ -53,11 +53,13 @@ def delete_fs(request):
     """
     Deleting a ceph FS
     """
-    log.info(f"Deleting the file system")
-    stat = OCP.delete(TEMP_YAML_FILE)
-    assert not CEPHFS_DELETED.format(cephfs_name=request.node.cls.fs_name) in stat
-    assert not verify_fs_exist(request.node.cls.fs_name)
-    utils.delete_file(TEMP_YAML_FILE)
+    def finalizer():
+        log.info(f"Deleting the file system")
+        stat = OCP.delete(TEMP_YAML_FILE)
+        assert not CEPHFS_DELETED.format(cephfs_name=request.node.cls.fs_name) in stat
+        assert not verify_fs_exist(request.node.cls.fs_name)
+        utils.delete_file(TEMP_YAML_FILE)
+    request.addfinalizer(finalizer)
 
 
 @pytest.mark.usefixtures(
@@ -83,8 +85,8 @@ class TestModifyFS:
         """
         with open(TEMP_YAML_FILE, 'r') as yaml_file:
             cephfs_obj = munchify(yaml.safe_load(yaml_file))
-        cephfs_obj.spec.metadataServer.activeCount = int(new_active_count)
+        cephfs_obj.spec.metadataServer.activeCount = int(self.new_active_count)
         with open(TEMP_YAML_FILE, 'w') as yaml_file:
             yaml.dump(cephfs_obj.toDict(), yaml_file, default_flow_style=False)
-        log.info(f"Change the active_count to {new_active_count}")
+        log.info(f"Change the active_count to {self.new_active_count}")
         assert OCP.apply(yaml_file=TEMP_YAML_FILE)
