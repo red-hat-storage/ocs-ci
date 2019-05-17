@@ -634,6 +634,5 @@ def apply_oc_resource(
     cfg_file = os.path.join(cluster_path, template_name)
     with open(cfg_file, "w") as f:
         f.write(template)
-    log.info(f"Creating rook resource from {template_name}")
+    log.info(f"Applying rook resource from {template_name}")
     run_cmd(f"oc apply -f {cfg_file}")
-
