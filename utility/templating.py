@@ -1,8 +1,7 @@
 import os
 
 import yaml
-from jinja2 import Environment, FileSystemLoader
-
+from jinja2 import Environment, FileSystemLoader, Template
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 TOP_DIR = os.path.dirname(THIS_DIR)
@@ -99,3 +98,26 @@ class Templating:
             path (str): Base path from which look for templates
         """
         self._base_path = path
+
+
+def generate_yaml_from_jinja2_template_with_data(file_, **kwargs):
+    """
+    Generate yaml fron jinja2 yaml with processed data
+
+    Args:
+        file_ (str): Template Yaml file path
+
+    Keyword Args:
+        All jinja2 attributes
+
+    Returns:
+        dict: Generated from template file
+
+    Examples:
+        generate_yaml_from_template(file_='path/to/file/name', pv_data_dict')
+    """
+    with open(file_, 'r') as stream:
+        data = stream.read()
+    template = Template(data)
+    out = template.render(**kwargs)
+    return yaml.safe_load(out)
