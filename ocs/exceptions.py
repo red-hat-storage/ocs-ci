@@ -10,7 +10,7 @@ class CephHealthException(Exception):
     pass
 
 
-class UnknownTestStatusException(Exception):
+class UnknownStatusOfTestException(Exception):
     pass
 
 

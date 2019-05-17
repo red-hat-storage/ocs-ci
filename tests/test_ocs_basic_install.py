@@ -9,7 +9,7 @@ import ocs.defaults as default
 from oc.openshift_ops import OCP
 from ocs.exceptions import CommandFailed, CephHealthException
 from ocs.utils import create_oc_resource
-from ocsci.enums import TestStatus
+from ocsci.enums import StatusOfTest
 from utility import templating
 from utility.aws import AWS
 from utility.retry import retry
@@ -27,7 +27,7 @@ def run(**kwargs):
     if cluster_path and OCP.set_kubeconfig(
         os.path.join(cluster_path, default.KUBECONFIG_LOCATION)
     ):
-        return TestStatus.SKIPPED
+        return StatusOfTest.SKIPPED
     config = kwargs.get('config')
     cluster_conf = kwargs.get('cluster_conf', {})
 
@@ -85,7 +85,7 @@ def run(**kwargs):
     if not OCP.set_kubeconfig(
         os.path.join(cluster_path, default.KUBECONFIG_LOCATION)
     ):
-        return TestStatus.FAILED
+        return StatusOfTest.FAILED
 
     # TODO: Create cluster object, add to test_data for other tests to utilize
     # Determine worker pattern and create ebs volumes
