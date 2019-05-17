@@ -16,6 +16,8 @@ log = logging.getLogger(__name__)
 
 PV_YAML = os.path.join("templates/ocs-deployment", "PersistentVolume.yaml")
 TEMP_YAML_FILE = 'test.yaml'
+VOLUME_DELETED = 'persistentvolume "{volume_name}" deleted'
+
 
 OCP = ocp.OCP(
     kind='PersistentVolume', namespace=defaults.ROOK_CLUSTER_NAMESPACE
@@ -42,7 +44,7 @@ def delete_pv(pv_name):
     """
     log.info(f"Deleting the Persistent Volume {pv_name}")
     stat = OCP.delete(TEMP_YAML_FILE)
-    if stat in defaults.VOLUME_DELETED.format(volume_name=pv_name):
+    if stat in VOLUME_DELETED.format(volume_name=pv_name):
         return True
     return False
 

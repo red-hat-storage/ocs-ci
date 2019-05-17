@@ -16,6 +16,7 @@ log = logging.getLogger(__name__)
 
 PV_YAML = os.path.join("templates/ocs-deployment", "cephfilesystem.yaml")
 TEMP_YAML_FILE = 'test_cephfilesystem.yaml'
+CEPHFS_DELETED = '"{cephfs_name}" deleted'
 
 OCP = ocp.OCP(
     kind='CephFilesystem', namespace=defaults.ROOK_CLUSTER_NAMESPACE
@@ -55,7 +56,7 @@ def delete_fs(fs_name):
     """
     log.info(f"Deleting the file system")
     stat = OCP.delete(TEMP_YAML_FILE)
-    if defaults.CEPHFS_DELETED.format(cephfs_name=fs_name) in stat:
+    if CEPHFS_DELETED.format(cephfs_name=fs_name) in stat:
         return True
     return False
 

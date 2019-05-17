@@ -25,7 +25,6 @@ setup(
         'openshift',
         'boto3',
         'munch',
-        'ipdb'
     ],
     zip_safe=True,
     include_package_data=True,
