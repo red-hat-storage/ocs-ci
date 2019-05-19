@@ -19,6 +19,7 @@ from utility.utils import create_unique_test_name, timestamp, run_cmd
 from .ceph import RolesContainer, CommandFailed, Ceph, CephNode
 from .clients import WinNode
 from .parallel import parallel
+from ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
