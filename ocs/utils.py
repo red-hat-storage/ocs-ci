@@ -601,7 +601,8 @@ def create_oc_resource(
     with open(cfg_file, "w") as f:
         f.write(template)
     log.info(f"Creating rook resource from {template_name}")
-    run_cmd(f"oc create -f {cfg_file}")
+    occli = OCP()
+    occli.create(cfg_file)
 
 
 def apply_oc_resource(
@@ -635,4 +636,5 @@ def apply_oc_resource(
     with open(cfg_file, "w") as f:
         f.write(template)
     log.info(f"Applying rook resource from {template_name}")
-    run_cmd(f"oc apply -f {cfg_file}")
+    occli = OCP()
+    occli.apply(cfg_file)

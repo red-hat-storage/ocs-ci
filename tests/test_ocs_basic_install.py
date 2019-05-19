@@ -174,7 +174,8 @@ def run(**kwargs):
     create_oc_resource(
         "prometheus-rules.yaml", cluster_path, _templating, env_data
     )
-
+    log.info(f"Waiting {wait_time} seconds...")
+    time.sleep(wait_time)
     # Verify health of ceph cluster
     # TODO: move destroy cluster logic to new CLI usage pattern?
     log.info("Done creating rook resources, waiting for HEALTH_OK")
