@@ -1,11 +1,21 @@
-# Code review best practices in OCS-CI
+# Code review/contribution best practices in OCS-CI
 
-**Lets use the following guidelines for Code Reviews:**
+**Lets use the following guidelines for Code Reviews and contribution:**
 
+* Create own fork of the repository and submit PR from your fork.
+* Please follow rules we have set in [coding guidelines](./coding_guidelines.md)
+    and read it properly before submitting your first PR.
 * Run couple of real tests before submitting for library changes.
     For test changes, they should be run on at least one environment before
     pull request is submitted.
+* Run the `tox` command locally before submitting the patch to github to see if
+    you are passing the tests we are running in Travis CI.
 * It is better to submit small changes in core libraries to avoid regression.
+* If the change is still Work In Progress (WIP), please add WIP to the name of
+    PR which indicates that patch is not ready for the  merge yet. We have
+    installed this [application WIP](https://github.com/marketplace/wip). This
+    magic word will prevent us to merge this change which contains WIP in the
+    name. Once you finish with patch you can remove it from the PR name.
 * Request review from a few of project maintainers or related folks.
     Currently we are using the CODEOWNERS file which should auto assign
     [top level reviewers](https://github.com/orgs/red-hat-storage/teams/top-level-reviewers/members).

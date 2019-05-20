@@ -8,8 +8,9 @@ Basic information about the project you can find in initial [README](../README.m
 
 Rest of the information you can find in those sections
 
-* [Code review](./code_review.md) - information about code review best
-    practices for the OCS-CI project
+* [Code review and contribution](./code_review.md) - information about code
+    review best practices for the OCS-CI project and tips and rules for
+    contribution.
 
 * [Code guidelines](./coding_guidelines.md) - information about code conventions and
     best practices for writing code in the OCS-CI project.
