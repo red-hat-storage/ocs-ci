@@ -3,6 +3,7 @@ import logging
 import os
 import random
 import time
+from copy import deepcopy
 
 import ocs.defaults as default
 from oc.openshift_ops import OCP
@@ -27,14 +28,10 @@ def run(**kwargs):
     ):
         return TestStatus.SKIPPED
     config = kwargs.get('config')
-    cluster_conf = kwargs.get('cluster_conf')
-    workers = masters = aws_region = None
-    if cluster_conf:
-        cluster_details = cluster_conf.get('aws', {}).get('cluster', {})
-        workers = cluster_details.get('workers')
-        masters = cluster_details.get('masters')
-        aws_region = cluster_details.get('region', default.AWS_REGION)
+    cluster_conf = kwargs.get('cluster_conf', {})
 
+    env_data = deepcopy(default.ENV_DATA)
+    custom_env_data = cluster_conf.get('env_data', {})
     # Generate install-config from template
     log.info("Generating install-config")
     # TODO: determine better place to create cluster directories - (log dir?)
@@ -50,20 +47,22 @@ def run(**kwargs):
     pull_secret_path = os.path.join(templating.TOP_DIR, "data", "pull-secret")
     with open(pull_secret_path, "r") as f:
         pull_secret = f.readline()
+    custom_env_data.update(
+        {
+            'pull_secret': pull_secret,
+            'cluster_name': cluster_name,
+        }
+    )
+    if custom_env_data:
+        env_data.update(custom_env_data)
 
-    data = {
-        "cluster_name": cluster_name,
-        "pull_secret": pull_secret,
-    }
-    if workers:
-        data.update({'worker_replicas': workers})
-    if masters:
-        data.update({'master_replicas': masters})
-    if aws_region:
-        data.update({'region': aws_region})
+    # TODO: check for supported platform and raise the exception if not
+    # supported. Currently we support just AWS.
 
     _templating = templating.Templating()
-    template = _templating.render_template("install-config.yaml.j2", data)
+    template = _templating.render_template(
+        "install-config.yaml.j2", env_data
+    )
     log.info(f"Install config: \n{template}")
     install_config = os.path.join(cluster_path, "install-config.yaml")
     with open(install_config, "w") as f:
@@ -95,68 +94,63 @@ def run(**kwargs):
     cluster_id = tfvars['cluster_id']
     worker_pattern = f'{cluster_id}-worker*'
     log.info(f'Worker pattern: {worker_pattern}')
-    region_name = aws_region if aws_region else default.AWS_REGION
-    create_ebs_volumes(worker_pattern, region_name=region_name)
-
-    # Use Rook to install Ceph cluster
-    # retrieve rook config from cluster_conf
-    rook_data = {}
-    if cluster_conf:
-        rook_data = cluster_conf.get('rook', {})
+    create_ebs_volumes(worker_pattern, region_name=env_data['region'])
 
     # render templates and create resources
-    create_oc_resource('common.yaml', rook_data, cluster_path, _templating)
+    create_oc_resource('common.yaml', cluster_path, _templating, env_data)
     run_cmd(
-        'oc label namespace openshift-storage '
-        '"openshift.io/cluster-monitoring=true"'
+        f'oc label namespace {env_data["cluster_namespace"]} '
+        f'"openshift.io/cluster-monitoring=true"'
     )
     run_cmd(
-        "oc policy add-role-to-user view "
-        "system:serviceaccount:openshift-monitoring:prometheus-k8s "
-        "-n openshift-storage"
+        f"oc policy add-role-to-user view "
+        f"system:serviceaccount:openshift-monitoring:prometheus-k8s "
+        f"-n {env_data['cluster_namespace']}"
     )
     create_oc_resource(
-        'operator-openshift.yaml', rook_data, cluster_path, _templating
+        'operator-openshift.yaml', cluster_path, _templating, env_data
     )
-    wait_time = 5
+    # Increased to 10 seconds as 5 is not enough
+    # TODO: do the sampler function and check if resource exist
+    wait_time = 10
     log.info(f"Waiting {wait_time} seconds...")
     time.sleep(wait_time)
     run_cmd(
-        "oc wait --for condition=ready pod "
-        "-l app=rook-ceph-operator "
-        "-n openshift-storage "
-        "--timeout=120s"
+        f"oc wait --for condition=ready pod "
+        f"-l app=rook-ceph-operator "
+        f"-n {env_data['cluster_namespace']} "
+        f"--timeout=120s"
     )
     run_cmd(
-        "oc wait --for condition=ready pod "
-        "-l app=rook-ceph-agent "
-        "-n openshift-storage "
-        "--timeout=120s"
+        f"oc wait --for condition=ready pod "
+        f"-l app=rook-ceph-agent "
+        f"-n {env_data['cluster_namespace']} "
+        f"--timeout=120s"
     )
     run_cmd(
-        "oc wait --for condition=ready pod "
-        "-l app=rook-discover "
-        "-n openshift-storage "
-        "--timeout=120s"
+        f"oc wait --for condition=ready pod "
+        f"-l app=rook-discover "
+        f"-n {env_data['cluster_namespace']} "
+        f"--timeout=120s"
     )
-    create_oc_resource('cluster.yaml', rook_data, cluster_path, _templating)
-    create_oc_resource('toolbox.yaml', rook_data, cluster_path, _templating)
+    create_oc_resource('cluster.yaml', cluster_path, _templating, env_data)
+    create_oc_resource('toolbox.yaml', cluster_path, _templating, env_data)
     log.info(f"Waiting {wait_time} seconds...")
     time.sleep(wait_time)
     create_oc_resource(
-        'storage-manifest.yaml', rook_data, cluster_path, _templating
+        'storage-manifest.yaml', cluster_path, _templating, env_data
     )
     create_oc_resource(
-        "service-monitor.yaml", rook_data, cluster_path, _templating
+        "service-monitor.yaml", cluster_path, _templating, env_data
     )
     create_oc_resource(
-        "prometheus-rules.yaml", rook_data, cluster_path, _templating
+        "prometheus-rules.yaml", cluster_path, _templating, env_data
     )
 
     # Verify health of ceph cluster
     # TODO: move destroy cluster logic to new CLI usage pattern?
     log.info("Done creating rook resources, waiting for HEALTH_OK")
-    rc = ceph_health_check()
+    rc = ceph_health_check(namespace=env_data['cluster_namespace'])
 
     return rc
 
@@ -190,9 +184,13 @@ def create_ebs_volumes(
 
 
 @retry((CephHealthException, CommandFailed), tries=20, delay=30, backoff=1)
-def ceph_health_check():
+def ceph_health_check(namespace=default.ROOK_CLUSTER_NAMESPACE):
     """
     Exec `ceph health` cmd on tools pod to determine health of cluster.
+
+    Args:
+        namespace (str): Namespace of of OCS (default:
+            default.ROOK_CLUSER_NAMESPACE)
 
     Raises:
         CephHealthException: If the ceph health returned is not HEALTH_OK
@@ -202,8 +200,6 @@ def ceph_health_check():
         0 if HEALTH_OK
 
     """
-    # TODO: grab namespace-name from rook data, default to openshift-storage
-    namespace = "openshift-storage"
     run_cmd(
         f"oc wait --for condition=ready pod "
         f"-l app=rook-ceph-tools "
