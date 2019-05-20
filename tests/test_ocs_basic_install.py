@@ -189,7 +189,7 @@ def ceph_health_check(namespace=default.ROOK_CLUSTER_NAMESPACE):
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
     Args:
-        namespace (str): Namespace of of OCS (default:
+        namespace (str): Namespace of OCS (default:
             default.ROOK_CLUSER_NAMESPACE)
 
     Raises:
