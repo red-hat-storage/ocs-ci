@@ -73,7 +73,7 @@ def run(**kwargs):
     installer = get_openshift_installer(
         version=config.get('installer-version', default.INSTALLER_VERSION)
     )
-    oc = get_openshift_client()
+    get_openshift_client()
 
     # Deploy cluster
     log.info("Deploying cluster")
@@ -109,11 +109,11 @@ def run(**kwargs):
     # render templates and create resources
     create_oc_resource('common.yaml', rook_data, cluster_path, _templating)
     run_cmd(
-        f'{oc} label namespace openshift-storage '
+        'oc label namespace openshift-storage '
         '"openshift.io/cluster-monitoring=true"'
     )
     run_cmd(
-        f"{oc} policy add-role-to-user view "
+        "oc policy add-role-to-user view "
         "system:serviceaccount:openshift-monitoring:prometheus-k8s "
         "-n openshift-storage"
     )
@@ -124,19 +124,19 @@ def run(**kwargs):
     log.info(f"Waiting {wait_time} seconds...")
     time.sleep(wait_time)
     run_cmd(
-        f"{oc} wait --for condition=ready pod "
+        "oc wait --for condition=ready pod "
         "-l app=rook-ceph-operator "
         "-n openshift-storage "
         "--timeout=120s"
     )
     run_cmd(
-        f"{oc} wait --for condition=ready pod "
+        "oc wait --for condition=ready pod "
         "-l app=rook-ceph-agent "
         "-n openshift-storage "
         "--timeout=120s"
     )
     run_cmd(
-        f"{oc} wait --for condition=ready pod "
+        "oc wait --for condition=ready pod "
         "-l app=rook-discover "
         "-n openshift-storage "
         "--timeout=120s"
@@ -206,18 +206,17 @@ def ceph_health_check():
     """
     # TODO: grab namespace-name from rook data, default to openshift-storage
     namespace = "openshift-storage"
-    oc = get_openshift_client()
     run_cmd(
-        f"{oc} wait --for condition=ready pod "
+        f"oc wait --for condition=ready pod "
         f"-l app=rook-ceph-tools "
         f"-n {namespace} "
         f"--timeout=120s"
     )
     tools_pod = run_cmd(
-        f"{oc} -n {namespace} get pod -l 'app=rook-ceph-tools' "
+        f"oc -n {namespace} get pod -l 'app=rook-ceph-tools' "
         f"-o jsonpath='{{.items[0].metadata.name}}'"
     )
-    health = run_cmd(f"{oc} -n {namespace} exec {tools_pod} ceph health")
+    health = run_cmd(f"oc -n {namespace} exec {tools_pod} ceph health")
     if health.strip() == "HEALTH_OK":
         log.info("HEALTH_OK, install successful.")
         return 0

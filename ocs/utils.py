@@ -15,12 +15,7 @@ from libcloud.compute.types import Provider
 
 from mita.openstack import CephVMNode
 from utility.retry import retry
-from utility.utils import (
-    create_unique_test_name,
-    timestamp,
-    run_cmd,
-    get_openshift_client,
-)
+from utility.utils import create_unique_test_name, timestamp, run_cmd
 from .ceph import RolesContainer, CommandFailed, Ceph, CephNode
 from .clients import WinNode
 from .parallel import parallel
@@ -610,5 +605,4 @@ def create_oc_resource(
     with open(cfg_file, "w") as f:
         f.write(template)
     log.info(f"Creating rook resource from {template_name}")
-    oc = get_openshift_client()
-    run_cmd(f"{oc} create -f {cfg_file}")
+    run_cmd(f"oc create -f {cfg_file}")

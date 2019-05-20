@@ -723,7 +723,8 @@ def destroy_cluster(cluster_path):
 
 def get_openshift_installer(version=defaults.INSTALLER_VERSION):
     """
-    Get path of the openshift installer binary, download it if not available.
+    Download the OpenShift installer binary, if not already present.
+    Update env. PATH and get path of the openshift installer binary.
 
     Args:
         version (str): version of the installer to download
@@ -735,7 +736,7 @@ def get_openshift_installer(version=defaults.INSTALLER_VERSION):
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(defaults.BIN_DIR, installer_filename)
     if os.path.isfile(installer_binary_path):
-        log.info("Installer exists, skipping download")
+        log.debug("Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
     else:
         log.info("Downloading openshift installer")
@@ -751,12 +752,15 @@ def get_openshift_installer(version=defaults.INSTALLER_VERSION):
         # return to the previous working directory
         os.chdir(previous_dir)
 
+    add_path_to_env_path(defaults.BIN_DIR)
+
     return installer_binary_path
 
 
 def get_openshift_client(version=defaults.CLIENT_VERSION):
     """
-    Get path of the openshift client binary, download it if not available.
+    Download the OpenShift client binary, if not already present.
+    Update env. PATH and get path of the oc binary.
 
     Args:
         version (str): version of the client to download
@@ -767,7 +771,7 @@ def get_openshift_client(version=defaults.CLIENT_VERSION):
     """
     client_binary_path = os.path.join(defaults.BIN_DIR, 'oc')
     if os.path.isfile(client_binary_path):
-        log.info("Client exists, skipping download")
+        log.debug("Client exists ({client_binary_path}), skipping download.")
         # TODO: check client version
     else:
         log.info("Downloading openshift client")
@@ -782,6 +786,8 @@ def get_openshift_client(version=defaults.CLIENT_VERSION):
         os.remove(tarball)
         # return to the previous working directory
         os.chdir(previous_dir)
+
+    add_path_to_env_path(defaults.BIN_DIR)
 
     return client_binary_path
 
@@ -820,3 +826,19 @@ def prepare_bin_dir():
         log.info(f"Directory '{defaults.BIN_DIR}' successfully created.")
     except FileExistsError:
         log.debug(f"Directory '{defaults.BIN_DIR}' already exists.")
+
+
+def add_path_to_env_path(path):
+    """
+    Add path to the PATH environment variable (if not already there).
+
+    Args:
+        path (str): path which should be added to the PATH env. variable
+
+    """
+    path = os.path.abspath('./bin')
+    env_path = os.environ['PATH'].split(os.pathsep)
+    if path not in env_path:
+        os.environ['PATH'] = os.pathsep.join([path] + env_path)
+        log.info(f"Path '{path}' added to the PATH environment variable.")
+    log.debug(f"PATH: {os.environ['PATH']}")
