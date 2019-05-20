@@ -576,9 +576,9 @@ def store_cluster_state(ceph_cluster_object, ceph_clusters_file_name):
 
 def create_oc_resource(
     template_name,
-    rook_data,
     cluster_path,
     _templating,
+    template_data={},
     template_dir="ocs-deployment",
 ):
     """
@@ -587,20 +587,16 @@ def create_oc_resource(
 
     Args:
         template_name (str): Name of the ocs-deployment config template
-        rook_data (dict): Rook specific config from cluster_conf
         cluster_path (str): Path to cluster directory, where files will be
             written
         _templating (Templating): Object of Templating class used for
             templating
+        template_data (dict): Data for render template (default: {})
         template_dir (str): Directory under templates dir where template
-            exists
+            exists (default: ocs-deployment)
     """
-    base_name = template_name.split('.')[0]
     template_path = os.path.join(template_dir, template_name)
-    template = _templating.render_template(
-        template_path,
-        rook_data.get(base_name, {})
-    )
+    template = _templating.render_template(template_path, template_data)
     cfg_file = os.path.join(cluster_path, template_name)
     with open(cfg_file, "w") as f:
         f.write(template)

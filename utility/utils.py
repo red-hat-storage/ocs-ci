@@ -18,7 +18,9 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from reportportal_client import ReportPortalServiceAsync
 
 from ocs import defaults
-from ocs.exceptions import CommandFailed, UnsupportedOSType
+from ocs.exceptions import (
+    CommandFailed, UnsupportedOSType, TimeoutExpiredError,
+)
 from ocsci.enums import TestStatus
 from .aws import AWS
 
@@ -842,3 +844,91 @@ def add_path_to_env_path(path):
         os.environ['PATH'] = os.pathsep.join([path] + env_path)
         log.info(f"Path '{path}' added to the PATH environment variable.")
     log.debug(f"PATH: {os.environ['PATH']}")
+
+
+def delete_file(file_name):
+    """
+    Delete file_name
+
+    Args:
+        file_name (str): Path to the file you want to delete
+    """
+    os.remove(file_name)
+
+
+class TimeoutSampler(object):
+    """
+    Samples the function output.
+
+    This is a generator object that at first yields the output of function
+    `func`. After the yield, it either raises instance of `timeout_exc_cls` or
+    sleeps `sleep` seconds.
+
+    Yielding the output allows you to handle every value as you wish.
+
+    Feel free to set the instance variables.
+    """
+
+    def __init__(self, timeout, sleep, func, *func_args, **func_kwargs):
+        self.timeout = timeout
+        ''' Timeout in seconds. '''
+        self.sleep = sleep
+        ''' Sleep interval seconds. '''
+
+        self.func = func
+        ''' A function to sample. '''
+        self.func_args = func_args
+        ''' Args for func. '''
+        self.func_kwargs = func_kwargs
+        ''' Kwargs for func. '''
+
+        self.start_time = None
+        ''' Time of starting the sampling. '''
+        self.last_sample_time = None
+        ''' Time of last sample. '''
+
+        self.timeout_exc_cls = TimeoutExpiredError
+        ''' Class of exception to be raised.  '''
+        self.timeout_exc_args = (self.timeout,)
+        ''' An args for __init__ of the timeout exception. '''
+
+    def __iter__(self):
+        if self.start_time is None:
+            self.start_time = time.time()
+        while True:
+            self.last_sample_time = time.time()
+            try:
+                yield self.func(*self.func_args, **self.func_kwargs)
+            except Exception:
+                pass
+
+            if self.timeout < (time.time() - self.start_time):
+                raise self.timeout_exc_cls(*self.timeout_exc_args)
+            time.sleep(self.sleep)
+
+    def wait_for_func_status(self, result):
+        """
+        Get function and run it for given time until success or timeout.
+        (using __iter__ function)
+
+        Args:
+            result (bool): Expected result from func.
+
+        Examples:
+            sample = TimeoutSampler(
+                timeout=60, sleep=1, func=some_func, func_arg1="1",
+                func_arg2="2"
+            )
+            if not sample.waitForFuncStatus(result=True):
+                raise Exception
+        """
+        try:
+            for res in self:
+                if result == res:
+                    return True
+
+        except self.timeout_exc_cls:
+            log.error(
+                f"({self.func.__name__}) return incorrect status after timeout"
+            )
+            return False

@@ -12,3 +12,13 @@ class CephHealthException(Exception):
 
 class UnknownTestStatusException(Exception):
     pass
+
+
+class TimeoutExpiredError(Exception):
+    message = 'Timed Out'
+
+    def __init__(self, *value):
+        self.value = value
+
+    def __str__(self):
+        return f"{self.message}: {self.value}"

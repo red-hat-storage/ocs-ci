@@ -97,6 +97,7 @@ def my_example(arg1, arg2=10):
     Returns:
         bool: description of when returns False and when True.
             But this can also return anything else like int, str, list, etc.
+
     """
     pass
 ```
