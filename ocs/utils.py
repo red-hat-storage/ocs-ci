@@ -15,7 +15,7 @@ from libcloud.compute.types import Provider
 
 from mita.openstack import CephVMNode
 from utility.retry import retry
-from utility.utils import create_unique_test_name, timestamp, run_cmd
+from utility.utils import create_unique_test_name, timestamp
 from .ceph import RolesContainer, CommandFailed, Ceph, CephNode
 from .clients import WinNode
 from .parallel import parallel
