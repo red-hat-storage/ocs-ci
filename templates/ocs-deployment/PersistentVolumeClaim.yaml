@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ pvc_name | default('ocsci-pvc') }}
+spec:
+  accessModes:
+  - {{ access_mode | default('ReadWriteOnce') }}
+  resources:
+    requests:
+      storage: {{ pvc_size | default('5Gi') }}
+  storageClassName: csi-cephfs

@@ -1,5 +1,6 @@
 import os
 import logging
+import yaml
 
 from kubernetes import config
 from openshift.dynamic import DynamicClient, exceptions
@@ -20,21 +21,21 @@ class OCP(object):
     def __init__(self):
 
         k8s_client = config.new_client_from_config()
-        dyn_client = DynamicClient(k8s_client)
+        self.dyn_client = DynamicClient(k8s_client)
 
-        self.v1_service_list = dyn_client.resources.get(
+        self.v1_service_list = self.dyn_client.resources.get(
             api_version='v1', kind='ServiceList'
         )
-        self.v1_projects = dyn_client.resources.get(
+        self.v1_projects = self.dyn_client.resources.get(
             api_version='project.openshift.io/v1', kind='Project'
         )
-        self.pods = dyn_client.resources.get(
+        self.pods = self.dyn_client.resources.get(
             api_version=default.API_VERSION, kind='Pod'
         )
-        self.deployments = dyn_client.resources.get(
+        self.deployments = self.dyn_client.resources.get(
             api_version=default.API_VERSION, kind='Deployment'
         )
-        self.services = dyn_client.resources.get(
+        self.services = self.dyn_client.resources.get(
             api_version=default.API_VERSION, kind='Service'
         )
 
@@ -217,3 +218,44 @@ class OCP(object):
             raise Exception(err)
 
         return _rc
+
+    # the following methods implementation already exists in
+    # https://github.com/red-hat-storage/ocs-ci/pull/40/files
+
+    def create_block_pool(self, pool_body):
+        """
+
+        Args:
+            pool_body (dict): Ceph block pool body
+
+        Returns:
+            bool: True for pool successful creation, False otherwise
+        """
+        service = self.dyn_client.resources.get(
+            api_version='v1', kind='CephBlockPool'
+        )
+        return service.create(body=pool_body)
+
+    def create_storage_class(self, sc_body):
+        """
+
+        Args:
+            sc_body:
+
+        Returns:
+
+        """
+        # TODO
+        pass
+
+    def create_pvc(self, pvc_body):
+        """
+
+        Args:
+            pvc_body:
+
+        Returns:
+
+        """
+        # TODO
+        pass
