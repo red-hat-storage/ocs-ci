@@ -65,7 +65,7 @@ class OCP(object):
         out = run_cmd(cmd=oc_cmd)
         return munchify(yaml.safe_load(out))
 
-    def get(self, resource_name='', out_yaml_format=True):
+    def get(self, resource_name='', out_yaml_format=True, selector=None):
         """
         Get command - 'oc get <resource>'
 
@@ -79,6 +79,8 @@ class OCP(object):
             Munch Obj: this object represents a returned yaml file
         """
         command = f"get {self.kind} {resource_name}"
+        if selector is not None:
+            command += f"--selector={selector}"
         if out_yaml_format:
             command += " -o yaml"
         return self.exec_oc_cmd(command)
@@ -117,7 +119,7 @@ class OCP(object):
         """
         command = f"delete -f {yaml_file}"
         if wait:
-            command += " --wait=True"
+            command += " --wait=true"
         return self.exec_oc_cmd(command)
 
     def apply(self, yaml_file):
@@ -134,23 +136,42 @@ class OCP(object):
         command = f"apply -f {yaml_file}"
         return self.exec_oc_cmd(command)
 
-    def wait_for_resource_status(
-        self, resource_name, condition, timeout=30, sleep=3
+    def watch(
+        self, condition, resource_name='', selector=None, resource_count=0,
+        timeout=60, sleep=3
     ):
         """
         Wait for a resource to reach to a desired condition
 
         Args:
-            resource_name (str): The name of the resource to wait
-                for (e.g.my-pv1)
             condition (str): The desired state the resource should be at
                 This is referring to: status.phase presented in the resource
                 yaml file
                 (e.g. status.phase == Available)
+            resource_name (str): The name of the resource to wait
+                for (e.g.my-pv1)
+            selector (str): The resource selector to search with.
+                Example: 'app=rook-ceph-mds'
+            resource_count (int): How many resources expected to be
+
+        Returns:
+            bool: True in case all resources reached desired condition,
+                False otherwise
+
         """
         for sample in TimeoutSampler(
-            timeout, sleep, self.get, resource_name
+            timeout, sleep, self.get, resource_name, True, selector
         ):
-            if sample.status.phase == condition:
-                return True
+            in_condition = []
+            pods = sample['items']
+            for pod in pods:
+                if pod.status.phase == condition:
+                    in_condition.append(pod)
+                if resource_count:
+                    if len(in_condition) == resource_count and (
+                        len(pods) == len(in_condition)
+                    ):
+                        return True
+                elif len(pods) == len(in_condition):
+                    return True
         return False
