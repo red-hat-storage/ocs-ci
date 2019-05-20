@@ -19,7 +19,7 @@ It is recommended that you use a python virtual environment to install the neces
     now. Use hidden `.venv` or normal `venv` folder for virtual env as we are
     ignoring this in flake8 configurtation in tox.
 
-    * `python3.7 -m .venv <path/to/venv>`
+    * `python3.7 -m venv <path/to/venv>`
     * `source <path/to/.venv>/bin/activate`
 
 2. Install requirements with `pip install -r requirements.txt`
