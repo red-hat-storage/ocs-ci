@@ -739,25 +739,12 @@ def get_openshift_installer(version=defaults.INSTALLER_VERSION):
         # TODO: check installer version
     else:
         log.info("Downloading openshift installer")
-        if platform.system() == "Darwin":
-            os_type = "mac"
-        elif platform.system() == "Linux":
-            os_type = "linux"
-        else:
-            raise UnsupportedOSType
-        url = (
-            f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
-            f"{version}/openshift-install-{os_type}-{version}.tar.gz"
-        )
-        # Prepare BIN_DIR
-        try:
-            os.mkdir(defaults.BIN_DIR)
-        except FileExistsError:
-            pass
+        prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
         os.chdir(defaults.BIN_DIR)
         tarball = f"{installer_filename}.tar.gz"
+        url = get_openshift_mirror_url(installer_filename, version)
         download_file(url, tarball)
         run_cmd(f"tar xzvf {tarball}")
         os.remove(tarball)
@@ -765,6 +752,7 @@ def get_openshift_installer(version=defaults.INSTALLER_VERSION):
         os.chdir(previous_dir)
 
     return installer_binary_path
+
 
 def get_openshift_client(version=defaults.CLIENT_VERSION):
     """
@@ -783,24 +771,11 @@ def get_openshift_client(version=defaults.CLIENT_VERSION):
         # TODO: check client version
     else:
         log.info("Downloading openshift client")
-        if platform.system() == "Darwin":
-            os_type = "mac"
-        elif platform.system() == "Linux":
-            os_type = "linux"
-        else:
-            raise UnsupportedOSType
-        url = (
-            f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
-            f"{version}/openshift-client-{os_type}-{version}.tar.gz"
-        )
-        # Prepare BIN_DIR
-        try:
-            os.mkdir(defaults.BIN_DIR)
-        except FileExistsError:
-            pass
+        prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
         os.chdir(defaults.BIN_DIR)
+        url = get_openshift_mirror_url('openshift-client', version)
         tarball = "openshift-client.tar.gz"
         download_file(url, tarball)
         run_cmd(f"tar xzvf {tarball}")
@@ -809,3 +784,39 @@ def get_openshift_client(version=defaults.CLIENT_VERSION):
         os.chdir(previous_dir)
 
     return client_binary_path
+
+
+def get_openshift_mirror_url(file_name, version):
+    """
+    Format url to OpenShift mirror (for client and installer download).
+
+    Args:
+        file_name (str): name of file
+        version (str): version of the installer or client to download
+
+    Returns:
+        str: url of the desired file (installer or client)
+
+    """
+    if platform.system() == "Darwin":
+        os_type = "mac"
+    elif platform.system() == "Linux":
+        os_type = "linux"
+    else:
+        raise UnsupportedOSType
+    url = (
+        f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
+        f"{version}/{file_name}-{os_type}-{version}.tar.gz"
+    )
+    return url
+
+
+def prepare_bin_dir():
+    """
+    Prepare bin directory for OpenShift client and installer
+    """
+    try:
+        os.mkdir(defaults.BIN_DIR)
+        log.info(f"Directory '{defaults.BIN_DIR}' successfully created.")
+    except FileExistsError:
+        log.debug(f"Directory '{defaults.BIN_DIR}' already exists.")
