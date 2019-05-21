@@ -5,6 +5,7 @@
 #   kubectl create -f operator-openshift-with-csi.yaml
 #   kubectl create -f cluster.yaml
 #################################################################################################################
+---
 kind: SecurityContextConstraints
 # older versions of openshift have "apiVersion: v1"
 apiVersion: security.openshift.io/v1
@@ -109,7 +110,7 @@ spec:
       serviceAccountName: rook-ceph-system
       containers:
       - name: rook-ceph-operator
-        image: rook/ceph:master
+        image: {{ rook_image | default('rook/ceph:master') }}
         args: ["ceph", "operator"]
         volumeMounts:
         - mountPath: /var/lib/rook

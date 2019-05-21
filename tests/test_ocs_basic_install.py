@@ -109,38 +109,40 @@ def run(**kwargs):
     )
     apply_oc_resource(
         'csi-nodeplugin-rbac_rbd.yaml',
-        rook_data,
         cluster_path,
         _templating,
+        env_data,
         template_dir="ocs-deployment/csi/rbd/"
     )
     apply_oc_resource(
         'csi-provisioner-rbac_rbd.yaml',
-        rook_data,
         cluster_path,
         _templating,
+        env_data,
         template_dir="ocs-deployment/csi/rbd/"
     )
     apply_oc_resource(
         'csi-nodeplugin-rbac_cephfs.yaml',
-        rook_data,
         cluster_path,
         _templating,
+        env_data,
         template_dir="ocs-deployment/csi/cephfs/"
     )
     apply_oc_resource(
         'csi-provisioner-rbac_cephfs.yaml',
-        rook_data,
         cluster_path,
         _templating,
+        env_data,
         template_dir="ocs-deployment/csi/cephfs/"
-    )
-    create_oc_resource(
-        'operator-openshift-with-csi.yaml', rook_data, cluster_path, _templating
     )
     # Increased to 10 seconds as 5 is not enough
     # TODO: do the sampler function and check if resource exist
     wait_time = 10
+    log.info(f"Waiting {wait_time} seconds...")
+    time.sleep(wait_time)
+    create_oc_resource(
+        'operator-openshift-with-csi.yaml', cluster_path, _templating, env_data
+    )
     log.info(f"Waiting {wait_time} seconds...")
     time.sleep(wait_time)
     run_cmd(
