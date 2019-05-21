@@ -28,19 +28,41 @@ There are a few arguments that are required ocs test execution:
 
 Some non-required arguments that we end up using a lot:
 
-* `--log-level <level>` - set the log level that is output to stdout.
+* `--capture=no` - when using pdb or ipdb you have to turn of capture mode
+    for pytest.
+
+### Parameters already converted to pytest:
+
 * `--cluster-name <name>` - name of cluster.
 * `--cluster-path <path>` - path where to create the directory which will
     contains all the installation/authentication information about cluster.
     `Use this parameter when running on already deployed cluster!` You can
     pass the cluster path from previous execution if was created automatically.
-* `--conf` - with this configuration you can overwrite the default parameters
-    for cluster and deployment. See the example of such file
+* `--ocsci-conf` - with this configuration you can overwrite the default
+    OCS-CI parameters defined in `conf/ocsci/default_config.yaml`
+* `--cluster-conf` - with this configuration you can overwrite the default
+    parameters for cluster and deployment. See the example of such file
+    [here](../conf/ocs_basic_install.yml).
+
+### Parameters for old runner:
+
+>TODO: Delete this section once moved to pytest and move missing parameters above!
+
+* `--cluster-name <name>` - name of cluster.
+* `--cluster-path <path>` - path where to create the directory which will
+    contains all the installation/authentication information about cluster.
+    `Use this parameter when running on already deployed cluster!` You can
+    pass the cluster path from previous execution if was created automatically.
+* `--conf` - with this configuration you can overwrite the default
+    parameters for cluster and deployment. See the example of such file
     [here](../conf/ocs_basic_install.yml).
 * `--no-destroy` - this will prevent you to destroy your cluster at the end of
     the execution. (Recommended if you want to re-run on the same cluster)
+* `--log-level <level>` - set the log level that is output to stdout.
 
 ## Examples
+
+### For old runner
 
 * Run OCS install suite:
 
@@ -55,3 +77,12 @@ python run.py --cluster-name=my-testing-cluster \
     --suite=suites/custom-test.yml --cluster-path=/home/your_login/my-testing-cluster \
     --no-email
 ```
+
+### For pytest
+
+```bash
+ py.test -m deployment  --ocsci-conf conf/ocsci/custom_config.yaml \
+    --cluster-conf conf/ocs_basic_install.yml \
+    --cluster-name kerberos_ID-ocs-deployment \
+    --cluster-path /home/my_user/my-ocs-dir tests/
+ ```
