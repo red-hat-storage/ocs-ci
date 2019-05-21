@@ -35,7 +35,7 @@ def create_pv(**kwargs):
         yaml.dump(file_y, yaml_file, default_flow_style=False)
         log.info(f"Creating new Persistent Volume")
     assert OCP.create(yaml_file=TEMP_YAML_FILE)
-    return OCP.wait_for_resource_status(kwargs['pv_name'], 'Available')
+    return OCP.wait(resource_name=kwargs['pv_name'], condition='Available')
 
 
 def delete_pv(pv_name):

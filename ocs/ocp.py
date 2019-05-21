@@ -136,7 +136,7 @@ class OCP(object):
         command = f"apply -f {yaml_file}"
         return self.exec_oc_cmd(command)
 
-    def watch(
+    def wait(
         self, condition, resource_name='', selector=None, resource_count=0,
         timeout=60, sleep=3
     ):
@@ -162,16 +162,22 @@ class OCP(object):
         for sample in TimeoutSampler(
             timeout, sleep, self.get, resource_name, True, selector
         ):
-            in_condition = []
-            pods = sample['items']
-            for pod in pods:
-                if pod.status.phase == condition:
-                    in_condition.append(pod)
-                if resource_count:
-                    if len(in_condition) == resource_count and (
-                        len(pods) == len(in_condition)
-                    ):
+            # More than 1 resources returned
+            if sample.kind == 'List':
+                in_condition = []
+                sample = sample['items']
+                for item in sample:
+                    if item.status.phase == condition:
+                        in_condition.append(item)
+                    if resource_count:
+                        if len(in_condition) == resource_count and (
+                            len(sample) == len(in_condition)
+                        ):
+                            return True
+                    elif len(sample) == len(in_condition):
                         return True
-                elif len(pods) == len(in_condition):
+            # Only 1 resource returned
+            else:
+                if sample.status.phase == condition:
                     return True
         return False

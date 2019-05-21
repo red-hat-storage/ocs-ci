@@ -37,7 +37,7 @@ def create_ceph_fs(**kwargs):
     log.info(f"Creating a new Ceph FileSystem")
     assert CEPHFS.create(yaml_file=TEMP_YAML_FILE)
 
-    assert POD.watch(
+    assert POD.wait(
         condition='Running', selector='app=rook-ceph-mds'
     )
     pods = POD.get(selector='app=rook-ceph-mds')['items']
@@ -57,7 +57,7 @@ def modify_fs(new_active_count):
         yaml.dump(cephfs_obj.toDict(), yaml_file, default_flow_style=False)
     log.info(f"Change the active_count to {new_active_count}")
     assert CEPHFS.apply(yaml_file=TEMP_YAML_FILE)
-    assert POD.watch(
+    assert POD.wait(
         condition='Running', selector='app=rook-ceph-mds', resource_count=4
     )
     pods = POD.get(selector='app=rook-ceph-mds')['items']
