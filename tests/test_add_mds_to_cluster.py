@@ -8,7 +8,6 @@ import os
 
 from ocs import ocp
 from munch import munchify
-from ocs import exceptions
 from ocsci.enums import StatusOfTest
 from utility import utils, templating
 
