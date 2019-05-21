@@ -3,7 +3,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: rook-csi-rbd-plugin-sa
-  namespace: {{ cluster_name | default('openshift-storage') }}
+  namespace: {{ cluster_namespace | default('openshift-storage') }}
 
 ---
 kind: ClusterRole
