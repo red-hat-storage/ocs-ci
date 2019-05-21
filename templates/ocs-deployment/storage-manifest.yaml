@@ -19,7 +19,7 @@ metadata:
 provisioner: ceph.rook.io/block
 parameters:
   blockPool: rbd
-  clusternamespace: {{ cluster_namespace | default('openshift-storage') }}
+  clusterNamespace: {{ cluster_namespace | default('openshift-storage') }}
   fstype: xfs
 reclaimPolicy: Retain
 
