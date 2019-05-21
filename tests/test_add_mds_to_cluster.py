@@ -14,7 +14,7 @@ from utility import utils, templating
 
 log = logging.getLogger(__name__)
 
-PV_YAML = os.path.join("templates/ocs-deployment", "cephfilesystem.yaml")
+CEPHFS_YAML = os.path.join("templates/ocs-deployment", "cephfilesystem.yaml")
 TEMP_YAML_FILE = 'test_cephfilesystem.yaml'
 CEPHFS_DELETED = '"{cephfs_name}" deleted'
 
@@ -30,7 +30,7 @@ def create_ceph_fs(**kwargs):
     """
 
     file_y = templating.generate_yaml_from_jinja2_template_with_data(
-        PV_YAML, **kwargs
+        CEPHFS_YAML, **kwargs
     )
     with open(TEMP_YAML_FILE, 'w') as yaml_file:
         yaml.dump(file_y, yaml_file, default_flow_style=False)
@@ -52,18 +52,12 @@ def modify_fs(new_active_count):
     """
     with open(TEMP_YAML_FILE, 'r') as yaml_file:
         cephfs_obj = munchify(yaml.safe_load(yaml_file))
-    cephfs_obj.spec.metadataServer.activeCount = int(new_active_count)
+    cephfs_obj.spec.metadataServer.activeCount = new_active_count
     with open(TEMP_YAML_FILE, 'w') as yaml_file:
         yaml.dump(cephfs_obj.toDict(), yaml_file, default_flow_style=False)
     log.info(f"Change the active_count to {new_active_count}")
     assert CEPHFS.apply(yaml_file=TEMP_YAML_FILE)
-    assert POD.wait(
-        condition='Running', selector='app=rook-ceph-mds', resource_count=4
-    )
-    pods = POD.get(selector='app=rook-ceph-mds')['items']
-    if len(pods) == 4:
-        return True
-    return False
+    return True
 
 
 def delete_fs(fs_name):
@@ -71,23 +65,24 @@ def delete_fs(fs_name):
     Deleting a ceph FS
     """
     log.info(f"Deleting the file system")
-    stat = CEPHFS.delete(TEMP_YAML_FILE)
+    stat = CEPHFS.delete(resource_name=fs_name)
     if CEPHFS_DELETED.format(cephfs_name=fs_name) in stat:
         return True
     return False
 
 
-def verify_fs_exist(fs_name):
+def verify_fs_exist(pod_count):
     """
     Verifying if a ceph FS exist
     """
-    try:
-        CEPHFS.get(fs_name)
-    except exceptions.CommandFailed:
-        log.info(f"CephFS {fs_name} doesn't exist")
-        return False
-    log.info(f"CephFS {fs_name} exist")
-    return True
+    assert POD.wait(
+        condition='Running', selector='app=rook-ceph-mds',
+        resource_count=pod_count
+    )
+    pods = POD.get(selector='app=rook-ceph-mds')['items']
+    if len(pods) == pod_count:
+        return True
+    return False
 
 
 def run(**kwargs):
@@ -97,11 +92,11 @@ def run(**kwargs):
     fs_data = {}
     fs_name = 'my-cephfs1'
     fs_data['fs_name'] = fs_name
-    new_active_count = '2'
+    new_active_count = 2
     assert create_ceph_fs(**fs_data)
-    assert verify_fs_exist(fs_name)
+    assert verify_fs_exist(2)
     assert modify_fs(new_active_count)
+    assert verify_fs_exist(new_active_count * 2)
     assert delete_fs(fs_name)
-    assert not verify_fs_exist(fs_name)
     utils.delete_file(TEMP_YAML_FILE)
     return StatusOfTest.PASSED

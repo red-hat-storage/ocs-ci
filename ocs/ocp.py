@@ -104,20 +104,32 @@ class OCP(object):
 
         return self.exec_oc_cmd(command)
 
-    def delete(self, yaml_file, wait=True):
+    def delete(self, yaml_file=None, resource_name='', wait=True):
         """
         Deletes a resource
 
         Args:
             yaml_file (str): Path to a yaml file to use in 'oc delete -f
                 file.yaml
+            resource_name (str): Name of the resource you want to delete
             wait (bool): Determines if the delete command should wait to
                 completion
 
         Returns:
             Munch Obj: this object represents a returned yaml file
         """
-        command = f"delete -f {yaml_file}"
+        if yaml_file is None and not resource_name:
+            log.error(
+                "At least one of resource_name or yaml_file have to "
+                "be provided"
+            )
+            return False
+
+        command = f"delete "
+        if resource_name:
+            command += f"{self.kind} {resource_name}"
+        else:
+            command += f"-f {yaml_file}"
         if wait:
             command += " --wait=true"
         return self.exec_oc_cmd(command)
