@@ -5,9 +5,9 @@ metadata:
   name: rbd
   namespace: {{ cluster_namespace | default('openshift-storage') }}
 spec:
-  failureDomain: osd
+  failureDomain: host
   replicated:
-    size: 2
+    size: {{ replica_size | default('3')}}
 
 ---
 apiVersion: storage.k8s.io/v1
