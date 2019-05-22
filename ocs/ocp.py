@@ -6,6 +6,8 @@ import logging
 import yaml
 
 from munch import munchify
+
+from ocs.exceptions import CommandFailed
 from utility.utils import TimeoutSampler
 from utility.utils import run_cmd
 
@@ -117,13 +119,15 @@ class OCP(object):
 
         Returns:
             Munch Obj: this object represents a returned yaml file
+
+        Raises:
+            CommandFailed: In case yaml_file and resource_name wasn't provided
         """
-        if yaml_file is None and not resource_name:
-            log.error(
+        if not (yaml_file or resource_name):
+            raise CommandFailed(
                 "At least one of resource_name or yaml_file have to "
                 "be provided"
             )
-            return False
 
         command = f"delete "
         if resource_name:
@@ -165,6 +169,8 @@ class OCP(object):
             selector (str): The resource selector to search with.
                 Example: 'app=rook-ceph-mds'
             resource_count (int): How many resources expected to be
+            timeout (int): Time in seconds to wait
+            sleep (int): Sampling time in seconds
 
         Returns:
             bool: True in case all resources reached desired condition,
@@ -174,8 +180,12 @@ class OCP(object):
         for sample in TimeoutSampler(
             timeout, sleep, self.get, resource_name, True, selector
         ):
+            # Only 1 resource expected to be returned
+            if resource_name:
+                if sample.status.phase == condition:
+                    return True
             # More than 1 resources returned
-            if sample.kind == 'List':
+            elif sample.kind == 'List':
                 in_condition = []
                 sample = sample['items']
                 for item in sample:
@@ -188,8 +198,29 @@ class OCP(object):
                             return True
                     elif len(sample) == len(in_condition):
                         return True
-            # Only 1 resource returned
-            else:
-                if sample.status.phase == condition:
-                    return True
+
+        return False
+
+    def wait_for_delete(
+        self, resource_name='', selector=None, timeout=60, sleep=3
+    ):
+        """
+        Wait for a resource to reach to a desired condition
+
+        Args:
+            resource_name (str): The name of the resource to wait
+                for (e.g.my-pv1)
+            selector (str): The resource selector to search with.
+                Example: 'app=rook-ceph-mds'
+
+        Returns:
+            bool: True in case all resources reached desired condition,
+                False otherwise
+
+        """
+        for sample in TimeoutSampler(
+            timeout, sleep, self.get, resource_name, True, selector
+        ):
+            if not sample:
+                return True
         return False
