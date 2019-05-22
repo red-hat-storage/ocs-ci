@@ -14,6 +14,7 @@ from utility import templating
 from utility.aws import AWS
 from utility.retry import retry
 from utility.utils import run_cmd, get_openshift_installer, get_openshift_client
+from ocs.parallel import parallel
 
 log = logging.getLogger(__name__)
 
@@ -173,16 +174,18 @@ def create_ebs_volumes(
     """
     aws = AWS(region_name)
     worker_instances = aws.get_instances_by_name_pattern(worker_pattern)
-    for worker in worker_instances:
-        log.info(
-            f"Creating and attaching {size} GB volume to {worker['name']}"
-        )
-        aws.create_volume_and_attach(
-            availability_zone=worker['avz'],
-            instance_id=worker['id'],
-            name=f"{worker['name']}_extra_volume",
-            size=size,
-        )
+    with parallel() as p:
+        for worker in worker_instances:
+            log.info(
+                f"Creating and attaching {size} GB volume to {worker['name']}"
+            )
+            p.spawn(
+                aws.create_volume_and_attach,
+                availability_zone=worker['avz'],
+                instance_id=worker['id'],
+                name=f"{worker['name']}_extra_volume",
+                size=size,
+            )
 
 
 @retry((CephHealthException, CommandFailed), tries=20, delay=30, backoff=1)
@@ -191,7 +194,7 @@ def ceph_health_check(namespace=default.ROOK_CLUSTER_NAMESPACE):
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
     Args:
-        namespace (str): Namespace of of OCS (default:
+        namespace (str): Namespace of OCS (default:
             default.ROOK_CLUSER_NAMESPACE)
 
     Raises:
