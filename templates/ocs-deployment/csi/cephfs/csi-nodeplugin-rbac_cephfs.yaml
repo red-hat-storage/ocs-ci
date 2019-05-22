@@ -46,7 +46,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: rook-csi-cephfs-plugin-sa
-    namespace: {{ cluster_name | default('openshift-storage') }}
+    namespace: {{ cluster_namespace | default('openshift-storage') }}
 roleRef:
   kind: ClusterRole
   name: cephfs-csi-nodeplugin
