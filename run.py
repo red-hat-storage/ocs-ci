@@ -12,7 +12,7 @@ import urllib3
 from docopt import docopt
 from getpass import getuser
 from oc.openshift_ops import OCP
-from ocsci.enums import ReturnCode, TestStatus
+from ocsci.enums import ReturnCode, StatusOfTest
 from ocs import defaults as default
 from utility.utils import (
     timestamp, create_run_dir, create_report_portal_session, email_results,
@@ -183,7 +183,7 @@ def run(args):
     sys.path.append(os.path.abspath('tests'))
     tests = suite.get('tests')
     tcs = []
-    jenkins_rc = TestStatus.FAILED
+    jenkins_rc = StatusOfTest.FAILED
     test_data = dict()
     test_data['no-destroy'] = no_destroy
     if cluster_name:
@@ -210,12 +210,12 @@ def run(args):
         )
         tc.execute()
         tcs.append(tc)
-        if tc.abort_on_fail and tc.status == TestStatus.FAILED:
+        if tc.abort_on_fail and tc.status == StatusOfTest.FAILED:
             log.info("Aborting on test failure")
             break
 
-    if all([tc.status == TestStatus.PASSED for tc in tcs]):
-        jenkins_rc = TestStatus.PASSED
+    if all([tc.status == StatusOfTest.PASSED for tc in tcs]):
+        jenkins_rc = StatusOfTest.PASSED
 
     close_and_remove_filehandlers()
     if post_to_report_portal:

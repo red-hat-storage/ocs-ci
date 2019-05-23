@@ -1,3 +1,4 @@
+import collections
 import getpass
 import json
 import logging
@@ -21,7 +22,7 @@ from ocs import defaults
 from ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
 )
-from ocsci.enums import TestStatus
+from ocsci.enums import StatusOfTest
 from .aws import AWS
 
 log = logging.getLogger(__name__)
@@ -679,7 +680,7 @@ def destroy_cluster(cluster_path):
         cluster_path (str): filepath to cluster directory to be destroyed
 
     Returns:
-        TestStatus: enum for status of cluster deletion
+        StatusOfTest: enum for status of cluster deletion
 
     """
     destroy_cmd = (
@@ -718,11 +719,11 @@ def destroy_cluster(cluster_path):
         # Remove installer and tarball
         os.remove(installer)
         os.remove(tarball)
-        return TestStatus.PASSED
+        return StatusOfTest.PASSED
 
     except Exception:
         log.error(traceback.format_exc())
-        return TestStatus.FAILED
+        return StatusOfTest.FAILED
 
 
 def download_openshift_installer(version=defaults.INSTALLER_VERSION):
@@ -844,3 +845,28 @@ class TimeoutSampler(object):
                 f"({self.func.__name__}) return incorrect status after timeout"
             )
             return False
+
+
+def update_dict_recursively(d, u):
+    """
+    Update dict recursively to not delete nested dict under second and more
+    nested level. This function is changing the origin dictionary cause of
+    operations are done on top of it and dict is a mutable object.
+
+    Args:
+        d (dict): Dict to update
+        u (dict): Other dict used for update d dict
+
+    Returns:
+        dict: returning updated dictionary (changes are also done on dict `d`)
+    """
+    for k, v in u.items():
+        if isinstance(d, collections.Mapping):
+            if isinstance(v, collections.Mapping):
+                r = update_dict_recursively(d.get(k, {}), v)
+                d[k] = r
+            else:
+                d[k] = u[k]
+        else:
+            d = {k: u[k]}
+    return d
