@@ -9,7 +9,7 @@ import yaml
 
 
 from ocs import api_client as ac
-from ocsci.enums import TestStatus
+from ocsci.enums import StatusOfTest
 
 
 log = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ def create_simple_service(client):
         client(APIClient): api-client object
 
     Returns:
-        TestStatus(enum): PASSED or FAILED
+        StatusOfTest(enum): PASSED or FAILED
     """
 
     # For brevity, having inline service yaml
@@ -48,10 +48,10 @@ def create_simple_service(client):
         log.info(res)
     except Exception as e:
         log.error(e)
-        return TestStatus.FAILED
+        return StatusOfTest.FAILED
 
     log.info(f"Created service: {res['metadata']['name']}")
-    return TestStatus.PASSED
+    return StatusOfTest.PASSED
 
 
 def run():

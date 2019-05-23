@@ -9,7 +9,7 @@ import os
 from ocs import ocp
 from munch import munchify
 from ocs import exceptions
-from ocsci.enums import TestStatus
+from ocsci.enums import StatusOfTest
 from utility import utils, templating
 
 log = logging.getLogger(__name__)
@@ -89,4 +89,4 @@ def run(**kwargs):
     assert delete_fs(fs_name)
     assert not verify_fs_exist(fs_name)
     utils.delete_file(TEMP_YAML_FILE)
-    return TestStatus.PASSED
+    return StatusOfTest.PASSED

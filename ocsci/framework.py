@@ -5,12 +5,12 @@ import time
 import traceback
 from pprint import pformat
 
-from ocs.exceptions import UnknownTestStatusException
+from ocs.exceptions import UnknownStatusOfTestException
 from utility.polarion import post_to_polarion
 from utility.utils import (
     create_unique_test_name, configure_logger, timestamp, destroy_cluster
 )
-from .enums import TestStatus
+from .enums import StatusOfTest
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class TestCase(object):
         suite_name (str): name of test suite test belongs to
         unique_name (str): unique version of test case name
         log_link (str): URL to log file location
-        status (TestStatus): Status of test case
+        status (StatusOfTest): Status of test case
         start (Float): start timestamp of test case
         end (Float): end timestamp of test case
         duration (str): duration of test case execution
@@ -69,7 +69,7 @@ class TestCase(object):
         self.unique_name = create_unique_test_name(self.name)
         self.log_link = configure_logger(self.unique_name, run_dir)
         self.duration = '0s'
-        self.status = TestStatus.NOT_EXECUTED
+        self.status = StatusOfTest.NOT_EXECUTED
         self.start = time.time()
         self.end = None
         mod_file_name = os.path.splitext(self.file)[0]
@@ -108,19 +108,19 @@ class TestCase(object):
     @staticmethod
     def rc_to_status(rc):
         """
-        Transform int unix return code to TestStatus
+        Transform int unix return code to StatusOfTest
 
         Args:
             rc (int): Return code
 
         Returns:
-            Enum: one of Test status from TestStatus Enum. If return code
-                differ from what we have defined in TestStatus it returns
-                TestStatus.FAILED
+            Enum: one of Test status from StatusOfTest Enum. If return code
+                differ from what we have defined in StatusOfTest it returns
+                StatusOfTest.FAILED
         """
-        if rc in TestStatus._value2member_map_:
-            return TestStatus._value2member_map_[rc]
-        return TestStatus.FAILED
+        if rc in StatusOfTest._value2member_map_:
+            return StatusOfTest._value2member_map_[rc]
+        return StatusOfTest.FAILED
 
     def execute(self):
         """
@@ -134,14 +134,14 @@ class TestCase(object):
             test_status = self.test_mod.run(**self.test_kwargs)
             if isinstance(test_status, int):
                 test_status = self.rc_to_status(test_status)
-            if not isinstance(test_status, TestStatus):
-                raise UnknownTestStatusException(
+            if not isinstance(test_status, StatusOfTest):
+                raise UnknownStatusOfTestException(
                     f"This is unknown Test Status: {test_status}"
                 )
             self.status = test_status
         except Exception:
             log.error(traceback.format_exc())
-            self.status = TestStatus.FAILED
+            self.status = StatusOfTest.FAILED
         finally:
             self._teardown()
 

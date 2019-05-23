@@ -3,7 +3,7 @@
 
 ## Prerequisites
 
-1. Python 3.7
+1. Python >= 3.6
 2. Configure AWS Account credentials when testing with AWS platforms,
    check default section in `~/.aws/credentials` for access/secret key
    [check aws-configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
@@ -28,18 +28,18 @@ It is recommended that you use a python virtual environment to install the neces
 
 ### OCS-CI config
 
-Configure your ocs-ci.yaml file:
+Configure your ocs-ci.yaml and pass it with --ocsci-conf parameter
 
 This file is used to allow configuration around a number of things within ocs-ci.
-The template can be found at the top level of the repository, `ocs-ci.yaml.template`.
+The default file is in conf/ocsci/default_config.yaml.
+TODO: Once moved to pytest update properly this file: `ocs-ci.yaml.template`.
+
 The required keys are in the template. Values are placeholders and should be replaced by legitimate values.
 Values for report portal or polarion are only required if you plan on posting to that particular service.
 
-Move a copy of the template to your user directory and edit it from there with the proper values.
+Move a copy of the template to your conf directory and edit it from there with
+the proper values and pass it with --ocsci-conf parameter to pytest.
 
-```bash
-cp ocs-ci.yaml.template ~/.ocs-ci.yaml
-```
 
 ### Pull Secret
 
@@ -62,8 +62,10 @@ CLI option
 Cluster configuration that defines Openshift/Kubernetes Cluster along with Ceph Configuration
 will reside in conf/ folder, This is still a work in progress.
 
-### Test Suites
+### Test Suites - deprecated once moved to pytest
 
+Once moved to pytest we have to determine if we still need those suites or how
+to utilize them.
 All test suite configurations are found inside the `suites` directory.
 
 ```yaml
