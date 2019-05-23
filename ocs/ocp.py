@@ -152,7 +152,7 @@ class OCP(object):
         command = f"apply -f {yaml_file}"
         return self.exec_oc_cmd(command)
 
-    def wait(
+    def wait_for_resource(
         self, condition, resource_name='', selector=None, resource_count=0,
         timeout=60, sleep=3
     ):

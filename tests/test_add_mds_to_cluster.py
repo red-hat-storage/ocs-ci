@@ -35,8 +35,7 @@ def create_ceph_fs(**kwargs):
         yaml.dump(file_y, yaml_file, default_flow_style=False)
     log.info(f"Creating a new Ceph FileSystem")
     assert CEPHFS.create(yaml_file=TEMP_YAML_FILE)
-
-    assert POD.wait(
+    assert POD.wait_for_resource(
         condition='Running', selector='app=rook-ceph-mds'
     )
     pods = POD.get(selector='app=rook-ceph-mds')['items']
@@ -74,7 +73,7 @@ def verify_fs_exist(pod_count):
     """
     Verifying if a ceph FS exist
     """
-    assert POD.wait(
+    assert POD.wait_for_resource(
         condition='Running', selector='app=rook-ceph-mds',
         resource_count=pod_count
     )
