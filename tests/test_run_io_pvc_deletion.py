@@ -98,7 +98,7 @@ def run_io():
     """
     OCP.exec_oc_cmd(
         f"rsh -n openshift-storage ocsci-pod touch /var/lib/www/html/test && "
-        f"dd if=/dev/urandom of=/var/lib/www/html/test"
+        f"dd if=/dev/urandom of=/var/lib/www/html/test bs=1M count=3000 &"
     )
 
 
@@ -156,7 +156,7 @@ def run():
     create_pvc()
     create_pod()
     run_io()
-    delete_pod()
     delete_pvc()
+    delete_pod()
     delete_storageclass()
     delete_ceph_block_pool()
