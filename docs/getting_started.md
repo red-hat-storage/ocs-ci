@@ -3,7 +3,7 @@
 
 ## Prerequisites
 
-1. Python 3.7
+1. Python >= 3.6
 2. Configure AWS Account credentials when testing with AWS platforms,
    check default section in `~/.aws/credentials` for access/secret key
    [check aws-configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
