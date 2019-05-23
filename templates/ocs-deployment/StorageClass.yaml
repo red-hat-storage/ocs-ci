@@ -5,11 +5,11 @@ metadata:
   name: {{ sc_name | default('ocsci-storageclass') }}
 provisioner: ceph.rook.io/block
 parameters:
-  blockPool: replicapool
+  blockPool: ocsci-cephblockpool
   # Specify the namespace of the rook cluster from which to create volumes.
   # If not specified, it will use `rook` as the default namespace of the cluster.
   # This is also the namespace where the cluster will be
-  clusterNamespace: rook-ceph
+  clusterNamespace: {{ cluster_namespace | default('openshift-storage') }}
   # Specify the filesystem type of the volume. If not specified, it will use `ext4`.
   fstype: xfs
   # (Optional) Specify an existing Ceph user that will be used for mounting storage with this StorageClass.

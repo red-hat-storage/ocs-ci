@@ -1,7 +1,7 @@
 import os
 import logging
 import yaml
-
+from utility.utils import generate_data
 from kubernetes import config
 from openshift.dynamic import DynamicClient, exceptions
 
@@ -218,44 +218,3 @@ class OCP(object):
             raise Exception(err)
 
         return _rc
-
-    # the following methods implementation already exists in
-    # https://github.com/red-hat-storage/ocs-ci/pull/40/files
-
-    def create_block_pool(self, pool_body):
-        """
-
-        Args:
-            pool_body (dict): Ceph block pool body
-
-        Returns:
-            bool: True for pool successful creation, False otherwise
-        """
-        service = self.dyn_client.resources.get(
-            api_version='v1', kind='CephBlockPool'
-        )
-        return service.create(body=pool_body)
-
-    def create_storage_class(self, sc_body):
-        """
-
-        Args:
-            sc_body:
-
-        Returns:
-
-        """
-        # TODO
-        pass
-
-    def create_pvc(self, pvc_body):
-        """
-
-        Args:
-            pvc_body:
-
-        Returns:
-
-        """
-        # TODO
-        pass

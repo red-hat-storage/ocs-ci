@@ -13,4 +13,11 @@ tests:
     config:
       destroy-cluster: False
     abort-on-fail: True
+#- test:
+#    name: testing OCS
+#    desc: Minimal testing of OCS
+#    module: test_add_mds_to_cluster.py
+#    config:
+#      destroy-cluster: False
+#    abort-on-fail: True
 
