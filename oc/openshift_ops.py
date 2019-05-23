@@ -1,7 +1,5 @@
 import os
 import logging
-import yaml
-from utility.utils import generate_data
 from kubernetes import config
 from openshift.dynamic import DynamicClient, exceptions
 
@@ -21,21 +19,21 @@ class OCP(object):
     def __init__(self):
 
         k8s_client = config.new_client_from_config()
-        self.dyn_client = DynamicClient(k8s_client)
+        dyn_client = DynamicClient(k8s_client)
 
-        self.v1_service_list = self.dyn_client.resources.get(
+        self.v1_service_list = dyn_client.resources.get(
             api_version='v1', kind='ServiceList'
         )
-        self.v1_projects = self.dyn_client.resources.get(
+        self.v1_projects = dyn_client.resources.get(
             api_version='project.openshift.io/v1', kind='Project'
         )
-        self.pods = self.dyn_client.resources.get(
+        self.pods = dyn_client.resources.get(
             api_version=default.API_VERSION, kind='Pod'
         )
-        self.deployments = self.dyn_client.resources.get(
+        self.deployments = dyn_client.resources.get(
             api_version=default.API_VERSION, kind='Deployment'
         )
-        self.services = self.dyn_client.resources.get(
+        self.services = dyn_client.resources.get(
             api_version=default.API_VERSION, kind='Service'
         )
 
