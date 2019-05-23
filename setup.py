@@ -29,7 +29,7 @@ setup(
     ],
     entry_points={
         'pytest11': [
-            'ocscilib = pytest_customization.plugins.ocscilib',
+            'ocscilib = pytest_customization.ocscilib',
         ]
     },
     zip_safe=True,
