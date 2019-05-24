@@ -5,10 +5,7 @@ import shlex
 from utility import templating
 from ocs.utils import create_oc_resource
 
-<<<<<<< HEAD
 
-=======
->>>>>>> cd83d0b1ef5f3eebe869adca5f8da288df776e04
 def make_private_namespace(name, region='us-east-2'):
     """
     Create a namespace.
@@ -43,9 +40,6 @@ def make_private_namespace(name, region='us-east-2'):
     templ_parm = templating.Templating()
     create_oc_resource('private.yaml', local_dir, templ_parm, env_data)
 
-<<<<<<< HEAD
 
-=======
->>>>>>> cd83d0b1ef5f3eebe869adca5f8da288df776e04
 if __name__ == "__main__":
     make_private_namespace('ocs-368')
