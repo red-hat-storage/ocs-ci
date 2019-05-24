@@ -205,7 +205,6 @@ class OCP(object):
 
         return False
 
-
     # this method location is temporary, will be changed to ocs class
     def exec_ceph_cmd(self, ceph_cmd):
         """
@@ -216,7 +215,6 @@ class OCP(object):
 
         Returns:
             str: Ceph command output in a Json format
-
         """
         pods_list = shlex.split(self.get(resource_name='pods'))
         ct_pod = [pod for pod in pods_list if "ceph-tools" in pod][0]
