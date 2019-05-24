@@ -36,9 +36,9 @@ def create_rbd_cephpool(poolname, storageclassname):
     log.info(TEMP_SC_YAML_FILE)
 
 
-def create_pvc(pvcname):
+def create_pvc_invalid_name(pvcname):
     """
-    Creates a pvc with an user provided name
+    Creates a pvc with an user provided data
     """
     data = {}
     data['pvc_name'] = pvcname
@@ -47,47 +47,74 @@ def create_pvc(pvcname):
     with open(TEMP_PVC_YAML_FILE, 'w') as fd:
         fd.write(tmp_yaml_file)
         log.info(f"Creating a pvc with name {pvcname}")
-
-    # Code from line:49 to line:76 will be converted to a library so that
-    # it can be consumed whenever required
-    import shlex
-    import subprocess
-
-    def run_ocp_cmd(cmd, **kwargs):
-
-        """
-           Run an ocp command locally
-
-           Args:
-               cmd (str): command to run
-
-           Returns:
-               stdout (str): Decoded stdout of command
-               stderr (str): Decoded stderr of command
-               returncode (str): return code of command
-
-           """
-        log.info(f"Executing ocp command: {cmd}")
-        if isinstance(cmd, str):
-            cmd = shlex.split(cmd)
-        r = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            stdin=subprocess.PIPE,
-            **kwargs
-        )
-        return r.stdout.decode(), r.stderr.decode(), r.returncode
-
+    log.info(tmp_yaml_file)
     oc_cmd = "oc "
     kubeconfig = f"--kubeconfig {os.getenv('KUBECONFIG')}"
     cmd = f"{oc_cmd} {kubeconfig} create -f {TEMP_PVC_YAML_FILE}"
     _, stderr, ret = run_ocp_cmd(cmd)
     if "error" in stderr:
-        log.info(f"PVC creation failed with error \n {stderr} \nas EXPECTED")
+        log.info(f"PVC creation failed with error \n {stderr} \n as "
+                 " invalid pvc name is provided. EXPECTED to fail")
     else:
         if ret != 0:
-            assert "PVC creation succeeded : NOT expected"
+            assert "PVC creation with invalid name succeeded : NOT expected"
+
+
+def create_pvc_invalid_size(pvcsize):
+    """
+    Creates a pvc with an user provided data
+    """
+    data = {}
+    data['pvc_size'] = pvcsize
+    _templating = templating.Templating()
+    tmp_yaml_file = _templating.render_template(RBD_PVC_YAML, data)
+    with open(TEMP_PVC_YAML_FILE, 'w') as fd:
+        fd.write(tmp_yaml_file)
+        log.info(f"Creating a pvc with size {pvcsize}")
+    log.info(tmp_yaml_file)
+    oc_cmd = "oc "
+    kubeconfig = f"--kubeconfig {os.getenv('KUBECONFIG')}"
+    cmd = f"{oc_cmd} {kubeconfig} create -f {TEMP_PVC_YAML_FILE}"
+    _, stderr, ret = run_ocp_cmd(cmd)
+    if "error" in stderr:
+        log.info(f"PVC creation failed with error \n {stderr} \n as "
+                 " invalid pvc size is provided. EXPECTED to fail")
+    else:
+        if ret != 0:
+            assert "PVC creation with invalid size succeeded : NOT expected"
+
+
+# Code from line:87 to line:114 will be converted to a library so that
+# it can be consumed whenever required
+import shlex
+import subprocess
+
+
+def run_ocp_cmd(cmd, **kwargs):
+
+    """
+       Run an ocp command locally
+
+       Args:
+           cmd (str): command to run
+
+       Returns:
+           stdout (str): Decoded stdout of command
+           stderr (str): Decoded stderr of command
+           returncode (str): return code of command
+
+       """
+    log.info(f"Executing ocp command: {cmd}")
+    if isinstance(cmd, str):
+        cmd = shlex.split(cmd)
+    r = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.PIPE,
+        **kwargs
+    )
+    return r.stdout.decode(), r.stderr.decode(), r.returncode
 
 
 def delete_rbd_cephpool():
@@ -103,9 +130,9 @@ def run(**kwargs):
     """
     A simple function to exercise a resource creation through api-client
     """
-    pvcname = '@123'
-    create_rbd_cephpool("autopoo1", "autosc1")
-    create_pvc(pvcname)
+    create_rbd_cephpool("autopool03", "autosc003")
+    create_pvc_invalid_name(pvcname='@123')
+    create_pvc_invalid_size(pvcsize='abcd')
     utils.delete_file(TEMP_SC_YAML_FILE)
     utils.delete_file(TEMP_PVC_YAML_FILE)
     return TestStatus.PASSED
