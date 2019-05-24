@@ -716,7 +716,7 @@ def destroy_cluster(cluster_path):
             aws.detach_and_delete_volume(volume)
 
         # Remove installer
-        os.remove(installer)
+        delete_file(installer)
         return StatusOfTest.PASSED
 
     except Exception:
@@ -726,9 +726,8 @@ def destroy_cluster(cluster_path):
 
 def get_openshift_installer(version=defaults.INSTALLER_VERSION):
     """
-    Download the openshift installer
-    Get path of the openshift installer binary, download it if not available.
-
+    Download the OpenShift installer binary, if not already present.
+    Update env. PATH and get path of the openshift installer binary.
 
     Args:
         version (str): version of the installer to download
@@ -740,36 +739,112 @@ def get_openshift_installer(version=defaults.INSTALLER_VERSION):
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(defaults.BIN_DIR, installer_filename)
     if os.path.isfile(installer_binary_path):
-        log.info("Installer exists, skipping download")
+        log.debug("Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
     else:
         log.info("Downloading openshift installer")
-        if platform.system() == "Darwin":
-            os_type = "mac"
-        elif platform.system() == "Linux":
-            os_type = "linux"
-        else:
-            raise UnsupportedOSType
-        url = (
-            f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
-            f"{version}/openshift-install-{os_type}-{version}.tar.gz"
-        )
-        # Prepare BIN_DIR
-        try:
-            os.mkdir(defaults.BIN_DIR)
-        except FileExistsError:
-            pass
+        prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
         os.chdir(defaults.BIN_DIR)
         tarball = f"{installer_filename}.tar.gz"
+        url = get_openshift_mirror_url(installer_filename, version)
         download_file(url, tarball)
         run_cmd(f"tar xzvf {tarball}")
-        os.remove(tarball)
+        delete_file(tarball)
         # return to the previous working directory
         os.chdir(previous_dir)
 
+    add_path_to_env_path(defaults.BIN_DIR)
+
     return installer_binary_path
+
+
+def get_openshift_client(version=defaults.CLIENT_VERSION):
+    """
+    Download the OpenShift client binary, if not already present.
+    Update env. PATH and get path of the oc binary.
+
+    Args:
+        version (str): version of the client to download
+
+    Returns:
+        str: path of the client binary
+
+    """
+    client_binary_path = os.path.join(defaults.BIN_DIR, 'oc')
+    if os.path.isfile(client_binary_path):
+        log.debug("Client exists ({client_binary_path}), skipping download.")
+        # TODO: check client version
+    else:
+        log.info("Downloading openshift client")
+        prepare_bin_dir()
+        # record current working directory and switch to BIN_DIR
+        previous_dir = os.getcwd()
+        os.chdir(defaults.BIN_DIR)
+        url = get_openshift_mirror_url('openshift-client', version)
+        tarball = "openshift-client.tar.gz"
+        download_file(url, tarball)
+        run_cmd(f"tar xzvf {tarball}")
+        delete_file(tarball)
+        # return to the previous working directory
+        os.chdir(previous_dir)
+
+    add_path_to_env_path(defaults.BIN_DIR)
+
+    return client_binary_path
+
+
+def get_openshift_mirror_url(file_name, version):
+    """
+    Format url to OpenShift mirror (for client and installer download).
+
+    Args:
+        file_name (str): name of file
+        version (str): version of the installer or client to download
+
+    Returns:
+        str: url of the desired file (installer or client)
+
+    """
+    if platform.system() == "Darwin":
+        os_type = "mac"
+    elif platform.system() == "Linux":
+        os_type = "linux"
+    else:
+        raise UnsupportedOSType
+    url = (
+        f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
+        f"{version}/{file_name}-{os_type}-{version}.tar.gz"
+    )
+    return url
+
+
+def prepare_bin_dir():
+    """
+    Prepare bin directory for OpenShift client and installer
+    """
+    try:
+        os.mkdir(defaults.BIN_DIR)
+        log.info(f"Directory '{defaults.BIN_DIR}' successfully created.")
+    except FileExistsError:
+        log.debug(f"Directory '{defaults.BIN_DIR}' already exists.")
+
+
+def add_path_to_env_path(path):
+    """
+    Add path to the PATH environment variable (if not already there).
+
+    Args:
+        path (str): path which should be added to the PATH env. variable
+
+    """
+    path = os.path.abspath('./bin')
+    env_path = os.environ['PATH'].split(os.pathsep)
+    if path not in env_path:
+        os.environ['PATH'] = os.pathsep.join([path] + env_path)
+        log.info(f"Path '{path}' added to the PATH environment variable.")
+    log.debug(f"PATH: {os.environ['PATH']}")
 
 
 def delete_file(file_name):
