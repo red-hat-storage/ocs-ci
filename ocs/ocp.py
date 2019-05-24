@@ -216,8 +216,8 @@ class OCP(object):
         Returns:
             str: Ceph command output in a Json format
         """
-        pods_list = shlex.split(self.get(resource_name='pods'))
+        pods_list = shlex.split(self.get(out_yaml_format=False))
         ct_pod = [pod for pod in pods_list if "ceph-tools" in pod][0]
         assert ct_pod, f"No Ceph tools pod found"
-        cmd = f"rsh {ct_pod} {ceph_cmd} --format pretty-json"
+        cmd = f"rsh {ct_pod} {ceph_cmd} --format json-pretty"
         return self.exec_oc_cmd(cmd)
