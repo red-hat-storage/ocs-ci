@@ -12,6 +12,7 @@ API_VERSION = "v1"
 CEPH_IMAGE = "quay.io/rhceph-dev/rhceph-4.0-rhel-8"
 ROOK_IMAGE = "quay.io/rhceph-dev/rook"
 DEPLOYMENT_PLATFORM = 'AWS'
+BIN_DIR = './bin'
 
 ENV_DATA = {
     'platform': DEPLOYMENT_PLATFORM,
