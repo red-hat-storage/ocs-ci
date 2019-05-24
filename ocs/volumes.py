@@ -255,4 +255,3 @@ class PVC(KubeVolume):
         self.service_pvc.create(body=data, namespace=self.namespace)
 
         return pvc_name
-
