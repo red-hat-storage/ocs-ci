@@ -4,7 +4,7 @@ General OCP object
 import os
 import logging
 import yaml
-
+import shlex
 from munch import munchify
 
 from ocs.exceptions import CommandFailed
@@ -204,3 +204,22 @@ class OCP(object):
                 return True
 
         return False
+
+
+    # this method location is temporary, will be changed to ocs class
+    def exec_ceph_cmd(self, ceph_cmd):
+        """
+        Execute a Ceph command on the Ceph tools pod
+
+        Args:
+            ceph_cmd (str): The Ceph command to execute on the Ceph tools pod
+
+        Returns:
+            str: Ceph command output in a Json format
+
+        """
+        pods_list = shlex.split(self.get(resource_name='pods'))
+        ct_pod = [pod for pod in pods_list if "ceph-tools" in pod][0]
+        assert ct_pod, f"No Ceph tools pod found"
+        cmd = f"rsh {ct_pod} {ceph_cmd} --format pretty-json"
+        return self.exec_oc_cmd(cmd)
