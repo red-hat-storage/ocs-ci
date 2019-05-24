@@ -2,7 +2,7 @@
 apiVersion: ceph.rook.io/v1
 kind: CephBlockPool
 metadata:
-  name: rbd
+  name: {{ metadata_name | default('rbd') }}
   namespace: {{ cluster_namespace | default('openshift-storage') }}
 spec:
   failureDomain: host
@@ -13,13 +13,12 @@ spec:
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-   name: rook-ceph-block
+   name: {{ storage_class_name | default('rook-ceph-block') }}
    annotations:
     storageclass.kubernetes.io/is-default-class: "true"
 provisioner: ceph.rook.io/block
 parameters:
-  blockPool: rbd
+  blockPool: {{ blockpool_name | default('rbd') }}
   clusterNamespace: {{ cluster_namespace | default('openshift-storage') }}
   fstype: xfs
 reclaimPolicy: Retain
-
