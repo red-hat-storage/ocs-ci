@@ -8,3 +8,4 @@ tests:
     name: destroy OCS cluster
     desc: Destroy OCS cluster defined in cluster_path
     module: test_destroy_cluster.py
+

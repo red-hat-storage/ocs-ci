@@ -35,6 +35,7 @@ def create_rbd_cephpool(poolname, storageclassname):
              "created successfully")
     log.info(TEMP_SC_YAML_FILE)
 
+
 def create_pvc(pvcname):
     """
     Creates a pvc with an user provided name
@@ -69,7 +70,7 @@ def create_pvc(pvcname):
         log.info(f"Executing ocp command: {cmd}")
         if isinstance(cmd, str):
             cmd = shlex.split(cmd)
-        r= subprocess.run(
+        r = subprocess.run(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -81,30 +82,29 @@ def create_pvc(pvcname):
     oc_cmd = "oc "
     kubeconfig = f"--kubeconfig {os.getenv('KUBECONFIG')}"
     cmd = f"{oc_cmd} {kubeconfig} create -f {TEMP_PVC_YAML_FILE}"
-    _, stderr, ret= run_ocp_cmd(cmd)
+    _, stderr, ret = run_ocp_cmd(cmd)
     if "error" in stderr:
         log.info(f"PVC creation failed with error \n {stderr} \nas EXPECTED")
     else:
-        if ret !=0:
+        if ret != 0:
             assert "PVC creation succeeded : NOT expected"
+
 
 def delete_rbd_cephpool():
     """
     Deletes the created ceph pool and storage class
     """
-    data = {}
-    _templating = templating.Templating()
-    tmp_yaml_file = _templating.render_template(RBD_SC_YAML, data)
     log.info("Deleting created temporary sc yaml file")
     assert occli.delete(TEMP_SC_YAML_FILE)
     log.info("Successfully deleted temporary sc yaml file")
+
 
 def run(**kwargs):
     """
     A simple function to exercise a resource creation through api-client
     """
     pvcname = '@123'
-    create_rbd_cephpool("autopoo1","autosc1")
+    create_rbd_cephpool("autopoo1", "autosc1")
     create_pvc(pvcname)
     utils.delete_file(TEMP_SC_YAML_FILE)
     utils.delete_file(TEMP_PVC_YAML_FILE)
