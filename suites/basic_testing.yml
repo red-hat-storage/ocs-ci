@@ -1,14 +1,14 @@
 tests:
 - test:
     name: testing OCS
-    desc: PV creation testing
+    desc:
     module: test_pv_creation.py
     config:
       destroy-cluster: False
     abort-on-fail: True
 - test:
     name: testing OCS
-    desc: Modifying a CephFilesystem
+    desc:
     module: test_add_mds_to_cluster.py
     config:
       destroy-cluster: False

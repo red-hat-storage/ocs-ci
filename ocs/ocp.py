@@ -154,7 +154,7 @@ class OCP(object):
 
     def wait_for_resource(
         self, condition, resource_name='', selector=None, resource_count=0,
-        timeout=60, sleep=3
+        to_delete=False, timeout=60, sleep=3
     ):
         """
         Wait for a resource to reach to a desired condition
@@ -169,6 +169,8 @@ class OCP(object):
             selector (str): The resource selector to search with.
                 Example: 'app=rook-ceph-mds'
             resource_count (int): How many resources expected to be
+            to_delete (bool): Determines if wait_for_resource should wait for
+                a resource to be deleted
             timeout (int): Time in seconds to wait
             sleep (int): Sampling time in seconds
 
@@ -198,29 +200,7 @@ class OCP(object):
                             return True
                     elif len(sample) == len(in_condition):
                         return True
-
-        return False
-
-    def wait_for_delete(
-        self, resource_name='', selector=None, timeout=60, sleep=3
-    ):
-        """
-        Wait for a resource to reach to a desired condition
-
-        Args:
-            resource_name (str): The name of the resource to wait
-                for (e.g.my-pv1)
-            selector (str): The resource selector to search with.
-                Example: 'app=rook-ceph-mds'
-
-        Returns:
-            bool: True in case all resources reached desired condition,
-                False otherwise
-
-        """
-        for sample in TimeoutSampler(
-            timeout, sleep, self.get, resource_name, True, selector
-        ):
-            if not sample:
+            if to_delete and not sample:
                 return True
+
         return False

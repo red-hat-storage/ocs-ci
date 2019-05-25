@@ -5,10 +5,11 @@ import logging
 import ocs.defaults as defaults
 import yaml
 import os
+import pytest
 
+from ocsci import tier1, ManageTest
 from ocs import ocp
 from munch import munchify
-from ocsci.enums import StatusOfTest
 from utility import utils, templating
 
 log = logging.getLogger(__name__)
@@ -23,13 +24,43 @@ CEPHFS = ocp.OCP(
 POD = ocp.OCP(kind='Pod', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
 
 
-def create_ceph_fs(**kwargs):
+@pytest.fixture(scope='class')
+def test_fixture(request):
+    """
+    Create disks
+    """
+    self = request.node.cls
+
+    def finalizer():
+        teardown(self)
+    request.addfinalizer(finalizer)
+    setup(self)
+
+
+def setup(self):
+    """
+    Setting up the environment for the test
+    """
+    assert create_ceph_fs(self.fs_data)
+    assert verify_fs_exist(2)
+
+
+def teardown(self):
+    """
+    Tearing down the environment
+    """
+    assert delete_fs(self.fs_name)
+
+    utils.delete_file(TEMP_YAML_FILE)
+
+
+def create_ceph_fs(data):
     """
     Create a new Ceph File System
     """
 
     file_y = templating.generate_yaml_from_jinja2_template_with_data(
-        CEPHFS_YAML, **kwargs
+        CEPHFS_YAML, **data
     )
     with open(TEMP_YAML_FILE, 'w') as yaml_file:
         yaml.dump(file_y, yaml_file, default_flow_style=False)
@@ -65,7 +96,9 @@ def delete_fs(fs_name):
     log.info(f"Deleting the file system")
     stat = CEPHFS.delete(resource_name=fs_name)
     if CEPHFS_DELETED.format(cephfs_name=fs_name) in stat:
-        return True
+        return POD.wait_for_resource(
+            condition='', selector='app=rook-ceph-mds', to_delete=True
+        )
     return False
 
 
@@ -83,18 +116,22 @@ def verify_fs_exist(pod_count):
     return False
 
 
-def run(**kwargs):
+@tier1
+@pytest.mark.usefixtures(
+    test_fixture.__name__,
+)
+class TestCephFilesystemCreation(ManageTest):
     """
-    A simple function to exercise a resource creation through api-client
+    Testing creation of Ceph FileSystem
     """
     fs_data = {}
     fs_name = 'my-cephfs1'
     fs_data['fs_name'] = fs_name
     new_active_count = 2
-    assert create_ceph_fs(**fs_data)
-    assert verify_fs_exist(2)
-    assert modify_fs(new_active_count)
-    assert verify_fs_exist(new_active_count * 2)
-    assert delete_fs(fs_name)
-    utils.delete_file(TEMP_YAML_FILE)
-    return StatusOfTest.PASSED
+
+    def test_cephfilesystem_creation(self):
+        """
+        Creating a Ceph Filesystem
+        """
+        assert modify_fs(self.new_active_count)
+        assert verify_fs_exist(self.new_active_count * 2)
