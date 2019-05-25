@@ -24,7 +24,7 @@ def make_rbd_pool(cluster_namespace, local_dir):
 def make_rbd_storage_class(cluster_namespace):
     """
     Make rbd storage class.
-    This code will fail if the private namespace corresponding to 
+    This code will fail if the private namespace corresponding to
     cluster_namespace has not already been created.
 
     Args:
