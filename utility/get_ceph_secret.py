@@ -2,6 +2,7 @@ import subprocess
 import shlex
 from ocs import api_client as ac
 
+
 def get_ceph_secret(namespace='openshift-storage'):
     client = ac.get_api_client("OCRESTClient")
     pod_list = client.get_pods(namespace=namespace)
