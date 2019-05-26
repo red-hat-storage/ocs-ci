@@ -79,7 +79,7 @@ class OCP(object):
             get('my-pv1')
 
         Returns:
-            Munch Obj: this object represents a returned yaml file
+            Munch Obj: This object represents a returned yaml file
         """
         command = f"get {self.kind} {resource_name}"
         if selector is not None:
@@ -209,12 +209,13 @@ class OCP(object):
     def exec_cmd_on_pod(self, pod_name, command):
         """
         Execute a command on a pod (e.g. oc rsh)
+
         Args:
             pod_name (str): The pod on which the command should be executed
             command (str): The command to execute on the given pod
 
         Returns:
-            Munch Obj: this object represents a returned yaml file
+            Munch Obj: This object represents a returned yaml file
         """
         rsh_cmd = f"rsh {pod_name} "
         rsh_cmd += command
