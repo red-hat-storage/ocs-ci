@@ -4,7 +4,6 @@ General OCP object
 import os
 import logging
 import yaml
-import shlex
 from ocs import defaults
 from munch import munchify
 
