@@ -228,13 +228,12 @@ def get_ceph_tools_pod():
     Get the Ceph tools pod
 
     Returns:
-        str: The Ceph tools pod
+        str: The Ceph tools pod name
     """
     ocp_pod_obj = OCP(kind='pods', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    pods_list = shlex.split(
-        ocp_pod_obj.get(selector='app=rook-ceph-tools', out_yaml_format=False)
-    )
-    ct_pod = [pod for pod in pods_list if "ceph-tools" in pod][0]
+    ct_pod = ocp_pod_obj.get(
+        selector='app=rook-ceph-tools'
+    ).toDict()['items'][0]['metadata']['name']
     assert ct_pod, f"No Ceph tools pod found"
     return ct_pod
 
