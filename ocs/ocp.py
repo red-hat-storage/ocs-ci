@@ -5,6 +5,7 @@ import os
 import logging
 import yaml
 import shlex
+from ocs import defaults
 from munch import munchify
 
 from ocs.exceptions import CommandFailed
@@ -205,19 +206,48 @@ class OCP(object):
 
         return False
 
-    # this method location is temporary, will be changed to ocs class
-    def exec_ceph_cmd(self, ceph_cmd):
+    def exec_cmd_on_pod(self, pod_name, command):
         """
-        Execute a Ceph command on the Ceph tools pod
 
         Args:
-            ceph_cmd (str): The Ceph command to execute on the Ceph tools pod
+            pod_name (str): The pod on which the command should be executed
+            command (str): The command to execute on the given pod
 
         Returns:
-            str: Ceph command output in a Json format
+            Munch Obj: this object represents a returned yaml file
         """
-        pods_list = shlex.split(self.get(out_yaml_format=False))
-        ct_pod = [pod for pod in pods_list if "ceph-tools" in pod][0]
-        assert ct_pod, f"No Ceph tools pod found"
-        cmd = f"rsh {ct_pod} {ceph_cmd} --format json-pretty"
-        return self.exec_oc_cmd(cmd)
+        rsh_cmd = f"rsh {pod_name} "
+        rsh_cmd += command
+        return self.exec_oc_cmd(rsh_cmd)
+
+
+# the following functions location is temporary, will be changed to ocs class
+def get_ceph_tools_pod():
+    """
+    Get the Ceph tools pod
+
+    Returns:
+        str: The Ceph tools pod
+
+    """
+    ocp_pod_obj = OCP(kind='pods', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    pods_list = shlex.split(ocp_pod_obj.get(out_yaml_format=False))
+    ct_pod = [pod for pod in pods_list if "ceph-tools" in pod][0]
+    assert ct_pod, f"No Ceph tools pod found"
+    return ct_pod
+
+
+def exec_ceph_cmd(ceph_cmd):
+    """
+    Execute a Ceph command on the Ceph tools pod
+
+    Args:
+        ceph_cmd (str): The Ceph command to execute on the Ceph tools pod
+
+    Returns:
+        str: Ceph command output in a Json format
+    """
+    ocp_pod_obj = OCP(kind='pods', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    ct_pod = get_ceph_tools_pod()
+    ceph_cmd += " --format json-pretty"
+    return ocp_pod_obj.exec_cmd_on_pod(ct_pod, ceph_cmd)
