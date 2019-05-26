@@ -74,6 +74,7 @@ class OCP(object):
 
         Args:
             resource_name (str): The resource name to fetch
+            selector (str): The label selector to look for
 
         Example:
             get('my-pv1')
@@ -208,7 +209,7 @@ class OCP(object):
 
     def exec_cmd_on_pod(self, pod_name, command):
         """
-
+        Execute a command on a pod (e.g. oc rsh)
         Args:
             pod_name (str): The pod on which the command should be executed
             command (str): The command to execute on the given pod
@@ -228,10 +229,11 @@ def get_ceph_tools_pod():
 
     Returns:
         str: The Ceph tools pod
-
     """
     ocp_pod_obj = OCP(kind='pods', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    pods_list = shlex.split(ocp_pod_obj.get(out_yaml_format=False))
+    pods_list = shlex.split(
+        ocp_pod_obj.get(selector='app=rook-ceph-tools', out_yaml_format=False)
+    )
     ct_pod = [pod for pod in pods_list if "ceph-tools" in pod][0]
     assert ct_pod, f"No Ceph tools pod found"
     return ct_pod
@@ -245,9 +247,9 @@ def exec_ceph_cmd(ceph_cmd):
         ceph_cmd (str): The Ceph command to execute on the Ceph tools pod
 
     Returns:
-        str: Ceph command output in a Json format
+        dict: Ceph command output
     """
     ocp_pod_obj = OCP(kind='pods', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     ct_pod = get_ceph_tools_pod()
     ceph_cmd += " --format json-pretty"
-    return ocp_pod_obj.exec_cmd_on_pod(ct_pod, ceph_cmd)
+    return ocp_pod_obj.exec_cmd_on_pod(ct_pod, ceph_cmd).toDict()
