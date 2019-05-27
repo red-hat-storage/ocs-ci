@@ -88,20 +88,31 @@ class OCP(object):
             command += " -o yaml"
         return self.exec_oc_cmd(command)
 
-    def create(self, yaml_file, out_yaml_format=True):
+    def create(self, yaml_file=None, resource_name='', out_yaml_format=True):
         """
         Creates a new resource
 
         Args:
             yaml_file (str): Path to a yaml file to use in 'oc create -f
                 file.yaml
+            resource_name (str): Name of the resource you want to create
             out_yaml_format (bool): Determines if the output should be
                 formatted to a yaml like string
 
         Returns:
             Munch Obj: this object represents a returned yaml file
         """
-        command = f"create -f {yaml_file}"
+        if not (yaml_file or resource_name):
+            raise CommandFailed(
+                "At least one of resource_name or yaml_file have to "
+                "be provided"
+            )
+        command = "create "
+        if yaml_file:
+            command += f"-f {yaml_file}"
+        elif resource_name:
+            # e.g "oc namespace my-project"
+            command = f"{self.kind} {resource_name}"
         if out_yaml_format:
             command += " -o yaml"
 
