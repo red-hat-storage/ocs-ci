@@ -28,12 +28,13 @@ def test_storageclass_cephfs_invalid(invalid_cephfs_storageclass, tmpdir):
     pvc_name = 'test-pvc'
     logger.info(
         f"Create PVC {pvc_name} "
-        f"with storageClassName {invalid_cephfs_storageclass}"
+        f"with storageClassName "
+        f"{invalid_cephfs_storageclass['metadata']['name']}"
     )
     pvc_yaml_content = templating.generate_yaml_from_jinja2_template_with_data(
         PVC_TEMPLATE,
         pvc_name=pvc_name,
-        storageclass_name=invalid_cephfs_storageclass
+        storageclass_name=invalid_cephfs_storageclass['metadata']['name']
     )
     temp_pvc_file = tmpdir.join('pvc.yaml')
     temp_pvc_file.write(

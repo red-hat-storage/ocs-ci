@@ -51,9 +51,12 @@ def invalid_cephfs_storageclass(tmpdir, request):
     )
     temp_sc_file = tmpdir.join('storageclass.cephfs.yaml')
     temp_sc_file.write(yaml.dump(sc_yaml_content))
-    storageclass.create(yaml_file=temp_sc_file)
+    sc_data = storageclass.create(yaml_file=temp_sc_file)
 
-    yield request.param['storageclass_name']
+    logger.debug('Check that storageclass has assigned creationTimestamp')
+    assert sc_data['metadata']['creationTimestamp']
+
+    yield sc_data
 
     logger.info(
         f"TEARDOWN - removing storageclass "
