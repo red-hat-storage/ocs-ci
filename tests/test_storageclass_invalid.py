@@ -5,8 +5,7 @@ import yaml
 
 from ocs import ocp
 from ocs import defaults
-from ocsci.config import ENV_DATA
-from ocsci import run_this, tier1
+from ocsci import tier1
 from utility import templating
 
 
@@ -29,7 +28,8 @@ def test_storageclass_cephfs_invalid(invalid_cephfs_storageclass, tmpdir):
     pvc_name = 'test-pvc'
     logger.info(
         f"Create PVC {pvc_name} "
-        f"with storageClassName {invalid_cephfs_storageclass}")
+        f"with storageClassName {invalid_cephfs_storageclass}"
+    )
     pvc_yaml_content = templating.generate_yaml_from_jinja2_template_with_data(
         PVC_TEMPLATE,
         pvc_name=pvc_name,
@@ -37,11 +37,12 @@ def test_storageclass_cephfs_invalid(invalid_cephfs_storageclass, tmpdir):
     )
     temp_pvc_file = tmpdir.join('pvc.yaml')
     temp_pvc_file.write(
-        yaml.dump(pvc_yaml_content))
+        yaml.dump(pvc_yaml_content)
+    )
     pvc.create(yaml_file=temp_pvc_file)
 
     pvc_status = pvc.get(resource_name=pvc_name)['status']['phase']
-    logger.debug(f"Status of PVC {pvc_name} after createtion: {pvc_status}")
+    logger.debug(f"Status of PVC {pvc_name} after creation: {pvc_status}")
     assert pvc_status == 'Pending'
 
     logger.info('Wait for 60 seconds')

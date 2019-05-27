@@ -5,7 +5,6 @@ import yaml
 
 from ocs import ocp
 from ocs import defaults
-from ocsci.config import ENV_DATA
 from utility import templating
 
 
@@ -44,7 +43,8 @@ def invalid_cephfs_storageclass(tmpdir, request):
     )
     logger.info(
         f"SETUP - creating storageclass "
-        f"{request.param['storageclass_name']}")
+        f"{request.param['storageclass_name']}"
+    )
     sc_yaml_content = templating.generate_yaml_from_jinja2_template_with_data(
         SC_CEPHFS_TEMPLATE,
         **request.param  # storageclass template parameters
@@ -57,5 +57,6 @@ def invalid_cephfs_storageclass(tmpdir, request):
 
     logger.info(
         f"TEARDOWN - removing storageclass "
-        f"{request.param['storageclass_name']}")
+        f"{request.param['storageclass_name']}"
+    )
     storageclass.delete(yaml_file=temp_sc_file)
