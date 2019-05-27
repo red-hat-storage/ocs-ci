@@ -750,7 +750,7 @@ def get_openshift_installer(version=defaults.INSTALLER_VERSION):
         tarball = f"{installer_filename}.tar.gz"
         url = get_openshift_mirror_url(installer_filename, version)
         download_file(url, tarball)
-        run_cmd(f"tar xzvf {tarball}")
+        run_cmd(f"tar xzvf {tarball} {installer_filename}")
         delete_file(tarball)
         # return to the previous working directory
         os.chdir(previous_dir)
@@ -785,7 +785,7 @@ def get_openshift_client(version=defaults.CLIENT_VERSION):
         url = get_openshift_mirror_url('openshift-client', version)
         tarball = "openshift-client.tar.gz"
         download_file(url, tarball)
-        run_cmd(f"tar xzvf {tarball}")
+        run_cmd(f"tar xzvf {tarball} oc kubectl")
         delete_file(tarball)
         # return to the previous working directory
         os.chdir(previous_dir)
