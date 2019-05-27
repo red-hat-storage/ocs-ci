@@ -730,10 +730,10 @@ def get_openshift_installer(version=defaults.INSTALLER_VERSION):
     Update env. PATH and get path of the openshift installer binary.
 
     Args:
-        version (str): version of the installer to download
+        version (str): Version of the installer to download
 
     Returns:
-        str: path to the installer binary
+        str: Path to the installer binary
 
     """
     installer_filename = "openshift-install"
@@ -766,10 +766,10 @@ def get_openshift_client(version=defaults.CLIENT_VERSION):
     Update env. PATH and get path of the oc binary.
 
     Args:
-        version (str): version of the client to download
+        version (str): Version of the client to download
 
     Returns:
-        str: path of the client binary
+        str: Path to the client binary
 
     """
     client_binary_path = os.path.join(defaults.BIN_DIR, 'oc')
@@ -800,11 +800,11 @@ def get_openshift_mirror_url(file_name, version):
     Format url to OpenShift mirror (for client and installer download).
 
     Args:
-        file_name (str): name of file
-        version (str): version of the installer or client to download
+        file_name (str): Name of file
+        version (str): Version of the installer or client to download
 
     Returns:
-        str: url of the desired file (installer or client)
+        str: Url of the desired file (installer or client)
 
     """
     if platform.system() == "Darwin":
@@ -836,7 +836,7 @@ def add_path_to_env_path(path):
     Add path to the PATH environment variable (if not already there).
 
     Args:
-        path (str): path which should be added to the PATH env. variable
+        path (str): Path which should be added to the PATH env. variable
 
     """
     path = os.path.abspath('./bin')
