@@ -1,6 +1,7 @@
 import logging
 import os.path
 import pytest
+import time
 import yaml
 
 from ocs import ocp
@@ -27,6 +28,9 @@ def test_storageclass_cephfs_invalid(invalid_cephfs_storageclass, tmpdir):
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
     pvc_name = 'test-pvc'
+    logger.info(
+        f"Create PVC {pvc_name} "
+        f"with storageClassName {invalid_cephfs_storageclass}")
     pvc_yaml_content = templating.generate_yaml_from_jinja2_template_with_data(
         PVC_TEMPLATE,
         pvc_name=pvc_name,
@@ -36,6 +40,17 @@ def test_storageclass_cephfs_invalid(invalid_cephfs_storageclass, tmpdir):
     temp_pvc_file.write(
         yaml.dump(pvc_yaml_content))
     pvc.create(yaml_file=temp_pvc_file)
-    status = pvc.get(resource_name=pvc_name)['status']['phase']
-    logger.info(status)
+
+    pvc_status = pvc.get(resource_name=pvc_name)['status']['phase']
+    logger.debug(f"Status of PVC {pvc_name} after createtion: {pvc_status}")
+    assert pvc_status == 'Pending'
+
+    logger.info('Wait for 60 seconds')
+    time.sleep(60)
+
+    pvc_status = pvc.get(resource_name=pvc_name)['status']['phase']
+    logger.info(f"Status of PVC {pvc_name} after 60 seconds: {pvc_status}")
+    assert pvc_status == 'Pending'
+
+    logger.info(f"Deleting PVC {pvc_name}")
     pvc.delete(yaml_file=temp_pvc_file)
