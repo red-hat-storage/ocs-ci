@@ -1,5 +1,6 @@
 import logging
 import os.path
+import pytest
 import yaml
 
 from ocs import ocp
