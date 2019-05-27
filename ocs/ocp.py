@@ -164,6 +164,21 @@ class OCP(object):
         command = f"apply -f {yaml_file}"
         return self.exec_oc_cmd(command)
 
+    def new_project(self, project_name):
+        """
+        Creates a new project
+
+        Args:
+            project_name (str): Name of the project to be created
+
+        Returns:
+            bool: True in case project creation succeeded, False otherwise
+        """
+        command = f"oc new-project {project_name}"
+        if f'Now using project "{project_name}"' in run_cmd(f"{command}"):
+            return True
+        return False
+
     def wait_for_resource(
         self, condition, resource_name='', selector=None, resource_count=0,
         to_delete=False, timeout=60, sleep=3
