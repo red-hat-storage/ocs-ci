@@ -1,12 +1,10 @@
 import logging
 import os.path
-import pytest
 import yaml
 
 from ocs import ocp
 from ocs import defaults
 from ocsci.config import ENV_DATA
-from ocsci import run_this, tier1
 from utility import templating
 
 
@@ -19,9 +17,9 @@ SC_CEPHFS_TEMPLATE = os.path.join(TEMPLATE_DIR, 'storageclass.cephfs.yaml')
 @pytest.fixture(
     params=[{
         'storageclass_name': 'invalid-storageclass',
-        'provisioner': None,
+        'provisioner': "invalid_provisioner",
         'monitors': 'invalid_monitors',
-        'provision_volume': None,
+        'provision_volume': "invalid_provisioner_volume",
         'ceph_pool': 'invalid_pool',
         'provisioner_secret_name': 'invalid_provisioner_secret_name',
         'provisioner_secret_namespace': 'invalid_provisioner_secret_namespace',
@@ -29,8 +27,8 @@ SC_CEPHFS_TEMPLATE = os.path.join(TEMPLATE_DIR, 'storageclass.cephfs.yaml')
         'node_stage_secret_namespace': 'invalid_node_stage_secret_namespace',
         'mounter': 'invalid_mounter',
         'reclaim_policy': 'Delete'
-        }]  # TODO: add more test case parameters
-    )
+    }]  # TODO: add more test case parameters
+)
 def invalid_cephfs_storageclass(tmpdir, request):
     """
     Creates StorageClass with CephFS filesystem that have invalid parameters.
@@ -57,6 +55,6 @@ def invalid_cephfs_storageclass(tmpdir, request):
     yield request.param['storageclass_name']
 
     logger.info(
-            f"TEARDOWN - removing storageclass "
-            f"{request.param['storageclass_name']}")
+        f"TEARDOWN - removing storageclass "
+        f"{request.param['storageclass_name']}")
     storageclass.delete(yaml_file=temp_sc_file)

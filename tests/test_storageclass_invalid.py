@@ -1,13 +1,11 @@
 import logging
 import os.path
-import pytest
 import time
 import yaml
 
 from ocs import ocp
 from ocs import defaults
 from ocsci.config import ENV_DATA
-from ocsci import run_this, tier1
 from utility import templating
 
 
