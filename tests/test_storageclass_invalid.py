@@ -48,7 +48,7 @@ def test_storageclass_cephfs_invalid(invalid_cephfs_storageclass, tmpdir):
 
     try:
         logger.info('Wait for 60 seconds')
-        pvc_status_changed = pvc.wait_for_resource_status(
+        pvc_status_changed = pvc.wait_for_resource(
             resource_name=pvc_name,
             condition="Bound",
             timeout=60,
