@@ -1,0 +1,6 @@
+tests:
+- test:
+    name: PVC_Oversubscribe
+    desc: Test automation for OCS-269
+    module: test_AllocateSizeMoreThanClusterSize.py
+    abort-on-fail: True
