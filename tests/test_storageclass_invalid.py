@@ -1,10 +1,10 @@
 import logging
 import os.path
-import time
 import yaml
 
 from ocs import ocp
 from ocs import defaults
+from ocs.exceptions import TimeoutExpiredError
 from ocsci import tier1
 from utility import templating
 
@@ -46,8 +46,19 @@ def test_storageclass_cephfs_invalid(invalid_cephfs_storageclass, tmpdir):
     logger.debug(f"Status of PVC {pvc_name} after creation: {pvc_status}")
     assert pvc_status == 'Pending'
 
-    logger.info('Wait for 60 seconds')
-    time.sleep(60)
+    try:
+        logger.info('Wait for 60 seconds')
+        pvc_status_changed = pvc.wait_for_resource_status(
+            resource_name=pvc_name,
+            condition="Bound",
+            timeout=60,
+            sleep=20
+        )
+        logger.debug('Check that PVC status did not changed')
+        assert not pvc_status_changed
+    except TimeoutExpiredError:
+        # raising TimeoutExpiredError is expected behavior
+        pass
 
     pvc_status = pvc.get(resource_name=pvc_name)['status']['phase']
     logger.info(f"Status of PVC {pvc_name} after 60 seconds: {pvc_status}")
