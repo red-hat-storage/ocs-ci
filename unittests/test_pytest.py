@@ -3,8 +3,6 @@
 import logging
 import textwrap
 
-import pytest
-
 
 logger = logging.getLogger(__name__)
 
