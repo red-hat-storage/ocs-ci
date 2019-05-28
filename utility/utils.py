@@ -875,10 +875,13 @@ def update_dict_recursively(d, u):
 
 def get_random_str(size=13):
     """
-    generates the random string of 13 characters
+    generates the random string of given size
+
+    Args:
+        size (int): number of random characters to generate
 
     Returns:
-         str : string of random 13 characters
+         str : string of random characters of given size
 
     """
     chars = string.ascii_lowercase + string.digits
