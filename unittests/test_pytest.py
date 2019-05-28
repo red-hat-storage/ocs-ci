@@ -25,7 +25,7 @@ def test_help_message(testdir):
         '*--cluster-conf*',
         '*--cluster-path*',
         '*--cluster-name*',
-        ])
+    ])
 
 
 def test_simple(testdir):
@@ -73,6 +73,6 @@ def test_config_parametrize(testdir):
         'collecting*collected 2 items',
         '*test_demo_parametrized_config?1? PASSED*',
         '*test_demo_parametrized_config?2? PASSED*',
-        ])
+    ])
     # make sure that that we get a '0' exit code for the testsuite
     assert result.ret == 0

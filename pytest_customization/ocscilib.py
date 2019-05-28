@@ -57,7 +57,7 @@ def pytest_configure(config):
     init_ocsci_conf(
         config,
         default_config=os.path.join(here, "..", "conf/ocsci/default_config.yaml"),
-        )
+    )
 
 
 def get_cli_param(config, name_of_param, default=None):
