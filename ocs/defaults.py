@@ -9,8 +9,8 @@ ROOK_CLUSTER_NAMESPACE = 'openshift-storage'
 KUBECONFIG_LOCATION = 'auth/kubeconfig'  # relative from cluster_dir
 CLUSTER_NAME = f"ocs-ci-cluster-{getuser()}"
 API_VERSION = "v1"
-CEPH_IMAGE = "quay.io/rhceph-dev/rhceph-4.0-rhel-8"
-ROOK_IMAGE = "quay.io/rhceph-dev/rook"
+CEPH_IMAGE = "ceph/ceph:v14.2.0-20190410"
+ROOK_IMAGE = "rook/ceph:master"
 DEPLOYMENT_PLATFORM = 'AWS'
 
 ENV_DATA = {

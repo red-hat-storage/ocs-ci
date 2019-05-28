@@ -7,4 +7,4 @@ ENV_DATA:
   platform: 'aws'
   worker_replicas: 6  # here you can define diff number of workers
   master_replicas: 3
-  rook_image: "quay.io/rhceph-dev/rook" # you can overwrite default rook image
+  rook_image: "rook/ceph:master" # you can overwrite default rook image
