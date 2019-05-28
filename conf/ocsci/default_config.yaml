@@ -35,7 +35,8 @@ RUN:
   kubeconfig_location: '{{ DEFAULTS["KUBECONFIG_LOCATION"] }}'
   cli_params: {}  # this will be filled with CLI parameters data
 
-# In this section we are storing all deployment related configuration
+# In this section we are storing all deployment related configuration but not
+# the environment related data as those are defined in ENV_DATA section.
 DEPLOYMENT:
   installer_version: "4.1.0-rc.3"
 
@@ -46,7 +47,7 @@ REPORTING:
 
 # This is the default information about environment. Will be overwritten with
 # --cluster-conf file.yaml data you will pass to the pytest.
-ENV_DATA: 
+ENV_DATA:
   platform: '{{ DEFAULTS["DEPLOYMENT_PLATFORM"] }}'
   cluster_name: "ocs-ci"  # needs to be changed in ocscilib plugin
   cluster_namespace: '{{ DEFAULTS["ROOK_CLUSTER_NAMESPACE"] }}'
