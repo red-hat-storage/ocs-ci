@@ -1,8 +1,0 @@
-globals:
-    openstack-credentials:
-        username: 'vakulkar'
-        password: 'XX'
-        auth-url: 'http://10.8.188.11:5000'
-        auth-version: '2.0_password'
-        tenant-name: 'ceph-jenkins'
-        service-region: 'regionOne'
