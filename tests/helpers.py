@@ -48,9 +48,10 @@ def run_io():
     Run IO to a file within the pod
 
     """
+    from ipdb import set_trace; set_trace()
     OCP.exec_oc_cmd(
-        f"rsh -n openshift-storage ocsci-pod touch /var/lib/www/html/test && "
-        f"dd if=/dev/urandom of=/var/lib/www/html/test bs=1M count=3000 &"
+        f"exec -t ocsci-pod -- bash -c \"touch /var/lib/www/html/test; while"
+        f" true; do cp /var/lib/www/html/test /var/lib/www/html/test1; done\""
     )
 
 def delete_pvc():

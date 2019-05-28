@@ -1,12 +1,12 @@
 import os
+import time
 import pytest
 import logging
 import ocs.ocp
 import ocs.defaults as defaults
 import tests.helpers as ocs_helpers
 from tests.fixtures import (
-    create_pod, create_pvc, create_storageclass, create_ceph_block_pool,
-    delete_ceph_block_pool, delete_storageclass, delete_pod,
+    test_fixture, teardown
 )
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ SC = ocs.ocp.OCP(
     kind='StorageClass', namespace=defaults.ROOK_CLUSTER_NAMESPACE
 )
 Pod = ocs.ocp.OCP(
-    kind='Pod', namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    kind='pods', namespace=defaults.ROOK_CLUSTER_NAMESPACE
 )
 
 
@@ -32,13 +32,7 @@ PROJECT_NAME = 'test-project'
 
 
 @pytest.mark.usefixtures(
-    create_ceph_block_pool.__name__,
-    create_storageclass.__name__,
-    create_pvc.__name__,
-    create_pod.__name__,
-    delete_ceph_block_pool.__name__,
-    delete_storageclass.__name__,
-    delete_pod.__name__
+    test_fixture.__name__
 )
 class TestCaseOCS371:
     """
