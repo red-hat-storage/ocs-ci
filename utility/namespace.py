@@ -13,7 +13,7 @@ def create_private_namespace(name, region='us-east-2'):
     """
     Create a namespace
 
-    When a new namespace is create, a directory in /tmp with the namespace's
+    When a new namespace is created, a directory in /tmp with the namespace's
     name will be created containing the private.yaml file that created this
     namespace.
 
