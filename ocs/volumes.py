@@ -10,6 +10,7 @@ from ocs import kinds
 from kubernetes import config
 from openshift.dynamic import DynamicClient
 from utility.utils import get_random_str
+from ocs.rook import RookCluster
 from utility.templating import generate_yaml_from_jinja2_template_with_data
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ class CephRBDVolume(KubeVolume):
 
     """
     def __init__(self, name=None, namespace='default'):
-        KubeVolume.__init__(self, name, namespace)
+        super().__init__(name, namespace)
         self.kind = kinds.CEPHBLOCKPOOL
         self.api_version = defaults.OPENSHIFT_REST_CLIENT_API_VERSION
         self.service_cbp = self.dyn_client.resources.get(
@@ -53,6 +54,7 @@ class CephRBDVolume(KubeVolume):
             kind=self.kind
         )
         self.template_path = os.path.join(TEMPLATE_DIR, "cephblockpool.yaml")
+        self.rk = RookCluster()
 
     def create_cephblockpool(
         self,
@@ -86,21 +88,14 @@ class CephRBDVolume(KubeVolume):
             cbp_name = self.name
         else:
             cbp_name = f"{cephblockpool_name_prefix}-{get_random_str()}"
-        # overwrite the namespace with openshift-storage, since cephblockpool
-        # is tied-up with openshift-storage
-        self.namespace = defaults.ROOK_CLUSTER_NAMESPACE
 
-        cephblockpool_data = {}
-        cephblockpool_data['cephblockpool_name'] = cbp_name
-        cephblockpool_data['rook_api_version'] = defaults.ROOK_API_VERSION
-        cephblockpool_data['failureDomain'] = failureDomain
-        cephblockpool_data['size'] = size
-
-        data = generate_yaml_from_jinja2_template_with_data(
-            self.template_path,
-            **cephblockpool_data
+        cbp_name = self.rk.create_cephblockpool(
+            cbp_name,
+            self.namespace,
+            self.service_cbp,
+            failureDomain,
+            size
         )
-        self.service_cbp.create(body=data, namespace=self.namespace)
 
         return cbp_name
 
@@ -115,7 +110,7 @@ class StorageClass(KubeVolume):
 
     """
     def __init__(self, name=None, namespace='default'):
-        KubeVolume.__init__(self, name, namespace)
+        super().__init__(name, namespace)
         self.kind = kinds.STORAGECLASS
         self.api_version = defaults.OPENSHIFT_REST_CLIENT_API_VERSION
         self.service_sc = self.dyn_client.resources.get(
@@ -193,7 +188,7 @@ class PVC(KubeVolume):
 
     """
     def __init__(self, name=None, namespace='default'):
-        KubeVolume.__init__(self, name, namespace)
+        super().__init__(name, namespace)
         self.kind = kinds.PVC
         self.api_version = defaults.OPENSHIFT_REST_CLIENT_API_VERSION
         self.service_pvc = self.dyn_client.resources.get(

@@ -7,10 +7,12 @@ functional and proper configurations are made for interaction.
 """
 
 import logging
+import os
 
 import oc.openshift_ops as ac
 from ocs.pod import Pod
 import ocs.defaults as default
+from utility.templating import generate_yaml_from_jinja2_template_with_data
 
 logger = logging.getLogger(__name__)
 
@@ -138,3 +140,53 @@ class RookCluster(object):
         """
 
         return self._api_client.get_labels(pod_name, namespace)
+
+    def create_cephblockpool(
+        self,
+        cephblockpool_name,
+        namespace,
+        service_cbp,
+        failureDomain,
+        size
+    ):
+        """
+        Creates cephblock pool
+
+        Args:
+            cephblockpool_name (str): name of cephblockpool
+            namespace (str): namespace to create cephblockpool
+            service_cbp (class):  dynamic client resource of kind cephblockpool
+            failureDomain (str): The failure domain across which the
+                                   replicas or chunks of data will be spread
+            size (int): The number of copies of the data in the pool.
+
+        Returns:
+            str : name of the cephblockpool created
+
+        Raises:
+            KeyError when error occured
+
+        Examples:
+            create_cephblockpool(
+                cephblockpool_name",
+                service_cbp,
+                failureDomain="host",
+                size=3
+            )
+
+        """
+        template_path = os.path.join(default.TEMPLATE_DIR, "cephblockpool.yaml")
+        # overwrite the namespace with openshift-storage, since cephblockpool
+        # is tied-up with openshift-storage
+        namespace = default.ROOK_CLUSTER_NAMESPACE
+
+        cephblockpool_data = {}
+        cephblockpool_data['cephblockpool_name'] = cephblockpool_name
+        cephblockpool_data['rook_api_version'] = default.ROOK_API_VERSION
+        cephblockpool_data['failureDomain'] = failureDomain
+        cephblockpool_data['size'] = size
+
+        data = generate_yaml_from_jinja2_template_with_data(template_path, **cephblockpool_data)
+        service_cbp.create(body=data, namespace=namespace)
+
+        return cephblockpool_name
