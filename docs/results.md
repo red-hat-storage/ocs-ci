@@ -1,31 +1,22 @@
 # Results
 
-**WIP**
-
-In order to post results properly or receive results emails you must first configure your `~/.ocs-ci.yaml` file.
-Please see the [Initial Setup](#initial-setup) section of the readme if you haven't done that.
-
-## Polarion
-
-**WIP**
-
-Results are posted to polarion if the `--post-results` argument is passed to
-`run.py`. When this argument is used, any tests that have a `polarion-id` 
-configured in the suite will have it's result posted to polarion.
-
 ## Report Portal
 
-**WIP**
+Sending test results to report portal is supported via the [pytest agent](https://github.com/reportportal/agent-python-pytest).
+For in-depth details on how to utilize this plugin, check their documentation.
 
-Results are posted to report portal if the `--report-portal` argument is passed to `run.py`.
+#### Configuration
 
-## Email
+We have a configuration file template that you can fill out with our team's report portal
+instance and user information in order to enable posting results.
 
-**WIP**
+1. Copy the config template located at `templates/reporting/report_portal.cfg` to another location
+2. Edit the placeholder values here with the report portal instance/user details.
 
-A result email is automatically sent to the address configured in your
-`~/.ocs-ci.yaml` file.
+You will now be able to post your test results to report portal by providing the appropriate CLI options.
 
-In addition to personally configured emails, if the `--post-results` or
-`--report-portal` arguments are passed to `run.py` an email will also be sent
-to QE (email pending)
+Ex.
+```bash
+run-ci tests/test_pytest.py --reportportal --rp-launch CfgTest --rp-launch-desc "An example launch description" -c /home/$USER/report_portal.cfg
+```
+Please check out the [doc](https://github.com/reportportal/agent-python-pytest) for more info on how to use this plugin properly.
