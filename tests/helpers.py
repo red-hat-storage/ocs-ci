@@ -3,6 +3,7 @@ Helper functions file for OCS QE
 """
 import datetime
 
+
 def create_unique_object_name(object_description, object_type):
     """
     Creates a unique object name by using the object_description
