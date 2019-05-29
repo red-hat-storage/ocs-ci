@@ -4,7 +4,7 @@ Helper functions file for OCS QE
 import datetime
 
 
-def create_unique_object_name(resource_description, resource_type):
+def create_unique_resource_name(resource_description, resource_type):
     """
     Creates a unique object name by using the object_description
     and object_type, as well as the current date/time string.
