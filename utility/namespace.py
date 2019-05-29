@@ -3,10 +3,6 @@ import os
 from utility import templating
 from ocs.defaults import ROOK_CLUSTER_NAMESPACE
 from ocs.utils import create_oc_resource
-from ocs import ocp
-
-
-OCP = ocp.OCP(kind='CephFilesystem', namespace=ROOK_CLUSTER_NAMESPACE)
 
 
 def create_private_namespace(name, region='us-east-2'):
@@ -22,10 +18,7 @@ def create_private_namespace(name, region='us-east-2'):
     Args:
         name (str): Namespace to be created
         region (str): AWS region.  Defaults to us-east-2
-
     """
-    oc_cmd = "get namespace"
-    OCP.exec_oc_cmd(oc_cmd)
     env_data = dict()
     env_data['cluster_namespace'] = name
     env_data['region'] = region
