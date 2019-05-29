@@ -64,7 +64,7 @@ class OCP(object):
             oc_cmd += f"--kubeconfig {kubeconfig} "
 
         oc_cmd += command
-        out = run_cmd(cmd=oc_cmd)
+        out, err, ret = run_cmd(cmd=oc_cmd)
         return munchify(yaml.safe_load(out))
 
     def get(self, resource_name='', out_yaml_format=True, selector=None):
