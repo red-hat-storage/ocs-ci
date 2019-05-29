@@ -1,176 +1,132 @@
-import os
-import time
 import pytest
 import logging
-import ocs.ocp
-import ocs.defaults as defaults
-from utility import templating
 from tests import helpers
 
 logger = logging.getLogger(__name__)
 
 
-# Ceph Block Pool
-CBP = ocs.ocp.OCP(
-    kind='CephBlockPool', namespace=defaults.ROOK_CLUSTER_NAMESPACE
-)
-PVC = ocs.ocp.OCP(
-    kind='PersistentVolumeClaim', namespace=defaults.ROOK_CLUSTER_NAMESPACE
-)
-SC = ocs.ocp.OCP(
-    kind='StorageClass', namespace=defaults.ROOK_CLUSTER_NAMESPACE
-)
-Pod = ocs.ocp.OCP(
-    kind='Pod', namespace=defaults.ROOK_CLUSTER_NAMESPACE
-)
-OCP = ocs.ocp.OCP(
-    kind='Service', namespace=defaults.ROOK_CLUSTER_NAMESPACE
-)
-
-TEMP_YAML = os.path.join("templates/ocs-deployment", "temp.yaml")
-TEMPLATES_DIR = "templates/ocs-deployment"
-PROJECT_NAME = 'test-project'
-
-
 @pytest.fixture()
-def create_ceph_block_pool():
+def create_ceph_block_pool(request):
     """
     Create a Ceph block pool
 
     """
-    cbp_name = helpers.create_unique_resource_name('test', 'cephblockpool')
-    helpers.create_ceph_block_pool(cbp_name)
+    class_instance = request.node.cls
+
+    def finalizer():
+        """
+        Delete the Ceph block pool
+        """
+        helpers.delete_ceph_block_pool(
+            class_instance.cbp_name, class_instance.project_name
+        )
+
+    request.addfinalizer(finalizer)
+    class_instance.cbp_name = helpers.create_unique_resource_name(
+        'test', 'cephblockpool'
+    )
+    helpers.create_ceph_block_pool(
+        class_instance.cbp_name, class_instance.project_name
+    )
 
 
 @pytest.fixture()
-def create_storageclass():
+def create_storageclass(request):
     """
     Create a storage class
 
     """
-    template = os.path.join(TEMPLATES_DIR, "StorageClass.yaml")
-    logger.info(f'Creating a storage class')
+    class_instance = request.node.cls
 
-    templating.dump_to_temp_yaml(template, TEMP_YAML)
-    assert SC.create(yaml_file=TEMP_YAML)
-    open(TEMP_YAML, 'w').close()
-    # TODO:
-    # wait()
-    time.sleep(15)
+    def finalizer():
+        """
+        Delete the storage class
+        """
+        helpers.delete_storage_class(
+            class_instance.sc_name, class_instance.project_name,
+            cbp_name=class_instance.cbp_name
+        )
+
+    request.addfinalizer(finalizer)
+
+    class_instance.sc_name = helpers.create_unique_resource_name(
+        'test', 'storageclass'
+    )
+    helpers.create_storageclass(
+        class_instance.sc_name, class_instance.project_name,
+        cbp_name=class_instance.cbp_name
+    )
 
 
 @pytest.fixture()
-def create_pvc():
+def create_pvc(request):
     """
     Create a persistent Volume Claim
 
     """
-    template = os.path.join(TEMPLATES_DIR, "PersistentVolumeClaim.yaml")
-    logger.info(f'Creating a PVC')
+    class_instance = request.node.cls
 
-    templating.dump_to_temp_yaml(template, TEMP_YAML)
+    def finalizer():
+        """
+        Delete the PVC
+        """
+        helpers.delete_pvc(
+            class_instance.pvc_name, class_instance.project_name
+        )
 
-    assert PVC.create(yaml_file=TEMP_YAML)
-    open(TEMP_YAML, 'w').close()
-    # TODO:
-    # wait()
+    request.addfinalizer(finalizer)
+
+    class_instance.pvc_name = helpers.create_unique_resource_name(
+        'test', 'pvc'
+    )
+    helpers.create_ceph_block_pool(
+        class_instance.pvc_name, class_instance.project_name
+    )
 
 
 @pytest.fixture()
-def create_pod():
+def create_pod(request):
     """
     Create a pod
 
     """
-    template = os.path.join(TEMPLATES_DIR, "Pod.yaml")
-    logger.info(f'Creating a pod')
-
-    templating.dump_to_temp_yaml(template, TEMP_YAML)
-
-    assert PVC.create(yaml_file=TEMP_YAML)
-    open(TEMP_YAML, 'w').close()
-    # TODO:
-    # wait()
-    time.sleep(30)
-
-
-@pytest.fixture()
-def delete_ceph_block_pool():
-    """
-    Delete the Ceph block pool
-
-    """
-    template = os.path.join(TEMPLATES_DIR, "CephBlockPool.yaml")
-    logger.info(f"Deleting Ceph Block Pool")
-    templating.dump_to_temp_yaml(template, TEMP_YAML)
-    assert CBP.delete(yaml_file=TEMP_YAML)
-    open(TEMP_YAML, 'w').close()
-
-
-@pytest.fixture()
-def delete_storageclass():
-    """
-    Delete the storage class
-
-    """
-    template = os.path.join(TEMPLATES_DIR, "StorageClass.yaml")
-    logger.info(f"Deleting storage class")
-    templating.dump_to_temp_yaml(template, TEMP_YAML)
-    assert SC.delete(yaml_file=TEMP_YAML)
-    open(TEMP_YAML, 'w').close()
-
-
-@pytest.fixture()
-def delete_pvc():
-    """
-    Delete the persistent volume claim
-
-    """
-    template = os.path.join(TEMPLATES_DIR, "PersistentVolumeClaim.yaml")
-    logger.info(f"Deleting PVC")
-    templating.dump_to_temp_yaml(template, TEMP_YAML)
-    assert PVC.delete(yaml_file=TEMP_YAML)
-    open(TEMP_YAML, 'w').close()
-
-
-@pytest.fixture()
-def delete_pod():
-    """
-    Delete the pod
-
-    """
-    template = os.path.join(TEMPLATES_DIR, "Pod.yaml")
-    logger.info(f"Deleting a pod")
-    templating.dump_to_temp_yaml(template, TEMP_YAML)
-    assert Pod.delete(yaml_file=TEMP_YAML)
-    open(TEMP_YAML, 'w').close()
-
-
-
-def teardown():
-    """
-    Tearing down the environment
-    """
-    delete_pod()
-    delete_storageclass()
-    delete_ceph_block_pool()
-
-
-@pytest.fixture(scope='class')
-def test_fixture(request):
-    """
-    Create disks
-    """
+    class_instance = request.node.cls
 
     def finalizer():
         """
-
-        Returns:
-
+        Delete the pod
         """
-        teardown()
+        helpers.delete_pod(
+            class_instance.pod_name, class_instance.project_name
+        )
+
     request.addfinalizer(finalizer)
-    create_ceph_block_pool()
-    create_storageclass()
-    create_pvc()
-    create_pod()
+    class_instance.pod_name = helpers.create_unique_resource_name(
+        'test', 'pod'
+    )
+    helpers.create_pod(
+        class_instance.pod_name, class_instance.project_name,
+        pvc_name=class_instance.pvc_name
+    )
+
+
+@pytest.fixture()
+def create_project(request):
+    """
+    Create a project
+
+    """
+    class_instance = request.node.cls
+
+    def finalizer():
+        """
+        Delete the project
+        """
+        helpers.delete_project(class_instance.project_name)
+
+    request.addfinalizer(finalizer)
+
+    class_instance.project_name = helpers.create_unique_resource_name(
+        'test', 'project'
+    )
+    helpers.create_project(class_instance.project_name)

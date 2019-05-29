@@ -8,10 +8,10 @@ spec:
    - name: web-server
      image: nginx
      volumeMounts:
-       - name: mypvc
+       - name: {{ pvc_name | default('ocsci-pvc') }}
          mountPath: /var/lib/www/html
   volumes:
-   - name: mypvc
+   - name: {{ pvc_name | default('ocsci-pvc') }}
      persistentVolumeClaim:
-       claimName: ocsci-pvc
+       claimName: {{ pvc_name | default('ocsci-pvc') }}
 readOnly: false
