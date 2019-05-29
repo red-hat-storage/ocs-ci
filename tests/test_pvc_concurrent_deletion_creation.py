@@ -33,7 +33,7 @@ def test_fixture(request):
     self = request.node.cls
 
     def finalizer():
-        teardown(self)
+        teardown()
     request.addfinalizer(finalizer)
 
 
@@ -74,9 +74,6 @@ def create_multiple_pvc(pvc_base_name, number_of_pvc):
     Args:
         pvc_base_name (str): Prefix of PVC name
         number_of_pvc (int): Number of PVCs to be created
-
-    Returns:
-        True if all PVCs are created, False otherwise
     """
     pvc_yaml = os.path.join(TEMPLATE_DIR, "PersistentVolumeClaim.yaml")
     pvc_parms = {'sc_name': 'test-sc', 'pvc_name': pvc_base_name}
@@ -95,7 +92,6 @@ def create_multiple_pvc(pvc_base_name, number_of_pvc):
         log.info(f'Creating Persistent Volume Claim {pvc_name}')
         assert PVC.create(yaml_file=TEMP_YAML_FILE_PVC)
         log.info(f'Created Persistent Volume Claim {pvc_name}')
-    return True
 
 
 def run_async(command):
@@ -123,18 +119,20 @@ def run_async(command):
     return p
 
 
-def verify_pvc_exist(pvc_name):
+def verify_pvc_bound(pvc_name):
     """
-    Verify existence of a PVC
+    Verify that the status of PVC is 'Bound'
 
     Args:
         pvc_name (str): Name of PVC
 
     Returns:
-        True if PVC exists, False otherwise.
+        True if PVC is in Bound state, False if PVC does not exists.
     """
     try:
-        PVC.get(pvc_name)
+        pvc_info = PVC.get(pvc_name)
+        assert pvc_info['status']['phase'] == "Bound", (f'PVC {pvc_name} is '
+                                                        f'not in Bound state')
     except exceptions.CommandFailed:
         log.info(f"PVC {pvc_name} doesn't exist")
         return False
@@ -180,12 +178,12 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         create_storage_class(**sc_parms)
 
         # Create 500 PVCs
-        assert create_multiple_pvc(pvc_base_name, number_of_pvc)
+        create_multiple_pvc(pvc_base_name, number_of_pvc)
 
         # Verify PVCs exists
         for count in range(1, number_of_pvc + 1):
             pvc_name = f'{pvc_base_name}{count}'
-            assert verify_pvc_exist(pvc_name)
+            assert verify_pvc_bound(pvc_name)
 
         # Start deleting 500 PVCs
         command = (f'for i in `seq 1 {number_of_pvc}`;do oc '
@@ -196,12 +194,12 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
 
         # Create another 500 PVCs
         pvc_base_name_new = 'test-pvc-re'
-        assert create_multiple_pvc(pvc_base_name_new, number_of_pvc)
+        create_multiple_pvc(pvc_base_name_new, number_of_pvc)
 
         # Verify PVCs exists
         for count in range(1, number_of_pvc + 1):
             pvc_name = f'{pvc_base_name_new}{count}'
-            assert verify_pvc_exist(pvc_name)
+            assert verify_pvc_bound(pvc_name)
 
         # Verify command to delete PVCs
         ret, out, err = proc.async_communicate()
