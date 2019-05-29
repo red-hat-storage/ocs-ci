@@ -65,13 +65,7 @@ class OCP(object):
 
         oc_cmd += command
         out = run_cmd(cmd=oc_cmd)
-
-        out = yaml.safe_load(out)
-        # In some cases, run_cmd() will return an empty string or in the case
-        # of executing ceph commands, it could return an empty list
-        if out != list():
-            return munchify(out)
-        return out
+        return munchify(yaml.safe_load(out))
 
     def get(self, resource_name='', out_yaml_format=True, selector=None):
         """
