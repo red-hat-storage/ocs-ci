@@ -65,7 +65,13 @@ class OCP(object):
 
         oc_cmd += command
         out = run_cmd(cmd=oc_cmd)
-        return munchify(yaml.safe_load(out))
+
+        out = yaml.safe_load(out)
+        # In some cases, run_cmd() will return an empty string or in the case
+        # of executing ceph commands, it could return an empty list
+        if out != list():
+            return munchify(out)
+        return out
 
     def get(self, resource_name='', out_yaml_format=True, selector=None):
         """
@@ -277,4 +283,11 @@ def exec_ceph_cmd(ceph_cmd):
     ocp_pod_obj = OCP(kind='pods', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     ct_pod = get_ceph_tools_pod()
     ceph_cmd += " --format json-pretty"
-    return ocp_pod_obj.exec_cmd_on_pod(ct_pod, ceph_cmd).toDict()
+    out = ocp_pod_obj.exec_cmd_on_pod(ct_pod, ceph_cmd)
+
+    # For some commands, like "ceph fs ls", the returned output is a list
+    if type(out) == type(list()):
+        new_out = list()
+        [new_out.append(item.toDict()) for item in out if item is not None]
+        return new_out
+    return out.toDict()
