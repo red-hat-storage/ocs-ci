@@ -1,7 +1,6 @@
 """ Create a namespace """
 import os
 from utility import templating
-from ocs.defaults import ROOK_CLUSTER_NAMESPACE
 from ocs.utils import create_oc_resource
 
 
