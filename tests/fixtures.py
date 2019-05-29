@@ -1,15 +1,11 @@
 import pytest
-import logging
 from tests import helpers
-
-logger = logging.getLogger(__name__)
 
 
 @pytest.fixture()
 def create_ceph_block_pool(request):
     """
     Create a Ceph block pool
-
     """
     class_instance = request.node.cls
 
@@ -34,7 +30,6 @@ def create_ceph_block_pool(request):
 def create_storageclass(request):
     """
     Create a storage class
-
     """
     class_instance = request.node.cls
 
@@ -62,7 +57,6 @@ def create_storageclass(request):
 def create_pvc(request):
     """
     Create a persistent Volume Claim
-
     """
     class_instance = request.node.cls
 
@@ -88,7 +82,6 @@ def create_pvc(request):
 def create_pod(request):
     """
     Create a pod
-
     """
     class_instance = request.node.cls
 
@@ -114,7 +107,6 @@ def create_pod(request):
 def create_project(request):
     """
     Create a project
-
     """
     class_instance = request.node.cls
 

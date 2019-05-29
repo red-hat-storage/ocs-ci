@@ -10,6 +10,11 @@ from utility.utils import delete_file
 
 logger = logging.getLogger(__name__)
 
+CEPH_BLOCK_POOL = "CephBlockPool"
+STORAGE_CLASS = "StorageClass"
+PVC = "PersistentVolumeClaim"
+POD = "pod"
+
 DEFAULT_CBP_YAML = "CephBlockPool.yaml"
 DEFAULT_SC_YAML = "StorageClass.yaml"
 DEFAULT_POD_YAML = "Pod.yaml"
@@ -39,6 +44,66 @@ def create_unique_resource_name(resource_description, resource_type):
     return f"{resource_type}_{resource_description[:23]}_{current_date_time[:10]}"
 
 
+def create_resource(
+    resource_kind, resource_name, project_name, yaml_file, **kwargs
+):
+    """
+    Create a resource
+
+    Args:
+        resource_kind (str): The kind of the resource (e.g. CephBlockPool)
+        resource_name (str): The name of the resource
+        project_name (str): The name of the project that the new resource
+            should be associated with
+        yaml_file (str): The yaml file to use (e.g. CephBlockPool.yaml)
+        **kwargs: Keyword args to be set for the new created resource
+
+    Raises:
+        AssertionError: In case of any failure
+    """
+    template = os.path.join(TEMPLATES_DIR, yaml_file)
+    templating.dump_to_temp_yaml(template, TEMP_YAML, **kwargs)
+    ocp_obj = ocp.OCP(kind=resource_kind, namespace=project_name)
+    logger.info(f"Creating a {resource_kind} {resource_name}")
+    assert ocp_obj.create(yaml_file=TEMP_YAML), (
+        f"Failed to create {resource_kind} {resource_name}"
+    )
+    assert ocp_obj.wait_for_resource(
+        condition='Available', resource_name=resource_name
+    ), f"Ceph block pool {resource_name} failed to reach status Available"
+    delete_file(TEMP_YAML)
+
+
+def delete_resource(
+    resource_kind, resource_name, project_name, yaml_file, **kwargs
+):
+    """
+    Delete a resource
+
+    Args:
+        resource_kind (str): The kind of the resource (e.g. CephBlockPool)
+        resource_name (str): The name of the resource
+        project_name (str): The name of the project that the resource
+            is associated with
+        yaml_file (str): The yaml file to use (e.g. CephBlockPool.yaml)
+
+    Raises:
+        AssertionError: In case of any failure
+    """
+    ocp_obj = ocp.OCP(kind=resource_kind, namespace=project_name)
+    if ocp_obj.get(resource_name=resource_name):
+        template = os.path.join(TEMPLATES_DIR, yaml_file)
+        templating.dump_to_temp_yaml(template, TEMP_YAML, **kwargs)
+        logger.info(f"Deleting {resource_kind} {resource_name}")
+        assert ocp_obj.delete(yaml_file=TEMP_YAML), (
+            f"Failed to delete {resource_kind} {resource_name}"
+        )
+        assert ocp_obj.wait_for_resource(
+            condition='', resource_name=resource_name, to_delete=True
+        ), f"{resource_kind} {resource_name} still exists'"
+        delete_file(TEMP_YAML)
+
+
 def create_ceph_block_pool(cbp_name, project_name, yaml_file=DEFAULT_CBP_YAML):
     """
     Create a Ceph block pool
@@ -53,19 +118,9 @@ def create_ceph_block_pool(cbp_name, project_name, yaml_file=DEFAULT_CBP_YAML):
         AssertionError: In case of any failure
 
     """
-    cbp_kwargs = {}
+    cbp_kwargs = dict()
     cbp_kwargs['cephblockpool_name'] = cbp_name
-    template = os.path.join(TEMPLATES_DIR, yaml_file)
-    logger.info(f'Creating a Ceph Block Pool')
-    templating.dump_to_temp_yaml(template, TEMP_YAML, **cbp_kwargs)
-    cbp = ocp.OCP(kind='CephBlockPool', namespace=project_name)
-    assert cbp.create(yaml_file=TEMP_YAML), (
-        f"Failed to create Ceph block pool {cbp_name}"
-    )
-    assert cbp.wait_for_resource(
-        condition='Available', resource_name=cbp_name
-    ), f"Ceph block pool {cbp_name} failed to reach status Available"
-    delete_file(TEMP_YAML)
+    create_resource(CEPH_BLOCK_POOL, cbp_name, project_name, yaml_file, **cbp_kwargs)
 
 
 def create_storageclass(sc_name, project_name, cbp_name, yaml_file=DEFAULT_SC_YAML):
@@ -82,20 +137,12 @@ def create_storageclass(sc_name, project_name, cbp_name, yaml_file=DEFAULT_SC_YA
     Raises:
         AssertionError: In case of any failure
     """
-    sc_kwargs = {}
+    sc_kwargs = dict()
     sc_kwargs['sc_name'] = sc_name
     sc_kwargs['ceph_block_pool_name'] = cbp_name
-    template = os.path.join(TEMPLATES_DIR, yaml_file)
-    logger.info(f'Creating a storage class')
-    ocp_sc = ocp.OCP(kind='StorageClass', namespace=project_name)
-    templating.dump_to_temp_yaml(template, TEMP_YAML, **sc_kwargs)
-    assert ocp_sc.create(yaml_file=TEMP_YAML), (
-        f"Failed to create storage class {sc_name}"
+    create_resource(
+        STORAGE_CLASS, sc_name, project_name, yaml_file, **sc_kwargs
     )
-    assert ocp_sc.wait_for_resource(
-        condition='Available', resource_name=sc_name, to_delete=True
-    ), f"Storage class {sc_name} failed to reach status Available"
-    delete_file(TEMP_YAML)
 
 
 def create_pvc(pvc_name, project_name, yaml_file=DEFAULT_PVC_YAML):
@@ -111,19 +158,9 @@ def create_pvc(pvc_name, project_name, yaml_file=DEFAULT_PVC_YAML):
     Raises:
         AssertionError: In case of any failure
     """
-    pvc_kwargs = {}
+    pvc_kwargs = dict()
     pvc_kwargs['pvc_name'] = pvc_name
-    template = os.path.join(TEMPLATES_DIR, yaml_file)
-    logger.info(f'Creating PVC {pvc_name}')
-    templating.dump_to_temp_yaml(template, TEMP_YAML, **pvc_kwargs)
-    ocp_pvc = ocp.OCP(kind='PersistentVolumeClaim', namespace=project_name)
-    assert ocp_pvc.create(yaml_file=TEMP_YAML), (
-        f"Failed to create PVC {pvc_name}"
-    )
-    assert ocp_pvc.wait_for_resource(
-        condition='Available', resource_name=pvc_name, to_delete=True
-    ), f"PVC {pvc_name} failed to reach status Available"
-    delete_file(TEMP_YAML)
+    create_resource(PVC, pvc_name, project_name, yaml_file, **pvc_kwargs)
 
 
 def create_pod(pod_name, project_name, pvc_name, yaml_file=DEFAULT_POD_YAML):
@@ -140,20 +177,10 @@ def create_pod(pod_name, project_name, pvc_name, yaml_file=DEFAULT_POD_YAML):
     Raises:
         AssertionError: In case of any failure
     """
-    pod_kwargs = {}
+    pod_kwargs = dict()
     pod_kwargs['pod_name'] = pod_name
     pod_kwargs['pvc_name'] = pvc_name
-    template = os.path.join(TEMPLATES_DIR, yaml_file)
-    logger.info(f'Creating pod {pod_name}')
-    templating.dump_to_temp_yaml(template, TEMP_YAML, **pod_kwargs)
-    ocp_pod = ocp.OCP(kind='pod', namespace=project_name)
-    assert ocp_pod.create(yaml_file=TEMP_YAML), (
-        f"Failed to create pod {pod_name}"
-    )
-    assert ocp_pvc.wait_for_resource(
-        condition='Available', resource_name=pod_name, to_delete=True
-    ), f"Pod {pod_name} failed to reach status Available"
-    delete_file(TEMP_YAML)
+    create_resource(PVC, pod_name, project_name, yaml_file, **pod_kwargs)
 
 
 def create_project(project_name):
@@ -201,19 +228,11 @@ def delete_ceph_block_pool(cbp_name, project_name, yaml_file=DEFAULT_CBP_YAML):
     Raises:
         AssertionError: In case of any failure
     """
-    cbp_kwargs = {}
+    cbp_kwargs = dict()
     cbp_kwargs['cephblockpool_name'] = cbp_name
-    ocp_cbp = ocp.OCP(kind='CephBlockPool', namespace=project_name)
-    template = os.path.join(TEMPLATES_DIR, yaml_file)
-    logger.info(f"Deleting Ceph block pool {cbp_name}")
-    templating.dump_to_temp_yaml(template, TEMP_YAML, **cbp_kwargs)
-    assert ocp_cbp.delete(yaml_file=TEMP_YAML), (
-        f"Failed to delete Ceph block pool {cbp_name}"
+    delete_resource(
+        CEPH_BLOCK_POOL, cbp_name, project_name, yaml_file, **cbp_kwargs
     )
-    assert ocp_cbp.wait_for_resource(
-        condition='', resource_name=cbp_name, to_delete=True
-    ), f"Ceph block pool {cbp_name} still exists'"
-    delete_file(TEMP_YAML)
 
 
 def delete_storage_class(sc_name, project_name, yaml_file=DEFAULT_SC_YAML):
@@ -229,19 +248,11 @@ def delete_storage_class(sc_name, project_name, yaml_file=DEFAULT_SC_YAML):
     Raises:
         AssertionError: In case of any failure
     """
-    sc_kwargs = {}
+    sc_kwargs = dict()
     sc_kwargs['sc_name'] = sc_name
-    ocp_sc = ocp.OCP(kind='StorageClass', namespace=project_name)
-    template = os.path.join(TEMPLATES_DIR, yaml_file)
-    logger.info(f"Deleting storage class {sc_name}")
-    templating.dump_to_temp_yaml(template, TEMP_YAML, **sc_kwargs)
-    assert ocp_sc.delete(yaml_file=TEMP_YAML), (
-        f"Failed to delete storage class {sc_name}"
+    delete_resource(
+        STORAGE_CLASS, sc_name, project_name, yaml_file, **sc_kwargs
     )
-    assert ocp_sc.wait_for_resource(
-        condition='', resource_name=sc_name, to_delete=True
-    ), f"Storage class {sc_name} still exists'"
-    delete_file(TEMP_YAML)
 
 
 def delete_pod(pod_name, project_name, yaml_file=DEFAULT_POD_YAML):
@@ -257,19 +268,9 @@ def delete_pod(pod_name, project_name, yaml_file=DEFAULT_POD_YAML):
     Raises:
         AssertionError: In case of any failure
     """
-    pod_kwargs = {}
+    pod_kwargs = dict()
     pod_kwargs['pod_name'] = pod_name
-    ocp_pod = ocp.OCP(kind='pod', namespace=project_name)
-    template = os.path.join(TEMPLATES_DIR, yaml_file)
-    logger.info(f"Deleting pod {pod_name}")
-    templating.dump_to_temp_yaml(template, TEMP_YAML, **pod_kwargs)
-    assert ocp_pod.delete(yaml_file=TEMP_YAML), (
-        f"Failed to delete pod {pod_name}"
-    )
-    assert ocp_pod.wait_for_resource(
-        condition='', resource_name=pod_name, to_delete=True
-    ), f"Pod {pod_name} still exists'"
-    delete_file(TEMP_YAML)
+    delete_resource(POD, pod_name, project_name, yaml_file, **pod_kwargs)
 
 
 def delete_pvc(pvc_name, project_name, yaml_file=DEFAULT_PVC_YAML):
@@ -285,20 +286,10 @@ def delete_pvc(pvc_name, project_name, yaml_file=DEFAULT_PVC_YAML):
     Raises:
         AssertionError: In case of any failure
     """
-    pvc_kwargs = {}
+    pvc_kwargs = dict()
     pvc_kwargs['pvc_name'] = pvc_name
-    ocp_pvc = ocp.OCP(kind='PersistentVolumeClaim', namespace=project_name)
-    if ocp_pvc.get(resource_name=pvc_name):
-        template = os.path.join(TEMPLATES_DIR, yaml_file)
-        logger.info(f"Deleting PVC {pvc_name}")
-        templating.dump_to_temp_yaml(template, TEMP_YAML, **pvc_kwargs)
-        assert ocp_pvc.delete(yaml_file=TEMP_YAML), (
-            f"Failed to delete PVC {pvc_name}"
-        )
-        assert ocp_pvc.wait_for_resource(
-            condition='', resource_name=pvc_name, to_delete=True
-        ), f"PVC {pvc_name} still exists'"
-        delete_file(TEMP_YAML)
+    delete_resource(PVC, pvc_name, project_name, yaml_file, **pvc_kwargs)
+
 
 
 def run_io(pod_name, project_name):
