@@ -8,7 +8,6 @@ def create_unique_object_name(object_description, object_type):
     """
     Creates a unique object name by using the object_description
     and object_type, as well as the current date/time string.
-    This can be used for any objects such as VMs, disks, clusters etc.
 
     Args:
         object_description (str): The user provided object description
