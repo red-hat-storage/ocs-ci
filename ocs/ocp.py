@@ -286,7 +286,7 @@ def exec_ceph_cmd(ceph_cmd):
     out = ocp_pod_obj.exec_cmd_on_pod(ct_pod, ceph_cmd)
 
     # For some commands, like "ceph fs ls", the returned output is a list
-    if type(out) == type(list()):
+    if isinstance(out, list):
         new_out = list()
         [new_out.append(item.toDict()) for item in out if item is not None]
         return new_out
