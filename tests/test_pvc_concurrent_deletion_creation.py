@@ -30,8 +30,6 @@ def test_fixture(request):
     """
     Removing the resources created for this test
     """
-    self = request.node.cls
-
     def finalizer():
         teardown()
     request.addfinalizer(finalizer)
