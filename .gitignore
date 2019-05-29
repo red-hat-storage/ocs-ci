@@ -14,3 +14,4 @@ config.yaml
 openshift-install*
 data/pull-secret
 bin/
+dist

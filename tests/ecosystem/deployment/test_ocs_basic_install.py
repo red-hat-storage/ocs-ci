@@ -6,7 +6,7 @@ import time
 from oc.openshift_ops import OCP
 import ocs.defaults as default
 from ocs.exceptions import CommandFailed, CephHealthException
-from ocs.utils import create_oc_resource
+from ocs.utils import create_oc_resource, apply_oc_resource
 from ocsci.config import RUN, ENV_DATA, DEPLOYMENT
 from ocsci import deployment, EcosystemTest
 import pytest
@@ -103,12 +103,42 @@ class TestDeployment(EcosystemTest):
             f"system:serviceaccount:openshift-monitoring:prometheus-k8s "
             f"-n {ENV_DATA['cluster_namespace']}"
         )
-        create_oc_resource(
-            'operator-openshift.yaml', cluster_path, _templating, ENV_DATA
+        apply_oc_resource(
+            'csi-nodeplugin-rbac_rbd.yaml',
+            cluster_path,
+            _templating,
+            ENV_DATA,
+            template_dir="ocs-deployment/csi/rbd/"
+        )
+        apply_oc_resource(
+            'csi-provisioner-rbac_rbd.yaml',
+            cluster_path,
+            _templating,
+            ENV_DATA,
+            template_dir="ocs-deployment/csi/rbd/"
+        )
+        apply_oc_resource(
+            'csi-nodeplugin-rbac_cephfs.yaml',
+            cluster_path,
+            _templating,
+            ENV_DATA,
+            template_dir="ocs-deployment/csi/cephfs/"
+        )
+        apply_oc_resource(
+            'csi-provisioner-rbac_cephfs.yaml',
+            cluster_path,
+            _templating,
+            ENV_DATA,
+            template_dir="ocs-deployment/csi/cephfs/"
         )
         # Increased to 15 seconds as 10 is not enough
         # TODO: do the sampler function and check if resource exist
         wait_time = 15
+        log.info(f"Waiting {wait_time} seconds...")
+        time.sleep(wait_time)
+        create_oc_resource(
+            'operator-openshift-with-csi.yaml', cluster_path, _templating, ENV_DATA
+        )
         log.info(f"Waiting {wait_time} seconds...")
         time.sleep(wait_time)
         run_cmd(
@@ -142,6 +172,8 @@ class TestDeployment(EcosystemTest):
         create_oc_resource(
             "prometheus-rules.yaml", cluster_path, _templating, ENV_DATA
         )
+        log.info(f"Waiting {wait_time} seconds...")
+        time.sleep(wait_time)
 
         # Verify health of ceph cluster
         # TODO: move destroy cluster logic to new CLI usage pattern?

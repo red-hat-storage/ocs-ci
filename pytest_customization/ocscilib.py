@@ -53,7 +53,11 @@ def pytest_configure(config):
         config (pytest.config): Pytest config object
 
     """
-    init_ocsci_conf(config)
+    here = os.path.abspath(os.path.dirname(__file__))
+    init_ocsci_conf(
+        config,
+        default_config=os.path.join(here, "..", "conf/ocsci/default_config.yaml"),
+    )
 
 
 def get_cli_param(config, name_of_param, default=None):
@@ -94,27 +98,24 @@ def process_cluster_cli_params(config):
         f"{ocsci_config.ENV_DATA['cluster_name']}-{getuser()}"
     )
     cluster_name = get_cli_param(config, 'cluster_name')
-    base_cluster_name = default_cluster_name
+    if cluster_name:
+        default_cluster_name = cluster_name
     cid = random.randint(10000, 99999)
     if not (cluster_name and cluster_path):
-        cluster_name = f"{base_cluster_name}-{cid}"
+        cluster_name = f"{default_cluster_name}-{cid}"
     if not cluster_path:
         cluster_path = os.path.join(cluster_dir_parent, cluster_name)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
 
 
-def init_ocsci_conf(
-    config,
-    default_config="conf/ocsci/default_config.yaml",
-):
+def init_ocsci_conf(config, default_config):
     """
     Function to init the default config for OCS CI
 
     Args:
         config (pytest.config): Pytest config object
-        default_config (str): Default config data (default:
-            conf/ocsci/default_config.yaml)
+        default_config (str): Default config data
 
     """
     custom_config = config.getoption('ocsci_conf')
