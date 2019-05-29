@@ -1,12 +1,16 @@
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: Pod
 metadata:
-  name: ocsci-pvc
-  namespace: openshift-storage
+  name: ocsci-pod
+readOnly: false
 spec:
-  accessModes:
-  - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
-  storageClassName: ocsci-storageclass
+  containers:
+  - image: nginx
+    name: web-server
+    volumeMounts:
+    - mountPath: /var/lib/www/html
+      name: mypvc
+  volumes:
+  - name: mypvc
+    persistentVolumeClaim:
+      claimName: ocsci-pvc

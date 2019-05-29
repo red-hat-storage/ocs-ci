@@ -5,6 +5,7 @@ import logging
 import ocs.ocp
 import ocs.defaults as defaults
 from utility import templating
+from tests import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -31,23 +32,17 @@ TEMPLATES_DIR = "templates/ocs-deployment"
 PROJECT_NAME = 'test-project'
 
 
+@pytest.fixture()
 def create_ceph_block_pool():
     """
     Create a Ceph block pool
 
     """
-    template = os.path.join(TEMPLATES_DIR, "CephBlockPool.yaml")
-    logger.info(f'Creating a Ceph Block Pool')
-
-    templating.dump_to_temp_yaml(template, TEMP_YAML)
-    assert CBP.create(yaml_file=TEMP_YAML)
-    open(TEMP_YAML, 'w').close()
-    # TODO:
-    # wait()
-    time.sleep(15)
+    cbp_name = helpers.create_unique_resource_name('test', 'cephblockpool')
+    helpers.create_ceph_block_pool(cbp_name)
 
 
-
+@pytest.fixture()
 def create_storageclass():
     """
     Create a storage class
@@ -64,6 +59,7 @@ def create_storageclass():
     time.sleep(15)
 
 
+@pytest.fixture()
 def create_pvc():
     """
     Create a persistent Volume Claim
@@ -80,6 +76,7 @@ def create_pvc():
     # wait()
 
 
+@pytest.fixture()
 def create_pod():
     """
     Create a pod
@@ -97,6 +94,7 @@ def create_pod():
     time.sleep(30)
 
 
+@pytest.fixture()
 def delete_ceph_block_pool():
     """
     Delete the Ceph block pool
@@ -109,6 +107,7 @@ def delete_ceph_block_pool():
     open(TEMP_YAML, 'w').close()
 
 
+@pytest.fixture()
 def delete_storageclass():
     """
     Delete the storage class
@@ -121,6 +120,7 @@ def delete_storageclass():
     open(TEMP_YAML, 'w').close()
 
 
+@pytest.fixture()
 def delete_pvc():
     """
     Delete the persistent volume claim
@@ -133,6 +133,7 @@ def delete_pvc():
     open(TEMP_YAML, 'w').close()
 
 
+@pytest.fixture()
 def delete_pod():
     """
     Delete the pod
