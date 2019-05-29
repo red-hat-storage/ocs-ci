@@ -3,12 +3,10 @@ import os
 from utility import templating
 from ocs.defaults import ROOK_CLUSTER_NAMESPACE
 from ocs.utils import create_oc_resource
-from ocs import api_client as ac
 from ocs import ocp
 
 
-OCP = ocp.OCP( kind='CephFilesystem', namespace=ROOK_CLUSTER_NAMESPACE
-)
+OCP = ocp.OCP(kind='CephFilesystem', namespace=ROOK_CLUSTER_NAMESPACE)
 
 
 def create_private_namespace(name, region='us-east-2'):
