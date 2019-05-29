@@ -37,7 +37,7 @@ def test_fixture(request):
     request.addfinalizer(finalizer)
 
 
-def teardown(self):
+def teardown():
     """
     Delete storage class
     Delete temporary yaml files
@@ -49,15 +49,17 @@ def teardown(self):
 
 def create_storage_class(**kwargs):
     """
-    Create storage class.
-    **kwargs: Key, value pairs for yaml file substitution
+    Create storage class
 
+    Args:
+        **kwargs: key, value pairs for yaml file substitution
     """
     sc_yaml = os.path.join(TEMPLATE_DIR, "StorageClass.yaml")
     sc_name = kwargs['sc_name']
 
     sc_yaml_file = templating.generate_yaml_from_jinja2_template_with_data(
-        sc_yaml, **kwargs)
+        sc_yaml, **kwargs
+    )
     with open(TEMP_YAML_FILE_SC, 'w') as yaml_file:
         yaml.dump(sc_yaml_file, yaml_file, default_flow_style=False)
     log.info(f'Creating Storage Class {sc_name}')
@@ -68,9 +70,11 @@ def create_storage_class(**kwargs):
 def create_multiple_pvc(pvc_base_name, number_of_pvc):
     """
     Create PVCs
+
     Args:
         pvc_base_name (str): Prefix of PVC name
         number_of_pvc (int): Number of PVCs to be created
+
     Returns:
         True if all PVCs are created, False otherwise
     """
@@ -78,10 +82,11 @@ def create_multiple_pvc(pvc_base_name, number_of_pvc):
     pvc_parms = {'sc_name': 'test-sc', 'pvc_name': pvc_base_name}
 
     pvc_yaml_file = templating.generate_yaml_from_jinja2_template_with_data(
-        pvc_yaml, **pvc_parms)
+        pvc_yaml, **pvc_parms
+    )
     pvc_obj = munchify(pvc_yaml_file)
 
-    for count in range(1, number_of_pvc+1):
+    for count in range(1, number_of_pvc + 1):
         pvc_name = f'{pvc_base_name}{count}'
         pvc_obj.metadata.name = pvc_name
         with open(TEMP_YAML_FILE_PVC, 'w') as yaml_file:
@@ -96,6 +101,7 @@ def create_multiple_pvc(pvc_base_name, number_of_pvc):
 def run_async(command):
     """
     Run command locally and return without waiting for completion
+
     Args:
         command (str): The command to run on the system.
 
@@ -104,8 +110,9 @@ def run_async(command):
         None on error.
     """
     log.info(f"Executing command: {command}")
-    p = subprocess.Popen(command, stdin=subprocess.PIPE,
-                         stdout=subprocess.PIPE, shell=True)
+    p = subprocess.Popen(
+        command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True
+    )
 
     def async_communicate():
         stdout, stderr = p.communicate()
@@ -119,8 +126,10 @@ def run_async(command):
 def verify_pvc_exist(pvc_name):
     """
     Verify existence of a PVC
+
     Args:
         pvc_name (str): Name of PVC
+
     Returns:
         True if PVC exists, False otherwise.
     """
@@ -135,8 +144,10 @@ def verify_pvc_exist(pvc_name):
 def verify_pvc_not_exists(pvc_name):
     """
     Ensure that the pvc does not exists
+
     Args:
         pvc_name (str): Name of PVC
+
     Returns:
         True if PVC does not exists, False otherwise.
     """
