@@ -6,16 +6,16 @@ from utility import templating
 from ocs.utils import create_oc_resource
 
 
-def make_private_namespace(name, region='us-east-2'):
+def create_private_namespace(name, region='us-east-2'):
     """
     Create a namespace.
 
     Args:
-        name (str): namespace to be created
-        region (str): aws region.  Defaults to us-east-2
+        name (str): Namespace to be created
+        region (str): AWS region.  Defaults to us-east-2
 
     Returns:
-        No return value.  The new namespace should exist, and a directory in
+        False if unable to create the new namespace.  If True, a directory in
         /tmp with the namespace's name should contain the private.yaml file
         that created this namespace.
 
@@ -25,13 +25,12 @@ def make_private_namespace(name, region='us-east-2'):
     output, error = process.communicate()
     if error:
         print(f"Error executing: {oc_cmd}")
-        return
+        return False
     prev_ns = [x for x in output.decode().split('\n') if x.startswith(f"{name} ")]
     if prev_ns:
         print(f"{name} already exists")
-        return
+        return False
     env_data = dict()
-    env_data['platform'] = 'AWS'
     env_data['cluster_namespace'] = name
     env_data['region'] = region
     local_dir = f"/tmp/{name}"
@@ -39,7 +38,4 @@ def make_private_namespace(name, region='us-east-2'):
         os.makedirs(local_dir)
     templ_parm = templating.Templating()
     create_oc_resource('private.yaml', local_dir, templ_parm, env_data)
-
-
-if __name__ == "__main__":
-    make_private_namespace('ocs-368')
+    return True
