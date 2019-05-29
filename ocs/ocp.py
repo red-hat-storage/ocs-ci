@@ -281,6 +281,5 @@ def exec_ceph_cmd(ceph_cmd):
 
     # For some commands, like "ceph fs ls", the returned output is a list
     if isinstance(out, list):
-        new_out = [item.toDict() for item in out if item]
-        return new_out
+        return [item.toDict() for item in out if item]
     return out.toDict()
