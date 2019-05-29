@@ -277,4 +277,9 @@ def exec_ceph_cmd(ceph_cmd):
     ocp_pod_obj = OCP(kind='pods', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     ct_pod = get_ceph_tools_pod()
     ceph_cmd += " --format json-pretty"
-    return ocp_pod_obj.exec_cmd_on_pod(ct_pod, ceph_cmd).toDict()
+    out = ocp_pod_obj.exec_cmd_on_pod(ct_pod, ceph_cmd)
+
+    # For some commands, like "ceph fs ls", the returned output is a list
+    if isinstance(out, list):
+        return [item.toDict() for item in out if item]
+    return out.toDict()
