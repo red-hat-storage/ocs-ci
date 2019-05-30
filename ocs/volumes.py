@@ -67,7 +67,7 @@ class CephRBDVolume(KubeVolume):
         Args:
             cephblockpool_name_prefix (str): Prefix given to cephblockpool
             failureDomain (str): The failure domain across which the
-                                   replicas or chunks of data will be spread
+                                 replicas or chunks of data will be spread
             replica_count (int): The number of copies of the data in the pool.
 
         Returns:
