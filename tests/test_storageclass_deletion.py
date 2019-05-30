@@ -120,6 +120,15 @@ def delete_storageclass(**kwargs):
     return run_cmd(f'oc delete sc {sc_name}')
 
 
+def delete_namespace(**kwargs):
+    '''
+    Deletes a project
+    '''
+
+    project_name = kwargs['project_name']
+    return run_cmd(f'oc delete project {project_name}')
+
+
 def run(**kwargs):
     '''
     Running the code in test steps defined.
