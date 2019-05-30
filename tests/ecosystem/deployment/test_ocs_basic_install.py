@@ -13,7 +13,7 @@ import pytest
 from utility import templating
 from utility.aws import AWS
 from utility.retry import retry
-from utility.utils import run_cmd, download_openshift_installer
+from utility.utils import run_cmd, get_openshift_installer, get_openshift_client
 from ocs.parallel import parallel
 
 log = logging.getLogger(__name__)
@@ -61,14 +61,16 @@ class TestDeployment(EcosystemTest):
             f.write(template)
 
         # Download installer
-        installer = download_openshift_installer(
+        installer = get_openshift_installer(
             DEPLOYMENT['installer_version']
         )
+        # Download client
+        get_openshift_client()
 
         # Deploy cluster
         log.info("Deploying cluster")
         run_cmd(
-            f"./{installer} create cluster "
+            f"{installer} create cluster "
             f"--dir {cluster_path} "
             f"--log-level debug"
         )
