@@ -147,7 +147,7 @@ class RookCluster(object):
         namespace,
         service_cbp,
         failureDomain,
-        replica_count 
+        replica_count
     ):
         """
         Creates cephblock pool
