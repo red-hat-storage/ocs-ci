@@ -37,7 +37,7 @@ RUN:
 
 # In this section we are storing all deployment related configuration
 DEPLOYMENT:
-  installer_version: "4.1.0-rc.3"
+  installer_version: "4.1.0-rc.5"
 
 # Section for reporting configuration
 REPORTING:
