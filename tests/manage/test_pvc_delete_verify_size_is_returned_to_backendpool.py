@@ -84,7 +84,7 @@ def create_storageclass(sc_name, pool_name):
     assert SC.get(f'{sc_name}')
 
 
-def create_secret(pool_name):
+def create_secret():
 
     name = get_ceph_tools_pod()
     po = pod.Pod(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
@@ -97,7 +97,8 @@ def create_secret(pool_name):
     # ToDo: Uncomment these steps when we are creating client.kubernetes
     # # Key value corresponds to a user name defined in Ceph cluster
     # cmd = (
-    #     f'ceph auth get-or-create-key client.kubernetes mon "allow profile rbd" osd "profile rbd pool={pool_name}"'
+    #     f'ceph auth get-or-create-key client.kubernetes
+    #     mon "allow profile rbd" osd "profile rbd pool={pool_name}"'
     # )
     # _, _, _ = po.exec_command(cmd=cmd, timeout=20)
     # cmd = "ceph auth get-key client.kubernetes|base64"
@@ -182,7 +183,7 @@ def setup(self):
 
     create_cephblock_pool(self.pool_name)
     create_storageclass(self.sc_name, self.pool_name)
-    create_secret(self.pool_name)
+    create_secret()
 
 
 def teardown():
