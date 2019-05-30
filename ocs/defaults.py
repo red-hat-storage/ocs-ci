@@ -1,7 +1,12 @@
 """
 Defaults module
 """
+import os
 from getpass import getuser
+
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+TOP_DIR = os.path.dirname(THIS_DIR)
+TEMPLATE_DIR = os.path.join(TOP_DIR, "templates/ocs-deployment/")
 
 INSTALLER_VERSION = '4.1.0-rc.3'
 CLIENT_VERSION = INSTALLER_VERSION
@@ -23,3 +28,7 @@ ENV_DATA = {
     'ceph_image': CEPH_IMAGE,
     'rook_image': ROOK_IMAGE,
 }
+STORAGE_API_VERSION = 'storage.k8s.io/v1'
+ROOK_API_VERSION = 'ceph.rook.io/v1'
+OCP_API_VERSION = 'project.openshift.io/v1'
+OPENSHIFT_REST_CLIENT_API_VERSION = 'v1'

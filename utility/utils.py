@@ -10,6 +10,7 @@ import smtplib
 import subprocess
 import time
 import traceback
+import string
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -959,3 +960,18 @@ def update_dict_recursively(d, u):
         else:
             d = {k: u[k]}
     return d
+
+
+def get_random_str(size=13):
+    """
+    generates the random string of given size
+
+    Args:
+        size (int): number of random characters to generate
+
+    Returns:
+         str : string of random characters of given size
+
+    """
+    chars = string.ascii_lowercase + string.digits
+    return ''.join(random.choice(chars) for _ in range(size))
