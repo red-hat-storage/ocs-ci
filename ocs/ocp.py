@@ -112,7 +112,7 @@ class OCP(object):
             command += f"-f {yaml_file}"
         elif resource_name:
             # e.g "oc namespace my-project"
-            command = f"{self.kind} {resource_name}"
+            command += f"{self.kind} {resource_name}"
         if out_yaml_format:
             command += " -o yaml"
 
