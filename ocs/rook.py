@@ -161,10 +161,10 @@ class RookCluster(object):
             replica_count (int): The number of copies of the data in the pool.
 
         Returns:
-            str : Name of the cephblockpool created
+            bool : True if cephblockpool created sucessfully
 
         Raises:
-            KeyError when error occured
+            Exception when error occured
 
         Examples:
             create_cephblockpool(
@@ -175,7 +175,11 @@ class RookCluster(object):
             )
 
         """
-        template_path = os.path.join(default.TEMPLATE_DIR, "cephblockpool.yaml")
+        _rc = False
+        template_path = os.path.join(
+            default.TEMPLATE_DIR,
+            "cephblockpool.yaml"
+        )
         # overwrite the namespace with openshift-storage, since cephblockpool
         # is tied-up with openshift-storage
         namespace = default.ROOK_CLUSTER_NAMESPACE
@@ -186,7 +190,17 @@ class RookCluster(object):
         cephblockpool_data['failureDomain'] = failureDomain
         cephblockpool_data['replica_count'] = replica_count
 
-        data = generate_yaml_from_jinja2_template_with_data(template_path, **cephblockpool_data)
-        service_cbp.create(body=data, namespace=namespace)
+        data = generate_yaml_from_jinja2_template_with_data(
+            template_path,
+            **cephblockpool_data
+        )
+        try:
+            service_cbp.create(body=data, namespace=namespace)
+            _rc = True
+        except Exception as err:
+            logger.error(
+                "Error while creating cephblockpool %s", cephblockpool_name
+            )
+            raise Exception(err)
 
-        return cephblockpool_name
+        return _rc

@@ -89,7 +89,7 @@ class CephRBDVolume(KubeVolume):
         else:
             cbp_name = f"{cephblockpool_name_prefix}-{get_random_str()}"
 
-        cbp_name = self.rk.create_cephblockpool(
+        self.rk.create_cephblockpool(
             cbp_name,
             self.namespace,
             self.service_cbp,
