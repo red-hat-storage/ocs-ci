@@ -634,9 +634,7 @@ def run_cmd(cmd, **kwargs):
         CommandFailed: In case the command execution fails
 
     Returns:
-        (str) Decoded stdout of command
-        (str) Decoded stderr of command
-        (str) return code of command
+        (str, str, str) Decoded stdout, decoded stderr, and return code of command
 
     """
     log.info(f"Executing command: {cmd}")
@@ -657,7 +655,7 @@ def run_cmd(cmd, **kwargs):
             f"Error during execution of command: {cmd}."
             f"\nError is {r.stderr.decode()}"
         )
-    return r.stdout.decode(), r.stderr.decode(), r.returncode
+    return (r.stdout.decode(), r.stderr.decode(), r.returncode)
 
 
 def download_file(url, filename):
