@@ -1,9 +1,13 @@
+"""
+This testcase is for removing the MDS from the cluster
+Polarion ID-OCS-361
+"""
+
 import logging
 import pytest
 from utility import templating
 from ocsci import tier1, ManageTest
 from tests import test_add_mds_to_cluster as obj
-import pdb
 
 log = logging.getLogger(__name__)
 _templating = templating.Templating()

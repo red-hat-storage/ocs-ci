@@ -6,10 +6,10 @@ and the default the command is "ceph osd df"
 
 import os
 import pdb
+import logging
 from ocs import pod
 from kubernetes import client, config
 os.sys.path.append(os.path.dirname(os.getcwd()))
-
 
 def run_command_on_pod(cmd, label_selector='app=rook-ceph-tools'):
     """
