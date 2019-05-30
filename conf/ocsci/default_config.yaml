@@ -17,23 +17,23 @@
 # This is the place for common default variables used in multiple places.
 # Values from this section are then available from tests from ocs.defaults
 # module.
+#
+# Put here mostly default variables reused just for related config sections
+# below. The default values which are related just to some modules/tests which
+# are not suppose to be used from sections below put directly in
+# ocs/defaults.py module.
 DEFAULTS:
   AWS_REGION: "us-east-2"
-  ROOK_CLUSTER_NAMESPACE: "openshift-storage"
-  KUBECONFIG_LOCATION: "auth/kubeconfig"  # relative from cluster_dir
   API_VERSION: "v1"
-  CEPH_IMAGE: "ceph/ceph:v14.2.0-20190410"
-  ROOK_IMAGE: "rook/ceph:master"
-  DEPLOYMENT_PLATFORM: "AWS"
-
-
 
 # in this RUN section we will keep default parameters for run of OCS-CI
 RUN:
   log_dir: "/tmp"
   run_id: null  # this will be redefined in the execution
-  kubeconfig_location: '{{ DEFAULTS["KUBECONFIG_LOCATION"] }}'
+  kubeconfig_location: 'auth/kubeconfig' # relative from cluster_dir
   cli_params: {}  # this will be filled with CLI parameters data
+  client_version: '{{ DEPLOYMENT["installer_version"] }}'
+  bin_dir: './bin'
 
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
@@ -50,7 +50,7 @@ REPORTING:
 ENV_DATA:
   platform: '{{ DEFAULTS["DEPLOYMENT_PLATFORM"] }}'
   cluster_name: "ocs-ci"  # needs to be changed in ocscilib plugin
-  cluster_namespace: '{{ DEFAULTS["ROOK_CLUSTER_NAMESPACE"] }}'
+  cluster_namespace: 'openshift-storage'
   region: '{{ DEFAULTS["AWS_REGION"] }}'
-  ceph_image: '{{ DEFAULTS["CEPH_IMAGE"] }}'
-  rook_image: '{{ DEFAULTS["ROOK_IMAGE"] }}'
+  ceph_image: 'ceph/ceph:v14.2.0-20190410'
+  rook_image: 'rook/ceph:master'

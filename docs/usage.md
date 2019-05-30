@@ -2,10 +2,11 @@
 
 **Work in progress**
 
-`run.py` is the main script for ocs-ci. You can view the full usage details by
-passing in the `--help` argument.
 
-For pytest run py.test --help
+`run.py` - (**deprecated**) is the main script for ocs-ci. You can view the
+full usage details by passing in the `--help` argument.
+
+For pytest run python -m run_ocsci --help
 
 ```bash
 python run.py --help
@@ -30,7 +31,7 @@ There are a few arguments that are required ocs test execution:
 ## Useful pytest arguments
 
 Some non-required arguments that we end up using a lot. You can use
-`py.test --help` to see all the parameters and description which you can pass
+`python -m run_ocsci --help` to see all the parameters and description which you can pass
 to the pytest.
 
 * `--capture=no` - when using pdb or ipdb you have to turn of capture mode
@@ -82,7 +83,8 @@ python run.py --suite suites/ocs_basic_install.yml --log-level info
 
 ```bash
 python run.py --cluster-name=my-testing-cluster \
-    --suite=suites/custom-test.yml --cluster-path=/home/your_login/my-testing-cluster \
+    --suite=suites/custom-test.yml \
+    --cluster-path=/home/your_login/my-testing-cluster \
     --no-email
 ```
 
@@ -109,7 +111,7 @@ on existing cluster with second execution of `pytest`!
 Deployment is moved already to pytest. If you would like to deploy new cluster
 you can run folowing command:
 ```bash
-py.test -m deployment  --ocsci-conf conf/ocsci/custom_config.yaml \
+python -m run_ocsci -m deployment --ocsci-conf conf/ocsci/custom_config.yaml \
     --cluster-conf conf/ocs_basic_install.yml \
     --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir tests/
@@ -121,6 +123,7 @@ values.
 #### Runing tests on deployed environment
 
 ```bash
-py.test -m "tier1 and manage"  --cluster-name kerberos_ID-ocs-deployment \
+python -m run_ocsci -m "tier1 and manage" \
+    --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir tests/
  ```

@@ -1,4 +1,3 @@
-import collections
 import getpass
 import json
 import logging
@@ -19,11 +18,11 @@ import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from reportportal_client import ReportPortalServiceAsync
 
-from ocs import defaults
 from ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
 )
 from ocsci.enums import StatusOfTest
+from ocsci.config import RUN, DEPLOYMENT
 from .aws import AWS
 
 log = logging.getLogger(__name__)
@@ -726,20 +725,24 @@ def destroy_cluster(cluster_path):
         return StatusOfTest.FAILED
 
 
-def get_openshift_installer(version=defaults.INSTALLER_VERSION):
+def get_openshift_installer(
+    version=DEPLOYMENT['installer_version'],
+    bin_dir=RUN['bin_dir'],
+):
     """
     Download the OpenShift installer binary, if not already present.
     Update env. PATH and get path of the openshift installer binary.
 
     Args:
         version (str): Version of the installer to download
+        bin_dir (str): Path to bin directory (default: RUN['bin_dir'])
 
     Returns:
         str: Path to the installer binary
 
     """
     installer_filename = "openshift-install"
-    installer_binary_path = os.path.join(defaults.BIN_DIR, installer_filename)
+    installer_binary_path = os.path.join(bin_dir, installer_filename)
     if os.path.isfile(installer_binary_path):
         log.debug("Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
@@ -748,7 +751,7 @@ def get_openshift_installer(version=defaults.INSTALLER_VERSION):
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
-        os.chdir(defaults.BIN_DIR)
+        os.chdir(bin_dir)
         tarball = f"{installer_filename}.tar.gz"
         url = get_openshift_mirror_url(installer_filename, version)
         download_file(url, tarball)
@@ -757,24 +760,29 @@ def get_openshift_installer(version=defaults.INSTALLER_VERSION):
         # return to the previous working directory
         os.chdir(previous_dir)
 
-    add_path_to_env_path(defaults.BIN_DIR)
+    add_path_to_env_path(bin_dir)
 
     return installer_binary_path
 
 
-def get_openshift_client(version=defaults.CLIENT_VERSION):
+def get_openshift_client(
+    version=RUN['client_version'],
+    bin_dir=RUN['bin_dir'],
+):
     """
     Download the OpenShift client binary, if not already present.
     Update env. PATH and get path of the oc binary.
 
     Args:
         version (str): Version of the client to download
+            (default: RUN['client_version'])
+        bin_dir (str): Path to bin directory (default: RUN['bin_dir'])
 
     Returns:
         str: Path to the client binary
 
     """
-    client_binary_path = os.path.join(defaults.BIN_DIR, 'oc')
+    client_binary_path = os.path.join(bin_dir, 'oc')
     if os.path.isfile(client_binary_path):
         log.debug("Client exists ({client_binary_path}), skipping download.")
         # TODO: check client version
@@ -783,7 +791,7 @@ def get_openshift_client(version=defaults.CLIENT_VERSION):
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
-        os.chdir(defaults.BIN_DIR)
+        os.chdir(bin_dir)
         url = get_openshift_mirror_url('openshift-client', version)
         tarball = "openshift-client.tar.gz"
         download_file(url, tarball)
@@ -792,7 +800,7 @@ def get_openshift_client(version=defaults.CLIENT_VERSION):
         # return to the previous working directory
         os.chdir(previous_dir)
 
-    add_path_to_env_path(defaults.BIN_DIR)
+    add_path_to_env_path(bin_dir)
 
     return client_binary_path
 
@@ -822,15 +830,18 @@ def get_openshift_mirror_url(file_name, version):
     return url
 
 
-def prepare_bin_dir():
+def prepare_bin_dir(bin_dir=RUN['bin_dir']):
     """
     Prepare bin directory for OpenShift client and installer
+
+    Args:
+        bin_dir (str): Path to bin directory (default: RUN['bin_dir'])
     """
     try:
-        os.mkdir(defaults.BIN_DIR)
-        log.info(f"Directory '{defaults.BIN_DIR}' successfully created.")
+        os.mkdir(bin_dir)
+        log.info(f"Directory '{bin_dir}' successfully created.")
     except FileExistsError:
-        log.debug(f"Directory '{defaults.BIN_DIR}' already exists.")
+        log.debug(f"Directory '{bin_dir}' already exists.")
 
 
 def add_path_to_env_path(path):
@@ -935,31 +946,6 @@ class TimeoutSampler(object):
                 f"({self.func.__name__}) return incorrect status after timeout"
             )
             return False
-
-
-def update_dict_recursively(d, u):
-    """
-    Update dict recursively to not delete nested dict under second and more
-    nested level. This function is changing the origin dictionary cause of
-    operations are done on top of it and dict is a mutable object.
-
-    Args:
-        d (dict): Dict to update
-        u (dict): Other dict used for update d dict
-
-    Returns:
-        dict: returning updated dictionary (changes are also done on dict `d`)
-    """
-    for k, v in u.items():
-        if isinstance(d, collections.Mapping):
-            if isinstance(v, collections.Mapping):
-                r = update_dict_recursively(d.get(k, {}), v)
-                d[k] = r
-            else:
-                d[k] = u[k]
-        else:
-            d = {k: u[k]}
-    return d
 
 
 def get_random_str(size=13):

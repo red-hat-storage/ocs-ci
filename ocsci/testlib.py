@@ -1,4 +1,4 @@
-from pytest_customization.marks import e2e, ecosystem, manage
+from ocsci.pytest_customization.marks import *  # noqa: F403
 
 
 class BaseTest():
@@ -10,7 +10,7 @@ class BaseTest():
     pass
 
 
-@e2e
+@e2e  # noqa: F405
 class E2ETest(BaseTest):
     """
     Base class for E2E team
@@ -18,7 +18,7 @@ class E2ETest(BaseTest):
     pass
 
 
-@manage
+@manage  # noqa: F405
 class ManageTest(BaseTest):
     """
     Base class for E2E team
@@ -26,7 +26,7 @@ class ManageTest(BaseTest):
     pass
 
 
-@ecosystem
+@ecosystem  # noqa: F405
 class EcosystemTest(BaseTest):
     """
     Base class for E2E team

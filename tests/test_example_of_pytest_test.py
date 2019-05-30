@@ -3,15 +3,14 @@ import logging
 import pytest
 
 from ocs import ocp
-from ocs import defaults
 from ocsci.config import ENV_DATA
-from ocsci import run_this, EcosystemTest, tier1
+from ocsci.testlib import run_this, EcosystemTest, tier1
 
 
 logger = logging.getLogger(__name__)
 
 OCP = ocp.OCP(
-    kind='pods', namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    kind='pods', namespace=ENV_DATA['cluster_namespace']
 )
 
 EXAMPLE_MSG = "THIS IS JUST AN EXAMPLE OF PYTEST TEST, WE WON'T RUN IT!"
@@ -37,7 +36,7 @@ class TestExampleClass(EcosystemTest):
         number_of_pods = len(pods)
         logger.info(
             f"Found {number_of_pods} pods in namespace: "
-            f"{defaults.ROOK_CLUSTER_NAMESPACE}"
+            f"{ENV_DATA['cluster_namespace']}"
         )
         for pod in pods:
             logger.info(f"Pod : {pod.metadata.name}")
