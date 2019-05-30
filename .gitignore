@@ -13,4 +13,5 @@ config.yaml
 *.bak
 openshift-install*
 data/pull-secret
+bin/
 dist
