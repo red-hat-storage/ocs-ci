@@ -7,10 +7,12 @@ functional and proper configurations are made for interaction.
 """
 
 import logging
+import os
 
 import oc.openshift_ops as ac
 from ocs.pod import Pod
 import ocs.defaults as default
+from utility.templating import generate_yaml_from_jinja2_template_with_data
 
 logger = logging.getLogger(__name__)
 
@@ -138,3 +140,67 @@ class RookCluster(object):
         """
 
         return self._api_client.get_labels(pod_name, namespace)
+
+    def create_cephblockpool(
+        self,
+        cephblockpool_name,
+        namespace,
+        service_cbp,
+        failureDomain,
+        replica_count
+    ):
+        """
+        Creates cephblock pool
+
+        Args:
+            cephblockpool_name (str): Name of cephblockpool
+            namespace (str): Namespace to create cephblockpool
+            service_cbp (class):  Dynamic client resource of kind cephblockpool
+            failureDomain (str): The failure domain across which the
+                                   replicas or chunks of data will be spread
+            replica_count (int): The number of copies of the data in the pool.
+
+        Returns:
+            bool : True if cephblockpool created sucessfully
+
+        Raises:
+            Exception when error occured
+
+        Examples:
+            create_cephblockpool(
+                cephblockpool_name",
+                service_cbp,
+                failureDomain="host",
+                replica_count=3
+            )
+
+        """
+        _rc = False
+        template_path = os.path.join(
+            default.TEMPLATE_DIR,
+            "cephblockpool.yaml"
+        )
+        # overwrite the namespace with openshift-storage, since cephblockpool
+        # is tied-up with openshift-storage
+        namespace = default.ROOK_CLUSTER_NAMESPACE
+
+        cephblockpool_data = {}
+        cephblockpool_data['cephblockpool_name'] = cephblockpool_name
+        cephblockpool_data['rook_api_version'] = default.ROOK_API_VERSION
+        cephblockpool_data['failureDomain'] = failureDomain
+        cephblockpool_data['replica_count'] = replica_count
+
+        data = generate_yaml_from_jinja2_template_with_data(
+            template_path,
+            **cephblockpool_data
+        )
+        try:
+            service_cbp.create(body=data, namespace=namespace)
+            _rc = True
+        except Exception as err:
+            logger.error(
+                "Error while creating cephblockpool %s", cephblockpool_name
+            )
+            raise Exception(err)
+
+        return _rc
