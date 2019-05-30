@@ -634,7 +634,8 @@ def run_cmd(cmd, **kwargs):
         CommandFailed: In case the command execution fails
 
     Returns:
-        tuple (str, str, int): Decoded stdout, decoded stderr, and return code of command
+        tuple (str, str, int): Decoded stdout, decoded stderr, and 
+                               return code of command
 
     """
     log.info(f"Executing command: {cmd}")
