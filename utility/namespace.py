@@ -4,7 +4,7 @@ from utility import templating
 from ocs.utils import create_oc_resource
 
 
-def create_namespace(name, region='us-east-2'):
+def create_namespace(name):
     """
     Create a namespace
 
@@ -16,14 +16,14 @@ def create_namespace(name, region='us-east-2'):
 
     Args:
         name (str): Namespace to be created
-        region (str): AWS region.  Defaults to us-east-2
     """
     env_data = dict()
     env_data['cluster_namespace'] = name
-    env_data['region'] = region
     local_dir = f"/tmp/{name}"
     if not os.path.exists(local_dir):
         os.makedirs(local_dir)
     templ_parm = templating.Templating()
-    create_oc_resource('namespace.yaml', local_dir, templ_parm,
-                       template_data=env_data, template_dir="test-deployment")
+    create_oc_resource(
+        'namespace.yaml', local_dir, templ_parm, template_data=env_data,
+        template_dir="test-deployment",
+    )
