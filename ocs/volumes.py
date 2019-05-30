@@ -80,7 +80,8 @@ class CephRBDVolume(KubeVolume):
             create_cephblockpool(
                 cephblockpool_name_prefix="autotests-blockpool",
                 failureDomain="host",
-                replica_count=3)
+                replica_count=3
+            )
 
         """
         if self.name:
