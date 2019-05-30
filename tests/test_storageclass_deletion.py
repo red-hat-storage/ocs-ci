@@ -30,7 +30,6 @@ TEMP_PVC_YAML_FILE = '/tmp/pvc_test.yaml'
 TEMP_POD_YAML_FILE = '/tmp/pod_test.yaml'
 TEMP_SC_YAML_FILE = '/tmp/sc_test.yaml'
 
-
 PVC = ocp.OCP(kind='PersistentVolumeClaim')
 PV = ocp.OCP(kind='PersistentVolume')
 SC = ocp.OCP(kind='StorageClass')
@@ -46,7 +45,7 @@ def create_namespace(**kwargs):
     namespaces = []
     for i in range(len(project_get['items'])):
         namespaces.append(project_get['items'][i]['metadata']['name'])
-    log.info(f'checking id project {project_name} already exists')
+        log.info(f'checking id project {project_name} already exists')
     if project_name in namespaces:
         log.info(
             f'project {project_name} exists, using the existing namespace'
@@ -79,6 +78,7 @@ def create_storageclass(**kwargs):
             yaml.dump(file_sc, yaml_file, default_flow_style=False)
         return SC.create(yaml_file=TEMP_SC_YAML_FILE)
 
+
 def create_pvc(**kwargs):
     '''
     Creates a Persistent Volume Claim
@@ -92,6 +92,7 @@ def create_pvc(**kwargs):
         log.info(f"Creating new Persistent Volume Claim")
     assert PVC.create(yaml_file=TEMP_PVC_YAML_FILE)
     return PVC.wait_for_resource_status(kwargs['pvc_name'], 'Bound')
+
 
 def delete_pvc(**kwargs):
     '''
@@ -108,6 +109,7 @@ def delete_pvc(**kwargs):
         return run_cmd(f'oc delete pv {pvc_get.spec.volumeName}')
     elif pv_get.spec.persistentVolumeReclaimPolicy == 'Delete':
         return run_cmd(f'oc delete pvc {pvc_name}')
+
 
 def delete_storageclass(**kwargs):
     '''
