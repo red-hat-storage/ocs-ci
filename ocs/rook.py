@@ -147,21 +147,21 @@ class RookCluster(object):
         namespace,
         service_cbp,
         failureDomain,
-        size
+        replica_count 
     ):
         """
         Creates cephblock pool
 
         Args:
-            cephblockpool_name (str): name of cephblockpool
-            namespace (str): namespace to create cephblockpool
-            service_cbp (class):  dynamic client resource of kind cephblockpool
+            cephblockpool_name (str): Name of cephblockpool
+            namespace (str): Namespace to create cephblockpool
+            service_cbp (class):  Dynamic client resource of kind cephblockpool
             failureDomain (str): The failure domain across which the
                                    replicas or chunks of data will be spread
-            size (int): The number of copies of the data in the pool.
+            replica_count (int): The number of copies of the data in the pool.
 
         Returns:
-            str : name of the cephblockpool created
+            str : Name of the cephblockpool created
 
         Raises:
             KeyError when error occured
@@ -171,7 +171,7 @@ class RookCluster(object):
                 cephblockpool_name",
                 service_cbp,
                 failureDomain="host",
-                size=3
+                replica_count=3
             )
 
         """
@@ -184,7 +184,7 @@ class RookCluster(object):
         cephblockpool_data['cephblockpool_name'] = cephblockpool_name
         cephblockpool_data['rook_api_version'] = default.ROOK_API_VERSION
         cephblockpool_data['failureDomain'] = failureDomain
-        cephblockpool_data['size'] = size
+        cephblockpool_data['replica_count'] = replica_count
 
         data = generate_yaml_from_jinja2_template_with_data(template_path, **cephblockpool_data)
         service_cbp.create(body=data, namespace=namespace)

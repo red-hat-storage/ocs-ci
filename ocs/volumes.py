@@ -15,18 +15,14 @@ from utility.templating import generate_yaml_from_jinja2_template_with_data
 
 logger = logging.getLogger(__name__)
 
-THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-TOP_DIR = os.path.dirname(THIS_DIR)
-TEMPLATE_DIR = os.path.join(TOP_DIR, "templates/ocs-deployment/")
-
 
 class KubeVolume(object):
     """
     Base class for cluster volumes
 
     Attributes:
-        name (str): name of the RBD volume
-        namepsace (str): namespace to create RBD volume
+        name (str): Name of the RBD volume
+        namepsace (str): Namespace to create RBD volume
 
     """
     def __init__(self, name, namespace):
@@ -41,8 +37,8 @@ class CephRBDVolume(KubeVolume):
     Class which contains Ceph RBD related functionality
 
     Attributes:
-        name (str): name of the RBD volume
-        namepsace (str): namespace to create RBD volume
+        name (str): Name of the RBD volume
+        namepsace (str): Namespace to create RBD volume
 
     """
     def __init__(self, name=None, namespace='default'):
@@ -53,26 +49,29 @@ class CephRBDVolume(KubeVolume):
             api_version=self.api_version,
             kind=self.kind
         )
-        self.template_path = os.path.join(TEMPLATE_DIR, "cephblockpool.yaml")
+        self.template_path = os.path.join(
+            defaults.TEMPLATE_DIR,
+            "cephblockpool.yaml"
+        )
         self.rk = RookCluster()
 
     def create_cephblockpool(
         self,
         cephblockpool_name_prefix="autotests-cephblockpool",
         failureDomain="host",
-        size="3"
+        replica_count="3"
     ):
         """
         Creates cephblock pool
 
         Args:
-            cephblockpool_name_prefix (str): prefix given to cephblockpool
+            cephblockpool_name_prefix (str): Prefix given to cephblockpool
             failureDomain (str): The failure domain across which the
                                    replicas or chunks of data will be spread
-            size (int): The number of copies of the data in the pool.
+            replica_count (int): The number of copies of the data in the pool.
 
         Returns:
-            str : name of the cephblockpool created
+            str : Name of the cephblockpool created
 
         Raises:
             KeyError when error occured
@@ -81,7 +80,7 @@ class CephRBDVolume(KubeVolume):
             create_cephblockpool(
                 cephblockpool_name_prefix="autotests-blockpool",
                 failureDomain="host",
-                size=3)
+                replica_count=3)
 
         """
         if self.name:
@@ -94,7 +93,7 @@ class CephRBDVolume(KubeVolume):
             self.namespace,
             self.service_cbp,
             failureDomain,
-            size
+            replica_count
         )
 
         return cbp_name
@@ -105,8 +104,8 @@ class StorageClass(KubeVolume):
     Class which contains StorageClass related functionality
 
     Attributes:
-        name (str): name of the RBD volume
-        namepsace (str): namespace to create RBD volume
+        name (str): Name of the RBD volume
+        namepsace (str): Namespace to create RBD volume
 
     """
     def __init__(self, name=None, namespace='default'):
@@ -117,7 +116,10 @@ class StorageClass(KubeVolume):
             api_version=self.api_version,
             kind=self.kind
         )
-        self.template_path = os.path.join(TEMPLATE_DIR, "storageclass.yaml")
+        self.template_path = os.path.join(
+            defaults.TEMPLATE_DIR,
+            "storageclass.yaml"
+        )
 
     def create_storageclass(
         self,
@@ -132,17 +134,17 @@ class StorageClass(KubeVolume):
         Creates storage class using data provided
 
         Args:
-            blockPool (str): name of the block pool
-            sc_name_prefix (str): sc name will consist of this prefix and
+            blockPool (str): Name of the block pool
+            sc_name_prefix (str): SC name will consist of this prefix and
                                   random str.
-            allow_volume_expansion (bool): either True or False
+            allow_volume_expansion (bool): Either True or False
             reclaim_policy (str): Reclaim Policy type. Either Retain,
                                   Recycle or Delete
-            fstype (str): filesystem type
-            clusterNamespace (str): namespace where rook cluster exists
+            fstype (str): Filesystem type
+            clusterNamespace (str): Namespace where rook cluster exists
 
         Returns:
-            str: name of the storage class created
+            str: Name of the storage class created
 
         Example:
             create_storageclass(
@@ -183,8 +185,8 @@ class PVC(KubeVolume):
     Class which contains PVC related functionality
 
     Attributes:
-        name (str): name of the PVC volume
-        namespace (str): namespace to create PVC
+        name (str): Name of the PVC volume
+        namespace (str): Namespace to create PVC
 
     """
     def __init__(self, name=None, namespace='default'):
@@ -195,7 +197,7 @@ class PVC(KubeVolume):
             api_version=self.api_version,
             kind=self.kind
         )
-        self.template_path = os.path.join(TEMPLATE_DIR, "pvc.yaml")
+        self.template_path = os.path.join(defaults.TEMPLATE_DIR, "pvc.yaml")
 
     def create_pvc(
         self,
@@ -208,13 +210,13 @@ class PVC(KubeVolume):
         Creates PVC using data provided
 
         Args:
-            storageclass (str): name of storageclass to create PVC
-            accessmode (str): access mode for PVC
-            pvc_name_prefix (str): prefix given to PVC name
-            pvc_size (int): size of PVC in Gb
+            storageclass (str): Name of storageclass to create PVC
+            accessmode (str): Access mode for PVC
+            pvc_name_prefix (str): Prefix given to PVC name
+            pvc_size (int): Size of PVC in Gb
 
         Returns:
-            str: name of the pvc created
+            str: Name of the pvc created
 
         Examples:
             create_pvc(

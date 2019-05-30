@@ -1,5 +1,5 @@
 """
-Hols all the 'kinds' required for OCS
+Holds all the 'kinds' required for OCS
 """
 CEPHBLOCKPOOL = 'CephBlockPool'
 STORAGECLASS = 'StorageClass'
