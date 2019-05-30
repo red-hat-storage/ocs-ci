@@ -4,12 +4,12 @@ from utility import templating
 from ocs.utils import create_oc_resource
 
 
-def create_private_namespace(name, region='us-east-2'):
+def create_namespace(name, region='us-east-2'):
     """
     Create a namespace
 
     When a new namespace is created, a directory in /tmp with the namespace's
-    name will be created containing the private.yaml file that created this
+    name will be created containing the namespace.yaml file that created this
     namespace.
 
     Raises AlreadyExists exception if the namespace already exists.
@@ -25,5 +25,5 @@ def create_private_namespace(name, region='us-east-2'):
     if not os.path.exists(local_dir):
         os.makedirs(local_dir)
     templ_parm = templating.Templating()
-    create_oc_resource('private.yaml', local_dir, templ_parm,
+    create_oc_resource('namespace.yaml', local_dir, templ_parm,
                        template_data=env_data, template_dir="test-deployment")
