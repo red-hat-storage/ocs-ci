@@ -14,7 +14,8 @@ def create_ceph_block_pool(request):
         Delete the Ceph block pool
         """
         helpers.delete_ceph_block_pool(
-            class_instance.cbp_name, class_instance.project_name
+            cbp_name=class_instance.cbp_name,
+            project_name=class_instance.project_name
         )
 
     request.addfinalizer(finalizer)
@@ -22,7 +23,8 @@ def create_ceph_block_pool(request):
         'test', 'cephblockpool'
     )
     helpers.create_ceph_block_pool(
-        class_instance.cbp_name, class_instance.project_name
+        cbp_name=class_instance.cbp_name,
+        project_name=class_instance.project_name
     )
 
 
@@ -38,8 +40,7 @@ def create_storageclass(request):
         Delete the storage class
         """
         helpers.delete_storage_class(
-            class_instance.sc_name, class_instance.project_name,
-            cbp_name=class_instance.cbp_name
+            class_instance.sc_name, class_instance.project_name
         )
 
     request.addfinalizer(finalizer)
@@ -48,8 +49,9 @@ def create_storageclass(request):
         'test', 'storageclass'
     )
     helpers.create_storageclass(
-        class_instance.sc_name, class_instance.project_name,
-        cbp_name=class_instance.cbp_name
+        sc_name=class_instance.sc_name,
+        project_name=class_instance.project_name,
+        sc_type=helpers.CEPH_BLOCK_POOL, pool_name=class_instance.cbp_name
     )
 
 
@@ -73,9 +75,7 @@ def create_pvc(request):
     class_instance.pvc_name = helpers.create_unique_resource_name(
         'test', 'pvc'
     )
-    helpers.create_ceph_block_pool(
-        class_instance.pvc_name, class_instance.project_name
-    )
+    helpers.create_pvc(class_instance.pvc_name, class_instance.project_name)
 
 
 @pytest.fixture()

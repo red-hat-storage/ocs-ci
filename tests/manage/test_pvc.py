@@ -40,4 +40,4 @@ class TestCaseOCS371(ManageTest):
         ocs_helpers.delete_pvc(
             pvc_name=self.pvc_name, project_name=self.project_name
         )
-        thread.join()
+        thread.join(timeout=60)

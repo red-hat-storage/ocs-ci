@@ -1,5 +1,5 @@
 ---
-apiVersion: {{ k8s_api_version }}
+apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
    name: {{ storageclass_name | default('ocsci-storageclass') }}

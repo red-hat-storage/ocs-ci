@@ -146,8 +146,10 @@ class OCP(object):
             command += f"{self.kind} {resource_name}"
         else:
             command += f"-f {yaml_file}"
-        if wait:
-            command += " --wait=true"
+
+        # default value for wait is true
+        if not wait:
+            command += " --wait=false"
         return self.exec_oc_cmd(command)
 
     def apply(self, yaml_file):
@@ -209,6 +211,8 @@ class OCP(object):
         for sample in TimeoutSampler(
             timeout, sleep, self.get, resource_name, True, selector
         ):
+            if to_delete and not sample:
+                return True
             # Only 1 resource expected to be returned
             if resource_name:
                 if sample.status.phase == condition:
@@ -227,9 +231,6 @@ class OCP(object):
                             return True
                     elif len(sample) == len(in_condition):
                         return True
-            if to_delete and not sample:
-                return True
-
         return False
 
     def exec_cmd_on_pod(self, pod_name, command):

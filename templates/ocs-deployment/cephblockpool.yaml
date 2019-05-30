@@ -1,5 +1,5 @@
 ---
-apiVersion: {{ rook_api_version }}
+apiVersion: ceph.rook.io/v1
 kind: CephBlockPool
 metadata:
   name: {{ cephblockpool_name | default('ocsci-cephblockpool') }}

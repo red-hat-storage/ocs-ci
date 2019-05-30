@@ -3,6 +3,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: {{ pod_name | default('ocsci-pod') }}
+  namespace: {{ cluster_namespace | default('openshift-storage') }}
 spec:
   containers:
    - name: web-server

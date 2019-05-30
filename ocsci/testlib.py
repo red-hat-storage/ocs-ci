@@ -1,4 +1,6 @@
 from ocsci.pytest_customization.marks import *  # noqa: F403
+import traceback
+from pytest_customization.marks import e2e, ecosystem, manage
 
 
 class BaseTest():
@@ -7,6 +9,9 @@ class BaseTest():
     If some functionallity/property needs to be implemented in all test classes
     here is the place to put your code.
     """
+    @property
+    def __name__(self):
+        return traceback.extract_stack(None, 2)[0][2]
     pass
 
 
