@@ -10,8 +10,9 @@ setup(
     name='ocs-ci',
     version='0.1',
     description='OCS CI tests that run in jenkins and standalone mode using aws provider',
-    author='Vasu Kulkarni',
-    author_email='vasu@redhat.com',
+    author='OCS QE',
+    author_email='ocs-ci@redhat.com',
+    license='MIT',
     install_requires=[
         'apache-libcloud',
         'docopt==0.6.2',
