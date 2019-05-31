@@ -1,7 +1,7 @@
 import logging
 import time
 
-import ocs.defaults as default
+from ocsci.config import ENV_DATA
 
 import boto3
 
@@ -22,7 +22,7 @@ class AWS(object):
     _ec2_resource = None
     _region_name = None
 
-    def __init__(self, region_name=default.AWS_REGION):
+    def __init__(self, region_name=ENV_DATA['region']):
         """
         Constructor for AWS class
 

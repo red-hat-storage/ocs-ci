@@ -29,8 +29,12 @@ setup(
         'pytest',
     ],
     entry_points={
+        'console_scripts': [
+            'run_ocsci=run_ocsci:main',
+        ],
         'pytest11': [
-            'ocscilib = pytest_customization.ocscilib',
+            'ocscilib = ocsci.pytest_customization.ocscilib',
+            'marks = ocsci.pytest_customization.marks',
         ]
     },
     zip_safe=True,
