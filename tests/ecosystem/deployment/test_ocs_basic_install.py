@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+import yaml
 
 from oc.openshift_ops import OCP
 import ocs.defaults as default
@@ -40,25 +41,26 @@ class TestDeployment(EcosystemTest):
             "data",
             "pull-secret"
         )
-        with open(pull_secret_path, "r") as f:
-            pull_secret = f.readline()
-        ENV_DATA.update(
-            {
-                'pull_secret': pull_secret,
-            }
-        )
 
         # TODO: check for supported platform and raise the exception if not
         # supported. Currently we support just AWS.
 
         _templating = templating.Templating()
-        template = _templating.render_template(
+        install_config_str = _templating.render_template(
             "install-config.yaml.j2", ENV_DATA
         )
-        log.info(f"Install config: \n{template}")
+        # Parse the rendered YAML so that we can manipulate the object directly
+        install_config_obj = yaml.safe_load(install_config_str)
+        with open(pull_secret_path, "r") as f:
+            # Parse, then unparse, the JSON file.
+            # We do this for two reasons: to ensure it is well-formatted, and
+            # also to ensure it ends up as a single line.
+            install_config_obj['pullSecret'] = json.dumps(json.loads(f.read()))
+        install_config_str = yaml.safe_dump(install_config_obj)
+        log.info(f"Install config: \n{install_config_str}")
         install_config = os.path.join(cluster_path, "install-config.yaml")
         with open(install_config, "w") as f:
-            f.write(template)
+            f.write(install_config_str)
 
         # Download installer
         installer = get_openshift_installer(
