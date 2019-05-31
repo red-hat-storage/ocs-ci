@@ -1,15 +1,16 @@
 """
 A test for creating a CephFS
 """
-import logging
-import ocs.defaults as defaults
-import yaml
 import os
+import logging
+import yaml
+
+from munch import munchify
 import pytest
 
-from ocsci import tier1, ManageTest
 from ocs import ocp
-from munch import munchify
+from ocsci.config import ENV_DATA
+from ocsci.testlib import tier1, ManageTest
 from utility import utils, templating
 
 log = logging.getLogger(__name__)
@@ -19,9 +20,9 @@ TEMP_YAML_FILE = 'test_cephfilesystem.yaml'
 CEPHFS_DELETED = '"{cephfs_name}" deleted'
 
 CEPHFS = ocp.OCP(
-    kind='CephFilesystem', namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    kind='CephFilesystem', namespace=ENV_DATA['cluster_namespace']
 )
-POD = ocp.OCP(kind='Pod', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+POD = ocp.OCP(kind='Pod', namespace=ENV_DATA['cluster_namespace'])
 
 
 @pytest.fixture(scope='class')

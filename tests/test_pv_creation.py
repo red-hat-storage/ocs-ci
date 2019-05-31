@@ -3,11 +3,11 @@ A test for creating a PV
 """
 import os
 import logging
-import ocs.defaults as defaults
 import yaml
 import pytest
 
-from ocsci import tier1, ManageTest
+from ocsci.config import ENV_DATA
+from ocsci.testlib import tier1, ManageTest
 from ocs import exceptions
 from ocs import ocp
 from utility import utils, templating
@@ -21,7 +21,7 @@ VOLUME_DELETED = 'persistentvolume "{volume_name}" deleted'
 
 
 OCP = ocp.OCP(
-    kind='PersistentVolume', namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    kind='PersistentVolume', namespace=ENV_DATA['cluster_namespace']
 )
 
 

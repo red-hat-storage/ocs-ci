@@ -3,6 +3,8 @@
 import logging
 import textwrap
 
+from run_ocsci import init_ocsci_conf
+
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +66,12 @@ def test_config_parametrize(testdir):
          - 1
          - 2
         """))
-    # run pytest with the following cmd args
-    result = testdir.runpytest('-v', f'--ocsci-conf={conf_file}')
+    pytest_arguments = ['-v', f'--ocsci-conf={conf_file}']
+    # this is a bit hack which allow us init all the config which we do in
+    # runner run_ocsci.py. Without this we won't be able to access config
+    init_ocsci_conf(pytest_arguments)
+    # run pytest with the following pytest_argumetns
+    result = testdir.runpytest(*pytest_arguments)
     # fnmatch_lines does an assertion internally
     result.stdout.fnmatch_lines([
         'collecting*collected 2 items',

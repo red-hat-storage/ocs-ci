@@ -5,11 +5,10 @@ import time
 import yaml
 
 from oc.openshift_ops import OCP
-import ocs.defaults as default
 from ocs.exceptions import CommandFailed, CephHealthException
 from ocs.utils import create_oc_resource, apply_oc_resource
 from ocsci.config import RUN, ENV_DATA, DEPLOYMENT
-from ocsci import deployment, EcosystemTest
+from ocsci.testlib import deployment, EcosystemTest
 import pytest
 from utility import templating
 from utility.aws import AWS
@@ -186,7 +185,7 @@ class TestDeployment(EcosystemTest):
 def create_ebs_volumes(
     worker_pattern,
     size=100,
-    region_name=default.AWS_REGION
+    region_name=ENV_DATA['region'],
 ):
     """
     Create volumes on workers
@@ -195,7 +194,7 @@ def create_ebs_volumes(
         worker_pattern (string): Worker name pattern e.g.:
             cluster-55jx2-worker*
         size (int): Size in GB (default: 100)
-        region_name (str): Region name (default: default.AWS_REGION)
+        region_name (str): Region name (default: ENV_DATA['region'])
     """
     aws = AWS(region_name)
     worker_instances = aws.get_instances_by_name_pattern(worker_pattern)
@@ -219,8 +218,8 @@ def ceph_health_check(namespace=ENV_DATA['cluster_namespace']):
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
     Args:
-        namespace (str): Namespace of OCS (default:
-            default.ROOK_CLUSER_NAMESPACE)
+        namespace (str): Namespace of OCS
+            (default: ENV_DATA['cluster_namespace'])
 
     Raises:
         CephHealthException: If the ceph health returned is not HEALTH_OK
