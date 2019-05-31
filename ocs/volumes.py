@@ -7,6 +7,7 @@ import logging
 
 from ocs import defaults
 from ocs import kinds
+from ocsci.config import ENV_DATA
 from kubernetes import config
 from openshift.dynamic import DynamicClient
 from utility.utils import get_random_str
@@ -129,7 +130,7 @@ class StorageClass(KubeVolume):
         allow_volume_expansion=True,
         reclaim_policy="Delete",
         fstype="xfs",
-        clusterNamespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        clusterNamespace=ENV_DATA['cluster_namespace'],
     ):
         """
         Creates storage class using data provided
