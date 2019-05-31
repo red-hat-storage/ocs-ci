@@ -30,11 +30,8 @@ setup(
     ],
     entry_points={
         'pytest11': [
-            # keep order here for loading modules by pytest, ocsciconfig needs
-            # to be loaded as fist to load config files!
-            '1_ocsciconfig = ocsci.pytest_customization.ocsciconfig',
-            '2_marks = ocsci.pytest_customization.marks',
-            '3_ocscilib = ocsci.pytest_customization.ocscilib',
+            'ocscilib = ocsci.pytest_customization.ocscilib',
+            'marks = ocsci.pytest_customization.marks',
         ]
     },
     zip_safe=True,
