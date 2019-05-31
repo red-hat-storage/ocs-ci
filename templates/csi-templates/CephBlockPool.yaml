@@ -1,0 +1,12 @@
+---
+apiVersion: ceph.rook.io/v1
+kind: CephBlockPool
+metadata:
+  name: {{ rbd_pool | default('rbd') }}
+  namespace: {{ cluster_namespace | default('openshift-storage') }}
+spec:
+  # The failure domain will spread the replicas of the data across different failure zones
+  failureDomain: {{ failureDomain | default('host') }}
+  # For a pool based on raw copies, specify the number of copies. A size of 1 indicates no redundancy.
+  replicated:
+    size: {{ size | default('3') }}
