@@ -32,6 +32,7 @@ workloads = pytest.mark.workloads
 performance = pytest.mark.performance
 scale = pytest.mark.scale
 deployment = pytest.mark.deployment
+destroy = pytest.mark.destroy
 upgrade = pytest.mark.upgrade
 
 # testing marker this is just for testing purpose if you want to run some test
