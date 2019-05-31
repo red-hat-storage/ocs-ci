@@ -58,22 +58,29 @@ POD = ocp.OCP(
 
 def create_cephblock_pool(pool_name):
 
+    """
+    Create a cephblockpool
+    """
+
     template_data['rbd_pool'] = pool_name
     create_oc_resource(
         'cephblockpool.yaml', TEMPLATES_DIR, _templating, template_data
     )
 
     # Check CephBlockPool is created
-    name = get_ceph_tools_pod()
-    po = pod.Pod(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    cmd = "ceph osd pool ls"
-
-    out, _, _ = po.exec_command(cmd=cmd, timeout=20)
-    assert pool_name in out
+    #name = get_ceph_tools_pod()
+    # po = pod.Pod(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    # cmd = "ceph osd pool ls"
+    #
+    # out, _, _ = po.exec_command(cmd=cmd, timeout=20)
+    out = ocp.exec_ceph_cmd(ceph_cmd="ceph osd pool ls")
+    #assert pool_name in out
 
 
 def create_storageclass(sc_name, pool_name):
-
+    """
+    Create a storage class
+    """
     template_data['rbd_storageclass_name'] = sc_name
     template_data['rbd_pool'] = pool_name
     create_oc_resource(
@@ -85,14 +92,20 @@ def create_storageclass(sc_name, pool_name):
 
 
 def create_secret():
+    """
+    Create secret to store username and password
+    """
 
-    name = get_ceph_tools_pod()
-    po = pod.Pod(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-
-    # Key value corresponds to a admin defined in Ceph cluster
-    cmd = "ceph auth get-key client.admin|base64"
-    out, _, _ = po.exec_command(cmd=cmd, timeout=20)
+    # name = get_ceph_tools_pod()
+    # po = pod.Pod(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    #
+    # # Key value corresponds to a admin defined in Ceph cluster
+    # cmd = "ceph auth get-key client.admin|base64"
+    # out, _, _ = po.exec_command(cmd=cmd, timeout=20)
+    # template_data['base64_encoded_admin_password'] = out
+    out = ocp.exec_ceph_cmd(ceph_cmd="ceph auth get-key client.admin|base64")
     template_data['base64_encoded_admin_password'] = out
+
 
     # ToDo: Uncomment these steps when we are creating client.kubernetes
     # # Key value corresponds to a user name defined in Ceph cluster
@@ -109,21 +122,29 @@ def create_secret():
     )
 
 
-def check_ceph_available_space():
+def check_ceph_used_space():
+    """
+    Check for the used space in cluster
+    """
 
-    name = get_ceph_tools_pod()
-    po = pod.Pod(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    # name = get_ceph_tools_pod()
+    # po = pod.Pod(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     cmd = "ceph status --format json"
-    out, err, ret = po.exec_command(cmd=cmd, timeout=20)
-    if not ret:
-        pods = json.loads(out)
-        used = pods['pgmap']['bytes_used']
-        used_in_gb = used / (1024 * 1024 * 1024)
-        return used_in_gb
-    raise ex.CommandFailed(f"Error during running command{cmd}")
+    out = ocp.exec_ceph_cmd(cmd)
+    # out, err, ret = po.exec_command(cmd=cmd, timeout=20)
+    # if not ret:
+    #     pods = json.loads(out)
+    #     used = pods['pgmap']['bytes_used']
+    #     GB = (1024 * 1024 * 1024)
+    #     used_in_gb = used / GB
+    #     return used_in_gb
+    # raise ex.CommandFailed(f"Error during running command{cmd}")
 
 
 def create_project(project_name):
+    """
+    Create a project
+    """
 
     project_info = PRJ.get()
     project_list = []
@@ -137,19 +158,25 @@ def create_project(project_name):
 
 
 def create_pvc(pvc_name, sc_name):
-
+    """
+    Create a pvc
+    """
     template_data['pvc_name'] = pvc_name
     template_data['user_namespace'] = PROJECT_NAME
     template_data['rbd_storageclass_name'] = sc_name
     create_oc_resource(
         'pvc.yaml', TEMPLATES_DIR, _templating, template_data)
 
-    time.sleep(20)
-    pvc_info = PVC.get(f'{pvc_name}')
-    assert pvc_info['status']['phase'] == "Bound"
+    # time.sleep(20)
+    # pvc_info = PVC.get(f'{pvc_name}')
+    # assert pvc_info['status']['phase'] == "Bound"
+    assert ocp.wait_for_resource(condition="Bound", resource=pvc_name)
 
 
 def create_pod(pod_name, pvc_name):
+    """
+    Create a app pod
+    """
 
     template_data['pod_name'] = pod_name
     template_data['pvc_name'] = pvc_name
@@ -157,10 +184,14 @@ def create_pod(pod_name, pvc_name):
         'pod.yaml', TEMPLATES_DIR, _templating, template_data)
 
     # Todo- Add a wait() function
-    time.sleep(30)
+    # time.sleep(30)
+    assert ocp.wait_for_resource(condition="Running", resource=pod_name)
 
 
 def run_io(pod_name):
+    """
+    Run io on the mount point
+    """
 
     run_cmd(
         f"oc rsh -n {PROJECT_NAME} {pod_name}"
@@ -170,6 +201,9 @@ def run_io(pod_name):
 
 @pytest.fixture(scope='class')
 def test_fixture(request):
+    """
+    Fixture for the test
+    """
 
     self = request.node.cls
 
@@ -180,6 +214,9 @@ def test_fixture(request):
 
 
 def setup(self):
+    """
+    Setting up the environment for the test
+    """
 
     create_cephblock_pool(self.pool_name)
     create_storageclass(self.sc_name, self.pool_name)
@@ -187,6 +224,9 @@ def setup(self):
 
 
 def teardown():
+    """
+    Tearing down the environment for the test
+    """
 
     assert SECRET.delete(yaml_file='/tmp/secret.yaml')
     assert SC.delete(yaml_file="/tmp/storageclass.yaml")
@@ -198,26 +238,30 @@ def teardown():
     test_fixture.__name__,
 )
 class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
-
+    """
+    Testing after pvc deletion the size is returned to backendpool
+    """
     pool_name = "rbd-pool"
     sc_name = "rbd-storageclass"
     pvc_name = "rbd-pvc"
     pod_name = "rbd-pod"
 
     def test_pvc_delete_and_verify_size_is_returned_to_backend_pool(self):
+        """
+        Test case to verify after delete pvc size returned to backend pools
+        """
 
-        log.info("Running OCS-372 testcase")
-        used_before_creating_pvc = check_ceph_available_space()
+        used_before_creating_pvc = check_ceph_used_space()
         create_project(PROJECT_NAME)
         create_pvc(self.pvc_name, self.sc_name)
         create_pod(self.pod_name, self.pvc_name)
         run_io(self.pod_name)
-        used_after_creating_pvc = check_ceph_available_space()
+        used_after_creating_pvc = check_ceph_used_space()
         assert used_before_creating_pvc < used_after_creating_pvc
         assert run_cmd(f'oc delete pod {self.pod_name} -n {PROJECT_NAME}')
         assert run_cmd(f'oc delete pvc {self.pvc_name}')
         assert run_cmd(f"oc delete project {PROJECT_NAME}")
-        used_after_deleting_pvc = check_ceph_available_space()
+        used_after_deleting_pvc = check_ceph_used_space()
         assert used_after_deleting_pvc < used_after_creating_pvc
         assert (abs(
             used_after_deleting_pvc - used_before_creating_pvc) < 0.2)
