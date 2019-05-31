@@ -1,5 +1,5 @@
-kind: 'DeploymentConfig'
 apiVersion: 'v1'
+kind: 'DeploymentConfig'
 metadata:
   name: {{ cirros_pod_name | default ('cirrospod') }}
 spec:
