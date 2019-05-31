@@ -4,6 +4,7 @@ General OCP object
 import os
 import logging
 import yaml
+import base64
 from ocs import defaults
 from munch import munchify
 
@@ -283,3 +284,19 @@ def exec_ceph_cmd(ceph_cmd):
     if isinstance(out, list):
         return [item.toDict() for item in out if item]
     return out.toDict()
+
+
+def getbase64_ceph_secret(keyring_name):
+    """
+    Get ceph keyring in base64 encoded format.
+
+    Args:
+        keyring_name (str): Keyring name i.e. client.admin, client.kubernetes
+
+    Returns:
+        base64 encoded value.
+    """
+    cmd_out = exec_ceph_cmd(ceph_cmd=f"ceph auth get-key {keyring_name}")
+    key = cmd_out.get('key')
+    out = base64.b64encode(key.encode("utf-8"))
+    return str(out, "utf-8")
