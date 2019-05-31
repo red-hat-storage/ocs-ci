@@ -257,11 +257,9 @@ def get_ceph_tools_pod():
         str: The Ceph tools pod name
     """
     ocp_pod_obj = OCP(kind='pods', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    ct_pod = ocp_pod_obj.get(
-        selector='app=rook-ceph-tools'
-    ).toDict()['items'][0]['metadata']['name']
-    assert ct_pod, f"No Ceph tools pod found"
-    return ct_pod
+    ct_pods = ocp_pod_obj.get(selector='app=rook-ceph-tools')
+    assert ct_pods, f"No Ceph tools pods found"
+    return ct_pods.toDict()['items'][0]['metadata']['name']
 
 
 def exec_ceph_cmd(ceph_cmd):
