@@ -78,9 +78,11 @@ def create_rbd_cephpool(poolname, storageclassname):
         fd.write(tmp_yaml_file)
         log.info(f"Creating RBD pool and storage class")
     assert OCCLI.create(TEMP_SC_YAML_FILE)
-    log.info(f"RBD pool: {poolname} storage class: {storageclassname} "
-             "created successfully")
-    log.info(TEMP_SC_YAML_FILE)
+    log.info(
+        f"RBD pool: {poolname} storage class: {storageclassname}"
+        " created successfully"
+    )
+    log.debug(TEMP_SC_YAML_FILE)
 
 
 def create_pvc_invalid_name(pvcname):
@@ -108,11 +110,15 @@ def create_pvc_invalid_name(pvcname):
         run_cmd(cmd)
     except CommandFailed as ex:
         if "error" in str(ex):
-            log.info(f"PVC creation failed with error \n {ex} \n as "
-                     " invalid pvc name is provided. EXPECTED")
+            log.info(
+                f"PVC creation failed with error \n {ex} \n as "
+                "invalid pvc name is provided. EXPECTED"
+            )
         else:
-            assert ("PVC creation with invalid name succeeded : "
-                    "NOT expected")
+            assert (
+                "PVC creation with invalid name succeeded : "
+                "NOT expected"
+            )
 
 
 def create_pvc_invalid_size(pvcsize):
@@ -140,8 +146,12 @@ def create_pvc_invalid_size(pvcsize):
         run_cmd(cmd)
     except CommandFailed as ex:
         if "error" in str(ex):
-            log.info(f"PVC creation failed with error \n {ex} \n as "
-                     " invalid pvc size is provided. EXPECTED")
+            log.info(
+                f"PVC creation failed with error \n {ex} \n as "
+                "invalid pvc size is provided. EXPECTED"
+            )
         else:
-            assert ("PVC creation with invalid size succeeded : "
-                    "NOT expected")
+            assert (
+                "PVC creation with invalid size succeeded : "
+                "NOT expected"
+            )
