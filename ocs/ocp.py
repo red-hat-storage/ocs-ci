@@ -288,13 +288,17 @@ def exec_ceph_cmd(ceph_cmd):
 
 def getbase64_ceph_secret(keyring_name):
     """
-    Get ceph keyring in base64 encoded format.
+    Get ceph keyring in base64 encoded format
 
     Args:
-        keyring_name (str): Keyring name i.e. client.admin, client.kubernetes
+        keyring_name (str): Keyring name i.e. client.admin, client.kubernete
+        Ceph client keyring created with "client.<client_type|client_name>"
+        Ceph supports client keys without "client" in prefix too
+        This param expects full name of key 
+        eg: "client.admin", "client.test", "kubernetes"
 
     Returns:
-        base64 encoded value.
+        base64 encoded value
     """
     cmd_out = exec_ceph_cmd(ceph_cmd=f"ceph auth get-key {keyring_name}")
     key = cmd_out.get('key')
