@@ -2,7 +2,7 @@ from time import sleep
 from threading import Thread
 import pytest
 import logging
-from ocsci import tier1, ManageTest
+from ocsci.testlib import ManageTest, tier1
 import tests.helpers as ocs_helpers
 from tests.fixtures import (
     create_storageclass, create_pod, create_pvc, create_ceph_block_pool,

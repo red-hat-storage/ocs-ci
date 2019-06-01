@@ -231,8 +231,8 @@ def create_project(project_name):
         AssertionError: In case of any failure
     """
     ocp_project = ocp.OCP(kind='namespace')
-    ocp_project.get()
-    assert ocp_project.new_project(project_name=project_name), (
+
+    assert ocp_project.create(resource_name=project_name), (
         f"Failed to create project {project_name}"
     )
 
@@ -315,7 +315,6 @@ def delete_pvc(pvc_name, project_name):
     """
     # as a W/A for BZ1715627, deleting PVC with wait=False
     delete_resource(PVC, pvc_name, project_name, wait=False)
-
 
 
 def run_io(pod_name, project_name):
