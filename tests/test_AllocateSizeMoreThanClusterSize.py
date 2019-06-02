@@ -5,9 +5,6 @@ OCS-269 - FT-OCP-Create-PV-AllocateSizeMoreThanClusterSize
 Verify a PVC creation by allocating more storage
 than what is available in Ceph
 
-https://polarion.engineering.redhat.com/polarion/#/project/
-OpenShiftContainerStorage/workitem?id=OCS-269
-
 """
 
 import logging
@@ -15,7 +12,6 @@ import yaml
 import os
 import json
 import pytest
-import pdb
 
 from ocs import ocp
 from utility import utils, templating
@@ -128,9 +124,7 @@ def create_namespace(**kwargs):
     """
     project_name = (kwargs['project_name'])
     project_get = NAMESPACE.get()
-    namespaces = []
-    for i in range(len(project_get['items'])):
-        namespaces.append(project_get['items'][i]['metadata']['name'])
+    namespaces = [item['metadata']['name'] for item in project_get['items']]
     log.info(f'checking if project {project_name} already exists')
     if project_name in namespaces:
         log.info(
@@ -146,7 +140,7 @@ def delete_namespace(project_name):
     """
     Deletes the project
     Args:
-        Project_name (str): Project to be deleted
+        project_name (str): Project to be deleted
 
     Returns:
         (bool): True if deletion is successful, False otherwise
@@ -320,7 +314,7 @@ def check_volsize_app_pod(**kwargs):
 )
 class TestAllocateSizeMorethanClusterSize(ManageTest):
 
-    data = {}
+    data = {'pvc_name': 'my-pvc1'}
     data['pvc_name'] = 'my-pvc1'
     data['project_name'] = defaults.TEST_NAMESPACE
     data['sc_name'] = 'ocs-qe-sc'
