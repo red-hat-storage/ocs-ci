@@ -1,8 +1,12 @@
+"""
+A test case to verify after deleting pvc whether
+size is returned to backend pool
+"""
 import logging
 import pytest
 
 import ocs.defaults as defaults
-from ocsci import tier1, ManageTest
+from ocsci.testlib import tier1, ManageTest
 from utility.utils import run_cmd
 from utility import templating
 from ocs.ocp import get_ceph_tools_pod
@@ -61,7 +65,8 @@ def create_cephblock_pool(pool_name):
 
     template_data['rbd_pool'] = pool_name
     create_oc_resource(
-        'CephBlockPool.yaml', TEMPLATES_DIR, _templating, template_data, template_dir='CSI/rbd'
+        'CephBlockPool.yaml', TEMPLATES_DIR, _templating,
+        template_data, template_dir='CSI/rbd'
     )
 
     # Validate cephblock created on oc
@@ -83,7 +88,8 @@ def create_storageclass(sc_name, pool_name):
     template_data['rbd_storageclass_name'] = sc_name
     template_data['rbd_pool'] = pool_name
     create_oc_resource(
-        'storageclass.yaml', TEMPLATES_DIR, _templating, template_data, "CSI/rbd"
+        'storageclass.yaml', TEMPLATES_DIR, _templating,
+        template_data, "CSI/rbd"
     )
 
     # Validate storage class created
@@ -117,6 +123,7 @@ def create_secret(secret_name, pool_name):
     # Validate secret is created
     assert SECRET.get(f'{secret_name}')
 
+
 def check_ceph_used_space():
     """
     Check for the used space in cluster
@@ -126,7 +133,7 @@ def check_ceph_used_space():
     pods = ocp.exec_ceph_cmd(cmd)
     assert pods is not None
     used = pods['pgmap']['bytes_used']
-    GB = (1024 * 1024 * 1024)
+    GB = (1024 ** 3)
     used_in_gb = used / GB
     return used_in_gb
 
