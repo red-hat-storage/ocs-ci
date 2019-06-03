@@ -16,17 +16,27 @@ from ocsci import ManageTest, tier1
 from utility import templating
 
 log = logging.getLogger(__name__)
-CEPH_FILESYSTEM = os.path.join("templates/ocs-deployment",
-                               "cephfilesystem.yaml")
-SC_RBD_YAML = os.path.join("templates/CSI/rbd",
-                           "storageclass.yaml")
-SECRET_RBD = os.path.join("templates/CSI/rbd", "secret.yaml")
-SC_CEPHFS_YAML = os.path.join("templates/CSI/cephfs",
-                              "storageclass.yaml")
-RBD_POOL_YAML = os.path.join("templates/CSI/rbd", "CephBlockPool.yaml")
-PVC_RBD_YAML = os.path.join("templates/CSI/rbd", "pvc-rbd.yaml")
-SECRET_CEPHFS = os.path.join("templates/CSI/cephfs",
-                             "secret.yaml")
+CEPH_FILESYSTEM = os.path.join(
+    "templates/ocs-deployment", "cephfilesystem.yaml"
+)
+SC_RBD_YAML = os.path.join(
+    "templates/CSI/rbd", "storageclass.yaml"
+)
+SECRET_RBD = os.path.join(
+    "templates/CSI/rbd", "secret.yaml"
+)
+SC_CEPHFS_YAML = os.path.join(
+    "templates/CSI/cephfs", "storageclass.yaml"
+)
+RBD_POOL_YAML = os.path.join(
+    "templates/CSI/rbd", "CephBlockPool.yaml"
+)
+PVC_RBD_YAML = os.path.join(
+    "templates/CSI/rbd", "pvc.yaml"
+)
+SECRET_CEPHFS = os.path.join(
+    "templates/CSI/cephfs", "secret.yaml"
+)
 TEMP_YAML_FILE = 'temp.yaml'
 TEMP_YAML_FILE_FS = 'temp_fs.yaml'
 
@@ -48,16 +58,10 @@ PVC = ocp.OCP(
 CFS = ocp.OCP(
     kind='CephFilesystem', namespace=defaults.ROOK_CLUSTER_NAMESPACE
 )
-storageclass_list = []
-pvc_list = []
-secret_list = []
-
 
 @pytest.fixture(scope='class')
 def test_fixture(request):
-    """
-    Create disks
-    """
+
     self = request.node.cls
 
     def finalizer():
@@ -71,14 +75,10 @@ def setup(self):
     """
     Setting up the environment for the test
     """
-    assert create_secret(file_name=SECRET_RBD)
-    assert create_secret(file_name=SECRET_CEPHFS)
+    assert create_secret(self,file_name=SECRET_RBD)
+    assert create_secret(self,file_name=SECRET_CEPHFS)
     assert create_cephfilesystem()
-    assert create_storageclass_rbd(get_pool_get_sc_name())
-    assert create_storageclass_rbd(get_pool_get_sc_name())
-    assert create_storageclass_rbd(get_pool_get_sc_name())
-    assert create_storageclass_rbd(get_pool_get_sc_name())
-    assert create_storageclass_rbd(get_pool_get_sc_name())
+    assert create_multiple_rbd_storageclasses(count=5)
     assert create_storageclass_cephfs()
 
 
@@ -86,10 +86,11 @@ def teardown(self):
     """
     Tearing down the environment
     """
-    assert delete_pvc(pvc_list)
-    assert delete_storageclass_and_cephblockpool(storageclass_list)
+    assert delete_pvc(self.pvc_list)
+    assert delete_storageclass()
+    assert delete_cephblockpool()
     assert delete_cephfilesystem(file_name=TEMP_YAML_FILE_FS)
-    assert delete_secret(secret_list)
+    assert delete_secret(self.secret_list)
 
 
 def delete_pvc(pvc_list):
@@ -104,17 +105,24 @@ def delete_pvc(pvc_list):
     return True
 
 
-def delete_storageclass_and_cephblockpool(storageclass_list):
+def delete_storageclass():
     """
     Function for deleting Storageclass and CephBlockPool
     :param storageclass_list:
     :return:
     """
+    storageclass_list=get_storageclass()
     for item in storageclass_list:
         log.info(f"Deleting StorageClass with name {item}")
         assert SC.delete(resource_name=item)
+    return True
+
+def delete_cephblockpool():
+    storageclass_list=get_storageclass()
+    for item in storageclass_list:
         if "cephfs" not in item:
             pool_name = item.strip('ocsci-csi-')
+            log.info(f"Deleting CephBlockPool with name {pool_name}")
             assert POOL.delete(resource_name=pool_name)
     return True
 
@@ -125,7 +133,7 @@ def delete_cephfilesystem(file_name):
     :param file_name:
     :return:
     """
-    log.info("Deletimg CephFileSystem")
+    log.info("Deleting CephFileSystem")
     assert CFS.delete(yaml_file=file_name)
     return True
 
@@ -195,30 +203,27 @@ def validate_storageclass(sc_name):
     """
     Validate if storageClass is been created or not
     """
-    sc_obj = SC.get()
-    sample = sc_obj['items']
-    for item in sample:
-        if item.metadata.name in sc_name:
-            log.info(f"StorageClass got created")
-            return True
-    return False
+    sc_obj = SC.get(resource_name=sc_name)
+    if sc_obj['metadata']['name']:
+        log.info(f"StorageClass got created")
+        return True
+    else:
+        return False
 
-
-def create_cephfilesystem(kwargs):
+def create_cephfilesystem():
     """
     Function for deploying CephFileSystem (MDS)
     :param kwargs:
     :return:
     """
     file_y = templating.generate_yaml_from_jinja2_template_with_data(
-        CEPH_FILESYSTEM, **kwargs
+        CEPH_FILESYSTEM
     )
     with open(TEMP_YAML_FILE_FS, 'w') as yaml_file:
         yaml.dump(file_y, yaml_file, default_flow_style=False)
     log.info(f"Creating a new CephFileSystem")
     assert CFS.create(yaml_file=TEMP_YAML_FILE_FS)
     fs_name = file_y.get('metadata')['name']
-    fs_name = fs_name
     POD.wait_for_resource(condition="Running", selector='app=rook-ceph-mds')
     assert validate_cephfilesystem(fs_name=fs_name)
     return True
@@ -242,45 +247,45 @@ def validate_cephfilesystem(fs_name):
         else:
             log.error("FileSystem was not present at Ceph Side")
             return False
-    result = CFS.get()
-    sample = result['items']
-    for item in sample:
-        if item.metadata.name == fs_name:
-            log.info(f"Filesystem got created from kubernetes Side")
-            k8s_validate = True
-        else:
-            log.error("Filesystem was not create at Kubernetes Side")
-            return False
+    result = CFS.get(resource_name=fs_name)
+    if result['metadata']['name']:
+        log.info(f"Filesystem got created from kubernetes Side")
+        k8s_validate = True
+    else:
+        log.error("Filesystem was not create at Kubernetes Side")
+        return False
     if ceph_validate and k8s_validate:
         return True
     else:
         return False
 
 
-def create_storageclass_rbd(kwargs):
+def create_multiple_rbd_storageclasses(count=1):
     """
     Create a new CSI StorageClass
     """
-    pool_name = kwargs.get('rbd_pool')
-    sc_name = kwargs.get('rbd_storageclass_name')
-    assert create_rbd_pool(pool_name=pool_name)
-    assert validate_pool_creation(pool_name)
-    if validate_pool_creation(pool_name):
-        log.info("Resource validation Passed")
-    else:
-        return 1
-    file_y = templating.generate_yaml_from_jinja2_template_with_data(
-        SC_RBD_YAML, **kwargs
-    )
-    with open(TEMP_YAML_FILE, 'w') as yaml_file:
-        yaml.dump(file_y, yaml_file, default_flow_style=False)
-    log.info(f"Creating a new RBD StorageClass")
-    assert SC.create(yaml_file=TEMP_YAML_FILE)
-    assert validate_storageclass(sc_name)
+    for sc_count in range(count):
+        kwargs=generate_pool_and_sc_names()
+        pool_name = kwargs.get('rbd_pool')
+        sc_name = kwargs.get('rbd_storageclass_name')
+        assert create_rbd_pool(pool_name=pool_name)
+        assert validate_pool_creation(pool_name)
+        if validate_pool_creation(pool_name):
+            log.info("Resource validation Passed")
+        else:
+            return 1
+        file_y = templating.generate_yaml_from_jinja2_template_with_data(
+            SC_RBD_YAML, **kwargs
+        )
+        with open(TEMP_YAML_FILE, 'w') as yaml_file:
+            yaml.dump(file_y, yaml_file, default_flow_style=False)
+        log.info(f"Creating a new RBD StorageClass")
+        assert SC.create(yaml_file=TEMP_YAML_FILE)
+        assert validate_storageclass(sc_name)
     return True
 
 
-def get_pool_get_sc_name():
+def generate_pool_and_sc_names():
     """
     This will generate random pool_name and storageclass name
     :return:
@@ -296,23 +301,21 @@ def get_pool_get_sc_name():
 
 def get_storageclass():
     """
-    Funtion for getting all storageclass
-    :return: storageclass list
+    Function for getting all storageclass
+    :return:
     """
     sc_obj = SC.get()
     sample = sc_obj['items']
+
     ignore_sc = 'gp2'
-    for item in sample:
-        if item.metadata.name not in ignore_sc:
-            storageclass_list.append(item.metadata.name)
-    if len(storageclass_list) >= 1:
-        return True
-    else:
-        log.error("No StorageClass Found")
-        return False
+    storageclass = [
+        item.metadata.name for item in sample if (
+                item.metadata.name not in ignore_sc
+        )
+    ]
+    return storageclass
 
-
-def create_secret(file_name):
+def create_secret(self,file_name):
     """
     This will create Secret file which will be used for creating StorageClass
     :return:
@@ -334,28 +337,23 @@ def create_secret(file_name):
     with open(TEMP_YAML_FILE, 'w') as yaml_file:
         yaml.dump(file_y, yaml_file, default_flow_style=False)
     assert SECRET.create(yaml_file=TEMP_YAML_FILE)
-    secret_list.append(file_y.get('metadata')['name'])
+    self.secret_list.append(file_y.get('metadata')['name'])
     return True
 
 
-def create_pvc(**kwargs):
+def create_pvc(pvc_list,storageclass_list,count=1):
     """
     Function for creating pvc and multiple pvc
     :param kwargs:
     :return:
     """
-    if kwargs.get('count'):
-        pvc_count = int(kwargs.get('count'))
-    else:
-        pvc_count = 1
-    for i in range(pvc_count):
+    for i in range(count):
         sc_name = random.choice(storageclass_list)
         pvc_data = {}
         pvc_data['rbd_storageclass_name'] = sc_name
         pvc_data['pvc_name'] = "rbd-pvc-" + ''.join(
             [random.choice(string.ascii_lowercase)
              for _ in range(3)]) + str(sc_name)
-
         file_y = templating.generate_yaml_from_jinja2_template_with_data(
             PVC_RBD_YAML, **pvc_data
         )
@@ -363,11 +361,12 @@ def create_pvc(**kwargs):
             yaml.dump(file_y, yaml_file, default_flow_style=False)
         assert PVC.create(yaml_file=TEMP_YAML_FILE)
         pvc_name = pvc_data.get('pvc_name')
-        pvc_name = pvc_data.get('pvc_name')
         pvc_list.append(pvc_name)
         PVC.wait_for_resource(resource_name=pvc_name, condition="Bound")
         log.info(f"{pvc_name} got Created and got Bounded")
     return True
+
+
 
 
 def create_storageclass_cephfs():
@@ -401,7 +400,12 @@ def create_storageclass_cephfs():
     test_fixture.__name__,
 )
 class TestCaseOCS288(ManageTest):
+    pvc_list = []
+    secret_list = []
     def test_ocs_288(self):
-        assert get_storageclass()
-        random.shuffle(storageclass_list)
-        assert create_pvc(count=20)
+        storageclass_list=get_storageclass()
+        if len(storageclass_list):
+            assert create_pvc(self.pvc_list,storageclass_list,count=20)
+        else:
+            log.error("No Storageclass Found")
+            return False
