@@ -1,0 +1,13 @@
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{pvc_name | default('test-rbd-device')}}
+  namespace: {{project_name | default('default')}}
+spec:
+  accessModes:
+    - {{access_mode | default("ReadWriteOnce")}}
+  resources:
+    requests:
+      storage: {{ pvc_size | default("10") }}Gi
+  storageClassName: {{sc_name | default("rook-ceph-block")}}
