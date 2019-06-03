@@ -62,43 +62,43 @@ CFS = ocp.OCP(
 
 @pytest.fixture(scope='class')
 def test_fixture(request):
-    self = request.node.cls
 
     def finalizer():
-        teardown(self)
+        teardown()
 
     request.addfinalizer(finalizer)
-    setup(self)
+    setup()
 
 
-def setup(self):
+def setup():
     """
     Setting up the environment for the test
     """
-    assert create_secret(self, file_name=SECRET_RBD)
-    assert create_secret(self, file_name=SECRET_CEPHFS)
+    assert create_secret(file_name=SECRET_RBD)
+    assert create_secret(file_name=SECRET_CEPHFS)
     assert create_cephfilesystem()
     assert create_multiple_rbd_storageclasses(count=5)
     assert create_storageclass_cephfs()
 
 
-def teardown(self):
+def teardown():
     """
     Tearing down the environment
     """
-    assert delete_pvc(self.pvc_list)
-    assert delete_storageclass()
+    assert delete_pvc()
     assert delete_cephblockpool()
+    assert delete_storageclass()
     assert delete_cephfilesystem(file_name=TEMP_YAML_FILE_FS)
-    assert delete_secret(self.secret_list)
+    assert delete_secret()
 
 
-def delete_pvc(pvc_list):
+def delete_pvc():
     """
     Function to delete pvc
     :param pvc_list:
     :return:
     """
+    pvc_list = get_pvc()
     for item in pvc_list:
         log.info(f"Deleting pvc {item}")
         assert PVC.delete(resource_name=item)
@@ -119,12 +119,10 @@ def delete_storageclass():
 
 
 def delete_cephblockpool():
-    storageclass_list = get_storageclass()
-    for item in storageclass_list:
-        if "cephfs" not in item:
-            pool_name = item.strip('ocsci-csi-')
-            log.info(f"Deleting CephBlockPool with name {pool_name}")
-            assert POOL.delete(resource_name=pool_name)
+    pool_list = get_cephblockpool()
+    for item in pool_list:
+        log.info(f"Deleting CephBlockPool with name {item}")
+        assert POOL.delete(resource_name=item)
     return True
 
 
@@ -139,12 +137,13 @@ def delete_cephfilesystem(file_name):
     return True
 
 
-def delete_secret(secret_list):
+def delete_secret():
     """
     Function to delete Secret
     :param secret_list:
     :return:
     """
+    secret_list = get_secret()
     for item in secret_list:
         log.info(f"Deleting secret {item}")
         assert SECRET.delete(resource_name=item)
@@ -208,8 +207,7 @@ def validate_storageclass(sc_name):
     if sc_obj['metadata']['name']:
         log.info(f"StorageClass got created")
         return True
-    else:
-        return False
+    return False
 
 
 def create_cephfilesystem():
@@ -261,7 +259,9 @@ def validate_cephfilesystem(fs_name):
 
 def create_multiple_rbd_storageclasses(count=1):
     """
-    Create a new CSI StorageClass
+    Function for creating multiple rbd storageclass
+    :param count:
+    :return:
     """
     for sc_count in range(count):
         kwargs = generate_pool_and_sc_names()
@@ -298,6 +298,37 @@ def generate_pool_and_sc_names():
     return sc_data
 
 
+def get_cephblockpool():
+    sc_obj = POOL.get()
+    sample = sc_obj['items']
+    pool_list = [
+        item.metadata.name for item in sample
+    ]
+    return pool_list
+
+
+def get_secret():
+    sc_obj = SECRET.get()
+    sample = sc_obj['items']
+    conside_secret = "csi-"
+    secret_list = [
+        item.metadata.name for item in sample if (
+            conside_secret in item.metadata.name
+        )
+    ]
+    return secret_list
+
+
+def get_pvc():
+    sc_obj = PVC.get()
+    sample = sc_obj['items']
+
+    pvc_list = [
+        item.metadata.name for item in sample
+    ]
+    return pvc_list
+
+
 def get_storageclass():
     """
     Function for getting all storageclass
@@ -315,7 +346,7 @@ def get_storageclass():
     return storageclass
 
 
-def create_secret(self, file_name):
+def create_secret(file_name):
     """
     This will create Secret file which will be used for creating StorageClass
     :return:
@@ -337,11 +368,10 @@ def create_secret(self, file_name):
     with open(TEMP_YAML_FILE, 'w') as yaml_file:
         yaml.dump(file_y, yaml_file, default_flow_style=False)
     assert SECRET.create(yaml_file=TEMP_YAML_FILE)
-    self.secret_list.append(file_y.get('metadata')['name'])
     return True
 
 
-def create_pvc(pvc_list, storageclass_list, count=1):
+def create_pvc(storageclass_list, count=1):
     """
     Function for creating pvc and multiple pvc
     :param kwargs:
@@ -361,7 +391,6 @@ def create_pvc(pvc_list, storageclass_list, count=1):
             yaml.dump(file_y, yaml_file, default_flow_style=False)
         assert PVC.create(yaml_file=TEMP_YAML_FILE)
         pvc_name = pvc_data.get('pvc_name')
-        pvc_list.append(pvc_name)
         PVC.wait_for_resource(resource_name=pvc_name, condition="Bound")
         log.info(f"{pvc_name} got Created and got Bounded")
     return True
@@ -398,13 +427,10 @@ def create_storageclass_cephfs():
     test_fixture.__name__,
 )
 class TestCaseOCS288(ManageTest):
-    pvc_list = []
-    secret_list = []
-
     def test_ocs_288(self):
         storageclass_list = get_storageclass()
         if len(storageclass_list):
-            assert create_pvc(self.pvc_list, storageclass_list, count=20)
+            assert create_pvc(storageclass_list, count=20)
         else:
             log.error("No Storageclass Found")
             return False
