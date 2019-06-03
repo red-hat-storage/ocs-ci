@@ -198,7 +198,7 @@ def test_fixture(request):
     self = request.node.cls
 
     def finalizer():
-        teardown()
+        teardown(self)
     request.addfinalizer(finalizer)
     setup(self)
 
@@ -214,14 +214,14 @@ def setup(self):
     PRJ.new_project(PROJECT_NAME)
 
 
-def teardown():
+def teardown(self):
     """
     Tearing down the environment for the test
     """
-    assert run_cmd(f"oc delete project {PROJECT_NAME}")
-    assert SECRET.delete(yaml_file='/tmp/secret.yaml')
-    assert SC.delete(yaml_file="/tmp/storageclass.yaml")
-    assert CBP.delete(yaml_file="/tmp/CephBlockPool.yaml")
+    assert PRJ.delete(resource_name=PROJECT_NAME)
+    assert SECRET.delete(resource_name=self.secret_name)
+    assert SC.delete(resource_name=self.sc_name)
+    assert CBP.delete(resource_name=self.pool_name)
 
 
 @tier1
@@ -249,8 +249,8 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         run_io(self.pod_name)
         used_after_creating_pvc = check_ceph_used_space()
         assert used_before_creating_pvc < used_after_creating_pvc
-        assert run_cmd(f'oc delete pod {self.pod_name} -n {PROJECT_NAME}')
-        assert run_cmd(f'oc delete pvc {self.pvc_name}')
+        assert POD.delete(resource_name=self.pod_name)
+        assert PVC.delete(resource_name=self.pvc_name)
         used_after_deleting_pvc = check_ceph_used_space()
         assert used_after_deleting_pvc < used_after_creating_pvc
         assert (abs(
