@@ -1,16 +1,13 @@
 import logging
-import time
-import json
 import pytest
 
 import ocs.defaults as defaults
-import ocs.exceptions as ex
 from ocsci import tier1, ManageTest
-from ocs.ocp import get_ceph_tools_pod
 from utility.utils import run_cmd
 from utility import templating
+from ocs.ocp import get_ceph_tools_pod
 from ocs.utils import create_oc_resource
-from ocs import pod, ocp
+from ocs import ocp, pod
 
 log = logging.getLogger(__name__)
 _templating = templating.Templating()
@@ -30,7 +27,7 @@ OCP = ocp.OCP(
     kind='Service', namespace=defaults.ROOK_CLUSTER_NAMESPACE
 )
 
-# Cephblockpool
+# CephBlockPool
 CBP = ocp.OCP(
     kind='CephBlockPool', namespace=defaults.ROOK_CLUSTER_NAMESPACE
 )
@@ -64,17 +61,19 @@ def create_cephblock_pool(pool_name):
 
     template_data['rbd_pool'] = pool_name
     create_oc_resource(
-        'cephblockpool.yaml', TEMPLATES_DIR, _templating, template_data
+        'CephBlockPool.yaml', TEMPLATES_DIR, _templating, template_data, template_dir='CSI/rbd'
     )
 
-    # Check CephBlockPool is created
-    #name = get_ceph_tools_pod()
-    # po = pod.Pod(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    # cmd = "ceph osd pool ls"
-    #
-    # out, _, _ = po.exec_command(cmd=cmd, timeout=20)
-    out = ocp.exec_ceph_cmd(ceph_cmd="ceph osd pool ls")
-    #assert pool_name in out
+    # Validate cephblock created on oc
+    assert CBP.get(f'{pool_name}')
+
+    # Validate cephblock created on ceph
+    _rc = False
+    pools = ocp.exec_ceph_cmd(ceph_cmd="ceph osd lspools")
+    for pool in pools:
+        if pool['poolname'] == pool_name:
+            _rc = True
+    assert _rc, f"Pool: {pool_name} wasn't created'"
 
 
 def create_storageclass(sc_name, pool_name):
@@ -84,61 +83,52 @@ def create_storageclass(sc_name, pool_name):
     template_data['rbd_storageclass_name'] = sc_name
     template_data['rbd_pool'] = pool_name
     create_oc_resource(
-        'storageclass.yaml', TEMPLATES_DIR, _templating, template_data
+        'storageclass.yaml', TEMPLATES_DIR, _templating, template_data, "CSI/rbd"
     )
 
     # Validate storage class created
     assert SC.get(f'{sc_name}')
 
 
-def create_secret():
+def create_secret(secret_name, pool_name):
     """
     Create secret to store username and password
     """
 
-    # name = get_ceph_tools_pod()
-    # po = pod.Pod(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    #
-    # # Key value corresponds to a admin defined in Ceph cluster
-    # cmd = "ceph auth get-key client.admin|base64"
-    # out, _, _ = po.exec_command(cmd=cmd, timeout=20)
-    # template_data['base64_encoded_admin_password'] = out
-    out = ocp.exec_ceph_cmd(ceph_cmd="ceph auth get-key client.admin|base64")
-    template_data['base64_encoded_admin_password'] = out
+    # Get the keyring for admin
+    admin = ocp.getbase64_ceph_secret("client.admin")
+    template_data['base64_encoded_admin_password'] = admin
 
+    # Create a user=kubernetes
+    assert ocp.exec_ceph_cmd(
+        ceph_cmd=f'ceph auth get-or-create-key client.kubernetes mon '
+        f' "allow profile rbd" osd "profile rbd pool={pool_name}"')
 
-    # ToDo: Uncomment these steps when we are creating client.kubernetes
-    # # Key value corresponds to a user name defined in Ceph cluster
-    # cmd = (
-    #     f'ceph auth get-or-create-key client.kubernetes
-    #     mon "allow profile rbd" osd "profile rbd pool={pool_name}"'
-    # )
-    # _, _, _ = po.exec_command(cmd=cmd, timeout=20)
-    # cmd = "ceph auth get-key client.kubernetes|base64"
-    # template_data['base64_encoded_user_password'] = out
+    # Get the keyring for user=kubernetes
+    kubernetes = ocp.getbase64_ceph_secret("client.kubernetes")
+    template_data['base64_encoded_user_password'] = kubernetes
+
+    template_data['csi_rbd_secret'] = secret_name
 
     create_oc_resource(
-        'secret.yaml', TEMPLATES_DIR, _templating, template_data
+        'secret.yaml', TEMPLATES_DIR, _templating, template_data, "CSI/rbd"
     )
 
+    # Validate secret is created
+    assert SECRET.get(f'{secret_name}')
 
 def check_ceph_used_space():
     """
     Check for the used space in cluster
     """
 
-    # name = get_ceph_tools_pod()
-    # po = pod.Pod(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    cmd = "ceph status --format json"
-    out = ocp.exec_ceph_cmd(cmd)
-    # out, err, ret = po.exec_command(cmd=cmd, timeout=20)
-    # if not ret:
-    #     pods = json.loads(out)
-    #     used = pods['pgmap']['bytes_used']
-    #     GB = (1024 * 1024 * 1024)
-    #     used_in_gb = used / GB
-    #     return used_in_gb
-    # raise ex.CommandFailed(f"Error during running command{cmd}")
+    cmd = "ceph status"
+    pods = ocp.exec_ceph_cmd(cmd)
+    assert pods is not None
+    used = pods['pgmap']['bytes_used']
+    GB = (1024 * 1024 * 1024)
+    used_in_gb = used / GB
+    return used_in_gb
 
 
 def create_project(project_name):
@@ -157,20 +147,30 @@ def create_project(project_name):
         assert run_cmd(f'oc new-project {project_name}')
 
 
-def create_pvc(pvc_name, sc_name):
+def create_pvc(pvc_name, sc_name, pool_name):
     """
     Create a pvc
     """
     template_data['pvc_name'] = pvc_name
     template_data['user_namespace'] = PROJECT_NAME
     template_data['rbd_storageclass_name'] = sc_name
+    template_data['pvc_size'] = '10Gi'
     create_oc_resource(
-        'pvc.yaml', TEMPLATES_DIR, _templating, template_data)
+        'pvc.yaml', TEMPLATES_DIR, _templating, template_data, "CSI/rbd"
+    )
 
-    # time.sleep(20)
-    # pvc_info = PVC.get(f'{pvc_name}')
-    # assert pvc_info['status']['phase'] == "Bound"
-    assert ocp.wait_for_resource(condition="Bound", resource=pvc_name)
+    # Validate pvc is in bound state
+    assert PVC.wait_for_resource(condition="Bound", resource_name=pvc_name)
+
+    # Validate pvc is created on ceph
+    pvc_info = PVC.get(f'{pvc_name}')
+
+    name = get_ceph_tools_pod()
+    po = pod.Pod(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    cmd = f"rbd ls -p {pool_name}"
+    pvc, _, _ = po.exec_command(cmd=cmd, timeout=20)
+
+    assert pvc_info['spec']['volumeName'] in pvc
 
 
 def create_pod(pod_name, pvc_name):
@@ -181,11 +181,10 @@ def create_pod(pod_name, pvc_name):
     template_data['pod_name'] = pod_name
     template_data['pvc_name'] = pvc_name
     create_oc_resource(
-        'pod.yaml', TEMPLATES_DIR, _templating, template_data)
+        'pod.yaml', TEMPLATES_DIR, _templating, template_data, "CSI/rbd"
+    )
 
-    # Todo- Add a wait() function
-    # time.sleep(30)
-    assert ocp.wait_for_resource(condition="Running", resource=pod_name)
+    assert POD.wait_for_resource(condition="Running", resource_name=pod_name)
 
 
 def run_io(pod_name):
@@ -195,7 +194,7 @@ def run_io(pod_name):
 
     run_cmd(
         f"oc rsh -n {PROJECT_NAME} {pod_name}"
-        " dd if=/dev/urandom of=/var/lib/www/html/dd_ar bs=10M count=250"
+        " dd if=/dev/urandom of=/var/lib/www/html/dd_ar bs=10M count=950"
     )
 
 
@@ -220,7 +219,7 @@ def setup(self):
 
     create_cephblock_pool(self.pool_name)
     create_storageclass(self.sc_name, self.pool_name)
-    create_secret()
+    create_secret(self.secret_name, self.pool_name)
 
 
 def teardown():
@@ -230,7 +229,7 @@ def teardown():
 
     assert SECRET.delete(yaml_file='/tmp/secret.yaml')
     assert SC.delete(yaml_file="/tmp/storageclass.yaml")
-    assert CBP.delete(yaml_file="/tmp/cephblockpool.yaml")
+    assert CBP.delete(yaml_file="/tmp/CephBlockPool.yaml")
 
 
 @tier1
@@ -245,6 +244,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
     sc_name = "rbd-storageclass"
     pvc_name = "rbd-pvc"
     pod_name = "rbd-pod"
+    secret_name = "csi-rbd-secret"
 
     def test_pvc_delete_and_verify_size_is_returned_to_backend_pool(self):
         """
@@ -253,7 +253,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
 
         used_before_creating_pvc = check_ceph_used_space()
         create_project(PROJECT_NAME)
-        create_pvc(self.pvc_name, self.sc_name)
+        create_pvc(self.pvc_name, self.sc_name, self.pool_name)
         create_pod(self.pod_name, self.pvc_name)
         run_io(self.pod_name)
         used_after_creating_pvc = check_ceph_used_space()
