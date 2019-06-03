@@ -50,4 +50,3 @@ STORAGE_API_VERSION = 'storage.k8s.io/v1'
 ROOK_API_VERSION = 'ceph.rook.io/v1'
 OCP_API_VERSION = 'project.openshift.io/v1'
 OPENSHIFT_REST_CLIENT_API_VERSION = 'v1'
-
