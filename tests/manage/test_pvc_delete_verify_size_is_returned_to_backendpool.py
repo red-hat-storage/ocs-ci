@@ -19,8 +19,6 @@ _templating = templating.Templating()
 # Project name
 PROJECT_NAME = "ocs-372"
 
-PRJ = ocp.OCP(kind='Project')
-
 # yaml path
 TEMPLATES_DIR = "/tmp/"
 
@@ -70,7 +68,7 @@ def create_cephblock_pool(pool_name):
     )
 
     # Validate cephblock created on oc
-    assert CBP.get(f'{pool_name}')
+    assert CBP.get(resource_name=pool_name)
 
     # Validate cephblock created on ceph
     _rc = False
@@ -93,7 +91,7 @@ def create_storageclass(sc_name, pool_name):
     )
 
     # Validate storage class created
-    assert SC.get(f'{sc_name}')
+    assert SC.get(resource_name=sc_name)
 
 
 def create_secret(secret_name, pool_name):
@@ -121,7 +119,7 @@ def create_secret(secret_name, pool_name):
     )
 
     # Validate secret is created
-    assert SECRET.get(f'{secret_name}')
+    assert SECRET.get(resource_name=secret_name)
 
 
 def check_ceph_used_space():
@@ -130,28 +128,12 @@ def check_ceph_used_space():
     """
 
     cmd = "ceph status"
-    pods = ocp.exec_ceph_cmd(cmd)
-    assert pods is not None
-    used = pods['pgmap']['bytes_used']
+    ceph_status = ocp.exec_ceph_cmd(cmd)
+    assert ceph_status is not None
+    used = ceph_status['pgmap']['bytes_used']
     GB = (1024 ** 3)
     used_in_gb = used / GB
     return used_in_gb
-
-
-def create_project(project_name):
-    """
-    Create a project
-    """
-
-    project_info = PRJ.get()
-    project_list = []
-    for i in range(len(project_info['items'])):
-        project_list.append(project_info['items'][i]['metadata']['name'])
-    if project_name in project_list:
-        log.info(f"{project_name} exists, using same project")
-    else:
-        log.info("Creating new project")
-        assert run_cmd(f'oc new-project {project_name}')
 
 
 def create_pvc(pvc_name, sc_name, pool_name):
@@ -170,7 +152,7 @@ def create_pvc(pvc_name, sc_name, pool_name):
     assert PVC.wait_for_resource(condition="Bound", resource_name=pvc_name)
 
     # Validate pvc is created on ceph
-    pvc_info = PVC.get(f'{pvc_name}')
+    pvc_info = PVC.get(resource_name=pvc_name)
 
     name = get_ceph_tools_pod()
     po = pod.Pod(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
@@ -227,13 +209,14 @@ def setup(self):
     create_cephblock_pool(self.pool_name)
     create_storageclass(self.sc_name, self.pool_name)
     create_secret(self.secret_name, self.pool_name)
+    assert OCP.new_project(PROJECT_NAME)
 
 
 def teardown():
     """
     Tearing down the environment for the test
     """
-
+    assert run_cmd(f"oc delete project {PROJECT_NAME}")
     assert SECRET.delete(yaml_file='/tmp/secret.yaml')
     assert SC.delete(yaml_file="/tmp/storageclass.yaml")
     assert CBP.delete(yaml_file="/tmp/CephBlockPool.yaml")
@@ -259,7 +242,6 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         """
 
         used_before_creating_pvc = check_ceph_used_space()
-        create_project(PROJECT_NAME)
         create_pvc(self.pvc_name, self.sc_name, self.pool_name)
         create_pod(self.pod_name, self.pvc_name)
         run_io(self.pod_name)
@@ -267,7 +249,6 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         assert used_before_creating_pvc < used_after_creating_pvc
         assert run_cmd(f'oc delete pod {self.pod_name} -n {PROJECT_NAME}')
         assert run_cmd(f'oc delete pvc {self.pvc_name}')
-        assert run_cmd(f"oc delete project {PROJECT_NAME}")
         used_after_deleting_pvc = check_ceph_used_space()
         assert used_after_deleting_pvc < used_after_creating_pvc
         assert (abs(
