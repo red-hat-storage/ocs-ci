@@ -272,7 +272,7 @@ def create_multiple_rbd_storageclasses(count=1):
         if validate_pool_creation(pool_name):
             log.info("Resource validation Passed")
         else:
-            return 1
+            return False
         file_y = templating.generate_yaml_from_jinja2_template_with_data(
             SC_RBD_YAML, **kwargs
         )
