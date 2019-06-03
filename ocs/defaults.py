@@ -32,3 +32,8 @@ STORAGE_API_VERSION = 'storage.k8s.io/v1'
 ROOK_API_VERSION = 'ceph.rook.io/v1'
 OCP_API_VERSION = 'project.openshift.io/v1'
 OPENSHIFT_REST_CLIENT_API_VERSION = 'v1'
+
+CEPHFS_NAME = 'myfs'
+MDS_APP_LABEL = f'{ROOK_CLUSTER_NAMESPACE}-mds'
+CEPHFS_STORAGE_CLASS = 'csi-cephfs'
+CEPHFS_DATA_POOL = f'{CEPHFS_NAME}-data0'

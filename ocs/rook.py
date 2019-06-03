@@ -8,16 +8,20 @@ functional and proper configurations are made for interaction.
 
 import logging
 import os
+import yaml
+
+from munch import munchify
 
 import oc.openshift_ops as ac
 from ocs.pod import Pod
+from ocs import ocp
 import ocs.defaults as default
 from utility.templating import generate_yaml_from_jinja2_template_with_data
 
 logger = logging.getLogger(__name__)
 
 
-class Rook(object):
+class OCS(object):
     """
     High level rook abstraction. This class should handle operator
     and cluster objects.
@@ -28,18 +32,18 @@ class Rook(object):
     cut.
 
     Attrs:
-        self._cluster (RookCluster): current cluster object
+        self._cluster (OCSCluster): current cluster object
     """
 
     def __init__(self, **config):
-        self._cluster = RookCluster(**config)
+        self._cluster = OCSCluster(**config)
 
     @property
     def cluster(self):
         return self._cluster
 
 
-class RookCluster(object):
+class OCSCluster(object):
     """
     Handles all cluster related operations from ceph perspective
 
@@ -76,6 +80,15 @@ class RookCluster(object):
         self._ocs_pods = list()
         self._api_client = ac.OCP()  # TODO: APIClient abstractions
         self.ocs_pod_init()
+        self.cephfs = None
+
+        """
+        Following variables hold map of pod name to pod objects
+        """
+        self.mons = {}
+        self.osds = {}
+        self.mdss = {}
+        self.toolbox = None
 
     @property
     def cluster_name(self):
@@ -90,6 +103,22 @@ class RookCluster(object):
         # TODO: Decide whether to return list or yield
         for pod in self._ocs_pods:
             yield pod
+
+    def get_mons(self):
+        # TODO: return all mons belonging to this cluster
+        pass
+
+    def get_key(self, username):
+        #TODO: Return key for cluster user, mostly client.***
+        pass
+
+    def get_client_users(self):
+        #TODO: Return all client users, like client.admin..
+        pass
+
+    def get_mon_info(self):
+        # TODO: Return info related to a mon ex: PORT
+        pass
 
     def ocs_pod_init(self):
         """
@@ -204,3 +233,155 @@ class RookCluster(object):
             raise Exception(err)
 
         return _rc
+
+    def create_cephfs(self, **kwargs):
+        """
+        A function to invoke cephfs creation via CephFS
+
+        Args:
+            **kwargs: Parameter which user want to override against defaults
+                like name, mds count etc. Keys should match as per fs resource
+                yaml.
+
+        Returns:
+            bool: True if fs healthy else False
+        """
+        if self.cephfs:
+            logger.info(f"Cephfs {self.cephfs.name} already exists")
+            return self.cephfs.health_ok()
+        self.cephfs = CephFS(self.namespace, **kwargs)
+        assert self.cephfs.health_ok()
+        return True
+
+
+class CephFS(object):
+    """
+    A class which handles create, delete and modify cephfs
+    No MDS ops here, instead it will be handled by RookCluster class
+    """
+
+    def __init__(self, _api_client, namespace, **kwargs):
+        self._name = kwargs.get('name', default.CEPHFS_NAME)
+        self.namespace = namespace
+        self.CEPHFS =  ocp.OCP(
+            kind='CephFilesystem',
+            namespace=namespace,
+        )
+        self.POD = ocp.OCP(
+            kind='Pod',
+            namespace=namespace,
+        )
+        self.CEPHFS_INITIAL_CONFIG = os.path.join(
+            default.TEMPLATE_DIR, "cephfilesystem.yaml"
+        )
+        self.CEPHFS_CURRENT_CONFIG = "cephfilesystem_tmp.yaml"
+        self.MDS_APP_LABEL = default.MDS_APP_LABEL
+        self.mdss = {}
+        self.active_count = 0
+        #In memory fs configuration(cephfilesystem type)
+        self.conf = None
+        self.data_pool = kwargs.get('data-pool', default.CEPHFS_DATA_POOL)
+
+        resource = generate_yaml_from_jinja2_template_with_data(
+            self.CEPHFS_INITAL_CONFIG,
+            **kwargs,
+        )
+
+        with open(self.CEPHFS_CURRENT_CONFIG, 'w') as conf:
+            yaml.dump(resource, conf, default_flow_style=False)
+
+        logger.info(f"Creating ceph FileSystem {self._name}")
+        assert self.CEPHFS.create(yaml_file=self.CEPHFS_CURRENT_CONFIG)
+        self.conf = self.get_current_conf()
+        self.active_count = self.conf.spec.metadataServer.activeCount
+
+    @property
+    def name(self):
+        return self._name
+
+    def get_current_conf(self):
+        """
+        A function to create in memory represenation
+        of fs config (Munchified data)
+
+        Returns:
+            Munchified object
+
+        # TODO: Get current config from openshift rather than temp conf file
+        """
+        with open(self.CEPHFS_CURRENT_CONFIG, 'r') as conf:
+            cur_conf = munchify(yaml.safe_load(conf))
+        return cur_conf
+
+    def set_current_conf(self, conf_obj):
+        """
+        After modification of in memory fs config we will call this function
+
+        Params:
+            modifiedconf(Munchobj): A munchified obj with new conf
+        """
+        with open(self.CEPHFS_CURRENT_CONFIG, 'w') as conf:
+            yaml.dump(conf_obj.toDict(), conf, default_flow_style=False)
+
+    def health_ok(self):
+        """
+        A all round health check of fs
+
+        Args:
+            None
+
+        Returns:
+            bool: True if healthy else False
+
+        """
+        assert self.check_mds_health()
+
+    def check_mds_health(self):
+        """
+        Asses health of mds
+
+        Returns:
+            bool: True if mds healthy
+        """
+        self.get_mds_info()
+        # TODO: need  checklist of health check parameters
+        # as of now just return True
+        return True
+
+    def get_mds_info(self):
+        """
+        Get mds info and fill in the pod object in self.mdss
+        """
+        #TODO: Replace api_client with OCP before merge
+        mdss = self._api_client.get_pods(
+            namespace=self.namespace,
+            label_selector=f'app == {self.MDS_APP_LABEL}'
+        )
+
+        for mds in mdss:
+            labels = self._api_client.get_pod_labels(
+                pod_name = mds,
+                namespace = self.namespace,
+            )
+            mds_id = labels['mds']
+            pod = Pod(mds, self.namespace, labels)
+            self.mdss.update({mds_id: pod})
+
+    def delete(self):
+        """
+        Destroy this fs
+
+        Returns:
+            bool: True if success else False
+        """
+        logger.info(f"Deleting the fs {self._name}")
+        out = self.CEPHFS.delete(resource_name=self._name)
+        if f'"{self._name}" deleted' in out:
+            # wait for mds pod termination
+            return self.POD.wait_for_resource(
+                condition='',
+                selector=self.MDS_APP_LABEL,
+                to_delete=True,
+            )
+        logger.error(f"Failed to delete cephfs {self._name}")
+        return False
