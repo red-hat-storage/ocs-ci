@@ -14,6 +14,8 @@ PYTEST_DONT_REWRITE - avoid pytest to rewrite, keep this msg here please!
 import os
 from getpass import getuser
 
+from utility.templating import load_yaml_to_dict
+
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 TOP_DIR = os.path.dirname(THIS_DIR)
 TEMPLATE_DIR = os.path.join(TOP_DIR, "templates/ocs-deployment/")
@@ -51,3 +53,17 @@ ENV_DATA = {
     'ceph_image': CEPH_IMAGE,
     'rook_image': ROOK_IMAGE,
 }
+
+TEMPLATES_DIR = "templates"
+TEMP_YAML = os.path.join(TEMPLATES_DIR, "temp.yaml")
+
+CEPHFILESYSTEM_DICT = load_yaml_to_dict(
+    os.path.join(
+        "templates/ocs-deployment", "cephfilesystem_new.yaml"
+    )
+)
+PVC_DICT = load_yaml_to_dict(
+    os.path.join(
+        "templates/ocs-deployment", "PersistentVolumeClaim_new.yaml"
+    )
+)
