@@ -32,6 +32,8 @@ API_VERSION = "v1"
 CEPH_IMAGE = "ceph/ceph:v14.2.0-20190410"
 ROOK_IMAGE = "rook/ceph:master"
 DEPLOYMENT_PLATFORM = 'AWS'
+TEST_NAMESPACE = 'ocs-qe'
+GB = 1024 ** 3
 
 # This section is suppose to be available just from ocsci/config.py module from
 # ENV_DATA dictionary. Once we drop support of old runner we will delete this
@@ -48,3 +50,4 @@ STORAGE_API_VERSION = 'storage.k8s.io/v1'
 ROOK_API_VERSION = 'ceph.rook.io/v1'
 OCP_API_VERSION = 'project.openshift.io/v1'
 OPENSHIFT_REST_CLIENT_API_VERSION = 'v1'
+
