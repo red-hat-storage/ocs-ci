@@ -5,7 +5,6 @@ import pytest
 from ocsci import tier1, ManageTest
 from ocs.ocp import OCP
 from utility import utils, templating
-from utility.utils import run_cmd
 from ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
@@ -103,11 +102,10 @@ def create_pvc_invalid_name(pvcname):
         fd.write(tmp_yaml_file)
         log.info(f"Creating a pvc with name {pvcname}")
     log.info(tmp_yaml_file)
-    oc_cmd = "oc "
-    kubeconfig = f"--kubeconfig {os.getenv('KUBECONFIG')}"
-    cmd = f"{oc_cmd} {kubeconfig} create -f {TEMP_PVC_YAML_FILE}"
     try:
-        run_cmd(cmd)
+        OCCLI.create(
+            yaml_file=tmp_yaml_file, resource_name="PersistentVolumeClaim"
+        )
     except CommandFailed as ex:
         if "error" in str(ex):
             log.info(
@@ -138,12 +136,11 @@ def create_pvc_invalid_size(pvcsize):
     with open(TEMP_PVC_YAML_FILE, 'w') as fd:
         fd.write(tmp_yaml_file)
         log.info(f"Creating a pvc with size {pvcsize}")
-    log.info(tmp_yaml_file)
-    oc_cmd = "oc "
-    kubeconfig = f"--kubeconfig {os.getenv('KUBECONFIG')}"
-    cmd = f"{oc_cmd} {kubeconfig} create -f {TEMP_PVC_YAML_FILE}"
+    log.debug(tmp_yaml_file)
     try:
-        run_cmd(cmd)
+        OCCLI.create(
+            yaml_file=tmp_yaml_file, resource_name="PersistentVolumeClaim"
+        )
     except CommandFailed as ex:
         if "error" in str(ex):
             log.info(
