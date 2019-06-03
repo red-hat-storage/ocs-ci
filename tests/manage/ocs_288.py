@@ -59,9 +59,9 @@ CFS = ocp.OCP(
     kind='CephFilesystem', namespace=defaults.ROOK_CLUSTER_NAMESPACE
 )
 
+
 @pytest.fixture(scope='class')
 def test_fixture(request):
-
     self = request.node.cls
 
     def finalizer():
@@ -75,8 +75,8 @@ def setup(self):
     """
     Setting up the environment for the test
     """
-    assert create_secret(self,file_name=SECRET_RBD)
-    assert create_secret(self,file_name=SECRET_CEPHFS)
+    assert create_secret(self, file_name=SECRET_RBD)
+    assert create_secret(self, file_name=SECRET_CEPHFS)
     assert create_cephfilesystem()
     assert create_multiple_rbd_storageclasses(count=5)
     assert create_storageclass_cephfs()
@@ -111,14 +111,15 @@ def delete_storageclass():
     :param storageclass_list:
     :return:
     """
-    storageclass_list=get_storageclass()
+    storageclass_list = get_storageclass()
     for item in storageclass_list:
         log.info(f"Deleting StorageClass with name {item}")
         assert SC.delete(resource_name=item)
     return True
 
+
 def delete_cephblockpool():
-    storageclass_list=get_storageclass()
+    storageclass_list = get_storageclass()
     for item in storageclass_list:
         if "cephfs" not in item:
             pool_name = item.strip('ocsci-csi-')
@@ -210,6 +211,7 @@ def validate_storageclass(sc_name):
     else:
         return False
 
+
 def create_cephfilesystem():
     """
     Function for deploying CephFileSystem (MDS)
@@ -262,7 +264,7 @@ def create_multiple_rbd_storageclasses(count=1):
     Create a new CSI StorageClass
     """
     for sc_count in range(count):
-        kwargs=generate_pool_and_sc_names()
+        kwargs = generate_pool_and_sc_names()
         pool_name = kwargs.get('rbd_pool')
         sc_name = kwargs.get('rbd_storageclass_name')
         assert create_rbd_pool(pool_name=pool_name)
@@ -312,7 +314,8 @@ def get_storageclass():
     ]
     return storageclass
 
-def create_secret(self,file_name):
+
+def create_secret(self, file_name):
     """
     This will create Secret file which will be used for creating StorageClass
     :return:
@@ -338,7 +341,7 @@ def create_secret(self,file_name):
     return True
 
 
-def create_pvc(pvc_list,storageclass_list,count=1):
+def create_pvc(pvc_list, storageclass_list, count=1):
     """
     Function for creating pvc and multiple pvc
     :param kwargs:
@@ -362,8 +365,6 @@ def create_pvc(pvc_list,storageclass_list,count=1):
         PVC.wait_for_resource(resource_name=pvc_name, condition="Bound")
         log.info(f"{pvc_name} got Created and got Bounded")
     return True
-
-
 
 
 def create_storageclass_cephfs():
@@ -399,10 +400,11 @@ def create_storageclass_cephfs():
 class TestCaseOCS288(ManageTest):
     pvc_list = []
     secret_list = []
+
     def test_ocs_288(self):
-        storageclass_list=get_storageclass()
+        storageclass_list = get_storageclass()
         if len(storageclass_list):
-            assert create_pvc(self.pvc_list,storageclass_list,count=20)
+            assert create_pvc(self.pvc_list, storageclass_list, count=20)
         else:
             log.error("No Storageclass Found")
             return False
