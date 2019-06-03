@@ -9,4 +9,4 @@ spec:
   failureDomain: {{ failureDomain | default('host') }}
   # For a pool based on raw copies, specify the number of copies. A size of 1 indicates no redundancy.
   replicated:
-    size: {{ size | default('3') }}
+    size: {{ replica_size | default('3') }}
