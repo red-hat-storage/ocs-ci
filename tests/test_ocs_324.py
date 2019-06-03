@@ -7,9 +7,9 @@ import os
 import pytest
 import yaml
 
-from ocs import defaults
 from ocs import ocp
-from ocsci import ManageTest, tier1
+from ocsci.config import ENV_DATA
+from ocsci.testlib import ManageTest, tier1
 from utility import templating, utils
 
 log = logging.getLogger(__name__)
@@ -17,15 +17,15 @@ log = logging.getLogger(__name__)
 TEMPLATES_DIR = "templates/csi-templates"
 TEMP_YAML = os.path.join(TEMPLATES_DIR, "temp.yaml")
 
-CBP = ocp.OCP(kind='CephBlockPool', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-CFS = ocp.OCP(kind='CephFilesystem', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-OCP = ocp.OCP(kind='Service', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-POD = ocp.OCP(kind='Pod', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+CBP = ocp.OCP(kind='CephBlockPool', namespace=ENV_DATA['cluster_namespace'])
+CFS = ocp.OCP(kind='CephFilesystem', namespace=ENV_DATA['cluster_namespace'])
+OCP = ocp.OCP(kind='Service', namespace=ENV_DATA['cluster_namespace'])
+POD = ocp.OCP(kind='Pod', namespace=ENV_DATA['cluster_namespace'])
 PVC = ocp.OCP(
-    kind='PersistentVolumeClaim', namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    kind='PersistentVolumeClaim', namespace=ENV_DATA['cluster_namespace']
 )
 SECRET = ocp.OCP(kind='Secret', namespace='default')
-SC = ocp.OCP(kind='StorageClass', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+SC = ocp.OCP(kind='StorageClass', namespace=ENV_DATA['cluster_namespace'])
 
 
 @pytest.fixture(params=['rbd', 'cephfs'])
@@ -46,7 +46,7 @@ def setup(interface):
     log.info(f"Setting up environment for: {interface}")
     name = f"{interface}-test324"
 
-    assert create_secret(interface)
+    assert create_secret(interface=interface)
     if 'rbd' in interface:
         assert create_rbd_pool(pool_name=name)
         assert validate_pool_creation(pool_name=name)
@@ -66,14 +66,14 @@ def teardown(interface):
     log.info(f"Tearing down the environment of: {interface}")
     name = f"{interface}-test324"
 
-    assert delete_pvc(interface)
+    assert delete_pvc(interface=interface)
     assert delete_storageclass(interface=interface)
     if 'rbd' in interface:
         assert delete_rbd_pool(pool_name=name)
     elif 'cephfs' in interface:
         assert delete_ceph_fs(fs_name=name)
 
-    assert delete_secret(interface)
+    assert delete_secret(interface=interface)
     utils.delete_file(TEMP_YAML)
 
 
@@ -146,7 +146,7 @@ def create_pvc(interface):
     log.info(f"Creating a PVC")
     pvc_data = {}
     pvc_data['pvc_name'] = f"csi-{interface}-pvc"
-    pvc_data['user_namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    pvc_data['user_namespace'] = ENV_DATA['cluster_namespace']
     pvc_data['sc_name'] = f"csi-{interface}-sc"
 
     template = os.path.join(TEMPLATES_DIR, "PersistentVolumeClaim.yaml")
@@ -157,6 +157,7 @@ def create_pvc(interface):
     )
 
 
+# TODO: Use function from ocp.py PR #136
 def get_admin_key():
     """
     Fetches admin key secret from ceph
@@ -226,7 +227,7 @@ def validate_pool_creation(pool_name):
     return False
 
 
-# To Do: Remove function after PR #69 is merged
+# TODO: Use function from templating.py PR #132
 def dump_to_temp_yaml(src_file, dst_file, **kwargs):
     """
     Dump a jinja2 template file content into a yaml file
@@ -234,7 +235,9 @@ def dump_to_temp_yaml(src_file, dst_file, **kwargs):
         src_file (str): Template Yaml file path
         dst_file: the path to the destination Yaml file
     """
-    data = templating.generate_yaml_from_jinja2_template_with_data(src_file, **kwargs)
+    data = templating.generate_yaml_from_jinja2_template_with_data(
+        src_file, **kwargs
+    )
     with open(dst_file, 'w') as yaml_file:
         yaml.dump(data, yaml_file)
 
@@ -252,6 +255,6 @@ class TestCaseOCS324(ManageTest):
         """
         TC OCS 324
         """
-        assert create_pvc(test_fixture)
-        assert delete_pvc(test_fixture)
-        assert create_pvc(test_fixture)
+        assert create_pvc(interface=test_fixture)
+        assert delete_pvc(interface=test_fixture)
+        assert create_pvc(interface=test_fixture)
