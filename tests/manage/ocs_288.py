@@ -254,10 +254,7 @@ def validate_cephfilesystem(fs_name):
     else:
         log.error("Filesystem was not create at Kubernetes Side")
         return False
-    if ceph_validate and k8s_validate:
-        return True
-    else:
-        return False
+    return True if (ceph_validate and k8s_validate) else False
 
 
 def create_multiple_rbd_storageclasses(count=1):
