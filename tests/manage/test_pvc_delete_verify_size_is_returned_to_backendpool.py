@@ -19,6 +19,8 @@ _templating = templating.Templating()
 # Project name
 PROJECT_NAME = "ocs-372"
 
+PRJ = ocp.OCP(kind='Project')
+
 # yaml path
 TEMPLATES_DIR = "/tmp/"
 
@@ -209,7 +211,7 @@ def setup(self):
     create_cephblock_pool(self.pool_name)
     create_storageclass(self.sc_name, self.pool_name)
     create_secret(self.secret_name, self.pool_name)
-    assert OCP.new_project(PROJECT_NAME)
+    PRJ.new_project(PROJECT_NAME)
 
 
 def teardown():
