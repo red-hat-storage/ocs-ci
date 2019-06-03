@@ -309,7 +309,7 @@ def get_storageclass():
     ignore_sc = 'gp2'
     storageclass = [
         item.metadata.name for item in sample if (
-                item.metadata.name not in ignore_sc
+            item.metadata.name not in ignore_sc
         )
     ]
     return storageclass
