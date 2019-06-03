@@ -5,7 +5,7 @@ import os
 import logging
 import yaml
 from ocsci.config import ENV_DATA
-from munch import munchify
+from munch import munchify, Munch
 
 from ocs.exceptions import CommandFailed
 from utility.utils import TimeoutSampler
@@ -53,7 +53,7 @@ class OCP(object):
                 without the initial 'oc' at the beginning
 
         Returns:
-            Munch Obj: this object represents a returned yaml file
+            Munch Obj if the object represents a returned yaml file, else returns a list
         """
         oc_cmd = "oc "
         kubeconfig = os.getenv('KUBECONFIG')
@@ -65,7 +65,10 @@ class OCP(object):
 
         oc_cmd += command
         out = run_cmd(cmd=oc_cmd)
-        return munchify(yaml.safe_load(out))
+        out = yaml.safe_load(out)
+        if isinstance(out, list):
+            return out
+        return munchify(out)
 
     def get(self, resource_name='', out_yaml_format=True, selector=None):
         """
@@ -264,22 +267,24 @@ def get_ceph_tools_pod():
     return ct_pod
 
 
-def exec_ceph_cmd(ceph_cmd):
+def exec_ceph_cmd(ceph_cmd, format_arg='json-pretty'):
     """
     Execute a Ceph command on the Ceph tools pod
 
     Args:
         ceph_cmd (str): The Ceph command to execute on the Ceph tools pod
+        format_arg (str): The argument for format. Defaults to 'json-pretty'
 
     Returns:
-        dict: Ceph command output
+        dict: Ceph command output if the output is in Munch format
+        else, returns the output as a list
     """
     ocp_pod_obj = OCP(kind='pods', namespace=ENV_DATA['cluster_namespace'])
     ct_pod = get_ceph_tools_pod()
-    ceph_cmd += " --format json-pretty"
+    ceph_cmd += f" --format {format_arg}"
     out = ocp_pod_obj.exec_cmd_on_pod(ct_pod, ceph_cmd)
 
     # For some commands, like "ceph fs ls", the returned output is a list
-    if isinstance(out, list):
-        return [item.toDict() for item in out if item]
-    return out.toDict()
+    if isinstance(out, Munch):
+        return out.toDict()
+    return yaml.safe_load(out)
