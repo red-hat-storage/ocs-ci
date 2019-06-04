@@ -97,7 +97,7 @@ def teardown(self):
 
     # Delete project created for the testcase
     PROJECT.delete(resource_name=TEST_PROJECT)
-    #assert run_cmd(f"oc delete project {TEST_PROJECT}")
+
     delete_file(TEMP_YAML_FILE_SC)
 
 
@@ -292,4 +292,3 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         assert not any(pv in final_pv_list for pv in self.initial_pvs), (
             "PVs associated with deleted PVCs still exists"
         )
-
