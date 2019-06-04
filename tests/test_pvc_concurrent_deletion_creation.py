@@ -6,14 +6,14 @@ import subprocess
 import logging
 import pytest
 import yaml
-from utility.utils import run_cmd
-from utility.utils import delete_file
 import ocs.defaults as defaults
 
+from utility.utils import run_cmd
+from utility.utils import delete_file
 from ocs import ocp
 from ocs import exceptions
 from ocs import volumes
-from ocsci import tier1, ManageTest
+from ocsci.testlib import tier1, ManageTest
 from utility import templating
 
 log = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ SC = ocp.OCP(kind='StorageClass', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
 PVC = ocp.OCP(kind='PersistentVolumeClaim', namespace=TEST_PROJECT)
 PV = ocp.OCP(kind='PersistentVolume', namespace=TEST_PROJECT)
 PVOLC = volumes.PVC(namespace=TEST_PROJECT)
+PROJECT = ocp.OCP(kind='Project', namespace=TEST_PROJECT)
 
 
 @pytest.fixture(scope='class')
@@ -45,11 +46,13 @@ def setup(self):
     Create storage class
     Create PVCs
     """
-    sc_parms = {'storageclass_name': 'test-sc', 'blockPool': 'rbd',
-                'k8s_api_version': defaults.STORAGE_API_VERSION}
+    sc_parms = {
+        'storageclass_name': 'test-sc', 'blockPool': 'rbd',
+        'k8s_api_version': defaults.STORAGE_API_VERSION
+    }
 
     # Create project
-    assert run_cmd(f'oc new-project {TEST_PROJECT}')
+    assert PROJECT.new_project(TEST_PROJECT)
 
     # Create storage class
     create_storage_class(**sc_parms)
@@ -73,18 +76,28 @@ def teardown(self):
     Delete project
     """
     # Delete newly created PVCs
-    command = (f'for i in `seq 1 {self.number_of_pvc}`;do oc delete pvc '
-               f'{self.pvc_base_name_new}$i -n {TEST_PROJECT};done')
+    command = (
+        f'for i in `seq 1 {self.number_of_pvc}`;do oc delete pvc '
+        f'{self.pvc_base_name_new}$i -n {TEST_PROJECT};done'
+    )
     proc = run_async(command)
-    assert proc, (f'Failed to execute command for deleting '
-                  f'{self.number_of_pvc} PVCs')
+    assert proc, (
+        f'Failed to execute command for deleting {self.number_of_pvc} PVCs'
+    )
 
     # Verify command to delete PVCs
     ret, _, _ = proc.async_communicate()
     assert not ret, "Deletion of newly created PVCs failed"
 
+    # Delete storage class
     assert SC.delete(yaml_file=TEMP_YAML_FILE_SC)
-    assert run_cmd(f"oc delete project {TEST_PROJECT}")
+
+    # Switch to default project
+    run_cmd(f'oc project {defaults.ROOK_CLUSTER_NAMESPACE}')
+
+    # Delete project created for the testcase
+    PROJECT.delete(resource_name=TEST_PROJECT)
+    #assert run_cmd(f"oc delete project {TEST_PROJECT}")
     delete_file(TEMP_YAML_FILE_SC)
 
 
@@ -157,16 +170,19 @@ def verify_pvc_and_fetch_pv_name(pvc_name):
         pvc_name (str): Name of PVC
 
     Returns:
-        PV name if PV exists, None if PVC does not exists.
+        str: PV name if PV exists, None if PVC does not exist
     """
     try:
         pvc_info = PVC.get(pvc_name)
-        assert pvc_info['status']['phase'] == "Bound", (f'PVC {pvc_name} is '
-                                                        f'not in Bound state')
+        assert pvc_info['status']['phase'] == "Bound", (
+            f'PVC {pvc_name} is not in Bound state'
+        )
         pv_name = pvc_info['spec']['volumeName'].strip()
         assert pv_name, f'PVC {pvc_name} is Bound. But could not fetch PV name'
-    except exceptions.CommandFailed:
-        log.error(f'PVC {pvc_name} does not exists')
+    except exceptions.CommandFailed as exp:
+        assert "not found" in str(exp), (
+            f'Failed to fetch details of PVC {pvc_name}'
+        )
         return None
     return pv_name
 
@@ -185,7 +201,9 @@ def verify_pvc_not_exists(pvc_name):
         PVC.get(pvc_name)
         return False
     except exceptions.CommandFailed as exp:
-        assert "not found" in str(exp)
+        assert "not found" in str(exp), (
+            f'Failed to fetch details of PVC {pvc_name}'
+        )
         log.info(f'Expected: PVC {pvc_name} does not exists ')
     return True
 
@@ -227,11 +245,14 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         To exercise resource creation and deletion
         """
         # Start deleting 100 PVCs
-        command = (f'for i in `seq 1 {self.number_of_pvc}`;do oc '
-                   f'delete pvc {self.pvc_base_name}$i;done')
+        command = (
+            f'for i in `seq 1 {self.number_of_pvc}`;do oc delete pvc '
+            f'{self.pvc_base_name}$i;done'
+        )
         proc = run_async(command)
-        assert proc, (f'Failed to execute command for deleting '
-                      f'{self.number_of_pvc} PVCs')
+        assert proc, (
+            f'Failed to execute command for deleting {self.number_of_pvc} PVCs'
+        )
 
         # Create another 100 PVCs
         create_multiple_pvc(self.pvc_base_name_new, self.number_of_pvc)
@@ -239,22 +260,36 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         # Verify PVCs are Bound
         for count in range(1, self.number_of_pvc + 1):
             pvc_name = f'{self.pvc_base_name_new}{count}'
-            assert verify_pvc_and_fetch_pv_name(pvc_name)
+            assert verify_pvc_and_fetch_pv_name(pvc_name), (
+                f'PVC {pvc_name} does not exists'
+            )
 
         # Verify command to delete PVCs
         ret, out, err = proc.async_communicate()
-        log.info(f'Return values of command: {command}.'
-                 f'\nretcode:{ret}\nstdout:{out}\nstderr:{err}')
+        log.info(
+            f'Return values of command: {command}.\nretcode:{ret}\nstdout:'
+            f'{out}\nstderr:{err}'
+        )
         assert not ret, "Deletion of PVCs failed"
 
         # Verify PVCs deleted
         for count in range(1, self.number_of_pvc + 1):
             pvc_name = f'{self.pvc_base_name}{count}'
             assert verify_pvc_not_exists(pvc_name), (
-                f'Unexpected: PVC {pvc_name} still exists.')
+                f'Unexpected: PVC {pvc_name} still exists.'
+            )
 
         # Verify PVs deleted. PVs should be deleted because reclaimPolicy in
-        # storage class ise set as 'Delete'
+        # storage class is set as 'Delete'
         for pv in self.initial_pvs:
-            assert verify_pv_not_exists(pv), (f'Unexpected: PV {pv} '
-                                              f'still exists.')
+            assert verify_pv_not_exists(pv), (
+                f'Unexpected: PV {pv} still exists.'
+            )
+
+        # Verify PVs using ceph toolbox
+        ceph_cmd = 'rbd ls -p rbd'
+        final_pv_list = ocp.exec_ceph_cmd(ceph_cmd, 'json')
+        assert not any(pv in final_pv_list for pv in self.initial_pvs), (
+            "PVs associated with deleted PVCs still exists"
+        )
+
