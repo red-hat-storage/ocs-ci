@@ -12,7 +12,7 @@ import pytest
 from ocs import ocp
 from ocs import exceptions
 from utility import templating, utils
-from ocsci import tier1, ManageTest
+from ocsci.testlib import tier1, ManageTest
 
 log = logging.getLogger(__name__)
 TEMPLATE_DIR = "templates/CSI/rbd/"
