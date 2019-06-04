@@ -1,0 +1,17 @@
+apiVersion: ceph.rook.io/v1
+kind: CephCluster
+metadata:
+  name: rc
+  namespace: openshift-storage
+spec:
+  cephVersion:
+    allowUnsupported: false
+    image: ceph/ceph:v13.2.5-20190319
+  dashboard:
+    enabled: true
+  dataDirHostPath: /var/lib/rook
+  mon:
+    allowMultiplePerNode: false
+    count: 1
+  network:
+    hostNetwork: false

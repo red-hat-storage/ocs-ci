@@ -1,4 +1,4 @@
-"""
+ have """
 Holds all the 'kinds' required for OCS
 """
 CEPHBLOCKPOOL = 'CephBlockPool'
