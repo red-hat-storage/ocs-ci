@@ -6,7 +6,7 @@
 `run.py` - (**deprecated**) is the main script for ocs-ci. You can view the
 full usage details by passing in the `--help` argument.
 
-For pytest run python -m run_ocsci --help
+For pytest usage run: run-ci --help
 
 ```bash
 python run.py --help
@@ -31,7 +31,7 @@ There are a few arguments that are required ocs test execution:
 ## Useful pytest arguments
 
 Some non-required arguments that we end up using a lot. You can use
-`python -m run_ocsci --help` to see all the parameters and description which you can pass
+`run-ci  --help` to see all the parameters and description which you can pass
 to the pytest.
 
 * `--capture=no` - when using pdb or ipdb you have to turn of capture mode
@@ -133,6 +133,6 @@ run-ci -m "tier1 and manage" \
 Destroy is moved already to pytest. If you would like to destroy existing
 cluster you can run following command:
 ```bash
-python -m run_ocsci -m destroy --cluster-name kerberos_ID-ocs-deployment \
+run-ci -m destroy --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir tests/
 ```
