@@ -647,13 +647,14 @@ def run_cmd(cmd, **kwargs):
         stdin=subprocess.PIPE,
         **kwargs
     )
+
     log.debug(f"CMD output: {r.stdout.decode()}")
     if r.stderr:
         log.error(f"CMD error:: {r.stderr.decode()}")
     if r.returncode:
         raise CommandFailed(
             f"Error during execution of command: {cmd}."
-            f"\nError is {r.stderr.decode()}"
+            f"\nError is :  {r.stderr.decode()}"
         )
     return r.stdout.decode()
 
