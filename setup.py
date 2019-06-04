@@ -30,7 +30,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'run_ocsci=run_ocsci:main',
+            'run-ci=run_ocsci:main',
         ],
         'pytest11': [
             'ocscilib = ocsci.pytest_customization.ocscilib',
