@@ -4,7 +4,6 @@ import pytest
 import yaml
 
 from ocs import ocp
-from ocs import defaults
 from utility import templating
 
 
