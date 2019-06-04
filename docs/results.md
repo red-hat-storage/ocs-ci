@@ -3,7 +3,6 @@
 ## Report Portal
 
 Sending test results to report portal is supported via the [pytest agent](https://github.com/reportportal/agent-python-pytest).
-For in-depth details on how to utilize this plugin, check their documentation.
 
 #### Configuration
 
@@ -19,4 +18,3 @@ Ex.
 ```bash
 run-ci tests/test_pytest.py --reportportal --rp-launch CfgTest --rp-launch-desc "An example launch description" -c /home/$USER/report_portal.cfg
 ```
-Please check out the [doc](https://github.com/reportportal/agent-python-pytest) for more info on how to use this plugin properly.
