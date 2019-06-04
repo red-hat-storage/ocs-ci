@@ -11,7 +11,7 @@ from utility import templating
 
 logger = logging.getLogger(__name__)
 
-TEMPLATE_DIR = 'templates/ocs-deployment'
+TEMPLATE_DIR = os.path.join('templates', 'ocs-deployment')
 PVC_TEMPLATE = os.path.join(TEMPLATE_DIR, 'PersistentVolumeClaim.yaml')
 
 
@@ -47,7 +47,10 @@ def test_storageclass_cephfs_invalid(invalid_cephfs_storageclass, tmpdir):
     assert pvc_status == 'Pending'
 
     try:
-        logger.info('Wait for 60 seconds')
+        logger.info(
+            f"Wait 60 seconds for status of PVC {pvc_name} "
+            f"to change to Bound (it shouldn't change)"
+        )
         pvc_status_changed = pvc.wait_for_resource(
             resource_name=pvc_name,
             condition="Bound",
@@ -62,7 +65,7 @@ def test_storageclass_cephfs_invalid(invalid_cephfs_storageclass, tmpdir):
 
     pvc_status = pvc.get(resource_name=pvc_name)['status']['phase']
     logger.info(f"Status of PVC {pvc_name} after 60 seconds: {pvc_status}")
-    assert pvc_status == 'Pending'
+    assert pvc_status == 'Pending', f"PVC {pvc_name} hasn't reached status Pending"
 
     logger.info(f"Deleting PVC {pvc_name}")
     pvc.delete(yaml_file=temp_pvc_file)
