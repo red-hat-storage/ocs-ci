@@ -38,8 +38,7 @@ def invalid_cephfs_storageclass(tmpdir, request):
         str: Name of created StorageClass
     """
     storageclass = ocp.OCP(
-        kind='storageclass',
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind='storageclass'
     )
     logger.info(
         f"SETUP - creating storageclass "
