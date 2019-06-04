@@ -29,7 +29,7 @@ OPENSHIFT_REST_CLIENT_API_VERSION = 'v1'
 # Be aware that variables defined above and below are not used anywhere in the
 # config files and their sections when we rendering config!
 
-INSTALLER_VERSION = '4.1.0-rc.3'
+INSTALLER_VERSION = '4.1.0-rc.5'
 CLIENT_VERSION = INSTALLER_VERSION
 AWS_REGION = 'us-east-2'
 ROOK_CLUSTER_NAMESPACE = 'openshift-storage'
