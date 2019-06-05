@@ -17,7 +17,7 @@ setup(
         'apache-libcloud',
         'docopt==0.6.2',
         'gevent==1.4.0',
-        'reportportal-client==3.2.0',
+        'reportportal-client @ git+https://github.com/reportportal/client-Python.git@master',
         'requests==2.21.0',
         'paramiko==2.4.2',
         'pyyaml>=4.2b1',
@@ -27,6 +27,7 @@ setup(
         'boto3',
         'munch',
         'pytest',
+        'pytest-reportportal==1.0.5',
     ],
     entry_points={
         'console_scripts': [
