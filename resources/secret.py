@@ -5,6 +5,7 @@ import os
 import logging
 import ocs.defaults as default
 import base64
+import tempfile
 
 
 from templating import dump_to_temp_yaml
@@ -36,7 +37,9 @@ class Secret(BaseOCSClass):
         self.secret_data = {
             'base64_encoded_admin_password': get_admin_key()
         }
-
+        self.temp_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='SECRET_', delete=False
+        )
     # def get(self, resource_name, selector=''):
     #     return self.ocp.get(resource_name=resource_name, selector=selector)
 
@@ -45,8 +48,8 @@ class Secret(BaseOCSClass):
         template = os.path.join(
             default.TEMPLATES_DIR, f"csi-{self.interface}-secret.yaml"
         )
-        dump_to_temp_yaml(template, default.TEMP_YAML, **self.secret_data)
-        assert self.ocp.create(yaml_file=default.TEMP_YAML)
+        dump_to_temp_yaml(template, self.temp_yaml.name, **self.secret_data)
+        assert self.ocp.create(yaml_file=self.temp_yaml.name)
 
     def delete(self):
         # TODO: implement the functionality

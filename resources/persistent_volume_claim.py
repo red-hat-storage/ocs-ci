@@ -1,8 +1,8 @@
 """
 General PVC object
 """
-import os
 import logging
+import tempfile
 import ocs.defaults as default
 import yaml
 
@@ -27,10 +27,7 @@ class PVC(BaseOCSClass):
         kwargs:
             Copy of ocs/defaults.py::PVC_DICT dictionary
         """
-        template = os.path.join(
-            "templates/ocs-deployment", "PersistentVolumeClaim_new.yaml"
-        )
-        self.pvc_data = yaml.safe_load(open(template, 'r'))
+        self.pvc_data = default.PVC_DICT
         self.pvc_data.update(kwargs)
         super(PVC, self).__init__(
             self.pvc_data['apiVersion'], self.pvc_data['kind'],
@@ -38,6 +35,9 @@ class PVC(BaseOCSClass):
         )
         self.interface = interface
         self._name = self.pvc_data['pvc_name']
+        self.temp_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='PVC_', delete=False
+        )
 
     @property
     def name(self):
@@ -52,9 +52,9 @@ class PVC(BaseOCSClass):
         """
         log.info(f"Creating a PVC")
 
-        with open(default.TEMP_YAML, 'w') as yaml_file:
+        with open(self.temp_yaml.name, 'w') as yaml_file:
             yaml.dump(self.pvc_data, yaml_file)
-        assert self.ocp.create(yaml_file=default.TEMP_YAML)
+        assert self.ocp.create(yaml_file=self.temp_yaml.name)
         if wait:
             return self.ocp.wait_for_resource(
                 condition='Bound', resource_name=self.name
@@ -65,6 +65,6 @@ class PVC(BaseOCSClass):
         assert self.ocp.delete(resource_name=self.name)
 
     def apply(self, **data):
-        with open(default.TEMP_YAML, 'w') as yaml_file:
+        with open(self.temp_yaml.name, 'w') as yaml_file:
             yaml.dump(data, yaml_file)
-        assert self.ocp.apply(yaml_file=default.TEMP_YAML)
+        assert self.ocp.apply(yaml_file=self.temp_yaml.name)

@@ -4,15 +4,19 @@ General OCP object
 import logging
 from ocs.ocp import OCP
 
+from ocs import defaults
+
 log = logging.getLogger(__name__)
 
 
 class BaseOCSClass(object):
     """
-    A basic OCP object to run basic 'oc' commands
+    Base OCSClass inherited by StorageClass, CephFilesystem, secrete,PVC etc
     """
 
-    def __init__(self, api_version='v1', kind='Service', namespace=None):
+    def __init__(self, api_version=defaults.API_VERSION,
+                 kind='Service', namespace=None
+                 ):
         """
         Initializer function
 
