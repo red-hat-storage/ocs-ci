@@ -36,6 +36,9 @@ def create_resource(desired_status=defaults.STATUS_AVAILABLE, **kwargs):
         desired_status (str): The status of the resource to wait for
         kwargs (dict): Dictionary of the OCS resource
 
+    Returns:
+        OCS: An OCS instance
+
     Raises:
         AssertionError: In case of any failure
     """
