@@ -9,6 +9,7 @@ from ocs import ocp, defaults
 from ocsci.config import ENV_DATA
 from ocsci.testlib import tier1, ManageTest
 from resources.ocs import OCS
+from tests import helpers
 
 log = logging.getLogger(__name__)
 
@@ -39,9 +40,14 @@ def setup(self):
     """
     Setting up the environment for the test
     """
+    self.fs_data = defaults.CEPHFILESYSTEM_DICT.copy()
+    self.fs_data['metadata']['name'] = helpers.create_unique_resource_name(
+        'test', 'cephfs'
+    )
+    self.fs_data['metadata']['namespace'] = ENV_DATA['cluster_namespace']
     global CEPH_OBJ
     CEPH_OBJ = OCS(**self.fs_data)
-    OCS.create()
+    CEPH_OBJ.create()
 
     # TODO: Change to:
     # CEPH_OBJ = helpers.create_resource(**self.fs_data)
@@ -82,8 +88,6 @@ class TestCephFilesystemCreation(ManageTest):
     """
     Testing creation of Ceph FileSystem
     """
-    fs_data = defaults.CEPHFILESYSTEM_DICT.copy()
-    fs_data['metadata']['name'] = 'my-cephfs1'
     new_active_count = 2
 
     def test_cephfilesystem_creation(self):
