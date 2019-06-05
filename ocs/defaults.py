@@ -68,6 +68,11 @@ ENV_DATA = {
 TEMPLATES_DIR = "templates"
 TEMP_YAML = os.path.join(TEMPLATES_DIR, "temp.yaml")
 
+TOOL_POD_DICT = load_yaml_to_dict(
+    os.path.join(
+        f"{TEMPLATE_DIR}", "toolbox_pod.yaml"
+    )
+)
 CEPHFILESYSTEM_DICT = load_yaml_to_dict(
     os.path.join(
         f"{TEMPLATE_DIR}", "cephfilesystem_new.yaml"

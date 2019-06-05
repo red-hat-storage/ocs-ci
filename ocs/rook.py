@@ -10,7 +10,7 @@ import logging
 import os
 
 import oc.openshift_ops as ac
-from ocs.pod import Pod
+import resources.pod as pod
 import ocs.defaults as default
 from utility.templating import generate_yaml_from_jinja2_template_with_data
 from ocsci.config import ENV_DATA
@@ -74,9 +74,9 @@ class RookCluster(object):
             f'/apis/ceph.rook.io/{self.rook_crd_ver}'
             f'/namespaces/{self._namespace}/'
         )
-        self._ocs_pods = list()
+        self._ocs_pods = pod.get_all_pods(self._namespace)
         self._api_client = ac.OCP()  # TODO: APIClient abstractions
-        self.ocs_pod_init()
+
 
     @property
     def cluster_name(self):
@@ -91,56 +91,6 @@ class RookCluster(object):
         # TODO: Decide whether to return list or yield
         for pod in self._ocs_pods:
             yield pod
-
-    def ocs_pod_init(self):
-        """
-        Not to be confused with actual pod init in oc cluster.
-        This is just an initializer for ```Class Pod``` from ocs/pod module.
-        """
-
-        def _get_ocs_pods():
-            """
-            Fetch pod info from openshift rook cluster
-
-            This function scans all mon, osd, client pods from the namespace
-            `_namespace` and fills in the details in `_ocs_pods`
-
-            Yields:
-                pod (str): name of the pod
-            """
-
-            pod_list = self._api_client.get_pods(
-                namespace=self._namespace,
-                label_selector='app != rook-ceph-osd-prepare'
-            )
-            for each in pod_list:
-                yield each
-
-        for pod in _get_ocs_pods():
-            pod_labels = self._get_pod_labels(
-                pod_name=pod,
-                namespace=self._namespace,
-            )
-            # Instantiate pod object for this pod
-            podobj = Pod(pod, self._namespace, pod_labels)
-            self._ocs_pods.append(podobj)
-
-    def _get_pod_labels(self, pod_name, namespace):
-        """
-        Get labels(openshift labels) on a pod
-
-        Args:
-            pod_name (str): Name of the pod
-            namespace (str): Namespace in which this pod lives
-
-        Returns:
-            dict: Labels from pod metadata
-
-        Note: this function is only for internal consumption, end users would
-        be using pod.labels to get labels on a given pod instance.
-        """
-
-        return self._api_client.get_labels(pod_name, namespace)
 
     def create_cephblockpool(
         self,

@@ -2,7 +2,7 @@ import os
 from kubernetes import client, config
 os.sys.path.append(os.path.dirname(os.getcwd()))
 
-from ocs import pod
+from resources import pod
 
 
 def main():
@@ -13,15 +13,19 @@ def main():
         label_selector='app=rook-ceph-tools'
     )
 
-    for i in ret.items:
-        namespace = i.metadata.namespace
-        name = i.metadata.name
-        break
+    namespace = ret.items[0].metadata.namespace
+    name = ret.items[0].metadata.name
 
+    pod_data = {
+        'metadata': {
+            'name': name,
+            'namespace': namespace
+        }
+    }
     cmd = "ceph osd df"
-    po = pod.Pod(name, namespace)
+    po = pod.Pod(**pod_data)
 
-    out, err, ret = po.exec_command(cmd=cmd, timeout=20)
+    out, err, ret = po.exec_cmd_on_pod(command=cmd)
     if out:
         print(out)
     if err:

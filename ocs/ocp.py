@@ -4,9 +4,8 @@ General OCP object
 import os
 import logging
 import yaml
-from ocsci.config import ENV_DATA
-from munch import munchify
 
+from munch import munchify
 from ocs.exceptions import CommandFailed
 from utility.utils import TimeoutSampler
 from utility.utils import run_cmd
@@ -231,55 +230,3 @@ class OCP(object):
                 return True
 
         return False
-
-    def exec_cmd_on_pod(self, pod_name, command):
-        """
-        Execute a command on a pod (e.g. oc rsh)
-
-        Args:
-            pod_name (str): The pod on which the command should be executed
-            command (str): The command to execute on the given pod
-
-        Returns:
-            Munch Obj: This object represents a returned yaml file
-        """
-        rsh_cmd = f"rsh {pod_name} "
-        rsh_cmd += command
-        return self.exec_oc_cmd(rsh_cmd)
-
-
-# the following functions location is temporary, will be changed to ocs class
-def get_ceph_tools_pod():
-    """
-    Get the Ceph tools pod
-
-    Returns:
-        str: The Ceph tools pod name
-    """
-    ocp_pod_obj = OCP(kind='pods', namespace=ENV_DATA['cluster_namespace'])
-    ct_pod = ocp_pod_obj.get(
-        selector='app=rook-ceph-tools'
-    ).toDict()['items'][0]['metadata']['name']
-    assert ct_pod, f"No Ceph tools pod found"
-    return ct_pod
-
-
-def exec_ceph_cmd(ceph_cmd):
-    """
-    Execute a Ceph command on the Ceph tools pod
-
-    Args:
-        ceph_cmd (str): The Ceph command to execute on the Ceph tools pod
-
-    Returns:
-        dict: Ceph command output
-    """
-    ocp_pod_obj = OCP(kind='pods', namespace=ENV_DATA['cluster_namespace'])
-    ct_pod = get_ceph_tools_pod()
-    ceph_cmd += " --format json-pretty"
-    out = ocp_pod_obj.exec_cmd_on_pod(ct_pod, ceph_cmd)
-
-    # For some commands, like "ceph fs ls", the returned output is a list
-    if isinstance(out, list):
-        return [item.toDict() for item in out if item]
-    return out.toDict()
