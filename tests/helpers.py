@@ -62,24 +62,3 @@ def create_resource(desired_status=defaults.STATUS_AVAILABLE, **kwargs):
         condition=desired_status, resource_name=created_resource.metadata.name
     ), f"{ocs_obj.kind} {ocs_obj.metadata.name} failed to reach status Available"
     return ocs_obj
-
-
-def apply_change_on_resource(ocs_obj, **kwargs):
-    """
-    Apply changes on an OCS resource
-
-    Args:
-        ocs_obj (BaseOCSClass): An instance of BaseOCSClass
-        kwargs (dict): Dictionary of the OCS resource with the changes to apply
-    """
-    ocs_obj.apply(**kwargs)
-
-
-def delete_resource(resource_obj):
-    """
-    Delete an OCS resource
-
-    Args:
-        resource_obj: A BaseOCSClass object
-    """
-    resource_obj.delete()
