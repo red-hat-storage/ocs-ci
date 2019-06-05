@@ -40,7 +40,7 @@ def setup(self):
     Setting up the environment for the test
     """
     global CEPH_OBJ
-    CEPH_OBJ = helpers.create_ocs_obj(**self.fs_data)
+    CEPH_OBJ = helpers.create_resource(**self.fs_data)
     assert POD.wait_for_resource(
         condition='Running', selector='app=rook-ceph-mds'
     )
