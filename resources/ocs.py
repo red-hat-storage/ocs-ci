@@ -11,7 +11,7 @@ from utility import templating
 log = logging.getLogger(__name__)
 
 
-class BaseOCSClass(object):
+class OCS(object):
     """
     Base OCSClass
     """

@@ -7,13 +7,12 @@ import ocs.defaults as default
 import yaml
 import tempfile
 
-
-from resources.base_resource import BaseOCSClass
+from resources.ocs import OCS
 
 log = logging.getLogger(__name__)
 
 
-class StorageClass(BaseOCSClass):
+class StorageClass(OCS):
     """
     A basic storage class kind resource
     """
