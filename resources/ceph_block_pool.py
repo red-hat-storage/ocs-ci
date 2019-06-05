@@ -49,4 +49,3 @@ class CephBlockPool(BaseOCSClass):
 
     def delete(self):
         self.ocp.delete(resource_name=self.name)
-
