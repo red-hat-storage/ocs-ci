@@ -8,7 +8,7 @@ import pytest
 from ocs import ocp, defaults
 from ocsci.config import ENV_DATA
 from ocsci.testlib import tier1, ManageTest
-from tests import helpers
+from resources.ocs import OCS
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +40,11 @@ def setup(self):
     Setting up the environment for the test
     """
     global CEPH_OBJ
-    CEPH_OBJ = helpers.create_resource(**self.fs_data)
+    CEPH_OBJ = OCS(**self.fs_data)
+    OCS.create()
+
+    # TODO: Change to:
+    # CEPH_OBJ = helpers.create_resource(**self.fs_data)
     assert POD.wait_for_resource(
         condition='Running', selector='app=rook-ceph-mds'
     )
