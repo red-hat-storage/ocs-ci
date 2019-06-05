@@ -25,15 +25,19 @@ def create_unique_resource_name(resource_description, resource_type):
     current_date_time = (
         datetime.datetime.now().strftime("%d%H%M%S%f")
     )
-    return f"{resource_type}_{resource_description[:23]}_{current_date_time[:10]}"
+    return f"{resource_type}-{resource_description[:23]}-{current_date_time[:10]}"
 
 
-def create_resource(desired_status=defaults.STATUS_AVAILABLE, **kwargs):
+def create_resource(
+    desired_status=defaults.STATUS_AVAILABLE, wait=True, **kwargs
+):
     """
     Create a resource
 
     Args:
         desired_status (str): The status of the resource to wait for
+        wait (bool): True for waiting for the resource to reach the desired
+            status, False otherwise
         kwargs (dict): Dictionary of the OCS resource
 
     Returns:
@@ -43,11 +47,14 @@ def create_resource(desired_status=defaults.STATUS_AVAILABLE, **kwargs):
         AssertionError: In case of any failure
     """
     ocs_obj = OCS(**kwargs)
+    resource_name = kwargs.get('metadata').get('name')
     created_resource = ocs_obj.create()
     assert created_resource, (
         f"Failed to create resource {created_resource.metadata.name}"
     )
-    assert ocs_obj.ocp.wait_for_resource(
-        condition=desired_status, resource_name=created_resource.metadata.name
-    ), f"{ocs_obj.kind} {ocs_obj.metadata.name} failed to reach status {desired_status}"
-    return ocs_obj
+    if wait:
+        assert ocs_obj.ocp.wait_for_resource(
+            condition=desired_status, resource_name=resource_name
+        ), f"{ocs_obj.kind} {resource_name} failed to reach"
+        f"status {desired_status}"
+        return ocs_obj
