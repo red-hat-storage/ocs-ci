@@ -2,8 +2,7 @@
 General CephFS object
 """
 import logging
-import ocs.defaults as default
-import yaml
+
 from utility.templating import load_yaml_to_dict
 from resources.base_resource import BaseOCSClass
 
@@ -24,29 +23,5 @@ class CephFileSystem(BaseOCSClass):
         kwargs:
             Copy of ocs/defaults.py::CEPHFILESYSTEM dictionary
         """
-        self.fs_data = default.CEPHFILESYSTEM_DICT
-        self.fs_data.update(kwargs)
-        super(CephFileSystem, self).__init__(
-            self.fs_data['apiVersion'], self.fs_data['kind'],
-            self.fs_data['metadata']['namespace']
-        )
-        self._name = self.fs_data['metadata']['name']
-
-    @property
-    def name(self):
-        return self._name
-
-    def reload(self):
-        self.fs_data = load_yaml_to_dict(self.temp_yaml.name)
-
-    def get(self, resource_name):
-        return self.ocp.get(resource_name=resource_name)
-
-    def create(self):
-        log.info(f"Adding CephFS with name {self.name}")
-        with open(self.temp_yaml.name, 'w') as yaml_file:
-            yaml.dump(self.fs_data, yaml_file)
-        return self.ocp.create(yaml_file=self.temp_yaml.name)
-
-    def delete(self):
-        self.ocp.delete(resource_name=self.name)
+        self.data = kwargs
+        super(CephFileSystem, self).__init__(**kwargs)
