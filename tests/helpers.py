@@ -60,5 +60,5 @@ def create_resource(desired_status=defaults.STATUS_AVAILABLE, **kwargs):
     )
     assert ocs_obj.ocp.wait_for_resource(
         condition=desired_status, resource_name=created_resource.metadata.name
-    ), f"{ocs_obj.kind} {ocs_obj.metadata.name} failed to reach status Available"
+    ), f"{ocs_obj.kind} {ocs_obj.metadata.name} failed to reach status {desired_status}"
     return ocs_obj
