@@ -6,6 +6,7 @@ import ocs.defaults as default
 import yaml
 import tempfile
 from utility.templating import load_yaml_to_dict
+from utility import utils
 from resources.base_resource import BaseOCSClass
 
 
@@ -23,7 +24,7 @@ class CephFileSystem(BaseOCSClass):
         Initializer function
 
         kwargs:
-            Copy of ocs/defaults.py::CEPHFILESYSTEM dictionary
+            Copy of ocs/defaults.py::CEPHFILESYSTEM_DICT dictionary
         """
         self.fs_data = default.CEPHFILESYSTEM_DICT
         self.fs_data.update(kwargs)
@@ -44,8 +45,8 @@ class CephFileSystem(BaseOCSClass):
     def reload(self):
         self.fs_data = load_yaml_to_dict(self.temp_yaml.name)
 
-    def get(self, resource_name):
-        return self.ocp.get(resource_name=resource_name)
+    def get(self):
+        return self.ocp.get(resource_name=self.name)
 
     def create(self):
         log.info(f"Adding CephFS with name {self.name}")
@@ -60,3 +61,6 @@ class CephFileSystem(BaseOCSClass):
         with open(self.temp_yaml.name, 'w') as yaml_file:
             yaml.dump(data, yaml_file)
         assert self.ocp.apply(yaml_file=self.temp_yaml.name)
+
+    def delete_temp_yaml_file(self):
+        utils.delete_file(self.temp_yaml.name)

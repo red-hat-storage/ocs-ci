@@ -7,7 +7,7 @@ import ocs.defaults as default
 import yaml
 import tempfile
 
-
+from utility import utils
 from resources.base_resource import BaseOCSClass
 
 log = logging.getLogger(__name__)
@@ -25,6 +25,7 @@ class StorageClass(BaseOCSClass):
         Args:
             interface (str): The ceph interface to use for creating the
             storage class - 'cephfs', 'rbd', 'rgw'
+
         kwargs:
             Copy of ocs/defaults.py::STORAGE_CLASS_DICT dictionary
         """
@@ -73,3 +74,6 @@ class StorageClass(BaseOCSClass):
         with open(self.temp_yaml.name, 'w') as yaml_file:
             yaml.dump(data, yaml_file)
         assert self.ocp.apply(yaml_file=self.temp_yaml.name)
+
+    def delete_temp_yaml_file(self):
+        utils.delete_file(self.temp_yaml.name)

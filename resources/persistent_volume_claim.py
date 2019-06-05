@@ -6,6 +6,7 @@ import tempfile
 import ocs.defaults as default
 import yaml
 
+from utility import utils
 from resources.base_resource import BaseOCSClass
 
 log = logging.getLogger(__name__)
@@ -68,3 +69,6 @@ class PVC(BaseOCSClass):
         with open(self.temp_yaml.name, 'w') as yaml_file:
             yaml.dump(data, yaml_file)
         assert self.ocp.apply(yaml_file=self.temp_yaml.name)
+
+    def delete_temp_yaml_file(self):
+        utils.delete_file(self.temp_yaml.name)

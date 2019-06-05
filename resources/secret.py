@@ -40,8 +40,10 @@ class Secret(BaseOCSClass):
         self.temp_yaml = tempfile.NamedTemporaryFile(
             mode='w+', prefix='SECRET_', delete=False
         )
-    # def get(self, resource_name, selector=''):
-    #     return self.ocp.get(resource_name=resource_name, selector=selector)
+
+    def get(self):
+        # TODO: implement the functionality
+        pass
 
     def create(self):
         log.info(f"Creating secret for {self.interface}")
@@ -52,8 +54,7 @@ class Secret(BaseOCSClass):
         assert self.ocp.create(yaml_file=self.temp_yaml.name)
 
     def delete(self):
-        # TODO: implement the functionality
-        pass
+        self.ocp.delete(yaml_file=self.temp_yaml)
 
     def apply(self):
         # TODO: implement the functionality
