@@ -1,17 +1,12 @@
 """
 Helper functions file for OCS QE
 """
-import os
 import logging
 import datetime
 from ocs import defaults
 from resources import ceph_file_system
 
 logger = logging.getLogger(__name__)
-
-
-TEMP_YAML = os.path.join("templates/ocs-deployment", "temp.yaml")
-TEMPLATES_DIR = "templates/ocs-deployment"
 
 
 def create_unique_resource_name(resource_description, resource_type):
