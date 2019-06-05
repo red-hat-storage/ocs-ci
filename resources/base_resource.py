@@ -44,3 +44,7 @@ class BaseOCSClass(object):
     @property
     def namespace(self):
         return self._namespace
+
+    @property
+    def ocp(self):
+        return self.ocp

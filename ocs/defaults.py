@@ -24,6 +24,12 @@ ROOK_API_VERSION = 'ceph.rook.io/v1'
 OCP_API_VERSION = 'project.openshift.io/v1'
 OPENSHIFT_REST_CLIENT_API_VERSION = 'v1'
 
+CEPHFILESYSTEM = "CephFileSystem"
+CEPHBLOCKPOOL = "CephBlockPool"
+PVC = "PersistentVolumeClaim"
+STORAGECLASS = "StorageClass"
+SECRET = "Secret"
+
 # Those variables below are duplicate at the moment from default_config.yaml
 # and once we drop support for old runner we will remove those variables from
 # here and will have them defined only on one place.
@@ -41,6 +47,11 @@ API_VERSION = "v1"
 CEPH_IMAGE = "ceph/ceph:v14.2.0-20190410"
 ROOK_IMAGE = "rook/ceph:master"
 DEPLOYMENT_PLATFORM = 'AWS'
+
+STATUS_PENDING = 'Pending'
+STATUS_AVAILABLE = 'Available'
+STATUS_RUNNING = 'Running'
+STATUS_TERMINATING = 'Terminating'
 
 # This section is suppose to be available just from ocsci/config.py module from
 # ENV_DATA dictionary. Once we drop support of old runner we will delete this
