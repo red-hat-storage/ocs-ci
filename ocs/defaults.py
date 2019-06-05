@@ -73,11 +73,6 @@ CEPHFILESYSTEM_DICT = load_yaml_to_dict(
         f"{TEMPLATE_DIR}", "cephfilesystem_new.yaml"
     )
 )
-CEPHBLOCKPOOL_DICT = load_yaml_to_dict(
-    os.path.join(
-        f"{TEMPLATE_DIR}", "cephblockpool_new.yaml"
-    )
-)
 PVC_DICT = load_yaml_to_dict(
     os.path.join(
         f"{TEMPLATE_DIR}", "PersistentVolumeClaim_new.yaml"
