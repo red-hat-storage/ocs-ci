@@ -1,5 +1,6 @@
 import logging
 import random
+from ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 
@@ -45,17 +46,16 @@ def run(**kw):
         f"{pool} "
         f"{pg_num} "
     )
-    out, err, ret = client.exec_command(cmd=pool_create, check_ec=True)
-    if ret:
-        log.error(f"Pool creation failed for {pool}")
-        log.error(err)
-        return ret
+    try:
+        ret = client.exec_ceph_cmd(ceph_cmd=pool_create)
+    except CommandFailed as ex:
+        log.error(f"Pool creation failed for {pool}\nError is: {ex}")
+        return False
     log.info(f"Pool {pool} created")
-    log.info(out)
+    log.info(ret)
 
     block = str(config.get('size', 4 << 20))
     time = config.get('time', 120)
-    timeout = time + 10
     time = str(time)
 
     rados_bench = (
@@ -67,17 +67,12 @@ def run(**kw):
         f"{op} "
         f"{cleanup} "
     )
-    out, err, ret = client.exec_command(
-        cmd=rados_bench,
-        check_ec=True,
-        long_running=True,
-        timeout=timeout
-    )
-    if ret:
-        log.error("Rados bench failed")
-        log.error(err)
-        return ret
+    try:
+        ret = client.exec_ceph_cmd(ceph_cmd=rados_bench)
+    except CommandFailed as ex:
+        log.error(f"Rados bench failed\n Error is: {ex}")
+        return False
 
-    log.info(out)
+    log.info(ret)
     log.info("Finished radosbench")
     return ret
