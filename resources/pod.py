@@ -12,12 +12,12 @@ from ocs import defaults, kinds
 from ocsci.config import ENV_DATA
 from ocs.exceptions import CommandFailed
 
-from resources.base_resource import BaseOCSClass
+from resources.ocs import OCS
 
 logger = logging.getLogger(__name__)
 
 
-class Pod(BaseOCSClass):
+class Pod(OCS):
     """
     Handles per pod related context
     """
@@ -30,10 +30,7 @@ class Pod(BaseOCSClass):
             Copy of ocs/defaults.py::<some pod> dictionary
         """
         self.pod_data = kwargs
-        super(Pod, self).__init__(
-            self.pod_data.get('apiVersion'), self.pod_data.get('kind'),
-            self.pod_data.get('metadata').get('namespace')
-        )
+        super(Pod, self).__init__(**kwargs)
 
         self.temp_yaml = tempfile.NamedTemporaryFile(
             mode='w+', prefix='POD_', delete=False
@@ -63,9 +60,9 @@ class Pod(BaseOCSClass):
     def labels(self):
         return self._labels
 
-    def set_role(self, role):
+    def add_role(self, role):
         """
-        Set a new role for this pod
+        Adds a new role for this pod
 
         Args:
             role (str): New role to be assigned for this pod
@@ -96,8 +93,7 @@ class Pod(BaseOCSClass):
         Returns:
             dict: All the openshift labels on a given pod
         """
-        data = self.pod_data.get('metadata').get('labels')
-        return {k: v for k, v in data.items()}
+        return self.pod_data.get('metadata').get('labels')
 
     def exec_ceph_cmd(self, ceph_cmd):
         """
@@ -155,4 +151,5 @@ def get_ceph_tools_pod():
         selector='app=rook-ceph-tools'
     )['items'][0]
     assert ct_pod, f"No Ceph tools pod found"
-    return ct_pod
+    ceph_pod = Pod(**ct_pod)
+    return ceph_pod

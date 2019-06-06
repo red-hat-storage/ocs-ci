@@ -5,7 +5,6 @@ import os
 import logging
 import yaml
 
-from munch import munchify
 from ocs.exceptions import CommandFailed
 from utility.utils import TimeoutSampler
 from utility.utils import run_cmd
@@ -52,7 +51,7 @@ class OCP(object):
                 without the initial 'oc' at the beginning
 
         Returns:
-            Munch Obj: this object represents a returned yaml file
+            dict: Dictionary represents a returned yaml file
         """
         oc_cmd = "oc "
         kubeconfig = os.getenv('KUBECONFIG')
@@ -64,7 +63,16 @@ class OCP(object):
 
         oc_cmd += command
         out = run_cmd(cmd=oc_cmd)
-        return munchify(yaml.safe_load(out))
+        # Removing any part of output which is out of the yaml/json
+        try:
+            if '{' in out:
+                if not out.startswith('{'):
+                    if ':' not in out[:out.index('{')]:
+                        out = out[out.index('{'):]
+        except ValueError:
+            pass
+
+        return yaml.safe_load(out)
 
     def get(self, resource_name='', out_yaml_format=True, selector=None):
         """
@@ -72,13 +80,14 @@ class OCP(object):
 
         Args:
             resource_name (str): The resource name to fetch
+            out_yaml_format (bool): Adding '-o yaml' to oc command
             selector (str): The label selector to look for
 
         Example:
             get('my-pv1')
 
         Returns:
-            Munch Obj: This object represents a returned yaml file
+            dict: Dictionary represents a returned yaml file
         """
         command = f"get {self.kind} {resource_name}"
         if selector is not None:
@@ -99,7 +108,7 @@ class OCP(object):
                 formatted to a yaml like string
 
         Returns:
-            Munch Obj: this object represents a returned yaml file
+            dict: Dictionary represents a returned yaml file
         """
         if not (yaml_file or resource_name):
             raise CommandFailed(
@@ -129,7 +138,7 @@ class OCP(object):
                 completion
 
         Returns:
-            Munch Obj: this object represents a returned yaml file
+            dict: Dictionary represents a returned yaml file
 
         Raises:
             CommandFailed: In case yaml_file and resource_name wasn't provided
@@ -158,7 +167,7 @@ class OCP(object):
                 file.yaml
 
         Returns:
-            Munch Obj: this object represents a returned yaml file
+            dict: Dictionary represents a returned yaml file
         """
         command = f"apply -f {yaml_file}"
         return self.exec_oc_cmd(command)
@@ -210,14 +219,14 @@ class OCP(object):
         ):
             # Only 1 resource expected to be returned
             if resource_name:
-                if sample.status.phase == condition:
+                if sample.get('status').get('phase') == condition:
                     return True
             # More than 1 resources returned
-            elif sample.kind == 'List':
+            elif sample.get('kind') == 'List':
                 in_condition = []
                 sample = sample['items']
                 for item in sample:
-                    if item.status.phase == condition:
+                    if item.get('status').get('phase') == condition:
                         in_condition.append(item)
                     if resource_count:
                         if len(in_condition) == resource_count and (

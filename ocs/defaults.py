@@ -70,16 +70,16 @@ TEMP_YAML = os.path.join(TEMPLATES_DIR, "temp.yaml")
 
 TOOL_POD_DICT = load_yaml_to_dict(
     os.path.join(
-        f"{TEMPLATE_DIR}", "toolbox_pod.yaml"
+        TEMPLATE_DIR, "toolbox_pod.yaml"
     )
 )
 CEPHFILESYSTEM_DICT = load_yaml_to_dict(
     os.path.join(
-        f"{TEMPLATE_DIR}", "cephfilesystem_new.yaml"
+        TEMPLATE_DIR, "cephfilesystem_new.yaml"
     )
 )
 PVC_DICT = load_yaml_to_dict(
     os.path.join(
-        f"{TEMPLATE_DIR}", "PersistentVolumeClaim_new.yaml"
+        TEMPLATE_DIR, "PersistentVolumeClaim_new.yaml"
     )
 )

@@ -77,7 +77,6 @@ class RookCluster(object):
         self._ocs_pods = pod.get_all_pods(self._namespace)
         self._api_client = ac.OCP()  # TODO: APIClient abstractions
 
-
     @property
     def cluster_name(self):
         return self._cluster_name
@@ -88,9 +87,7 @@ class RookCluster(object):
 
     @property
     def pods(self):
-        # TODO: Decide whether to return list or yield
-        for pod in self._ocs_pods:
-            yield pod
+        return self._ocs_pods
 
     def create_cephblockpool(
         self,
