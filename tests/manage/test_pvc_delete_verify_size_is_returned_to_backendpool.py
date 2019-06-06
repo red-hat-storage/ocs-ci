@@ -3,15 +3,15 @@ A test case to verify after deleting pvc whether
 size is returned to backend pool
 """
 import logging
+import time
 import pytest
 
 import ocs.defaults as defaults
+import ocs.exceptions as ex
 from ocsci.testlib import tier1, ManageTest
-from utility.utils import run_cmd
 from utility import templating
-from ocs.ocp import get_ceph_tools_pod
 from ocs.utils import create_oc_resource
-from ocs import ocp, pod
+from ocs import ocp
 
 log = logging.getLogger(__name__)
 _templating = templating.Templating()
@@ -46,6 +46,11 @@ SECRET = ocp.OCP(
     kind='Secret', namespace="default"
 )
 
+# PV
+PV = ocp.OCP(
+    kind='PersistentVolume', namespace=PROJECT_NAME
+)
+
 # PVC
 PVC = ocp.OCP(
     kind='PersistentVolumeClaim', namespace=PROJECT_NAME
@@ -70,7 +75,7 @@ def create_cephblock_pool(pool_name):
     )
 
     # Validate cephblock created on oc
-    assert CBP.get(resource_name=pool_name)
+    assert CBP.get(f'{pool_name}')
 
     # Validate cephblock created on ceph
     _rc = False
@@ -93,7 +98,7 @@ def create_storageclass(sc_name, pool_name):
     )
 
     # Validate storage class created
-    assert SC.get(resource_name=sc_name)
+    assert SC.get(f'{sc_name}')
 
 
 def create_secret(secret_name, pool_name):
@@ -121,7 +126,7 @@ def create_secret(secret_name, pool_name):
     )
 
     # Validate secret is created
-    assert SECRET.get(resource_name=secret_name)
+    assert SECRET.get(f'{secret_name}')
 
 
 def check_ceph_used_space():
@@ -130,10 +135,10 @@ def check_ceph_used_space():
     """
 
     cmd = "ceph status"
-    ceph_status = ocp.exec_ceph_cmd(cmd)
-    assert ceph_status is not None
-    used = ceph_status['pgmap']['bytes_used']
-    GB = (1024 ** 3)
+    pods = ocp.exec_ceph_cmd(cmd)
+    assert pods is not None
+    used = pods['pgmap']['bytes_used']
+    GB = (1024 * 1024 * 1024)
     used_in_gb = used / GB
     return used_in_gb
 
@@ -154,14 +159,13 @@ def create_pvc(pvc_name, sc_name, pool_name):
     assert PVC.wait_for_resource(condition="Bound", resource_name=pvc_name)
 
     # Validate pvc is created on ceph
-    pvc_info = PVC.get(resource_name=pvc_name)
+    pvc_info = PVC.get(f'{pvc_name}')
 
-    name = get_ceph_tools_pod()
-    po = pod.Pod(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    cmd = f"rbd ls -p {pool_name}"
-    pvc, _, _ = po.exec_command(cmd=cmd, timeout=20)
-
+    pvc = ocp.exec_ceph_cmd(
+        ceph_cmd=f"rbd ls -p {pool_name}", format_arg='json'
+        )
     assert pvc_info['spec']['volumeName'] in pvc
+    return pvc_info['spec']['volumeName']
 
 
 def create_pod(pod_name, pvc_name):
@@ -183,10 +187,39 @@ def run_io(pod_name):
     Run io on the mount point
     """
 
-    run_cmd(
-        f"oc rsh -n {PROJECT_NAME} {pod_name}"
-        " dd if=/dev/urandom of=/var/lib/www/html/dd_ar bs=10M count=950"
-    )
+    # Run IO's
+    POD.exec_cmd_on_pod(
+        pod_name=pod_name,
+        command="dd if=/dev/urandom of=/var/lib/www/html/dd_a bs=10M count=950"
+        )
+
+    # Verify data's are written to mount-point
+    mount_point = POD.exec_cmd_on_pod(pod_name=pod_name, command="df -kh")
+    mount_point = mount_point.split()
+    used_percentage = mount_point[mount_point.index('/var/lib/www/html') - 1]
+    assert used_percentage > '90%'
+
+
+def verify_pv_not_exists(pv_name, pool_name):
+    """
+    Ensure that pv does not exists
+    """
+
+    # validate on oc side
+    try:
+        assert not PV.get(pv_name)
+    except ex.CommandFailed as ecf:
+        assert "not found" in str(ecf)
+        log.info(
+            f"Expected: pv should not be found "
+            f"after deleting corresponding pvc"
+            )
+
+    # Validate on ceph side
+    pv_list = ocp.exec_ceph_cmd(
+        ceph_cmd=f"rbd ls -p {pool_name}", format_arg='json'
+        )
+    assert pv_name not in pv_list
 
 
 @pytest.fixture(scope='class')
@@ -244,14 +277,20 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         """
 
         used_before_creating_pvc = check_ceph_used_space()
-        create_pvc(self.pvc_name, self.sc_name, self.pool_name)
+        log.info(f"used before creating pvc {used_before_creating_pvc}")
+        pv_name = create_pvc(self.pvc_name, self.sc_name, self.pool_name)
         create_pod(self.pod_name, self.pvc_name)
         run_io(self.pod_name)
         used_after_creating_pvc = check_ceph_used_space()
+        log.info(f"used after creating pvc {used_after_creating_pvc}")
         assert used_before_creating_pvc < used_after_creating_pvc
         assert POD.delete(resource_name=self.pod_name)
         assert PVC.delete(resource_name=self.pvc_name)
+        # Todo: Takes some time to delete pv so for now adding sleep
+        time.sleep(20)
+        verify_pv_not_exists(pv_name, self.pool_name)
         used_after_deleting_pvc = check_ceph_used_space()
+        log.info(f"used after deleting pvc {used_after_deleting_pvc}")
         assert used_after_deleting_pvc < used_after_creating_pvc
         assert (abs(
             used_after_deleting_pvc - used_before_creating_pvc) < 0.2)
