@@ -1,27 +1,15 @@
 import os
-from kubernetes import client, config
 os.sys.path.append(os.path.dirname(os.getcwd()))
 
-from ocs import pod
+from resources import pod
 from tests import test_radosbench as radosbench
 
 
-def run():
-    config.load_kube_config()
-    v1 = client.CoreV1Api()
-    ret = v1.list_pod_for_all_namespaces(
-        watch=False,
-        label_selector='app=rook-ceph-tools'
-    )
-
-    for i in ret.items:
-        namespace = i.metadata.namespace
-        name = i.metadata.name
-        break
-
-    po = pod.Pod(name, namespace, roles=['client'])
+def test_run():
+    tools_pod = pod.get_ceph_tools_pod()
+    tools_pod.add_role(role='client')
 
     return radosbench.run(
-        ceph_pods=[po],
+        ceph_pods=[tools_pod],
         config={'time': 10, 'cleanup': False}
     )

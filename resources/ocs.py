@@ -53,7 +53,14 @@ class OCS(object):
         return self._name
 
     def reload(self):
-        self.data = templating.load_yaml_to_dict(self.temp_yaml.name)
+        """
+        Reloading the OCS instance with the new information from its actual
+        data.
+        After creating a resource from a yaml file, the actual yaml file is
+        being changed and more information about the resource is added.
+        """
+        self.data = self.get()
+        self.__init__(**self.data)
 
     def get(self):
         return self.ocp.get(resource_name=self.name)
@@ -61,7 +68,9 @@ class OCS(object):
     def create(self):
         log.info(f"Adding {self.kind} with name {self.name}")
         templating.dump_dict_to_temp_yaml(self.data, self.temp_yaml.name)
-        return self.ocp.create(yaml_file=self.temp_yaml.name)
+        status = self.ocp.create(yaml_file=self.temp_yaml.name)
+        self.reload()
+        return status
 
     def delete(self):
         self.ocp.delete(resource_name=self.name)
@@ -72,6 +81,18 @@ class OCS(object):
         assert self.ocp.apply(yaml_file=self.temp_yaml.name), (
             f"Failed to apply changes {data}"
         )
+
+    def add_label(self, label):
+        """
+        Addss a new label
+
+        Args:
+            label (str): New label to be assigned for this pod
+                E.g: "label=app='rook-ceph-mds'"
+        """
+        status = self.ocp.add_label(resource_name=self.name, label=label)
+        self.reload()
+        return status
 
     def delete_temp_yaml_file(self):
         utils.delete_file(self.temp_yaml.name)
