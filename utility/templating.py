@@ -3,8 +3,7 @@ import os
 import yaml
 from jinja2 import Environment, FileSystemLoader, Template
 
-THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-TOP_DIR = os.path.dirname(THIS_DIR)
+from ocs.constants import TEMPLATES_DIR
 
 
 def load_config_data(data_path):
@@ -52,7 +51,7 @@ class Templating:
     Class which provides all functionality for templating
     """
 
-    def __init__(self, base_path=os.path.join(TOP_DIR, 'templates')):
+    def __init__(self, base_path=TEMPLATES_DIR):
         """
         Constructor for Templating class
 

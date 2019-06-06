@@ -125,7 +125,7 @@ class RookCluster(object):
         """
         _rc = False
         template_path = os.path.join(
-            default.TEMPLATE_DIR,
+            default.DEPLOYMENT_TEMPLATE_DIR,
             "cephblockpool.yaml"
         )
         # overwrite the namespace with openshift-storage, since cephblockpool
