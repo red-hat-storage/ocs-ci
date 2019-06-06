@@ -218,7 +218,7 @@ def verify_pv_not_exists(pv_name, pool_name):
     # Validate on ceph side
     pv_list = ocp.exec_ceph_cmd(
         ceph_cmd=f"rbd ls -p {pool_name}", format_arg='json'
-        )
+    )
     assert pv_name not in pv_list
 
 
