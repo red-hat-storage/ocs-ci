@@ -35,10 +35,20 @@ TEMP_PVC_YAML_FILE = '/tmp/pvc_test.yaml'
 TEMP_POD_YAML_FILE = '/tmp/pod_test.yaml'
 TEMP_SC_YAML_FILE = '/tmp/sc_test.yaml'
 
-PVC = ocp.OCP(kind='PersistentVolumeClaim')
-PV = ocp.OCP(kind='PersistentVolume')
-SC = ocp.OCP(kind='StorageClass')
-NAMESPACE = ocp.OCP(kind='Project')
+
+PVC = ocp.OCP(
+    kind='PersistentVolumeClaim', namespace=defaults.TEST_NAMESPACE
+)
+PV = ocp.OCP(
+    kind='PersistentVolume', namespace=defaults.TEST_NAMESPACE
+)
+SC = ocp.OCP(
+    kind='StorageClass', namespace=defaults.TEST_NAMESPACE
+)
+NAMESPACE = ocp.OCP(
+    kind='Project', namespace=defaults.TEST_NAMESPACE
+)
+
 
 
 @pytest.fixture(scope='class')
@@ -204,9 +214,9 @@ class TestStorageClass(ManageTest):
         """
         Test to validate OCS-297
         """
-        assert create_namespace(data['project_name'])
-        assert create_storageclass(data['sc_name'])
-        assert create_pvc(data['pvc_name'])
-        assert delete_pvc(data[pvc_name])
-        assert delete_storageclass(data[sc_name])
-        assert delete_namespace(data[project_name])
+        assert create_namespace(**self.data)
+        assert create_storageclass(**self.data)
+        assert create_pvc(**self.data)
+        assert delete_pvc(data['pvc_name'])
+        assert delete_storageclass(data['sc_name'])
+        assert delete_namespace(data['project_name'])
