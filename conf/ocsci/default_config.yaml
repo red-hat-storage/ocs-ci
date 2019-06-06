@@ -23,6 +23,7 @@
 # are not suppose to be used from sections below put directly in
 # ocs/defaults.py module.
 DEFAULTS:
+  DEPLOYMENT_PLATFORM: "AWS"
   AWS_REGION: "us-east-2"
   API_VERSION: "v1"
   TEMPLATES: "templates/"
