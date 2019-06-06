@@ -82,5 +82,17 @@ class OCS(object):
             f"Failed to apply changes {data}"
         )
 
+    def add_label(self, label):
+        """
+        Addss a new label
+
+        Args:
+            label (str): New label to be assigned for this pod
+                E.g: "label=app='rook-ceph-mds'"
+        """
+        status = self.ocp.add_label(resource_name=self.name, label=label)
+        self.reload()
+        return status
+
     def delete_temp_yaml_file(self):
         utils.delete_file(self.temp_yaml.name)

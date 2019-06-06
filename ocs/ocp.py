@@ -172,6 +172,19 @@ class OCP(object):
         command = f"apply -f {yaml_file}"
         return self.exec_oc_cmd(command)
 
+    def add_label(self, resource_name, label):
+        """
+        Adds a new label for this pod
+
+        Args:
+            resource_name (str): Name of the resource you want to label
+            label (str): New label to be assigned for this pod
+                E.g: "label=app='rook-ceph-mds'"
+        """
+        command = f"label {self.kind} {resource_name} {label}"
+        status = self.exec_oc_cmd(command)
+        return status
+
     def new_project(self, project_name):
         """
         Creates a new project

@@ -37,7 +37,7 @@ class Pod(OCS):
         )
         self._name = self.pod_data.get('metadata').get('name')
         self._labels = self.get_labels()
-        self._roles = [self.pod_data.get('metadata').get('labels').get('app')]
+        self._roles = []
         self.ocp = OCP(
             api_version=defaults.API_VERSION, kind=kinds.POD,
             namespace=self.namespace
@@ -108,7 +108,7 @@ class Pod(OCS):
         Raises:
             CommandFailed: In case the pod is not a toolbox pod
         """
-        if 'rook-ceph-tools' not in self.roles:
+        if 'rook-ceph-tools' not in self.labels.values():
             raise CommandFailed(
                 "Ceph commands can be executed only on toolbox pod"
             )
