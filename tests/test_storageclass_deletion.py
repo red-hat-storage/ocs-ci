@@ -50,7 +50,6 @@ NAMESPACE = ocp.OCP(
 )
 
 
-
 @pytest.fixture(scope='class')
 def test_fixture(request):
     """
