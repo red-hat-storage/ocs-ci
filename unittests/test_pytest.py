@@ -5,6 +5,10 @@ import textwrap
 
 from run_ocsci import init_ocsci_conf
 
+pytest_plugins = [
+    'pytester',
+]
+
 
 logger = logging.getLogger(__name__)
 
