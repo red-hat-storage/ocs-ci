@@ -3,7 +3,7 @@
 import logging
 import textwrap
 
-from run_ocsci import init_ocsci_conf
+from ocsci.main import init_ocsci_conf
 
 pytest_plugins = [
     'pytester',
