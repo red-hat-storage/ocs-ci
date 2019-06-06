@@ -138,3 +138,8 @@ def dump_to_temp_yaml(src_file, dst_file, **kwargs):
 def load_yaml_to_dict(file):
     template = os.path.join(file)
     return yaml.safe_load(open(template, 'r'))
+
+
+def dump_dict_to_temp_yaml(data, temp_yaml):
+    with open(temp_yaml, 'w') as yaml_file:
+        return yaml.dump(data, yaml_file)

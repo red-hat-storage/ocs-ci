@@ -8,9 +8,8 @@ import pytest
 from ocs import ocp, defaults
 from ocsci.config import ENV_DATA
 from ocsci.testlib import tier1, ManageTest
-from utility import utils
-from resources import ceph_file_system as cephfs
-
+from resources.ocs import OCS
+from tests import helpers
 
 log = logging.getLogger(__name__)
 
@@ -41,9 +40,17 @@ def setup(self):
     """
     Setting up the environment for the test
     """
+    self.fs_data = defaults.CEPHFILESYSTEM_DICT.copy()
+    self.fs_data['metadata']['name'] = helpers.create_unique_resource_name(
+        'test', 'cephfs'
+    )
+    self.fs_data['metadata']['namespace'] = ENV_DATA['cluster_namespace']
     global CEPH_OBJ
-    CEPH_OBJ = cephfs.CephFileSystem(**self.fs_data)
+    CEPH_OBJ = OCS(**self.fs_data)
     CEPH_OBJ.create()
+
+    # TODO: Change to:
+    # CEPH_OBJ = helpers.create_resource(**self.fs_data)
     assert POD.wait_for_resource(
         condition='Running', selector='app=rook-ceph-mds'
     )
@@ -55,9 +62,8 @@ def teardown():
     """
     Tearing down the environment
     """
-    global CEPH_OBJ
     CEPH_OBJ.delete()
-    utils.delete_file(defaults.TEMP_YAML)
+    CEPH_OBJ.delete_temp_yaml_file()
 
 
 def verify_fs_exist(pod_count):
@@ -82,8 +88,6 @@ class TestCephFilesystemCreation(ManageTest):
     """
     Testing creation of Ceph FileSystem
     """
-    fs_data = defaults.CEPHFILESYSTEM_DICT.copy()
-    fs_data['metadata']['name'] = 'my-cephfs1'
     new_active_count = 2
 
     def test_cephfilesystem_creation(self):

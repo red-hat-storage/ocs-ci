@@ -7,15 +7,14 @@ import ocs.defaults as default
 import base64
 import tempfile
 
-
 from templating import dump_to_temp_yaml
-from resources.base_resource import BaseOCSClass
+from resources.ocs import OCS
 from ocs import ocp
 
 log = logging.getLogger(__name__)
 
 
-class Secret(BaseOCSClass):
+class Secret(OCS):
     """
     A basic secret kind resource
     """
