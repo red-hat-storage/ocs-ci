@@ -10,16 +10,13 @@ import os
 import pytest
 import ocs.defaults as defaults
 
-from ocs import ocp
 from utility import utils, templating
 from utility.utils import run_cmd
 from ocsci.testlib import tier1, ManageTest
 
-from utility.utils import run_cmd
 from ocs import ocp
 from openshift.dynamic import DynamicClient
 import kubernetes
-from ocsci.enums import StatusOfTest
 
 
 k8s_client = kubernetes.config.new_client_from_config()
@@ -95,6 +92,18 @@ def create_namespace(**kwargs):
     else:
         log.info(f'creating a new project {project_name}')
         return run_cmd(f'oc new-project {project_name}')
+
+
+def delete_namespace(project_name):
+    """
+    Deletes the project
+    Args:
+        project_name (str): Project to be deleted
+    Returns:
+        (bool): True if deletion is successful, False otherwise
+    """
+
+    return NAMESPACE.delete(resource_name=project_name)
 
 
 def create_storageclass(**kwargs):
