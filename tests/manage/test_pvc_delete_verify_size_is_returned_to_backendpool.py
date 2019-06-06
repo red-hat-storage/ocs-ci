@@ -163,7 +163,7 @@ def create_pvc(pvc_name, sc_name, pool_name):
 
     pvc = ocp.exec_ceph_cmd(
         ceph_cmd=f"rbd ls -p {pool_name}", format_arg='json'
-        )
+    )
     assert pvc_info['spec']['volumeName'] in pvc
     return pvc_info['spec']['volumeName']
 
@@ -191,7 +191,7 @@ def run_io(pod_name):
     POD.exec_cmd_on_pod(
         pod_name=pod_name,
         command="dd if=/dev/urandom of=/var/lib/www/html/dd_a bs=10M count=950"
-        )
+    )
 
     # Verify data's are written to mount-point
     mount_point = POD.exec_cmd_on_pod(pod_name=pod_name, command="df -kh")
@@ -213,7 +213,7 @@ def verify_pv_not_exists(pv_name, pool_name):
         log.info(
             f"Expected: pv should not be found "
             f"after deleting corresponding pvc"
-            )
+        )
 
     # Validate on ceph side
     pv_list = ocp.exec_ceph_cmd(
