@@ -6,12 +6,12 @@ import tempfile
 import ocs.defaults as default
 import yaml
 
-from resources.base_resource import BaseOCSClass
+from resources.ocs import OCS
 
 log = logging.getLogger(__name__)
 
 
-class PVC(BaseOCSClass):
+class PVC(OCS):
     """
     A basic PersistentVolumeClaim kind resource
     """
