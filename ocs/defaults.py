@@ -71,6 +71,10 @@ ENV_DATA = {
     'rook_image': ROOK_IMAGE,
 }
 
+DEPLOYMENT = {
+    'installer_version': INSTALLER_VERSION,
+}
+
 TEMPLATES_DIR = "templates"
 TEMP_YAML = os.path.join(TEMPLATES_DIR, "temp.yaml")
 
