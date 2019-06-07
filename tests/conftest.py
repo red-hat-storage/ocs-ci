@@ -88,10 +88,9 @@ def cluster(request):
     log.info("Running OCS basic installation")
     cluster_path = ENV_DATA['cluster_path']
     # Add a finalizer to teardown the cluster after test execution is finished
-    if not config.skip_teardown:
+    if config.teardown:
         request.addfinalizer(cluster_teardown)
-    else:
-        log.info("Will skip cluster teardown because --skip-teardown was provided")
+        log.info("Will teardown cluster because --teardown was provided")
     # Test cluster access and if exist just skip the deployment.
     if RUN['cli_params'].get('cluster_path') and OCP.set_kubeconfig(
         os.path.join(cluster_path, RUN.get('kubeconfig_location'))

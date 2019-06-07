@@ -45,11 +45,11 @@ def pytest_addoption(parser):
         help="Name of cluster",
     )
     parser.addoption(
-        '--skip-teardown',
-        dest='skip_teardown',
+        '--teardown',
+        dest='teardown',
         action="store_true",
         default=False,
-        help="If provided cluster teardown after testing will be skipped",
+        help="If provided the test cluster will be destroyed after tests complete",
     )
 
 
@@ -110,11 +110,11 @@ def process_cluster_cli_params(config):
         cluster_name = f"{cluster_name}-{cid}"
     if not cluster_path:
         cluster_path = os.path.join(cluster_dir_parent, cluster_name)
-    # adds skip_teardown to osci_config.RUN['cli_params']
-    skip_teardown = get_cli_param(config, "skip_teardown", default=False)
+    # adds teardown to osci_config.RUN['cli_params']
+    teardown = get_cli_param(config, "teardown", default=False)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
-    ocsci_config.skip_teardown = skip_teardown
+    ocsci_config.teardown = teardown
 
 
 def pytest_collection_modifyitems(session, config, items):
