@@ -93,7 +93,7 @@ def process_cluster_cli_params(config):
     # TODO: determine better place for parent dir
     cluster_dir_parent = "/tmp"
     default_cluster_name = (
-        f"{ocsci_config.ENV_DATA['cluster_name']}-{getuser()}"
+        f"{ocsci_config.ENV_DATA['cluster_name']}-{getuser()[:8]}"
     )
     cluster_name = get_cli_param(config, 'cluster_name')
     if cluster_name:
