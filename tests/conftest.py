@@ -14,7 +14,7 @@ from ocsci.config import RUN, ENV_DATA, DEPLOYMENT
 from utility import templating
 from utility.aws import AWS
 from utility.retry import retry
-from utility.utils import run_cmd, get_openshift_installer, get_openshift_client
+from utility.utils import destroy_cluster, run_cmd, get_openshift_installer, get_openshift_client
 from ocs.parallel import parallel
 
 log = logging.getLogger(__name__)
@@ -76,10 +76,18 @@ def polarion_testsuite_properties(record_testsuite_property):
     record_testsuite_property('polarion-projct-id', polarion_project_id)
 
 
+def cluster_teardown():
+    log.info("Destroying the test cluster")
+    destroy_cluster(ENV_DATA['cluster_path'])
+    log.info("Destroying the test cluster complete")
+
+
 @pytest.fixture(scope="session", autouse=True)
-def cluster():
+def cluster(request):
     log.info("Running OCS basic installation")
     cluster_path = ENV_DATA['cluster_path']
+    # Add a finalizer to teardown the cluster after test execution as finished
+    request.addfinalizer(cluster_teardown)
     # Test cluster access and if exist just skip the deployment.
     if RUN['cli_params'].get('cluster_path') and OCP.set_kubeconfig(
         os.path.join(cluster_path, RUN.get('kubeconfig_location'))
@@ -233,7 +241,6 @@ def cluster():
     time.sleep(wait_time)
 
     # Verify health of ceph cluster
-    # TODO: add destroy cluster logic to a pytest finalizer
     log.info("Done creating rook resources, waiting for HEALTH_OK")
     assert ceph_health_check(namespace=ENV_DATA['cluster_namespace'])
 
