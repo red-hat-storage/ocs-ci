@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs import defaults
-from ocsci.config import ENV_DATA
+from ocsci import config
 from ocsci.testlib import tier1, ManageTest
 from resources.ocs import OCS
 from resources.pvc import PVC
@@ -12,7 +12,7 @@ from ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 
-OCCLI = OCP(kind='service', namespace=ENV_DATA['cluster_namespace'])
+OCCLI = OCP(kind='service', namespace=config.ENV_DATA['cluster_namespace'])
 
 SC_OBJ = None
 

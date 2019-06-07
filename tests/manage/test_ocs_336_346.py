@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs import ocp, defaults, constants
-from ocsci.config import ENV_DATA
+from ocsci import config
 from ocsci.testlib import tier1, ManageTest
 from resources.ocs import OCS
 from resources.pod import get_admin_key_from_ceph_tools
@@ -12,7 +12,7 @@ from tests import helpers
 log = logging.getLogger(__name__)
 
 
-POD = ocp.OCP(kind='Pod', namespace=ENV_DATA['cluster_namespace'])
+POD = ocp.OCP(kind='Pod', namespace=config.ENV_DATA['cluster_namespace'])
 CEPH_OBJ = None
 
 
@@ -36,7 +36,7 @@ def setup_fs(self):
     self.fs_data['metadata']['name'] = helpers.create_unique_resource_name(
         'test', 'cephfs'
     )
-    self.fs_data['metadata']['namespace'] = ENV_DATA['cluster_namespace']
+    self.fs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
     CEPH_OBJ = OCS(**self.fs_data)
     CEPH_OBJ.create()
     assert POD.wait_for_resource(
@@ -57,11 +57,11 @@ def teardown_fs():
 @tier1
 class TestOSCBasics(ManageTest):
     mons = (
-        f'rook-ceph-mon-a.{ENV_DATA["cluster_namespace"]}'
+        f'rook-ceph-mon-a.{config.ENV_DATA["cluster_namespace"]}'
         f'.svc.cluster.local:6789,'
-        f'rook-ceph-mon-b.{ENV_DATA["cluster_namespace"]}.'
+        f'rook-ceph-mon-b.{config.ENV_DATA["cluster_namespace"]}.'
         f'svc.cluster.local:6789,'
-        f'rook-ceph-mon-c.{ENV_DATA["cluster_namespace"]}'
+        f'rook-ceph-mon-c.{config.ENV_DATA["cluster_namespace"]}'
         f'.svc.cluster.local:6789'
     )
 

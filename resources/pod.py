@@ -13,7 +13,7 @@ import base64
 from ocs.ocp import OCP
 from ocs import defaults, constants, exceptions
 
-from ocsci.config import ENV_DATA
+from ocsci import config
 from ocs.exceptions import CommandFailed
 
 from resources.ocs import OCS
@@ -165,7 +165,7 @@ def get_ceph_tools_pod():
         Pod object: The Ceph tools pod object
     """
     ocp_pod_obj = OCP(
-        kind=constants.POD, namespace=ENV_DATA['cluster_namespace']
+        kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
     )
     ct_pod = ocp_pod_obj.get(
         selector='app=rook-ceph-tools'

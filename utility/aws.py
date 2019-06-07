@@ -1,7 +1,7 @@
 import logging
 import time
 
-from ocsci.config import ENV_DATA
+from ocsci import config
 
 import boto3
 
@@ -29,7 +29,7 @@ class AWS(object):
         Args:
             region_name (str): Name of AWS region (default: us-east-2)
         """
-        self._region_name = region_name or ENV_DATA['region']
+        self._region_name = region_name or config.ENV_DATA['region']
 
     @property
     def ec2_client(self):
