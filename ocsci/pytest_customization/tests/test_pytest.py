@@ -2,7 +2,10 @@
 
 import logging
 import textwrap
+from pytest import fixture
 
+from ocs import defaults
+import ocsci
 from ocsci.main import init_ocsci_conf
 
 pytest_plugins = [
@@ -11,6 +14,11 @@ pytest_plugins = [
 
 
 logger = logging.getLogger(__name__)
+
+
+@fixture(autouse=True)
+def reset_config():
+    ocsci.config.reset()
 
 
 def test_pytest_works():
@@ -66,15 +74,16 @@ def test_config_parametrize(testdir):
 
         from ocsci import config as ocsci_config
 
-        @pytest.mark.parametrize("item", ocsci_config.DEMO)
+        @pytest.mark.parametrize("item", ocsci_config.RUN)
         def test_demo_parametrized_config(item):
             assert item is not None
         """))
     # create config file
     conf_file = testdir.makefile(".yaml", textwrap.dedent("""\
-        DEMO:
-         - 1
-         - 2
+        RUN:
+          things:
+            - 1
+            - 2
         """))
     pytest_arguments = ['-v', f'--ocsci-conf={conf_file}']
     # this is a bit hack which allow us init all the config which we do in
@@ -82,11 +91,14 @@ def test_config_parametrize(testdir):
     init_ocsci_conf(pytest_arguments)
     # run pytest with the following pytest_argumetns
     result = testdir.runpytest(*pytest_arguments)
-    # fnmatch_lines does an assertion internally
-    result.stdout.fnmatch_lines([
-        'collecting*collected 2 items',
-        '*test_demo_parametrized_config?1? PASSED*',
-        '*test_demo_parametrized_config?2? PASSED*',
+    # Build a list of lines we expect to see in the output
+    expected_items = sorted(list(defaults.RUN.keys()) + ['things'])
+    expected_lines = [f'collecting*collected {len(expected_items)} items']
+    expected_lines.extend([
+        f'*test_demo_parametrized_config?{key}? PASSED*'
+        for key in expected_items
     ])
+    # fnmatch_lines does an assertion internally
+    result.stdout.fnmatch_lines(expected_lines)
     # make sure that that we get a '0' exit code for the testsuite
     assert result.ret == 0
