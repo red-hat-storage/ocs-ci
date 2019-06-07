@@ -6,7 +6,7 @@ import pytest
 import yaml
 
 import ocs.defaults
-import ocsci.config
+import ocsci
 
 
 HERE = os.path.abspath(os.path.dirname(__file__))
@@ -45,7 +45,7 @@ def init_ocsci_conf(arguments=[], default_config=OCSCI_DEFAULT_CONFIG):
     """
     custom_config = get_param('--ocsci-conf', arguments)
     cluster_config = get_param('--cluster-conf', arguments)
-    config_data = ocsci.config.CONFIG
+    config_data = ocsci.config.to_dict()
     with open(default_config) as file_stream:
         default_config_data = yaml.safe_load(file_stream)
     update_dict_recursively(config_data, default_config_data)
