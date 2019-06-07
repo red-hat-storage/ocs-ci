@@ -1,21 +1,20 @@
-import os
 import logging
-import ocs.defaults as defaults
 import pytest
-from ocsci import tier1, ManageTest
+
+from ocs import defaults
+from ocsci.config import ENV_DATA
+from ocsci.testlib import tier1, ManageTest
+from resources.ocs import OCS
+from tests import helpers
 from ocs.ocp import OCP
-from utility import utils, templating
 from ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 
-RBD_SC_YAML = os.path.join("ocs-deployment", "storage-manifest.yaml")
-TEMP_SC_YAML_FILE = '/tmp/tmp-storage-manifest.yaml'
+OCCLI = OCP(kind='service', namespace=ENV_DATA['cluster_namespace'])
 
-RBD_PVC_YAML = os.path.join("ocs-deployment", "PersistentVolumeClaim.yaml")
-TEMP_PVC_YAML_FILE = '/tmp/tmp-persistentVolumeClaim.yaml'
-
-OCCLI = OCP(kind='service', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+SC_OBJ = None
+SC_NAME = None
 
 
 @pytest.fixture(scope='class')
@@ -23,65 +22,53 @@ def test_fixture(request):
     """
     This is a test fixture
     """
-
+    self = request.node.cls
     def finalizer():
         teardown()
     request.addfinalizer(finalizer)
+    setup(self)
 
+
+def setup(self):
+    """
+    Setting up the environment for the test
+    """
+    # Create a storage class
+    log.info("Creating a Storage Class")
+    self.sc_data = defaults.STORAGECLASS_DICT.copy()
+    self.sc_data['metadata']['name'] = helpers.create_unique_resource_name(
+        'test', 'csi-rbd'
+    )
+    global SC_OBJ
+    global  SC_NAME
+    SC_OBJ = OCS(**self.sc_data)
+    SC_NAME = self.sc_data['metadata']['name']
+    assert SC_OBJ.create()
+    log.info(f"Storage class: {SC_NAME} created successfully")
+    log.debug(self.sc_data)
+    return SC_NAME
 
 def teardown():
     """
-    This is a tear down function
+    Tearing down the environment
 
     """
-    log.info("Deleting created temporary sc yaml file")
-    assert OCCLI.delete(TEMP_SC_YAML_FILE)
-    log.info("Successfully deleted temporary sc yaml file")
-    utils.delete_file(TEMP_SC_YAML_FILE)
-    utils.delete_file(TEMP_PVC_YAML_FILE)
-
+    log.info(f"Deleting created storage class: {SC_NAME}")
+    SC_OBJ.delete()
+    log.info(f"Storage class: {SC_NAME} deleted successfully")
 
 @tier1
 @pytest.mark.usefixtures(test_fixture.__name__)
 class TestPvcCreationInvalidInputs(ManageTest):
     """
-    This is a test for creating pvc with invalid inputs
+    This is the class for creating pvc with invalid inputs
     """
     def test_pvccreation_invalid_inputs(self):
-
-        create_rbd_cephpool("autopool1119", "autosc1119")
+        """
+        Calling functions for pvc invalid name and size
+        """
         create_pvc_invalid_name(pvcname='@123')
-        create_pvc_invalid_size(pvcsize='abcd')
-
-
-def create_rbd_cephpool(poolname, storageclassname):
-    """
-    Creates rbd storage class and ceph pool
-
-    Args:
-        poolname (str): Name of the ceph pool to be created
-        storageclassname (str): Name of the storage class
-
-    Returns:
-        None
-    """
-
-    data = {}
-    data['metadata_name'] = poolname
-    data['storage_class_name'] = storageclassname
-    data['blockpool_name'] = poolname
-    _templating = templating.Templating()
-    tmp_yaml_file = _templating.render_template(RBD_SC_YAML, data)
-
-    with open(TEMP_SC_YAML_FILE, 'w') as fd:
-        fd.write(tmp_yaml_file)
-        log.info(f"Creating RBD pool and storage class")
-    assert OCCLI.create(TEMP_SC_YAML_FILE)
-    log.info(
-        f"RBD pool: {poolname} storage class: {storageclassname}"
-        " created successfully"
-    )
-    log.debug(TEMP_SC_YAML_FILE)
+        create_pvc_invalid_size(pvcsize='t@st')
 
 
 def create_pvc_invalid_name(pvcname):
@@ -94,30 +81,24 @@ def create_pvc_invalid_name(pvcname):
     Returns:
         None
     """
-    data = {}
-    data['pvc_name'] = pvcname
-    _templating = templating.Templating()
-    tmp_yaml_file = _templating.render_template(RBD_PVC_YAML, data)
-    with open(TEMP_PVC_YAML_FILE, 'w') as fd:
-        fd.write(tmp_yaml_file)
-        log.info(f"Creating a pvc with name {pvcname}")
-    log.info(tmp_yaml_file)
+    pvc_data = defaults.PVC_DICT.copy()
+    pvc_data['metadata']['name'] = pvcname
+    pvc_data['spec']['storageClassName'] = SC_NAME
+    PVC_OBJ = OCS(**pvc_data)
+    log.info(f"Creating a pvc with name {pvcname}")
     try:
-        OCCLI.create(
-            yaml_file=tmp_yaml_file, resource_name="PersistentVolumeClaim"
-        )
+        PVC_OBJ.create()
     except CommandFailed as ex:
         if "error" in str(ex):
-            log.info(
-                f"PVC creation failed with error \n {ex} \n as "
-                "invalid pvc name is provided. EXPECTED"
-            )
+                log.info(
+                    f"PVC creation failed with error \n {ex} \n as "
+                    "invalid pvc name is provided. EXPECTED"
+                )
         else:
             assert (
                 "PVC creation with invalid name succeeded : "
                 "NOT expected"
             )
-
 
 def create_pvc_invalid_size(pvcsize):
     """
@@ -129,18 +110,14 @@ def create_pvc_invalid_size(pvcsize):
     Returns:
         None
     """
-    data = {}
-    data['pvc_size'] = pvcsize
-    _templating = templating.Templating()
-    tmp_yaml_file = _templating.render_template(RBD_PVC_YAML, data)
-    with open(TEMP_PVC_YAML_FILE, 'w') as fd:
-        fd.write(tmp_yaml_file)
-        log.info(f"Creating a pvc with size {pvcsize}")
-    log.debug(tmp_yaml_file)
+    pvc_data = defaults.PVC_DICT.copy()
+    pvc_data['metadata']['name'] = "auto"
+    pvc_data['spec']['resources']['requests']['storage'] = pvcsize
+    pvc_data['spec']['storageClassName'] = SC_NAME
+    PVC_OBJ = OCS(**pvc_data)
+    log.info(f"Creating a PVC with size {pvcsize}")
     try:
-        OCCLI.create(
-            yaml_file=tmp_yaml_file, resource_name="PersistentVolumeClaim"
-        )
+        PVC_OBJ.create()
     except CommandFailed as ex:
         if "error" in str(ex):
             log.info(
