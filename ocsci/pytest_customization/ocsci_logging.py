@@ -10,9 +10,9 @@ FORMATTER = logging.Formatter(
     " - %(message)s"
 )
 ep_time = int(time.time())
-log_dir = "/logs_" + str(ep_time)
-log_dir_path = ocsci_config.RUN['log_dir'] + log_dir
-sym_link = ocsci_config.RUN['log_dir'] + "/logs"
+log_dir = f"logs_{ep_time}"
+log_dir_path = os.path.join(ocsci_config.RUN['log_dir'], log_dir)
+sym_link = os.path.join(ocsci_config.RUN['log_dir'], "logs")
 
 
 def create_directory_path(path):
@@ -43,7 +43,7 @@ def pytest_runtest_setup(item):
     log_structure = item.nodeid.split("::")[0][:-3]
     test_class_name = item.nodeid.split("::")[1]
     log_path = os.path.join(log_dir_path, log_structure, test_class_name)
-    test_log = item.name + ".log"
+    test_log = f"{item.name}.log"
     log_file = os.path.join(log_path, test_log)
 
     if not os.path.exists(log_path):
