@@ -7,10 +7,10 @@ import os
 import pytest
 import yaml
 
+from ocsci import config
 from ocs import exceptions
 from ocs import ocp
 from ocs.constants import TEMPLATE_PV_PVC_DIR
-from ocsci.config import ENV_DATA
 from ocsci.testlib import tier1, ManageTest
 from utility import utils, templating
 
@@ -22,7 +22,7 @@ VOLUME_DELETED = 'persistentvolume "{volume_name}" deleted'
 
 
 OCP = ocp.OCP(
-    kind='PersistentVolume', namespace=ENV_DATA['cluster_namespace']
+    kind='PersistentVolume', namespace=config.ENV_DATA['cluster_namespace']
 )
 
 
