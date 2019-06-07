@@ -23,6 +23,7 @@ def test_fixture(request):
     This is a test fixture
     """
     self = request.node.cls
+
     def finalizer():
         teardown()
     request.addfinalizer(finalizer)
@@ -40,13 +41,14 @@ def setup(self):
         'test', 'csi-rbd'
     )
     global SC_OBJ
-    global  SC_NAME
+    global SC_NAME
     SC_OBJ = OCS(**self.sc_data)
     SC_NAME = self.sc_data['metadata']['name']
     assert SC_OBJ.create()
     log.info(f"Storage class: {SC_NAME} created successfully")
     log.debug(self.sc_data)
     return SC_NAME
+
 
 def teardown():
     """
@@ -56,6 +58,7 @@ def teardown():
     log.info(f"Deleting created storage class: {SC_NAME}")
     SC_OBJ.delete()
     log.info(f"Storage class: {SC_NAME} deleted successfully")
+
 
 @tier1
 @pytest.mark.usefixtures(test_fixture.__name__)
@@ -90,15 +93,16 @@ def create_pvc_invalid_name(pvcname):
         PVC_OBJ.create()
     except CommandFailed as ex:
         if "error" in str(ex):
-                log.info(
-                    f"PVC creation failed with error \n {ex} \n as "
-                    "invalid pvc name is provided. EXPECTED"
-                )
+            log.info(
+                f"PVC creation failed with error \n {ex} \n as "
+                "invalid pvc name is provided. EXPECTED"
+            )
         else:
             assert (
                 "PVC creation with invalid name succeeded : "
                 "NOT expected"
             )
+
 
 def create_pvc_invalid_size(pvcsize):
     """
