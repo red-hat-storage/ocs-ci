@@ -15,7 +15,7 @@ from ocsci.config import RUN, ENV_DATA, DEPLOYMENT
 from utility import templating
 from utility.aws import AWS
 from utility.retry import retry
-from utility.utils import destroy_cluster, run_cmd, get_openshift_installer, get_openshift_client
+from utility.utils import destroy_cluster, run_cmd, get_openshift_installer, get_openshift_client, is_cluster_running
 from ocs.parallel import parallel
 
 log = logging.getLogger(__name__)
@@ -92,9 +92,7 @@ def cluster(request):
         request.addfinalizer(cluster_teardown)
         log.info("Will teardown cluster because --teardown was provided")
     # Test cluster access and if exist just skip the deployment.
-    if RUN['cli_params'].get('cluster_path') and OCP.set_kubeconfig(
-        os.path.join(cluster_path, RUN.get('kubeconfig_location'))
-    ):
+    if is_cluster_running(cluster_path):
         pytest.skip(
             "The installation is skipped cause the cluster is running"
         )
