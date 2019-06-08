@@ -997,3 +997,10 @@ def run_async(command):
 
     popen_obj.async_communicate = async_communicate
     return popen_obj
+
+
+def is_cluster_running(cluster_path):
+    from oc.openshift_ops import OCP
+    return RUN['cli_params'].get('cluster_path') and OCP.set_kubeconfig(
+        os.path.join(cluster_path, RUN.get('kubeconfig_location'))
+    )
