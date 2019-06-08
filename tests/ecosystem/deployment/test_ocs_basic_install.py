@@ -15,7 +15,7 @@ import pytest
 from utility import templating
 from utility.aws import AWS
 from utility.retry import retry
-from utility.utils import run_cmd, get_openshift_installer, get_openshift_client
+from utility.utils import run_cmd, get_openshift_installer, get_openshift_client, is_cluster_running
 from ocs.parallel import parallel
 from ocs import ocp, defaults, constants
 from resources.ocs import OCS
@@ -32,6 +32,11 @@ CEPH_OBJ = None
 
 
 @deployment
+def test_cluster_is_running():
+    assert is_cluster_running(ENV_DATA['cluster_path'])
+
+
+# @deployment
 class TestDeployment(EcosystemTest):
     def test_deployment(self):
         log.info("Running OCS basic installation")
