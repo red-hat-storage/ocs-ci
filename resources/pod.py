@@ -77,6 +77,9 @@ class Pod(OCS):
     def labels(self):
         return self._labels
 
+    def __setattr__(self, key, val):
+        self.__dict__[key] = val
+
     def add_role(self, role):
         """
         Adds a new role for this pod
