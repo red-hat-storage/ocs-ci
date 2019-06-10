@@ -4,6 +4,7 @@ General OCP object
 import os
 import logging
 import yaml
+import tempfile
 
 from ocs.exceptions import CommandFailed
 from utility.utils import TimeoutSampler
