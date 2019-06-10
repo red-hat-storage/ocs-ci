@@ -11,7 +11,7 @@ apiVersion: ceph.rook.io/v1
 kind: CephBlockPool
 metadata:
   name: replicated-metadata-pool
-  namespace: rook-ceph
+  namespace: openshift-storage
 spec:
   replicated:
     size: 2
@@ -20,7 +20,7 @@ apiVersion: ceph.rook.io/v1
 kind: CephBlockPool
 metadata:
   name: ec-data-pool
-  namespace: rook-ceph
+  namespace: openshift-storage
 spec:
   # Make sure you have enough nodes and OSDs running bluestore to support the replica size or erasure code chunks.
   # For the below settings, you need at least 3 OSDs on different nodes (because the `failureDomain` is `host` by default).
@@ -32,7 +32,7 @@ spec:
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-   name: rook-ceph-block
+   name: rook-ceph-block2
 provisioner: ceph.rook.io/block
 parameters:
   # If you want to use erasure coded pool with RBD, you need to create two pools (as seen above): one erasure coded and one replicated.
@@ -43,6 +43,6 @@ parameters:
   # Specify the namespace of the rook cluster from which to create volumes.
   # If not specified, it will use `rook` as the default namespace of the cluster.
   # This is also the namespace where the cluster will be
-  clusterNamespace: rook-ceph
+  clusterNamespace: openshift-storage
   # Specify the filesystem type of the volume. If not specified, it will use `ext4`.
   fstype: xfs
