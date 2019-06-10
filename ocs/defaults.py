@@ -82,8 +82,33 @@ CEPHFILESYSTEM_DICT = load_yaml_to_dict(
         constants.TEMPLATE_CSI_FS_DIR, "CephFileSystem.yaml"
     )
 )
-PVC_DICT = load_yaml_to_dict(
+CEPHBLOCKPOOL_DICT = load_yaml_to_dict(
+    os.path.join(
+        constants.TEMPLATE_DEPLOYMENT_DIR, "cephblockpool.yaml"
+    )
+)
+CSI_RBD_STORAGECLASS_DICT = load_yaml_to_dict(
+    os.path.join(
+        constants.TEMPLATE_CSI_RBD_DIR, "storageclass.yaml"
+    )
+)
+CSI_PVC_DICT = load_yaml_to_dict(
     os.path.join(
         constants.TEMPLATE_PV_PVC_DIR, "PersistentVolumeClaim.yaml"
+    )
+)
+CSI_RBD_POD_DICT = load_yaml_to_dict(
+    os.path.join(
+        constants.TEMPLATE_CSI_RBD_DIR, "pod.yaml"
+    )
+)
+CSI_RBD_SECRET = load_yaml_to_dict(
+    os.path.join(
+        constants.TEMPLATE_CSI_RBD_DIR, "secret.yaml"
+    )
+)
+CSI_CEPHFS_SECRET = load_yaml_to_dict(
+    os.path.join(
+        constants.TEMPLATE_CSI_FS_DIR, "secret.yaml"
     )
 )

@@ -1,10 +1,15 @@
 ---
-apiVersion: {{ rook_api_version }}
+apiVersion: ceph.rook.io/v1
 kind: CephBlockPool
 metadata:
-  name: {{ cephblockpool_name | default('ocsci-cephblockpool') }}
-  namespace: {{ cluster_namespace | default('openshift-storage') }}
+  name: replicapool
+  namespace: default
 spec:
-  failureDomain: {{ failureDomain | default('host') }}
+  # The failure domain will spread the replicas of the data across different failure zones
+  failureDomain: host
+  # For a pool based on raw copies, specify the number of copies. A size of 1 indicates no redundancy.
   replicated:
-    size: {{ replica_count | default('3') }}
+    size: 3
+  # A key/value list of annotations
+  annotations:
+  #  key: valueplica_size | default('3') }}
