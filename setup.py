@@ -36,6 +36,7 @@ setup(
         'pytest11': [
             'ocscilib = ocsci.pytest_customization.ocscilib',
             'marks = ocsci.pytest_customization.marks',
+            'ocsci_logging = ocsci.pytest_customization.ocsci_logging'
         ]
     },
     zip_safe=True,
