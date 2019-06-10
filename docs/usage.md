@@ -111,7 +111,7 @@ in third execution.
 Deployment is moved already to pytest. If you would like to deploy new cluster
 you can run following command:
 ```bash
-run-ci -m deployment --ocsci-conf conf/ocsci/custom_config.yaml \
+run-ci -m deployment --ocsci-conf conf/ocsci/default_config.yaml \
     --cluster-conf conf/ocs_basic_install.yml \
     --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir tests/
