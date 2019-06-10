@@ -1,12 +1,12 @@
 """
 A test for creating a PV
 """
-import os
 import logging
 import yaml
 import pytest
 
 from ocsci.config import ENV_DATA
+from ocs.defaults import TEMPLATE_PV_PVC_DIR
 from ocsci.testlib import tier1, ManageTest
 from ocs import exceptions
 from ocs import ocp
@@ -15,7 +15,7 @@ from utility import utils, templating
 
 log = logging.getLogger(__name__)
 
-PV_YAML = os.path.join("templates/ocs-deployment", "PersistentVolume.yaml")
+PV_YAML = f"{TEMPLATE_PV_PVC_DIR}/PersistentVolume.yaml"
 TEMP_YAML_FILE = 'test.yaml'
 VOLUME_DELETED = 'persistentvolume "{volume_name}" deleted'
 
