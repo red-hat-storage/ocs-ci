@@ -49,8 +49,6 @@ def setup(self):
     CEPH_OBJ = OCS(**self.fs_data)
     CEPH_OBJ.create()
 
-    # TODO: Change to:
-    # CEPH_OBJ = helpers.create_resource(**self.fs_data)
     assert POD.wait_for_resource(
         condition='Running', selector='app=rook-ceph-mds'
     )
