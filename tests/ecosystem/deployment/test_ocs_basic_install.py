@@ -7,7 +7,7 @@ import yaml
 from oc.openshift_ops import OCP
 from ocs.exceptions import CommandFailed, CephHealthException
 from ocs.utils import create_oc_resource, apply_oc_resource
-from ocs.defaults import TOP_DIR
+from ocs.constants import TOP_DIR
 from ocsci.config import RUN, ENV_DATA, DEPLOYMENT
 from ocsci.testlib import deployment, EcosystemTest
 import pytest

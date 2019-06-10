@@ -11,7 +11,7 @@ import os
 
 import oc.openshift_ops as ac
 import resources.pod as pod
-import ocs.defaults as default
+from ocs import constants, defaults
 from utility.templating import generate_yaml_from_jinja2_template_with_data
 from ocsci.config import ENV_DATA
 
@@ -125,7 +125,7 @@ class RookCluster(object):
         """
         _rc = False
         template_path = os.path.join(
-            default.DEPLOYMENT_TEMPLATE_DIR,
+            constants.TEMPLATE_DEPLOYMENT_DIR,
             "cephblockpool.yaml"
         )
         # overwrite the namespace with openshift-storage, since cephblockpool
@@ -134,7 +134,7 @@ class RookCluster(object):
 
         cephblockpool_data = {}
         cephblockpool_data['cephblockpool_name'] = cephblockpool_name
-        cephblockpool_data['rook_api_version'] = default.ROOK_API_VERSION
+        cephblockpool_data['rook_api_version'] = defaults.ROOK_API_VERSION
         cephblockpool_data['failureDomain'] = failureDomain
         cephblockpool_data['replica_count'] = replica_count
 
