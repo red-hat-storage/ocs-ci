@@ -1,7 +1,6 @@
 """
 A test for creating a CephFS
 """
-import os
 import logging
 import pytest
 
@@ -13,10 +12,6 @@ from tests import helpers
 
 log = logging.getLogger(__name__)
 
-CEPHFS_YAML = os.path.join(
-    "templates/ocs-deployment", "cephfilesystem_new.yaml"
-)
-TEMP_YAML_FILE = 'test_cephfilesystem.yaml'
 CEPHFS_DELETED = '"{cephfs_name}" deleted'
 
 POD = ocp.OCP(kind='Pod', namespace=ENV_DATA['cluster_namespace'])

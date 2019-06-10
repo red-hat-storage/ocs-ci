@@ -26,9 +26,6 @@ DEFAULTS:
   AWS_REGION: "us-east-2"
   API_VERSION: "v1"
   TEMPLATES: "templates/"
-  TEMPLATE_CSI_DIR: '{{ DEFAULTS["TEMPLATES"] }}/CSI'
-  TEMPLATE_CSI_RBD_DIR: '{{ DEFAULTS["TEMPLATE_CSI_DIR"] }}/rbd'
-  TEMPLATE_CSI_FS_DIR: '{{ DEFAULTS["TEMPLATE_CSI_DIR"] }}/cephfs'
 
 # in this RUN section we will keep default parameters for run of OCS-CI
 RUN:
