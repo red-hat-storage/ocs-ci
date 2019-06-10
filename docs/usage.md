@@ -2,10 +2,11 @@
 
 **Work in progress**
 
-`run.py` is the main script for ocs-ci. You can view the full usage details by
-passing in the `--help` argument.
 
-For pytest run py.test --help
+`run.py` - (**deprecated**) is the main script for ocs-ci. You can view the
+full usage details by passing in the `--help` argument.
+
+For pytest usage run: run-ci --help
 
 ```bash
 python run.py --help
@@ -30,7 +31,7 @@ There are a few arguments that are required ocs test execution:
 ## Useful pytest arguments
 
 Some non-required arguments that we end up using a lot. You can use
-`py.test --help` to see all the parameters and description which you can pass
+`run-ci  --help` to see all the parameters and description which you can pass
 to the pytest.
 
 * `--capture=no` - when using pdb or ipdb you have to turn of capture mode
@@ -82,34 +83,35 @@ python run.py --suite suites/ocs_basic_install.yml --log-level info
 
 ```bash
 python run.py --cluster-name=my-testing-cluster \
-    --suite=suites/custom-test.yml --cluster-path=/home/your_login/my-testing-cluster \
+    --suite=suites/custom-test.yml \
+    --cluster-path=/home/your_login/my-testing-cluster \
     --no-email
 ```
 
 ### For pytest
 
-**WORK IN PROGRESS:**
-There is still work in progress and we didn't moved cleanup of cluster to
-pytest yet, will be done in different PR.
 
-> Destroy of cluster can be done with old runner till we move this to pytest.
-> Or with `uni-cleanup.sh` script.
+There is no order yet for deployment, run of tests and destroy cluster.
+That means: you are not able to run all in one execution.
+We can do ordering with
+[pytest ordering plugin](https://pytest-ordering.readthedocs.io/en/develop/)
+or different way we decide later on. (Will be done in different PR)
 
-Also there is no order yet for
-deployment and running tests, so currently you are not able to run deployment
-and test in one execution. This will be done also in new PR with pytest
-ordering plugin or different way if we will decide.
+For now please deploy cluster with one execution of `pytest` and run tests
+on existing cluster with second execution of `pytest`, destroy can be done
+in third execution.
 
-So for now please deploy cluster with one execution of `pytest` and run tests
-on existing cluster with second execution of `pytest`!
+> In case you lost yor cluster dir, the destroy can be done with
+> `uni-cleanup.sh` script.
 
 
 
 #### Deployment of cluster
+
 Deployment is moved already to pytest. If you would like to deploy new cluster
-you can run folowing command:
+you can run following command:
 ```bash
-py.test -m deployment  --ocsci-conf conf/ocsci/custom_config.yaml \
+run-ci -m deployment --ocsci-conf conf/ocsci/custom_config.yaml \
     --cluster-conf conf/ocs_basic_install.yml \
     --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir tests/
@@ -121,6 +123,16 @@ values.
 #### Runing tests on deployed environment
 
 ```bash
-py.test -m "tier1 and manage"  --cluster-name kerberos_ID-ocs-deployment \
+run-ci -m "tier1 and manage" \
+    --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir tests/
  ```
+
+#### Destroy of cluster
+
+Destroy is moved already to pytest. If you would like to destroy existing
+cluster you can run following command:
+```bash
+run-ci -m destroy --cluster-name kerberos_ID-ocs-deployment \
+    --cluster-path /home/my_user/my-ocs-dir tests/
+```

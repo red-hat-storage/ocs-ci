@@ -1,50 +1,8 @@
-from pytest_customization.marks import (
-    tier1,
-    tier2,
-    tier3,
-    tier4,
-    e2e,
-    ecosystem,
-    manage,
-    ocp,
-    rook,
-    ui,
-    csi,
-    monitoring,
-    workloads,
-    performance,
-    scale,
-    deployment,
-    upgrade,
-    run_this
-)
+"""
+Avoid already-imported warning cause of we are importing this package from
+run wrapper for loading config.
 
-from ocsci.testlib import (
-    E2ETest,
-    EcosystemTest,
-    ManageTest
-)
-
-__all__ = [
-    'tier1',
-    'tier2',
-    'tier3',
-    'tier4',
-    'e2e',
-    'ecosystem',
-    'manage',
-    'ocp',
-    'rook',
-    'ui',
-    'csi',
-    'monitoring',
-    'workloads',
-    'performance',
-    'scale',
-    'deployment',
-    'upgrade',
-    'run_this',
-    'E2ETest',
-    'EcosystemTest',
-    'ManageTest',
-]
+You can see documentation here:
+https://docs.pytest.org/en/latest/reference.html
+under section PYTEST_DONT_REWRITE
+"""

@@ -1,0 +1,10 @@
+---
+apiVersion: {{ rook_api_version }}
+kind: CephBlockPool
+metadata:
+  name: {{ cephblockpool_name | default('ocsci-cephblockpool') }}
+  namespace: {{ cluster_namespace | default('openshift-storage') }}
+spec:
+  failureDomain: {{ failureDomain | default('host') }}
+  replicated:
+    size: {{ replica_count | default('3') }}

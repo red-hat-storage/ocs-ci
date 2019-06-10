@@ -2,18 +2,18 @@ import json
 import logging
 import os
 import time
+import yaml
 
 from oc.openshift_ops import OCP
-import ocs.defaults as default
 from ocs.exceptions import CommandFailed, CephHealthException
-from ocs.utils import create_oc_resource
+from ocs.utils import create_oc_resource, apply_oc_resource
 from ocsci.config import RUN, ENV_DATA, DEPLOYMENT
-from ocsci import deployment, EcosystemTest
+from ocsci.testlib import deployment, EcosystemTest
 import pytest
 from utility import templating
 from utility.aws import AWS
 from utility.retry import retry
-from utility.utils import run_cmd, download_openshift_installer
+from utility.utils import run_cmd, get_openshift_installer, get_openshift_client
 from ocs.parallel import parallel
 
 log = logging.getLogger(__name__)
@@ -40,35 +40,38 @@ class TestDeployment(EcosystemTest):
             "data",
             "pull-secret"
         )
-        with open(pull_secret_path, "r") as f:
-            pull_secret = f.readline()
-        ENV_DATA.update(
-            {
-                'pull_secret': pull_secret,
-            }
-        )
 
         # TODO: check for supported platform and raise the exception if not
         # supported. Currently we support just AWS.
 
         _templating = templating.Templating()
-        template = _templating.render_template(
+        install_config_str = _templating.render_template(
             "install-config.yaml.j2", ENV_DATA
         )
-        log.info(f"Install config: \n{template}")
+        # Parse the rendered YAML so that we can manipulate the object directly
+        install_config_obj = yaml.safe_load(install_config_str)
+        with open(pull_secret_path, "r") as f:
+            # Parse, then unparse, the JSON file.
+            # We do this for two reasons: to ensure it is well-formatted, and
+            # also to ensure it ends up as a single line.
+            install_config_obj['pullSecret'] = json.dumps(json.loads(f.read()))
+        install_config_str = yaml.safe_dump(install_config_obj)
+        log.info(f"Install config: \n{install_config_str}")
         install_config = os.path.join(cluster_path, "install-config.yaml")
         with open(install_config, "w") as f:
-            f.write(template)
+            f.write(install_config_str)
 
         # Download installer
-        installer = download_openshift_installer(
+        installer = get_openshift_installer(
             DEPLOYMENT['installer_version']
         )
+        # Download client
+        get_openshift_client()
 
         # Deploy cluster
         log.info("Deploying cluster")
         run_cmd(
-            f"./{installer} create cluster "
+            f"{installer} create cluster "
             f"--dir {cluster_path} "
             f"--log-level debug"
         )
@@ -101,12 +104,42 @@ class TestDeployment(EcosystemTest):
             f"system:serviceaccount:openshift-monitoring:prometheus-k8s "
             f"-n {ENV_DATA['cluster_namespace']}"
         )
-        create_oc_resource(
-            'operator-openshift.yaml', cluster_path, _templating, ENV_DATA
+        apply_oc_resource(
+            'csi-nodeplugin-rbac_rbd.yaml',
+            cluster_path,
+            _templating,
+            ENV_DATA,
+            template_dir="ocs-deployment/csi/rbd/"
+        )
+        apply_oc_resource(
+            'csi-provisioner-rbac_rbd.yaml',
+            cluster_path,
+            _templating,
+            ENV_DATA,
+            template_dir="ocs-deployment/csi/rbd/"
+        )
+        apply_oc_resource(
+            'csi-nodeplugin-rbac_cephfs.yaml',
+            cluster_path,
+            _templating,
+            ENV_DATA,
+            template_dir="ocs-deployment/csi/cephfs/"
+        )
+        apply_oc_resource(
+            'csi-provisioner-rbac_cephfs.yaml',
+            cluster_path,
+            _templating,
+            ENV_DATA,
+            template_dir="ocs-deployment/csi/cephfs/"
         )
         # Increased to 15 seconds as 10 is not enough
         # TODO: do the sampler function and check if resource exist
         wait_time = 15
+        log.info(f"Waiting {wait_time} seconds...")
+        time.sleep(wait_time)
+        create_oc_resource(
+            'operator-openshift-with-csi.yaml', cluster_path, _templating, ENV_DATA
+        )
         log.info(f"Waiting {wait_time} seconds...")
         time.sleep(wait_time)
         run_cmd(
@@ -140,6 +173,8 @@ class TestDeployment(EcosystemTest):
         create_oc_resource(
             "prometheus-rules.yaml", cluster_path, _templating, ENV_DATA
         )
+        log.info(f"Waiting {wait_time} seconds...")
+        time.sleep(wait_time)
 
         # Verify health of ceph cluster
         # TODO: move destroy cluster logic to new CLI usage pattern?
@@ -150,7 +185,7 @@ class TestDeployment(EcosystemTest):
 def create_ebs_volumes(
     worker_pattern,
     size=100,
-    region_name=default.AWS_REGION
+    region_name=ENV_DATA['region'],
 ):
     """
     Create volumes on workers
@@ -159,7 +194,7 @@ def create_ebs_volumes(
         worker_pattern (string): Worker name pattern e.g.:
             cluster-55jx2-worker*
         size (int): Size in GB (default: 100)
-        region_name (str): Region name (default: default.AWS_REGION)
+        region_name (str): Region name (default: ENV_DATA['region'])
     """
     aws = AWS(region_name)
     worker_instances = aws.get_instances_by_name_pattern(worker_pattern)
@@ -183,8 +218,8 @@ def ceph_health_check(namespace=ENV_DATA['cluster_namespace']):
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
     Args:
-        namespace (str): Namespace of OCS (default:
-            default.ROOK_CLUSER_NAMESPACE)
+        namespace (str): Namespace of OCS
+            (default: ENV_DATA['cluster_namespace'])
 
     Raises:
         CephHealthException: If the ceph health returned is not HEALTH_OK

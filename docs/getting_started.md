@@ -13,16 +13,22 @@
 
 ## Installing
 
-It is recommended that you use a python virtual environment to install the necessary dependencies
+It is recommended that you use a python virtual environment to install the
+necessary dependencies
 
-1. Setup a python 3.7 virtual environment. This is actually quite easy to do
+1. Clone ocs-ci repository from
+    [https://github.com/red-hat-storage/ocs-ci](https://github.com/red-hat-storage/ocs-ci)
+    via cmd `git clone git@github.com:red-hat-storage/ocs-ci.git`.
+2. Go to ocs-ci folder `cd ocs-ci`.
+3. Setup a python 3.7 virtual environment. This is actually quite easy to do
     now. Use hidden `.venv` or normal `venv` folder for virtual env as we are
     ignoring this in flake8 configurtation in tox.
 
     * `python3.7 -m venv <path/to/venv>`
     * `source <path/to/.venv>/bin/activate`
 
-2. Install requirements with `pip install -r requirements.txt`
+4. Upgrade pip with `pip install --upgrade pip`
+5. Install requirements with `pip install -r requirements.txt`
 
 ## Initial Setup
 

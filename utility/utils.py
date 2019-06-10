@@ -1,4 +1,3 @@
-import collections
 import getpass
 import json
 import logging
@@ -10,6 +9,7 @@ import smtplib
 import subprocess
 import time
 import traceback
+import string
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -18,11 +18,11 @@ import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from reportportal_client import ReportPortalServiceAsync
 
-from ocs import defaults
 from ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
 )
 from ocsci.enums import StatusOfTest
+from ocsci.config import RUN, DEPLOYMENT
 from .aws import AWS
 
 log = logging.getLogger(__name__)
@@ -684,8 +684,11 @@ def destroy_cluster(cluster_path):
         StatusOfTest: enum for status of cluster deletion
 
     """
+    # Download installer
+    installer = get_openshift_installer()
+
     destroy_cmd = (
-        f"./openshift-install destroy cluster "
+        f"{installer} destroy cluster "
         f"--dir {cluster_path} "
         f"--log-level debug"
     )
@@ -700,10 +703,6 @@ def destroy_cluster(cluster_path):
         cluster_name = metadata.get("clusterName")
         region_name = metadata.get("aws").get("region")
 
-        # Download installer
-        installer = download_openshift_installer()
-        tarball = f"{installer}.tar.gz"
-
         # Execute destroy cluster using OpenShift installer
         log.info(f"Destroying cluster defined in {cluster_path}")
         run_cmd(destroy_cmd)
@@ -717,9 +716,8 @@ def destroy_cluster(cluster_path):
         for volume in volumes:
             aws.detach_and_delete_volume(volume)
 
-        # Remove installer and tarball
-        os.remove(installer)
-        os.remove(tarball)
+        # Remove installer
+        delete_file(installer)
         return StatusOfTest.PASSED
 
     except Exception:
@@ -727,37 +725,139 @@ def destroy_cluster(cluster_path):
         return StatusOfTest.FAILED
 
 
-def download_openshift_installer(version=defaults.INSTALLER_VERSION):
+def get_openshift_installer(
+    version=DEPLOYMENT['installer_version'],
+    bin_dir=RUN['bin_dir'],
+):
     """
-    Download the openshift installer
+    Download the OpenShift installer binary, if not already present.
+    Update env. PATH and get path of the openshift installer binary.
 
     Args:
-        version (str): version of the installer to download
+        version (str): Version of the installer to download
+        bin_dir (str): Path to bin directory (default: RUN['bin_dir'])
 
     Returns:
-        str: name of the installer binary after being unpacked
+        str: Path to the installer binary
 
     """
     installer_filename = "openshift-install"
-    tarball = f"{installer_filename}.tar.gz"
-    if os.path.isfile(installer_filename):
-        log.info("Installer exists, skipping download")
+    installer_binary_path = os.path.join(bin_dir, installer_filename)
+    if os.path.isfile(installer_binary_path):
+        log.debug("Installer exists ({installer_binary_path}), skipping download.")
+        # TODO: check installer version
     else:
         log.info("Downloading openshift installer")
-        if platform.system() == "Darwin":
-            os_type = "mac"
-        elif platform.system() == "Linux":
-            os_type = "linux"
-        else:
-            raise UnsupportedOSType
-        url = (
-            f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
-            f"{version}/openshift-install-{os_type}-{version}.tar.gz"
-        )
+        prepare_bin_dir()
+        # record current working directory and switch to BIN_DIR
+        previous_dir = os.getcwd()
+        os.chdir(bin_dir)
+        tarball = f"{installer_filename}.tar.gz"
+        url = get_openshift_mirror_url(installer_filename, version)
         download_file(url, tarball)
-        run_cmd(f"tar xzvf {tarball}")
+        run_cmd(f"tar xzvf {tarball} {installer_filename}")
+        delete_file(tarball)
+        # return to the previous working directory
+        os.chdir(previous_dir)
 
-    return installer_filename
+    add_path_to_env_path(bin_dir)
+
+    return installer_binary_path
+
+
+def get_openshift_client(
+    version=RUN['client_version'],
+    bin_dir=RUN['bin_dir'],
+):
+    """
+    Download the OpenShift client binary, if not already present.
+    Update env. PATH and get path of the oc binary.
+
+    Args:
+        version (str): Version of the client to download
+            (default: RUN['client_version'])
+        bin_dir (str): Path to bin directory (default: RUN['bin_dir'])
+
+    Returns:
+        str: Path to the client binary
+
+    """
+    client_binary_path = os.path.join(bin_dir, 'oc')
+    if os.path.isfile(client_binary_path):
+        log.debug("Client exists ({client_binary_path}), skipping download.")
+        # TODO: check client version
+    else:
+        log.info("Downloading openshift client")
+        prepare_bin_dir()
+        # record current working directory and switch to BIN_DIR
+        previous_dir = os.getcwd()
+        os.chdir(bin_dir)
+        url = get_openshift_mirror_url('openshift-client', version)
+        tarball = "openshift-client.tar.gz"
+        download_file(url, tarball)
+        run_cmd(f"tar xzvf {tarball} oc kubectl")
+        delete_file(tarball)
+        # return to the previous working directory
+        os.chdir(previous_dir)
+
+    add_path_to_env_path(bin_dir)
+
+    return client_binary_path
+
+
+def get_openshift_mirror_url(file_name, version):
+    """
+    Format url to OpenShift mirror (for client and installer download).
+
+    Args:
+        file_name (str): Name of file
+        version (str): Version of the installer or client to download
+
+    Returns:
+        str: Url of the desired file (installer or client)
+
+    """
+    if platform.system() == "Darwin":
+        os_type = "mac"
+    elif platform.system() == "Linux":
+        os_type = "linux"
+    else:
+        raise UnsupportedOSType
+    url = (
+        f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
+        f"{version}/{file_name}-{os_type}-{version}.tar.gz"
+    )
+    return url
+
+
+def prepare_bin_dir(bin_dir=RUN['bin_dir']):
+    """
+    Prepare bin directory for OpenShift client and installer
+
+    Args:
+        bin_dir (str): Path to bin directory (default: RUN['bin_dir'])
+    """
+    try:
+        os.mkdir(bin_dir)
+        log.info(f"Directory '{bin_dir}' successfully created.")
+    except FileExistsError:
+        log.debug(f"Directory '{bin_dir}' already exists.")
+
+
+def add_path_to_env_path(path):
+    """
+    Add path to the PATH environment variable (if not already there).
+
+    Args:
+        path (str): Path which should be added to the PATH env. variable
+
+    """
+    path = os.path.abspath('./bin')
+    env_path = os.environ['PATH'].split(os.pathsep)
+    if path not in env_path:
+        os.environ['PATH'] = os.pathsep.join([path] + env_path)
+        log.info(f"Path '{path}' added to the PATH environment variable.")
+    log.debug(f"PATH: {os.environ['PATH']}")
 
 
 def delete_file(file_name):
@@ -848,26 +948,16 @@ class TimeoutSampler(object):
             return False
 
 
-def update_dict_recursively(d, u):
+def get_random_str(size=13):
     """
-    Update dict recursively to not delete nested dict under second and more
-    nested level. This function is changing the origin dictionary cause of
-    operations are done on top of it and dict is a mutable object.
+    generates the random string of given size
 
     Args:
-        d (dict): Dict to update
-        u (dict): Other dict used for update d dict
+        size (int): number of random characters to generate
 
     Returns:
-        dict: returning updated dictionary (changes are also done on dict `d`)
+         str : string of random characters of given size
+
     """
-    for k, v in u.items():
-        if isinstance(d, collections.Mapping):
-            if isinstance(v, collections.Mapping):
-                r = update_dict_recursively(d.get(k, {}), v)
-                d[k] = r
-            else:
-                d[k] = u[k]
-        else:
-            d = {k: u[k]}
-    return d
+    chars = string.ascii_lowercase + string.digits
+    return ''.join(random.choice(chars) for _ in range(size))

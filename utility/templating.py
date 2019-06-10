@@ -123,16 +123,23 @@ def generate_yaml_from_jinja2_template_with_data(file_, **kwargs):
     return yaml.safe_load(out)
 
 
-def render_yaml_with_j2_context(yaml_data):
+def dump_to_temp_yaml(src_file, dst_file, **kwargs):
     """
-    Render yaml template with own context.
+    Dump a jinja2 template file content into a yaml file
+     Args:
+        src_file (str): Template Yaml file path
+        dst_file: the path to the destination Yaml file
+     """
+    data = generate_yaml_from_jinja2_template_with_data(src_file, **kwargs)
+    with open(dst_file, 'w') as yaml_file:
+        yaml.dump(data, yaml_file)
 
-    Args:
-        yaml_data (dict): Yaml data
 
-    Returns:
-        dict: rendered data
-    """
-    template = Template(yaml.dump(yaml_data))
-    out = template.render(**yaml_data)
-    return yaml.safe_load(out)
+def load_yaml_to_dict(file):
+    template = os.path.join(file)
+    return yaml.safe_load(open(template, 'r'))
+
+
+def dump_dict_to_temp_yaml(data, temp_yaml):
+    with open(temp_yaml, 'w') as yaml_file:
+        return yaml.dump(data, yaml_file)

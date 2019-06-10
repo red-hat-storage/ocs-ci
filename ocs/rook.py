@@ -7,10 +7,13 @@ functional and proper configurations are made for interaction.
 """
 
 import logging
+import os
 
 import oc.openshift_ops as ac
-from ocs.pod import Pod
+import resources.pod as pod
 import ocs.defaults as default
+from utility.templating import generate_yaml_from_jinja2_template_with_data
+from ocsci.config import ENV_DATA
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +63,7 @@ class RookCluster(object):
         Read namespace and cluster name from config.
         """
         self._namespace = config.get(
-            'namespace', default.ROOK_CLUSTER_NAMESPACE
+            'namespace', ENV_DATA['cluster_namespace']
         )
         # Keeping api_client_name for upcoming PR
         self._api_client_name = config.get('api_client_name', 'OCRESTClient')
@@ -71,9 +74,8 @@ class RookCluster(object):
             f'/apis/ceph.rook.io/{self.rook_crd_ver}'
             f'/namespaces/{self._namespace}/'
         )
-        self._ocs_pods = list()
+        self._ocs_pods = pod.get_all_pods(self._namespace)
         self._api_client = ac.OCP()  # TODO: APIClient abstractions
-        self.ocs_pod_init()
 
     @property
     def cluster_name(self):
@@ -85,56 +87,68 @@ class RookCluster(object):
 
     @property
     def pods(self):
-        # TODO: Decide whether to return list or yield
-        for pod in self._ocs_pods:
-            yield pod
+        return self._ocs_pods
 
-    def ocs_pod_init(self):
+    def create_cephblockpool(
+        self,
+        cephblockpool_name,
+        namespace,
+        service_cbp,
+        failureDomain,
+        replica_count
+    ):
         """
-        Not to be confused with actual pod init in oc cluster.
-        This is just an initializer for ```Class Pod``` from ocs/pod module.
-        """
-
-        def _get_ocs_pods():
-            """
-            Fetch pod info from openshift rook cluster
-
-            This function scans all mon, osd, client pods from the namespace
-            `_namespace` and fills in the details in `_ocs_pods`
-
-            Yields:
-                pod (str): name of the pod
-            """
-
-            pod_list = self._api_client.get_pods(
-                namespace=self._namespace,
-                label_selector='app != rook-ceph-osd-prepare'
-            )
-            for each in pod_list:
-                yield each
-
-        for pod in _get_ocs_pods():
-            pod_labels = self._get_pod_labels(
-                pod_name=pod,
-                namespace=self._namespace,
-            )
-            # Instantiate pod object for this pod
-            podobj = Pod(pod, self._namespace, pod_labels)
-            self._ocs_pods.append(podobj)
-
-    def _get_pod_labels(self, pod_name, namespace):
-        """
-        Get labels(openshift labels) on a pod
+        Creates cephblock pool
 
         Args:
-            pod_name (str): Name of the pod
-            namespace (str): Namespace in which this pod lives
+            cephblockpool_name (str): Name of cephblockpool
+            namespace (str): Namespace to create cephblockpool
+            service_cbp (class):  Dynamic client resource of kind cephblockpool
+            failureDomain (str): The failure domain across which the
+                                   replicas or chunks of data will be spread
+            replica_count (int): The number of copies of the data in the pool.
 
         Returns:
-            dict: Labels from pod metadata
+            bool : True if cephblockpool created sucessfully
 
-        Note: this function is only for internal consumption, end users would
-        be using pod.labels to get labels on a given pod instance.
+        Raises:
+            Exception when error occured
+
+        Examples:
+            create_cephblockpool(
+                cephblockpool_name",
+                service_cbp,
+                failureDomain="host",
+                replica_count=3
+            )
+
         """
+        _rc = False
+        template_path = os.path.join(
+            default.TEMPLATE_DIR,
+            "cephblockpool.yaml"
+        )
+        # overwrite the namespace with openshift-storage, since cephblockpool
+        # is tied-up with openshift-storage
+        namespace = ENV_DATA['cluster_namespace']
 
-        return self._api_client.get_labels(pod_name, namespace)
+        cephblockpool_data = {}
+        cephblockpool_data['cephblockpool_name'] = cephblockpool_name
+        cephblockpool_data['rook_api_version'] = default.ROOK_API_VERSION
+        cephblockpool_data['failureDomain'] = failureDomain
+        cephblockpool_data['replica_count'] = replica_count
+
+        data = generate_yaml_from_jinja2_template_with_data(
+            template_path,
+            **cephblockpool_data
+        )
+        try:
+            service_cbp.create(body=data, namespace=namespace)
+            _rc = True
+        except Exception as err:
+            logger.error(
+                "Error while creating cephblockpool %s", cephblockpool_name
+            )
+            raise Exception(err)
+
+        return _rc

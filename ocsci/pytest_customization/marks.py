@@ -5,6 +5,7 @@ all related hooks/plugins to markers.
 
 import pytest
 
+
 # tier marks
 tier1 = pytest.mark.tier1(value=1)
 tier2 = pytest.mark.tier2(value=2)
@@ -31,6 +32,7 @@ workloads = pytest.mark.workloads
 performance = pytest.mark.performance
 scale = pytest.mark.scale
 deployment = pytest.mark.deployment
+destroy = pytest.mark.destroy
 upgrade = pytest.mark.upgrade
 
 # testing marker this is just for testing purpose if you want to run some test
