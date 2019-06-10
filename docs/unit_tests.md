@@ -1,7 +1,7 @@
-# unittests
+# Unit tests
 
-This directory contains unit tests of ocs-ci python modules, including our
-pytest plugins.
+We're in the process of writing unit tests for the ocs-ci python modules,
+including our pytest plugins.
 
 We are using [pytest](https://docs.pytest.org/en/latest/) framework
 and test execution is handled via [tox](https://tox.readthedocs.io/), as
@@ -25,18 +25,30 @@ This will execute the tests in the same way as in
 [Travis CI](https://travis-ci.org/red-hat-storage/ocs-ci), including flake8
 checks.
 
+## What tests are available?
+
+You can list available tests by doing:
+```
+$ tox -e py37 -- --collect-only
+```
+
 ## How to run particular test only?
 
 It's possible to pass additional pytest arguments to tox like this:
 
 ```
-$ tox -e py37 -- unittests/test_pytest.py::test_config_parametrize
+$ tox -e py37 -- ocsci/pytest_customization/tests/test_pytest.py::test_config_parametrize
+```
+
+Or like this:
+```
+$ tox -e py37 -- -k test_config_parametrize
 ```
 
 This can be also helpful during debugging:
 
 ```
-$ tox -e py37 -- unittests -v --pdb
+$ tox -e py37 -- -v --pdb
 ```
 
 ## Pytest integration tests

@@ -12,7 +12,6 @@ See the documentation in conf/README.md file to understand this config file.
 PYTEST_DONT_REWRITE - avoid pytest to rewrite, keep this msg here please!
 """
 import os
-from getpass import getuser
 
 from utility.templating import load_yaml_to_dict
 
@@ -48,7 +47,7 @@ CLIENT_VERSION = INSTALLER_VERSION
 AWS_REGION = 'us-east-2'
 ROOK_CLUSTER_NAMESPACE = 'openshift-storage'
 KUBECONFIG_LOCATION = 'auth/kubeconfig'  # relative from cluster_dir
-CLUSTER_NAME = f"ocs-ci-cluster-{getuser()}"
+CLUSTER_NAME = "ocs-ci"
 API_VERSION = "v1"
 CEPH_IMAGE = "ceph/ceph:v14.2.0-20190410"
 ROOK_IMAGE = "rook/ceph:master"
@@ -69,6 +68,25 @@ ENV_DATA = {
     'region': AWS_REGION,
     'ceph_image': CEPH_IMAGE,
     'rook_image': ROOK_IMAGE,
+}
+
+DEPLOYMENT = {
+    'installer_version': INSTALLER_VERSION,
+}
+
+REPORTING = {
+    'email': {
+        'address': 'ocs-ci@redhat.com',
+    },
+}
+
+RUN = {
+    'log_dir': '/tmp',
+    'run_id': None,
+    'kubeconfig_location': 'auth/kubeconfig',
+    'cli_params': {},
+    'client_version': DEPLOYMENT['installer_version'],
+    'bin_dir': './bin',
 }
 
 TEMPLATES_DIR = "templates"

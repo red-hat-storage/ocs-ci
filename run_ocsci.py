@@ -110,6 +110,11 @@ def render_yaml_with_j2_context(yaml_data):
 def main():
     arguments = sys.argv[1:]
     init_ocsci_conf(arguments)
+    arguments.extend([
+        '-p', 'ocsci.pytest_customization.ocscilib',
+        '-p', 'ocsci.pytest_customization.marks',
+        '-p', 'ocsci.pytest_customization.ocsci_logging',
+    ])
     exit(pytest.main(arguments))
 
 

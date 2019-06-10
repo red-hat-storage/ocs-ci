@@ -22,14 +22,14 @@ class AWS(object):
     _ec2_resource = None
     _region_name = None
 
-    def __init__(self, region_name=ENV_DATA['region']):
+    def __init__(self, region_name=None):
         """
         Constructor for AWS class
 
         Args:
             region_name (str): Name of AWS region (default: us-east-2)
         """
-        self._region_name = region_name
+        self._region_name = region_name or ENV_DATA['region']
 
     @property
     def ec2_client(self):

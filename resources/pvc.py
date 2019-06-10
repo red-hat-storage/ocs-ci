@@ -1,7 +1,6 @@
 """
 General PVC object
 """
-import tempfile
 import logging
 
 from resources.ocs import OCS
