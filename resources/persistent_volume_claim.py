@@ -30,8 +30,9 @@ class PVC(OCS):
         self.pvc_data = default.PVC_DICT
         self.pvc_data.update(kwargs)
         super(PVC, self).__init__(
-            self.pvc_data['apiVersion'], self.pvc_data['kind'],
-            self.pvc_data['metadata']['namespace']
+            api_version=self.pvc_data['apiVersion'],
+            kind=self.pvc_data['kind'],
+            namespace=self.pvc_data['metadata']['namespace']
         )
         self.interface = interface
         self._name = self.pvc_data['pvc_name']
