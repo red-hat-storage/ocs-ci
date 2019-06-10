@@ -8,7 +8,7 @@ import tempfile
 import yaml
 
 from ocs.ocp import OCP
-from ocs import defaults, kinds
+from ocs import defaults, constants
 from ocsci.config import ENV_DATA
 from ocs.exceptions import CommandFailed
 
@@ -39,7 +39,7 @@ class Pod(OCS):
         self._labels = self.get_labels()
         self._roles = []
         self.ocp = OCP(
-            api_version=defaults.API_VERSION, kind=kinds.POD,
+            api_version=defaults.API_VERSION, kind=constants.POD,
             namespace=self.namespace
         )
         # TODO: get backend config !!
@@ -131,7 +131,7 @@ def get_all_pods(namespace=None):
     Returns:
         list: List of Pod objects
     """
-    ocp_pod_obj = OCP(kind=kinds.POD, namespace=namespace)
+    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     pods = ocp_pod_obj.get()['items']
     pod_objs = [Pod(**yaml.safe_load(pod)) for pod in pods]
     return pod_objs
@@ -145,7 +145,7 @@ def get_ceph_tools_pod():
         Pod object: The Ceph tools pod object
     """
     ocp_pod_obj = OCP(
-        kind=kinds.POD, namespace=ENV_DATA['cluster_namespace']
+        kind=constants.POD, namespace=ENV_DATA['cluster_namespace']
     )
     ct_pod = ocp_pod_obj.get(
         selector='app=rook-ceph-tools'

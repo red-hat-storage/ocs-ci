@@ -3,13 +3,12 @@ General Secret object
 """
 import os
 import logging
-import ocs.defaults as default
 import base64
 import tempfile
 
-from templating import dump_to_temp_yaml
+from utility.templating import dump_to_temp_yaml
 from resources.ocs import OCS
-from ocs import ocp
+from ocs import ocp, constants
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +44,7 @@ class Secret(OCS):
     def create(self):
         log.info(f"Creating secret for {self.interface}")
         template = os.path.join(
-            default.TEMPLATES_DIR, f"csi-{self.interface}-secret.yaml"
+            constants.TEMPLATES_DIR, f"csi-{self.interface}-secret.yaml"
         )
         dump_to_temp_yaml(template, self.temp_yaml.name, **self.secret_data)
         assert self.ocp.create(yaml_file=self.temp_yaml.name)
