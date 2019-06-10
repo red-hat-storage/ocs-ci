@@ -728,6 +728,7 @@ def destroy_cluster(cluster_path):
 def get_openshift_installer(
     version=DEPLOYMENT['installer_version'],
     bin_dir=RUN['bin_dir'],
+    force_download=False,
 ):
     """
     Download the OpenShift installer binary, if not already present.
@@ -736,6 +737,7 @@ def get_openshift_installer(
     Args:
         version (str): Version of the installer to download
         bin_dir (str): Path to bin directory (default: RUN['bin_dir'])
+        force_download (bool): Force installer download even if already present
 
     Returns:
         str: Path to the installer binary
@@ -743,6 +745,8 @@ def get_openshift_installer(
     """
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
+    if os.path.isfile(installer_binary_path) and force_download:
+        delete_file(installer_binary_path)
     if os.path.isfile(installer_binary_path):
         log.debug("Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
@@ -768,6 +772,7 @@ def get_openshift_installer(
 def get_openshift_client(
     version=RUN['client_version'],
     bin_dir=RUN['bin_dir'],
+    force_download=False,
 ):
     """
     Download the OpenShift client binary, if not already present.
@@ -777,12 +782,15 @@ def get_openshift_client(
         version (str): Version of the client to download
             (default: RUN['client_version'])
         bin_dir (str): Path to bin directory (default: RUN['bin_dir'])
+        force_download (bool): Force client download even if already present
 
     Returns:
         str: Path to the client binary
 
     """
     client_binary_path = os.path.join(bin_dir, 'oc')
+    if os.path.isfile(client_binary_path) and force_download:
+        delete_file(client_binary_path)
     if os.path.isfile(client_binary_path):
         log.debug("Client exists ({client_binary_path}), skipping download.")
         # TODO: check client version

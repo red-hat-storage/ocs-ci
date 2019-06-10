@@ -63,10 +63,11 @@ class TestDeployment(EcosystemTest):
 
         # Download installer
         installer = get_openshift_installer(
-            DEPLOYMENT['installer_version']
+            DEPLOYMENT['installer_version'],
+            force_download=True,
         )
         # Download client
-        get_openshift_client()
+        get_openshift_client(force_download=True)
 
         # Deploy cluster
         log.info("Deploying cluster")
