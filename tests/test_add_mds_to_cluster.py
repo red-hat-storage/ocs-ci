@@ -4,7 +4,7 @@ A test for creating a CephFS
 import logging
 import pytest
 
-from ocs import ocp, defaults
+from ocs import ocp, defaults, constants
 from ocsci.config import ENV_DATA
 from ocsci.testlib import tier1, ManageTest
 from resources.ocs import OCS
@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 CEPHFS_DELETED = '"{cephfs_name}" deleted'
 
-POD = ocp.OCP(kind='Pod', namespace=ENV_DATA['cluster_namespace'])
+POD = ocp.OCP(kind=constants.POD, namespace=ENV_DATA['cluster_namespace'])
 CEPH_OBJ = None
 
 

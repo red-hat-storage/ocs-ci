@@ -2,20 +2,21 @@
 A test for creating a PV
 """
 import logging
-import yaml
-import pytest
+import os
 
-from ocsci.config import ENV_DATA
-from ocs.defaults import TEMPLATE_PV_PVC_DIR
-from ocsci.testlib import tier1, ManageTest
+import pytest
+import yaml
+
 from ocs import exceptions
 from ocs import ocp
+from ocs.constants import TEMPLATE_PV_PVC_DIR
+from ocsci.config import ENV_DATA
+from ocsci.testlib import tier1, ManageTest
 from utility import utils, templating
-
 
 log = logging.getLogger(__name__)
 
-PV_YAML = f"{TEMPLATE_PV_PVC_DIR}/PersistentVolume.yaml"
+PV_YAML = os.path.join(TEMPLATE_PV_PVC_DIR, "PersistentVolume.yaml")
 TEMP_YAML_FILE = 'test.yaml'
 VOLUME_DELETED = 'persistentvolume "{volume_name}" deleted'
 

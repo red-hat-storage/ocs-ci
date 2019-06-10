@@ -3,10 +3,10 @@ General StorageClass object
 """
 import os
 import logging
-import ocs.defaults as default
 import yaml
 import tempfile
 
+from ocs import constants
 from resources.ocs import OCS
 
 log = logging.getLogger(__name__)
@@ -30,13 +30,13 @@ class StorageClass(OCS):
         self.interface = interface
         if self.interface == 'cephfs':
             self.yaml_path = os.path.join(
-                default.TEMPLATE_CSI_RBD_DIR, "rbd_storageclass.yaml"
+                constants.TEMPLATE_CSI_RBD_DIR, "rbd_storageclass.yaml"
             )
             # TODO: Implement
             pass
         if self.interface == 'rbd':
             self.yaml_path = os.path.join(
-                default.TEMPLATE_CSI_FS_DIR, "cephfs_storageclass.yaml"
+                constants.TEMPLATE_CSI_FS_DIR, "cephfs_storageclass.yaml"
             )
             # TODO: Implement
             pass

@@ -3,7 +3,7 @@ Helper functions file for OCS QE
 """
 import logging
 import datetime
-from ocs import defaults
+from ocs import constants
 from resources.ocs import OCS
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ def create_unique_resource_name(resource_description, resource_type):
 
 
 def create_resource(
-    desired_status=defaults.STATUS_AVAILABLE, wait=True, **kwargs
+    desired_status=constants.STATUS_AVAILABLE, wait=True, **kwargs
 ):
     """
     Create a resource
