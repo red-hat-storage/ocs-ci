@@ -5,6 +5,10 @@ import textwrap
 
 from run_ocsci import init_ocsci_conf
 
+pytest_plugins = [
+    'pytester',
+]
+
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +22,9 @@ def test_help_message(testdir):
     Check that ``py.test --help`` output lists custom options of
     ocscilib pytest plugin.
     """
+    testdir.makeconftest(textwrap.dedent("""
+        pytest_plugins = ['ocsci.pytest_customization.ocscilib']
+    """))
     result = testdir.runpytest('--help')
     # fnmatch_lines does an assertion internally
     result.stdout.fnmatch_lines([
@@ -50,6 +57,9 @@ def test_config_parametrize(testdir):
     Parametrization via config values, use case described in
     https://github.com/red-hat-storage/ocs-ci/pull/61#issuecomment-494866745
     """
+    testdir.makeconftest(textwrap.dedent("""
+        pytest_plugins = ['ocsci.pytest_customization.ocscilib']
+    """))
     # create a temporary pytest test module
     testdir.makepyfile(textwrap.dedent("""\
         import pytest
