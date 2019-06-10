@@ -667,6 +667,7 @@ def download_file(url, filename):
         filename (str): Name of the file to write the download to
 
     """
+    log.debug(f"Download '{url}' to '{filename}'.")
     with open(filename, "wb") as f:
         r = requests.get(url)
         f.write(r.content)
@@ -751,7 +752,7 @@ def get_openshift_installer(
         log.debug("Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
     else:
-        log.info("Downloading openshift installer")
+        log.info(f"Downloading openshift installer ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
@@ -763,6 +764,9 @@ def get_openshift_installer(
         delete_file(tarball)
         # return to the previous working directory
         os.chdir(previous_dir)
+
+    installer_version = run_cmd(f"{installer_binary_path} version")
+    log.info(f"OpenShift Installer version: {installer_version}")
 
     add_path_to_env_path(bin_dir)
 
@@ -795,7 +799,7 @@ def get_openshift_client(
         log.debug("Client exists ({client_binary_path}), skipping download.")
         # TODO: check client version
     else:
-        log.info("Downloading openshift client")
+        log.info(f"Downloading openshift client ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
@@ -807,6 +811,9 @@ def get_openshift_client(
         delete_file(tarball)
         # return to the previous working directory
         os.chdir(previous_dir)
+
+    client_version = run_cmd(f"{client_binary_path} version")
+    log.info(f"OpenShift Client version: {client_version}")
 
     add_path_to_env_path(bin_dir)
 
