@@ -71,8 +71,8 @@ class OCS(object):
         self.data = self.get()
         self.__init__(**self.data)
 
-    def get(self):
-        return self.ocp.get(resource_name=self.name)
+    def get(self, out_yaml_format=True):
+        return self.ocp.get(resource_name=self.name, out_yaml_format=out_yaml_format)
 
     def create(self):
         log.info(f"Adding {self.kind} with name {self.name}")
@@ -81,8 +81,8 @@ class OCS(object):
         self.reload()
         return status
 
-    def delete(self):
-        self.ocp.delete(resource_name=self.name)
+    def delete(self, wait=True):
+        self.ocp.delete(resource_name=self.name, wait=wait)
 
     def apply(self, **data):
         with open(self.temp_yaml.name, 'w') as yaml_file:

@@ -25,6 +25,7 @@ STATUS_PENDING = 'Pending'
 STATUS_AVAILABLE = 'Available'
 STATUS_RUNNING = 'Running'
 STATUS_TERMINATING = 'Terminating'
+STATUS_BOUND = 'Bound'
 
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
