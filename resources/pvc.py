@@ -21,29 +21,9 @@ class PVC(OCS):
             See parent class for kwargs information
         """
         super(PVC, self).__init__(**kwargs)
-        self.temp_yaml = tempfile.NamedTemporaryFile(
-            mode='w+', prefix='PVC_', delete=False
-        )
 
-    def get_status(self):
-        """
-        Returns the PVC status
-
-        Returns:
-            str: PVC status
-        """
-        return self.data.get('status').get('phase')
-
-    def get_backed_pv(self):
-        """
-        Returns the backed PV name of pvc_name in namespace
-
-        Returns:
-            str: PV name
-        """
-        return self.data.get('spec').get('volumeName')
-
-    def get_size(self):
+    @property
+    def size(self):
         """
         Returns the PVC size pvc_name in namespace
 
@@ -52,6 +32,26 @@ class PVC(OCS):
         """
         #  [:-2] -> to remove the 'Gi' from the size (e.g. '5Gi --> '5')
         return int(self.data.get('status').get('capacity').get('storage')[:-2])
+
+    @property
+    def status(self):
+        """
+        Returns the PVC status
+
+        Returns:
+            str: PVC status
+        """
+        return self.data.get('status').get('phase')
+
+    @property
+    def backed_pv(self):
+        """
+        Returns the backed PV name of pvc_name in namespace
+
+        Returns:
+            str: PV name
+        """
+        return self.data.get('spec').get('volumeName')
 
     def resize_pvc(self, new_size, verify=False):
         """

@@ -22,8 +22,8 @@ class OCS(object):
 
         Args:
             kwargs (dict):
-                1) For existing resource, use OCP.get() to get the resource's
-                dictionary and use it to pass as **kwargs
+                1) For existing resource, use OCP.reload() to get the
+                resource's dictionary and use it to pass as **kwargs
                 2) For new resource, use yaml files templates under
                 /templates/CSI like:
                 obj_dict = load_yaml_to_dict(
