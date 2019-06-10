@@ -1,7 +1,7 @@
 import pytest
 import logging
 
-from ocs import defaults, exceptions
+from ocs import defaults, exceptions, constants
 from resources import pod
 from ocsci.testlib import ManageTest, tier1
 from tests.fixtures import (
@@ -37,7 +37,7 @@ class TestCaseOCS371(ManageTest):
 
         # This is a workaround for bug 1715627 (replaces wait_for_resource)
         pvc_out = self.pvc_obj.get(out_yaml_format=False)
-        assert defaults.STATUS_TERMINATING in pvc_out, (
+        assert constants.STATUS_TERMINATING in pvc_out, (
             f"PVC {self.pvc_obj.name} failed to reach status {defaults.STATUS_TERMINATING}"
         )
 
