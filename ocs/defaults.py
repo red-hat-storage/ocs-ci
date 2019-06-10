@@ -18,7 +18,13 @@ from utility.templating import load_yaml_to_dict
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 TOP_DIR = os.path.dirname(THIS_DIR)
-TEMPLATE_DIR = os.path.join(TOP_DIR, "templates/ocs-deployment/")
+TEMPLATE_DIR = os.path.join(TOP_DIR, "templates")
+TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
+TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
+TEMPLATE_CSI_RBD_DIR = os.path.join(TEMPLATE_CSI_DIR, "rbd")
+TEMPLATE_CSI_FS_DIR = os.path.join(TEMPLATE_CSI_DIR, "cephfs")
+TEMPLATE_PV_PVC_DIR = os.path.join(TEMPLATE_DIR, "pv_pvc")
+TEMPLATE_APP_POD_DIR = os.path.join(TEMPLATE_DIR, "app-pods")
 STORAGE_API_VERSION = 'storage.k8s.io/v1'
 ROOK_API_VERSION = 'ceph.rook.io/v1'
 OCP_API_VERSION = 'project.openshift.io/v1'
@@ -70,16 +76,16 @@ TEMP_YAML = os.path.join(TEMPLATES_DIR, "temp.yaml")
 
 TOOL_POD_DICT = load_yaml_to_dict(
     os.path.join(
-        TEMPLATE_DIR, "toolbox_pod.yaml"
+        TEMPLATE_DEPLOYMENT_DIR, "toolbox_pod.yaml"
     )
 )
 CEPHFILESYSTEM_DICT = load_yaml_to_dict(
     os.path.join(
-        TEMPLATE_DIR, "cephfilesystem_new.yaml"
+        TEMPLATE_CSI_FS_DIR, "CephFileSystem.yaml"
     )
 )
 PVC_DICT = load_yaml_to_dict(
     os.path.join(
-        TEMPLATE_DIR, "PersistentVolumeClaim_new.yaml"
+        TEMPLATE_PV_PVC_DIR, "PersistentVolumeClaim.yaml"
     )
 )

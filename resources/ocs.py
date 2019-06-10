@@ -22,6 +22,15 @@ class OCS(object):
 
         Args:
             kwargs (dict):
+                1) For existing resource, use OCP.reload() to get the
+                resource's dictionary and use it to pass as **kwargs
+                2) For new resource, use yaml files templates under
+                /templates/CSI like:
+                obj_dict = load_yaml_to_dict(
+                    os.path.join(
+                        TEMPLATE_DIR, "some_resource.yaml"
+                        )
+                    )
         """
         self.data = kwargs
         self._api_version = self.data.get('api_version')
@@ -81,6 +90,7 @@ class OCS(object):
         assert self.ocp.apply(yaml_file=self.temp_yaml.name), (
             f"Failed to apply changes {data}"
         )
+        self.reload()
 
     def add_label(self, label):
         """

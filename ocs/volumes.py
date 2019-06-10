@@ -51,7 +51,7 @@ class CephRBDVolume(KubeVolume):
             kind=self.kind
         )
         self.template_path = os.path.join(
-            defaults.TEMPLATE_DIR,
+            defaults.TEMPLATE_DEPLOYMENT_DIR,
             "cephblockpool.yaml"
         )
         self.rk = RookCluster()
@@ -119,7 +119,7 @@ class StorageClass(KubeVolume):
             kind=self.kind
         )
         self.template_path = os.path.join(
-            defaults.TEMPLATE_DIR,
+            defaults.TEMPLATE_DEPLOYMENT_DIR,
             "storageclass.yaml"
         )
 
@@ -199,7 +199,7 @@ class PVC(KubeVolume):
             api_version=self.api_version,
             kind=self.kind
         )
-        self.template_path = os.path.join(defaults.TEMPLATE_DIR, "pvc.yaml")
+        self.template_path = os.path.join(defaults.TEMPLATE_DEPLOYMENT_DIR, "pvc.yaml")
 
     def create_pvc(
         self,
