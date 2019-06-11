@@ -36,6 +36,9 @@ POD = "Pod"
 
 # Other
 SECRET = "Secret"
+<<<<<<< HEAD
 
 # encoded value of 'admin'
+=======
+>>>>>>> Fixed cephfs storageclass creation
 ADMIN_BASE64 = 'YWRtaW4='

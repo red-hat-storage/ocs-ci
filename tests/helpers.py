@@ -107,14 +107,19 @@ def create_secret(interface_type):
     secret_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
         secret_data = defaults.CSI_RBD_SECRET.copy()
+        del secret_data['data']['kubernetes']
+        secret_data['data']['admin'] = get_admin_key()
     elif interface_type == constants.CEPHFILESYSTEM:
         secret_data = defaults.CSI_CEPHFS_SECRET.copy()
+        del secret_data['data']['userID']
+        del secret_data['data']['userKey']
+        secret_data['data']['adminID'] = constants.ADMIN_BASE64
+        secret_data['data']['adminKey'] = get_admin_key()
     secret_data['metadata']['name'] = create_unique_resource_name(
         'test', 'secret'
     )
     secret_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    del secret_data['data']['kubernetes']
-    secret_data['data']['admin'] = get_admin_key()
+
     return create_resource(**secret_data, wait=False)
 
 
@@ -154,9 +159,9 @@ def create_storage_class(interface_type, interface_name, secret_name):
     sc_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
         sc_data = defaults.CSI_RBD_STORAGECLASS_DICT.copy()
-        sc_data['parameters']['pool'] = interface_name
     elif interface_type == constants.CEPHFILESYSTEM:
-        sc_data = defaults.CEPHFILESYSTEM_DICT.copy()
+        sc_data = defaults.CSI_CEPHFS_STORAGECLASS_DICT.copy()
+    sc_data['parameters']['pool'] = interface_name
 
     mons = (
         f'rook-ceph-mon-a.{ENV_DATA["cluster_namespace"]}'
@@ -176,7 +181,10 @@ def create_storage_class(interface_type, interface_name, secret_name):
     sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
 
     sc_data['parameters']['monitors'] = mons
-    del sc_data['parameters']['userid']
+    try:
+        del sc_data['parameters']['userid']
+    except KeyError:
+        pass
     return create_resource(**sc_data, wait=False)
 
 
@@ -230,3 +238,15 @@ def get_admin_key():
     out = ct_pod.exec_ceph_cmd('ceph auth get-key client.admin')
     base64_output = base64.b64encode(out['key'].encode()).decode()
     return base64_output
+
+
+def get_cephfs_data_pool_name():
+    """
+        Fetches ceph fs datapool name from Ceph
+
+        Returns:
+            str: fs datapool name
+        """
+    ct_pod = pod.get_ceph_tools_pod()
+    out = ct_pod.exec_ceph_cmd('ceph fs ls')
+    return out[0]['data_pools'][0]
