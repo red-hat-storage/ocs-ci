@@ -2,8 +2,8 @@
 A test case to verify after deleting pvc whether
 size is returned to backend pool
 """
+from datetime import datetime, timedelta
 import logging
-import time
 import pytest
 
 from ocs import constants, defaults
@@ -30,16 +30,19 @@ def check_ceph_used_space():
     """
     Check for the used space in cluster
     """
-
-    # ToDo: after running IO's or deleting pod & pvc takes some time
-    time.sleep(20)
-    ct_pod = pod.get_ceph_tools_pod()
-    ceph_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph status")
-    assert ceph_status is not None
-    used = ceph_status['pgmap']['bytes_used']
-    GB = (1024 * 1024 * 1024)
-    used_in_gb = used / GB
-    return used_in_gb
+    end_time = datetime.now() + timedelta(seconds=120)
+    while datetime.now() < end_time:
+        sample_of_three_size = []
+        for i in range(3):
+            ct_pod = pod.get_ceph_tools_pod()
+            ceph_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph status")
+            assert ceph_status is not None
+            used = ceph_status['pgmap']['bytes_used']
+            used_in_gb = used / constants.GB
+            sample_of_three_size.append(used_in_gb)
+        if len(set(sample_of_three_size)) == 1:
+            return used_in_gb
+    logger.error(f"Unexpected: In ceph status, used size is keeping varying")
 
 
 def run_io(pod_obj):
@@ -64,26 +67,16 @@ def verify_pv_not_exists(pv_name, cbp_name):
     Ensure that pv does not exists
     """
 
-    # validate on oc side
-    try:
-        assert not PV.get(pv_name)
-    except ex.CommandFailed as ecf:
-        assert "not found" in str(ecf)
-        logger.info(
-            f"Expected: pv should not be found "
-            f"after deleting corresponding pvc"
-        )
-
     # Validate on ceph side
     logger.info(f"Verifying pvc {pv_name} exists on backend")
-    _rc = False
     ct_pod = pod.get_ceph_tools_pod()
-    pvc_list = ct_pod.exec_ceph_cmd(
-        ceph_cmd=f"rbd ls -p {cbp_name}", format='json'
-    )
-    for pvc in pvc_list:
-        if pvc == pv_name:
-            _rc = True
+    end_time = datetime.now() + timedelta(seconds=20)
+    while datetime.now() < end_time:
+        pvc_list = ct_pod.exec_ceph_cmd(
+            ceph_cmd=f"rbd ls -p {cbp_name}", format='json'
+        )
+        _rc = pv_name in pvc_list
+        if not _rc:
             break
     assert not _rc, (
         f"pvc {pv_name} exists on backend"
@@ -92,10 +85,19 @@ def verify_pv_not_exists(pv_name, cbp_name):
         f"Expected: pvc {pv_name} doesn't exist on backend after deleting pvc"
     )
 
+    # Validate on oc side
+    try:
+        assert not PV.get(pv_name)
+    except ex.CommandFailed as ecf:
+        assert "not found" in str(ecf)
+    logger.info(
+        f"Expected: pv should not be found "
+        f"after deleting corresponding pvc"
+    )
+
 
 def create_pvc_and_verify_pvc_exists(
-        sc_name, cbp_name,
-        desired_status=constants.STATUS_BOUND, wait=True
+    sc_name, cbp_name, desired_status=constants.STATUS_BOUND
 ):
     """
     Create pvc, verify pvc is bound in state and
@@ -108,35 +110,27 @@ def create_pvc_and_verify_pvc_exists(
     )
     pvc_data['spec']['storageClassName'] = sc_name
     pvc_data['spec']['resources']['requests']['storage'] = "10Gi"
-    global PVC_OBJ
-    PVC_OBJ = helpers.create_resource(**pvc_data, wait=False)
-    assert PVC_OBJ, (
+    pvc_obj = helpers.create_resource(
+        **pvc_data, desired_status=desired_status, wait=True
+    )
+    assert pvc_obj, (
         f"Failed to create resource {pvc_data['metadata']['name']}"
     )
-    if wait:
-        assert PVC_OBJ.ocp.wait_for_resource(
-            condition=desired_status, resource_name=PVC_OBJ.name
-        ), f"{pvc_data.kind} {PVC_OBJ.name} failed to reach"
-        f"status {desired_status}"
 
     # get pvc info
-    pvc_info = PVC_OBJ.get()
+    pvc_info = pvc_obj.get()
     pv_name = pvc_info['spec']['volumeName']
 
     # Validate pvc is created on ceph
     logger.info(f"Verifying pvc {pv_name} exists on backend")
-    _rc = False
     ct_pod = pod.get_ceph_tools_pod()
     pvc_list = ct_pod.exec_ceph_cmd(
         ceph_cmd=f"rbd ls -p {cbp_name}", format='json'
     )
-    for pvc in pvc_list:
-        if pvc == pv_name:
-            _rc = True
-            break
+    _rc = pv_name in pvc_list
     assert _rc, f"pvc {pv_name} doesn't exist on backend"
     logger.info(f"pvc {pv_name} exists on backend")
-    return pv_name, PVC_OBJ.name
+    return pvc_obj, pv_name
 
 
 @pytest.mark.usefixtures(
@@ -155,24 +149,22 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         Test case to verify after delete pvc size returned to backend pools
         """
         used_before_creating_pvc = check_ceph_used_space()
-        logger.info(f"used before creating pvc {used_before_creating_pvc}")
-        pv_name, pvc_name = create_pvc_and_verify_pvc_exists(
+        logger.info(f"Used before creating pvc {used_before_creating_pvc}")
+        pvc_obj, pv_name = create_pvc_and_verify_pvc_exists(
             self.sc_obj.name, self.cbp_obj.name
         )
         pod_data = defaults.CSI_RBD_POD_DICT.copy()
-        pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
+        pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_obj.name
         pod_obj = helpers.create_pod(**pod_data)
         run_io(pod_obj)
         used_after_creating_pvc = check_ceph_used_space()
-        logger.info(f"used after creating pvc {used_after_creating_pvc}")
+        logger.info(f"Used after creating pvc {used_after_creating_pvc}")
         assert used_before_creating_pvc < used_after_creating_pvc
         pod_obj.delete()
-        PVC_OBJ.delete()
-        # Todo: Takes some time to delete pv so for now adding sleep
-        time.sleep(20)
+        pvc_obj.delete()
         verify_pv_not_exists(pv_name, self.cbp_obj.name)
         used_after_deleting_pvc = check_ceph_used_space()
-        logger.info(f"used after deleting pvc {used_after_deleting_pvc}")
+        logger.info(f"Used after deleting pvc {used_after_deleting_pvc}")
         assert used_after_deleting_pvc < used_after_creating_pvc
         assert (abs(
             used_after_deleting_pvc - used_before_creating_pvc) < 0.2)
