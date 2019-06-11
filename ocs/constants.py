@@ -36,3 +36,6 @@ POD = "Pod"
 
 # Other
 SECRET = "Secret"
+
+# encoded value of 'admin'
+ADMIN_BASE64 = 'YWRtaW4='
