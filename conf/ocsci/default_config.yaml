@@ -23,12 +23,10 @@
 # are not suppose to be used from sections below put directly in
 # ocs/defaults.py module.
 DEFAULTS:
+  DEPLOYMENT_PLATFORM: "AWS"
   AWS_REGION: "us-east-2"
   API_VERSION: "v1"
   TEMPLATES: "templates/"
-  TEMPLATE_CSI_DIR: '{{ DEFAULTS["TEMPLATES"] }}/CSI'
-  TEMPLATE_CSI_RBD_DIR: '{{ DEFAULTS["TEMPLATE_CSI_DIR"] }}/rbd'
-  TEMPLATE_CSI_FS_DIR: '{{ DEFAULTS["TEMPLATE_CSI_DIR"] }}/cephfs'
 
 # in this RUN section we will keep default parameters for run of OCS-CI
 RUN:
@@ -43,7 +41,7 @@ RUN:
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
 DEPLOYMENT:
-  installer_version: "4.1.0-rc.5"
+  installer_version: "4.1.0"
   force_download_installer: True
 
 # Section for reporting configuration

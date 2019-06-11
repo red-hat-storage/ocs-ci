@@ -2,8 +2,8 @@
 apiVersion: ceph.rook.io/v1
 kind: CephFilesystem
 metadata:
-  name: {{ fs_name | default('ocsci-cephfs') }}
-  namespace: {{ cluster_namespace | default('openshift-storage') }}
+  name: ocsci-cephfs
+  namespace: openshift-storage
 spec:
 # The metadata pool spec. Must use replication.
   metadataPool:
@@ -17,7 +17,7 @@ spec:
   # The metadata service (mds) configuration
   metadataServer:
     # The number of active MDS instances
-    activeCount: {{ active_count | default('1') }}
+    activeCount: 1
     # Whether each active MDS instance will have an active standby
     # with a warm metadata cache for faster failover.
     # If false, standbys will be available, but will not have

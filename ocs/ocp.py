@@ -63,12 +63,10 @@ class OCP(object):
 
         oc_cmd += command
         out = run_cmd(cmd=oc_cmd)
-        # Removing any part of output which is out of the yaml/json
+
         try:
-            if '{' in out:
-                if not out.startswith('{'):
-                    if ':' not in out[:out.index('{')]:
-                        out = out[out.index('{'):]
+            if out.startswith('hints = '):
+                out = out[out.index('{'):]
         except ValueError:
             pass
 
@@ -154,8 +152,9 @@ class OCP(object):
             command += f"{self.kind} {resource_name}"
         else:
             command += f"-f {yaml_file}"
-        if wait:
-            command += " --wait=true"
+        # oc default for wait is True
+        if not wait:
+            command += " --wait=false"
         return self.exec_oc_cmd(command)
 
     def apply(self, yaml_file):

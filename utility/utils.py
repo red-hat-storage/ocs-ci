@@ -727,8 +727,8 @@ def destroy_cluster(cluster_path):
 
 
 def get_openshift_installer(
-    version=DEPLOYMENT['installer_version'],
-    bin_dir=RUN['bin_dir'],
+    version=None,
+    bin_dir=None,
     force_download=False,
 ):
     """
@@ -744,6 +744,8 @@ def get_openshift_installer(
         str: Path to the installer binary
 
     """
+    version = version or DEPLOYMENT['installer_version']
+    bin_dir = bin_dir or RUN['bin_dir']
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
     if os.path.isfile(installer_binary_path) and force_download:
@@ -774,8 +776,8 @@ def get_openshift_installer(
 
 
 def get_openshift_client(
-    version=RUN['client_version'],
-    bin_dir=RUN['bin_dir'],
+    version=None,
+    bin_dir=None,
     force_download=False,
 ):
     """
@@ -792,6 +794,8 @@ def get_openshift_client(
         str: Path to the client binary
 
     """
+    version = version or RUN['client_version']
+    bin_dir = bin_dir or RUN['bin_dir']
     client_binary_path = os.path.join(bin_dir, 'oc')
     if os.path.isfile(client_binary_path) and force_download:
         delete_file(client_binary_path)
@@ -845,13 +849,14 @@ def get_openshift_mirror_url(file_name, version):
     return url
 
 
-def prepare_bin_dir(bin_dir=RUN['bin_dir']):
+def prepare_bin_dir(bin_dir=None):
     """
     Prepare bin directory for OpenShift client and installer
 
     Args:
         bin_dir (str): Path to bin directory (default: RUN['bin_dir'])
     """
+    bin_dir = bin_dir or RUN['bin_dir']
     try:
         os.mkdir(bin_dir)
         log.info(f"Directory '{bin_dir}' successfully created.")

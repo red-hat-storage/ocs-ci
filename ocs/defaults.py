@@ -12,23 +12,14 @@ See the documentation in conf/README.md file to understand this config file.
 PYTEST_DONT_REWRITE - avoid pytest to rewrite, keep this msg here please!
 """
 import os
-from getpass import getuser
 
+from ocs import constants
 from utility.templating import load_yaml_to_dict
 
-THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-TOP_DIR = os.path.dirname(THIS_DIR)
-TEMPLATE_DIR = os.path.join(TOP_DIR, "templates/ocs-deployment/")
 STORAGE_API_VERSION = 'storage.k8s.io/v1'
 ROOK_API_VERSION = 'ceph.rook.io/v1'
 OCP_API_VERSION = 'project.openshift.io/v1'
 OPENSHIFT_REST_CLIENT_API_VERSION = 'v1'
-
-CEPHFILESYSTEM = "CephFileSystem"
-CEPHBLOCKPOOL = "CephBlockPool"
-PVC = "PersistentVolumeClaim"
-STORAGECLASS = "StorageClass"
-SECRET = "Secret"
 
 # Those variables below are duplicate at the moment from default_config.yaml
 # and once we drop support for old runner we will remove those variables from
@@ -42,16 +33,11 @@ CLIENT_VERSION = INSTALLER_VERSION
 AWS_REGION = 'us-east-2'
 ROOK_CLUSTER_NAMESPACE = 'openshift-storage'
 KUBECONFIG_LOCATION = 'auth/kubeconfig'  # relative from cluster_dir
-CLUSTER_NAME = f"ocs-ci-cluster-{getuser()}"
+CLUSTER_NAME = "ocs-ci"
 API_VERSION = "v1"
 CEPH_IMAGE = "ceph/ceph:v14.2.0-20190410"
 ROOK_IMAGE = "rook/ceph:master"
 DEPLOYMENT_PLATFORM = 'AWS'
-
-STATUS_PENDING = 'Pending'
-STATUS_AVAILABLE = 'Available'
-STATUS_RUNNING = 'Running'
-STATUS_TERMINATING = 'Terminating'
 
 # This section is suppose to be available just from ocsci/config.py module from
 # ENV_DATA dictionary. Once we drop support of old runner we will delete this
@@ -65,21 +51,64 @@ ENV_DATA = {
     'rook_image': ROOK_IMAGE,
 }
 
-TEMPLATES_DIR = "templates"
-TEMP_YAML = os.path.join(TEMPLATES_DIR, "temp.yaml")
+DEPLOYMENT = {
+    'installer_version': INSTALLER_VERSION,
+}
+
+REPORTING = {
+    'email': {
+        'address': 'ocs-ci@redhat.com',
+    },
+}
+
+RUN = {
+    'log_dir': '/tmp',
+    'run_id': None,
+    'kubeconfig_location': 'auth/kubeconfig',
+    'cli_params': {},
+    'client_version': DEPLOYMENT['installer_version'],
+    'bin_dir': './bin',
+}
+
+TEMP_YAML = os.path.join(constants.TEMPLATE_DIR, "temp.yaml")
 
 TOOL_POD_DICT = load_yaml_to_dict(
     os.path.join(
-        TEMPLATE_DIR, "toolbox_pod.yaml"
+        constants.TEMPLATE_DEPLOYMENT_DIR, "toolbox_pod.yaml"
     )
 )
 CEPHFILESYSTEM_DICT = load_yaml_to_dict(
     os.path.join(
-        TEMPLATE_DIR, "cephfilesystem_new.yaml"
+        constants.TEMPLATE_CSI_FS_DIR, "CephFileSystem.yaml"
     )
 )
-PVC_DICT = load_yaml_to_dict(
+CEPHBLOCKPOOL_DICT = load_yaml_to_dict(
     os.path.join(
-        TEMPLATE_DIR, "PersistentVolumeClaim_new.yaml"
+        constants.TEMPLATE_DEPLOYMENT_DIR, "cephblockpool.yaml"
+    )
+)
+CSI_RBD_STORAGECLASS_DICT = load_yaml_to_dict(
+    os.path.join(
+        constants.TEMPLATE_CSI_RBD_DIR, "storageclass.yaml"
+    )
+)
+CSI_PVC_DICT = load_yaml_to_dict(
+    os.path.join(
+        constants.TEMPLATE_PV_PVC_DIR, "PersistentVolumeClaim.yaml"
+    )
+)
+CSI_RBD_POD_DICT = load_yaml_to_dict(
+    os.path.join(
+        constants.TEMPLATE_CSI_RBD_DIR, "pod.yaml"
+    )
+)
+CSI_RBD_SECRET = load_yaml_to_dict(
+    os.path.join(
+        constants.TEMPLATE_CSI_RBD_DIR, "secret.yaml"
+    )
+)
+CSI_CEPHFS_SECRET = load_yaml_to_dict(
+    os.path.join(
+        constants.TEMPLATE_CSI_FS_DIR, "secret.yaml"
     )
 )
