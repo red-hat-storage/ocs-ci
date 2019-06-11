@@ -38,7 +38,7 @@ class TestCaseOCS371(ManageTest):
         # This is a workaround for bug 1715627 (replaces wait_for_resource)
         pvc_out = self.pvc_obj.get(out_yaml_format=False)
         assert constants.STATUS_TERMINATING in pvc_out, (
-            f"PVC {self.pvc_obj.name} failed to reach status {defaults.STATUS_TERMINATING}"
+            f"PVC {self.pvc_obj.name} failed to reach status {constants.STATUS_TERMINATING}"
         )
 
         thread.join(timeout=15)
