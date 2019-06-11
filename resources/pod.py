@@ -9,6 +9,7 @@ import tempfile
 import yaml
 from time import sleep
 from threading import Thread
+import base64
 
 from ocs.ocp import OCP
 from ocs import defaults, constants, exceptions
@@ -239,3 +240,15 @@ def run_io_in_bg(pod_obj, expect_to_fail=False):
     )
 
     return thread
+
+
+def get_admin_key_from_ceph_tools():
+    """
+    Fetches admin key secret from ceph
+    Returns:
+            admin keyring encoded with base64 as a string
+    """
+    tools_pod = get_ceph_tools_pod()
+    out = tools_pod.exec_ceph_cmd(ceph_cmd='ceph auth get-key client.admin')
+    base64_output = base64.b64encode(out['key'].encode()).decode()
+    return base64_output
