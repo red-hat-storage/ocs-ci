@@ -44,12 +44,9 @@ class StorageClass(OCS):
         self.sc_data = yaml.safe_load(open(self.yaml_path, 'r'))
         self.sc_data.update(kwargs)
 
-        # TODO(HACK): Fix properly inheritance to OCS, storage classes don't use namespace
-        self.sc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
         super(StorageClass, self).__init__(
             api_version=self.sc_data['apiVersion'],
-            kind=self.sc_data['kind'],
-            metadata=self.sc_data['metadata']
+            kind=self.sc_data['kind']
         )
         self._name = self.sc_data['metadata']['name']
         self.temp_yaml = tempfile.NamedTemporaryFile(
