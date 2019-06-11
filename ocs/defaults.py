@@ -16,6 +16,12 @@ import os
 from ocs import constants
 from utility.templating import load_yaml_to_dict
 
+# those are data for testing defaults, do not change or remove them!
+TEST_DATA_NOT_CHANGED = "persist"
+TEST_DATA_CHANGED = "changed"
+# end of testing data
+
+
 STORAGE_API_VERSION = 'storage.k8s.io/v1'
 ROOK_API_VERSION = 'ceph.rook.io/v1'
 OCP_API_VERSION = 'project.openshift.io/v1'
