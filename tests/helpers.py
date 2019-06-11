@@ -1,13 +1,14 @@
 """
 Helper functions file for OCS QE
 """
-import logging
 import base64
 import datetime
-from ocs import constants, defaults
+import logging
+
+from ocs import constants, defaults, ocp
 from ocsci.config import ENV_DATA
-from resources.ocs import OCS
 from resources import pod
+from resources.ocs import OCS
 
 logger = logging.getLogger(__name__)
 
@@ -250,3 +251,146 @@ def get_cephfs_data_pool_name():
     ct_pod = pod.get_ceph_tools_pod()
     out = ct_pod.exec_ceph_cmd('ceph fs ls')
     return out[0]['data_pools'][0]
+
+
+def validate_cephfilesystem(fs_name):
+    """
+     Verify CephFileSystem exists at ceph and k8s
+     Args:
+        fs_name (str): The name of the Ceph FileSystem
+    """
+    CFS = ocp.OCP(
+        kind=constants.CEPHFILESYSTEM,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_validate = False
+    k8s_validate = False
+    cmd = "ceph fs ls"
+    logger.info(fs_name)
+    out = ct_pod.exec_ceph_cmd(ceph_cmd=cmd)
+    if out:
+        out = out[0]['name']
+        logger.info(out)
+        if out == fs_name:
+            logger.info("FileSystem got created from Ceph Side")
+            ceph_validate = True
+        else:
+            logger.error("FileSystem was not present at Ceph Side")
+            return False
+    result = CFS.get(resource_name=fs_name)
+    if result['metadata']['name']:
+        logger.info(f"Filesystem got created from kubernetes Side")
+        k8s_validate = True
+    else:
+        logger.error("Filesystem was not create at Kubernetes Side")
+        return False
+    return True if (ceph_validate and k8s_validate) else False
+
+
+def get_all_storageclass_name():
+    """
+    Function for getting all storageclass
+    :return list of storageclass
+    """
+    SC = ocp.OCP(
+        kind=constants.STORAGECLASS,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    sc_obj = SC.get()
+    sample = sc_obj['items']
+
+    storageclass = [
+        item.get('metadata').get('name') for item in sample if (
+            item.get('metadata').get('name') not in constants.IGNORE_SC
+        )
+    ]
+    return storageclass
+
+
+def delete_all_storageclass():
+    """"
+    Function for Deleting all storageclass
+    """
+
+    SC = ocp.OCP(
+        kind=constants.STORAGECLASS,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    storageclass_list = get_all_storageclass_name()
+    for item in storageclass_list:
+        logger.info(f"Deleting StorageClass with name {item}")
+        assert SC.delete(resource_name=item)
+    return True
+
+
+def get_cephblockpool_name():
+    """
+    Function for getting all CephBlockPool
+    :return list of cephblockpool
+    """
+    POOL = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOL,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    sc_obj = POOL.get()
+    sample = sc_obj['items']
+    pool_list = [
+        item.get('metadata').get('name') for item in sample
+    ]
+    return pool_list
+
+
+def delete_cephblockpool():
+    """
+    Function for deleting CephBlockPool
+    """
+    POOL = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOL,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    pool_list = get_cephblockpool_name()
+    for item in pool_list:
+        logger.info(f"Deleting CephBlockPool with name {item}")
+        assert POOL.delete(resource_name=item)
+    return True
+
+
+def create_cephfilesystem():
+    """
+    Function for deploying CephFileSystem (MDS)
+    """
+    fs_data = defaults.CEPHFILESYSTEM_DICT.copy()
+    fs_data['metadata']['name'] = create_unique_resource_name(
+        'test', 'cephfs'
+    )
+    fs_data['metadata']['namespace'] = ENV_DATA['cluster_namespace']
+    global CEPHFS_OBJ
+    CEPHFS_OBJ = OCS(**fs_data)
+    CEPHFS_OBJ.create()
+    POD = pod.get_all_pods(
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    for pod_names in POD:
+        if 'rook-ceph-mds' in pod_names.labels.values():
+            assert pod_names.ocp.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector='app=rook-ceph-mds'
+            )
+    assert validate_cephfilesystem(fs_name=fs_data['metadata']['name'])
+    return True
+
+
+def delete_all_cephfilesystem():
+    """
+    Function to Delete CephFileSysem
+    """
+    CFS = ocp.OCP(
+        kind=constants.CEPHFILESYSTEM,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    result = CFS.get()
+    cephfs_dict = result['items']
+    for item in cephfs_dict:
+        CFS.delete(resource_name=item.get('metadata').get('name'))
+    return True
