@@ -6,11 +6,11 @@ The basic configuration is done in run_ocsci.py module casue we need to load
 all the config before pytest run. This run_ocsci.py is just a wrapper for
 pytest which proccess config and passes all params to pytest.
 """
-from getpass import getuser
 import os
 
 import random
 
+import ocs
 from ocsci import config as ocsci_config
 
 __all__ = [
@@ -92,15 +92,13 @@ def process_cluster_cli_params(config):
         )
     # TODO: determine better place for parent dir
     cluster_dir_parent = "/tmp"
-    default_cluster_name = (
-        f"{ocsci_config.ENV_DATA['cluster_name']}-{getuser()[:8]}"
-    )
+    default_cluster_name = ocs.defaults.CLUSTER_NAME
     cluster_name = get_cli_param(config, 'cluster_name')
-    if cluster_name:
-        default_cluster_name = cluster_name
+    if not cluster_name:
+        cluster_name = default_cluster_name
     cid = random.randint(10000, 99999)
     if not (cluster_name and cluster_path):
-        cluster_name = f"{default_cluster_name}-{cid}"
+        cluster_name = f"{cluster_name}-{cid}"
     if not cluster_path:
         cluster_path = os.path.join(cluster_dir_parent, cluster_name)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name

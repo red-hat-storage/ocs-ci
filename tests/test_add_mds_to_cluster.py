@@ -1,11 +1,10 @@
 """
 A test for creating a CephFS
 """
-import os
 import logging
 import pytest
 
-from ocs import ocp, defaults
+from ocs import ocp, defaults, constants
 from ocsci.config import ENV_DATA
 from ocsci.testlib import tier1, ManageTest
 from resources.ocs import OCS
@@ -13,13 +12,9 @@ from tests import helpers
 
 log = logging.getLogger(__name__)
 
-CEPHFS_YAML = os.path.join(
-    "templates/ocs-deployment", "cephfilesystem_new.yaml"
-)
-TEMP_YAML_FILE = 'test_cephfilesystem.yaml'
 CEPHFS_DELETED = '"{cephfs_name}" deleted'
 
-POD = ocp.OCP(kind='Pod', namespace=ENV_DATA['cluster_namespace'])
+POD = ocp.OCP(kind=constants.POD, namespace=ENV_DATA['cluster_namespace'])
 CEPH_OBJ = None
 
 
@@ -49,8 +44,6 @@ def setup(self):
     CEPH_OBJ = OCS(**self.fs_data)
     CEPH_OBJ.create()
 
-    # TODO: Change to:
-    # CEPH_OBJ = helpers.create_resource(**self.fs_data)
     assert POD.wait_for_resource(
         condition='Running', selector='app=rook-ceph-mds'
     )
