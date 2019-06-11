@@ -5,8 +5,7 @@ A module which consists of kubevolume related operations
 import os
 import logging
 
-from ocs import defaults
-from ocs import kinds
+from ocs import defaults, constants
 from ocsci.config import ENV_DATA
 from kubernetes import config
 from openshift.dynamic import DynamicClient
@@ -44,14 +43,14 @@ class CephRBDVolume(KubeVolume):
     """
     def __init__(self, name=None, namespace='default'):
         super().__init__(name, namespace)
-        self.kind = kinds.CEPHBLOCKPOOL
+        self.kind = constants.CEPHBLOCKPOOL
         self.api_version = defaults.OPENSHIFT_REST_CLIENT_API_VERSION
         self.service_cbp = self.dyn_client.resources.get(
             api_version=self.api_version,
             kind=self.kind
         )
         self.template_path = os.path.join(
-            defaults.TEMPLATE_DIR,
+            constants.TEMPLATE_DEPLOYMENT_DIR,
             "cephblockpool.yaml"
         )
         self.rk = RookCluster()
@@ -107,19 +106,19 @@ class StorageClass(KubeVolume):
 
     Attributes:
         name (str): Name of the RBD volume
-        namepsace (str): Namespace to create RBD volume
+        namespace (str): Namespace to create RBD volume
 
     """
     def __init__(self, name=None, namespace='default'):
         super().__init__(name, namespace)
-        self.kind = kinds.STORAGECLASS
+        self.kind = constants.STORAGECLASS
         self.api_version = defaults.OPENSHIFT_REST_CLIENT_API_VERSION
         self.service_sc = self.dyn_client.resources.get(
             api_version=self.api_version,
             kind=self.kind
         )
         self.template_path = os.path.join(
-            defaults.TEMPLATE_DIR,
+            constants.TEMPLATE_DEPLOYMENT_DIR,
             "storageclass.yaml"
         )
 
@@ -193,13 +192,15 @@ class PVC(KubeVolume):
     """
     def __init__(self, name=None, namespace='default'):
         super().__init__(name, namespace)
-        self.kind = kinds.PVC
+        self.kind = constants.PVC
         self.api_version = defaults.OPENSHIFT_REST_CLIENT_API_VERSION
         self.service_pvc = self.dyn_client.resources.get(
             api_version=self.api_version,
             kind=self.kind
         )
-        self.template_path = os.path.join(defaults.TEMPLATE_DIR, "pvc.yaml")
+        self.template_path = os.path.join(
+            constants.TEMPLATE_DEPLOYMENT_DIR, "pvc.yaml"
+        )
 
     def create_pvc(
         self,

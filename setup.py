@@ -33,10 +33,6 @@ setup(
         'console_scripts': [
             'run-ci=run_ocsci:main',
         ],
-        'pytest11': [
-            'ocscilib = ocsci.pytest_customization.ocscilib',
-            'marks = ocsci.pytest_customization.marks',
-        ]
     },
     zip_safe=True,
     include_package_data=True,
