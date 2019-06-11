@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs import ocp, defaults
+from ocs import ocp, defaults, constants
 from ocsci.config import ENV_DATA
 from ocsci.testlib import tier1, ManageTest
 from resources.ocs import OCS
@@ -76,7 +76,7 @@ class TestOSCBasics(ManageTest):
         self.cephfs_secret['data']['adminKey'] = (
             get_admin_key_from_ceph_tools()
         )
-        self.cephfs_secret['data']['adminID'] = defaults.constants.ADMIN_BASE64
+        self.cephfs_secret['data']['adminID'] = constants.ADMIN_BASE64
         logging.info(self.cephfs_secret)
         secret = OCS(**self.cephfs_secret)
         secret.create()
