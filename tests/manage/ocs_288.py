@@ -66,7 +66,11 @@ def teardown():
 def create_multiple_rbd_storageclasses(count=1):
     """
     Function for creating multiple rbd storageclass
-    :param count:
+    By default if we haven't passed count function will create only one
+    storageclass because by default count for creating sc is one
+
+    :Args count:
+
     """
 
     for sc_count in range(count):

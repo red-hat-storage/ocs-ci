@@ -37,9 +37,12 @@ POD = "Pod"
 # Other
 SECRET = "Secret"
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 # encoded value of 'admin'
 =======
 >>>>>>> Fixed cephfs storageclass creation
 ADMIN_BASE64 = 'YWRtaW4='
+=======
+>>>>>>> Fixed Conflits
 IGNORE_SC = "gp2"
