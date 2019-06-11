@@ -6,7 +6,7 @@ import logging
 import yaml
 import tempfile
 
-from ocs import constants
+from ocs import constants, defaults
 from resources.ocs import OCS
 
 log = logging.getLogger(__name__)
@@ -43,9 +43,11 @@ class StorageClass(OCS):
 
         self.sc_data = yaml.safe_load(open(self.yaml_path, 'r'))
         self.sc_data.update(kwargs)
+        self.sc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
         super(StorageClass, self).__init__(
-            self.sc_data['apiVersion'], self.sc_data['kind'],
-            self.sc_data['metadata']['namespace']
+            api_version=self.sc_data['apiVersion'],
+            kind=self.sc_data['kind'],
+            metadata=self.sc_data['metadata']
         )
         self._name = self.sc_data['metadata']['name']
         self.temp_yaml = tempfile.NamedTemporaryFile(
