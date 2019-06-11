@@ -35,7 +35,9 @@ class OCS(object):
         self.data = kwargs
         self._api_version = self.data.get('api_version')
         self._kind = self.data.get('kind')
-        self._namespace = self.data.get('metadata').get('namespace')
+        self._namespace = None
+        if 'metadata' in self.data:
+            self._namespace = self.data.get('metadata').get('namespace')
         self._name = self.data.get('metadata').get('name')
         self.ocp = OCP(
             api_version=self._api_version, kind=self.kind,
@@ -72,7 +74,9 @@ class OCS(object):
         self.__init__(**self.data)
 
     def get(self, out_yaml_format=True):
-        return self.ocp.get(resource_name=self.name, out_yaml_format=out_yaml_format)
+        return self.ocp.get(
+            resource_name=self.name, out_yaml_format=out_yaml_format
+        )
 
     def create(self):
         log.info(f"Adding {self.kind} with name {self.name}")
