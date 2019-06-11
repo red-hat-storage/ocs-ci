@@ -6,7 +6,7 @@ import logging
 import yaml
 import tempfile
 
-from ocs import constants, defaults
+from ocs import constants
 from resources.ocs import OCS
 
 log = logging.getLogger(__name__)
