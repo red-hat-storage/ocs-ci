@@ -34,9 +34,9 @@ def check_ceph_used_space():
     # ToDo: after running IO's or deleting pod & pvc takes some time
     time.sleep(20)
     ct_pod = pod.get_ceph_tools_pod()
-    pods = ct_pod.exec_ceph_cmd(ceph_cmd="ceph status")
-    assert pods is not None
-    used = pods['pgmap']['bytes_used']
+    ceph_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph status")
+    assert ceph_status is not None
+    used = ceph_status['pgmap']['bytes_used']
     GB = (1024 * 1024 * 1024)
     used_in_gb = used / GB
     return used_in_gb
@@ -160,8 +160,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
             self.sc_obj.name, self.cbp_obj.name
         )
         pod_data = defaults.CSI_RBD_POD_DICT.copy()
-        pod_data['spec']['volumes'][0]\
-            ['persistentVolumeClaim']['claimName'] = pvc_name
+        pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
         pod_obj = helpers.create_pod(**pod_data)
         run_io(pod_obj)
         used_after_creating_pvc = check_ceph_used_space()
