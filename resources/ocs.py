@@ -38,7 +38,7 @@ class OCS(object):
         self._namespace = None
         if 'metadata' in self.data:
             self._namespace = self.data.get('metadata').get('namespace')
-        self._name = self.data.get('metadata').get('name')
+            self._name = self.data.get('metadata').get('name')
         self.ocp = OCP(
             api_version=self._api_version, kind=self.kind,
             namespace=self._namespace
