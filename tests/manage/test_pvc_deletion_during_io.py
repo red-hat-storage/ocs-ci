@@ -1,7 +1,7 @@
 import pytest
 import logging
 
-from ocs import defaults, exceptions, constants
+from ocs import exceptions, constants
 from resources import pod
 from ocsci.testlib import ManageTest, tier1
 from tests.fixtures import (
