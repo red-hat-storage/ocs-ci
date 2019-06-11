@@ -242,11 +242,11 @@ def get_admin_key():
 
 def get_cephfs_data_pool_name():
     """
-        Fetches ceph fs datapool name from Ceph
+    Fetches ceph fs datapool name from Ceph
 
-        Returns:
-            str: fs datapool name
-        """
+    Returns:
+        str: fs datapool name
+    """
     ct_pod = pod.get_ceph_tools_pod()
     out = ct_pod.exec_ceph_cmd('ceph fs ls')
     return out[0]['data_pools'][0]

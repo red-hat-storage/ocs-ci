@@ -2,7 +2,6 @@
 A test for creating pvc with random sc
 """
 import logging
-import os
 import random
 
 import pytest
@@ -11,33 +10,17 @@ from ocs import defaults, constants
 from ocs import ocp
 from ocsci.config import ENV_DATA
 from ocsci.testlib import tier1, ManageTest
-from resources import pod
 from resources.ocs import OCS
 from tests import helpers
+from resources import pod, pvc
 
 log = logging.getLogger(__name__)
-TEMPLATE_DIR = "templates"
-
-RBD_POOL_YAML = os.path.join(
-    "templates/ocs-deployment", "cephblockpool.yaml"
-)
-
-TEMP_YAML_FILE = 'temp.yaml'
 
 SC = ocp.OCP(
     kind='StorageClass', namespace=defaults.ROOK_CLUSTER_NAMESPACE
 )
 POOL = ocp.OCP(
     kind='CephBlockPool', namespace=defaults.ROOK_CLUSTER_NAMESPACE
-)
-POD = ocp.OCP(
-    kind='Pod', namespace=defaults.ROOK_CLUSTER_NAMESPACE
-)
-SECRET = ocp.OCP(
-    kind='Secret', namespace="default"
-)
-PVC = ocp.OCP(
-    kind='PersistentVolumeClaim', namespace=defaults.ROOK_CLUSTER_NAMESPACE
 )
 CFS = ocp.OCP(
     kind='CephFilesystem', namespace=defaults.ROOK_CLUSTER_NAMESPACE
@@ -57,7 +40,6 @@ def setup():
     """
     Setting up the environment for the test
     """
-    log.info("Creating RBD Secret")
     global RBD_SECRET_OBJ
     RBD_SECRET_OBJ = helpers.create_secret(constants.CEPHBLOCKPOOL)
 
@@ -81,7 +63,7 @@ def teardown():
     """
     global RBD_SECRET_OBJ, CEPHFS_SECRET_OBJ, CEPHFS_OBJ
     log.info("Deleting PVC")
-    assert delete_pvc()
+    assert pvc.delete_all_pvcs()
     log.info("Deleting CEPH BLOCK POOL")
     assert delete_cephblockpool()
     log.info("Deleting RBD Secret")
@@ -94,24 +76,9 @@ def teardown():
     assert delete_storageclass()
 
 
-def delete_pvc():
-    """
-    Function to delete pvc
-    :param pvc_list:
-    :return:
-    """
-    pvc_list = get_pvc()
-    for item in pvc_list:
-        log.info(f"Deleting pvc {item}")
-        assert PVC.delete(resource_name=item)
-    return True
-
-
 def delete_storageclass():
     """
-    Function for deleting Storageclass and CephBlockPool
-    :param storageclass_list:
-    :return:
+    Function for deleting Storageclass
     """
     storageclass_list = get_storageclass()
     for item in storageclass_list:
@@ -123,7 +90,6 @@ def delete_storageclass():
 def delete_cephblockpool():
     """
     Function for deleting CephBlockPool
-    :return:
     """
     pool_list = get_cephblockpool()
     for item in pool_list:
@@ -135,8 +101,6 @@ def delete_cephblockpool():
 def create_cephfilesystem():
     """
     Function for deploying CephFileSystem (MDS)
-    :param kwargs:
-    :return:
     """
     fs_data = defaults.CEPHFILESYSTEM_DICT.copy()
     fs_data['metadata']['name'] = helpers.create_unique_resource_name(
@@ -146,9 +110,15 @@ def create_cephfilesystem():
     global CEPHFS_OBJ
     CEPHFS_OBJ = OCS(**fs_data)
     CEPHFS_OBJ.create()
-    assert POD.wait_for_resource(
-        condition='Running', selector='app=rook-ceph-mds'
+    POD = pod.get_all_pods(
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
+    for pod_names in POD:
+        if 'rook-ceph-mds' in pod_names.labels.values():
+            assert pod_names.ocp.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector='app=rook-ceph-mds'
+            )
     assert validate_cephfilesystem(fs_name=fs_data['metadata']['name'])
     return True
 
@@ -157,7 +127,6 @@ def validate_cephfilesystem(fs_name):
     """
     Function for validating CephFileSystem Creation
     :param fs_name:
-    :return:
     """
     tools_pod = pod.get_ceph_tools_pod()
     ceph_validate = False
@@ -188,7 +157,6 @@ def create_multiple_rbd_storageclasses(count=1, ):
     """
     Function for creating multiple rbd storageclass
     :param count:
-    :return:
     """
 
     for sc_count in range(count):
@@ -204,48 +172,27 @@ def create_multiple_rbd_storageclasses(count=1, ):
 
 
 def get_cephblockpool():
+    """
+    Function for getting all CephBlockPool
+    """
     sc_obj = POOL.get()
     sample = sc_obj['items']
     pool_list = [
-        item.get('metadata')['name'] for item in sample
+        item.get('metadata').get('name') for item in sample
     ]
     return pool_list
-
-
-def get_secret():
-    sc_obj = SECRET.get()
-    sample = sc_obj['items']
-    conside_secret = "csi-"
-    secret_list = [
-        item.get('metadata')['name'] for item in sample if (
-            conside_secret in item.metadata.name
-        )
-    ]
-    return secret_list
-
-
-def get_pvc():
-    sc_obj = PVC.get()
-    sample = sc_obj['items']
-
-    pvc_list = [
-        item.get('metadata')['name'] for item in sample
-    ]
-    return pvc_list
 
 
 def get_storageclass():
     """
     Function for getting all storageclass
-    :return:
     """
     sc_obj = SC.get()
     sample = sc_obj['items']
 
-    ignore_sc = 'gp2'
     storageclass = [
-        item.get('metadata')['name'] for item in sample if (
-            item.get('metadata')['name'] not in ignore_sc
+        item.get('metadata').get('name') for item in sample if (
+            item.get('metadata').get('name') not in constants.IGNORE_SC
         )
     ]
     return storageclass
@@ -255,7 +202,6 @@ def create_pvc(storageclass_list, count=1):
     """
     Function for creating pvc and multiple pvc
     :param kwargs:
-    :return:
     """
     for i in range(count):
         sc_name = random.choice(storageclass_list)
@@ -283,7 +229,13 @@ def create_storageclass_cephfs():
     ocs288_fixture.__name__,
 )
 class TestCaseOCS288(ManageTest):
-    def test_ocs_288(self):
+    """
+    Creating PVC with random SC
+
+    https://polarion.engineering.redhat.com/polarion/#/project/
+    OpenShiftContainerStorage/workitem?id=OCS-288
+    """
+    def test_create_pvc_with_random_sc(self):
         storageclass_list = get_storageclass()
         if len(storageclass_list):
             assert create_pvc(storageclass_list, count=20)

@@ -42,3 +42,4 @@ SECRET = "Secret"
 =======
 >>>>>>> Fixed cephfs storageclass creation
 ADMIN_BASE64 = 'YWRtaW4='
+IGNORE_SC = "gp2"
