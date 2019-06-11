@@ -1,33 +1,26 @@
 """
 Test to verify concurrent creation and deletion of multiple PVCs
 """
-import os
 import subprocess
 import logging
 import pytest
-import yaml
-import ocs.defaults as defaults
 
+from ocs import defaults, constants, ocp, exceptions
 from utility.utils import run_cmd
-from utility.utils import delete_file
-from ocs import ocp
-from ocs import exceptions
-from ocs import volumes
 from ocsci.testlib import tier1, ManageTest
-from utility import templating
+from resources.pod import get_ceph_tools_pod
+from resources.pvc import PVC
+from tests.fixtures import (
+    create_rbd_storageclass, create_ceph_block_pool, create_rbd_secret
+)
 
 log = logging.getLogger(__name__)
-TEMPLATE_DIR = "templates/ocs-deployment"
-TEMP_YAML_FILE_SC = '/tmp/temp_file_sc.yaml'
+PVC_OBJS = []
 TEST_PROJECT = 'test-project'
-SC = ocp.OCP(kind='StorageClass', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-PVC = ocp.OCP(kind='PersistentVolumeClaim', namespace=TEST_PROJECT)
-PV = ocp.OCP(kind='PersistentVolume', namespace=TEST_PROJECT)
-PVOLC = volumes.PVC(namespace=TEST_PROJECT)
 PROJECT = ocp.OCP(kind='Project', namespace=TEST_PROJECT)
 
 
-@pytest.fixture(scope='class')
+@pytest.fixture()
 def test_fixture(request):
     """
     Setup and teardown
@@ -42,37 +35,35 @@ def test_fixture(request):
 
 def setup(self):
     """
-    Create project
-    Create storage class
+    Create new project
     Create PVCs
     """
-    sc_parms = {
-        'storageclass_name': 'test-sc', 'blockPool': 'rbd',
-        'k8s_api_version': defaults.STORAGE_API_VERSION
-    }
-
-    # Create project
-    assert PROJECT.new_project(TEST_PROJECT)
-
-    # Create storage class
-    create_storage_class(**sc_parms)
+    # Create new project
+    assert PROJECT.new_project(TEST_PROJECT), (
+        f'Failed to create new project {TEST_PROJECT}'
+    )
 
     # Create 100 PVCs
-    create_multiple_pvc(self.pvc_base_name, self.number_of_pvc)
+    create_multiple_pvc(
+        self.pvc_base_name, self.number_of_pvc, self.sc_obj.name
+    )
+    log.info(f'Created initial {self.number_of_pvc} PVCs')
+    self.pvc_objs_initial = PVC_OBJS[:]
+    PVC_OBJS.clear()
 
-    # Verify PVCs are Bound
-    for count in range(1, self.number_of_pvc + 1):
-        pvc_name = f'{self.pvc_base_name}{count}'
-        pv = verify_pvc_and_fetch_pv_name(pvc_name)
-        assert pv, f'PVC {pvc_name} does not exists'
-        self.initial_pvs.append(pv)
+    # Verify PVCs are Bound and fetch PV names
+    for pvc in self.pvc_objs_initial:
+        pvc.reload()
+        assert pvc.status == constants.STATUS_BOUND, (
+            f'PVC {pvc.name} is not Bound'
+        )
+        self.initial_pvs.append(pvc.backed_pv)
+    log.info(f'Initial {self.number_of_pvc} PVCs are in Bound state')
 
 
 def teardown(self):
     """
     Delete PVCs
-    Delete storage class
-    Delete temporary yaml files
     Delete project
     """
     # Delete newly created PVCs
@@ -88,9 +79,7 @@ def teardown(self):
     # Verify command to delete PVCs
     ret, _, _ = proc.async_communicate()
     assert not ret, "Deletion of newly created PVCs failed"
-
-    # Delete storage class
-    assert SC.delete(yaml_file=TEMP_YAML_FILE_SC)
+    log.info(f'Newly created {self.number_of_pvc} PVCs are now deleted.')
 
     # Switch to default project
     run_cmd(f'oc project {defaults.ROOK_CLUSTER_NAMESPACE}')
@@ -98,42 +87,28 @@ def teardown(self):
     # Delete project created for the testcase
     PROJECT.delete(resource_name=TEST_PROJECT)
 
-    delete_file(TEMP_YAML_FILE_SC)
 
-
-def create_storage_class(**kwargs):
-    """
-    Create storage class
-
-    Args:
-        **kwargs: key, value pairs for yaml file substitution
-    """
-    sc_yaml = os.path.join(TEMPLATE_DIR, "storageclass.yaml")
-    sc_name = kwargs['storageclass_name']
-
-    sc_yaml_file = templating.generate_yaml_from_jinja2_template_with_data(
-        sc_yaml, **kwargs
-    )
-    with open(TEMP_YAML_FILE_SC, 'w') as yaml_file:
-        yaml.dump(sc_yaml_file, yaml_file, default_flow_style=False)
-    log.info(f'Creating Storage Class {sc_name}')
-    assert SC.create(yaml_file=TEMP_YAML_FILE_SC)
-    log.info(f'Created Storage Class {sc_name}')
-
-
-def create_multiple_pvc(pvc_base_name, number_of_pvc):
+def create_multiple_pvc(pvc_base_name, number_of_pvc, sc_name):
     """
     Create PVCs
 
     Args:
         pvc_base_name (str): Prefix of PVC name
         number_of_pvc (int): Number of PVCs to be created
+        sc_name (str): Storage class name
     """
+    # Parameters for PVC yaml as dict
+    pvc_data = defaults.CSI_PVC_DICT.copy()
+    pvc_data['metadata']['namespace'] = TEST_PROJECT
+    pvc_data['spec']['storageClassName'] = sc_name
+
     for count in range(1, number_of_pvc + 1):
         pvc_name = f'{pvc_base_name}{count}'
         log.info(f'Creating Persistent Volume Claim {pvc_name}')
-        PVOLC.name = pvc_name
-        assert PVOLC.create_pvc(storageclass='test-sc')
+        pvc_data['metadata']['name'] = pvc_name
+        PVC_OBJ = PVC(**pvc_data)
+        PVC_OBJ.create()
+        PVC_OBJS.append(PVC_OBJ)
         log.info(f'Created Persistent Volume Claim {pvc_name}')
 
 
@@ -162,74 +137,11 @@ def run_async(command):
     return p
 
 
-def verify_pvc_and_fetch_pv_name(pvc_name):
-    """
-    Verify that the status of PVC is 'Bound' and fetch PV name
-
-    Args:
-        pvc_name (str): Name of PVC
-
-    Returns:
-        str: PV name if PV exists, None if PVC does not exist
-    """
-    try:
-        pvc_info = PVC.get(pvc_name)
-        assert pvc_info['status']['phase'] == "Bound", (
-            f'PVC {pvc_name} is not in Bound state'
-        )
-        pv_name = pvc_info['spec']['volumeName'].strip()
-        assert pv_name, f'PVC {pvc_name} is Bound. But could not fetch PV name'
-    except exceptions.CommandFailed as exp:
-        assert "not found" in str(exp), (
-            f'Failed to fetch details of PVC {pvc_name}'
-        )
-        return None
-    return pv_name
-
-
-def verify_pvc_not_exists(pvc_name):
-    """
-    Ensure that the pvc does not exists
-
-    Args:
-        pvc_name (str): Name of PVC
-
-    Returns:
-        True if PVC does not exists, False otherwise.
-    """
-    try:
-        PVC.get(pvc_name)
-        return False
-    except exceptions.CommandFailed as exp:
-        assert "not found" in str(exp), (
-            f'Failed to fetch details of PVC {pvc_name}'
-        )
-        log.info(f'Expected: PVC {pvc_name} does not exists ')
-    return True
-
-
-def verify_pv_not_exists(pv_name):
-    """
-    Ensure that the pv does not exists
-
-    Args:
-        pv_name (str): Name of PV
-
-    Returns:
-        True if PV does not exists, False otherwise.
-    """
-    try:
-        PV.get(pv_name)
-        return False
-    except exceptions.CommandFailed as exp:
-        assert "not found" in str(exp)
-        log.info(f'Expected: PV {pv_name} does not exists ')
-    return True
-
-
-@tier1
 @pytest.mark.usefixtures(
-    test_fixture.__name__,
+    create_rbd_secret.__name__,
+    create_ceph_block_pool.__name__,
+    create_rbd_storageclass.__name__,
+    test_fixture.__name__
 )
 class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
     """
@@ -239,7 +151,10 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
     pvc_base_name = 'test-pvc'
     pvc_base_name_new = 'test-pvc-re'
     initial_pvs = []
+    pvc_objs_initial = []
+    pvc_objs_new = []
 
+    @tier1
     def test_multiple_pvc_concurrent_creation_deletion(self):
         """
         To exercise resource creation and deletion
@@ -247,22 +162,27 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         # Start deleting 100 PVCs
         command = (
             f'for i in `seq 1 {self.number_of_pvc}`;do oc delete pvc '
-            f'{self.pvc_base_name}$i;done'
+            f'{self.pvc_base_name}$i -n {TEST_PROJECT};done'
         )
         proc = run_async(command)
         assert proc, (
             f'Failed to execute command for deleting {self.number_of_pvc} PVCs'
         )
 
-        # Create another 100 PVCs
-        create_multiple_pvc(self.pvc_base_name_new, self.number_of_pvc)
+        # Create 100 new PVCs
+        create_multiple_pvc(
+            self.pvc_base_name_new, self.number_of_pvc, self.sc_obj.name
+        )
+        log.info(f'Created {self.number_of_pvc} new PVCs.')
+        self.pvc_objs_new = PVC_OBJS[:]
 
         # Verify PVCs are Bound
-        for count in range(1, self.number_of_pvc + 1):
-            pvc_name = f'{self.pvc_base_name_new}{count}'
-            assert verify_pvc_and_fetch_pv_name(pvc_name), (
-                f'PVC {pvc_name} does not exists'
+        for pvc in self.pvc_objs_new:
+            pvc.reload()
+            assert pvc.status == constants.STATUS_BOUND, (
+                f'PVC {pvc.name} is not Bound'
             )
+        log.info('Verified: Newly created PVCs are in Bound state.')
 
         # Verify command to delete PVCs
         ret, out, err = proc.async_communicate()
@@ -270,25 +190,26 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
             f'Return values of command: {command}.\nretcode:{ret}\nstdout:'
             f'{out}\nstderr:{err}'
         )
-        assert not ret, "Deletion of PVCs failed"
+        assert not ret, 'Deletion of PVCs failed'
 
-        # Verify PVCs deleted
-        for count in range(1, self.number_of_pvc + 1):
-            pvc_name = f'{self.pvc_base_name}{count}'
-            assert verify_pvc_not_exists(pvc_name), (
-                f'Unexpected: PVC {pvc_name} still exists.'
-            )
+        # Verify PVCs are deleted
+        for pvc in self.pvc_objs_initial:
+            try:
+                pvc.get()
+                return False
+            except exceptions.CommandFailed as exp:
+                assert "not found" in str(exp), (
+                    f'Failed to fetch details of PVC {pvc.name}'
+                )
+                log.info(f'Expected: PVC {pvc.name} does not exists ')
+        log.info(f'Successfully deleted initial {self.number_of_pvc} PVCs')
 
-        # Verify PVs deleted. PVs should be deleted because reclaimPolicy in
-        # storage class is set as 'Delete'
-        for pv in self.initial_pvs:
-            assert verify_pv_not_exists(pv), (
-                f'Unexpected: PV {pv} still exists.'
-            )
-
-        # Verify PVs using ceph toolbox
-        ceph_cmd = 'rbd ls -p rbd'
-        final_pv_list = ocp.exec_ceph_cmd(ceph_cmd, 'json')
+        # Verify PVs using ceph toolbox. PVs should be deleted because
+        # reclaimPolicy is Delete
+        ceph_cmd = f'rbd ls -p {self.cbp_obj.name}'
+        ct_pod = get_ceph_tools_pod()
+        final_pv_list = ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd, format='json')
         assert not any(pv in final_pv_list for pv in self.initial_pvs), (
             "PVs associated with deleted PVCs still exists"
         )
+        log.info('Verified: PVs associated with deleted PVCs are also deleted')
