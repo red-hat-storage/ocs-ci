@@ -5,6 +5,7 @@ from ocs import defaults
 from ocsci.config import ENV_DATA
 from ocsci.testlib import tier1, ManageTest
 from resources.ocs import OCS
+from resources.pvc import PVC
 from tests import helpers
 from ocs.ocp import OCP
 from ocs.exceptions import CommandFailed
@@ -14,7 +15,6 @@ log = logging.getLogger(__name__)
 OCCLI = OCP(kind='service', namespace=ENV_DATA['cluster_namespace'])
 
 SC_OBJ = None
-SC_NAME = None
 
 
 @pytest.fixture(scope='class')
@@ -36,18 +36,15 @@ def setup(self):
     """
     # Create a storage class
     log.info("Creating a Storage Class")
-    self.sc_data = defaults.STORAGECLASS_DICT.copy()
+    self.sc_data = defaults.CSI_RBD_STORAGECLASS_DICT.copy()
     self.sc_data['metadata']['name'] = helpers.create_unique_resource_name(
         'test', 'csi-rbd'
     )
     global SC_OBJ
-    global SC_NAME
     SC_OBJ = OCS(**self.sc_data)
-    SC_NAME = self.sc_data['metadata']['name']
     assert SC_OBJ.create()
-    log.info(f"Storage class: {SC_NAME} created successfully")
+    log.info(f"Storage class: {SC_OBJ.name} created successfully")
     log.debug(self.sc_data)
-    return SC_NAME
 
 
 def teardown():
@@ -55,16 +52,19 @@ def teardown():
     Tearing down the environment
 
     """
-    log.info(f"Deleting created storage class: {SC_NAME}")
+    log.info(f"Deleting created storage class: {SC_OBJ.name}")
     SC_OBJ.delete()
-    log.info(f"Storage class: {SC_NAME} deleted successfully")
+    log.info(f"Storage class: {SC_OBJ.name} deleted successfully")
 
 
 @tier1
 @pytest.mark.usefixtures(test_fixture.__name__)
 class TestPvcCreationInvalidInputs(ManageTest):
     """
-    This is the class for creating pvc with invalid inputs
+    PVC creation with invaid inputs in pvc yaml
+
+    https://polarion.engineering.redhat.com/polarion/#/project/
+    OpenShiftContainerStorage/workitem?id=OCS-284
     """
     def test_pvccreation_invalid_inputs(self):
         """
@@ -84,15 +84,18 @@ def create_pvc_invalid_name(pvcname):
     Returns:
         None
     """
-    pvc_data = defaults.PVC_DICT.copy()
+    pvc_data = defaults.CSI_PVC_DICT.copy()
     pvc_data['metadata']['name'] = pvcname
-    pvc_data['spec']['storageClassName'] = SC_NAME
-    PVC_OBJ = OCS(**pvc_data)
+    pvc_data['spec']['storageClassName'] = SC_OBJ.name
+    pvc_obj = PVC(**pvc_data)
     log.info(f"Creating a pvc with name {pvcname}")
     try:
-        PVC_OBJ.create()
+        pvc_obj.create()
     except CommandFailed as ex:
-        if "error" in str(ex):
+        error = "subdomain must consist of lower case alphanumeric "\
+                "characters, '-' or '.', and must start and end with "\
+                "an alphanumeric character"
+        if error in str(ex):
             log.info(
                 f"PVC creation failed with error \n {ex} \n as "
                 "invalid pvc name is provided. EXPECTED"
@@ -114,16 +117,18 @@ def create_pvc_invalid_size(pvcsize):
     Returns:
         None
     """
-    pvc_data = defaults.PVC_DICT.copy()
+    pvc_data = defaults.CSI_PVC_DICT.copy()
     pvc_data['metadata']['name'] = "auto"
     pvc_data['spec']['resources']['requests']['storage'] = pvcsize
-    pvc_data['spec']['storageClassName'] = SC_NAME
-    PVC_OBJ = OCS(**pvc_data)
+    pvc_data['spec']['storageClassName'] = SC_OBJ.name
+    pvc_obj = PVC(**pvc_data)
     log.info(f"Creating a PVC with size {pvcsize}")
     try:
-        PVC_OBJ.create()
+        pvc_obj.create()
     except CommandFailed as ex:
-        if "error" in str(ex):
+        error = "quantities must match the regular expression '^([+-]?[0-9.]"\
+                "+)([eEinumkKMGTP]*[-+]?[0-9]*)$'"
+        if error in str(ex):
             log.info(
                 f"PVC creation failed with error \n {ex} \n as "
                 "invalid pvc size is provided. EXPECTED"
