@@ -69,10 +69,10 @@ def create_multiple_rbd_storageclasses(count=1):
     By default if we haven't passed count function will create only one
     storageclass because by default count for creating sc is one
 
-    :Args count:
-
+    Args:
+         count (int): count specify no of storageclass want to create by
+            default count is set to one i.e it will create one sc
     """
-
     for sc_count in range(count):
         log.info("Creating CephBlockPool")
         pool_obj = helpers.create_ceph_block_pool()
@@ -88,7 +88,10 @@ def create_multiple_rbd_storageclasses(count=1):
 def create_pvc(storageclass_list, count=1):
     """
     Function for creating pvc and multiple pvc
-    :param storageclass_list,count:
+
+    Args:
+        storageclass_list (list): This will contain storageclass list
+        count (int): count specify no of pvc want's to create
     """
     for i in range(count):
         sc_name = random.choice(storageclass_list)
@@ -100,7 +103,6 @@ def create_pvc(storageclass_list, count=1):
 def create_storageclass_cephfs():
     """
     Function for creating CephFs storageclass
-    :return:
     """
     helpers.create_storage_class(
         constants.CEPHFILESYSTEM,
