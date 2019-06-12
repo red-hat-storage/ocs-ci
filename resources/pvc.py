@@ -3,6 +3,9 @@ General PVC object
 """
 import logging
 
+from ocs import constants
+from ocs.defaults import ENV_DATA
+from ocs.ocp import OCP
 from resources.ocs import OCS
 
 log = logging.getLogger(__name__)
@@ -64,3 +67,36 @@ class PVC(OCS):
         if verify:
             return self.get_size() == new_size
         return True
+
+
+def delete_all_pvcs():
+    """
+    Deletes all pvc in namespace
+
+    Returns:
+        bool: True if deletion is successful
+    """
+    ocp_pvc_obj = OCP(
+        kind=constants.PVC, namespace=ENV_DATA['cluster_namespace']
+    )
+    ocp_pvc_list = get_all_pvcs()
+    pvc_list = ocp_pvc_list['items']
+    for item in pvc_list:
+        ocp_pvc_obj.delete(resource_name=item.get('metadata').get('name'))
+
+    return True
+
+
+def get_all_pvcs():
+    """
+    Gets all pvc in given namespace
+
+    Returns:
+         dict: Dict of all pvc in namespaces
+    """
+
+    ocp_pvc_obj = OCP(
+        kind=constants.PVC, namespace=ENV_DATA['cluster_namespace']
+    )
+    out = ocp_pvc_obj.get()
+    return out
