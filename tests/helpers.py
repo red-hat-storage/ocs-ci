@@ -1,13 +1,14 @@
 """
 Helper functions file for OCS QE
 """
-import logging
 import base64
 import datetime
-from ocs import constants, defaults
+import logging
+
+from ocs import constants, defaults, ocp
 from ocsci.config import ENV_DATA
-from resources.ocs import OCS
 from resources import pod
+from resources.ocs import OCS
 
 logger = logging.getLogger(__name__)
 
@@ -107,14 +108,19 @@ def create_secret(interface_type):
     secret_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
         secret_data = defaults.CSI_RBD_SECRET.copy()
+        del secret_data['data']['kubernetes']
+        secret_data['data']['admin'] = get_admin_key()
     elif interface_type == constants.CEPHFILESYSTEM:
         secret_data = defaults.CSI_CEPHFS_SECRET.copy()
+        del secret_data['data']['userID']
+        del secret_data['data']['userKey']
+        secret_data['data']['adminID'] = constants.ADMIN_BASE64
+        secret_data['data']['adminKey'] = get_admin_key()
     secret_data['metadata']['name'] = create_unique_resource_name(
         'test', 'secret'
     )
     secret_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    del secret_data['data']['kubernetes']
-    secret_data['data']['admin'] = get_admin_key()
+
     return create_resource(**secret_data, wait=False)
 
 
@@ -154,9 +160,9 @@ def create_storage_class(interface_type, interface_name, secret_name):
     sc_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
         sc_data = defaults.CSI_RBD_STORAGECLASS_DICT.copy()
-        sc_data['parameters']['pool'] = interface_name
     elif interface_type == constants.CEPHFILESYSTEM:
-        sc_data = defaults.CEPHFILESYSTEM_DICT.copy()
+        sc_data = defaults.CSI_CEPHFS_STORAGECLASS_DICT.copy()
+    sc_data['parameters']['pool'] = interface_name
 
     mons = (
         f'rook-ceph-mon-a.{ENV_DATA["cluster_namespace"]}'
@@ -176,7 +182,10 @@ def create_storage_class(interface_type, interface_name, secret_name):
     sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
 
     sc_data['parameters']['monitors'] = mons
-    del sc_data['parameters']['userid']
+    try:
+        del sc_data['parameters']['userid']
+    except KeyError:
+        pass
     return create_resource(**sc_data, wait=False)
 
 
@@ -230,3 +239,179 @@ def get_admin_key():
     out = ct_pod.exec_ceph_cmd('ceph auth get-key client.admin')
     base64_output = base64.b64encode(out['key'].encode()).decode()
     return base64_output
+
+
+def get_cephfs_data_pool_name():
+    """
+    Fetches ceph fs datapool name from Ceph
+
+    Returns:
+        str: fs datapool name
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    out = ct_pod.exec_ceph_cmd('ceph fs ls')
+    return out[0]['data_pools'][0]
+
+
+def validate_cephfilesystem(fs_name):
+    """
+     Verify CephFileSystem exists at ceph and k8s
+
+     Args:
+        fs_name (str): The name of the Ceph FileSystem
+
+     Returns:
+         bool: True if CephFileSystem is created at ceph and k8s side else
+            will return False with valid msg i.e Failure cause
+    """
+    CFS = ocp.OCP(
+        kind=constants.CEPHFILESYSTEM,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_validate = False
+    k8s_validate = False
+    cmd = "ceph fs ls"
+    logger.info(fs_name)
+    out = ct_pod.exec_ceph_cmd(ceph_cmd=cmd)
+    if out:
+        out = out[0]['name']
+        logger.info(out)
+        if out == fs_name:
+            logger.info("FileSystem got created from Ceph Side")
+            ceph_validate = True
+        else:
+            logger.error("FileSystem was not present at Ceph Side")
+            return False
+    result = CFS.get(resource_name=fs_name)
+    if result['metadata']['name']:
+        logger.info(f"Filesystem got created from kubernetes Side")
+        k8s_validate = True
+    else:
+        logger.error("Filesystem was not create at Kubernetes Side")
+        return False
+    return True if (ceph_validate and k8s_validate) else False
+
+
+def get_all_storageclass_name():
+    """
+    Function for getting all storageclass
+
+    Returns:
+         list: list of storageclass name
+    """
+    SC = ocp.OCP(
+        kind=constants.STORAGECLASS,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    sc_obj = SC.get()
+    sample = sc_obj['items']
+
+    storageclass = [
+        item.get('metadata').get('name') for item in sample if (
+            item.get('metadata').get('name') not in constants.IGNORE_SC
+        )
+    ]
+    return storageclass
+
+
+def delete_all_storageclass():
+    """"
+    Function for Deleting all storageclass
+
+    Returns:
+        bool: True if deletion is successful
+    """
+
+    SC = ocp.OCP(
+        kind=constants.STORAGECLASS,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    storageclass_list = get_all_storageclass_name()
+    for item in storageclass_list:
+        logger.info(f"Deleting StorageClass with name {item}")
+        assert SC.delete(resource_name=item)
+    return True
+
+
+def get_cephblockpool_name():
+    """
+    Function for getting all CephBlockPool
+
+    Returns:
+         list: list of cephblockpool name
+    """
+    POOL = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOL,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    sc_obj = POOL.get()
+    sample = sc_obj['items']
+    pool_list = [
+        item.get('metadata').get('name') for item in sample
+    ]
+    return pool_list
+
+
+def delete_cephblockpool():
+    """
+    Function for deleting CephBlockPool
+
+    Returns:
+        bool: True if deletion of CephBlockPool is successful
+    """
+    POOL = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOL,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    pool_list = get_cephblockpool_name()
+    for item in pool_list:
+        logger.info(f"Deleting CephBlockPool with name {item}")
+        assert POOL.delete(resource_name=item)
+    return True
+
+
+def create_cephfilesystem():
+    """
+    Function for deploying CephFileSystem (MDS)
+
+    Returns:
+        bool: True if CephFileSystem creates successful
+    """
+    fs_data = defaults.CEPHFILESYSTEM_DICT.copy()
+    fs_data['metadata']['name'] = create_unique_resource_name(
+        'test', 'cephfs'
+    )
+    fs_data['metadata']['namespace'] = ENV_DATA['cluster_namespace']
+    global CEPHFS_OBJ
+    CEPHFS_OBJ = OCS(**fs_data)
+    CEPHFS_OBJ.create()
+    POD = pod.get_all_pods(
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    for pod_names in POD:
+        if 'rook-ceph-mds' in pod_names.labels.values():
+            assert pod_names.ocp.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector='app=rook-ceph-mds'
+            )
+    assert validate_cephfilesystem(fs_name=fs_data['metadata']['name'])
+    return True
+
+
+def delete_all_cephfilesystem():
+    """
+    Function to Delete CephFileSysem
+
+    Returns:
+        bool: True if deletion of CephFileSystem is successful
+    """
+    CFS = ocp.OCP(
+        kind=constants.CEPHFILESYSTEM,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    result = CFS.get()
+    cephfs_dict = result['items']
+    for item in cephfs_dict:
+        assert CFS.delete(resource_name=item.get('metadata').get('name'))
+    return True

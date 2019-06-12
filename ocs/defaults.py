@@ -88,6 +88,11 @@ CSI_RBD_STORAGECLASS_DICT = load_yaml_to_dict(
         constants.TEMPLATE_CSI_RBD_DIR, "storageclass.yaml"
     )
 )
+CSI_CEPHFS_STORAGECLASS_DICT = load_yaml_to_dict(
+    os.path.join(
+        constants.TEMPLATE_CSI_FS_DIR, "storageclass.yaml"
+    )
+)
 CSI_PVC_DICT = load_yaml_to_dict(
     os.path.join(
         constants.TEMPLATE_PV_PVC_DIR, "PersistentVolumeClaim.yaml"

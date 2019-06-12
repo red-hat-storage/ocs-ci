@@ -6,7 +6,6 @@ Each pod in the openshift cluster will have a corresponding pod object
 import logging
 import re
 import tempfile
-import yaml
 from time import sleep
 from threading import Thread
 import base64
@@ -154,7 +153,7 @@ def get_all_pods(namespace=None):
     """
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     pods = ocp_pod_obj.get()['items']
-    pod_objs = [Pod(**yaml.safe_load(pod)) for pod in pods]
+    pod_objs = [Pod(**pod) for pod in pods]
     return pod_objs
 
 
