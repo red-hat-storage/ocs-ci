@@ -2,16 +2,16 @@
 A test case to verify after deleting pvc whether
 size is returned to backend pool
 """
-from datetime import datetime, timedelta
 import logging
 import pytest
 
 from ocs import constants, defaults
-import ocs.exceptions as ex
+from ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from tests import helpers
 from ocsci.testlib import tier1, ManageTest
 from utility import templating
-from resources import pod
+from utility.retry import retry
+from resources import pod, pvc
 from ocs import ocp
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool,
@@ -26,70 +26,54 @@ PV = ocp.OCP(
 )
 
 
+@retry((UnexpectedBehaviour), tries=20, delay=30, backoff=1)
 def check_ceph_used_space():
     """
     Check for the used space in cluster
     """
-    end_time = datetime.now() + timedelta(seconds=120)
-    while datetime.now() < end_time:
-        sample_of_three_size = []
-        for i in range(3):
-            ct_pod = pod.get_ceph_tools_pod()
-            ceph_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph status")
-            assert ceph_status is not None
-            used = ceph_status['pgmap']['bytes_used']
-            used_in_gb = used / constants.GB
-            sample_of_three_size.append(used_in_gb)
-        if len(set(sample_of_three_size)) == 1:
-            return used_in_gb
-    logger.error(f"Unexpected: In ceph status, used size is keeping varying")
+
+    sample_of_three_size = []
+    for i in range(3):
+        ct_pod = pod.get_ceph_tools_pod()
+        ceph_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph status")
+        assert ceph_status is not None
+        used = ceph_status['pgmap']['bytes_used']
+        used_in_gb = used / constants.GB
+        sample_of_three_size.append(used_in_gb)
+    if not len(set(sample_of_three_size)) == 1:
+        raise UnexpectedBehaviour(
+            f"In Ceph status, used size is keeping varying"
+        )
+    return used_in_gb
 
 
-def run_io(pod_obj):
-    """
-    Run io on the mount point
-    """
-
-    # Run IO's
-    pod_obj.exec_cmd_on_pod(
-        command="dd if=/dev/urandom of=/var/lib/www/html/dd_a bs=10M count=950"
-    )
-
-    # Verify data's are written to mount-point
-    mount_point = pod_obj.exec_cmd_on_pod(command="df -kh")
-    mount_point = mount_point.split()
-    used_percentage = mount_point[mount_point.index('/var/lib/www/html') - 1]
-    assert used_percentage > '90%'
-
-
+@retry((UnexpectedBehaviour), tries=4, delay=30, backoff=1)
 def verify_pv_not_exists(pv_name, cbp_name):
     """
     Ensure that pv does not exists
     """
 
     # Validate on ceph side
-    logger.info(f"Verifying pvc {pv_name} exists on backend")
+    logger.info(f"Verifying pv {pv_name} exists on backend")
     ct_pod = pod.get_ceph_tools_pod()
-    end_time = datetime.now() + timedelta(seconds=20)
-    while datetime.now() < end_time:
-        pvc_list = ct_pod.exec_ceph_cmd(
-            ceph_cmd=f"rbd ls -p {cbp_name}", format='json'
-        )
-        _rc = pv_name in pvc_list
-        if not _rc:
-            break
-    assert not _rc, (
-        f"pvc {pv_name} exists on backend"
+    pvc_list = ct_pod.exec_ceph_cmd(
+        ceph_cmd=f"rbd ls -p {cbp_name}", format='json'
     )
+    _rc = pv_name in pvc_list
+
+    if _rc:
+        raise UnexpectedBehaviour(f"pv {pv_name} exists on backend")
     logger.info(
-        f"Expected: pvc {pv_name} doesn't exist on backend after deleting pvc"
+        f"Expected: pv {pv_name} doesn't exist on backend after deleting pvc"
     )
 
     # Validate on oc side
     try:
-        assert not PV.get(pv_name)
-    except ex.CommandFailed as ecf:
-        assert "not found" in str(ecf)
+        PV.get(pv_name)
+    except CommandFailed as ecf:
+        assert "not found" in str(ecf), (
+            f"Unexpected: pv {pv_name} still exists"
+        )
     logger.info(
         f"Expected: pv should not be found "
         f"after deleting corresponding pvc"
@@ -97,7 +81,7 @@ def verify_pv_not_exists(pv_name, cbp_name):
 
 
 def create_pvc_and_verify_pvc_exists(
-    sc_name, cbp_name, desired_status=constants.STATUS_BOUND
+    sc_name, cbp_name, desired_status=constants.STATUS_BOUND, wait=True
 ):
     """
     Create pvc, verify pvc is bound in state and
@@ -110,27 +94,25 @@ def create_pvc_and_verify_pvc_exists(
     )
     pvc_data['spec']['storageClassName'] = sc_name
     pvc_data['spec']['resources']['requests']['storage'] = "10Gi"
-    pvc_obj = helpers.create_resource(
-        **pvc_data, desired_status=desired_status, wait=True
-    )
-    assert pvc_obj, (
-        f"Failed to create resource {pvc_data['metadata']['name']}"
-    )
+    pvc_obj = pvc.PVC(**pvc_data)
+    pvc_obj.create()
+    if wait:
+        assert pvc_obj.ocp.wait_for_resource(
+            condition=desired_status, resource_name=pvc_obj.name
+        ), f"{pvc_obj.kind} {pvc_obj.name} failed to reach"
+        f"status {desired_status}"
+    pvc_obj.reload()
 
-    # get pvc info
-    pvc_info = pvc_obj.get()
-    pv_name = pvc_info['spec']['volumeName']
-
-    # Validate pvc is created on ceph
-    logger.info(f"Verifying pvc {pv_name} exists on backend")
+    # Validate pv is created on ceph
+    logger.info(f"Verifying pv exists on backend")
     ct_pod = pod.get_ceph_tools_pod()
-    pvc_list = ct_pod.exec_ceph_cmd(
+    pv_list = ct_pod.exec_ceph_cmd(
         ceph_cmd=f"rbd ls -p {cbp_name}", format='json'
     )
-    _rc = pv_name in pvc_list
-    assert _rc, f"pvc {pv_name} doesn't exist on backend"
-    logger.info(f"pvc {pv_name} exists on backend")
-    return pvc_obj, pv_name
+    _rc = pvc_obj.backed_pv in pv_list
+    assert _rc, f"pv doesn't exist on backend"
+    logger.info(f"pv {pvc_obj.backed_pv} exists on backend")
+    return pvc_obj
 
 
 @pytest.mark.usefixtures(
@@ -150,19 +132,20 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         """
         used_before_creating_pvc = check_ceph_used_space()
         logger.info(f"Used before creating pvc {used_before_creating_pvc}")
-        pvc_obj, pv_name = create_pvc_and_verify_pvc_exists(
+        pvc_obj = create_pvc_and_verify_pvc_exists(
             self.sc_obj.name, self.cbp_obj.name
         )
         pod_data = defaults.CSI_RBD_POD_DICT.copy()
         pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_obj.name
         pod_obj = helpers.create_pod(**pod_data)
-        run_io(pod_obj)
+        used_percentage = pod.run_io_and_verify_mount_point(pod_obj)
+        assert used_percentage > '90%', "I/O's didn't run completely"
         used_after_creating_pvc = check_ceph_used_space()
         logger.info(f"Used after creating pvc {used_after_creating_pvc}")
         assert used_before_creating_pvc < used_after_creating_pvc
         pod_obj.delete()
         pvc_obj.delete()
-        verify_pv_not_exists(pv_name, self.cbp_obj.name)
+        verify_pv_not_exists(pvc_obj.backed_pv, self.cbp_obj.name)
         used_after_deleting_pvc = check_ceph_used_space()
         logger.info(f"Used after deleting pvc {used_after_deleting_pvc}")
         assert used_after_deleting_pvc < used_after_creating_pvc
