@@ -5,7 +5,6 @@ from jinja2 import Template
 import pytest
 import yaml
 
-import ocs.defaults
 import ocsci
 
 
@@ -61,10 +60,7 @@ def init_ocsci_conf(arguments=None, default_config=OCSCI_DEFAULT_CONFIG):
         update_dict_recursively(config_data, cluster_config_data)
     rendered_config = render_yaml_with_j2_context(config_data)
     for key, value in rendered_config.items():
-        if key == "DEFAULTS":
-            for default_key, default_value in value.items():
-                setattr(ocs.defaults, default_key, default_value)
-        elif key.isupper():
+        if key.isupper():
             setattr(ocsci.config, key, value)
 
 
