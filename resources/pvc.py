@@ -72,6 +72,9 @@ class PVC(OCS):
 def delete_all_pvcs():
     """
     Deletes all pvc in namespace
+
+    Returns:
+        bool: True if deletion is successful
     """
     ocp_pvc_obj = OCP(
         kind=constants.PVC, namespace=ENV_DATA['cluster_namespace']
@@ -87,7 +90,9 @@ def delete_all_pvcs():
 def get_all_pvcs():
     """
     Gets all pvc in given namespace
-    :return: Dict of all pvc in namespaces
+
+    Returns:
+         dict: Dict of all pvc in namespaces
     """
 
     ocp_pvc_obj = OCP(
