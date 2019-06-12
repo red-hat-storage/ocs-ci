@@ -17,15 +17,14 @@ For more information please read the rest of the documentation.
 
 ## OCS CI Config
 
-We moved all the OCSCI framework related config under
-[ocsci folder](./ocsci/). We have defined currently this file:
+## defaults file
+* [defaults.py](../ocs/defaults.py) - this is main defaults file which is
+  a python file, All default values should reside here.
 
-* [default_config.yaml](ocsci/default_config.yaml) - this is the default
-    config file for OCS CI which is loaded automatically (don't pass it to
-    --ocsci-conf). It contains multiple sections which user can overwrite in
-    custom file and provide as an option to `--oscci-conf`.
-* In the future we will have more config files in this folder which you can
-    reuse.
+We moved most of the OCSCI framework related config under
+[ocsci folder](./ocsci/). * In the future we will have more config files in
+this folder which you can reuse.:
+
 
 ## Cluster config
 
@@ -55,15 +54,6 @@ defaults among all configs as well.
 All of the below sections, except for `DEFAULTS`, will be available from
 [ocsci/config.py](../ocsci/config.py) module. `DEFAULTS` section is exposed to
 [ocs/defaults.py](../ocs/defaults.py) module as described below.
-
-#### DEFAULTS
-
-Default values which are used among different configs and sections.
-
-All variables defined in this section are exposed to
-[../ocs/defaults.py](../ocs/defaults.py) module during the start of the
-execution. So you can access those default data from `ocs/defaults.py` module
-directly from your tests or modules.
 
 #### RUN
 
