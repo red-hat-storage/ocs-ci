@@ -1,14 +1,10 @@
 """
 Defaults module.
-
 This module is automatically loaded with variables defined in
 conf/ocsci/default_config.yaml in its DEFAULTS section.
-
 If the variable can be used in some config file sections from ocsci/config.py
 module, plese put your defaults rather to mentioned default_config.yaml file!
-
 See the documentation in conf/README.md file to understand this config file.
-
 PYTEST_DONT_REWRITE - avoid pytest to rewrite, keep this msg here please!
 """
 import os
@@ -28,7 +24,7 @@ OPENSHIFT_REST_CLIENT_API_VERSION = 'v1'
 # Be aware that variables defined above and below are not used anywhere in the
 # config files and their sections when we rendering config!
 
-INSTALLER_VERSION = '4.1.0-rc.5'
+INSTALLER_VERSION = '4.1.0'
 CLIENT_VERSION = INSTALLER_VERSION
 AWS_REGION = 'us-east-2'
 ROOK_CLUSTER_NAMESPACE = 'openshift-storage'
@@ -110,5 +106,23 @@ CSI_RBD_SECRET = load_yaml_to_dict(
 CSI_CEPHFS_SECRET = load_yaml_to_dict(
     os.path.join(
         constants.TEMPLATE_CSI_FS_DIR, "secret.yaml"
+    )
+)
+
+CSI_CEPHFS_STORAGECLASS_DICT = load_yaml_to_dict(
+    os.path.join(
+        constants.TEMPLATE_CSI_FS_DIR, "storageclass.yaml"
+    )
+)
+
+CSI_CEPHFS_PVC = load_yaml_to_dict(
+    os.path.join(
+        constants.TEMPLATE_CSI_FS_DIR, "pvc.yaml"
+    )
+)
+
+CSI_RBD_PVC = load_yaml_to_dict(
+    os.path.join(
+        constants.TEMPLATE_CSI_RBD_DIR, "pvc.yaml"
     )
 )
