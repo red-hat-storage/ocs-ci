@@ -124,15 +124,18 @@ def create_secret(interface_type):
     return create_resource(**secret_data, wait=False)
 
 
-def create_ceph_block_pool():
+def create_ceph_block_pool(pool_name=None):
     """
     Create a Ceph block pool
+
+    Args:
+        pool_name (str): The pool name to create
 
     Returns:
         OCS: An OCS instance for the Ceph block pool
     """
     cbp_data = defaults.CEPHBLOCKPOOL_DICT.copy()
-    cbp_data['metadata']['name'] = create_unique_resource_name(
+    cbp_data['metadata']['name'] = pool_name if pool_name else create_unique_resource_name(
         'test', 'cbp'
     )
     cbp_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
@@ -142,6 +145,34 @@ def create_ceph_block_pool():
         f"Block pool {cbp_obj.name} does not exist"
     )
     return cbp_obj
+
+
+def create_ceph_fs(fs_name=None):
+    """
+    Create a Ceph File System
+
+    Args:
+        fs_name (str): The File System name to create
+
+    Returns:
+        OCS: An OCS instance for the Ceph File System
+    """
+    fs_data = defaults.CEPHFILESYSTEM_DICT.copy()
+    fs_data['metadata']['name'] = fs_name if fs_name else create_unique_resource_name(
+        'test', 'cephfs'
+    )
+    fs_data['metadata']['namespace'] = ENV_DATA['cluster_namespace']
+    cephfs_obj = create_resource(**fs_data, wait=False)
+
+    pod = ocp.OCP(kind='Pod', namespace=ENV_DATA['cluster_namespace'])
+    assert pod.wait_for_resource(
+        condition='Running', selector='app=rook-ceph-mds', resource_count=2
+    )
+
+    assert verify_fs_exist(cephfs_obj.name), (
+        f"File System {cephfs_obj.name} does not exist"
+    )
+    return cephfs_obj
 
 
 def create_storage_class(interface_type, interface_name, secret_name):
@@ -189,17 +220,20 @@ def create_storage_class(interface_type, interface_name, secret_name):
     return create_resource(**sc_data, wait=False)
 
 
-def create_pvc(sc_name):
+def create_pvc(sc_name, pvc_name=None):
     """
+    Create a PVC
+
     Args:
         sc_name (str): The name of the storage class for the PVC to be
             associated with
+        pvc_name (str): The PVC name to create
 
     Returns:
         OCS: An OCS instance for the PVC
     """
     pvc_data = defaults.CSI_PVC_DICT.copy()
-    pvc_data['metadata']['name'] = create_unique_resource_name(
+    pvc_data['metadata']['name'] = pvc_name if pvc_name else create_unique_resource_name(
         'test', 'pvc'
     )
     pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
@@ -224,6 +258,25 @@ def verify_block_pool_exists(pool_name):
     pools = ct_pod.exec_ceph_cmd('ceph osd lspools')
     for pool in pools:
         if pool_name in pool.get('poolname'):
+            return True
+    return False
+
+
+def verify_fs_exist(fs_name):
+    """
+    Verifying if a Ceph File System exist
+
+    Args:
+        fs_name (str): The name of the Ceph File System
+
+    Returns:
+        bool: True if the Ceph File System exists, False otherwise
+    """
+    logger.info(f"Verifying that Ceph File System {fs_name} exists")
+    ct_pod = pod.get_ceph_tools_pod()
+    fs_list = ct_pod.exec_ceph_cmd('ceph fs ls')
+    for fs in fs_list:
+        if fs_name in fs.get('name'):
             return True
     return False
 
