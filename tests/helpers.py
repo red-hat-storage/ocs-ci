@@ -256,8 +256,13 @@ def get_cephfs_data_pool_name():
 def validate_cephfilesystem(fs_name):
     """
      Verify CephFileSystem exists at ceph and k8s
+
      Args:
         fs_name (str): The name of the Ceph FileSystem
+
+     Returns:
+         bool: True if CephFileSystem is created at ceph and k8s side else
+            will return False with valid msg i.e Failure cause
     """
     CFS = ocp.OCP(
         kind=constants.CEPHFILESYSTEM,
@@ -291,7 +296,9 @@ def validate_cephfilesystem(fs_name):
 def get_all_storageclass_name():
     """
     Function for getting all storageclass
-    :return list of storageclass
+
+    Returns:
+         list: list of storageclass name
     """
     SC = ocp.OCP(
         kind=constants.STORAGECLASS,
@@ -311,6 +318,9 @@ def get_all_storageclass_name():
 def delete_all_storageclass():
     """"
     Function for Deleting all storageclass
+
+    Returns:
+        bool: True if deletion is successful
     """
 
     SC = ocp.OCP(
@@ -327,7 +337,9 @@ def delete_all_storageclass():
 def get_cephblockpool_name():
     """
     Function for getting all CephBlockPool
-    :return list of cephblockpool
+
+    Returns:
+         list: list of cephblockpool name
     """
     POOL = ocp.OCP(
         kind=constants.CEPHBLOCKPOOL,
@@ -344,6 +356,9 @@ def get_cephblockpool_name():
 def delete_cephblockpool():
     """
     Function for deleting CephBlockPool
+
+    Returns:
+        bool: True if deletion of CephBlockPool is successful
     """
     POOL = ocp.OCP(
         kind=constants.CEPHBLOCKPOOL,
@@ -359,6 +374,9 @@ def delete_cephblockpool():
 def create_cephfilesystem():
     """
     Function for deploying CephFileSystem (MDS)
+
+    Returns:
+        bool: True if CephFileSystem creates successful
     """
     fs_data = defaults.CEPHFILESYSTEM_DICT.copy()
     fs_data['metadata']['name'] = create_unique_resource_name(
@@ -384,6 +402,9 @@ def create_cephfilesystem():
 def delete_all_cephfilesystem():
     """
     Function to Delete CephFileSysem
+
+    Returns:
+        bool: True if deletion of CephFileSystem is successful
     """
     CFS = ocp.OCP(
         kind=constants.CEPHFILESYSTEM,
@@ -392,5 +413,5 @@ def delete_all_cephfilesystem():
     result = CFS.get()
     cephfs_dict = result['items']
     for item in cephfs_dict:
-        CFS.delete(resource_name=item.get('metadata').get('name'))
+        assert CFS.delete(resource_name=item.get('metadata').get('name'))
     return True
