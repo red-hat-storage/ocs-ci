@@ -31,7 +31,7 @@ ROOK_CLUSTER_NAMESPACE = 'openshift-storage'
 KUBECONFIG_LOCATION = 'auth/kubeconfig'  # relative from cluster_dir
 CLUSTER_NAME = "ocs-ci"
 API_VERSION = "v1"
-CEPH_IMAGE = "ceph/ceph:v14.2.0-20190410"
+CEPH_IMAGE = "ceph/ceph:v14"
 ROOK_IMAGE = "rook/ceph:master"
 DEPLOYMENT_PLATFORM = 'AWS'
 
