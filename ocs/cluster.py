@@ -9,6 +9,7 @@ functional and proper configurations are made for interaction.
 import logging
 import os
 import base64
+import yaml
 
 import oc.openshift_ops as ac
 import resources.pod as pod
@@ -38,8 +39,6 @@ class CephCluster(object):
         _ocs_pods (list) : A list of  ceph cluster related pods
         _cluster_name (str): Name of ceph cluster
         _namespace (str): openshift Namespace where this cluster lives
-        _api_client (APIClient): api-client used for interacting with openshift
-        _url_prefix (str): url prefix for REST api interaction
     """
 
     def __init__(self, **config):
@@ -61,10 +60,18 @@ class CephCluster(object):
         #self.cluster_config = generate_yaml_from_jinja2_template_with_data(
         #    self.cluster_resource, **config
         #)
-        self.cluster_config = CEPHCLUSTER.get()['items'][0]
+        self.cluster_config = CEPHCLUSTER.get().get('items')[0]
+        logging.info(self.cluster_config)
+        file = open("dump_from_auto", 'w')
+        try:
+            yaml.dump(self.cluster_config, file, default_flow_style = False)
+        except Exception as e:
+            logging.error(e)
+        file.close()
         self.cephfs_config = default.CEPHFILESYSTEM_DICT.copy()
         #Below is just for testing purpose
-        #self.cephfs_config['metadata']['name'] = 'cephfs-test-0913235459'
+        # Handle "what if cephfs doesn't exist
+        self.cephfs_config['metadata']['name'] = 'cephfs-test-0913235459'
 
         # We are not invoking ocs.create() here
         # assuming cluster creation is done somewhere after deployment
@@ -133,6 +140,7 @@ class CephCluster(object):
             new_count(int): Absolute number of mons required
         """
         self.cluster.data['spec']['mon']['count'] = new_count
+        logging.info(self.cluster.data)
         self.cluster.apply(**self.cluster.data)
         self.mon_health_check(new_count)
         logger.info(f"Mon count changed to {new_count}")

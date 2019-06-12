@@ -26,7 +26,7 @@ def setup(self):
     Setting up the environment for the test
     """
     global cluster
-    cluster = CephCluster()
+    cluster = CephCluster(name='rook-ceph')
 
 
 def teardown():
