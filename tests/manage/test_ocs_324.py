@@ -18,7 +18,9 @@ PVC_OBJ = None
 @pytest.fixture(params=[constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM])
 def test_fixture(request):
     """
-    This is a test fixture
+    Parametrized fixture which allows test to be run for different CEPH
+    interface.
+    The test will run for each interface provided in params.
     """
     self = request.node.cls
     self.interface_type = request.param
@@ -30,9 +32,13 @@ def test_fixture(request):
 
 def setup(self):
     """
-    Setting up the environment for the test
+    Creates the resources needed for the type of interface to be used and
+    initializes pvc_data which is used to create/delete PVC by the test.
+
+    For CephBlockPool interface: Creates Secret, CephBlockPool, StorageClass
+    For CephFilesystem interface: Creates Secret, CephFilesystem, StorageClass
     """
-    logger.info(f"Setting up environment for: {self.interface_type}")
+    logger.info(f"Creating resources for {self.interface_type} interface")
 
     self.secret_obj = helpers.create_secret(interface_type=self.interface_type)
     assert self.secret_obj, f"Failed to create secret"
@@ -60,15 +66,15 @@ def setup(self):
     self.pvc_data['metadata']['name'] = helpers.create_unique_resource_name(
         'test', 'pvc'
     )
-    self.pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    self.pvc_data['metadata']['namespace'] = ENV_DATA['cluster_namespace']
     self.pvc_data['spec']['storageClassName'] = self.sc_obj.name
 
 
 def teardown(self):
     """
-    Tearing down the environment
+    Deletes the resources for the type of interface used.
     """
-    logger.info(f"Tearing down the environment of: {self.interface_type}")
+    logger.info(f"Deleting resources for {self.interface_type} interface")
 
     PVC_OBJ.delete()
     self.sc_obj.delete()
