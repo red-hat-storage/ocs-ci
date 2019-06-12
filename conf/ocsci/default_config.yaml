@@ -54,5 +54,8 @@ ENV_DATA:
   cluster_name: "ocs-ci"  # needs to be changed in ocscilib plugin
   cluster_namespace: 'openshift-storage'
   region: '{{ DEFAULTS["AWS_REGION"] }}'
-  ceph_image: 'ceph/ceph:v14.2.0-20190410'
+  # Do not change to specific version like v14.2.1-20190430 if not needed
+  # cause we don't need to update it each time new 14.x version is released
+  # but only once when move to new version like v15.
+  ceph_image: 'ceph/ceph:v14'
   rook_image: 'rook/ceph:master'
