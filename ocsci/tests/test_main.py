@@ -1,5 +1,19 @@
 # -*- coding: utf-8 -*-
+import subprocess
+
 from ocsci.main import update_dict_recursively
+
+
+class TestEntrypoint(object):
+    def test_help(self):
+        result = subprocess.check_output(
+            ['run-ci', '--help'],
+            stderr=subprocess.STDOUT,
+        ).decode()
+        assert '--ocsci-conf' in result
+        assert '--cluster-conf' in result
+        assert '--cluster-path' in result
+        assert '--cluster-name' in result
 
 
 class TestUpdateDict(object):
