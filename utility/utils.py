@@ -762,8 +762,6 @@ def get_openshift_installer(
         # return to the previous working directory
         os.chdir(previous_dir)
 
-    add_path_to_env_path(bin_dir)
-
     return installer_binary_path
 
 
@@ -803,8 +801,6 @@ def get_openshift_client(
         delete_file(tarball)
         # return to the previous working directory
         os.chdir(previous_dir)
-
-    add_path_to_env_path(bin_dir)
 
     return client_binary_path
 
@@ -857,7 +853,6 @@ def add_path_to_env_path(path):
         path (str): Path which should be added to the PATH env. variable
 
     """
-    path = os.path.abspath('./bin')
     env_path = os.environ['PATH'].split(os.pathsep)
     if path not in env_path:
         os.environ['PATH'] = os.pathsep.join([path] + env_path)
