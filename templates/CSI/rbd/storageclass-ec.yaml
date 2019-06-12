@@ -32,7 +32,7 @@ spec:
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-   name: rook-ceph-block2
+   name: rook-ceph-block
 provisioner: ceph.rook.io/block
 parameters:
   # If you want to use erasure coded pool with RBD, you need to create two pools (as seen above): one erasure coded and one replicated.
