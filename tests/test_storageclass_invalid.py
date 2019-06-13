@@ -1,8 +1,5 @@
 import logging
-import os.path
-import pytest
 
-from resources.ocs import OCS
 from resources.pvc import PVC
 from tests import helpers
 from ocs import constants, defaults
@@ -11,6 +8,7 @@ from ocsci.testlib import tier3, ManageTest
 
 
 logger = logging.getLogger(__name__)
+
 
 @tier3
 class TestCaseOCS331(ManageTest):
