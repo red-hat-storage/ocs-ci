@@ -124,15 +124,18 @@ def create_secret(interface_type):
     return create_resource(**secret_data, wait=False)
 
 
-def create_ceph_block_pool():
+def create_ceph_block_pool(pool_name=None):
     """
     Create a Ceph block pool
+
+    Args:
+        pool_name (str): The pool name to create
 
     Returns:
         OCS: An OCS instance for the Ceph block pool
     """
     cbp_data = defaults.CEPHBLOCKPOOL_DICT.copy()
-    cbp_data['metadata']['name'] = create_unique_resource_name(
+    cbp_data['metadata']['name'] = pool_name if pool_name else create_unique_resource_name(
         'test', 'cbp'
     )
     cbp_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
@@ -144,7 +147,9 @@ def create_ceph_block_pool():
     return cbp_obj
 
 
-def create_storage_class(interface_type, interface_name, secret_name):
+def create_storage_class(
+    interface_type, interface_name, secret_name, sc_name=None
+):
     """
     Create a storage class
 
@@ -153,6 +158,7 @@ def create_storage_class(interface_type, interface_name, secret_name):
             (e.g. CephBlockPool, CephFileSystem)
         interface_name (str): The name of the interface
         secret_name (str): The name of the secret
+        sc_name (str): The name of storage class to create
 
     Returns:
         OCS: An OCS instance for the storage class
@@ -172,7 +178,7 @@ def create_storage_class(interface_type, interface_name, secret_name):
         f'rook-ceph-mon-c.{ENV_DATA["cluster_namespace"]}'
         f'.svc.cluster.local:6789'
     )
-    sc_data['metadata']['name'] = create_unique_resource_name(
+    sc_data['metadata']['name'] = sc_name if sc_name else create_unique_resource_name(
         'test', 'storageclass'
     )
     sc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
@@ -189,17 +195,20 @@ def create_storage_class(interface_type, interface_name, secret_name):
     return create_resource(**sc_data, wait=False)
 
 
-def create_pvc(sc_name):
+def create_pvc(sc_name, pvc_name=None):
     """
+    Create a PVC
+
     Args:
         sc_name (str): The name of the storage class for the PVC to be
             associated with
+        pvc_name (str): The name of the PVC to create
 
     Returns:
         OCS: An OCS instance for the PVC
     """
     pvc_data = defaults.CSI_PVC_DICT.copy()
-    pvc_data['metadata']['name'] = create_unique_resource_name(
+    pvc_data['metadata']['name'] = pvc_name if pvc_name else create_unique_resource_name(
         'test', 'pvc'
     )
     pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
