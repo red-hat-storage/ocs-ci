@@ -26,6 +26,7 @@ class TestCaseOCS371(ManageTest):
         Delete PVC while IO is in progress
         """
         thread = pod.run_io_in_bg(self.pod_obj, expect_to_fail=True)
+        logger.info(f"Deleting PVC {self.pvc_obj.name}")
         self.pvc_obj.delete(wait=False)
 
         # This is a workaround for bug 1715627 (replaces wait_for_resource)
@@ -35,7 +36,7 @@ class TestCaseOCS371(ManageTest):
         )
 
         thread.join(timeout=15)
-        logger.info(f"Deleting PVC {self.pod_obj.name}")
+        logger.info(f"Deleting pod {self.pod_obj.name}")
         self.pod_obj.delete()
 
         # The PVC will no longer exist because the pod got deleted while it was
