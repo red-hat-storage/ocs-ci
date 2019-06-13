@@ -9,9 +9,6 @@ from resources.ocs import OCS
 
 logger = logging.getLogger(__name__)
 
-TEMPLATE_DIR = os.path.join('templates', 'ocs-deployment')
-SC_CEPHFS_TEMPLATE = os.path.join(TEMPLATE_DIR, 'storageclass.cephfs.yaml')
-
 
 @pytest.fixture(
     params=[{
