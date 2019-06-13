@@ -4,11 +4,10 @@ Basic test for creating PVC with default StorageClass - RBD-CSI
 
 import logging
 import pytest
-from ocs import defaults
-from ocsci.config import ENV_DATA
+
 from ocsci.testlib import tier1, ManageTest
-from resources.ocs import OCS
-from resources import pod
+from tests import helpers
+from ocs import constants
 
 log = logging.getLogger(__name__)
 
@@ -18,24 +17,19 @@ def test_fixture(request):
     """
     This is a test fixture
     """
-    self = request.node.cls
-
     def finalizer():
         teardown()
     request.addfinalizer(finalizer)
-    setup(self)
+    setup()
 
 
-def setup(self):
+def setup():
     """
-    Setting up the environment - Creating secret
+    Setting up the environment - Creating Secret
     """
     global SECRET
-    self.rbd_secret = defaults.CSI_RBD_SECRET.copy()
-    del self.rbd_secret['data']['kubernetes']
-    self.rbd_secret['data']['admin'] = pod.get_admin_key_from_ceph_tools()
-    SECRET = OCS(**self.rbd_secret)
-    assert SECRET.create()
+    log.info("Creating RBD Secret")
+    SECRET = helpers.create_secret(constants.CEPHBLOCKPOOL)
 
 
 def teardown():
@@ -44,8 +38,10 @@ def teardown():
     """
     log.info("Deleting PVC")
     PVC.delete()
+
     log.info("Deleting StorageClass")
     STORAGE_CLASS.delete()
+
     log.info("Deleting Secret")
     SECRET.delete()
 
@@ -55,26 +51,20 @@ def teardown():
     test_fixture.__name__,
 )
 class TestCaseOCS347(ManageTest):
-    mons = (
-        f'rook-ceph-mon-a.{ENV_DATA["cluster_namespace"]}'
-        f'.svc.cluster.local:6789,'
-        f'rook-ceph-mon-b.{ENV_DATA["cluster_namespace"]}.'
-        f'svc.cluster.local:6789,'
-        f'rook-ceph-mon-c.{ENV_DATA["cluster_namespace"]}'
-        f'.svc.cluster.local:6789'
-    )
+    """
+    Testing default storage class creation and pvc creation
+    with default rbd pool
+
+    https://polarion.engineering.redhat.com/polarion/#/project/
+    OpenShiftContainerStorage/workitem?id=OCS-347
+    """
 
     def test_ocs_347(self):
-        """
-        Testing default storage class creation and pvc creation using rbd
-        """
         global PVC, STORAGE_CLASS
-        rbd_sc = defaults.CSI_RBD_STORAGECLASS_DICT.copy()
-        rbd_sc['parameters']['monitors'] = self.mons
-        STORAGE_CLASS = OCS(**rbd_sc)
-        assert STORAGE_CLASS.create()
-        rbd_pvc = defaults.CSI_RBD_PVC.copy()
-        PVC = OCS(**rbd_pvc)
-        assert PVC.create()
-        get_pv = PVC.get()
-        assert 'Bound' == get_pv['status']['phase']
+        log.info("Creating RBD StorageClass")
+        STORAGE_CLASS = helpers.create_storage_class(
+            constants.CEPHBLOCKPOOL, 'rbd', SECRET.name
+        )
+
+        log.info("Creating a PVC")
+        PVC = helpers.create_pvc(STORAGE_CLASS.name)
