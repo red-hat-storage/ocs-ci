@@ -120,6 +120,12 @@ of course you can utilize your cluster to add `--cluster-conf` parameter or
 you can omit --cluster-name or --cluster-path if you would like to use default
 values.
 
+Note that during deployment, openshift command line tools like `oc` and
+`openshift-install` are installed into [`bin` directory of the
+repository](../bin). These tools are then available to both deployment and test
+code because `run-ci` wrapper includes the `bin` directoy into `PATH`
+environment variable.
+
 #### Runing tests on deployed environment
 
 ```bash
