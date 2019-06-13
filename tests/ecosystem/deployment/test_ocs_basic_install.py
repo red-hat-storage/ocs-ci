@@ -16,8 +16,18 @@ from utility.aws import AWS
 from utility.retry import retry
 from utility.utils import run_cmd, get_openshift_installer, get_openshift_client
 from ocs.parallel import parallel
+from ocs import ocp, defaults, constants
+from resources.ocs import OCS
+from resources import pod
+
 
 log = logging.getLogger(__name__)
+
+POD = ocp.OCP(kind=constants.POD, namespace=ENV_DATA['cluster_namespace'])
+CFS = ocp.OCP(
+    kind=constants.CEPHFILESYSTEM, namespace=ENV_DATA['cluster_namespace']
+)
+CEPH_OBJ = None
 
 
 @deployment
@@ -162,6 +172,21 @@ class TestDeployment(EcosystemTest):
             f"--timeout=120s"
         )
         create_oc_resource('cluster.yaml', cluster_path, _templating, ENV_DATA)
+
+        # Check for the Running status of Ceph Pods
+
+        assert POD.wait_for_resource(
+            condition='Running', selector='app=rook-ceph-mon',
+            resource_count=3, timeout=600
+        )
+        assert POD.wait_for_resource(
+            condition='Running', selector='app=rook-ceph-mgr',
+            timeout=600
+        )
+        assert POD.wait_for_resource(
+            condition='Running', selector='app=rook-ceph-osd',
+            resource_count=3, timeout=600
+        )
         create_oc_resource('toolbox.yaml', cluster_path, _templating, ENV_DATA)
         log.info(f"Waiting {wait_time} seconds...")
         time.sleep(wait_time)
@@ -176,6 +201,30 @@ class TestDeployment(EcosystemTest):
         )
         log.info(f"Waiting {wait_time} seconds...")
         time.sleep(wait_time)
+
+        # Create MDS pods for CephFileSystem
+
+        self.fs_data = defaults.CEPHFILESYSTEM_DICT.copy()
+        self.fs_data['metadata']['namespace'] = ENV_DATA['cluster_namespace']
+
+        global CEPH_OBJ
+        CEPH_OBJ = OCS(**self.fs_data)
+        CEPH_OBJ.create()
+        assert POD.wait_for_resource(
+            condition='Running', selector='app=rook-ceph-mds',
+            resource_count=2, timeout=600
+        )
+
+        # Check for CephFilesystem creation in ocp
+        cfs_data = CFS.get()
+        cfs_name = cfs_data['items'][0]['metadata']['name']
+
+        # Check successful creation of cephfilesystem from ceph backend
+        ct_pod = pod.get_ceph_tools_pod()
+        cmd_out = ct_pod.exec_ceph_cmd(ceph_cmd="ceph fs ls ")
+
+        if cfs_name in [pool.get('name') for pool in cmd_out]:
+            log.info(f"CephFileSystem {cfs_name} validated in ceph backend ")
 
         # Verify health of ceph cluster
         # TODO: move destroy cluster logic to new CLI usage pattern?
