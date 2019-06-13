@@ -86,7 +86,7 @@ class OCS(object):
         return status
 
     def delete(self, wait=True):
-        self.ocp.delete(resource_name=self.name, wait=wait)
+        return self.ocp.delete(resource_name=self.name, wait=wait)
 
     def apply(self, **data):
         with open(self.temp_yaml.name, 'w') as yaml_file:
