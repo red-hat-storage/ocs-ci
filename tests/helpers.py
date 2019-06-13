@@ -7,9 +7,15 @@ import datetime
 import logging
 
 from ocs import constants, defaults, ocp
+<<<<<<< HEAD
 from ocsci import config
+=======
+from ocs.exceptions import TimeoutExpiredError
+from ocsci.config import ENV_DATA
+>>>>>>> 1:- Added retry capability for validate_cephfilesystem
 from resources import pod
 from resources.ocs import OCS
+from utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -269,6 +275,7 @@ def get_cephfs_data_pool_name():
     return out[0]['data_pools'][0]
 
 
+@retry(TimeoutExpiredError, tries=5, delay=3, backoff=1)
 def validate_cephfilesystem(fs_name):
     """
      Verify CephFileSystem exists at ceph and k8s
@@ -389,12 +396,24 @@ def delete_cephblockpool():
 
 def create_cephfilesystem():
     """
-    Function for deploying CephFileSystem (MDS)
+    Function for deploying CephFileSystem (MDS) if CephFilesystem exists
+    deploying will be skipped
 
     Returns:
         bool: True if CephFileSystem creates successful
     """
+<<<<<<< HEAD
     fs_data = copy.deepcopy(defaults.CEPHFILESYSTEM_DICT)
+=======
+    POD = pod.get_all_pods(
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    for pod_names in POD:
+        if 'rook-ceph-mds' in pod_names.labels.values():
+            logger.info("CephFileSystem already exists")
+            return True
+    fs_data = defaults.CEPHFILESYSTEM_DICT.copy()
+>>>>>>> 1:- Added retry capability for validate_cephfilesystem
     fs_data['metadata']['name'] = create_unique_resource_name(
         'test', 'cephfs'
     )
