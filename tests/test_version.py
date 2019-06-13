@@ -7,6 +7,7 @@
 # others, eg. https://github.com/red-hat-storage/ocs-ci/pull/173).
 
 
+from datetime import datetime
 import argparse
 import logging
 import os.path
@@ -15,9 +16,6 @@ import sys
 from ocs.ocp import OCP
 import ocsci.config
 
-# TODO will require a change when helpers module will be moved somewhere else
-# later
-from .helpers import create_unique_resource_name
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +29,7 @@ def test_version():
     # base of "version of ocs components" section of a bugreport.
     version_filename = os.path.join(
         ocsci.config.ENV_DATA['cluster_path'],
-        create_unique_resource_name("cluster", "version"))
+        "cluster_version." + datetime.now().isoformat())
     version_file = open(version_filename, "w")
 
     # We use ClusterVersion resource (which is acted upon by openshift
