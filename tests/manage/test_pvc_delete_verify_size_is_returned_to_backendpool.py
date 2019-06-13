@@ -25,29 +25,29 @@ PV = ocp.OCP(
     kind='PersistentVolume', namespace=defaults.ROOK_CLUSTER_NAMESPACE
 )
 
+used_space = 0
 
-@retry((UnexpectedBehaviour), tries=20, delay=30, backoff=1)
+
+@retry(UnexpectedBehaviour, tries=10, delay=3, backoff=1)
 def check_ceph_used_space():
     """
     Check for the used space in cluster
     """
-
-    sample_of_three_size = []
-    for i in range(3):
-        ct_pod = pod.get_ceph_tools_pod()
-        ceph_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph status")
-        assert ceph_status is not None
-        used = ceph_status['pgmap']['bytes_used']
-        used_in_gb = used / constants.GB
-        sample_of_three_size.append(used_in_gb)
-    if not len(set(sample_of_three_size)) == 1:
-        raise UnexpectedBehaviour(
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph status")
+    assert ceph_status is not None
+    used = ceph_status['pgmap']['bytes_used']
+    used_in_gb = used / constants.GB
+    global used_space
+    if used_space and used_space == used_in_gb:
+        return used_in_gb
+    used_space = used_in_gb
+    raise UnexpectedBehaviour(
             f"In Ceph status, used size is keeping varying"
-        )
-    return used_in_gb
+    )
 
 
-@retry((UnexpectedBehaviour), tries=4, delay=30, backoff=1)
+@retry(UnexpectedBehaviour, tries=5, delay=3, backoff=1)
 def verify_pv_not_exists(pv_name, cbp_name):
     """
     Ensure that pv does not exists
