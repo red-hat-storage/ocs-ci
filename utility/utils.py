@@ -977,10 +977,16 @@ def run_async(command):
 
     Returns:
         An open descriptor to be used by the calling function.
+
+    Example:
+        command = 'oc delete pvc pvc1'
+        proc = run_async(command)
+        ret, out, err = proc.async_communicate()
     """
     log.info(f"Executing command: {command}")
     popen_obj = subprocess.Popen(
-        command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True
+        command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True,
+        encoding='utf-8'
     )
 
     def async_communicate():
