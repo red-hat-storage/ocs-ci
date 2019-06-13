@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
         'monitors': 'invalid_monitors',
         'provision_volume': "invalid_provisioner_volume",
         'ceph_pool': 'invalid_pool',
+        'root_path': 'invalid_root_path',
         'provisioner_secret_name': 'invalid_provisioner_secret_name',
         'provisioner_secret_namespace': 'invalid_provisioner_secret_namespace',
         'node_stage_secret_name': 'invalid_node_stage_secret_name',
