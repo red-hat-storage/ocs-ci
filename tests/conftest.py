@@ -8,6 +8,7 @@ import yaml
 from ocsci import config
 from utility.environment_check import environment_checker  # noqa: F401
 from oc.openshift_ops import OCP
+from ocs import constants
 from ocs.exceptions import CommandFailed, CephHealthException
 from ocs.utils import create_oc_resource, apply_oc_resource
 from ocsci import config
@@ -107,7 +108,7 @@ def cluster(request):
     log.info("Generating install-config")
     run_cmd(f"mkdir -p {cluster_path}")
     pull_secret_path = os.path.join(
-        templating.TOP_DIR,
+        constants.TOP_DIR,
         "data",
         "pull-secret"
     )
