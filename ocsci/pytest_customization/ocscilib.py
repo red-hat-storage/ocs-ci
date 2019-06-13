@@ -51,6 +51,13 @@ def pytest_addoption(parser):
         default=False,
         help="If provided the test cluster will be destroyed after tests complete",
     )
+    parser.addoption(
+        '--deploy',
+        dest='deploy',
+        action="store_true",
+        default=False,
+        help="If provided a test cluster will be deployed on AWS to use for testing",
+    )
 
 
 def pytest_configure(config):
@@ -112,9 +119,12 @@ def process_cluster_cli_params(config):
         cluster_path = os.path.join(cluster_dir_parent, cluster_name)
     # adds teardown to osci_config.RUN['cli_params']
     teardown = get_cli_param(config, "teardown", default=False)
+    # adds deploy to osci_config.RUN['cli_params']
+    deploy = get_cli_param(config, "deploy", default=False)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
     ocsci_config.teardown = teardown
+    ocsci_config.deploy = deploy
 
 
 def pytest_collection_modifyitems(session, config, items):
