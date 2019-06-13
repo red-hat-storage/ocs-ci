@@ -1,14 +1,12 @@
 """
 OCS-368
 """
-import os
 import logging
 import pytest
 
-from ocs import ocp, defaults, constants
+from ocs import ocp, defaults
 from ocsci.config import ENV_DATA
 from ocsci.testlib import tier1, ManageTest
-from resources.ocs import OCS
 from resources.pvc import PVC
 from resources.pod import Pod
 
@@ -19,6 +17,7 @@ OCS_BUG_ID = 'test3-ocs-368'
 NAMESPACE = ocp.OCP(kind='namespace', namespace=ENV_DATA['cluster_name'])
 OUR_PVC = None
 POD = None
+
 
 @pytest.fixture(scope='class')
 def test_fixture(request):
