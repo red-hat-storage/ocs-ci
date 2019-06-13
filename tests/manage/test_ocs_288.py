@@ -7,7 +7,7 @@ import random
 import pytest
 
 from ocs import constants
-from ocsci.testlib import tier1, ManageTest
+from ocsci.testlib import tier2, ManageTest
 from resources import pvc
 from tests import helpers
 
@@ -113,7 +113,7 @@ def create_storageclass_cephfs():
     return True
 
 
-@tier1
+@tier2
 @pytest.mark.usefixtures(
     ocs288_fixture.__name__,
 )
