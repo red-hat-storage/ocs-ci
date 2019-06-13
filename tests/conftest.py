@@ -96,6 +96,10 @@ def cluster(request):
         pytest.skip(
             "The installation is skipped cause the cluster is running"
         )
+    else:
+        pytest.error(
+            "The given cluster can not be connected to: {}".format(cluster_path)
+        )
 
     # Generate install-config from template
     log.info("Generating install-config")
