@@ -94,9 +94,8 @@ def cluster(request):
         log.info("Will teardown cluster because --teardown was provided")
     # Test cluster access and if exist just skip the deployment.
     if is_cluster_running(cluster_path):
-        pytest.skip(
-            "The installation is skipped cause the cluster is running"
-        )
+        log.info("The installation is skipped because the cluster is running")
+        return
     elif not config.deploy:
         pytest.fail(
             "The given cluster can not be connected to: {}".format(cluster_path)
