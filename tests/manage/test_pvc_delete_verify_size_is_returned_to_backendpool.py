@@ -43,7 +43,7 @@ def check_ceph_used_space():
         return used_in_gb
     used_space = used_in_gb
     raise UnexpectedBehaviour(
-            f"In Ceph status, used size is keeping varying"
+        f"In Ceph status, used size is keeping varying"
     )
 
 
