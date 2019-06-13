@@ -1,10 +1,13 @@
 import logging
 import os.path
+import pytest
 
 from resources.ocs import OCS
+from resources.pvc import PVC
 from tests import helpers
 from ocs import constants, defaults
 from ocs.exceptions import TimeoutExpiredError
+from ocsci.testlib import tier1, ManageTest
 
 
 logger = logging.getLogger(__name__)
@@ -12,9 +15,9 @@ logger = logging.getLogger(__name__)
 TEMPLATE_DIR = os.path.join('templates', 'ocs-deployment')
 PVC_TEMPLATE = os.path.join(TEMPLATE_DIR, 'PersistentVolumeClaim.yaml')
 
-
+@tier1
 class TestCaseOCS331(ManageTest):
-    def test_storageclass_cephfs_invalid(invalid_cephfs_storageclass, tmpdir):
+    def test_storageclass_cephfs_invalid(self, invalid_cephfs_storageclass):
         """
         Test that Persistent Volume Claim can not be created from misconfigured
         CephFS Storage Class.
@@ -30,17 +33,17 @@ class TestCaseOCS331(ManageTest):
             f"with storageClassName "
             f"{invalid_cephfs_storageclass['metadata']['name']}"
         )
-        pvc = OCS(**pvc_data)
+        pvc = PVC(**pvc_data)
         pvc.create()
 
-        pvc_status = pvc.get()['status']['phase']
+        pvc_status = pvc.status
         logger.debug(f"Status of PVC {pvc_name} after creation: {pvc_status}")
         assert pvc_status == constants.STATUS_PENDING
 
         try:
             logger.info(
-                f"Wait 60 seconds for status of PVC {pvc_name} "
-                f"to change to {constants.STATUS_BOUND} (it shouldn't change)"
+                f"Waiting for status '{constants.STATUS_BOUND}' "
+                f"for 60 seconds (it shouldn't change)"
             )
             pvc_status_changed = pvc.ocp.wait_for_resource(
                 resource_name=pvc_name,
