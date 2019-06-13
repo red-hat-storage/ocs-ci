@@ -966,3 +966,33 @@ def get_random_str(size=13):
     """
     chars = string.ascii_lowercase + string.digits
     return ''.join(random.choice(chars) for _ in range(size))
+
+
+def run_async(command):
+    """
+    Run command locally and return without waiting for completion
+
+    Args:
+        command (str): The command to run.
+
+    Returns:
+        An open descriptor to be used by the calling function.
+    """
+    log.info(f"Executing command: {command}")
+    popen_obj = subprocess.Popen(
+        command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True
+    )
+
+    def async_communicate():
+        """
+        Wait for command to complete and fetch the result
+
+        Returns:
+            retcode, stdout, stderr of the command
+        """
+        stdout, stderr = popen_obj.communicate()
+        retcode = popen_obj.returncode
+        return retcode, stdout, stderr
+
+    popen_obj.async_communicate = async_communicate
+    return popen_obj
