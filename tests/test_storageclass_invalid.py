@@ -7,12 +7,12 @@ from resources.pvc import PVC
 from tests import helpers
 from ocs import constants, defaults
 from ocs.exceptions import TimeoutExpiredError
-from ocsci.testlib import tier1, ManageTest
+from ocsci.testlib import tier3, ManageTest
 
 
 logger = logging.getLogger(__name__)
 
-@tier1
+@tier3
 class TestCaseOCS331(ManageTest):
     def test_storageclass_cephfs_invalid(self, invalid_cephfs_storageclass):
         """
