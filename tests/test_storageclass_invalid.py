@@ -54,7 +54,7 @@ class TestCaseOCS331(ManageTest):
             # raising TimeoutExpiredError is expected behavior
             pass
 
-        pvc_status = pvc.get()['status']['phase']
+        pvc_status = pvc.status
         logger.info(f"Status of PVC {pvc_name} after 60 seconds: {pvc_status}")
         assert_msg = (
             f"PVC {pvc_name} hasn't reached status "
