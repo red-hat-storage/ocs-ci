@@ -68,7 +68,7 @@ class TestDeployment(EcosystemTest):
             force_download=DEPLOYMENT['force_download_installer'],
         )
         # Download client
-        get_openshift_client(force_download=RUN['force_download_client'])
+        get_openshift_client(force_download=DEPLOYMENT['force_download_client'])
 
         # Deploy cluster
         log.info("Deploying cluster")
