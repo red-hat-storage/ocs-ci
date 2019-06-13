@@ -276,7 +276,7 @@ def switch_to_project(project_name):
     return False
 
 
-def switch_to_default_project():
+def switch_to_default_rook_cluster_project():
     """
     Switch to default project
 
