@@ -278,13 +278,13 @@ def get_cephfs_data_pool_name():
 @retry(TimeoutExpiredError, tries=5, delay=3, backoff=1)
 def validate_cephfilesystem(fs_name):
     """
-     Verify CephFileSystem exists at ceph and k8s
+     Verify CephFileSystem exists at ceph and Ocp
 
      Args:
         fs_name (str): The name of the Ceph FileSystem
 
      Returns:
-         bool: True if CephFileSystem is created at ceph and k8s side else
+         bool: True if CephFileSystem is created at ceph and Ocp side else
             will return False with valid msg i.e Failure cause
     """
     CFS = ocp.OCP(
@@ -293,7 +293,7 @@ def validate_cephfilesystem(fs_name):
     )
     ct_pod = pod.get_ceph_tools_pod()
     ceph_validate = False
-    k8s_validate = False
+    ocp_validate = False
     cmd = "ceph fs ls"
     logger.info(fs_name)
     out = ct_pod.exec_ceph_cmd(ceph_cmd=cmd)
@@ -301,19 +301,19 @@ def validate_cephfilesystem(fs_name):
         out = out[0]['name']
         logger.info(out)
         if out == fs_name:
-            logger.info("FileSystem got created from Ceph Side")
+            logger.info(f"FileSystem {out} got created from Ceph Side")
             ceph_validate = True
         else:
-            logger.error("FileSystem was not present at Ceph Side")
+            logger.error(f"FileSystem {out} was not present at Ceph Side")
             return False
     result = CFS.get(resource_name=fs_name)
     if result['metadata']['name']:
-        logger.info(f"Filesystem got created from kubernetes Side")
-        k8s_validate = True
+        logger.info(f"Filesystem {out} got created from Openshift Side")
+        ocp_validate = True
     else:
-        logger.error("Filesystem was not create at Kubernetes Side")
+        logger.error(f"Filesystem {out} was not create at Openshift Side")
         return False
-    return True if (ceph_validate and k8s_validate) else False
+    return True if (ceph_validate and ocp_validate) else False
 
 
 def get_all_storageclass_name():
@@ -396,8 +396,8 @@ def delete_cephblockpool():
 
 def create_cephfilesystem():
     """
-    Function for deploying CephFileSystem (MDS) if CephFilesystem exists
-    deploying will be skipped
+    Function for deploying CephFileSystem (MDS). If CephFilesystem exists
+    deployment will be skipped
 
     Returns:
         bool: True if CephFileSystem creates successful
