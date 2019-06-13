@@ -29,6 +29,7 @@ setup(
         'pytest',
         'pytest-reportportal==1.0.5',
         'DeepDiff',
+        'dataclasses',  # For compatibility with python 3.6
     ],
     entry_points={
         'console_scripts': [
