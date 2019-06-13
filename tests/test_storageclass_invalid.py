@@ -1,4 +1,5 @@
 import logging
+import pytest
 
 from resources.pvc import PVC
 from tests import helpers
@@ -35,11 +36,12 @@ class TestCaseOCS331(ManageTest):
         logger.debug(f"Status of PVC {pvc_name} after creation: {pvc_status}")
         assert pvc_status == constants.STATUS_PENDING
 
-        try:
-            logger.info(
-                f"Waiting for status '{constants.STATUS_BOUND}' "
-                f"for 60 seconds (it shouldn't change)"
-            )
+        logger.info(
+            f"Waiting for status '{constants.STATUS_BOUND}' "
+            f"for 60 seconds (it shouldn't change)"
+        )
+        with pytest.raises(TimeoutExpiredError):
+            # raising TimeoutExpiredError is expected behavior
             pvc_status_changed = pvc.ocp.wait_for_resource(
                 resource_name=pvc_name,
                 condition=constants.STATUS_BOUND,
@@ -48,9 +50,6 @@ class TestCaseOCS331(ManageTest):
             )
             logger.debug('Check that PVC status did not changed')
             assert not pvc_status_changed
-        except TimeoutExpiredError:
-            # raising TimeoutExpiredError is expected behavior
-            pass
 
         pvc_status = pvc.status
         logger.info(f"Status of PVC {pvc_name} after 60 seconds: {pvc_status}")
