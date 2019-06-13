@@ -12,9 +12,6 @@ from ocsci.testlib import tier1, ManageTest
 
 logger = logging.getLogger(__name__)
 
-TEMPLATE_DIR = os.path.join('templates', 'ocs-deployment')
-PVC_TEMPLATE = os.path.join(TEMPLATE_DIR, 'PersistentVolumeClaim.yaml')
-
 @tier1
 class TestCaseOCS331(ManageTest):
     def test_storageclass_cephfs_invalid(self, invalid_cephfs_storageclass):
