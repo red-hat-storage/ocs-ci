@@ -40,24 +40,23 @@ def setup(self):
     self.secret_obj = helpers.create_secret(interface_type=self.interface_type)
     assert self.secret_obj, f"Failed to create secret"
 
+    self.interface_name = None
     if self.interface_type == constants.CEPHBLOCKPOOL:
         self.cbp_obj = helpers.create_ceph_block_pool()
         assert self.cbp_obj, f"Failed to create block pool"
-        self.sc_obj = helpers.create_storage_class(
-            interface_type=self.interface_type,
-            interface_name=self.cbp_obj.name,
-            secret_name=self.secret_obj.name
-        )
+        self.interface_name = self.cbp_obj.name
 
     elif self.interface_type == constants.CEPHFILESYSTEM:
-        self.cephfs_obj = helpers.create_ceph_fs()
-        assert self.cephfs_obj, f"Failed to create Ceph File System"
-        self.sc_obj = helpers.create_storage_class(
-            interface_type=self.interface_type,
-            interface_name=f"{self.cephfs_obj.name}-data0",
-            secret_name=self.secret_obj.name
+        assert helpers.create_cephfilesystem(), (
+            f"Failed to create Ceph File System"
         )
+        self.interface_name = helpers.get_cephfs_data_pool_name()
 
+    self.sc_obj = helpers.create_storage_class(
+        interface_type=self.interface_type,
+        interface_name=self.interface_name,
+        secret_name=self.secret_obj.name
+    )
     assert self.sc_obj, f"Failed to create storage class"
 
 
@@ -72,7 +71,8 @@ def teardown(self):
     if self.interface_type == constants.CEPHBLOCKPOOL:
         self.cbp_obj.delete()
     elif self.interface_type == constants.CEPHFILESYSTEM:
-        self.cephfs_obj.delete()
+        logger.info("Deleting CephFileSystem")
+        assert helpers.delete_all_cephfilesystem()
     self.secret_obj.delete()
 
 

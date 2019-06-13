@@ -147,35 +147,9 @@ def create_ceph_block_pool(pool_name=None):
     return cbp_obj
 
 
-def create_ceph_fs(fs_name=None):
-    """
-    Create a Ceph File System
-
-    Args:
-        fs_name (str): The File System name to create
-
-    Returns:
-        OCS: An OCS instance for the Ceph File System
-    """
-    fs_data = defaults.CEPHFILESYSTEM_DICT.copy()
-    fs_data['metadata']['name'] = fs_name if fs_name else create_unique_resource_name(
-        'test', 'cephfs'
-    )
-    fs_data['metadata']['namespace'] = ENV_DATA['cluster_namespace']
-    cephfs_obj = create_resource(**fs_data, wait=False)
-
-    pod = ocp.OCP(kind='Pod', namespace=ENV_DATA['cluster_namespace'])
-    assert pod.wait_for_resource(
-        condition='Running', selector='app=rook-ceph-mds', resource_count=2
-    )
-
-    assert verify_fs_exist(cephfs_obj.name), (
-        f"File System {cephfs_obj.name} does not exist"
-    )
-    return cephfs_obj
-
-
-def create_storage_class(interface_type, interface_name, secret_name):
+def create_storage_class(
+    interface_type, interface_name, secret_name, sc_name=None
+):
     """
     Create a storage class
 
@@ -184,6 +158,7 @@ def create_storage_class(interface_type, interface_name, secret_name):
             (e.g. CephBlockPool, CephFileSystem)
         interface_name (str): The name of the interface
         secret_name (str): The name of the secret
+        sc_name (str): The name of storage class to create
 
     Returns:
         OCS: An OCS instance for the storage class
@@ -203,7 +178,7 @@ def create_storage_class(interface_type, interface_name, secret_name):
         f'rook-ceph-mon-c.{ENV_DATA["cluster_namespace"]}'
         f'.svc.cluster.local:6789'
     )
-    sc_data['metadata']['name'] = create_unique_resource_name(
+    sc_data['metadata']['name'] = sc_name if sc_name else create_unique_resource_name(
         'test', 'storageclass'
     )
     sc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
@@ -227,7 +202,7 @@ def create_pvc(sc_name, pvc_name=None):
     Args:
         sc_name (str): The name of the storage class for the PVC to be
             associated with
-        pvc_name (str): The PVC name to create
+        pvc_name (str): The name of the PVC to create
 
     Returns:
         OCS: An OCS instance for the PVC
@@ -258,25 +233,6 @@ def verify_block_pool_exists(pool_name):
     pools = ct_pod.exec_ceph_cmd('ceph osd lspools')
     for pool in pools:
         if pool_name in pool.get('poolname'):
-            return True
-    return False
-
-
-def verify_fs_exist(fs_name):
-    """
-    Verifying if a Ceph File System exist
-
-    Args:
-        fs_name (str): The name of the Ceph File System
-
-    Returns:
-        bool: True if the Ceph File System exists, False otherwise
-    """
-    logger.info(f"Verifying that Ceph File System {fs_name} exists")
-    ct_pod = pod.get_ceph_tools_pod()
-    fs_list = ct_pod.exec_ceph_cmd('ceph fs ls')
-    for fs in fs_list:
-        if fs_name in fs.get('name'):
             return True
     return False
 
