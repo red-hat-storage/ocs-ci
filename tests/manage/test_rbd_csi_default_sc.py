@@ -4,7 +4,6 @@ Basic test for creating PVC with default StorageClass - RBD-CSI
 
 import logging
 import pytest
-import base64
 from ocs import defaults
 from ocsci.config import ENV_DATA
 from ocsci.testlib import tier1, ManageTest
@@ -29,14 +28,14 @@ def test_fixture(request):
 
 def setup(self):
     """
-    Setting up the environment for the test
+    Setting up the environment - Creating secret
     """
     global SECRET
     self.rbd_secret = defaults.CSI_RBD_SECRET.copy()
     del self.rbd_secret['data']['kubernetes']
-    self.rbd_secret['data']['admin'] = get_admin_key_from_ceph_tools()
+    self.rbd_secret['data']['admin'] = pod.get_admin_key_from_ceph_tools()
     SECRET = OCS(**self.rbd_secret)
-    SECRET.create()
+    assert SECRET.create()
 
 
 def teardown():
@@ -49,19 +48,6 @@ def teardown():
     STORAGE_CLASS.delete()
     log.info("Deleting Secret")
     SECRET.delete()
-
-
-def get_admin_key_from_ceph_tools():
-    """
-    Fetches admin key from Ceph
-
-    Returns:
-        str: Admin keyring encoded with base64
-    """
-    tools_pod = pod.get_ceph_tools_pod()
-    out = tools_pod.exec_ceph_cmd(ceph_cmd='ceph auth get-key client.admin')
-    base64_output = base64.b64encode(out['key'].encode()).decode()
-    return base64_output
 
 
 @tier1
@@ -86,9 +72,9 @@ class TestCaseOCS347(ManageTest):
         rbd_sc = defaults.CSI_RBD_STORAGECLASS_DICT.copy()
         rbd_sc['parameters']['monitors'] = self.mons
         STORAGE_CLASS = OCS(**rbd_sc)
-        STORAGE_CLASS.create()
+        assert STORAGE_CLASS.create()
         rbd_pvc = defaults.CSI_RBD_PVC.copy()
         PVC = OCS(**rbd_pvc)
-        PVC.create()
+        assert PVC.create()
         get_pv = PVC.get()
         assert 'Bound' == get_pv['status']['phase']
