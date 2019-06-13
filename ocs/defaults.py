@@ -134,3 +134,8 @@ CSI_RBD_PVC = load_yaml_to_dict(
         constants.TEMPLATE_CSI_RBD_DIR, "pvc.yaml"
     )
 )
+
+MON_APP_LABEL = "app=rook-ceph-mon"
+MDS_APP_LABEL = "app=rook-ceph-mds"
+TOOL_APP_LABEL = "app=rook-ceph-tools"
+MGR_APP_LABEL = "app=rook-ceph-mgr"

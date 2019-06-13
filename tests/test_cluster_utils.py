@@ -26,7 +26,7 @@ def setup(self):
     Setting up the environment for the test
     """
     global cluster
-    cluster = CephCluster(name='rook-ceph')
+    cluster = CephCluster()
 
 
 def teardown():
@@ -70,6 +70,7 @@ class TestClusterUtils(ManageTest):
 
     def test_add_mds(self):
         cur_count = cluster.mds_count
-        new_count = cur_count + 2
+        logging.info(f"Current count = {cur_count}")
+        new_count = cur_count + 1
         cluster.mds_change_count(new_count)
         assert new_count == cluster.mds_count

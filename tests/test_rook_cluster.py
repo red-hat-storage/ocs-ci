@@ -1,7 +1,7 @@
 """
 A test program for checking Rook and RookCluster classes
 and pod objects.
-"""
+
 
 
 import os
@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 def run():
-    """
-    Assumes rook cluster has already been deployed.
-    """
+"""
+#    Assumes rook cluster has already been deployed.
+"""
     rook_obj = rook.Rook()  # Everything with default
     cluster = rook_obj.cluster
     cluster_name = cluster.cluster_name
@@ -40,3 +40,4 @@ def run():
         logger.info(out)
     else:
         logger.info(err)
+"""
