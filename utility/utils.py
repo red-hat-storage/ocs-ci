@@ -751,7 +751,7 @@ def get_openshift_installer(
     if os.path.isfile(installer_binary_path) and force_download:
         delete_file(installer_binary_path)
     if os.path.isfile(installer_binary_path):
-        log.debug("Installer exists ({installer_binary_path}), skipping download.")
+        log.debug(f"Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
     else:
         log.info(f"Downloading openshift installer ({version}).")
@@ -798,7 +798,7 @@ def get_openshift_client(
     if os.path.isfile(client_binary_path) and force_download:
         delete_file(client_binary_path)
     if os.path.isfile(client_binary_path):
-        log.debug("Client exists ({client_binary_path}), skipping download.")
+        log.debug(f"Client exists ({client_binary_path}), skipping download.")
         # TODO: check client version
     else:
         log.info(f"Downloading openshift client ({version}).")
