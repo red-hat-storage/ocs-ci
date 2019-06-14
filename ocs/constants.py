@@ -40,3 +40,4 @@ IGNORE_SC = "gp2"
 
 # encoded value of 'admin'
 ADMIN_BASE64 = 'YWRtaW4='
+GB = 1024 ** 3
