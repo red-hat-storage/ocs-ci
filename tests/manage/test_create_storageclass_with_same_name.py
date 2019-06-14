@@ -18,10 +18,7 @@ def test_fixture(request):
     This fixture defines the teardown function.
     """
 
-    def finalizer():
-        teardown()
-
-    request.addfinalizer(finalizer)
+    request.addfinalizer(teardown)
 
 
 def teardown():
@@ -40,9 +37,12 @@ def create_storageclass(sc_name, expect_fail=False):
     duplicate storage class name
 
     Args:
-       sc_name (str): name of the storageclass
-        expect_fail (bool): To catch the incorrect scenario in OC - in case
+        sc_name (str): name of the storageclass to be created
+        expect_fail (bool): To catch the incorrect scenario if
             two SCs are indeed created with same name
+
+    Returns:
+        None
 
     """
 
