@@ -7,19 +7,15 @@ functional and proper configurations are made for interaction.
 """
 
 import logging
-import os
 import base64
-import yaml
 
-import oc.openshift_ops as ac
 import resources.pod as pod
 from resources import ocs
 import ocs.defaults as default
-from utility.templating import generate_yaml_from_jinja2_template_with_data
 from utility.utils import TimeoutSampler
 from ocsci.config import ENV_DATA
 from ocs import ocp
-from ocs.exceptions import *
+from ocs import exceptions
 
 POD = ocp.OCP(kind='Pod', namespace=ENV_DATA['cluster_namespace'])
 CEPHCLUSTER = ocp.OCP(
@@ -60,7 +56,6 @@ class CephCluster(object):
             logging.warning("No CephFS found")
             self.cephfs_config = None
 
-
         self._cluster_name = self.cluster_resource_config.get(
             'metadata').get('name')
         self._namespace = self.cluster_resource_config.get(
@@ -77,7 +72,7 @@ class CephCluster(object):
         self.mds_selector = default.MDS_APP_LABEL
         self.tool_selector = default.TOOL_APP_LABEL
         self.mons = []
-        self._ceph_pods= []
+        self._ceph_pods = []
         self.mdss = []
         self.toolbox = None
         self.mds_count = 0
@@ -94,7 +89,6 @@ class CephCluster(object):
                 self.mds_count = int(len(self.mdss))
         logging.info(f"Number of mons = {self.mon_count}")
         logging.info(f"Number of mds = {self.mds_count}")
-
 
     @property
     def cluster_name(self):
@@ -171,7 +165,7 @@ class CephCluster(object):
         )
 
         if not sample.wait_for_func_status(result=True):
-            raise CephHealthException("Cluster health is NOT OK")
+            raise exceptions.CephHealthException("Cluster health is NOT OK")
 
         logger.info("Cluster HEALTH_OK")
         return True
@@ -207,11 +201,11 @@ class CephCluster(object):
         try:
             assert POD.wait_for_resource(
                 condition='Running', selector=self.mon_selector,
-                resource_count=count, timeout = timeout, sleep=3,
+                resource_count=count, timeout=timeout, sleep=3,
             )
         except AssertionError as e:
             logger.error(e)
-            raise MonCountException(
+            raise exceptions.MonCountException(
                 f"Failed to achieve desired Mon count"
                 f" {count}"
             )
@@ -224,7 +218,6 @@ class CephCluster(object):
             new_count(int): Absolute number of active mdss required
         """
         self.cephfs.data['spec']['metadataServer']['activeCount'] = new_count
-        #logger.info(self.cephfs.data)
         self.cephfs.apply(**self.cephfs.data)
         logger.info(f"MDS active count changed to {new_count}")
         self.mds_health_check(new_count)
@@ -248,10 +241,10 @@ class CephCluster(object):
             assert POD.wait_for_resource(
                 condition='Running', selector=self.mds_selector,
                 resource_count=count, timeout=timeout, sleep=3,
-        )
+            )
         except AssertionError as e:
             logger.error(e)
-            raise MDSCountException(
+            raise exceptions.MDSCountException(
                 f"Failed to achieve desired MDS count"
                 f" {count}"
             )
@@ -265,7 +258,6 @@ class CephCluster(object):
 
     def get_user_key(self, user):
         """
-
         Args:
             user (str): ceph username ex: client.user1
 
