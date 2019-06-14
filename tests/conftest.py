@@ -4,22 +4,29 @@ import logging
 import os
 import time
 import yaml
+import copy
 
 from ocsci import config
 from utility.environment_check import environment_checker  # noqa: F401
 from oc.openshift_ops import OCP
-from ocs import constants
+from ocs import constants, ocp
 from ocs.exceptions import CommandFailed, CephHealthException
 from ocs.utils import create_oc_resource, apply_oc_resource
-from ocsci import config
-from ocsci.config import RUN, ENV_DATA, DEPLOYMENT
 from utility import templating
 from utility.aws import AWS
 from utility.retry import retry
 from utility.utils import destroy_cluster, run_cmd, get_openshift_installer, get_openshift_client, is_cluster_running
 from ocs.parallel import parallel
+from resources.ocs import OCS
+from tests import helpers
 
 log = logging.getLogger(__name__)
+
+POD = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace'])
+CFS = ocp.OCP(
+    kind=constants.CEPHFILESYSTEM, namespace=config.ENV_DATA['cluster_namespace']
+)
+CEPH_OBJ = None
 
 
 @pytest.fixture(
@@ -87,7 +94,7 @@ def cluster_teardown():
 @pytest.fixture(scope="session", autouse=True)
 def cluster(request):
     log.info("Running OCS basic installation")
-    cluster_path = ENV_DATA['cluster_path']
+    cluster_path = config.ENV_DATA['cluster_path']
     # Add a finalizer to teardown the cluster after test execution is finished
     if config.teardown:
         request.addfinalizer(cluster_teardown)
@@ -117,7 +124,7 @@ def cluster(request):
 
     _templating = templating.Templating()
     install_config_str = _templating.render_template(
-        "install-config.yaml.j2", ENV_DATA
+        "install-config.yaml.j2", config.ENV_DATA
     )
     # Parse the rendered YAML so that we can manipulate the object directly
     install_config_obj = yaml.safe_load(install_config_str)
@@ -134,7 +141,7 @@ def cluster(request):
 
     # Download installer
     installer = get_openshift_installer(
-        DEPLOYMENT['installer_version']
+        config.DEPLOYMENT['installer_version']
     )
     # Download client
     get_openshift_client()
@@ -149,11 +156,11 @@ def cluster(request):
 
     # Test cluster access
     if not OCP.set_kubeconfig(
-        os.path.join(cluster_path, RUN.get('kubeconfig_location'))
+        os.path.join(cluster_path, config.RUN.get('kubeconfig_location'))
     ):
         pytest.fail("Cluster is not available!")
 
-    # TODO: Create cluster object, add to ENV_DATA for other tests to
+    # TODO: Create cluster object, add to config.ENV_DATA for other tests to
     # utilize.
     # Determine worker pattern and create ebs volumes
     with open(os.path.join(cluster_path, "terraform.tfvars")) as f:
@@ -162,45 +169,45 @@ def cluster(request):
     cluster_id = tfvars['cluster_id']
     worker_pattern = f'{cluster_id}-worker*'
     log.info(f'Worker pattern: {worker_pattern}')
-    create_ebs_volumes(worker_pattern, region_name=ENV_DATA['region'])
+    create_ebs_volumes(worker_pattern, region_name=config.ENV_DATA['region'])
 
     # render templates and create resources
-    create_oc_resource('common.yaml', cluster_path, _templating, ENV_DATA)
+    create_oc_resource('common.yaml', cluster_path, _templating, config.ENV_DATA)
     run_cmd(
-        f'oc label namespace {ENV_DATA["cluster_namespace"]} '
+        f'oc label namespace {config.ENV_DATA["cluster_namespace"]} '
         f'"openshift.io/cluster-monitoring=true"'
     )
     run_cmd(
         f"oc policy add-role-to-user view "
         f"system:serviceaccount:openshift-monitoring:prometheus-k8s "
-        f"-n {ENV_DATA['cluster_namespace']}"
+        f"-n {config.ENV_DATA['cluster_namespace']}"
     )
     apply_oc_resource(
         'csi-nodeplugin-rbac_rbd.yaml',
         cluster_path,
         _templating,
-        ENV_DATA,
+        config.ENV_DATA,
         template_dir="ocs-deployment/csi/rbd/"
     )
     apply_oc_resource(
         'csi-provisioner-rbac_rbd.yaml',
         cluster_path,
         _templating,
-        ENV_DATA,
+        config.ENV_DATA,
         template_dir="ocs-deployment/csi/rbd/"
     )
     apply_oc_resource(
         'csi-nodeplugin-rbac_cephfs.yaml',
         cluster_path,
         _templating,
-        ENV_DATA,
+        config.ENV_DATA,
         template_dir="ocs-deployment/csi/cephfs/"
     )
     apply_oc_resource(
         'csi-provisioner-rbac_cephfs.yaml',
         cluster_path,
         _templating,
-        ENV_DATA,
+        config.ENV_DATA,
         template_dir="ocs-deployment/csi/cephfs/"
     )
     # Increased to 15 seconds as 10 is not enough
@@ -209,53 +216,92 @@ def cluster(request):
     log.info(f"Waiting {wait_time} seconds...")
     time.sleep(wait_time)
     create_oc_resource(
-        'operator-openshift-with-csi.yaml', cluster_path, _templating, ENV_DATA
+        'operator-openshift-with-csi.yaml', cluster_path, _templating, config.ENV_DATA
     )
     log.info(f"Waiting {wait_time} seconds...")
     time.sleep(wait_time)
     run_cmd(
         f"oc wait --for condition=ready pod "
         f"-l app=rook-ceph-operator "
-        f"-n {ENV_DATA['cluster_namespace']} "
-        f"--timeout=120s"
-    )
-    run_cmd(
-        f"oc wait --for condition=ready pod "
-        f"-l app=rook-ceph-agent "
-        f"-n {ENV_DATA['cluster_namespace']} "
+        f"-n {config.ENV_DATA['cluster_namespace']} "
         f"--timeout=120s"
     )
     run_cmd(
         f"oc wait --for condition=ready pod "
         f"-l app=rook-discover "
-        f"-n {ENV_DATA['cluster_namespace']} "
+        f"-n {config.ENV_DATA['cluster_namespace']} "
         f"--timeout=120s"
     )
-    create_oc_resource('cluster.yaml', cluster_path, _templating, ENV_DATA)
-    create_oc_resource('toolbox.yaml', cluster_path, _templating, ENV_DATA)
+    create_oc_resource('cluster.yaml', cluster_path, _templating, config.ENV_DATA)
+
+    # Check for the Running status of Ceph Pods
+    run_cmd(
+        f"oc wait --for condition=ready pod "
+        f"-l app=rook-ceph-agent "
+        f"-n {config.ENV_DATA['cluster_namespace']} "
+        f"--timeout=120s"
+    )
+    assert POD.wait_for_resource(
+        condition='Running', selector='app=rook-ceph-mon',
+        resource_count=3, timeout=600
+    )
+    assert POD.wait_for_resource(
+        condition='Running', selector='app=rook-ceph-mgr',
+        timeout=600
+    )
+    assert POD.wait_for_resource(
+        condition='Running', selector='app=rook-ceph-osd',
+        resource_count=3, timeout=600
+    )
+
+    create_oc_resource('toolbox.yaml', cluster_path, _templating, config.ENV_DATA)
     log.info(f"Waiting {wait_time} seconds...")
     time.sleep(wait_time)
     create_oc_resource(
-        'storage-manifest.yaml', cluster_path, _templating, ENV_DATA
+        'storage-manifest.yaml', cluster_path, _templating, config.ENV_DATA
     )
     create_oc_resource(
-        "service-monitor.yaml", cluster_path, _templating, ENV_DATA
+        "service-monitor.yaml", cluster_path, _templating, config.ENV_DATA
     )
     create_oc_resource(
-        "prometheus-rules.yaml", cluster_path, _templating, ENV_DATA
+        "prometheus-rules.yaml", cluster_path, _templating, config.ENV_DATA
     )
     log.info(f"Waiting {wait_time} seconds...")
     time.sleep(wait_time)
 
+    # Create MDS pods for CephFileSystem
+    fs_data = copy.deepcopy(defaults.CEPHFILESYSTEM_DICT)
+    fs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
+
+    global CEPH_OBJ
+    CEPH_OBJ = OCS(**fs_data)
+    CEPH_OBJ.create()
+    assert POD.wait_for_resource(
+        condition=constants.STATUS_RUNNING, selector='app=rook-ceph-mds',
+        resource_count=2, timeout=600
+    )
+
+    # Check for CephFilesystem creation in ocp
+    cfs_data = CFS.get()
+    cfs_name = cfs_data['items'][0]['metadata']['name']
+
+    if helpers.validate_cephfilesystem(cfs_name):
+        log.info(f"MDS deployment is successful!")
+    else:
+        log.error(
+            f"MDS deployment Failed! Please check logs!"
+        )
+
     # Verify health of ceph cluster
+    # TODO: move destroy cluster logic to new CLI usage pattern?
     log.info("Done creating rook resources, waiting for HEALTH_OK")
-    assert ceph_health_check(namespace=ENV_DATA['cluster_namespace'])
+    assert ceph_health_check(namespace=config.ENV_DATA['cluster_namespace'])
 
 
 def create_ebs_volumes(
     worker_pattern,
     size=100,
-    region_name=ENV_DATA['region'],
+    region_name=config.ENV_DATA['region'],
 ):
     """
     Create volumes on workers
@@ -264,7 +310,7 @@ def create_ebs_volumes(
         worker_pattern (string): Worker name pattern e.g.:
             cluster-55jx2-worker*
         size (int): Size in GB (default: 100)
-        region_name (str): Region name (default: ENV_DATA['region'])
+        region_name (str): Region name (default: config.ENV_DATA['region'])
     """
     aws = AWS(region_name)
     worker_instances = aws.get_instances_by_name_pattern(worker_pattern)
@@ -283,13 +329,13 @@ def create_ebs_volumes(
 
 
 @retry((CephHealthException, CommandFailed), tries=20, delay=30, backoff=1)
-def ceph_health_check(namespace=ENV_DATA['cluster_namespace']):
+def ceph_health_check(namespace=config.ENV_DATA['cluster_namespace']):
     """
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
     Args:
         namespace (str): Namespace of OCS
-            (default: ENV_DATA['cluster_namespace'])
+            (default: config.ENV_DATA['cluster_namespace'])
 
     Raises:
         CephHealthException: If the ceph health returned is not HEALTH_OK
