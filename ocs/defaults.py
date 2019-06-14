@@ -24,7 +24,7 @@ OPENSHIFT_REST_CLIENT_API_VERSION = 'v1'
 # Be aware that variables defined above and below are not used anywhere in the
 # config files and their sections when we rendering config!
 
-INSTALLER_VERSION = '4.1.0'
+INSTALLER_VERSION = '4.1.2'
 CLIENT_VERSION = INSTALLER_VERSION
 AWS_REGION = 'us-east-2'
 ROOK_CLUSTER_NAMESPACE = 'openshift-storage'
@@ -65,6 +65,9 @@ RUN = {
     'client_version': DEPLOYMENT['installer_version'],
     'bin_dir': './bin',
 }
+
+ENV_STATUS_PRE = {}
+ENV_STATUS_POST = {}
 
 TEMP_YAML = os.path.join(constants.TEMPLATE_DIR, "temp.yaml")
 

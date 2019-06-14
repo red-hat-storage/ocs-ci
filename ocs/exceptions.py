@@ -14,12 +14,11 @@ class UnexpectedBehaviour(Exception):
     pass
 
 
-# TODO: Delete once moved to pytest
-class UnknownStatusOfTestException(Exception):
+class ClassCreationException(Exception):
     pass
 
 
-class ClassCreationException(Exception):
+class LeftoversDetected(Exception):
     pass
 
 
