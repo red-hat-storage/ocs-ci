@@ -26,9 +26,13 @@ def teardown():
     Tearing down the environment
 
     """
-    log.info(f"Deleting created storage class: {SC_OBJ.name}")
+    log.info(
+        f"Deleting created storage class: {SC_OBJ.name}"
+    )
     SC_OBJ.delete()
-    log.info(f"Storage class: {SC_OBJ.name} deleted successfully")
+    log.info(
+        f"Storage class: {SC_OBJ.name} deleted successfully"
+    )
 
 
 def create_storageclass(sc_name, expect_fail=False):
@@ -69,14 +73,17 @@ def create_storageclass(sc_name, expect_fail=False):
         assert not expect_fail, (
             "SC creation with same name passed. Expected to fail !!"
         )
-        log.info(f"Storage class: {SC_OBJ.name} created successfully")
+        log.info(
+            f"Storage class: {SC_OBJ.name} created successfully !!"
+        )
         log.debug(sc_data)
 
     except CommandFailed as ecf:
         assert "AlreadyExists" in str(ecf)
-        log.error(f"Cannot create two StorageClasses with same name !! \n"
-                  f"{ecf}"
-                  )
+        log.error(
+            f"Cannot create two StorageClasses with same name !! \n"
+            f"{ecf}"
+        )
 
 
 @tier1
@@ -94,6 +101,8 @@ class TestCaseOCS322(ManageTest):
 
         sc_name = "ocs-322-sc"
         create_storageclass(sc_name)
-        log.info(f"Attempting to create a storageclass "
-                 f"with duplicate name {sc_name}")
+        log.info(
+            f"Attempting to create a storageclass "
+            f"with duplicate name {sc_name}"
+        )
         create_storageclass(sc_name, expect_fail=True)
