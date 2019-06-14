@@ -770,8 +770,6 @@ def get_openshift_installer(
     installer_version = run_cmd(f"{installer_binary_path} version")
     log.info(f"OpenShift Installer version: {installer_version}")
 
-    add_path_to_env_path(bin_dir)
-
     return installer_binary_path
 
 
@@ -818,8 +816,6 @@ def get_openshift_client(
 
     client_version = run_cmd(f"{client_binary_path} version")
     log.info(f"OpenShift Client version: {client_version}")
-
-    add_path_to_env_path(bin_dir)
 
     return client_binary_path
 
@@ -872,7 +868,6 @@ def add_path_to_env_path(path):
         path (str): Path which should be added to the PATH env. variable
 
     """
-    path = os.path.abspath('./bin')
     env_path = os.environ['PATH'].split(os.pathsep)
     if path not in env_path:
         os.environ['PATH'] = os.pathsep.join([path] + env_path)
