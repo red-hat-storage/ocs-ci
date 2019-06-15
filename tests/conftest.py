@@ -5,6 +5,7 @@ import yaml
 
 from ocs import constants
 from resources.ocs import OCS
+from utility.environment_check import environment_checker  # noqa: F401
 
 
 logger = logging.getLogger(__name__)

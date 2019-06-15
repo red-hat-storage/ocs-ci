@@ -50,7 +50,6 @@ def get_status_before_execution():
     defaults.ENV_STATUS_PRE['namespace'] = NS.get(all_namespaces=True)['items']
 
 
-@pytest.fixture(scope='class')
 def get_status_after_execution():
     """
 
