@@ -1,21 +1,19 @@
 """
 Test to verify concurrent creation and deletion of multiple PVCs
 """
-import subprocess
 import logging
 import pytest
 
 from ocs import defaults, constants, ocp, exceptions
-from utility.utils import run_cmd
+from utility.utils import run_async
 from ocsci.testlib import tier1, ManageTest
 from resources.pod import get_ceph_tools_pod
-from resources.pvc import PVC
+from resources.pvc import create_multiple_pvc
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool, create_rbd_secret
 )
 
 log = logging.getLogger(__name__)
-PVC_OBJS = []
 TEST_PROJECT = 'test-project'
 PROJECT = ocp.OCP(kind='Project', namespace=TEST_PROJECT)
 
@@ -43,13 +41,16 @@ def setup(self):
         f'Failed to create new project {TEST_PROJECT}'
     )
 
+    # Parameters for PVC yaml as dict
+    pvc_data = defaults.CSI_PVC_DICT.copy()
+    pvc_data['metadata']['namespace'] = TEST_PROJECT
+    pvc_data['spec']['storageClassName'] = self.sc_obj.name
+    pvc_data['metadata']['name'] = self.pvc_base_name
+
     # Create 100 PVCs
-    create_multiple_pvc(
-        self.pvc_base_name, self.number_of_pvc, self.sc_obj.name
-    )
+    pvc_objs = create_multiple_pvc(self.number_of_pvc, pvc_data)
     log.info(f'Created initial {self.number_of_pvc} PVCs')
-    self.pvc_objs_initial = PVC_OBJS[:]
-    PVC_OBJS.clear()
+    self.pvc_objs_initial = pvc_objs[:]
 
     # Verify PVCs are Bound and fetch PV names
     for pvc in self.pvc_objs_initial:
@@ -82,61 +83,15 @@ def teardown(self):
     log.info(f'Newly created {self.number_of_pvc} PVCs are now deleted.')
 
     # Switch to default project
-    run_cmd(f'oc project {defaults.ROOK_CLUSTER_NAMESPACE}')
+    ret = ocp.switch_to_default_rook_cluster_project()
+    if not ret:
+        log.error('Failed to switch to default project')
 
     # Delete project created for the testcase
     PROJECT.delete(resource_name=TEST_PROJECT)
 
 
-def create_multiple_pvc(pvc_base_name, number_of_pvc, sc_name):
-    """
-    Create PVCs
-
-    Args:
-        pvc_base_name (str): Prefix of PVC name
-        number_of_pvc (int): Number of PVCs to be created
-        sc_name (str): Storage class name
-    """
-    # Parameters for PVC yaml as dict
-    pvc_data = defaults.CSI_PVC_DICT.copy()
-    pvc_data['metadata']['namespace'] = TEST_PROJECT
-    pvc_data['spec']['storageClassName'] = sc_name
-
-    for count in range(1, number_of_pvc + 1):
-        pvc_name = f'{pvc_base_name}{count}'
-        log.info(f'Creating Persistent Volume Claim {pvc_name}')
-        pvc_data['metadata']['name'] = pvc_name
-        PVC_OBJ = PVC(**pvc_data)
-        PVC_OBJ.create()
-        PVC_OBJS.append(PVC_OBJ)
-        log.info(f'Created Persistent Volume Claim {pvc_name}')
-
-
-def run_async(command):
-    """
-    Run command locally and return without waiting for completion
-
-    Args:
-        command (str): The command to run on the system.
-
-    Returns:
-        An open descriptor to be used by the calling function.
-        None on error.
-    """
-    log.info(f"Executing command: {command}")
-    p = subprocess.Popen(
-        command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True
-    )
-
-    def async_communicate():
-        stdout, stderr = p.communicate()
-        retcode = p.returncode
-        return retcode, stdout, stderr
-
-    p.async_communicate = async_communicate
-    return p
-
-
+@tier1
 @pytest.mark.usefixtures(
     create_rbd_secret.__name__,
     create_ceph_block_pool.__name__,
@@ -154,7 +109,6 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
     pvc_objs_initial = []
     pvc_objs_new = []
 
-    @tier1
     def test_multiple_pvc_concurrent_creation_deletion(self):
         """
         To exercise resource creation and deletion
@@ -170,11 +124,17 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         )
 
         # Create 100 new PVCs
-        create_multiple_pvc(
-            self.pvc_base_name_new, self.number_of_pvc, self.sc_obj.name
-        )
+        # Parameters for PVC yaml as dict
+        pvc_data = defaults.CSI_PVC_DICT.copy()
+        pvc_data['metadata']['namespace'] = TEST_PROJECT
+        pvc_data['spec']['storageClassName'] = self.sc_obj.name
+        pvc_data['metadata']['name'] = self.pvc_base_name_new
+
+        # Create 100 PVCs
+        pvc_objs = create_multiple_pvc(self.number_of_pvc, pvc_data)
+
         log.info(f'Created {self.number_of_pvc} new PVCs.')
-        self.pvc_objs_new = PVC_OBJS[:]
+        self.pvc_objs_new = pvc_objs[:]
 
         # Verify PVCs are Bound
         for pvc in self.pvc_objs_new:
