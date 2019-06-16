@@ -79,15 +79,14 @@ def teardown(self):
 
     # Verify command to delete PVCs
     ret, _, _ = proc.async_communicate()
-    assert not ret, "Deletion of newly created PVCs failed"
+    assert not ret, 'Deletion of newly created PVCs failed'
     log.info(f'Newly created {self.number_of_pvc} PVCs are now deleted.')
 
     # Switch to default project
     ret = ocp.switch_to_default_rook_cluster_project()
-    if not ret:
-        log.error('Failed to switch to default project')
+    assert ret, 'Failed to switch to default rook cluster project'
 
-    # Delete project created for the testcase
+    # Delete project created for the test case
     PROJECT.delete(resource_name=TEST_PROJECT)
 
 
@@ -170,6 +169,6 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         ct_pod = get_ceph_tools_pod()
         final_pv_list = ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd, format='json')
         assert not any(pv in final_pv_list for pv in self.initial_pvs), (
-            "PVs associated with deleted PVCs still exists"
+            'PVs associated with deleted PVCs still exists'
         )
         log.info('Verified: PVs associated with deleted PVCs are also deleted')
