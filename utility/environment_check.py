@@ -5,7 +5,7 @@ leftovers
 import logging
 import pytest
 
-from ocs import ocp, defaults, constants, exceptions
+from ocs import ocp, constants, exceptions
 from deepdiff import DeepDiff
 
 log = logging.getLogger(__name__)
@@ -23,6 +23,9 @@ NS = ocp.OCP(kind=constants.NAMESPACE)
 ADDED_RESOURCE = 'iterable_item_added'
 REMOVED_RESOURCE = 'iterable_item_removed'
 
+ENV_STATUS_PRE = {}
+ENV_STATUS_POST = {}
+
 
 @pytest.fixture(scope='class')
 def environment_checker(request):
@@ -34,66 +37,65 @@ def get_status_before_execution():
     """
 
     """
-    defaults.ENV_STATUS_PRE['pod'] = POD.get(all_namespaces=True)['items']
-    defaults.ENV_STATUS_PRE['sc'] = SC.get(all_namespaces=True)['items']
-    defaults.ENV_STATUS_PRE['cephfs'] = CEPHFILESYSTEM.get(
+    ENV_STATUS_PRE['pod'] = POD.get(all_namespaces=True)['items']
+    ENV_STATUS_PRE['sc'] = SC.get(all_namespaces=True)['items']
+    ENV_STATUS_PRE['cephfs'] = CEPHFILESYSTEM.get(
         all_namespaces=True
     )['items']
-    defaults.ENV_STATUS_PRE['cephbp'] = CEPHBLOCKPOOL.get(
+    ENV_STATUS_PRE['cephbp'] = CEPHBLOCKPOOL.get(
         all_namespaces=True
     )['items']
-    defaults.ENV_STATUS_PRE['pv'] = PV.get(all_namespaces=True)['items']
-    defaults.ENV_STATUS_PRE['pvc'] = PVC.get(all_namespaces=True)['items']
-    defaults.ENV_STATUS_PRE['secret'] = SECRET.get(
+    ENV_STATUS_PRE['pv'] = PV.get(all_namespaces=True)['items']
+    ENV_STATUS_PRE['pvc'] = PVC.get(all_namespaces=True)['items']
+    ENV_STATUS_PRE['secret'] = SECRET.get(
         all_namespaces=True
     )['items']
-    defaults.ENV_STATUS_PRE['namespace'] = NS.get(all_namespaces=True)['items']
+    ENV_STATUS_PRE['namespace'] = NS.get(all_namespaces=True)['items']
 
 
 def get_status_after_execution():
     """
 
     """
-    defaults.ENV_STATUS_POST['pod'] = POD.get(all_namespaces=True)['items']
-    defaults.ENV_STATUS_POST['sc'] = SC.get(all_namespaces=True)['items']
-    defaults.ENV_STATUS_POST['cephfs'] = CEPHFILESYSTEM.get(
+    ENV_STATUS_POST['pod'] = POD.get(all_namespaces=True)['items']
+    ENV_STATUS_POST['sc'] = SC.get(all_namespaces=True)['items']
+    ENV_STATUS_POST['cephfs'] = CEPHFILESYSTEM.get(
         all_namespaces=True
     )['items']
-    defaults.ENV_STATUS_POST['cephbp'] = CEPHBLOCKPOOL.get(
+    ENV_STATUS_POST['cephbp'] = CEPHBLOCKPOOL.get(
         all_namespaces=True
     )['items']
-    defaults.ENV_STATUS_POST['pv'] = PV.get(all_namespaces=True)['items']
-    defaults.ENV_STATUS_POST['pvc'] = PVC.get(all_namespaces=True)['items']
-    defaults.ENV_STATUS_POST['secret'] = SECRET.get(
+    ENV_STATUS_POST['pv'] = PV.get(all_namespaces=True)['items']
+    ENV_STATUS_POST['pvc'] = PVC.get(all_namespaces=True)['items']
+    ENV_STATUS_POST['secret'] = SECRET.get(
         all_namespaces=True
     )['items']
-    defaults.ENV_STATUS_POST['namespace'] = NS.get(
+    ENV_STATUS_POST['namespace'] = NS.get(
         all_namespaces=True
     )['items']
     pod_diff = DeepDiff(
-        defaults.ENV_STATUS_PRE['pod'], defaults.ENV_STATUS_POST['pod']
+        ENV_STATUS_PRE['pod'], ENV_STATUS_POST['pod']
     )
     sc_diff = DeepDiff(
-        defaults.ENV_STATUS_PRE['sc'], defaults.ENV_STATUS_POST['sc']
+        ENV_STATUS_PRE['sc'], ENV_STATUS_POST['sc']
     )
     cephfs_diff = DeepDiff(
-        defaults.ENV_STATUS_PRE['cephfs'], defaults.ENV_STATUS_POST['cephfs']
+        ENV_STATUS_PRE['cephfs'], ENV_STATUS_POST['cephfs']
     )
     cephbp_diff = DeepDiff(
-        defaults.ENV_STATUS_PRE['cephbp'], defaults.ENV_STATUS_POST['cephbp']
+        ENV_STATUS_PRE['cephbp'], ENV_STATUS_POST['cephbp']
     )
     pv_diff = DeepDiff(
-        defaults.ENV_STATUS_PRE['pv'], defaults.ENV_STATUS_POST['pv']
+        ENV_STATUS_PRE['pv'], ENV_STATUS_POST['pv']
     )
     pvc_diff = DeepDiff(
-        defaults.ENV_STATUS_PRE['pvc'], defaults.ENV_STATUS_POST['pvc']
+        ENV_STATUS_PRE['pvc'], ENV_STATUS_POST['pvc']
     )
     secret_diff = DeepDiff(
-        defaults.ENV_STATUS_PRE['secret'], defaults.ENV_STATUS_POST['secret']
+        ENV_STATUS_PRE['secret'], ENV_STATUS_POST['secret']
     )
     namespace_diff = DeepDiff(
-        defaults.ENV_STATUS_PRE['namespace'],
-        defaults.ENV_STATUS_POST['namespace']
+        ENV_STATUS_PRE['namespace'], ENV_STATUS_POST['namespace']
     )
     diffs_dict = {
         'pods': pod_diff,

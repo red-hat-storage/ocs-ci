@@ -66,9 +66,6 @@ RUN = {
     'bin_dir': './bin',
 }
 
-ENV_STATUS_PRE = {}
-ENV_STATUS_POST = {}
-
 TEMP_YAML = os.path.join(constants.TEMPLATE_DIR, "temp.yaml")
 
 TOOL_POD_DICT = load_yaml_to_dict(
