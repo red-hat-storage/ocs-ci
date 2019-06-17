@@ -18,7 +18,7 @@ class ClassCreationException(Exception):
     pass
 
 
-class LeftoversDetected(Exception):
+class ResourceLeftoversException(Exception):
     pass
 
 

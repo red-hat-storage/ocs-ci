@@ -120,7 +120,7 @@ def get_status_after_execution():
             })
             leftover_detected = True
     if leftover_detected:
-        raise exceptions.LeftoversDetected(
+        raise exceptions.ResourceLeftoversException(
             f"\nThere are leftovers in the environment after test case:"
             f"\nResources added: {leftovers['Leftovers added']}"
             f"\nResources removed: {leftovers['Leftovers removed']}"
