@@ -110,14 +110,17 @@ def create_secret(interface_type):
         secret_data = defaults.CSI_RBD_SECRET.copy()
         del secret_data['data']['kubernetes']
         secret_data['data']['admin'] = get_admin_key()
+        component = 'rbd'
     elif interface_type == constants.CEPHFILESYSTEM:
         secret_data = defaults.CSI_CEPHFS_SECRET.copy()
         del secret_data['data']['userID']
         del secret_data['data']['userKey']
         secret_data['data']['adminID'] = constants.ADMIN_BASE64
         secret_data['data']['adminKey'] = get_admin_key()
+        component = 'cephfs'
+
     secret_data['metadata']['name'] = create_unique_resource_name(
-        'test', 'secret'
+        f'test-{component}', 'secret'
     )
     secret_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
 
@@ -136,8 +139,7 @@ def create_ceph_block_pool(pool_name=None):
     """
     cbp_data = defaults.CEPHBLOCKPOOL_DICT.copy()
     cbp_data['metadata']['name'] = pool_name if pool_name else create_unique_resource_name(
-        'test', 'cbp'
-    )
+        'test', 'cbp')
     cbp_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     cbp_obj = create_resource(**cbp_data, wait=False)
 
@@ -166,8 +168,12 @@ def create_storage_class(
     sc_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
         sc_data = defaults.CSI_RBD_STORAGECLASS_DICT.copy()
+        component = 'rbd'
+
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = defaults.CSI_CEPHFS_STORAGECLASS_DICT.copy()
+        component = 'cephfs'
+
     sc_data['parameters']['pool'] = interface_name
 
     mons = (
@@ -179,7 +185,7 @@ def create_storage_class(
         f'.svc.cluster.local:6789'
     )
     sc_data['metadata']['name'] = sc_name if sc_name else create_unique_resource_name(
-        'test', 'storageclass'
+        f'test-{component}', 'storageclass'
     )
     sc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data['parameters']['csi.storage.k8s.io/provisioner-secret-name'] = secret_name
@@ -207,9 +213,16 @@ def create_pvc(sc_name, pvc_name=None):
     Returns:
         OCS: An OCS instance for the PVC
     """
+    if 'rbd' in sc_name:
+        component = 'rbd'
+    elif 'cephfs' in sc_name:
+        component = 'cephfs'
+    else:
+        component = None
+
     pvc_data = defaults.CSI_PVC_DICT.copy()
     pvc_data['metadata']['name'] = pvc_name if pvc_name else create_unique_resource_name(
-        'test', 'pvc'
+        f'test-{component}', 'pvc'
     )
     pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     pvc_data['spec']['storageClassName'] = sc_name
