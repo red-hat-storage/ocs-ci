@@ -59,6 +59,7 @@ def teardown():
 
 @tier1
 @pytest.mark.usefixtures(test_fixture.__name__)
+@pytest.mark.polarion_id("OCS-284")
 class TestPvcCreationInvalidInputs(ManageTest):
     """
     PVC creation with invaid inputs in pvc yaml
