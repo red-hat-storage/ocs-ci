@@ -31,11 +31,13 @@ STATUS_BOUND = 'Bound'
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
 STORAGECLASS = "StorageClass"
+PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
 POD = "Pod"
 
 # Other
 SECRET = "Secret"
+NAMESPACE = 'Namespace'
 IGNORE_SC = "gp2"
 
 # encoded value of 'admin'
