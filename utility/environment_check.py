@@ -95,27 +95,31 @@ def get_status_after_execution():
         defaults.ENV_STATUS_PRE['namespace'],
         defaults.ENV_STATUS_POST['namespace']
     )
-    diffs_list = [
-        {'pods': pod_diff}, {'sc': sc_diff}, {'cephfs': cephfs_diff},
-        {'cephbp': cephbp_diff}, {'pvs': pv_diff}, {'pvcs': pvc_diff},
-        {'secret': secret_diff}, {'ns': namespace_diff},
-    ]
+    diffs_dict = {
+        'pods': pod_diff,
+        'sc': sc_diff,
+        'cephfs': cephfs_diff,
+        'cephbp': cephbp_diff,
+        'pvs': pv_diff,
+        'pvcs': pvc_diff,
+        'secret': secret_diff,
+        'ns': namespace_diff,
+    }
     leftover_detected = False
+
     leftovers = {'Leftovers added': [], 'Leftovers removed': []}
-    for kind in diffs_list:
-        if ADDED_RESOURCE in kind[''.join(kind.keys())]:
+    for kind, kind_diff in diffs_dict.items():
+        if ADDED_RESOURCE in kind_diff:
             leftovers['Leftovers added'].append({
-                ''.join(kind.keys()):
-                kind[''.join(kind.keys())][ADDED_RESOURCE][
-                    ''.join(kind[''.join(kind.keys())][ADDED_RESOURCE])
+                kind: kind_diff[ADDED_RESOURCE][
+                    ''.join(kind_diff[ADDED_RESOURCE])
                 ]
             })
             leftover_detected = True
-        if REMOVED_RESOURCE in kind[''.join(kind.keys())]:
-            leftovers['Leftovers removed'].append({
-                ''.join(kind.keys()):
-                kind[''.join(kind.keys())][REMOVED_RESOURCE][
-                    ''.join(kind[''.join(kind.keys())][REMOVED_RESOURCE])
+        if REMOVED_RESOURCE in kind_diff:
+            leftovers['Leftovers added'].append({
+                kind: kind_diff[REMOVED_RESOURCE][
+                    ''.join(kind_diff[REMOVED_RESOURCE])
                 ]
             })
             leftover_detected = True
