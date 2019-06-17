@@ -103,3 +103,13 @@ def process_cluster_cli_params(config):
         cluster_path = os.path.join(cluster_dir_parent, cluster_name)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
+
+
+def pytest_collection_modifyitems(session, config, items):
+    """
+    Add Polarion ID property to test cases that are marked with one.
+    """
+    for item in items:
+        for marker in item.iter_markers(name="polarion_id"):
+            polarion_id = marker.args[0]
+            item.user_properties.append(("polarion-testcase-id", polarion_id))
