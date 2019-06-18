@@ -55,6 +55,9 @@ REPORTING = {
     'email': {
         'address': 'ocs-ci@redhat.com',
     },
+    'polarion': {
+        'project_id': 'OCS',
+    }
 }
 
 RUN = {

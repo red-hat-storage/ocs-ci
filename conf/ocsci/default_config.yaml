@@ -46,6 +46,8 @@ DEPLOYMENT:
 REPORTING:
   email:
     address: "ocs-ci@redhat.com"
+  polarion:
+    project_id: "OCS"
 
 # This is the default information about environment. Will be overwritten with
 # --cluster-conf file.yaml data you will pass to the pytest.

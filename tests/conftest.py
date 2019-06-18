@@ -4,6 +4,7 @@ import pytest
 import yaml
 
 from ocs import constants
+from ocsci.config import REPORTING
 from resources.ocs import OCS
 from utility.environment_check import environment_checker  # noqa: F401
 
@@ -57,3 +58,12 @@ def invalid_cephfs_storageclass(request):
         f"{request.param['storageclass_name']}"
     )
     storageclass.delete()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def polarion_testsuite_properties(record_testsuite_property):
+    """
+    Configures polarion testsuite properties for junit xml
+    """
+    polarion_project_id = REPORTING['polarion']['project_id']
+    record_testsuite_property('polarion-projct-id', polarion_project_id)
