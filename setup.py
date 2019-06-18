@@ -28,6 +28,7 @@ setup(
         'munch',
         'pytest',
         'pytest-reportportal==1.0.5',
+        'DeepDiff',
     ],
     entry_points={
         'console_scripts': [
