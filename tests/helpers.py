@@ -166,8 +166,12 @@ def create_storage_class(
     sc_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
         sc_data = defaults.CSI_RBD_STORAGECLASS_DICT.copy()
+        sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-name'] = secret_name
+        sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = defaults.CSI_CEPHFS_STORAGECLASS_DICT.copy()
+        sc_data['parameters']['csi.storage.k8s.io/node-stage-secret-name'] = secret_name
+        sc_data['parameters']['csi.storage.k8s.io/node-stage-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data['parameters']['pool'] = interface_name
 
     mons = (
@@ -183,9 +187,7 @@ def create_storage_class(
     )
     sc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data['parameters']['csi.storage.k8s.io/provisioner-secret-name'] = secret_name
-    sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-name'] = secret_name
     sc_data['parameters']['csi.storage.k8s.io/provisioner-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
 
     sc_data['parameters']['monitors'] = mons
     try:
