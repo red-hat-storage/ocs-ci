@@ -13,7 +13,7 @@ import oc.openshift_ops as ac
 import resources.pod as pod
 from ocs import constants, defaults
 from utility.templating import generate_yaml_from_jinja2_template_with_data
-from ocsci.config import ENV_DATA
+from ocsci import config
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ class RookCluster(object):
         Read namespace and cluster name from config.
         """
         self._namespace = config.get(
-            'namespace', ENV_DATA['cluster_namespace']
+            'namespace', config.ENV_DATA['cluster_namespace']
         )
         # Keeping api_client_name for upcoming PR
         self._api_client_name = config.get('api_client_name', 'OCRESTClient')
@@ -130,7 +130,7 @@ class RookCluster(object):
         )
         # overwrite the namespace with openshift-storage, since cephblockpool
         # is tied-up with openshift-storage
-        namespace = ENV_DATA['cluster_namespace']
+        namespace = config.ENV_DATA['cluster_namespace']
 
         cephblockpool_data = {}
         cephblockpool_data['cephblockpool_name'] = cephblockpool_name
