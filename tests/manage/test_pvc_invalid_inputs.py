@@ -2,17 +2,13 @@ import logging
 import pytest
 
 from ocs import defaults
-from ocsci.config import ENV_DATA
-from ocsci.testlib import tier1, ManageTest
+from ocsci.testlib import tier3, ManageTest
 from resources.ocs import OCS
 from resources.pvc import PVC
 from tests import helpers
-from ocs.ocp import OCP
 from ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
-
-OCCLI = OCP(kind='service', namespace=ENV_DATA['cluster_namespace'])
 
 SC_OBJ = None
 
@@ -57,7 +53,7 @@ def teardown():
     log.info(f"Storage class: {SC_OBJ.name} deleted successfully")
 
 
-@tier1
+@tier3
 @pytest.mark.usefixtures(test_fixture.__name__)
 class TestPvcCreationInvalidInputs(ManageTest):
     """
