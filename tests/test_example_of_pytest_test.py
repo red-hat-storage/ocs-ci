@@ -3,14 +3,15 @@ import logging
 import pytest
 
 from ocs import ocp
-from ocsci.config import ENV_DATA
+
+from ocsci import config
 from ocsci.testlib import run_this, EcosystemTest, tier1
 
 
 logger = logging.getLogger(__name__)
 
 OCP = ocp.OCP(
-    kind='pods', namespace=ENV_DATA['cluster_namespace']
+    kind='pods', namespace=config.ENV_DATA['cluster_namespace']
 )
 
 EXAMPLE_MSG = "THIS IS JUST AN EXAMPLE OF PYTEST TEST, WE WON'T RUN IT!"
@@ -21,8 +22,8 @@ EXAMPLE_MSG = "THIS IS JUST AN EXAMPLE OF PYTEST TEST, WE WON'T RUN IT!"
 def test_not_run_me_fail_pass():
     logger.info("Hey from test which should pass")
     logger.info(
-        "You can easily access data from ENV_DATA like cluster_name: %s",
-        ENV_DATA['cluster_name']
+        "You can easily access data from config.ENV_DATA like cluster_name: %s",
+        config.ENV_DATA['cluster_name']
     )
     assert 1 == 1, "This will not reach this message"
 
@@ -36,7 +37,7 @@ class TestExampleClass(EcosystemTest):
         number_of_pods = len(pods)
         logger.info(
             f"Found {number_of_pods} pods in namespace: "
-            f"{ENV_DATA['cluster_namespace']}"
+            f"{config.ENV_DATA['cluster_namespace']}"
         )
         for pod in pods:
             logger.info(f"Pod : {pod.metadata.name}")
