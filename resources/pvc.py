@@ -4,7 +4,7 @@ General PVC object
 import logging
 
 from ocs import constants
-from ocs.defaults import ENV_DATA
+from ocs.defaults import ENV_DATA, CSI_PVC_DICT
 from ocs.ocp import OCP
 from resources.ocs import OCS
 
@@ -100,3 +100,30 @@ def get_all_pvcs():
     )
     out = ocp_pvc_obj.get()
     return out
+
+
+def create_multiple_pvc(number_of_pvc=1, pvc_data=CSI_PVC_DICT.copy()):
+    """
+    Create one or more PVC
+
+    Args:
+        number_of_pvc (int): Number of PVCs to be created
+        pvc_data (dict): Parameters for PVC yaml
+
+    Returns:
+         list: List of PVC objects
+    """
+    pvc_objs = []
+    pvc_base_name = pvc_data['metadata']['name']
+
+    for count in range(1, number_of_pvc + 1):
+        if number_of_pvc != 1:
+            pvc_name = f'{pvc_base_name}{count}'
+            pvc_data['metadata']['name'] = pvc_name
+        pvc_name = pvc_data['metadata']['name']
+        log.info(f'Creating Persistent Volume Claim {pvc_name}')
+        pvc_obj = PVC(**pvc_data)
+        pvc_obj.create()
+        pvc_objs.append(pvc_obj)
+        log.info(f'Created Persistent Volume Claim {pvc_name}')
+    return pvc_objs
