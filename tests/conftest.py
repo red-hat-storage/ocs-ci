@@ -103,10 +103,13 @@ def cluster(request):
     if is_cluster_running(cluster_path):
         log.info("The installation is skipped because the cluster is running")
         return
-    elif not config.deploy:
-        pytest.fail(
-            "The given cluster can not be connected to: {}".format(cluster_path)
-        )
+    elif config.teardown and not config.deploy:
+        log.info("Attempting teardown of non-accessible cluster: %s", cluster_path)
+        return
+    elif not config.deploy and not config.teardown:
+        msg = "The given cluster can not be connected to: {}. ".format(cluster_path)
+        msg += "Provide a valid --cluster-path or use --deploy to deploy a new cluster"
+        pytest.fail(msg)
     else:
         log.info("A testing cluster will be deployed and cluster information stored at: %s", cluster_path)
 
