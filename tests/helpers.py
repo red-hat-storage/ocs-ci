@@ -4,6 +4,8 @@ Helper functions file for OCS QE
 import base64
 import datetime
 import logging
+import random
+import string
 
 from ocs import constants, defaults, ocp
 from ocsci.config import ENV_DATA
@@ -169,10 +171,14 @@ def create_storage_class(
     sc_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
         sc_data = defaults.CSI_RBD_STORAGECLASS_DICT.copy()
+        sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-name'] = secret_name
+        sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
         component = constants.RBD_COMPONENT
 
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = defaults.CSI_CEPHFS_STORAGECLASS_DICT.copy()
+        sc_data['parameters']['csi.storage.k8s.io/node-stage-secret-name'] = secret_name
+        sc_data['parameters']['csi.storage.k8s.io/node-stage-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
         component = constants.CEPHFS_COMPONENT
 
     sc_data['parameters']['pool'] = interface_name
@@ -190,9 +196,7 @@ def create_storage_class(
     )
     sc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data['parameters']['csi.storage.k8s.io/provisioner-secret-name'] = secret_name
-    sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-name'] = secret_name
     sc_data['parameters']['csi.storage.k8s.io/provisioner-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
 
     sc_data['parameters']['monitors'] = mons
     try:
@@ -219,8 +223,9 @@ def create_pvc(sc_name, pvc_name=None):
     elif 'cephfs' in sc_name:
         component = constants.CEPHFS_COMPONENT
     else:
-        component = None
-
+        component = ''.join(
+            [random.choice(string.ascii_lowercase) for _ in range(4)]
+        )
     pvc_data = defaults.CSI_PVC_DICT.copy()
     pvc_data['metadata']['name'] = pvc_name if pvc_name else create_unique_resource_name(
         f'test-{component}', 'pvc'
