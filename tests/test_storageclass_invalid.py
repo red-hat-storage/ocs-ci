@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 @tier3
-class TestCaseOCS331(ManageTest):
-    def test_storageclass_cephfs_invalid(self, invalid_cephfs_storageclass):
+class TestCaseOCS331_and_OC341(ManageTest):
+    def test_storageclass_invalid(self, invalid_storageclass):
         """
         Test that Persistent Volume Claim can not be created from misconfigured
         CephFS Storage Class.
@@ -22,12 +22,12 @@ class TestCaseOCS331(ManageTest):
         pvc_name = helpers.create_unique_resource_name('test', 'pvc')
         pvc_data['metadata']['name'] = pvc_name
         pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-        pvc_data['spec']['storageClassName'] = invalid_cephfs_storageclass[
+        pvc_data['spec']['storageClassName'] = invalid_storageclass[
             'metadata']['name']
         logger.info(
             f"Create PVC {pvc_name} "
             f"with storageClassName "
-            f"{invalid_cephfs_storageclass['metadata']['name']}"
+            f"{invalid_storageclass['metadata']['name']}"
         )
         pvc = PVC(**pvc_data)
         pvc.create()
