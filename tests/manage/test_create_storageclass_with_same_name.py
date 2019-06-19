@@ -91,6 +91,7 @@ def create_storageclass(sc_name, expect_fail=False):
 @pytest.mark.usefixtures(
     test_fixture.__name__,
 )
+@pytest.mark.polarion_id("OCS-322")
 class TestCaseOCS322(ManageTest):
     def test_create_storageclass_with_same_name(self):
         """
