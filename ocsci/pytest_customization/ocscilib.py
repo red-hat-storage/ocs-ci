@@ -117,14 +117,10 @@ def process_cluster_cli_params(config):
         cluster_name = f"{cluster_name}-{cid}"
     if not cluster_path:
         cluster_path = os.path.join(cluster_dir_parent, cluster_name)
-    # adds teardown to osci_config.RUN['cli_params']
-    teardown = get_cli_param(config, "teardown", default=False)
-    # adds deploy to osci_config.RUN['cli_params']
-    deploy = get_cli_param(config, "deploy", default=False)
+    ocsci_config.RUN['cli_params']['teardown'] = get_cli_param(config, "teardown", default=False)
+    ocsci_config.RUN['cli_params']['deploy'] = get_cli_param(config, "deploy", default=False)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
-    ocsci_config.teardown = teardown
-    ocsci_config.deploy = deploy
 
 
 def pytest_collection_modifyitems(session, config, items):

@@ -95,18 +95,20 @@ def cluster_teardown():
 def cluster(request):
     log.info("Running OCS basic installation")
     cluster_path = config.ENV_DATA['cluster_path']
+    deploy = config.RUN['cli_params']['deploy']
+    teardown = config.RUN['cli_params']['teardown']
     # Add a finalizer to teardown the cluster after test execution is finished
-    if config.teardown:
+    if teardown:
         request.addfinalizer(cluster_teardown)
         log.info("Will teardown cluster because --teardown was provided")
     # Test cluster access and if exist just skip the deployment.
     if is_cluster_running(cluster_path):
         log.info("The installation is skipped because the cluster is running")
         return
-    elif config.teardown and not config.deploy:
+    elif teardown and not deploy:
         log.info("Attempting teardown of non-accessible cluster: %s", cluster_path)
         return
-    elif not config.deploy and not config.teardown:
+    elif not deploy and not teardown:
         msg = "The given cluster can not be connected to: {}. ".format(cluster_path)
         msg += "Provide a valid --cluster-path or use --deploy to deploy a new cluster"
         pytest.fail(msg)
@@ -304,7 +306,7 @@ def cluster(request):
 def create_ebs_volumes(
     worker_pattern,
     size=100,
-    region_name=config.ENV_DATA['region'],
+    region_name=None,
 ):
     """
     Create volumes on workers
@@ -316,6 +318,7 @@ def create_ebs_volumes(
         region_name (str): Region name (default: config.ENV_DATA['region'])
     """
     aws = AWS(region_name)
+    region_name = region_name or config.ENV_DATA['region']
     worker_instances = aws.get_instances_by_name_pattern(worker_pattern)
     with parallel() as p:
         for worker in worker_instances:
@@ -332,7 +335,7 @@ def create_ebs_volumes(
 
 
 @retry((CephHealthException, CommandFailed), tries=20, delay=30, backoff=1)
-def ceph_health_check(namespace=config.ENV_DATA['cluster_namespace']):
+def ceph_health_check(namespace=None):
     """
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
@@ -348,6 +351,7 @@ def ceph_health_check(namespace=config.ENV_DATA['cluster_namespace']):
         boolean: True if HEALTH_OK
 
     """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
     run_cmd(
         f"oc wait --for condition=ready pod "
         f"-l app=rook-ceph-tools "
