@@ -65,6 +65,7 @@ class TestOSCBasics(ManageTest):
         f'.svc.cluster.local:6789'
     )
 
+    @pytest.mark.polarion_id("OCS-336")
     def test_ocs_336(self, test_fixture):
         """
         Testing basics: secret creation,
@@ -96,6 +97,7 @@ class TestOSCBasics(ManageTest):
         storage_class.delete()
         secret.delete()
 
+    @pytest.mark.polarion_id("OCS-346")
     def test_ocs_346(self):
         """
         Testing basics: secret creation,
