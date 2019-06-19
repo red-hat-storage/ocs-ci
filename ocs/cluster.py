@@ -13,16 +13,16 @@ import resources.pod as pod
 from resources import ocs
 import ocs.defaults as default
 from utility.utils import TimeoutSampler
-from ocsci.config import ENV_DATA
+from ocsci import config
 from ocs import ocp
 from ocs import exceptions
 
-POD = ocp.OCP(kind='Pod', namespace=ENV_DATA['cluster_namespace'])
+POD = ocp.OCP(kind='Pod', namespace=config.ENV_DATA['cluster_namespace'])
 CEPHCLUSTER = ocp.OCP(
-    kind='CephCluster', namespace=ENV_DATA['cluster_namespace']
+    kind='CephCluster', namespace=config.ENV_DATA['cluster_namespace']
 )
 CEPHFS = ocp.OCP(
-    kind='CephFilesystem', namespace=ENV_DATA['cluster_namespace']
+    kind='CephFilesystem', namespace=config.ENV_DATA['cluster_namespace']
 )
 
 logger = logging.getLogger(__name__)
@@ -56,10 +56,12 @@ class CephCluster(object):
             logging.warning("No CephFS found")
             self.cephfs_config = None
 
-        self._cluster_name = self.cluster_resource_config.get(
-            'metadata').get('name')
-        self._namespace = self.cluster_resource_config.get(
-            'metadata').get('namespace')
+        self._cluster_name = (
+            self.cluster_resource_config.get('metadata').get('name')
+        )
+        self._namespace = (
+            self.cluster_resource_config.get('metadata').get('namespace')
+        )
 
         # We are not invoking ocs.create() here
         # assuming cluster creation is done somewhere after deployment
@@ -71,22 +73,20 @@ class CephCluster(object):
         self.mon_selector = default.MON_APP_LABEL
         self.mds_selector = default.MDS_APP_LABEL
         self.tool_selector = default.TOOL_APP_LABEL
+        self.mgr_selector = default.MGR_APP_LABEL
+        self.osd_selector = default.OSD_APP_LABEL
         self.mons = []
         self._ceph_pods = []
         self.mdss = []
+        self.mgrs = []
+        self.osds = []
         self.toolbox = None
         self.mds_count = 0
         self.mon_count = 0
+        self.mgr_count = 0
+        self.osd_count = 0
 
         self.scan_cluster()
-
-        # Set counts after scan_cluster to get latest updates on pod counts
-        self.mon_count = len(self.mons)
-        if self.cephfs_config:
-            if self.cephfs.data['spec']['metadataServer']['activeStandby']:
-                self.mds_count = int(len(self.mdss) / 2)
-            else:
-                self.mds_count = int(len(self.mdss))
         logging.info(f"Number of mons = {self.mon_count}")
         logging.info(f"Number of mds = {self.mds_count}")
 
@@ -107,8 +107,10 @@ class CephCluster(object):
         Get accurate info on current state of pods
         """
         self._ceph_pods = pod.get_all_pods(self._namespace)
-        self.mons = self._filter_pods(self.mon_selector, self.pods)
-        self.mdss = self._filter_pods(self.mds_selector, self.pods)
+        self.mons = pod.get_mon_pods(self.mon_selector, self.namespace)
+        self.mdss = pod.get_mds_pods(self.mds_selector, self.namespace)
+        self.mgrs = pod.get_mgr_pods(self.mgr_selector, self.namespace)
+        self.osds = pod.get_osd_pods(self.osd_selector, self.namespace)
         self.toolbox = pod.get_ceph_tools_pod()
 
         # set port attrib on mon pods
@@ -116,6 +118,11 @@ class CephCluster(object):
         self.cluster.reload()
         if self.cephfs_config:
             self.cephfs.reload()
+
+        self.mon_count = len(self.mons)
+        self.mds_count = len(self.mdss)
+        self.mgr_count = len(self.mgrs)
+        self.osd_count = len(self.osds)
 
     @staticmethod
     def set_port(pod):
@@ -125,7 +132,10 @@ class CephCluster(object):
         is not a member for original pod class.
 
         Args:
-            pod(Pod): Pod object with 'port' attribute
+            pod(Pod): Pod object without 'port' attribute
+
+        Returns:
+            pod(Pod): A modified pod object with 'port' attribute set
         """
         l1 = pod.pod_data.get('spec').get('containers')
         l2 = l1[0]['ports'][0]['containerPort']
@@ -166,8 +176,35 @@ class CephCluster(object):
 
         if not sample.wait_for_func_status(result=True):
             raise exceptions.CephHealthException("Cluster health is NOT OK")
+        # This way of checking health of different cluster entities and
+        # raising only CephHealthException is not elegant.
+        # TODO: add an attribute in CephHealthException, called "reason"
+        # which should tell because of which exact cluster entity health
+        # is not ok ?
+        expected_mon_count = self.mon_count
+        expected_mds_count = self.mds_count
 
+        self.scan_cluster()
+        try:
+            self.mon_health_check(expected_mon_count)
+        except exceptions.MonCountException as e:
+            logger.error(e)
+            raise exceptions.CephHealthException("Cluster health is NOT OK")
+
+        try:
+            if not expected_mds_count:
+                pass
+            else:
+                self.mds_health_check(expected_mds_count)
+        except exceptions.MDSCountException as e:
+            logger.error(e)
+            raise exceptions.CephHealthException("Cluster health is NOT OK")
+        # TODO: OSD and MGR health check
         logger.info("Cluster HEALTH_OK")
+        # This scan is for reconcilation on *.count
+        # because during first scan in this function some of the
+        # pods may not be up and would have set count to lesser number
+        self.scan_cluster()
         return True
 
     def mon_change_count(self, new_count):
@@ -177,14 +214,13 @@ class CephCluster(object):
         Args:
             new_count(int): Absolute number of mons required
         """
+        self.cluster.reload()
         self.cluster.data['spec']['mon']['count'] = new_count
         logger.info(self.cluster.data)
         self.cluster.apply(**self.cluster.data)
-        self.mon_health_check(new_count)
+        self.mon_count = new_count
         self.cluster_health_check()
         logger.info(f"Mon count changed to {new_count}")
-        self.mon_count = new_count
-        self.scan_cluster()
         self.cluster.reload()
 
     def mon_health_check(self, count):
@@ -198,12 +234,13 @@ class CephCluster(object):
             MonCountException: if mon pod count doesn't match
         """
         timeout = 10 * len(self.pods)
+        logger.info(f"Expected MONs = {count}")
         try:
             assert POD.wait_for_resource(
                 condition='Running', selector=self.mon_selector,
                 resource_count=count, timeout=timeout, sleep=3,
             )
-        except AssertionError as e:
+        except exceptions.TimeoutExpiredError as e:
             logger.error(e)
             raise exceptions.MonCountException(
                 f"Failed to achieve desired Mon count"
@@ -220,10 +257,12 @@ class CephCluster(object):
         self.cephfs.data['spec']['metadataServer']['activeCount'] = new_count
         self.cephfs.apply(**self.cephfs.data)
         logger.info(f"MDS active count changed to {new_count}")
-        self.mds_health_check(new_count)
+        if self.cephfs.data['spec']['metadataServer']['activeStandby']:
+            expected = new_count * 2
+        else:
+            expected = new_count
+        self.mds_count = expected
         self.cluster_health_check()
-        self.mds_count = int(new_count)
-        self.scan_cluster()
         self.cephfs.reload()
 
     def mds_health_check(self, count):

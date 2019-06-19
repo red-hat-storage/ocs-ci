@@ -64,13 +64,14 @@ class TestClusterUtils(ManageTest):
 
     def test_add_mon(self):
         cur_count = cluster.mon_count
+        logging.info(f"current mon count = {cur_count}")
         new_count = cur_count + 1
         cluster.mon_change_count(new_count)
         assert new_count == cluster.mon_count
 
     def test_add_mds(self):
-        cur_count = cluster.mds_count
-        logging.info(f"Current count = {cur_count}")
+        cur_count = int(cluster.mds_count / 2)
+        logging.info(f"Current active count = {cur_count}")
         new_count = cur_count + 1
         cluster.mds_change_count(new_count)
-        assert new_count == cluster.mds_count
+        assert new_count * 2 == cluster.mds_count
