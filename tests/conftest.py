@@ -4,7 +4,7 @@ import pytest
 import yaml
 
 from ocs import constants
-from ocsci.config import REPORTING
+from ocsci import config
 from resources.ocs import OCS
 from utility.environment_check import environment_checker  # noqa: F401
 
@@ -65,5 +65,5 @@ def polarion_testsuite_properties(record_testsuite_property):
     """
     Configures polarion testsuite properties for junit xml
     """
-    polarion_project_id = REPORTING['polarion']['project_id']
+    polarion_project_id = config.REPORTING['polarion']['project_id']
     record_testsuite_property('polarion-projct-id', polarion_project_id)
