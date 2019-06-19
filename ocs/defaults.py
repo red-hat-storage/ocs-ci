@@ -56,7 +56,7 @@ REPORTING = {
         'address': 'ocs-ci@redhat.com',
     },
     'polarion': {
-        'project_id': 'OCS',
+        'project_id': 'OpenShiftContainerStorage',
     }
 }
 
