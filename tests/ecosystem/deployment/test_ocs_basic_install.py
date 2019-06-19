@@ -202,7 +202,6 @@ class TestDeployment(EcosystemTest):
         log.info(f"Waiting {wait_time} seconds...")
         time.sleep(wait_time)
 
-
         # Create MDS pods for CephFileSystem
         self.fs_data = defaults.CEPHFILESYSTEM_DICT.copy()
         self.fs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
@@ -225,7 +224,6 @@ class TestDeployment(EcosystemTest):
             log.error(
                 f"MDS deployment Failed! Please check logs!"
             )
-
 
         # Verify health of ceph cluster
         # TODO: move destroy cluster logic to new CLI usage pattern?
