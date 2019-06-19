@@ -88,14 +88,14 @@ higher priority).
 ## Example of accessing config/default data
 
 ```python
-from ocsci.config import RUN, ENV_DATA
+from ocsci import config
 from ocs import defaults
 
 # From you code you can access those data like
 
 Taking data from ENV_DATA will always use right cluster_namespace passed via
 `--ocsci-conf` config file or default one defined in `default_config.yaml`.
-funciton_which_taking_namespace(namespace=ENV_DATA['cluster_namespace'])
+function_which_taking_namespace(namespace=config.ENV_DATA['cluster_namespace'])
 
 # Defaults data you can access like in this example:
 print(f"Printing some default data like API version: {defaults.API_VERSION}")

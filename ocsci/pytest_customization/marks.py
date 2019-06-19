@@ -35,6 +35,9 @@ deployment = pytest.mark.deployment
 destroy = pytest.mark.destroy
 upgrade = pytest.mark.upgrade
 
+# mark the test class with marker below to ignore leftover check
+ignore_leftovers = pytest.mark.ignore_leftovers
+
 # testing marker this is just for testing purpose if you want to run some test
 # under development, you can mark it with @run_this and run pytest -m run_this
 run_this = pytest.mark.run_this
