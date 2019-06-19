@@ -3,12 +3,14 @@ import pytest
 
 from ocs import defaults
 from ocsci.testlib import tier3, ManageTest
+from ocsci import config
 from resources.ocs import OCS
 from resources.pvc import PVC
 from tests import helpers
 from ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
+
 
 SC_OBJ = None
 

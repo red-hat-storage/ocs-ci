@@ -5,8 +5,8 @@ A module which consists of kubevolume related operations
 import os
 import logging
 
+import ocsci
 from ocs import defaults, constants
-from ocsci.config import ENV_DATA
 from kubernetes import config
 from openshift.dynamic import DynamicClient
 from utility.utils import get_random_str
@@ -129,7 +129,7 @@ class StorageClass(KubeVolume):
         allow_volume_expansion=True,
         reclaim_policy="Delete",
         fstype="xfs",
-        clusterNamespace=ENV_DATA['cluster_namespace'],
+        clusterNamespace=ocsci.config.ENV_DATA['cluster_namespace'],
     ):
         """
         Creates storage class using data provided

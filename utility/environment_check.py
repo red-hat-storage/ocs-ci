@@ -1,11 +1,14 @@
 """
-Util for environment check befora and after test to compare and find stale
+Util for environment check before and after test to compare and find stale
 leftovers
 """
 import logging
 import pytest
 
 from ocs import ocp, constants, exceptions
+from ocsci.pytest_customization.marks import (
+    deployment, destroy, ignore_leftovers
+)
 from deepdiff import DeepDiff
 
 log = logging.getLogger(__name__)
@@ -26,9 +29,17 @@ REMOVED_RESOURCE = 'iterable_item_removed'
 ENV_STATUS_PRE = {}
 ENV_STATUS_POST = {}
 
+# List of marks for which we will ignore the leftover checker
+MARKS_TO_IGNORE = [m.mark for m in [deployment, destroy, ignore_leftovers]]
+
 
 @pytest.fixture(scope='class')
 def environment_checker(request):
+    node = request.node
+    for mark in node.iter_markers():
+        if mark in MARKS_TO_IGNORE:
+            return
+
     request.addfinalizer(get_status_after_execution)
     get_status_before_execution()
 

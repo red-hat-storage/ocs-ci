@@ -6,7 +6,7 @@ import datetime
 import logging
 
 from ocs import constants, defaults, ocp
-from ocsci.config import ENV_DATA
+from ocsci import config
 from resources import pod
 from resources.ocs import OCS
 
@@ -166,16 +166,20 @@ def create_storage_class(
     sc_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
         sc_data = defaults.CSI_RBD_STORAGECLASS_DICT.copy()
+        sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-name'] = secret_name
+        sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = defaults.CSI_CEPHFS_STORAGECLASS_DICT.copy()
+        sc_data['parameters']['csi.storage.k8s.io/node-stage-secret-name'] = secret_name
+        sc_data['parameters']['csi.storage.k8s.io/node-stage-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data['parameters']['pool'] = interface_name
 
     mons = (
-        f'rook-ceph-mon-a.{ENV_DATA["cluster_namespace"]}'
+        f'rook-ceph-mon-a.{config.ENV_DATA["cluster_namespace"]}'
         f'.svc.cluster.local:6789,'
-        f'rook-ceph-mon-b.{ENV_DATA["cluster_namespace"]}.'
+        f'rook-ceph-mon-b.{config.ENV_DATA["cluster_namespace"]}.'
         f'svc.cluster.local:6789,'
-        f'rook-ceph-mon-c.{ENV_DATA["cluster_namespace"]}'
+        f'rook-ceph-mon-c.{config.ENV_DATA["cluster_namespace"]}'
         f'.svc.cluster.local:6789'
     )
     sc_data['metadata']['name'] = sc_name if sc_name else create_unique_resource_name(
@@ -183,9 +187,7 @@ def create_storage_class(
     )
     sc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data['parameters']['csi.storage.k8s.io/provisioner-secret-name'] = secret_name
-    sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-name'] = secret_name
     sc_data['parameters']['csi.storage.k8s.io/provisioner-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
 
     sc_data['parameters']['monitors'] = mons
     try:
@@ -391,7 +393,7 @@ def create_cephfilesystem():
     fs_data['metadata']['name'] = create_unique_resource_name(
         'test', 'cephfs'
     )
-    fs_data['metadata']['namespace'] = ENV_DATA['cluster_namespace']
+    fs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
     global CEPHFS_OBJ
     CEPHFS_OBJ = OCS(**fs_data)
     CEPHFS_OBJ.create()
