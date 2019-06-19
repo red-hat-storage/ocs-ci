@@ -8,6 +8,7 @@ import yaml
 from ocs.exceptions import CommandFailed
 from utility.utils import TimeoutSampler
 from utility.utils import run_cmd
+from ocs import defaults
 
 log = logging.getLogger(__name__)
 
@@ -257,3 +258,35 @@ class OCP(object):
                 return True
 
         return False
+
+
+def switch_to_project(project_name):
+    """
+    Switch to another project
+
+    Args:
+        project_name (str): Name of the project to be switched to
+
+    Returns:
+        bool: True on success, False otherwise
+    """
+    log.info(f'Switching to project {project_name}')
+    cmd = f'oc project {project_name}'
+    success_msgs = [
+        f'Now using project "{project_name}"',
+        f'Already on project "{project_name}"'
+    ]
+    ret = run_cmd(cmd)
+    if any(msg in ret for msg in success_msgs):
+        return True
+    return False
+
+
+def switch_to_default_rook_cluster_project():
+    """
+    Switch to default project
+
+    Returns:
+        bool: True on success, False otherwise
+    """
+    return switch_to_project(defaults.ROOK_CLUSTER_NAMESPACE)
