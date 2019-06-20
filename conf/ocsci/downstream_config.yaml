@@ -1,0 +1,4 @@
+---
+ENV_DATA:
+  ceph_image: 'quay.io/rhceph-dev/rhceph-4.0-rhel-8:latest'
+  rook_image: 'quay.io/rhceph-dev/rook:latest'
