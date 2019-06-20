@@ -26,7 +26,7 @@ python run.py --help
 
 There are a few arguments that are required ocs test execution:
 
-* `--suite <suite_file>`
+* `--cluster-path <path>`
 
 ## Useful pytest arguments
 
@@ -43,15 +43,20 @@ to the pytest.
 ### Parameters already converted to pytest:
 
 * `--cluster-name <name>` - name of cluster.
-* `--cluster-path <path>` - path where to create the directory which will
-    contains all the installation/authentication information about cluster.
-    `Use this parameter when running on already deployed cluster!` You can
-    pass the cluster path from previous execution if was created automatically.
+* `--cluster-path <path>` - path to the directory which will
+    contain all the installation/authentication information about the cluster.
+    If the information given can not be used to access the cluster then
+    test execution will fail. If you wish to deploy a new cluster, give
+    a path to a new directory and also use the `--deploy` argument.
 * `--ocsci-conf` - with this configuration you can overwrite the default
     OCS-CI parameters defined in `conf/ocsci/default_config.yaml`
 * `--cluster-conf` - with this configuration you can overwrite the default
     parameters for cluster and deployment. See the example of such file
     [here](../conf/ocs_basic_install.yml).
+* `--deploy` - if this is given and a cluster can not be accessed from the
+    provided `--cluster-path` then a new test cluster will be deployed.
+* `--teardown` - if this is given the testing cluster will be destroyed after
+    the test have completed, regardless of if the tests passed or failed.
 
 ### Parameters for old runner:
 
@@ -90,18 +95,12 @@ python run.py --cluster-name=my-testing-cluster \
 
 ### For pytest
 
+Deployment and teardown of the test cluster can be done automatically with
+the `--deploy` and `--teardown` arguments. The `--cluster-path` must always be
+provided and if given without the `--deploy` argument, it must contain information
+that can be used to access an existing cluster.
 
-There is no order yet for deployment, run of tests and destroy cluster.
-That means: you are not able to run all in one execution.
-We can do ordering with
-[pytest ordering plugin](https://pytest-ordering.readthedocs.io/en/develop/)
-or different way we decide later on. (Will be done in different PR)
-
-For now please deploy cluster with one execution of `pytest` and run tests
-on existing cluster with second execution of `pytest`, destroy can be done
-in third execution.
-
-> In case you lost yor cluster dir, the destroy can be done with
+> In case you lost your cluster dir, the destroy can be done with
 > `uni-cleanup.sh` script.
 
 
@@ -114,10 +113,11 @@ you can run following command:
 run-ci -m deployment --ocsci-conf conf/ocsci/custom_config.yaml \
     --cluster-conf conf/ocs_basic_install.yml \
     --cluster-name kerberos_ID-ocs-deployment \
-    --cluster-path /home/my_user/my-ocs-dir tests/
+    --cluster-path /home/my_user/my-ocs-dir tests/ \
+    --deploy
  ```
 of course you can utilize your cluster to add `--cluster-conf` parameter or
-you can omit --cluster-name or --cluster-path if you would like to use default
+you can omit --cluster-name if you would like to use default
 values.
 
 Note that during deployment, openshift command line tools like `oc` and
@@ -139,6 +139,8 @@ run-ci -m "tier1 and manage" \
 Destroy is moved already to pytest. If you would like to destroy existing
 cluster you can run following command:
 ```bash
-run-ci -m destroy --cluster-name kerberos_ID-ocs-deployment \
-    --cluster-path /home/my_user/my-ocs-dir tests/
-```
+run-ci -m deployment \
+    --cluster-name kerberos_ID-ocs-deployment \
+    --cluster-path /home/my_user/my-ocs-dir tests/ \
+    --teardown
+ ```

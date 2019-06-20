@@ -44,6 +44,20 @@ def pytest_addoption(parser):
         dest='cluster_name',
         help="Name of cluster",
     )
+    parser.addoption(
+        '--teardown',
+        dest='teardown',
+        action="store_true",
+        default=False,
+        help="If provided the test cluster will be destroyed after tests complete",
+    )
+    parser.addoption(
+        '--deploy',
+        dest='deploy',
+        action="store_true",
+        default=False,
+        help="If provided a test cluster will be deployed on AWS to use for testing",
+    )
 
 
 def pytest_configure(config):
@@ -103,6 +117,8 @@ def process_cluster_cli_params(config):
         cluster_name = f"{cluster_name}-{cid}"
     if not cluster_path:
         cluster_path = os.path.join(cluster_dir_parent, cluster_name)
+    ocsci_config.RUN['cli_params']['teardown'] = get_cli_param(config, "teardown", default=False)
+    ocsci_config.RUN['cli_params']['deploy'] = get_cli_param(config, "deploy", default=False)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
 
