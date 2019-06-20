@@ -6,8 +6,8 @@ The basic configuration is done in run_ocsci.py module casue we need to load
 all the config before pytest run. This run_ocsci.py is just a wrapper for
 pytest which proccess config and passes all params to pytest.
 """
+import logging
 import os
-
 import random
 
 import ocs
@@ -16,6 +16,8 @@ from ocsci import config as ocsci_config
 __all__ = [
     "pytest_addoption",
 ]
+
+log = logging.getLogger(__name__)
 
 
 def pytest_addoption(parser):
@@ -103,3 +105,23 @@ def process_cluster_cli_params(config):
         cluster_path = os.path.join(cluster_dir_parent, cluster_name)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
+
+
+def pytest_collection_modifyitems(session, config, items):
+    """
+    Add Polarion ID property to test cases that are marked with one.
+    """
+    for item in items:
+        try:
+            marker = item.get_closest_marker(name="polarion_id")
+            if marker:
+                polarion_id = marker.args[0]
+                item.user_properties.append(
+                    ("polarion-testcase-id", polarion_id)
+                )
+        except IndexError:
+            log.warning(
+                f"polarion_id marker found with no value for "
+                f"{item.name} in {item.fspath}",
+                exc_info=True
+            )

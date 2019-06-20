@@ -21,8 +21,8 @@ from reportportal_client import ReportPortalServiceAsync
 from ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
 )
+from ocsci import config
 from ocsci.enums import StatusOfTest
-from ocsci.config import RUN, DEPLOYMENT
 from .aws import AWS
 
 log = logging.getLogger(__name__)
@@ -735,18 +735,18 @@ def get_openshift_installer(
 
     Args:
         version (str): Version of the installer to download
-        bin_dir (str): Path to bin directory (default: RUN['bin_dir'])
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
 
     Returns:
         str: Path to the installer binary
 
     """
-    version = version or DEPLOYMENT['installer_version']
-    bin_dir = bin_dir or RUN['bin_dir']
+    version = version or config.DEPLOYMENT['installer_version']
+    bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
     if os.path.isfile(installer_binary_path):
-        log.debug("Installer exists ({installer_binary_path}), skipping download.")
+        log.debug(f"Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
     else:
         log.info("Downloading openshift installer")
@@ -775,15 +775,15 @@ def get_openshift_client(
 
     Args:
         version (str): Version of the client to download
-            (default: RUN['client_version'])
-        bin_dir (str): Path to bin directory (default: RUN['bin_dir'])
+            (default: config.RUN['client_version'])
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
 
     Returns:
         str: Path to the client binary
 
     """
-    version = version or RUN['client_version']
-    bin_dir = bin_dir or RUN['bin_dir']
+    version = version or config.RUN['client_version']
+    bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     client_binary_path = os.path.join(bin_dir, 'oc')
     if os.path.isfile(client_binary_path):
         log.debug("Client exists ({client_binary_path}), skipping download.")
@@ -835,9 +835,9 @@ def prepare_bin_dir(bin_dir=None):
     Prepare bin directory for OpenShift client and installer
 
     Args:
-        bin_dir (str): Path to bin directory (default: RUN['bin_dir'])
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
     """
-    bin_dir = bin_dir or RUN['bin_dir']
+    bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     try:
         os.mkdir(bin_dir)
         log.info(f"Directory '{bin_dir}' successfully created.")
