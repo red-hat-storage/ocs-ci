@@ -3,6 +3,7 @@ import logging
 import os
 import time
 import yaml
+import copy
 
 from oc.openshift_ops import OCP
 from ocs.exceptions import CommandFailed, CephHealthException
@@ -16,8 +17,18 @@ from utility.aws import AWS
 from utility.retry import retry
 from utility.utils import run_cmd, get_openshift_installer, get_openshift_client
 from ocs.parallel import parallel
+from ocs import ocp, defaults, constants
+from resources.ocs import OCS
+from tests import helpers
+
 
 log = logging.getLogger(__name__)
+
+POD = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace'])
+CFS = ocp.OCP(
+    kind=constants.CEPHFILESYSTEM, namespace=config.ENV_DATA['cluster_namespace']
+)
+CEPH_OBJ = None
 
 
 @deployment
@@ -151,17 +162,32 @@ class TestDeployment(EcosystemTest):
         )
         run_cmd(
             f"oc wait --for condition=ready pod "
-            f"-l app=rook-ceph-agent "
-            f"-n {config.ENV_DATA['cluster_namespace']} "
-            f"--timeout=120s"
-        )
-        run_cmd(
-            f"oc wait --for condition=ready pod "
             f"-l app=rook-discover "
             f"-n {config.ENV_DATA['cluster_namespace']} "
             f"--timeout=120s"
         )
         create_oc_resource('cluster.yaml', cluster_path, _templating, config.ENV_DATA)
+
+        # Check for the Running status of Ceph Pods
+        run_cmd(
+            f"oc wait --for condition=ready pod "
+            f"-l app=rook-ceph-agent "
+            f"-n {config.ENV_DATA['cluster_namespace']} "
+            f"--timeout=120s"
+        )
+        assert POD.wait_for_resource(
+            condition='Running', selector='app=rook-ceph-mon',
+            resource_count=3, timeout=600
+        )
+        assert POD.wait_for_resource(
+            condition='Running', selector='app=rook-ceph-mgr',
+            timeout=600
+        )
+        assert POD.wait_for_resource(
+            condition='Running', selector='app=rook-ceph-osd',
+            resource_count=3, timeout=600
+        )
+
         create_oc_resource('toolbox.yaml', cluster_path, _templating, config.ENV_DATA)
         log.info(f"Waiting {wait_time} seconds...")
         time.sleep(wait_time)
@@ -176,6 +202,29 @@ class TestDeployment(EcosystemTest):
         )
         log.info(f"Waiting {wait_time} seconds...")
         time.sleep(wait_time)
+
+        # Create MDS pods for CephFileSystem
+        self.fs_data = copy.deepcopy(defaults.CEPHFILESYSTEM_DICT)
+        self.fs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
+
+        global CEPH_OBJ
+        CEPH_OBJ = OCS(**self.fs_data)
+        CEPH_OBJ.create()
+        assert POD.wait_for_resource(
+            condition=constants.STATUS_RUNNING, selector='app=rook-ceph-mds',
+            resource_count=2, timeout=600
+        )
+
+        # Check for CephFilesystem creation in ocp
+        cfs_data = CFS.get()
+        cfs_name = cfs_data['items'][0]['metadata']['name']
+
+        if helpers.validate_cephfilesystem(cfs_name):
+            log.info(f"MDS deployment is successful!")
+        else:
+            log.error(
+                f"MDS deployment Failed! Please check logs!"
+            )
 
         # Verify health of ceph cluster
         # TODO: move destroy cluster logic to new CLI usage pattern?
