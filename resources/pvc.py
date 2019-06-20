@@ -1,6 +1,7 @@
 """
 General PVC object
 """
+import copy
 import logging
 
 from ocs import constants
@@ -102,7 +103,7 @@ def get_all_pvcs():
     return out
 
 
-def create_multiple_pvc(number_of_pvc=1, pvc_data=CSI_PVC_DICT.copy()):
+def create_multiple_pvc(number_of_pvc=1, pvc_data=copy.deepcopy(CSI_PVC_DICT)):
     """
     Create one or more PVC
 
