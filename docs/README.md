@@ -4,7 +4,7 @@ Hello and welcome in the official project documentation.
 
 Basic information about the project you can find in initial [README](../README.md) file.
 
-## TOC for documentation
+## Table of contents for documentation
 
 Rest of the information you can find in those sections
 
