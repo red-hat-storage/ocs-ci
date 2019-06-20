@@ -3,6 +3,7 @@ Test to verify concurrent creation and deletion of multiple PVCs
 """
 import logging
 import pytest
+from copy import deepcopy
 
 from ocs import defaults, constants, ocp, exceptions
 from utility.utils import run_async
@@ -124,7 +125,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
 
         # Create 100 new PVCs
         # Parameters for PVC yaml as dict
-        pvc_data = defaults.CSI_PVC_DICT.copy()
+        pvc_data = deepcopy(defaults.CSI_PVC_DICT)
         pvc_data['metadata']['namespace'] = TEST_PROJECT
         pvc_data['spec']['storageClassName'] = self.sc_obj.name
         pvc_data['metadata']['name'] = self.pvc_base_name_new
