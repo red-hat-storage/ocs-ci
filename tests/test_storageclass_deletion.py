@@ -10,9 +10,11 @@ import pytest
 from ocsci.testlib import tier1, ManageTest
 from ocs import constants
 from tests import helpers
+import ocs.defaults as defaults
 
 
 log = logging.getLogger(__name__)
+
 
 @pytest.fixture(scope='class')
 def test_fixture(request):
@@ -32,10 +34,12 @@ def teardown(self):
     Remove the resources after execution of tests
     """
 
+
 def setup(self):
     """
     Setting up the Environment : Creating project
     """
+    project_name = defaults.NAMESPACE
     log.info("Creating project")
     NAMESPACE.new_project(project_name)
 
@@ -51,6 +55,7 @@ class TestStorageClass(ManageTest):
         """
         Test to validate OCS-297
         """
+        project_name = defaults.NAMESPACE
         global PVC, STORAGE_CLASS, NAMESPACE
         log.info("Creating StorageClass")
         STORAGE_CLASS = helpers.create_storage_class(
@@ -64,4 +69,3 @@ class TestStorageClass(ManageTest):
         STORAGE_CLASS.delete()
         log.info("Deleting project")
         NAMESPACE.delete(resource_name=project_name)
-
