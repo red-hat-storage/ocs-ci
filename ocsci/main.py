@@ -34,7 +34,7 @@ def get_param(param, arguments, default=None):
     return default
 
 
-def init_ocsci_conf(arguments=[], default_config=OCSCI_DEFAULT_CONFIG):
+def init_ocsci_conf(arguments=None, default_config=OCSCI_DEFAULT_CONFIG):
     """
     Function to init the default config for OCS CI
 
@@ -43,6 +43,8 @@ def init_ocsci_conf(arguments=[], default_config=OCSCI_DEFAULT_CONFIG):
         default_config (str): Default config data
 
     """
+    if arguments is None:
+        arguments = []
     custom_config = get_param('--ocsci-conf', arguments)
     cluster_config = get_param('--cluster-conf', arguments)
     config_data = ocsci.config.to_dict()

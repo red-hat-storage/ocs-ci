@@ -103,7 +103,7 @@ def get_all_pvcs():
     return out
 
 
-def create_multiple_pvc(number_of_pvc=1, pvc_data=copy.deepcopy(CSI_PVC_DICT)):
+def create_multiple_pvc(number_of_pvc=1, pvc_data=None):
     """
     Create one or more PVC
 
@@ -114,6 +114,8 @@ def create_multiple_pvc(number_of_pvc=1, pvc_data=copy.deepcopy(CSI_PVC_DICT)):
     Returns:
          list: List of PVC objects
     """
+    if pvc_data is None:
+        pvc_data = copy.deepcopy(CSI_PVC_DICT)
     pvc_objs = []
     pvc_base_name = pvc_data['metadata']['name']
 
