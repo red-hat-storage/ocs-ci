@@ -189,7 +189,11 @@ def create_storage_class(
     sc_data['parameters']['csi.storage.k8s.io/provisioner-secret-name'] = secret_name
     sc_data['parameters']['csi.storage.k8s.io/provisioner-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
 
-    sc_data['parameters']['monitors'] = mons
+    if interface_type == constants.CEPHBLOCKPOOL:
+        sc_data['parameters']['clusterID'] = defaults.ROOK_CLUSTER_NAMESPACE
+    elif interface_type == constants.CEPHFILESYSTEM:
+        sc_data['parameters']['monitors'] = mons
+
     try:
         del sc_data['parameters']['userid']
     except KeyError:
