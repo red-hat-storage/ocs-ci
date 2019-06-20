@@ -3,6 +3,7 @@ import logging
 import os
 import time
 import yaml
+import copy
 
 from oc.openshift_ops import OCP
 from ocs.exceptions import CommandFailed, CephHealthException
@@ -19,6 +20,7 @@ from ocs.parallel import parallel
 from ocs import ocp, defaults, constants
 from resources.ocs import OCS
 from tests import helpers
+
 
 log = logging.getLogger(__name__)
 
@@ -167,7 +169,6 @@ class TestDeployment(EcosystemTest):
         create_oc_resource('cluster.yaml', cluster_path, _templating, config.ENV_DATA)
 
         # Check for the Running status of Ceph Pods
-
         run_cmd(
             f"oc wait --for condition=ready pod "
             f"-l app=rook-ceph-agent "
@@ -203,7 +204,7 @@ class TestDeployment(EcosystemTest):
         time.sleep(wait_time)
 
         # Create MDS pods for CephFileSystem
-        self.fs_data = defaults.CEPHFILESYSTEM_DICT.copy()
+        self.fs_data = copy.deepcopy(defaults.CEPHFILESYSTEM_DICT)
         self.fs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
 
         global CEPH_OBJ
@@ -219,7 +220,7 @@ class TestDeployment(EcosystemTest):
         cfs_name = cfs_data['items'][0]['metadata']['name']
 
         if helpers.validate_cephfilesystem(cfs_name):
-            log.info(f"MDS deployment is successful")
+            log.info(f"MDS deployment is successful!")
         else:
             log.error(
                 f"MDS deployment Failed! Please check logs!"
