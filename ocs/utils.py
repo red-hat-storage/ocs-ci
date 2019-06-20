@@ -579,7 +579,7 @@ def create_oc_resource(
     template_name,
     cluster_path,
     _templating,
-    template_data={},
+    template_data=None,
     template_dir="ocs-deployment",
 ):
     """
@@ -596,6 +596,8 @@ def create_oc_resource(
         template_dir (str): Directory under templates dir where template
             exists (default: ocs-deployment)
     """
+    if template_data is None:
+        template_data = {}
     template_path = os.path.join(template_dir, template_name)
     template = _templating.render_template(template_path, template_data)
     cfg_file = os.path.join(cluster_path, template_name)
@@ -610,7 +612,7 @@ def apply_oc_resource(
     template_name,
     cluster_path,
     _templating,
-    template_data={},
+    template_data=None,
     template_dir="ocs-deployment",
 ):
     """
@@ -627,6 +629,8 @@ def apply_oc_resource(
         template_dir (str): Directory under templates dir where template
             exists (default: ocs-deployment)
     """
+    if template_data is None:
+        template_data = {}
     template_path = os.path.join(template_dir, template_name)
     template = _templating.render_template(template_path, template_data)
     cfg_file = os.path.join(cluster_path, template_name)

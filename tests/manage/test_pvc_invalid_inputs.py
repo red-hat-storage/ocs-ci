@@ -1,4 +1,6 @@
+import copy
 import logging
+
 import pytest
 
 from ocs import defaults
@@ -36,7 +38,7 @@ def setup(self):
     """
     # Create a storage class
     log.info("Creating a Storage Class")
-    self.sc_data = defaults.CSI_RBD_STORAGECLASS_DICT.copy()
+    self.sc_data = copy.deepcopy(defaults.CSI_RBD_STORAGECLASS_DICT)
     self.sc_data['metadata']['name'] = helpers.create_unique_resource_name(
         'test', 'csi-rbd'
     )
@@ -85,7 +87,7 @@ def create_pvc_invalid_name(pvcname):
     Returns:
         None
     """
-    pvc_data = defaults.CSI_PVC_DICT.copy()
+    pvc_data = copy.deepcopy(defaults.CSI_PVC_DICT)
     pvc_data['metadata']['name'] = pvcname
     pvc_data['spec']['storageClassName'] = SC_OBJ.name
     pvc_obj = PVC(**pvc_data)
@@ -118,7 +120,7 @@ def create_pvc_invalid_size(pvcsize):
     Returns:
         None
     """
-    pvc_data = defaults.CSI_PVC_DICT.copy()
+    pvc_data = copy.deepcopy(defaults.CSI_PVC_DICT)
     pvc_data['metadata']['name'] = "auto"
     pvc_data['spec']['resources']['requests']['storage'] = pvcsize
     pvc_data['spec']['storageClassName'] = SC_OBJ.name
