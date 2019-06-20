@@ -382,7 +382,7 @@ def create_run_dir(run_id):
     return run_dir
 
 
-def close_and_remove_filehandlers(logger=logging.getLogger()):
+def close_and_remove_filehandlers(logger=None):
     """
     Close FileHandlers and then remove them from the loggers handlers list.
 
@@ -392,6 +392,8 @@ def close_and_remove_filehandlers(logger=logging.getLogger()):
     Returns:
         None
     """
+    if logger is None:
+        logger = logging.getLogger()
     handlers = logger.handlers[:]
     for h in handlers:
         if isinstance(h, logging.FileHandler):
