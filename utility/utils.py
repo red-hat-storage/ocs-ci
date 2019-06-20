@@ -742,7 +742,7 @@ def get_openshift_installer(
 
     """
     version = version or config.DEPLOYMENT['installer_version']
-    bin_dir = bin_dir or config.RUN['bin_dir']
+    bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
     if os.path.isfile(installer_binary_path):
@@ -783,7 +783,7 @@ def get_openshift_client(
 
     """
     version = version or config.RUN['client_version']
-    bin_dir = bin_dir or config.RUN['bin_dir']
+    bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     client_binary_path = os.path.join(bin_dir, 'oc')
     if os.path.isfile(client_binary_path):
         log.debug("Client exists ({client_binary_path}), skipping download.")
@@ -837,7 +837,7 @@ def prepare_bin_dir(bin_dir=None):
     Args:
         bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
     """
-    bin_dir = bin_dir or config.RUN['bin_dir']
+    bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     try:
         os.mkdir(bin_dir)
         log.info(f"Directory '{bin_dir}' successfully created.")
