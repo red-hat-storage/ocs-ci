@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
                 'reclaim_policy': 'Delete'
             }
             },
-        marks=pytest.mark.ocs_331),
+        marks=pytest.mark.polarion_id("OCS-331")),
         pytest.param({
             'template_dir': constants.TEMPLATE_CSI_RBD_DIR,
             'values': {
@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
                 'reclaim_policy': 'Delete'
             }
         },
-        marks=pytest.mark.ocs_341)
+        marks=pytest.mark.polarion_id("OCS-341"))
     ],  # TODO: add more test case parameters
     ids=["CephFS", "RBD"]
 )
