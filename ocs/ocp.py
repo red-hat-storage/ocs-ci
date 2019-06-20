@@ -72,7 +72,10 @@ class OCP(object):
 
         return yaml.safe_load(out)
 
-    def get(self, resource_name='', out_yaml_format=True, selector=None):
+    def get(
+        self, resource_name='', out_yaml_format=True, selector=None,
+        all_namespaces=False
+    ):
         """
         Get command - 'oc get <resource>'
 
@@ -80,6 +83,7 @@ class OCP(object):
             resource_name (str): The resource name to fetch
             out_yaml_format (bool): Adding '-o yaml' to oc command
             selector (str): The label selector to look for
+            all_namespaces (bool): Equal to oc get <resource> -A
 
         Example:
             get('my-pv1')
@@ -88,6 +92,8 @@ class OCP(object):
             dict: Dictionary represents a returned yaml file
         """
         command = f"get {self.kind} {resource_name}"
+        if all_namespaces and not self.namespace:
+            command += "-A"
         if selector is not None:
             command += f"--selector={selector}"
         if out_yaml_format:
