@@ -22,7 +22,6 @@ from ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
 )
 from ocsci import config
-from ocsci.enums import StatusOfTest
 from .aws import AWS
 
 log = logging.getLogger(__name__)
@@ -682,9 +681,6 @@ def destroy_cluster(cluster_path):
     Args:
         cluster_path (str): filepath to cluster directory to be destroyed
 
-    Returns:
-        StatusOfTest: enum for status of cluster deletion
-
     """
     # Download installer
     installer = get_openshift_installer()
@@ -720,11 +716,9 @@ def destroy_cluster(cluster_path):
 
         # Remove installer
         delete_file(installer)
-        return StatusOfTest.PASSED
 
     except Exception:
         log.error(traceback.format_exc())
-        return StatusOfTest.FAILED
 
 
 def get_openshift_installer(
