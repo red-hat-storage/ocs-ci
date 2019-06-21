@@ -69,7 +69,8 @@ def pytest_configure(config):
         config (pytest.config): Pytest config object
 
     """
-    process_cluster_cli_params(config)
+    if not config.getoption("--help"):
+        process_cluster_cli_params(config)
 
 
 def get_cli_param(config, name_of_param, default=None):
