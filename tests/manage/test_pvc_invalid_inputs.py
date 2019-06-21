@@ -95,9 +95,9 @@ def create_pvc_invalid_name(pvcname):
     try:
         pvc_obj.create()
     except CommandFailed as ex:
-        error = "subdomain must consist of lower case alphanumeric "\
-                "characters, '-' or '.', and must start and end with "\
-                "an alphanumeric character"
+        error = ("subdomain must consist of lower case alphanumeric "
+                 "characters, '-' or '.', and must start and end with "
+                 "an alphanumeric character")
         if error in str(ex):
             log.info(
                 f"PVC creation failed with error \n {ex} \n as "
@@ -129,8 +129,8 @@ def create_pvc_invalid_size(pvcsize):
     try:
         pvc_obj.create()
     except CommandFailed as ex:
-        error = "quantities must match the regular expression '^([+-]?[0-9.]"\
-                "+)([eEinumkKMGTP]*[-+]?[0-9]*)$'"
+        error = ("quantities must match the regular expression '^([+-]?[0-9.]"
+                 "+)([eEinumkKMGTP]*[-+]?[0-9]*)$'")
         if error in str(ex):
             log.info(
                 f"PVC creation failed with error \n {ex} \n as "

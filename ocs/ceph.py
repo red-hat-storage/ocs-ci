@@ -328,8 +328,10 @@ class Ceph(object):
         collocated = self.ansible_config.get('osd_scenario') == 'collocated'
         lvm = self.ansible_config.get('osd_scenario') == 'lvm'
         if not collocated and not lvm:
-            reserved_devs = \
-                [raw_journal_device for raw_journal_device in set(self.ansible_config.get('dedicated_devices'))]
+            reserved_devs = [
+                raw_journal_device
+                for raw_journal_device
+                in set(self.ansible_config.get('dedicated_devices'))]
         if len(node.get_free_volumes()) >= len(reserved_devs):
             for _ in reserved_devs:
                 node.get_free_volumes()[0].status = NodeVolume.ALLOCATED
@@ -611,9 +613,9 @@ class Ceph(object):
                     logger.info("Using the cdn repo for the test")
                     node.setup_rhel_cdn_repos(build)
             else:
-                if self.ansible_config.get('ceph_repository_type') != 'iso' or \
-                        self.ansible_config.get('ceph_repository_type') == 'iso' and \
-                        (node.role == 'installer'):
+                if (self.ansible_config.get('ceph_repository_type') != 'iso'
+                        or self.ansible_config.get('ceph_repository_type') == 'iso'
+                        and (node.role == 'installer')):
                     if node.pkg_type == 'deb':
                         node.setup_deb_repos(ubuntu_repo)
                         sleep(15)
@@ -1033,8 +1035,7 @@ class CephNode(object):
 
         stdin, stdout, stderr = self.rssh().exec_command("dmesg")
         self.rssh_transport().set_keepalive(15)
-        changepwd = 'echo ' + "'" + self.username + ":" + self.password + "'" \
-                    + "|" + "chpasswd"
+        changepwd = 'echo ' + "'" + self.username + ":" + self.password + "'" + "|" + "chpasswd"
         logger.info("Running command %s", changepwd)
         stdin, stdout, stderr = self.rssh().exec_command(changepwd)
         logger.info(stdout.readlines())
@@ -1313,9 +1314,9 @@ class CephNode(object):
         user = 'redhat'
         passwd = 'OgYZNpkj6jZAIF20XFZW0gnnwYBjYcmt7PeY76bLHec9'
         num = str(build).split('.')[0]
-        cmd = 'umask 0077; echo deb https://{user}:{passwd}@rhcs.download.redhat.com/{num}-updates/Tools ' \
-              '$(lsb_release -sc) main | tee /etc/apt/sources.list.d/Tools.list'.format(user=user, passwd=passwd,
-                                                                                        num=num)
+        cmd = ('umask 0077; echo deb https://{user}:{passwd}@rhcs.download.redhat.com/{num}-updates/Tools '
+               '$(lsb_release -sc) main | tee /etc/apt/sources.list.d/Tools.list').format(user=user, passwd=passwd,
+                                                                                          num=num)
         self.exec_command(sudo=True, cmd=cmd)
         self.exec_command(sudo=True, cmd='wget -O - https://www.redhat.com/security/fd431d51.txt | apt-key add -')
         self.exec_command(sudo=True, cmd='apt-get update')
@@ -1364,8 +1365,7 @@ class CephNode(object):
         self.exec_command(cmd='sudo rm -f /etc/apt/sources.list.d/*')
         repos = ['MON', 'OSD', 'Tools']
         for repo in repos:
-            cmd = 'sudo echo deb ' + deb_repo + '/{0}'.format(repo) + \
-                  ' $(lsb_release -sc) main'
+            cmd = 'sudo echo deb ' + deb_repo + '/{0}'.format(repo) + ' $(lsb_release -sc) main'
             self.exec_command(cmd=cmd + ' > ' + "/tmp/{0}.list".format(repo))
             self.exec_command(cmd='sudo cp /tmp/{0}.list'.format(repo)
                                   + ' /etc/apt/sources.list.d/')

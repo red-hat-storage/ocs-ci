@@ -62,14 +62,16 @@ class WinNode(object):
         pass
 
     def connect_to_target(self, ip, username, password):
-        command = "Connect-IscsiTarget -NodeAddress iqn.2003-01.com.redhat.iscsi-gw:ceph-igw"\
-            r" -IsMultipathEnabled \$True -TargetPortalAddress {}  -AuthenticationType ONEWAYCHAP"\
-            " -ChapUsername {} -ChapSecret {}".format(ip, username, password)
+        command = (
+            "Connect-IscsiTarget -NodeAddress iqn.2003-01.com.redhat.iscsi-gw:ceph-igw"
+            r" -IsMultipathEnabled \$True -TargetPortalAddress {}  -AuthenticationType ONEWAYCHAP"
+            " -ChapUsername {} -ChapSecret {}").format(ip, username, password)
         self.win_exec(command)
 
     def disconnect_from_target(self,):
-        command = "Disconnect-IscsiTarget -NodeAddress "\
-            "iqn.2003-01.com.redhat.iscsi-gw:ceph-igw -Confirm:$false"
+        command = (
+            "Disconnect-IscsiTarget -NodeAddress "
+            "iqn.2003-01.com.redhat.iscsi-gw:ceph-igw -Confirm:$false")
         self.win_exec(command)
 
     def create_disk(self, number):

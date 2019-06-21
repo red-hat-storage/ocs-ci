@@ -244,8 +244,8 @@ class RadosHelper:
             mgr_object.containerized = True
             mgr_object.container_name = proxy_container
         else:
-            mgr_object = \
-                [mgr_object for mgr_object in node.get_ceph_objects('mgr') if
-                 mgr_object.containerized and mgr_object.container_name == proxy_container][0]
+            mgr_object = [
+                mgr_object for mgr_object in node.get_ceph_objects('mgr')
+                if mgr_object.containerized and mgr_object.container_name == proxy_container][0]
 
         return mgr_object

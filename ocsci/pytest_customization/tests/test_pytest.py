@@ -48,7 +48,7 @@ def test_simple(testdir):
     Make sure that  pytest itself is not broken by running very simple test.
     """
     # create a temporary pytest test module
-    testdir.makepyfile(textwrap.dedent("""\
+    testdir.makepyfile(textwrap.dedent("""
         def test_foo():
             assert 1 == 1
         """))
@@ -69,7 +69,7 @@ def test_config_parametrize(testdir):
         pytest_plugins = ['ocsci.pytest_customization.ocscilib']
     """))
     # create a temporary pytest test module
-    testdir.makepyfile(textwrap.dedent("""\
+    testdir.makepyfile(textwrap.dedent("""
         import pytest
 
         from ocsci import config as ocsci_config
@@ -79,7 +79,7 @@ def test_config_parametrize(testdir):
             assert item is not None
         """))
     # create config file
-    conf_file = testdir.makefile(".yaml", textwrap.dedent("""\
+    conf_file = testdir.makefile(".yaml", textwrap.dedent("""
         RUN:
           things:
             - 1
