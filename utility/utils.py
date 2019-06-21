@@ -316,42 +316,6 @@ def rc_verify(tc, RC):
 #     BOLD = '\033[1m'
 
 
-def get_latest_container_image_tag(version):
-    """
-    Retrieves the container image tag of the latest compose for the given version
-
-    Args:
-        version: version to get the latest image tag for (2.x, 3.0, or 3.x)
-
-    Returns:
-        str: Image tag of the latest compose for the given version
-
-    """
-    image_tag = get_latest_container(version).get('docker_tag')
-    log.info("Found image tag: {image_tag}".format(image_tag=image_tag))
-    return str(image_tag)
-
-
-def get_latest_container(version):
-    """
-    Retrieves latest nightly-build container details from magna002.ceph.redhat.com
-
-    Args:
-        version: version to get the latest image tag, should match ceph-container-latest-{version} filename at magna002
-                 storage
-
-    Returns:
-        Container details dictionary with given format:
-        {'docker_registry': docker_registry, 'docker_image': docker_image, 'docker_tag': docker_tag}
-    """
-    url = 'http://magna002.ceph.redhat.com/latest-ceph-container-builds/latest-RHCEPH-{version}.json'.format(
-        version=version)
-    data = requests.get(url)
-    docker_registry, docker_image_tag = data.json()['repository'].split('/')
-    docker_image, docker_tag = docker_image_tag.split(':')
-    return {'docker_registry': docker_registry, 'docker_image': docker_image, 'docker_tag': docker_tag}
-
-
 def custom_ceph_config(suite_config, custom_config, custom_config_file):
     """
     Combines and returns custom configuration overrides for ceph.
