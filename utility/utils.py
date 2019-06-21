@@ -293,20 +293,6 @@ def pinned_dir_io(clients, mds_fail_over, num_of_files, range1, range2):
         log.error(e)
 
 
-def rc_verify(tc, RC):
-    return_codes_set = set(RC)
-
-    if len(return_codes_set) == 1:
-
-        out = "Test case %s Passed" % (tc)
-
-        return out
-    else:
-        out = "Test case %s Failed" % (tc)
-
-        return out
-
-
 # colors for pass and fail status
 # class Bcolors:
 #     HEADER = '\033[95m'
