@@ -10,7 +10,6 @@ import logging
 import os
 import random
 
-import ocs
 from ocsci import config as ocsci_config
 
 __all__ = [
@@ -108,7 +107,7 @@ def process_cluster_cli_params(config):
         )
     # TODO: determine better place for parent dir
     cluster_dir_parent = "/tmp"
-    default_cluster_name = ocs.defaults.CLUSTER_NAME
+    default_cluster_name = ocsci_config.ENV_DATA.get('cluster_name', None)
     cluster_name = get_cli_param(config, 'cluster_name')
     if not cluster_name:
         cluster_name = default_cluster_name
