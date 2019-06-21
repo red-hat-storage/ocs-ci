@@ -293,15 +293,6 @@ def pinned_dir_io(clients, mds_fail_over, num_of_files, range1, range2):
         log.error(e)
 
 
-# colors for pass and fail status
-# class Bcolors:
-#     HEADER = '\033[95m'
-#     OKGREEN = '\033[92m'
-#     FAIL = '\033[91m'
-#     ENDC = '\033[0m'
-#     BOLD = '\033[1m'
-
-
 def custom_ceph_config(suite_config, custom_config, custom_config_file):
     """
     Combines and returns custom configuration overrides for ceph.
