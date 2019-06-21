@@ -10,9 +10,6 @@
 # different sections. The sections which are with capital letters will be
 # available directly in ocsci.config module.
 #
-# Please when you reuse some variable follow this convention:
-# ceph_image: '{{ DEFAULTS["CEPH_IMAGE"] }}'
-# Order of the quotas is important! Start with apostrophe like in example!
 # ------------------------------------------------------------------------
 
 # in this RUN section we will keep default parameters for run of OCS-CI
@@ -41,10 +38,10 @@ REPORTING:
 ENV_DATA:
   cluster_name: "ocs-ci"  # needs to be changed in ocscilib plugin
   cluster_namespace: 'openshift-storage'
+  platform: 'AWS'
+  region: 'us-east-2'
   # Do not change to specific version like v14.2.1-20190430 if not needed
   # cause we don't need to update it each time new 14.x version is released
   # but only once when move to new version like v15.
-  platform: 'AWS'
-  region: 'us-east-2'
   ceph_image: 'ceph/ceph:v14'
   rook_image: 'rook/ceph:master'
