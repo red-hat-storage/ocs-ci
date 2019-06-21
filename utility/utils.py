@@ -16,7 +16,6 @@ from email.mime.text import MIMEText
 import requests
 import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from reportportal_client import ReportPortalServiceAsync
 
 from ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
@@ -398,60 +397,6 @@ def close_and_remove_filehandlers(logger=None):
         if isinstance(h, logging.FileHandler):
             h.close()
             logger.removeHandler(h)
-
-
-def create_report_portal_session():
-    """
-    Configures and creates a session to the Report Portal instance.
-
-    Returns:
-        The session object
-    """
-    cfg = get_ocsci_config()['report-portal']
-
-    return ReportPortalServiceAsync(
-        endpoint=cfg['endpoint'], project=cfg['project'], token=cfg['token'], error_handler=error_handler)
-
-
-def timestamp():
-    """
-    The current epoch timestamp in milliseconds as a string.
-
-    Returns:
-        The timestamp
-    """
-    return str(int(time.time() * 1000))
-
-
-def error_handler(exc_info):
-    """
-    Error handler for the Report Portal session.
-
-    Returns:
-        None
-    """
-    print("Error occurred: {}".format(exc_info[1]))
-    traceback.print_exception(*exc_info)
-
-
-def create_unique_test_name(test_name):
-    """
-    Creates a unique test name using the actual test name and an increasing integer for each duplicate test name.
-
-    Args:
-        test_name: name of the test
-
-    Returns:
-        unique name for the test case
-    """
-    global unique_test_names
-    base = "_".join(test_name.split())
-    num = 0
-    while "{base}_{num}".format(base=base, num=num) in unique_test_names:
-        num += 1
-    name = "{base}_{num}".format(base=base, num=num)
-    unique_test_names.append(name)
-    return name
 
 
 def get_latest_container_image_tag(version):
