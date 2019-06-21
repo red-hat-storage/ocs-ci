@@ -12,6 +12,7 @@ import random
 
 import ocs
 from ocsci import config as ocsci_config
+from ocsci.exceptions import ClusterPathNotProvidedError
 
 __all__ = [
     "pytest_addoption",
@@ -99,6 +100,10 @@ def process_cluster_cli_params(config):
 
     """
     cluster_path = get_cli_param(config, 'cluster_path')
+    if not cluster_path:
+        raise ClusterPathNotProvidedError()
+    if not os.path.exists(cluster_path):
+        os.makedirs(cluster_path)
     # Importing here cause once the function is invoked we have already config
     # loaded, so this is OK to import once you sure that config is loaded.
     from oc.openshift_ops import OCP
