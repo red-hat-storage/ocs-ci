@@ -4,7 +4,6 @@ import logging
 import textwrap
 from pytest import fixture
 
-from ocs import defaults
 import ocsci
 from ocsci.main import init_ocsci_conf
 
@@ -92,7 +91,7 @@ def test_config_parametrize(testdir):
     # run pytest with the following pytest_argumetns
     result = testdir.runpytest(*pytest_arguments)
     # Build a list of lines we expect to see in the output
-    expected_items = sorted(list(defaults.RUN.keys()) + ['things'])
+    expected_items = sorted(list(ocsci.config.RUN.keys()))
     expected_lines = [f'collecting*collected {len(expected_items)} items']
     expected_lines.extend([
         f'*test_demo_parametrized_config?{key}? PASSED*'

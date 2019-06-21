@@ -5,9 +5,10 @@ import copy
 import logging
 
 from ocs import constants
-from ocs.defaults import ENV_DATA, CSI_PVC_DICT
+from ocs.defaults import CSI_PVC_DICT
 from ocs.ocp import OCP
 from resources.ocs import OCS
+from ocsci import config
 
 log = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ def delete_all_pvcs():
         bool: True if deletion is successful
     """
     ocp_pvc_obj = OCP(
-        kind=constants.PVC, namespace=ENV_DATA['cluster_namespace']
+        kind=constants.PVC, namespace=config.ENV_DATA['cluster_namespace']
     )
     ocp_pvc_list = get_all_pvcs()
     pvc_list = ocp_pvc_list['items']
@@ -97,7 +98,7 @@ def get_all_pvcs():
     """
 
     ocp_pvc_obj = OCP(
-        kind=constants.PVC, namespace=ENV_DATA['cluster_namespace']
+        kind=constants.PVC, namespace=config.ENV_DATA['cluster_namespace']
     )
     out = ocp_pvc_obj.get()
     return out
