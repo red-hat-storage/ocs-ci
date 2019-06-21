@@ -1,4 +1,3 @@
-import getpass
 import json
 import logging
 import os
@@ -319,84 +318,6 @@ def rc_verify(tc, RC):
 #     FAIL = '\033[91m'
 #     ENDC = '\033[0m'
 #     BOLD = '\033[1m'
-
-
-def configure_logger(test_name, run_dir, level=logging.DEBUG):
-    """
-    Configures a new FileHandler for the root logger.
-
-    Args:
-        test_name: name of the test being executed. used for naming the logfile
-        run_dir: directory where logs are being placed
-        level: logging level
-
-    Returns:
-        URL where the log file can be viewed or None if the run_dir does not exist
-    """
-    if not os.path.isdir(run_dir):
-        log.error("Run directory '{run_dir}' does not exist, logs will not output to file.".format(run_dir=run_dir))
-        return None
-    _root = logging.getLogger()
-
-    full_log_name = "{test_name}.log".format(test_name=test_name)
-    test_logfile = os.path.join(run_dir, full_log_name)
-    log.info("Test logfile: {}".format(test_logfile))
-    close_and_remove_filehandlers()
-    _handler = logging.FileHandler(test_logfile)
-    _handler.setLevel(level)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    _handler.setFormatter(formatter)
-    _root.addHandler(_handler)
-
-    url_base = "http://magna002.ceph.redhat.com/cephci-jenkins"
-    run_dir_name = run_dir.split('/')[-1]
-    log_url = "{url_base}/{run_dir}/{log_name}".format(url_base=url_base, run_dir=run_dir_name, log_name=full_log_name)
-
-    log.info("Completed log configuration")
-    return log_url
-
-
-def create_run_dir(run_id):
-    """
-    Create the directory where test logs will be placed.
-
-    Args:
-        run_id: id of the test run. used to name the directory
-
-    Returns:
-        Full path of the created directory
-    """
-    dir_name = "cephci-run-{run_id}".format(run_id=run_id)
-    base_dir = "/ceph/cephci-jenkins"
-    if not os.path.isdir(base_dir):
-        base_dir = "/tmp"
-    run_dir = os.path.join(base_dir, dir_name)
-    try:
-        os.makedirs(run_dir)
-    except OSError:
-        if "jenkins" in getpass.getuser():
-            raise
-
-    return run_dir
-
-
-def close_and_remove_filehandlers(logger=None):
-    """
-    Close FileHandlers and then remove them from the loggers handlers list.
-
-    Args:
-        logger: the logger in which to remove the handlers from, defaults to root logger
-
-    Returns:
-        None
-    """
-    if logger is None:
-        logger = logging.getLogger()
-    handlers = logger.handlers[:]
-    for h in handlers:
-        if isinstance(h, logging.FileHandler):
-            h.close()
-            logger.removeHandler(h)
 
 
 def get_latest_container_image_tag(version):
