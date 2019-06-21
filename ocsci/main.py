@@ -7,6 +7,7 @@ import yaml
 
 import ocs.defaults
 import ocsci
+from utility import utils
 
 
 HERE = os.path.abspath(os.path.dirname(__file__))
@@ -115,4 +116,5 @@ def main(arguments):
         '-p', 'ocsci.pytest_customization.marks',
         '-p', 'ocsci.pytest_customization.ocsci_logging',
     ])
+    utils.add_path_to_env_path(os.path.expanduser(ocsci.config.RUN['bin_dir']))
     return pytest.main(arguments)
