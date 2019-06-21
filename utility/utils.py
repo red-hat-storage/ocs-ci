@@ -4,17 +4,13 @@ import os
 import platform
 import random
 import shlex
-import smtplib
+import string
 import subprocess
 import time
 import traceback
-import string
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
 import requests
 import yaml
-from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
@@ -405,89 +401,6 @@ def custom_ceph_config(suite_config, custom_config, custom_config_file):
 
     log.info("Full custom config: {}".format(full_custom_config))
     return full_custom_config
-
-
-def email_results(results_list, run_id, send_to_cephci=False):
-    """
-    Email results of test run to QE
-
-    Args:
-        results_list (list): test case results info
-        run_id (str): id of the test run
-        send_to_cephci (bool): send to cephci@redhat.com as well as user email
-
-    Returns: None
-
-    """
-    cfg = get_ocsci_config().get('email')
-    sender = "ocs-ci@redhat.com"
-    recipients = []
-    if cfg and cfg.get('address'):
-        recipients = [cfg['address']]
-    else:
-        log.warning("No email address configured in ~/.ocs-ci.yaml. "
-                    "Please configure if you would like to receive run result emails.")
-
-    if send_to_cephci:
-        pass  # TODO: determine email address to use for ocs-ci results and append to recipients
-        # recipients.append(sender)
-
-    if recipients:
-        run_name = "cephci-run-{id}".format(id=run_id)
-        log_link = "http://magna002.ceph.redhat.com/cephci-jenkins/{run}/".format(run=run_name)
-
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = "cephci results for {run}".format(run=run_name)
-        msg['From'] = sender
-        msg['To'] = ", ".join(recipients)
-
-        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        template_dir = os.path.join(project_dir, 'templates')
-
-        env = Environment(
-            loader=FileSystemLoader(template_dir),
-            autoescape=select_autoescape(['html', 'xml'])
-        )
-        template = env.get_template('result-email-template.html')
-
-        html = template.render(run_name=run_name,
-                               log_link=log_link,
-                               test_results=results_list)
-
-        part1 = MIMEText(html, 'html')
-        msg.attach(part1)
-
-        try:
-            s = smtplib.SMTP('localhost')
-            s.sendmail(sender, recipients, msg.as_string())
-            s.quit()
-            log.info("Results have been emailed to {recipients}".format(recipients=recipients))
-
-        except Exception as e:
-            print("\n")
-            log.exception(e)
-
-
-def get_ocsci_config():
-    """
-    Receives the data from ~/.ocs-ci.yaml.
-
-    Returns:
-        (dict) configuration from ~/.ocs-ci.yaml
-
-    """
-    home_dir = os.path.expanduser("~")
-    cfg_file = os.path.join(home_dir, ".ocs-ci.yaml")
-    try:
-        with open(cfg_file, "r") as yml:
-            cfg = yaml.safe_load(yml)
-    except IOError:
-        log.error(
-            "Please create ~/.ocs-ci.yaml from the ocs-ci.yaml.template. "
-            "See README for more information."
-        )
-        raise
-    return cfg
 
 
 def run_cmd(cmd, **kwargs):
