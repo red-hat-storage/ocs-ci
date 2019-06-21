@@ -21,3 +21,4 @@ Rest of the information you can find in those sections
 * [Results](./results.md) - information about results publishing.
 * [Writing tests](./writing_tests.md) - information about how to write tests.
 * [Scripts](../scripts/README.md) - information about helper shell scripts.
+* [Templates](../templates/README.md) - information about templates.
