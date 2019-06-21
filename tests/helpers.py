@@ -5,6 +5,8 @@ import base64
 import copy
 import datetime
 import logging
+import random
+import string
 
 from ocs import constants, defaults, ocp
 from ocsci import config
@@ -111,14 +113,17 @@ def create_secret(interface_type):
         secret_data = copy.deepcopy(defaults.CSI_RBD_SECRET)
         del secret_data['data']['kubernetes']
         secret_data['data']['admin'] = get_admin_key()
+        component = constants.RBD_COMPONENT
     elif interface_type == constants.CEPHFILESYSTEM:
         secret_data = copy.deepcopy(defaults.CSI_CEPHFS_SECRET)
         del secret_data['data']['userID']
         del secret_data['data']['userKey']
         secret_data['data']['adminID'] = constants.ADMIN_BASE64
         secret_data['data']['adminKey'] = get_admin_key()
+        component = constants.CEPHFS_COMPONENT
+
     secret_data['metadata']['name'] = create_unique_resource_name(
-        'test', 'secret'
+        f'test-{component}', 'secret'
     )
     secret_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
 
@@ -169,10 +174,14 @@ def create_storage_class(
         sc_data = copy.deepcopy(defaults.CSI_RBD_STORAGECLASS_DICT)
         sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-name'] = secret_name
         sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+        component = constants.RBD_COMPONENT
+
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = copy.deepcopy(defaults.CSI_CEPHFS_STORAGECLASS_DICT)
         sc_data['parameters']['csi.storage.k8s.io/node-stage-secret-name'] = secret_name
         sc_data['parameters']['csi.storage.k8s.io/node-stage-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+        component = constants.CEPHFS_COMPONENT
+
     sc_data['parameters']['pool'] = interface_name
 
     mons = (
@@ -184,7 +193,7 @@ def create_storage_class(
         f'.svc.cluster.local:6789'
     )
     sc_data['metadata']['name'] = sc_name if sc_name else create_unique_resource_name(
-        'test', 'storageclass'
+        f'test-{component}', 'storageclass'
     )
     sc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data['parameters']['csi.storage.k8s.io/provisioner-secret-name'] = secret_name
@@ -215,8 +224,16 @@ def create_pvc(sc_name, pvc_name=None):
         OCS: An OCS instance for the PVC
     """
     pvc_data = copy.deepcopy(defaults.CSI_PVC_DICT)
+    if 'rbd' in sc_name:
+        component = constants.RBD_COMPONENT
+    elif 'cephfs' in sc_name:
+        component = constants.CEPHFS_COMPONENT
+    else:
+        component = ''.join(
+            [random.choice(string.ascii_lowercase) for _ in range(4)]
+        )
     pvc_data['metadata']['name'] = pvc_name if pvc_name else create_unique_resource_name(
-        'test', 'pvc'
+        f'test-{component}', 'pvc'
     )
     pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     pvc_data['spec']['storageClassName'] = sc_name
