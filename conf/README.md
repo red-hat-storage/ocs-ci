@@ -51,14 +51,12 @@ defaults among all configs as well.
 
 ### Sections in our configs
 
-All of the below sections, except for `DEFAULTS`, will be available from
-[ocsci/config.py](../ocsci/config.py) module. `DEFAULTS` section is exposed to
-[ocs/defaults.py](../ocs/defaults.py) module as described below.
+All of the below sections, will be available from the ocsci config dataclass.
 
 #### RUN
 
-Framework RUN related config parameters. If the paremeter is for whole run
-it belongs here.
+Framework RUN related config parameters. If the parameter is for the complete
+run it belongs here.
 
 #### DEPLOYMENT
 
