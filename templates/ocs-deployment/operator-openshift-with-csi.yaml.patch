@@ -1,0 +1,58 @@
+--- https://raw.githubusercontent.com/rook/rook/master/cluster/examples/kubernetes/ceph/operator-openshift-with-csi.yaml
++++ templates/ocs-deployment/operator-openshift-with-csi.yaml
+@@ -5,6 +5,7 @@
+ #   kubectl create -f operator-openshift-with-csi.yaml
+ #   kubectl create -f cluster.yaml
+ #################################################################################################################
++---
+ kind: SecurityContextConstraints
+ # older versions of openshift have "apiVersion: v1"
+ apiVersion: security.openshift.io/v1
+@@ -45,10 +46,10 @@
+   # A user needs to be added for each rook service account.
+   # This assumes running in the default sample "rook-ceph" namespace.
+   # If other namespaces or service accounts are configured, they need to be updated here.
+-  - system:serviceaccount:rook-ceph:rook-ceph-system
+-  - system:serviceaccount:rook-ceph:default
+-  - system:serviceaccount:rook-ceph:rook-ceph-mgr
+-  - system:serviceaccount:rook-ceph:rook-ceph-osd
++  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-ceph-system
++  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:default
++  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-ceph-mgr
++  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-ceph-osd
+ ---
+ kind: SecurityContextConstraints
+ # older versions of openshift have "apiVersion: v1"
+@@ -82,17 +83,17 @@
+   # A user needs to be added for each rook service account.
+   # This assumes running in the default sample "rook-ceph" namespace.
+   # If other namespaces or service accounts are configured, they need to be updated here.
+-  - system:serviceaccount:rook-ceph:rook-csi-rbd-plugin-sa
+-  - system:serviceaccount:rook-ceph:rook-csi-rbd-provisioner-sa
+-  - system:serviceaccount:rook-ceph:rook-csi-rbd-attacher-sa
+-  - system:serviceaccount:rook-ceph:rook-csi-cephfs-plugin-sa
+-  - system:serviceaccount:rook-ceph:rook-csi-cephfs-provisioner-sa
++  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-csi-rbd-plugin-sa
++  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-csi-rbd-provisioner-sa
++  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-csi-rbd-attacher-sa
++  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-csi-cephfs-plugin-sa
++  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-csi-cephfs-provisioner-sa
+ ---
+ apiVersion: apps/v1
+ kind: Deployment
+ metadata:
+   name: rook-ceph-operator
+-  namespace: rook-ceph
++  namespace: {{ cluster_namespace | default('openshift-storage') }}
+   labels:
+     operator: rook
+     storage-backend: ceph
+@@ -109,7 +110,7 @@
+       serviceAccountName: rook-ceph-system
+       containers:
+       - name: rook-ceph-operator
+-        image: rook/ceph:master
++        image: {{ rook_image | default('rook/ceph:master') }}
+         args: ["ceph", "operator"]
+         volumeMounts:
+         - mountPath: /var/lib/rook

@@ -1,0 +1,63 @@
+--- https://raw.githubusercontent.com/rook/rook/master/cluster/examples/kubernetes/ceph/cluster.yaml
++++ templates/ocs-deployment/cluster.yaml
+@@ -13,32 +13,34 @@
+ kind: CephCluster
+ metadata:
+   name: rook-ceph
+-  namespace: rook-ceph
++  namespace: {{ cluster_namespace | default('openshift-storage') }}
+ spec:
+   cephVersion:
+     # The container image used to launch the Ceph daemon pods (mon, mgr, osd, mds, rgw).
+     # v12 is luminous, v13 is mimic, and v14 is nautilus.
+     # RECOMMENDATION: In production, use a specific version tag instead of the general v14 flag, which pulls the latest release and could result in different
+     # versions running within the cluster. See tags available at https://hub.docker.com/r/ceph/ceph/tags/.
+-    image: ceph/ceph:v14.2.1-20190430
++    image: {{ ceph_image | default('ceph/ceph:v14.2.0-20190410') }}
+     # Whether to allow unsupported versions of Ceph. Currently luminous, mimic and nautilus are supported, with the recommendation to upgrade to nautilus.
+     # Do not set to true in production.
+-    allowUnsupported: false
++    allowUnsupported: {{ allow_unsupported_ceph | default('true') }}
+   # The path on the host where configuration files will be persisted. Must be specified.
+   # Important: if you reinstall the cluster, make sure you delete this directory from each host or else the mons will fail to start on the new cluster.
+   # In Minikube, the '/data' directory is configured to persist across reboots. Use "/data/rook" in Minikube environment.
+   dataDirHostPath: /var/lib/rook
+   # set the amount of mons to be started
+   mon:
+-    count: 3
++    count: {{ ceph_mon_count | default(3) }}
+     allowMultiplePerNode: false
+   # enable the ceph dashboard for viewing cluster status
+   dashboard:
+-    enabled: true
++    enabled: {{ dashboard_enabled | default('true') }}
+     # serve the dashboard under a subpath (useful when you are accessing the dashboard via a reverse proxy)
+     # urlPrefix: /ceph-dashboard
+     # serve the dashboard at the given port.
+-    # port: 8443
++    {% if dashboard_enabled %}
++    port: {{ dashboard_port | default(8444) }}
++    {% endif %}
+     # serve the dashboard using SSL
+     # ssl: true
+   network:
+@@ -89,8 +91,12 @@
+ #    mon:
+ #    osd:
+   storage: # cluster level storage configuration and selection
+-    useAllNodes: true
+-    useAllDevices: true
++    useAllNodes: {{ storage_use_all_nodes | default('true') }}
++    useAllDevices: {{ storage_use_all_devices | default('true') }}
++{% if not notstorage_use_all_nodes|default(True) in ('true', True) %}
++    nodes:
++    {{ storage_nodes_definitions | to_nice_yaml | indent(4) }}
++{% endif %}
+     deviceFilter:
+     location:
+     config:
+@@ -128,3 +134,4 @@
+ #        storeType: filestore
+ #    - name: "172.17.4.301"
+ #      deviceFilter: "^sd."
++
