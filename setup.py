@@ -22,12 +22,14 @@ setup(
         'paramiko==2.4.2',
         'pyyaml>=4.2b1',
         'jinja2==2.10.1',
-        'kubernetes<9.0.0,>=8.0.0',  # to satisfy openshift package requirement
+        'kubernetes==9.0.0',
         'openshift',
         'boto3',
         'munch',
         'pytest',
         'pytest-reportportal==1.0.5',
+        'DeepDiff',
+        'dataclasses',  # For compatibility with python 3.6
     ],
     entry_points={
         'console_scripts': [

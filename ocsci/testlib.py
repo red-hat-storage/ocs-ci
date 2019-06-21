@@ -1,6 +1,10 @@
 from ocsci.pytest_customization.marks import *  # noqa: F403
+from utility import environment_check as ec
 
 
+@pytest.mark.usefixtures(  # noqa: F405
+    ec.environment_checker.__name__,
+)
 class BaseTest():
     """
     Base test class for our testing.

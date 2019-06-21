@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
     create_pvc.__name__,
     create_pod.__name__
 )
+@pytest.mark.polarion_id("OCS-371")
 class TestCaseOCS371(ManageTest):
     """
     Delete PVC while IO is in progress

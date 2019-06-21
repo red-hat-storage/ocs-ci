@@ -117,6 +117,7 @@ def create_storageclass_cephfs():
 @pytest.mark.usefixtures(
     ocs288_fixture.__name__,
 )
+@pytest.mark.polarion_id("OCS-288")
 class TestCaseOCS288(ManageTest):
     """
     Creating PVC with random SC

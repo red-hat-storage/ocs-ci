@@ -1,11 +1,13 @@
+import copy
 import logging
+
 import pytest
 
 from ocs import defaults
 from ocsci.testlib import tier1, ManageTest
 from resources.ocs import OCS
 from ocs.exceptions import CommandFailed
-from ocsci.config import ENV_DATA
+from ocsci import config
 
 log = logging.getLogger(__name__)
 
@@ -51,16 +53,17 @@ def create_storageclass(sc_name, expect_fail=False):
     """
 
     # Create a storage class
+    namespace = config.ENV_DATA["cluster_namespace"]
     mons = (
-        f'rook-ceph-mon-a.{ENV_DATA["cluster_namespace"]}'
+        f'rook-ceph-mon-a.{namespace}'
         f'.svc.cluster.local:6789,'
-        f'rook-ceph-mon-b.{ENV_DATA["cluster_namespace"]}.'
+        f'rook-ceph-mon-b.{namespace}.'
         f'svc.cluster.local:6789,'
-        f'rook-ceph-mon-c.{ENV_DATA["cluster_namespace"]}'
+        f'rook-ceph-mon-c.{namespace}'
         f'.svc.cluster.local:6789'
     )
     log.info("Creating a Storage Class")
-    sc_data = defaults.CSI_RBD_STORAGECLASS_DICT.copy()
+    sc_data = copy.deepcopy(defaults.CSI_RBD_STORAGECLASS_DICT)
     sc_data['metadata']['name'] = sc_name
     sc_data['parameters']['monitors'] = mons
 
@@ -90,6 +93,7 @@ def create_storageclass(sc_name, expect_fail=False):
 @pytest.mark.usefixtures(
     test_fixture.__name__,
 )
+@pytest.mark.polarion_id("OCS-322")
 class TestCaseOCS322(ManageTest):
     def test_create_storageclass_with_same_name(self):
         """

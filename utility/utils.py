@@ -21,8 +21,7 @@ from reportportal_client import ReportPortalServiceAsync
 from ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
 )
-from ocsci.enums import StatusOfTest
-from ocsci.config import RUN, DEPLOYMENT
+from ocsci import config
 from .aws import AWS
 
 log = logging.getLogger(__name__)
@@ -382,7 +381,7 @@ def create_run_dir(run_id):
     return run_dir
 
 
-def close_and_remove_filehandlers(logger=logging.getLogger()):
+def close_and_remove_filehandlers(logger=None):
     """
     Close FileHandlers and then remove them from the loggers handlers list.
 
@@ -392,6 +391,8 @@ def close_and_remove_filehandlers(logger=logging.getLogger()):
     Returns:
         None
     """
+    if logger is None:
+        logger = logging.getLogger()
     handlers = logger.handlers[:]
     for h in handlers:
         if isinstance(h, logging.FileHandler):
@@ -680,9 +681,6 @@ def destroy_cluster(cluster_path):
     Args:
         cluster_path (str): filepath to cluster directory to be destroyed
 
-    Returns:
-        StatusOfTest: enum for status of cluster deletion
-
     """
     # Download installer
     installer = get_openshift_installer()
@@ -718,11 +716,9 @@ def destroy_cluster(cluster_path):
 
         # Remove installer
         delete_file(installer)
-        return StatusOfTest.PASSED
 
     except Exception:
         log.error(traceback.format_exc())
-        return StatusOfTest.FAILED
 
 
 def get_openshift_installer(
@@ -735,18 +731,18 @@ def get_openshift_installer(
 
     Args:
         version (str): Version of the installer to download
-        bin_dir (str): Path to bin directory (default: RUN['bin_dir'])
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
 
     Returns:
         str: Path to the installer binary
 
     """
-    version = version or DEPLOYMENT['installer_version']
-    bin_dir = bin_dir or RUN['bin_dir']
+    version = version or config.DEPLOYMENT['installer_version']
+    bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
     if os.path.isfile(installer_binary_path):
-        log.debug("Installer exists ({installer_binary_path}), skipping download.")
+        log.debug(f"Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
     else:
         log.info("Downloading openshift installer")
@@ -775,15 +771,15 @@ def get_openshift_client(
 
     Args:
         version (str): Version of the client to download
-            (default: RUN['client_version'])
-        bin_dir (str): Path to bin directory (default: RUN['bin_dir'])
+            (default: config.RUN['client_version'])
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
 
     Returns:
         str: Path to the client binary
 
     """
-    version = version or RUN['client_version']
-    bin_dir = bin_dir or RUN['bin_dir']
+    version = version or config.RUN['client_version']
+    bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     client_binary_path = os.path.join(bin_dir, 'oc')
     if os.path.isfile(client_binary_path):
         log.debug("Client exists ({client_binary_path}), skipping download.")
@@ -835,9 +831,9 @@ def prepare_bin_dir(bin_dir=None):
     Prepare bin directory for OpenShift client and installer
 
     Args:
-        bin_dir (str): Path to bin directory (default: RUN['bin_dir'])
+        bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
     """
-    bin_dir = bin_dir or RUN['bin_dir']
+    bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     try:
         os.mkdir(bin_dir)
         log.info(f"Directory '{bin_dir}' successfully created.")
@@ -997,3 +993,10 @@ def run_async(command):
 
     popen_obj.async_communicate = async_communicate
     return popen_obj
+
+
+def is_cluster_running(cluster_path):
+    from oc.openshift_ops import OCP
+    return config.RUN['cli_params'].get('cluster_path') and OCP.set_kubeconfig(
+        os.path.join(cluster_path, config.RUN.get('kubeconfig_location'))
+    )

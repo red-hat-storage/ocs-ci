@@ -13,7 +13,7 @@ import base64
 from ocs.ocp import OCP
 from ocs import defaults, constants, exceptions
 
-from ocsci.config import ENV_DATA
+from ocsci import config
 from ocs.exceptions import CommandFailed
 
 from resources.ocs import OCS
@@ -165,7 +165,7 @@ def get_ceph_tools_pod():
         Pod object: The Ceph tools pod object
     """
     ocp_pod_obj = OCP(
-        kind=constants.POD, namespace=ENV_DATA['cluster_namespace']
+        kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
     )
     ct_pod = ocp_pod_obj.get(
         selector='app=rook-ceph-tools'
@@ -251,3 +251,27 @@ def get_admin_key_from_ceph_tools():
     out = tools_pod.exec_ceph_cmd(ceph_cmd='ceph auth get-key client.admin')
     base64_output = base64.b64encode(out['key'].encode()).decode()
     return base64_output
+
+
+def run_io_and_verify_mount_point(pod_obj, bs='10M', count='950'):
+    """
+    Run I/O on mount point
+
+
+    Args:
+        pod_obj (Pod): The object of the pod
+        bs (str): Read and write up to bytes at a time
+        count (str): Copy only N input blocks
+
+    Returns:
+         used_percentage (str): Used percentage on mount point
+    """
+    pod_obj.exec_cmd_on_pod(
+        command=f"dd if=/dev/urandom of=/var/lib/www/html/dd_a bs={bs} count={count}"
+    )
+
+    # Verify data's are written to mount-point
+    mount_point = pod_obj.exec_cmd_on_pod(command="df -kh")
+    mount_point = mount_point.split()
+    used_percentage = mount_point[mount_point.index('/var/lib/www/html') - 1]
+    return used_percentage
