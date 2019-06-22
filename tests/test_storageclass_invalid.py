@@ -1,4 +1,3 @@
-import copy
 import logging
 
 import pytest
@@ -103,7 +102,7 @@ class TestCaseOCS331_and_OC341(ManageTest):
         Test that Persistent Volume Claim can not be created from misconfigured
         CephFS Storage Class.
         """
-        pvc_data = copy.deepcopy(defaults.CSI_PVC_DICT)
+        pvc_data = helpers.get_crd_dict(defaults.CSI_PVC_DICT)
         pvc_name = helpers.create_unique_resource_name('test', 'pvc')
         pvc_data['metadata']['name'] = pvc_name
         pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE

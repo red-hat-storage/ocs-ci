@@ -2,11 +2,11 @@
 Helper functions file for OCS QE
 """
 import base64
-import copy
 import datetime
 import logging
 
 from ocs import constants, defaults, ocp
+from utility.templating import load_yaml_to_dict
 from ocsci import config
 from resources import pod
 from resources.ocs import OCS
@@ -31,6 +31,13 @@ def create_unique_resource_name(resource_description, resource_type):
         datetime.datetime.now().strftime("%d%H%M%S%f")
     )
     return f"{resource_type}-{resource_description[:23]}-{current_date_time[:10]}"
+
+
+def get_crd_dict(path_to_dict):
+    """
+
+    """
+    return load_yaml_to_dict(path_to_dict)
 
 
 def create_resource(
@@ -108,11 +115,11 @@ def create_secret(interface_type):
     """
     secret_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
-        secret_data = copy.deepcopy(defaults.CSI_RBD_SECRET)
+        secret_data = get_crd_dict(defaults.CSI_RBD_SECRET)
         del secret_data['data']['kubernetes']
         secret_data['data']['admin'] = get_admin_key()
     elif interface_type == constants.CEPHFILESYSTEM:
-        secret_data = copy.deepcopy(defaults.CSI_CEPHFS_SECRET)
+        secret_data = get_crd_dict(defaults.CSI_CEPHFS_SECRET)
         del secret_data['data']['userID']
         del secret_data['data']['userKey']
         secret_data['data']['adminID'] = constants.ADMIN_BASE64
@@ -135,9 +142,11 @@ def create_ceph_block_pool(pool_name=None):
     Returns:
         OCS: An OCS instance for the Ceph block pool
     """
-    cbp_data = copy.deepcopy(defaults.CEPHBLOCKPOOL_DICT)
-    cbp_data['metadata']['name'] = pool_name if pool_name else create_unique_resource_name(
-        'test', 'cbp'
+    cbp_data = get_crd_dict(defaults.CEPHBLOCKPOOL_YAML)
+    cbp_data['metadata']['name'] = (
+        pool_name if pool_name else create_unique_resource_name(
+            'test', 'cbp'
+        )
     )
     cbp_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     cbp_obj = create_resource(**cbp_data, wait=False)
@@ -166,11 +175,11 @@ def create_storage_class(
     """
     sc_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
-        sc_data = copy.deepcopy(defaults.CSI_RBD_STORAGECLASS_DICT)
+        sc_data = get_crd_dict(defaults.CSI_RBD_STORAGECLASS_DICT)
         sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-name'] = secret_name
         sc_data['parameters']['csi.storage.k8s.io/node-publish-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     elif interface_type == constants.CEPHFILESYSTEM:
-        sc_data = copy.deepcopy(defaults.CSI_CEPHFS_STORAGECLASS_DICT)
+        sc_data = get_crd_dict(defaults.CSI_CEPHFS_STORAGECLASS_DICT)
         sc_data['parameters']['csi.storage.k8s.io/node-stage-secret-name'] = secret_name
         sc_data['parameters']['csi.storage.k8s.io/node-stage-secret-namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data['parameters']['pool'] = interface_name
@@ -214,7 +223,7 @@ def create_pvc(sc_name, pvc_name=None):
     Returns:
         OCS: An OCS instance for the PVC
     """
-    pvc_data = copy.deepcopy(defaults.CSI_PVC_DICT)
+    pvc_data = get_crd_dict(defaults.CSI_PVC_DICT)
     pvc_data['metadata']['name'] = pvc_name if pvc_name else create_unique_resource_name(
         'test', 'pvc'
     )
@@ -394,7 +403,7 @@ def create_cephfilesystem():
     Returns:
         bool: True if CephFileSystem creates successful
     """
-    fs_data = copy.deepcopy(defaults.CEPHFILESYSTEM_DICT)
+    fs_data = get_crd_dict(defaults.CEPHFILESYSTEM_YAML)
     fs_data['metadata']['name'] = create_unique_resource_name(
         'test', 'cephfs'
     )

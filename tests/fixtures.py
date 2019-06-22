@@ -1,5 +1,3 @@
-import copy
-
 import pytest
 from tests import helpers
 from ocs import defaults, constants
@@ -90,7 +88,7 @@ def create_pod(request):
     """
     class_instance = request.node.cls
 
-    pod_data = copy.deepcopy(defaults.CSI_RBD_POD_DICT)
+    pod_data = helpers.get_crd_dict(defaults.CSI_RBD_POD_DICT)
     pod_data['metadata']['name'] = helpers.create_unique_resource_name(
         'test', 'pod'
     )

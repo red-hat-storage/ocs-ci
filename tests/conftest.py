@@ -4,7 +4,6 @@ import logging
 import os
 import time
 import yaml
-import copy
 
 from ocsci import config
 from utility.environment_check import environment_checker  # noqa: F401
@@ -230,7 +229,7 @@ def cluster(request):
     time.sleep(wait_time)
 
     # Create MDS pods for CephFileSystem
-    fs_data = copy.deepcopy(defaults.CEPHFILESYSTEM_DICT)
+    fs_data = helpers.get_crd_dict(defaults.CEPHFILESYSTEM_YAML)
     fs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
 
     ceph_obj = OCS(**fs_data)

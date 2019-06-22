@@ -1,7 +1,6 @@
 """
 A test for creating a CephFS
 """
-import copy
 import logging
 
 import pytest
@@ -37,7 +36,7 @@ def setup(self):
     """
     Setting up the environment for the test
     """
-    self.fs_data = copy.deepcopy(defaults.CEPHFILESYSTEM_DICT)
+    self.fs_data = helpers.get_crd_dict(defaults.CEPHFILESYSTEM_YAML)
     self.fs_data['metadata']['name'] = helpers.create_unique_resource_name(
         'test', 'cephfs'
     )
