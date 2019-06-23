@@ -17,13 +17,6 @@ from ocsci import config
 from ocs import ocp
 from ocs import exceptions
 
-POD = ocp.OCP(kind='Pod', namespace=config.ENV_DATA['cluster_namespace'])
-CEPHCLUSTER = ocp.OCP(
-    kind='CephCluster', namespace=config.ENV_DATA['cluster_namespace']
-)
-CEPHFS = ocp.OCP(
-    kind='CephFilesystem', namespace=config.ENV_DATA['cluster_namespace']
-)
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +41,20 @@ class CephCluster(object):
         """
         # cluster_name is name of cluster in rook of type CephCluster
 
-        self.cluster_resource_config = CEPHCLUSTER.get().get('items')[0]
+        self.POD = ocp.OCP(
+            kind='Pod', namespace=config.ENV_DATA['cluster_namespace']
+        )
+        self.CEPHCLUSTER = ocp.OCP(
+            kind='CephCluster', namespace=config.ENV_DATA['cluster_namespace']
+        )
+        self.CEPHFS = ocp.OCP(
+            kind='CephFilesystem',
+            namespace=config.ENV_DATA['cluster_namespace']
+        )
+
+        self.cluster_resource_config = self.CEPHCLUSTER.get().get('items')[0]
         try:
-            self.cephfs_config = CEPHFS.get().get('items')[0]
+            self.cephfs_config = self.CEPHFS.get().get('items')[0]
         except IndexError as e:
             logging.warning(e)
             logging.warning("No CephFS found")
@@ -236,7 +240,7 @@ class CephCluster(object):
         timeout = 10 * len(self.pods)
         logger.info(f"Expected MONs = {count}")
         try:
-            assert POD.wait_for_resource(
+            assert self.POD.wait_for_resource(
                 condition='Running', selector=self.mon_selector,
                 resource_count=count, timeout=timeout, sleep=3,
             )
@@ -277,7 +281,7 @@ class CephCluster(object):
         """
         timeout = 10 * len(self.pods)
         try:
-            assert POD.wait_for_resource(
+            assert self.POD.wait_for_resource(
                 condition='Running', selector=self.mds_selector,
                 resource_count=count, timeout=timeout, sleep=3,
             )

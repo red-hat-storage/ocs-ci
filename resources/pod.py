@@ -296,10 +296,7 @@ def get_pods_having_label(label, namespace):
     return pods
 
 
-def get_mds_pods(
-        mds_label=defaults.MDS_APP_LABEL,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
-):
+def get_mds_pods(mds_label=defaults.MDS_APP_LABEL, namespace=None):
     """
     Fetches info about mds pods in the cluster
 
@@ -312,15 +309,13 @@ def get_mds_pods(
     Returns:
         list : of mds pod objects
     """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
     mdss = get_pods_having_label(mds_label, namespace)
     mds_pods = [Pod(**mds) for mds in mdss]
     return mds_pods
 
 
-def get_mon_pods(
-        mon_label=defaults.MON_APP_LABEL,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
-):
+def get_mon_pods(mon_label=defaults.MON_APP_LABEL, namespace=None):
     """
     Fetches info about mon pods in the cluster
 
@@ -333,15 +328,13 @@ def get_mon_pods(
     Returns:
         list : of mon pod objects
     """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
     mons = get_pods_having_label(mon_label, namespace)
     mon_pods = [Pod(**mon) for mon in mons]
     return mon_pods
 
 
-def get_mgr_pods(
-        mgr_label=defaults.MGR_APP_LABEL,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
-):
+def get_mgr_pods(mgr_label=defaults.MGR_APP_LABEL, namespace=None):
     """
     Fetches info about mgr pods in the cluster
 
@@ -354,15 +347,13 @@ def get_mgr_pods(
     Returns:
         list : of mgr pod objects
     """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
     mgrs = get_pods_having_label(mgr_label, namespace)
     mgr_pods = [Pod(**mgr) for mgr in mgrs]
     return mgr_pods
 
 
-def get_osd_pods(
-        osd_label=defaults.OSD_APP_LABEL,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
-):
+def get_osd_pods(osd_label=defaults.OSD_APP_LABEL, namespace=None):
     """
     Fetches info about osd pods in the cluster
 
@@ -375,6 +366,7 @@ def get_osd_pods(
     Returns:
         list : of osd pod objects
     """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
     osds = get_pods_having_label(osd_label, namespace)
     osd_pods = [Pod(**osd) for osd in osds]
     return osd_pods

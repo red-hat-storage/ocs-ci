@@ -27,13 +27,26 @@ def setup(self):
     """
     global cluster
     cluster = CephCluster()
+    global username
+    username = "client.test"
+    caps = "mon 'allow r' osd 'allow rwx'"
+    assert cluster.create_user(username, caps)
 
 
 def teardown():
     """
     Tearing down the environment
     """
-    pass
+    global cluster
+    global username
+    new_count = cluster.mon_count - 1
+    cluster.mon_change_count(new_count)
+    assert new_count == cluster.mon_count
+    new_mdscount = int(cluster.mds_count / 2) - 1
+    cluster.mds_change_count(new_mdscount)
+    assert new_mdscount * 2 == cluster.mds_count
+    del_cmd = f"ceph auth del {username}"
+    cluster.toolbox.exec_ceph_cmd(del_cmd)
 
 
 @tier1
@@ -43,10 +56,6 @@ def teardown():
 class TestClusterUtils(ManageTest):
 
     username = "client.test"
-    caps = "mon 'allow r' osd 'allow rwx'"
-
-    def test_user_creation(self):
-        assert cluster.create_user(self.username, self.caps)
 
     def test_get_user_key(self):
         key = cluster.get_user_key(self.username)
@@ -54,6 +63,9 @@ class TestClusterUtils(ManageTest):
         logging.info(key)
 
     def test_get_admin_key(self):
+        """
+        By default admin user will be created by rook
+        """
         key = cluster.get_admin_key()
         assert key
 
