@@ -245,6 +245,7 @@ def cluster(request):
 
     if helpers.validate_cephfilesystem(cfs_name):
         log.info(f"MDS deployment is successful!")
+        defaults.CEPHFILESYSTEM_NAME = cfs_name
     else:
         log.error(
             f"MDS deployment Failed! Please check logs!"

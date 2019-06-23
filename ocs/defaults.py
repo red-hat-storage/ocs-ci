@@ -20,6 +20,7 @@ CLIENT_VERSION = INSTALLER_VERSION
 ROOK_CLUSTER_NAMESPACE = 'openshift-storage'
 KUBECONFIG_LOCATION = 'auth/kubeconfig'  # relative from cluster_dir
 API_VERSION = "v1"
+CEPHFILESYSTEM_NAME = 'ocsci-cephfs'
 
 TEMP_YAML = os.path.join(constants.TEMPLATE_DIR, "temp.yaml")
 

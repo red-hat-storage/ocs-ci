@@ -4,6 +4,7 @@ leftovers
 """
 import logging
 import pytest
+from gevent.threadpool import ThreadPoolExecutor
 
 from ocs import ocp, constants, exceptions
 from ocsci.pytest_customization.marks import (
@@ -23,11 +24,31 @@ PVC = ocp.OCP(kind=constants.PVC)
 SECRET = ocp.OCP(kind=constants.SECRET)
 NS = ocp.OCP(kind=constants.NAMESPACE)
 
+KINDS = [POD, SC, CEPHFILESYSTEM, CEPHBLOCKPOOL, PV, PVC, SECRET, NS]
+ENV_STATUS_PRE = {
+    'pod': None,
+    'sc': None,
+    'cephfs': None,
+    'cephbp': None,
+    'pv': None,
+    'pvc': None,
+    'secret': None,
+    'namespace': None,
+}
+ENV_STATUS_POST = {
+    'pod': None,
+    'sc': None,
+    'cephfs': None,
+    'cephbp': None,
+    'pv': None,
+    'pvc': None,
+    'secret': None,
+    'namespace': None,
+}
+
+
 ADDED_RESOURCE = 'iterable_item_added'
 REMOVED_RESOURCE = 'iterable_item_removed'
-
-ENV_STATUS_PRE = {}
-ENV_STATUS_POST = {}
 
 # List of marks for which we will ignore the leftover checker
 MARKS_TO_IGNORE = [m.mark for m in [deployment, destroy, ignore_leftovers]]
@@ -44,46 +65,27 @@ def environment_checker(request):
     get_status_before_execution()
 
 
+def assign_get_values(env_status_dict, key,  kind):
+    env_status_dict[key] = kind.get(all_namespaces=True)['items']
+
+
 def get_status_before_execution():
     """
 
     """
-    ENV_STATUS_PRE['pod'] = POD.get(all_namespaces=True)['items']
-    ENV_STATUS_PRE['sc'] = SC.get(all_namespaces=True)['items']
-    ENV_STATUS_PRE['cephfs'] = CEPHFILESYSTEM.get(
-        all_namespaces=True
-    )['items']
-    ENV_STATUS_PRE['cephbp'] = CEPHBLOCKPOOL.get(
-        all_namespaces=True
-    )['items']
-    ENV_STATUS_PRE['pv'] = PV.get(all_namespaces=True)['items']
-    ENV_STATUS_PRE['pvc'] = PVC.get(all_namespaces=True)['items']
-    ENV_STATUS_PRE['secret'] = SECRET.get(
-        all_namespaces=True
-    )['items']
-    ENV_STATUS_PRE['namespace'] = NS.get(all_namespaces=True)['items']
+    with ThreadPoolExecutor(max_workers=len(KINDS)) as executor:
+        for key, kind in zip(ENV_STATUS_PRE.keys(), KINDS):
+            executor.submit(assign_get_values, ENV_STATUS_PRE, key, kind)
 
 
 def get_status_after_execution():
     """
 
     """
-    ENV_STATUS_POST['pod'] = POD.get(all_namespaces=True)['items']
-    ENV_STATUS_POST['sc'] = SC.get(all_namespaces=True)['items']
-    ENV_STATUS_POST['cephfs'] = CEPHFILESYSTEM.get(
-        all_namespaces=True
-    )['items']
-    ENV_STATUS_POST['cephbp'] = CEPHBLOCKPOOL.get(
-        all_namespaces=True
-    )['items']
-    ENV_STATUS_POST['pv'] = PV.get(all_namespaces=True)['items']
-    ENV_STATUS_POST['pvc'] = PVC.get(all_namespaces=True)['items']
-    ENV_STATUS_POST['secret'] = SECRET.get(
-        all_namespaces=True
-    )['items']
-    ENV_STATUS_POST['namespace'] = NS.get(
-        all_namespaces=True
-    )['items']
+    with ThreadPoolExecutor(max_workers=len(KINDS)) as executor:
+        for key, kind in zip(ENV_STATUS_PRE.keys(), KINDS):
+            executor.submit(assign_get_values, ENV_STATUS_POST, key, kind)
+
     pod_diff = DeepDiff(
         ENV_STATUS_PRE['pod'], ENV_STATUS_POST['pod']
     )
