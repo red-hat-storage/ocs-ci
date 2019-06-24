@@ -59,7 +59,7 @@ def test_simple(testdir):
     assert result.ret == 0
 
 
-def test_config_parametrize(testdir):
+def test_config_parametrize(testdir, tmpdir):
     """
     Parametrization via config values, use case described in
     https://github.com/red-hat-storage/ocs-ci/pull/61#issuecomment-494866745
@@ -84,7 +84,7 @@ def test_config_parametrize(testdir):
             - 1
             - 2
         """))
-    pytest_arguments = ['-v', f'--ocsci-conf={conf_file}']
+    pytest_arguments = ['-v', f'--ocsci-conf={conf_file}', f'--cluster-path={tmpdir}']
     # this is a bit hack which allow us init all the config which we do in
     # runner run_ocsci.py. Without this we won't be able to access config
     init_ocsci_conf(pytest_arguments)
