@@ -8,6 +8,7 @@ import yaml
 from ocs.exceptions import CommandFailed
 from utility.utils import TimeoutSampler
 from utility.utils import run_cmd
+from ocs import defaults
 
 log = logging.getLogger(__name__)
 
@@ -72,7 +73,10 @@ class OCP(object):
 
         return yaml.safe_load(out)
 
-    def get(self, resource_name='', out_yaml_format=True, selector=None):
+    def get(
+        self, resource_name='', out_yaml_format=True, selector=None,
+        all_namespaces=False
+    ):
         """
         Get command - 'oc get <resource>'
 
@@ -80,6 +84,7 @@ class OCP(object):
             resource_name (str): The resource name to fetch
             out_yaml_format (bool): Adding '-o yaml' to oc command
             selector (str): The label selector to look for
+            all_namespaces (bool): Equal to oc get <resource> -A
 
         Example:
             get('my-pv1')
@@ -88,6 +93,8 @@ class OCP(object):
             dict: Dictionary represents a returned yaml file
         """
         command = f"get {self.kind} {resource_name}"
+        if all_namespaces and not self.namespace:
+            command += "-A"
         if selector is not None:
             command += f"--selector={selector}"
         if out_yaml_format:
@@ -251,3 +258,35 @@ class OCP(object):
                 return True
 
         return False
+
+
+def switch_to_project(project_name):
+    """
+    Switch to another project
+
+    Args:
+        project_name (str): Name of the project to be switched to
+
+    Returns:
+        bool: True on success, False otherwise
+    """
+    log.info(f'Switching to project {project_name}')
+    cmd = f'oc project {project_name}'
+    success_msgs = [
+        f'Now using project "{project_name}"',
+        f'Already on project "{project_name}"'
+    ]
+    ret = run_cmd(cmd)
+    if any(msg in ret for msg in success_msgs):
+        return True
+    return False
+
+
+def switch_to_default_rook_cluster_project():
+    """
+    Switch to default project
+
+    Returns:
+        bool: True on success, False otherwise
+    """
+    return switch_to_project(defaults.ROOK_CLUSTER_NAMESPACE)

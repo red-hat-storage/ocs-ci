@@ -15,25 +15,8 @@ Lets follow the following guidelines for the Core Libraries and Test Scripts
 * Helper functions that are useful to wide variety of tests should
     reside in utils and/or should be carefully reviewed to check if
     they can actually be methods.
-* test_scripts will reside in test/ folders and will define `run`
-    function
-* test_scripts should return non zero exit status for failure and 0
-    for 'pass'. The recommended way is to directly return the StatusOfTest
-    from Enum StatusOfTest which you can import from [enums](../ocsci/enums.py)
-    module. We are trying to transform int Unix RC to StatusOfTest automatically.
-
-**ex: test_scripts/test_ocs_operator.py**
-
-```python
-        def run(ocs_context, **kw):
-            # use ocs_context to deal with cluster
-            # run your test steps
-            if test_failed:
-                return StatusOfTest.FAILED
-            else:
-                return StatusOfTest.PASSED
-```
-
+* test_scripts will reside in the `tests/` folder under the correct subsection
+ and will follow [pytest](https://docs.pytest.org/en/latest/) conventions.
 * Do not use backslashes in the code for line breaker!
 * Line length should be maximum 79 characters!
 * Try to follow this convention for brackets and indentions like in example

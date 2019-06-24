@@ -50,6 +50,7 @@ def teardown():
 @pytest.mark.usefixtures(
     test_fixture.__name__,
 )
+@pytest.mark.polarion_id("OCS-347")
 class TestCaseOCS347(ManageTest):
     """
     Testing default storage class creation and pvc creation

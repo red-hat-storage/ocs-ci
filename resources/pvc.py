@@ -1,12 +1,14 @@
 """
 General PVC object
 """
+import copy
 import logging
 
 from ocs import constants
-from ocs.defaults import ENV_DATA
+from ocs.defaults import CSI_PVC_DICT
 from ocs.ocp import OCP
 from resources.ocs import OCS
+from ocsci import config
 
 log = logging.getLogger(__name__)
 
@@ -77,7 +79,7 @@ def delete_all_pvcs():
         bool: True if deletion is successful
     """
     ocp_pvc_obj = OCP(
-        kind=constants.PVC, namespace=ENV_DATA['cluster_namespace']
+        kind=constants.PVC, namespace=config.ENV_DATA['cluster_namespace']
     )
     ocp_pvc_list = get_all_pvcs()
     pvc_list = ocp_pvc_list['items']
@@ -96,7 +98,36 @@ def get_all_pvcs():
     """
 
     ocp_pvc_obj = OCP(
-        kind=constants.PVC, namespace=ENV_DATA['cluster_namespace']
+        kind=constants.PVC, namespace=config.ENV_DATA['cluster_namespace']
     )
     out = ocp_pvc_obj.get()
     return out
+
+
+def create_multiple_pvc(number_of_pvc=1, pvc_data=None):
+    """
+    Create one or more PVC
+
+    Args:
+        number_of_pvc (int): Number of PVCs to be created
+        pvc_data (dict): Parameters for PVC yaml
+
+    Returns:
+         list: List of PVC objects
+    """
+    if pvc_data is None:
+        pvc_data = copy.deepcopy(CSI_PVC_DICT)
+    pvc_objs = []
+    pvc_base_name = pvc_data['metadata']['name']
+
+    for count in range(1, number_of_pvc + 1):
+        if number_of_pvc != 1:
+            pvc_name = f'{pvc_base_name}{count}'
+            pvc_data['metadata']['name'] = pvc_name
+        pvc_name = pvc_data['metadata']['name']
+        log.info(f'Creating Persistent Volume Claim {pvc_name}')
+        pvc_obj = PVC(**pvc_data)
+        pvc_obj.create()
+        pvc_objs.append(pvc_obj)
+        log.info(f'Created Persistent Volume Claim {pvc_name}')
+    return pvc_objs

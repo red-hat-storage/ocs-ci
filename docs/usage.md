@@ -2,15 +2,7 @@
 
 **Work in progress**
 
-
-`run.py` - (**deprecated**) is the main script for ocs-ci. You can view the
-full usage details by passing in the `--help` argument.
-
-For pytest usage run: run-ci --help
-
-```bash
-python run.py --help
-```
+For full usage run: `run-ci --help`
 
 ## Required configuration
 
@@ -26,9 +18,13 @@ python run.py --help
 
 There are a few arguments that are required ocs test execution:
 
-* `--suite <suite_file>`
+* `--cluster-path <path>` - path to the directory which will
+    contain all the installation/authentication information about the cluster.
+    If the information given can not be used to access the cluster then
+    test execution will fail. If you wish to deploy a new cluster, give
+    a path to a new directory and also use the `--deploy` argument.
 
-## Useful pytest arguments
+## Useful arguments
 
 Some non-required arguments that we end up using a lot. You can use
 `run-ci  --help` to see all the parameters and description which you can pass
@@ -39,94 +35,50 @@ to the pytest.
 * `-m "tier1 and ecosystem"` - This will select just tests marked with
     tier1 and ecosystem marks.
 
-
-### Parameters already converted to pytest:
+### Additional arguments:
 
 * `--cluster-name <name>` - name of cluster.
-* `--cluster-path <path>` - path where to create the directory which will
-    contains all the installation/authentication information about cluster.
-    `Use this parameter when running on already deployed cluster!` You can
-    pass the cluster path from previous execution if was created automatically.
 * `--ocsci-conf` - with this configuration you can overwrite the default
     OCS-CI parameters defined in `conf/ocsci/default_config.yaml`
 * `--cluster-conf` - with this configuration you can overwrite the default
     parameters for cluster and deployment. See the example of such file
     [here](../conf/ocs_basic_install.yml).
-
-### Parameters for old runner:
-
->TODO: Delete this section once moved to pytest and move missing parameters above!
-
-* `--cluster-name <name>` - name of cluster.
-* `--cluster-path <path>` - path where to create the directory which will
-    contains all the installation/authentication information about cluster.
-    `Use this parameter when running on already deployed cluster!` You can
-    pass the cluster path from previous execution if was created automatically.
-* `--conf` - with this configuration you can overwrite the default
-    parameters for cluster and deployment. See the example of such file
-    [here](../conf/ocs_basic_install.yml).
-* `--no-destroy` - this will prevent you to destroy your cluster at the end of
-    the execution. (Recommended if you want to re-run on the same cluster)
-* `--log-level <level>` - set the log level that is output to stdout.
+* `--deploy` - if this is given and a cluster can not be accessed from the
+    provided `--cluster-path` then a new test cluster will be deployed.
+* `--teardown` - if this is given the testing cluster will be destroyed after
+    the test have completed, regardless of if the tests passed or failed.
 
 ## Examples
 
-### For old runner
+Deployment and teardown of the test cluster can be done automatically with
+the `--deploy` and `--teardown` arguments. The `--cluster-path` must always be
+provided and if given without the `--deploy` argument, it must contain information
+that can be used to access an existing cluster.
 
-* Run OCS install suite:
-
-```bash
-python run.py --suite suites/ocs_basic_install.yml --log-level info
-```
-
-* Run with specific name of cluster and cluster directory without sending email:
-
-```bash
-python run.py --cluster-name=my-testing-cluster \
-    --suite=suites/custom-test.yml \
-    --cluster-path=/home/your_login/my-testing-cluster \
-    --no-email
-```
-
-### For pytest
-
-
-There is no order yet for deployment, run of tests and destroy cluster.
-That means: you are not able to run all in one execution.
-We can do ordering with
-[pytest ordering plugin](https://pytest-ordering.readthedocs.io/en/develop/)
-or different way we decide later on. (Will be done in different PR)
-
-For now please deploy cluster with one execution of `pytest` and run tests
-on existing cluster with second execution of `pytest`, destroy can be done
-in third execution.
-
-> In case you lost yor cluster dir, the destroy can be done with
+> In case you lost your cluster dir, the destroy can be done with
 > `uni-cleanup.sh` script.
-
-
 
 #### Deployment of cluster
 
-Deployment is moved already to pytest. If you would like to deploy new cluster
-you can run following command:
+If you would like to deploy new cluster you can run following command:
 ```bash
 run-ci -m deployment --ocsci-conf conf/ocsci/custom_config.yaml \
     --cluster-conf conf/ocs_basic_install.yml \
     --cluster-name kerberos_ID-ocs-deployment \
-    --cluster-path /home/my_user/my-ocs-dir tests/
+    --cluster-path /home/my_user/my-ocs-dir tests/ \
+    --deploy
  ```
 of course you can utilize your cluster to add `--cluster-conf` parameter or
-you can omit --cluster-name or --cluster-path if you would like to use default
+you can omit --cluster-name if you would like to use default
 values.
 
 Note that during deployment, openshift command line tools like `oc` and
 `openshift-install` are installed into [`bin` directory of the
 repository](../bin). These tools are then available to both deployment and test
-code because `run-ci` wrapper includes the `bin` directoy into `PATH`
+code because `run-ci` wrapper includes the `bin` directory into `PATH`
 environment variable.
 
-#### Runing tests on deployed environment
+#### Running tests on deployed environment
 
 ```bash
 run-ci -m "tier1 and manage" \
@@ -136,9 +88,10 @@ run-ci -m "tier1 and manage" \
 
 #### Destroy of cluster
 
-Destroy is moved already to pytest. If you would like to destroy existing
-cluster you can run following command:
+If you would like to destroy existing cluster you can run following command:
 ```bash
-run-ci -m destroy --cluster-name kerberos_ID-ocs-deployment \
-    --cluster-path /home/my_user/my-ocs-dir tests/
-```
+run-ci -m deployment \
+    --cluster-name kerberos_ID-ocs-deployment \
+    --cluster-path /home/my_user/my-ocs-dir tests/ \
+    --teardown
+ ```

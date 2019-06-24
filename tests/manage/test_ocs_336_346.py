@@ -1,8 +1,10 @@
+import copy
 import logging
+
 import pytest
 
 from ocs import ocp, defaults, constants
-from ocsci.config import ENV_DATA
+from ocsci import config
 from ocsci.testlib import tier1, ManageTest
 from resources.ocs import OCS
 from resources.pod import get_admin_key_from_ceph_tools
@@ -12,7 +14,7 @@ from tests import helpers
 log = logging.getLogger(__name__)
 
 
-POD = ocp.OCP(kind='Pod', namespace=ENV_DATA['cluster_namespace'])
+POD = ocp.OCP(kind='Pod', namespace=config.ENV_DATA['cluster_namespace'])
 CEPH_OBJ = None
 
 
@@ -32,11 +34,11 @@ def setup_fs(self):
     Setting up the environment for the test
     """
     global CEPH_OBJ
-    self.fs_data = defaults.CEPHFILESYSTEM_DICT.copy()
+    self.fs_data = copy.deepcopy(defaults.CEPHFILESYSTEM_DICT)
     self.fs_data['metadata']['name'] = helpers.create_unique_resource_name(
         'test', 'cephfs'
     )
-    self.fs_data['metadata']['namespace'] = ENV_DATA['cluster_namespace']
+    self.fs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
     CEPH_OBJ = OCS(**self.fs_data)
     CEPH_OBJ.create()
     assert POD.wait_for_resource(
@@ -57,20 +59,21 @@ def teardown_fs():
 @tier1
 class TestOSCBasics(ManageTest):
     mons = (
-        f'rook-ceph-mon-a.{ENV_DATA["cluster_namespace"]}'
+        f'rook-ceph-mon-a.{config.ENV_DATA["cluster_namespace"]}'
         f'.svc.cluster.local:6789,'
-        f'rook-ceph-mon-b.{ENV_DATA["cluster_namespace"]}.'
+        f'rook-ceph-mon-b.{config.ENV_DATA["cluster_namespace"]}.'
         f'svc.cluster.local:6789,'
-        f'rook-ceph-mon-c.{ENV_DATA["cluster_namespace"]}'
+        f'rook-ceph-mon-c.{config.ENV_DATA["cluster_namespace"]}'
         f'.svc.cluster.local:6789'
     )
 
+    @pytest.mark.polarion_id("OCS-336")
     def test_ocs_336(self, test_fixture):
         """
         Testing basics: secret creation,
         storage class creation and pvc with cephfs
         """
-        self.cephfs_secret = defaults.CSI_CEPHFS_SECRET.copy()
+        self.cephfs_secret = copy.deepcopy(defaults.CSI_CEPHFS_SECRET)
         del self.cephfs_secret['data']['userID']
         del self.cephfs_secret['data']['userKey']
         self.cephfs_secret['data']['adminKey'] = (
@@ -80,14 +83,14 @@ class TestOSCBasics(ManageTest):
         logging.info(self.cephfs_secret)
         secret = OCS(**self.cephfs_secret)
         secret.create()
-        self.cephfs_sc = defaults.CSI_CEPHFS_STORAGECLASS_DICT.copy()
+        self.cephfs_sc = copy.deepcopy(defaults.CSI_CEPHFS_STORAGECLASS_DICT)
         self.cephfs_sc['parameters']['monitors'] = self.mons
         self.cephfs_sc['parameters']['pool'] = (
             f"{self.fs_data['metadata']['name']}-data0"
         )
         storage_class = OCS(**self.cephfs_sc)
         storage_class.create()
-        self.cephfs_pvc = defaults.CSI_CEPHFS_PVC.copy()
+        self.cephfs_pvc = copy.deepcopy(defaults.CSI_CEPHFS_PVC)
         pvc = PVC(**self.cephfs_pvc)
         pvc.create()
         log.info(pvc.status)
@@ -96,23 +99,24 @@ class TestOSCBasics(ManageTest):
         storage_class.delete()
         secret.delete()
 
+    @pytest.mark.polarion_id("OCS-346")
     def test_ocs_346(self):
         """
         Testing basics: secret creation,
          storage class creation  and pvc with rbd
         """
-        self.rbd_secret = defaults.CSI_RBD_SECRET.copy()
+        self.rbd_secret = copy.deepcopy(defaults.CSI_RBD_SECRET)
         del self.rbd_secret['data']['kubernetes']
         self.rbd_secret['data']['admin'] = get_admin_key_from_ceph_tools()
         logging.info(self.rbd_secret)
         secret = OCS(**self.rbd_secret)
         secret.create()
-        self.rbd_sc = defaults.CSI_RBD_STORAGECLASS_DICT.copy()
+        self.rbd_sc = copy.deepcopy(defaults.CSI_RBD_STORAGECLASS_DICT)
         self.rbd_sc['parameters']['monitors'] = self.mons
         del self.rbd_sc['parameters']['userid']
         storage_class = OCS(**self.rbd_sc)
         storage_class.create()
-        self.rbd_pvc = defaults.CSI_RBD_PVC.copy()
+        self.rbd_pvc = copy.deepcopy(defaults.CSI_RBD_PVC)
         pvc = PVC(**self.rbd_pvc)
         pvc.create()
         assert 'Bound' in pvc.status

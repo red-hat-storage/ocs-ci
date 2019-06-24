@@ -10,12 +10,15 @@ class CephHealthException(Exception):
     pass
 
 
-# TODO: Delete once moved to pytest
-class UnknownStatusOfTestException(Exception):
+class UnexpectedBehaviour(Exception):
     pass
 
 
 class ClassCreationException(Exception):
+    pass
+
+
+class ResourceLeftoversException(Exception):
     pass
 
 

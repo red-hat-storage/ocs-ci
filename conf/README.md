@@ -17,15 +17,14 @@ For more information please read the rest of the documentation.
 
 ## OCS CI Config
 
-We moved all the OCSCI framework related config under
-[ocsci folder](./ocsci/). We have defined currently this file:
+## defaults file
+* [defaults.py](../ocs/defaults.py) - this is main defaults file which is
+  a python file, All default values should reside here.
 
-* [default_config.yaml](ocsci/default_config.yaml) - this is the default
-    config file for OCS CI which is loaded automatically (don't pass it to
-    --ocsci-conf). It contains multiple sections which user can overwrite in
-    custom file and provide as an option to `--oscci-conf`.
-* In the future we will have more config files in this folder which you can
-    reuse.
+We moved most of the OCSCI framework related config under
+[ocsci folder](./ocsci/). * In the future we will have more config files in
+this folder which you can reuse.:
+
 
 ## Cluster config
 
@@ -52,23 +51,12 @@ defaults among all configs as well.
 
 ### Sections in our configs
 
-All of the below sections, except for `DEFAULTS`, will be available from
-[ocsci/config.py](../ocsci/config.py) module. `DEFAULTS` section is exposed to
-[ocs/defaults.py](../ocs/defaults.py) module as described below.
-
-#### DEFAULTS
-
-Default values which are used among different configs and sections.
-
-All variables defined in this section are exposed to
-[../ocs/defaults.py](../ocs/defaults.py) module during the start of the
-execution. So you can access those default data from `ocs/defaults.py` module
-directly from your tests or modules.
+All of the below sections, will be available from the ocsci config dataclass.
 
 #### RUN
 
-Framework RUN related config parameters. If the paremeter is for whole run
-it belongs here.
+Framework RUN related config parameters. If the parameter is for the complete
+run it belongs here.
 
 #### DEPLOYMENT
 
@@ -88,14 +76,14 @@ higher priority).
 ## Example of accessing config/default data
 
 ```python
-from ocsci.config import RUN, ENV_DATA
+from ocsci import config
 from ocs import defaults
 
 # From you code you can access those data like
 
 Taking data from ENV_DATA will always use right cluster_namespace passed via
 `--ocsci-conf` config file or default one defined in `default_config.yaml`.
-funciton_which_taking_namespace(namespace=ENV_DATA['cluster_namespace'])
+function_which_taking_namespace(namespace=config.ENV_DATA['cluster_namespace'])
 
 # Defaults data you can access like in this example:
 print(f"Printing some default data like API version: {defaults.API_VERSION}")

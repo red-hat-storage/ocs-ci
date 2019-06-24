@@ -11,8 +11,12 @@ FORMATTER = logging.Formatter(
 )
 ep_time = int(time.time())
 log_dir = f"logs_{ep_time}"
-log_dir_path = os.path.join(ocsci_config.RUN['log_dir'], log_dir)
-sym_link = os.path.join(ocsci_config.RUN['log_dir'], "logs")
+log_dir_path = os.path.expanduser(
+    os.path.join(ocsci_config.RUN['log_dir'], log_dir)
+)
+sym_link = os.path.expanduser(
+    os.path.join(ocsci_config.RUN['log_dir'], "logs")
+)
 
 
 def create_directory_path(path):

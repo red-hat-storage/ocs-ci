@@ -77,6 +77,7 @@ def teardown(self):
 
 
 @tier1
+@pytest.mark.polarion_id("OCS-324")
 class TestCaseOCS324(ManageTest):
     """
     Delete PVC and create a new PVC with same name

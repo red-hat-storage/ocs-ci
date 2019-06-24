@@ -22,7 +22,7 @@ necessary dependencies
 2. Go to ocs-ci folder `cd ocs-ci`.
 3. Setup a python 3.7 virtual environment. This is actually quite easy to do
     now. Use hidden `.venv` or normal `venv` folder for virtual env as we are
-    ignoring this in flake8 configurtation in tox.
+    ignoring this in flake8 configuration in tox.
 
     * `python3.7 -m venv <path/to/venv>`
     * `source <path/to/.venv>/bin/activate`
@@ -67,20 +67,3 @@ CLI option
 
 Cluster configuration that defines Openshift/Kubernetes Cluster along with Ceph Configuration
 will reside in conf/ folder, This is still a work in progress.
-
-### Test Suites - deprecated once moved to pytest
-
-Once moved to pytest we have to determine if we still need those suites or how
-to utilize them.
-All test suite configurations are found inside the `suites` directory.
-
-```yaml
-tests:
-- test:
-    name: install OCS
-    desc: Minimal installation of OCS
-    module: test_ocs_basic_install.py
-    config:
-      installer-version: v0.16.1
-      destroy-cluster: False
-```
