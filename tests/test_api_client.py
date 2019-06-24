@@ -6,6 +6,7 @@ perform a basic functionality check using api-client
 
 import logging
 import yaml
+import time
 
 from ocs import api_client as ac
 
@@ -29,7 +30,7 @@ def test_create_simple_service():
     kind: Service
     apiVersion: v1
     metadata:
-      name: myservice
+      name: myservice-{}
     spec:
       selector:
         app: MyApp
@@ -37,7 +38,7 @@ def test_create_simple_service():
         - protocol: TCP
           port: 8089
           targetPort: 9369
-    """
+    """.format(int(time.time() * 1000))
 
     service_data = yaml.safe_load(service)
     res = client.create_service(body=service_data, namespace='default')
