@@ -59,12 +59,24 @@ def environment_checker(request):
 
 
 def assign_get_values(env_status_dict, key, kind):
+    """
+    Assigning kind status into env_status_dict
+
+    Args:
+        env_status_dict (dict): Dictionary which is
+            copy.deepcopy(ENV_STATUS_DICT)
+        key (str): Name of the resource
+        kind (OCP obj): OCP object for a resource
+    """
     env_status_dict[key] = kind.get(all_namespaces=True)['items']
 
 
 def get_environment_status(env_dict):
     """
+    Get the environment status per kind in KINDS and save it in a dictionary
 
+    Args:
+        env_dict (dict): Dictionary that is a copy.deepcopy(ENV_STATUS_DICT)
     """
     with ThreadPoolExecutor(max_workers=len(KINDS)) as executor:
         for key, kind in zip(env_dict.keys(), KINDS):
@@ -73,14 +85,19 @@ def get_environment_status(env_dict):
 
 def get_status_before_execution():
     """
-
+    Set the environment status and assign it into ENV_STATUS_PRE dictionary
     """
     get_environment_status(ENV_STATUS_PRE)
 
 
 def get_status_after_execution():
     """
+    Set the environment status and assign it into ENV_STATUS_PRE dictionary.
+    In addition compare the dict before the execution and after using DeepDiff
 
+    Raises:
+         ResourceLeftoversException: In case there are leftovers in the
+            environment after the execution
     """
     get_environment_status(ENV_STATUS_POST)
 
