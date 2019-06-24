@@ -16,7 +16,7 @@ def test_fixture(request):
     self = request.node.cls
 
     def finalizer():
-        teardown()
+        teardown(self)
     request.addfinalizer(finalizer)
     setup(self)
 
@@ -25,28 +25,21 @@ def setup(self):
     """
     Setting up the environment for the test
     """
-    global cluster
-    cluster = CephCluster()
-    global username
-    username = "client.test"
-    caps = "mon 'allow r' osd 'allow rwx'"
-    assert cluster.create_user(username, caps)
+    assert self.cluster.create_user(self.username, self.caps)
 
 
-def teardown():
+def teardown(self):
     """
     Tearing down the environment
     """
-    global cluster
-    global username
-    new_count = cluster.mon_count - 1
-    cluster.mon_change_count(new_count)
-    assert new_count == cluster.mon_count
-    new_mdscount = int(cluster.mds_count / 2) - 1
-    cluster.mds_change_count(new_mdscount)
-    assert new_mdscount * 2 == cluster.mds_count
-    del_cmd = f"ceph auth del {username}"
-    cluster.toolbox.exec_ceph_cmd(del_cmd)
+    new_count = self.cluster.mon_count - 1
+    self.cluster.mon_change_count(new_count)
+    assert new_count == self.cluster.mon_count
+    new_mdscount = int(self.cluster.mds_count / 2) - 1
+    self.cluster.mds_change_count(new_mdscount)
+    assert new_mdscount * 2 == self.cluster.mds_count
+    del_cmd = f"ceph auth del {self.username}"
+    self.cluster.toolbox.exec_ceph_cmd(del_cmd)
 
 
 @tier1
@@ -55,10 +48,12 @@ def teardown():
 )
 class TestClusterUtils(ManageTest):
 
+    cluster = CephCluster()
     username = "client.test"
+    caps = "mon 'allow r' osd 'allow rwx'"
 
     def test_get_user_key(self):
-        key = cluster.get_user_key(self.username)
+        key = self.cluster.get_user_key(self.username)
         assert key
         logging.info(key)
 
@@ -66,24 +61,24 @@ class TestClusterUtils(ManageTest):
         """
         By default admin user will be created by rook
         """
-        key = cluster.get_admin_key()
+        key = self.cluster.get_admin_key()
         assert key
 
     def test_get_mon_info(self):
-        for mon in cluster.mons:
+        for mon in self.cluster.mons:
             logging.info(mon.name)
             logging.info(mon.port)
 
     def test_add_mon(self):
-        cur_count = cluster.mon_count
+        cur_count = self.cluster.mon_count
         logging.info(f"current mon count = {cur_count}")
         new_count = cur_count + 1
-        cluster.mon_change_count(new_count)
-        assert new_count == cluster.mon_count
+        self.cluster.mon_change_count(new_count)
+        assert new_count == self.cluster.mon_count
 
     def test_add_mds(self):
-        cur_count = int(cluster.mds_count / 2)
+        cur_count = int(self.cluster.mds_count / 2)
         logging.info(f"Current active count = {cur_count}")
         new_count = cur_count + 1
-        cluster.mds_change_count(new_count)
-        assert new_count * 2 == cluster.mds_count
+        self.cluster.mds_change_count(new_count)
+        assert new_count * 2 == self.cluster.mds_count

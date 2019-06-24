@@ -11,7 +11,7 @@ import base64
 
 import resources.pod as pod
 from resources import ocs
-import ocs.defaults as default
+import ocs.constants as constant
 from utility.utils import TimeoutSampler
 from ocsci import config
 from ocs import ocp
@@ -29,9 +29,9 @@ class CephCluster(object):
     pod objects which represents ceph cluster entities.
 
     Attributes:
-        _ceph_pods (list) : A list of  ceph cluster related pods
-        _cluster_name (str): Name of ceph cluster
-        _namespace (str): openshift Namespace where this cluster lives
+        pods (list) : A list of  ceph cluster related pods
+        cluster_name (str): Name of ceph cluster
+        namespace (str): openshift Namespace where this cluster lives
     """
 
     def __init__(self):
@@ -74,11 +74,11 @@ class CephCluster(object):
         if self.cephfs_config:
             self.cephfs = ocs.OCS(**self.cephfs_config)
 
-        self.mon_selector = default.MON_APP_LABEL
-        self.mds_selector = default.MDS_APP_LABEL
-        self.tool_selector = default.TOOL_APP_LABEL
-        self.mgr_selector = default.MGR_APP_LABEL
-        self.osd_selector = default.OSD_APP_LABEL
+        self.mon_selector = constant.MON_APP_LABEL
+        self.mds_selector = constant.MDS_APP_LABEL
+        self.tool_selector = constant.TOOL_APP_LABEL
+        self.mgr_selector = constant.MGR_APP_LABEL
+        self.osd_selector = constant.OSD_APP_LABEL
         self.mons = []
         self._ceph_pods = []
         self.mdss = []
@@ -141,10 +141,10 @@ class CephCluster(object):
         Returns:
             pod(Pod): A modified pod object with 'port' attribute set
         """
-        l1 = pod.pod_data.get('spec').get('containers')
-        l2 = l1[0]['ports'][0]['containerPort']
+        container = pod.pod_data.get('spec').get('containers')
+        port = container[0]['ports'][0]['containerPort']
         # Dynamically added attribute 'port'
-        pod.port = l2
+        pod.port = port
         logging.info(f"port={pod.port}")
         return pod
 
@@ -332,20 +332,3 @@ class CephCluster(object):
         out = self.toolbox.exec_cmd_on_pod(cmd)
         logging.info(type(out))
         return self.get_user_key(username)
-
-    @staticmethod
-    def _filter_pods(selector, pods):
-        """
-        Filter pods based on label match
-
-        Args:
-             selector (str): for ex: "app=rook-ceph-mon"
-             pods (list): list of Pod objects
-
-        Returns:
-            list: of pod objects which matches labels
-        """
-        def _filter(each):
-            key, val = selector.split("=")
-            return key in each.labels and each.labels[key] == val
-        return list(filter(_filter, pods))

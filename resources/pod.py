@@ -296,7 +296,7 @@ def get_pods_having_label(label, namespace):
     return pods
 
 
-def get_mds_pods(mds_label=defaults.MDS_APP_LABEL, namespace=None):
+def get_mds_pods(mds_label=constants.MDS_APP_LABEL, namespace=None):
     """
     Fetches info about mds pods in the cluster
 
@@ -315,7 +315,7 @@ def get_mds_pods(mds_label=defaults.MDS_APP_LABEL, namespace=None):
     return mds_pods
 
 
-def get_mon_pods(mon_label=defaults.MON_APP_LABEL, namespace=None):
+def get_mon_pods(mon_label=constants.MON_APP_LABEL, namespace=None):
     """
     Fetches info about mon pods in the cluster
 
@@ -334,7 +334,7 @@ def get_mon_pods(mon_label=defaults.MON_APP_LABEL, namespace=None):
     return mon_pods
 
 
-def get_mgr_pods(mgr_label=defaults.MGR_APP_LABEL, namespace=None):
+def get_mgr_pods(mgr_label=constants.MGR_APP_LABEL, namespace=None):
     """
     Fetches info about mgr pods in the cluster
 
@@ -353,7 +353,7 @@ def get_mgr_pods(mgr_label=defaults.MGR_APP_LABEL, namespace=None):
     return mgr_pods
 
 
-def get_osd_pods(osd_label=defaults.OSD_APP_LABEL, namespace=None):
+def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
     """
     Fetches info about osd pods in the cluster
 

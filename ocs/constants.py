@@ -43,3 +43,9 @@ IGNORE_SC = "gp2"
 # encoded value of 'admin'
 ADMIN_BASE64 = 'YWRtaW4='
 GB = 1024 ** 3
+
+MON_APP_LABEL = "app=rook-ceph-mon"
+MDS_APP_LABEL = "app=rook-ceph-mds"
+TOOL_APP_LABEL = "app=rook-ceph-tools"
+MGR_APP_LABEL = "app=rook-ceph-mgr"
+OSD_APP_LABEL = "app=rook-ceph-osd"
