@@ -1,11 +1,11 @@
 import logging
 import pytest
 
-from tests import helpers
 from ocs import defaults
 from ocsci.testlib import tier1, ManageTest
 from resources.ocs import OCS
 from ocs.exceptions import CommandFailed
+from utility import templating
 from ocsci import config
 
 log = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ def create_storageclass(sc_name, expect_fail=False):
         f'.svc.cluster.local:6789'
     )
     log.info("Creating a Storage Class")
-    sc_data = helpers.get_crd_dict(defaults.CSI_RBD_STORAGECLASS_DICT)
+    sc_data = templating.get_crd_dict(defaults.CSI_RBD_STORAGECLASS_DICT)
     sc_data['metadata']['name'] = sc_name
     sc_data['parameters']['monitors'] = mons
 

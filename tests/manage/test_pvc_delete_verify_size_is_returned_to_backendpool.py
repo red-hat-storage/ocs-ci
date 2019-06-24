@@ -89,7 +89,7 @@ def create_pvc_and_verify_pvc_exists(
     pvc exists on ceph side
     """
 
-    pvc_data = helpers.get_crd_dict(defaults.CSI_PVC_DICT)
+    pvc_data = templating.get_crd_dict(defaults.CSI_PVC_DICT)
     pvc_data['metadata']['name'] = helpers.create_unique_resource_name(
         'test', 'pvc'
     )
@@ -136,8 +136,10 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         pvc_obj = create_pvc_and_verify_pvc_exists(
             self.sc_obj.name, self.cbp_obj.name
         )
-        pod_data = helpers.get_crd_dict(defaults.CSI_RBD_POD_DICT)
-        pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_obj.name
+        pod_data = templating.get_crd_dict(defaults.CSI_RBD_POD_DICT)
+        pod_data['spec']['volumes'][0]['persistentVolumeClaim'][
+            'claimName'
+        ] = pvc_obj.name
         pod_obj = helpers.create_pod(**pod_data)
         used_percentage = pod.run_io_and_verify_mount_point(pod_obj)
         assert used_percentage > '90%', "I/O's didn't run completely"

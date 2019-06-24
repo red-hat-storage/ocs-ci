@@ -4,7 +4,7 @@ General PVC object
 import logging
 
 from ocs import constants
-from tests import helpers
+from utility import templating
 from ocs import defaults
 from ocs.ocp import OCP
 from resources.ocs import OCS
@@ -116,7 +116,7 @@ def create_multiple_pvc(number_of_pvc=1, pvc_data=None):
          list: List of PVC objects
     """
     if pvc_data is None:
-        pvc_data = helpers.get_crd_dict(defaults.CSI_PVC_DICT)
+        pvc_data = templating.get_crd_dict(defaults.CSI_PVC_DICT)
     pvc_objs = []
     pvc_base_name = pvc_data['metadata']['name']
 
