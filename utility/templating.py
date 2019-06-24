@@ -142,10 +142,3 @@ def load_yaml_to_dict(file):
 def dump_dict_to_temp_yaml(data, temp_yaml):
     with open(temp_yaml, 'w') as yaml_file:
         return yaml.dump(data, yaml_file)
-
-
-def get_crd_dict(path_to_dict):
-    """
-
-    """
-    return load_yaml_to_dict(path_to_dict)

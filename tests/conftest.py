@@ -229,7 +229,7 @@ def cluster(request):
     time.sleep(wait_time)
 
     # Create MDS pods for CephFileSystem
-    fs_data = templating.get_crd_dict(defaults.CEPHFILESYSTEM_YAML)
+    fs_data = templating.load_yaml_to_dict(constants.CEPHFILESYSTEM_YAML)
     fs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
 
     ceph_obj = OCS(**fs_data)

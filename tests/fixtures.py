@@ -89,7 +89,7 @@ def create_pod(request):
     """
     class_instance = request.node.cls
 
-    pod_data = templating.get_crd_dict(defaults.CSI_RBD_POD_DICT)
+    pod_data = templating.load_yaml_to_dict(constants.CSI_RBD_POD_YAML)
     pod_data['metadata']['name'] = helpers.create_unique_resource_name(
         'test', 'pod'
     )

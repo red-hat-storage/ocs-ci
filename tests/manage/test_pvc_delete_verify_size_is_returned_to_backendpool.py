@@ -89,7 +89,7 @@ def create_pvc_and_verify_pvc_exists(
     pvc exists on ceph side
     """
 
-    pvc_data = templating.get_crd_dict(defaults.CSI_PVC_DICT)
+    pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
     pvc_data['metadata']['name'] = helpers.create_unique_resource_name(
         'test', 'pvc'
     )
@@ -136,7 +136,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         pvc_obj = create_pvc_and_verify_pvc_exists(
             self.sc_obj.name, self.cbp_obj.name
         )
-        pod_data = templating.get_crd_dict(defaults.CSI_RBD_POD_DICT)
+        pod_data = templating.load_yaml_to_dict(constants.CSI_RBD_POD_YAML)
         pod_data['spec']['volumes'][0]['persistentVolumeClaim'][
             'claimName'
         ] = pvc_obj.name

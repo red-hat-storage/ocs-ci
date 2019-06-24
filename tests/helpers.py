@@ -108,11 +108,15 @@ def create_secret(interface_type):
     """
     secret_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
-        secret_data = templating.get_crd_dict(defaults.CSI_RBD_SECRET)
+        secret_data = templating.load_yaml_to_dict(
+            constants.CSI_RBD_SECRET_YAML
+        )
         del secret_data['data']['kubernetes']
         secret_data['data']['admin'] = get_admin_key()
     elif interface_type == constants.CEPHFILESYSTEM:
-        secret_data = templating.get_crd_dict(defaults.CSI_CEPHFS_SECRET)
+        secret_data = templating.load_yaml_to_dict(
+            constants.CSI_CEPHFS_SECRET_YAML
+        )
         del secret_data['data']['userID']
         del secret_data['data']['userKey']
         secret_data['data']['adminID'] = constants.ADMIN_BASE64
@@ -135,7 +139,7 @@ def create_ceph_block_pool(pool_name=None):
     Returns:
         OCS: An OCS instance for the Ceph block pool
     """
-    cbp_data = templating.get_crd_dict(defaults.CEPHBLOCKPOOL_YAML)
+    cbp_data = templating.load_yaml_to_dict(constants.CEPHBLOCKPOOL_YAML)
     cbp_data['metadata']['name'] = (
         pool_name if pool_name else create_unique_resource_name(
             'test', 'cbp'
@@ -168,7 +172,9 @@ def create_storage_class(
     """
     sc_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
-        sc_data = templating.get_crd_dict(defaults.CSI_RBD_STORAGECLASS_DICT)
+        sc_data = templating.load_yaml_to_dict(
+            constants.CSI_RBD_STORAGECLASS_YAML
+        )
         sc_data['parameters'][
             'csi.storage.k8s.io/node-publish-secret-name'
         ] = secret_name
@@ -176,8 +182,8 @@ def create_storage_class(
             'csi.storage.k8s.io/node-publish-secret-namespace'
         ] = defaults.ROOK_CLUSTER_NAMESPACE
     elif interface_type == constants.CEPHFILESYSTEM:
-        sc_data = templating.get_crd_dict(
-            defaults.CSI_CEPHFS_STORAGECLASS_DICT
+        sc_data = templating.load_yaml_to_dict(
+            constants.CSI_CEPHFS_STORAGECLASS_YAML
         )
         sc_data['parameters'][
             'csi.storage.k8s.io/node-stage-secret-name'
@@ -232,7 +238,7 @@ def create_pvc(sc_name, pvc_name=None):
     Returns:
         OCS: An OCS instance for the PVC
     """
-    pvc_data = templating.get_crd_dict(defaults.CSI_PVC_DICT)
+    pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
     pvc_data['metadata']['name'] = (
         pvc_name if pvc_name else create_unique_resource_name(
             'test', 'pvc'
@@ -414,7 +420,7 @@ def create_cephfilesystem():
     Returns:
         bool: True if CephFileSystem creates successful
     """
-    fs_data = templating.get_crd_dict(defaults.CEPHFILESYSTEM_YAML)
+    fs_data = templating.load_yaml_to_dict(constants.CEPHFILESYSTEM_YAML)
     fs_data['metadata']['name'] = create_unique_resource_name(
         'test', 'cephfs'
     )

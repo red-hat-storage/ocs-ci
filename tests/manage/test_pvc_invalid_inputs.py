@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from ocs import defaults
+from ocs import constants
 from ocsci.testlib import tier3, ManageTest
 from resources.ocs import OCS
 from resources.pvc import PVC
@@ -34,7 +34,9 @@ def setup(self):
     """
     # Create a storage class
     log.info("Creating a Storage Class")
-    self.sc_data = templating.get_crd_dict(defaults.CSI_RBD_STORAGECLASS_DICT)
+    self.sc_data = templating.load_yaml_to_dict(
+        constants.CSI_RBD_STORAGECLASS_YAML
+    )
     self.sc_data['metadata']['name'] = helpers.create_unique_resource_name(
         'test', 'csi-rbd'
     )
@@ -83,7 +85,7 @@ def create_pvc_invalid_name(pvcname):
     Returns:
         None
     """
-    pvc_data = templating.get_crd_dict(defaults.CSI_PVC_DICT)
+    pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
     pvc_data['metadata']['name'] = pvcname
     pvc_data['spec']['storageClassName'] = SC_OBJ.name
     pvc_obj = PVC(**pvc_data)
@@ -118,7 +120,7 @@ def create_pvc_invalid_size(pvcsize):
     Returns:
         None
     """
-    pvc_data = templating.get_crd_dict(defaults.CSI_PVC_DICT)
+    pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
     pvc_data['metadata']['name'] = "auto"
     pvc_data['spec']['resources']['requests']['storage'] = pvcsize
     pvc_data['spec']['storageClassName'] = SC_OBJ.name
