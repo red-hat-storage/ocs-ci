@@ -70,7 +70,7 @@ class PVC(OCS):
         return True
 
 
-def delete_pvcs(pvc_name):
+def delete_pvc(pvc_name):
     """
     Deletes specific pvc in namespace
 
@@ -83,7 +83,7 @@ def delete_pvcs(pvc_name):
     ocp_pvc_obj = OCP(
         kind=constants.PVC, namespace=config.ENV_DATA['cluster_namespace']
     )
-    log.info(f"Deleting PersistentVolumeClaim with name {pvc_name}")
+    log.info("Deleting PersistentVolumeClaim with name %s", pvc_name)
     ocp_pvc_obj.delete(resource_name=pvc_name)
     return True
 
