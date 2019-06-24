@@ -101,5 +101,3 @@ Lower number == higher priority
     parameter.
 4) **default configuration** - default values and the lowest priority. You can
     see [default config here](ocsci/default_config.yaml).
-5) **ocsci/config.py** - module data are with lowest priority and can be
-    overwritten with data mentioned above.

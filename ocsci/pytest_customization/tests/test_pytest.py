@@ -91,7 +91,8 @@ def test_config_parametrize(testdir, tmpdir):
     # run pytest with the following pytest_argumetns
     result = testdir.runpytest(*pytest_arguments)
     # Build a list of lines we expect to see in the output
-    expected_items = sorted(list(ocsci.config.RUN.keys()))
+    run_defaults = ocsci.config.get_defaults()['RUN']
+    expected_items = list(run_defaults.keys()) + ['things']
     expected_lines = [f'collecting*collected {len(expected_items)} items']
     expected_lines.extend([
         f'*test_demo_parametrized_config?{key}? PASSED*'
