@@ -4,11 +4,22 @@ Helper functions file for OCS QE
 import datetime
 import logging
 
+<<<<<<< HEAD
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility import templating
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
+=======
+from ocs.exceptions import TimeoutExpiredError
+
+from ocs import constants, defaults, ocp
+from utility import templating
+from ocsci import config
+from resources import pod
+from resources.ocs import OCS
+from utility.retry import retry
+>>>>>>> - Modified delete_all_storageclass to delete_storageclass now it accept arg with name sc_name which is used to delete specific sc
 
 logger = logging.getLogger(__name__)
 
@@ -284,15 +295,16 @@ def get_cephfs_data_pool_name():
     return out[0]['data_pools'][0]
 
 
+@retry(TimeoutExpiredError, tries=5, delay=3, backoff=1)
 def validate_cephfilesystem(fs_name):
     """
-     Verify CephFileSystem exists at ceph and k8s
+     Verify CephFileSystem exists at ceph and Ocp
 
      Args:
         fs_name (str): The name of the Ceph FileSystem
 
      Returns:
-         bool: True if CephFileSystem is created at ceph and k8s side else
+         bool: True if CephFileSystem is created at ceph and Ocp side else
             will return False with valid msg i.e Failure cause
     """
     CFS = ocp.OCP(
@@ -301,7 +313,7 @@ def validate_cephfilesystem(fs_name):
     )
     ct_pod = pod.get_ceph_tools_pod()
     ceph_validate = False
-    k8s_validate = False
+    ocp_validate = False
     cmd = "ceph fs ls"
     logger.info(fs_name)
     out = ct_pod.exec_ceph_cmd(ceph_cmd=cmd)
@@ -309,19 +321,19 @@ def validate_cephfilesystem(fs_name):
         out = out[0]['name']
         logger.info(out)
         if out == fs_name:
-            logger.info("FileSystem got created from Ceph Side")
+            logger.info(f"FileSystem {out} got created from Ceph Side")
             ceph_validate = True
         else:
-            logger.error("FileSystem was not present at Ceph Side")
+            logger.error(f"FileSystem {out} was not present at Ceph Side")
             return False
     result = CFS.get(resource_name=fs_name)
     if result['metadata']['name']:
-        logger.info(f"Filesystem got created from kubernetes Side")
-        k8s_validate = True
+        logger.info(f"Filesystem {out} got created from Openshift Side")
+        ocp_validate = True
     else:
-        logger.error("Filesystem was not create at Kubernetes Side")
+        logger.error(f"Filesystem {out} was not create at Openshift Side")
         return False
-    return True if (ceph_validate and k8s_validate) else False
+    return True if (ceph_validate and ocp_validate) else False
 
 
 def get_all_storageclass_name():
@@ -346,9 +358,12 @@ def get_all_storageclass_name():
     return storageclass
 
 
-def delete_all_storageclass():
+def delete_storageclass(sc_name):
     """"
-    Function for Deleting all storageclass
+    Function for Deleting specific storageclass
+
+    Args:
+        sc_name (str): Name of sc for deletion
 
     Returns:
         bool: True if deletion is successful
@@ -358,10 +373,8 @@ def delete_all_storageclass():
         kind=constants.STORAGECLASS,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
-    storageclass_list = get_all_storageclass_name()
-    for item in storageclass_list:
-        logger.info(f"Deleting StorageClass with name {item}")
-        assert SC.delete(resource_name=item)
+    logger.info(f"Deleting StorageClass with name {sc_name}")
+    assert SC.delete(resource_name=sc_name)
     return True
 
 
@@ -384,9 +397,12 @@ def get_cephblockpool_name():
     return pool_list
 
 
-def delete_cephblockpool():
+def delete_cephblockpool(cbp_name):
     """
-    Function for deleting CephBlockPool
+    Function for deleting specific CephBlockPool
+
+    Args:
+        cbp_name (str): Name of cbp for deletion
 
     Returns:
         bool: True if deletion of CephBlockPool is successful
@@ -395,21 +411,38 @@ def delete_cephblockpool():
         kind=constants.CEPHBLOCKPOOL,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
-    pool_list = get_cephblockpool_name()
-    for item in pool_list:
-        logger.info(f"Deleting CephBlockPool with name {item}")
-        assert POOL.delete(resource_name=item)
+    logger.info(f"Deleting CephBlockPool with name {cbp_name}")
+    assert POOL.delete(resource_name=cbp_name)
     return True
 
 
-def create_cephfilesystem():
+def create_cephfilesystem(override_fs=True):
     """
     Function for deploying CephFileSystem (MDS)
+
+    Args:
+        override_fs (bool): If true it will delete old CFS and recreate new one, If False will skip creation of CFS
 
     Returns:
         bool: True if CephFileSystem creates successful
     """
+<<<<<<< HEAD
     fs_data = templating.load_yaml_to_dict(constants.CEPHFILESYSTEM_YAML)
+=======
+    fs_data = copy.deepcopy(defaults.CEPHFILESYSTEM_DICT)
+    if override_fs:
+        logger.info("Deleting CephFileSystem if exists")
+        delete_all_cephfilesystem()
+    else:
+        POD = pod.get_all_pods(
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        )
+        for pod_names in POD:
+            if 'rook-ceph-mds' in pod_names.labels.values():
+                logger.info("CephFileSystem already exists")
+                logger.info("Skipping CephFileSystem Creation")
+                return True
+>>>>>>> - Modified delete_all_storageclass to delete_storageclass now it accept arg with name sc_name which is used to delete specific sc
     fs_data['metadata']['name'] = create_unique_resource_name(
         'test', 'cephfs'
     )
