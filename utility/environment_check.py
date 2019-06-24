@@ -3,6 +3,7 @@ Util for environment check before and after test to compare and find stale
 leftovers
 """
 import logging
+import copy
 import pytest
 from gevent.threadpool import ThreadPoolExecutor
 
@@ -25,7 +26,7 @@ SECRET = ocp.OCP(kind=constants.SECRET)
 NS = ocp.OCP(kind=constants.NAMESPACE)
 
 KINDS = [POD, SC, CEPHFILESYSTEM, CEPHBLOCKPOOL, PV, PVC, SECRET, NS]
-ENV_STATUS_PRE = {
+ENV_STATUS_DICT = {
     'pod': None,
     'sc': None,
     'cephfs': None,
@@ -35,16 +36,8 @@ ENV_STATUS_PRE = {
     'secret': None,
     'namespace': None,
 }
-ENV_STATUS_POST = {
-    'pod': None,
-    'sc': None,
-    'cephfs': None,
-    'cephbp': None,
-    'pv': None,
-    'pvc': None,
-    'secret': None,
-    'namespace': None,
-}
+ENV_STATUS_PRE = copy.deepcopy(ENV_STATUS_DICT)
+ENV_STATUS_POST = copy.deepcopy(ENV_STATUS_DICT)
 
 
 ADDED_RESOURCE = 'iterable_item_added'
@@ -65,26 +58,31 @@ def environment_checker(request):
     get_status_before_execution()
 
 
-def assign_get_values(env_status_dict, key,  kind):
+def assign_get_values(env_status_dict, key, kind):
     env_status_dict[key] = kind.get(all_namespaces=True)['items']
+
+
+def get_environment_status(env_dict):
+    """
+
+    """
+    with ThreadPoolExecutor(max_workers=len(KINDS)) as executor:
+        for key, kind in zip(env_dict.keys(), KINDS):
+            executor.submit(assign_get_values, env_dict, key, kind)
 
 
 def get_status_before_execution():
     """
 
     """
-    with ThreadPoolExecutor(max_workers=len(KINDS)) as executor:
-        for key, kind in zip(ENV_STATUS_PRE.keys(), KINDS):
-            executor.submit(assign_get_values, ENV_STATUS_PRE, key, kind)
+    get_environment_status(ENV_STATUS_PRE)
 
 
 def get_status_after_execution():
     """
 
     """
-    with ThreadPoolExecutor(max_workers=len(KINDS)) as executor:
-        for key, kind in zip(ENV_STATUS_PRE.keys(), KINDS):
-            executor.submit(assign_get_values, ENV_STATUS_POST, key, kind)
+    get_environment_status(ENV_STATUS_POST)
 
     pod_diff = DeepDiff(
         ENV_STATUS_PRE['pod'], ENV_STATUS_POST['pod']
