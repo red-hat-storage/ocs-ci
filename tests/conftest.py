@@ -4,7 +4,6 @@ import logging
 import os
 import time
 import yaml
-import copy
 
 from ocsci import config
 from utility.environment_check import environment_checker  # noqa: F401
@@ -12,7 +11,7 @@ from oc.openshift_ops import OCP
 from ocs import constants, ocp, defaults
 from ocs.exceptions import CommandFailed, CephHealthException
 from ocs.utils import create_oc_resource, apply_oc_resource
-from utility import templating
+from utility import templating, system
 from utility.aws import AWS
 from utility.retry import retry
 from utility.utils import destroy_cluster, run_cmd, get_openshift_installer, get_openshift_client, is_cluster_running
@@ -57,6 +56,10 @@ def cluster(request):
     elif not deploy and not teardown:
         msg = "The given cluster can not be connected to: {}. ".format(cluster_path)
         msg += "Provide a valid --cluster-path or use --deploy to deploy a new cluster"
+        pytest.fail(msg)
+    elif not system.is_path_empty(cluster_path) and deploy:
+        msg = "The given cluster path is not empty: {}. ".format(cluster_path)
+        msg += "Provide an empty --cluster-path and --deploy to deploy a new cluster"
         pytest.fail(msg)
     else:
         log.info("A testing cluster will be deployed and cluster information stored at: %s", cluster_path)
@@ -226,7 +229,7 @@ def cluster(request):
     time.sleep(wait_time)
 
     # Create MDS pods for CephFileSystem
-    fs_data = copy.deepcopy(defaults.CEPHFILESYSTEM_DICT)
+    fs_data = templating.load_yaml_to_dict(constants.CEPHFILESYSTEM_YAML)
     fs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
 
     ceph_obj = OCS(**fs_data)
@@ -242,6 +245,7 @@ def cluster(request):
 
     if helpers.validate_cephfilesystem(cfs_name):
         log.info(f"MDS deployment is successful!")
+        defaults.CEPHFILESYSTEM_NAME = cfs_name
     else:
         log.error(
             f"MDS deployment Failed! Please check logs!"

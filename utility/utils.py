@@ -1,22 +1,16 @@
-import getpass
 import json
 import logging
 import os
 import platform
 import random
 import shlex
-import smtplib
+import string
 import subprocess
 import time
 import traceback
-import string
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
 import requests
 import yaml
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-from reportportal_client import ReportPortalServiceAsync
 
 from ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
@@ -299,197 +293,6 @@ def pinned_dir_io(clients, mds_fail_over, num_of_files, range1, range2):
         log.error(e)
 
 
-def rc_verify(tc, RC):
-    return_codes_set = set(RC)
-
-    if len(return_codes_set) == 1:
-
-        out = "Test case %s Passed" % (tc)
-
-        return out
-    else:
-        out = "Test case %s Failed" % (tc)
-
-        return out
-
-
-# colors for pass and fail status
-# class Bcolors:
-#     HEADER = '\033[95m'
-#     OKGREEN = '\033[92m'
-#     FAIL = '\033[91m'
-#     ENDC = '\033[0m'
-#     BOLD = '\033[1m'
-
-
-def configure_logger(test_name, run_dir, level=logging.DEBUG):
-    """
-    Configures a new FileHandler for the root logger.
-
-    Args:
-        test_name: name of the test being executed. used for naming the logfile
-        run_dir: directory where logs are being placed
-        level: logging level
-
-    Returns:
-        URL where the log file can be viewed or None if the run_dir does not exist
-    """
-    if not os.path.isdir(run_dir):
-        log.error("Run directory '{run_dir}' does not exist, logs will not output to file.".format(run_dir=run_dir))
-        return None
-    _root = logging.getLogger()
-
-    full_log_name = "{test_name}.log".format(test_name=test_name)
-    test_logfile = os.path.join(run_dir, full_log_name)
-    log.info("Test logfile: {}".format(test_logfile))
-    close_and_remove_filehandlers()
-    _handler = logging.FileHandler(test_logfile)
-    _handler.setLevel(level)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    _handler.setFormatter(formatter)
-    _root.addHandler(_handler)
-
-    url_base = "http://magna002.ceph.redhat.com/cephci-jenkins"
-    run_dir_name = run_dir.split('/')[-1]
-    log_url = "{url_base}/{run_dir}/{log_name}".format(url_base=url_base, run_dir=run_dir_name, log_name=full_log_name)
-
-    log.info("Completed log configuration")
-    return log_url
-
-
-def create_run_dir(run_id):
-    """
-    Create the directory where test logs will be placed.
-
-    Args:
-        run_id: id of the test run. used to name the directory
-
-    Returns:
-        Full path of the created directory
-    """
-    dir_name = "cephci-run-{run_id}".format(run_id=run_id)
-    base_dir = "/ceph/cephci-jenkins"
-    if not os.path.isdir(base_dir):
-        base_dir = "/tmp"
-    run_dir = os.path.join(base_dir, dir_name)
-    try:
-        os.makedirs(run_dir)
-    except OSError:
-        if "jenkins" in getpass.getuser():
-            raise
-
-    return run_dir
-
-
-def close_and_remove_filehandlers(logger=None):
-    """
-    Close FileHandlers and then remove them from the loggers handlers list.
-
-    Args:
-        logger: the logger in which to remove the handlers from, defaults to root logger
-
-    Returns:
-        None
-    """
-    if logger is None:
-        logger = logging.getLogger()
-    handlers = logger.handlers[:]
-    for h in handlers:
-        if isinstance(h, logging.FileHandler):
-            h.close()
-            logger.removeHandler(h)
-
-
-def create_report_portal_session():
-    """
-    Configures and creates a session to the Report Portal instance.
-
-    Returns:
-        The session object
-    """
-    cfg = get_ocsci_config()['report-portal']
-
-    return ReportPortalServiceAsync(
-        endpoint=cfg['endpoint'], project=cfg['project'], token=cfg['token'], error_handler=error_handler)
-
-
-def timestamp():
-    """
-    The current epoch timestamp in milliseconds as a string.
-
-    Returns:
-        The timestamp
-    """
-    return str(int(time.time() * 1000))
-
-
-def error_handler(exc_info):
-    """
-    Error handler for the Report Portal session.
-
-    Returns:
-        None
-    """
-    print("Error occurred: {}".format(exc_info[1]))
-    traceback.print_exception(*exc_info)
-
-
-def create_unique_test_name(test_name):
-    """
-    Creates a unique test name using the actual test name and an increasing integer for each duplicate test name.
-
-    Args:
-        test_name: name of the test
-
-    Returns:
-        unique name for the test case
-    """
-    global unique_test_names
-    base = "_".join(test_name.split())
-    num = 0
-    while "{base}_{num}".format(base=base, num=num) in unique_test_names:
-        num += 1
-    name = "{base}_{num}".format(base=base, num=num)
-    unique_test_names.append(name)
-    return name
-
-
-def get_latest_container_image_tag(version):
-    """
-    Retrieves the container image tag of the latest compose for the given version
-
-    Args:
-        version: version to get the latest image tag for (2.x, 3.0, or 3.x)
-
-    Returns:
-        str: Image tag of the latest compose for the given version
-
-    """
-    image_tag = get_latest_container(version).get('docker_tag')
-    log.info("Found image tag: {image_tag}".format(image_tag=image_tag))
-    return str(image_tag)
-
-
-def get_latest_container(version):
-    """
-    Retrieves latest nightly-build container details from magna002.ceph.redhat.com
-
-    Args:
-        version: version to get the latest image tag, should match ceph-container-latest-{version} filename at magna002
-                 storage
-
-    Returns:
-        Container details dictionary with given format:
-        {'docker_registry': docker_registry, 'docker_image': docker_image, 'docker_tag': docker_tag}
-    """
-    url = 'http://magna002.ceph.redhat.com/latest-ceph-container-builds/latest-RHCEPH-{version}.json'.format(
-        version=version)
-    data = requests.get(url)
-    docker_registry, docker_image_tag = data.json()['repository'].split('/')
-    docker_image, docker_tag = docker_image_tag.split(':')
-    return {'docker_registry': docker_registry, 'docker_image': docker_image, 'docker_tag': docker_tag}
-
-
 def custom_ceph_config(suite_config, custom_config, custom_config_file):
     """
     Combines and returns custom configuration overrides for ceph.
@@ -541,89 +344,6 @@ def custom_ceph_config(suite_config, custom_config, custom_config_file):
     return full_custom_config
 
 
-def email_results(results_list, run_id, send_to_cephci=False):
-    """
-    Email results of test run to QE
-
-    Args:
-        results_list (list): test case results info
-        run_id (str): id of the test run
-        send_to_cephci (bool): send to cephci@redhat.com as well as user email
-
-    Returns: None
-
-    """
-    cfg = get_ocsci_config().get('email')
-    sender = "ocs-ci@redhat.com"
-    recipients = []
-    if cfg and cfg.get('address'):
-        recipients = [cfg['address']]
-    else:
-        log.warning("No email address configured in ~/.ocs-ci.yaml. "
-                    "Please configure if you would like to receive run result emails.")
-
-    if send_to_cephci:
-        pass  # TODO: determine email address to use for ocs-ci results and append to recipients
-        # recipients.append(sender)
-
-    if recipients:
-        run_name = "cephci-run-{id}".format(id=run_id)
-        log_link = "http://magna002.ceph.redhat.com/cephci-jenkins/{run}/".format(run=run_name)
-
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = "cephci results for {run}".format(run=run_name)
-        msg['From'] = sender
-        msg['To'] = ", ".join(recipients)
-
-        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        template_dir = os.path.join(project_dir, 'templates')
-
-        env = Environment(
-            loader=FileSystemLoader(template_dir),
-            autoescape=select_autoescape(['html', 'xml'])
-        )
-        template = env.get_template('result-email-template.html')
-
-        html = template.render(run_name=run_name,
-                               log_link=log_link,
-                               test_results=results_list)
-
-        part1 = MIMEText(html, 'html')
-        msg.attach(part1)
-
-        try:
-            s = smtplib.SMTP('localhost')
-            s.sendmail(sender, recipients, msg.as_string())
-            s.quit()
-            log.info("Results have been emailed to {recipients}".format(recipients=recipients))
-
-        except Exception as e:
-            print("\n")
-            log.exception(e)
-
-
-def get_ocsci_config():
-    """
-    Receives the data from ~/.ocs-ci.yaml.
-
-    Returns:
-        (dict) configuration from ~/.ocs-ci.yaml
-
-    """
-    home_dir = os.path.expanduser("~")
-    cfg_file = os.path.join(home_dir, ".ocs-ci.yaml")
-    try:
-        with open(cfg_file, "r") as yml:
-            cfg = yaml.safe_load(yml)
-    except IOError:
-        log.error(
-            "Please create ~/.ocs-ci.yaml from the ocs-ci.yaml.template. "
-            "See README for more information."
-        )
-        raise
-    return cfg
-
-
 def run_cmd(cmd, **kwargs):
     """
     Run an arbitrary command locally
@@ -668,6 +388,7 @@ def download_file(url, filename):
         filename (str): Name of the file to write the download to
 
     """
+    log.debug(f"Download '{url}' to '{filename}'.")
     with open(filename, "wb") as f:
         r = requests.get(url)
         f.write(r.content)
@@ -724,6 +445,7 @@ def destroy_cluster(cluster_path):
 def get_openshift_installer(
     version=None,
     bin_dir=None,
+    force_download=False,
 ):
     """
     Download the OpenShift installer binary, if not already present.
@@ -732,6 +454,7 @@ def get_openshift_installer(
     Args:
         version (str): Version of the installer to download
         bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+        force_download (bool): Force installer download even if already present
 
     Returns:
         str: Path to the installer binary
@@ -741,11 +464,13 @@ def get_openshift_installer(
     bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
+    if os.path.isfile(installer_binary_path) and force_download:
+        delete_file(installer_binary_path)
     if os.path.isfile(installer_binary_path):
         log.debug(f"Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
     else:
-        log.info("Downloading openshift installer")
+        log.info(f"Downloading openshift installer ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
@@ -758,12 +483,16 @@ def get_openshift_installer(
         # return to the previous working directory
         os.chdir(previous_dir)
 
+    installer_version = run_cmd(f"{installer_binary_path} version")
+    log.info(f"OpenShift Installer version: {installer_version}")
+
     return installer_binary_path
 
 
 def get_openshift_client(
     version=None,
     bin_dir=None,
+    force_download=False,
 ):
     """
     Download the OpenShift client binary, if not already present.
@@ -773,6 +502,7 @@ def get_openshift_client(
         version (str): Version of the client to download
             (default: config.RUN['client_version'])
         bin_dir (str): Path to bin directory (default: config.RUN['bin_dir'])
+        force_download (bool): Force client download even if already present
 
     Returns:
         str: Path to the client binary
@@ -781,11 +511,13 @@ def get_openshift_client(
     version = version or config.RUN['client_version']
     bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     client_binary_path = os.path.join(bin_dir, 'oc')
+    if os.path.isfile(client_binary_path) and force_download:
+        delete_file(client_binary_path)
     if os.path.isfile(client_binary_path):
-        log.debug("Client exists ({client_binary_path}), skipping download.")
+        log.debug(f"Client exists ({client_binary_path}), skipping download.")
         # TODO: check client version
     else:
-        log.info("Downloading openshift client")
+        log.info(f"Downloading openshift client ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
@@ -797,6 +529,9 @@ def get_openshift_client(
         delete_file(tarball)
         # return to the previous working directory
         os.chdir(previous_dir)
+
+    client_version = run_cmd(f"{client_binary_path} version")
+    log.info(f"OpenShift Client version: {client_version}")
 
     return client_binary_path
 

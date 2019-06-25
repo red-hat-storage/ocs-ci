@@ -6,9 +6,8 @@
 # * --cluster-conf cluster.yaml parameter - this will be rendered under
 #   ENV_DATA section
 #
-# Then it will be rendered with jinja2 to be able to reuse vars defined in
-# different sections. The sections which are with capital letters will be
-# available directly in ocsci.config module.
+# Each section in this file will be available as an attribute of the
+# ocsci.config object.
 #
 # ------------------------------------------------------------------------
 
@@ -18,13 +17,15 @@ RUN:
   run_id: null  # this will be redefined in the execution
   kubeconfig_location: 'auth/kubeconfig' # relative from cluster_dir
   cli_params: {}  # this will be filled with CLI parameters data
-  client_version: '{{ DEPLOYMENT["installer_version"] }}'
+  client_version: '4.1.2'
   bin_dir: './bin'
 
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
 DEPLOYMENT:
   installer_version: "4.1.2"
+  force_download_installer: True
+  force_download_client: True
 
 # Section for reporting configuration
 REPORTING:

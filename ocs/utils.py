@@ -15,7 +15,6 @@ from libcloud.compute.types import Provider
 
 from mita.openstack import CephVMNode
 from utility.retry import retry
-from utility.utils import create_unique_test_name, timestamp
 from .ceph import RolesContainer, CommandFailed, Ceph, CephNode
 from .clients import WinNode
 from .parallel import parallel
@@ -516,14 +515,7 @@ def get_public_network():
 
 
 @retry(LibcloudError, tries=5, delay=15)
-def create_nodes(conf, inventory, osp_cred, run_id, report_portal_session=None, instances_name=None):
-    if report_portal_session:
-        name = create_unique_test_name("ceph node creation")
-        desc = "Ceph cluster preparation"
-        report_portal_session.start_test_item(name=name,
-                                              description=desc,
-                                              start_time=timestamp(),
-                                              item_type="STEP")
+def create_nodes(conf, inventory, osp_cred, run_id, instances_name=None):
     log.info("Destroying existing osp instances")
     cleanup_ceph_nodes(osp_cred, instances_name)
     ceph_cluster_dict = {}
@@ -557,14 +549,7 @@ def create_nodes(conf, inventory, osp_cred, run_id, report_portal_session=None, 
     time.sleep(15)
     for cluster_name, cluster in ceph_cluster_dict.items():
         for instance in cluster:
-            try:
-                instance.connect()
-            except BaseException:
-                if report_portal_session:
-                    report_portal_session.finish_test_item(end_time=timestamp(), status="FAILED")
-                raise
-    if report_portal_session:
-        report_portal_session.finish_test_item(end_time=timestamp(), status="PASSED")
+            instance.connect()
     return ceph_cluster_dict, clients
 
 

@@ -77,6 +77,9 @@ class Pod(OCS):
     def labels(self):
         return self._labels
 
+    def __setattr__(self, key, val):
+        self.__dict__[key] = val
+
     def add_role(self, role):
         """
         Adds a new role for this pod
@@ -275,3 +278,95 @@ def run_io_and_verify_mount_point(pod_obj, bs='10M', count='950'):
     mount_point = mount_point.split()
     used_percentage = mount_point[mount_point.index('/var/lib/www/html') - 1]
     return used_percentage
+
+
+def get_pods_having_label(label, namespace):
+    """
+    Fetches pod resources with given label in given namespace
+
+    Args:
+        label (str): label which pods might have
+        namespace (str): Namespace in which to be looked up
+
+    Return:
+        dict: of pod info
+    """
+    ocp_pod = OCP(kind=constants.POD, namespace=namespace)
+    pods = ocp_pod.get(selector=label).get('items')
+    return pods
+
+
+def get_mds_pods(mds_label=constants.MDS_APP_LABEL, namespace=None):
+    """
+    Fetches info about mds pods in the cluster
+
+    Args:
+        mds_label (str): label associated with mds pods
+            (default: defaults.MDS_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list : of mds pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    mdss = get_pods_having_label(mds_label, namespace)
+    mds_pods = [Pod(**mds) for mds in mdss]
+    return mds_pods
+
+
+def get_mon_pods(mon_label=constants.MON_APP_LABEL, namespace=None):
+    """
+    Fetches info about mon pods in the cluster
+
+    Args:
+        mon_label (str): label associated with mon pods
+            (default: defaults.MON_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list : of mon pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    mons = get_pods_having_label(mon_label, namespace)
+    mon_pods = [Pod(**mon) for mon in mons]
+    return mon_pods
+
+
+def get_mgr_pods(mgr_label=constants.MGR_APP_LABEL, namespace=None):
+    """
+    Fetches info about mgr pods in the cluster
+
+    Args:
+        mgr_label (str): label associated with mgr pods
+            (default: defaults.MGR_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list : of mgr pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    mgrs = get_pods_having_label(mgr_label, namespace)
+    mgr_pods = [Pod(**mgr) for mgr in mgrs]
+    return mgr_pods
+
+
+def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
+    """
+    Fetches info about osd pods in the cluster
+
+    Args:
+        osd_label (str): label associated with osd pods
+            (default: defaults.OSD_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list : of osd pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    osds = get_pods_having_label(osd_label, namespace)
+    osd_pods = [Pod(**osd) for osd in osds]
+    return osd_pods

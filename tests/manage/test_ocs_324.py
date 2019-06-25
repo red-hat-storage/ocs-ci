@@ -4,8 +4,9 @@ A test for deleting an existing PVC and create a new PVC with the same name
 import logging
 import pytest
 
-from ocs import constants
-from ocsci.testlib import ManageTest, tier1
+from ocs import constants, exceptions, ocp
+from ocsci import config
+from ocsci.testlib import ManageTest, tier2
 from tests import helpers
 
 logger = logging.getLogger(__name__)
@@ -32,13 +33,10 @@ def setup(self):
     """
     Creates the resources needed for the type of interface to be used.
 
-    For CephBlockPool interface: Creates Secret, CephBlockPool, StorageClass
-    For CephFilesystem interface: Creates Secret, CephFilesystem, StorageClass
+    For CephBlockPool interface: Creates CephBlockPool, Secret and StorageClass
+    For CephFilesystem interface: Creates Secret and StorageClass
     """
     logger.info(f"Creating resources for {self.interface_type} interface")
-
-    self.secret_obj = helpers.create_secret(interface_type=self.interface_type)
-    assert self.secret_obj, f"Failed to create secret"
 
     self.interface_name = None
     if self.interface_type == constants.CEPHBLOCKPOOL:
@@ -47,10 +45,10 @@ def setup(self):
         self.interface_name = self.cbp_obj.name
 
     elif self.interface_type == constants.CEPHFILESYSTEM:
-        assert helpers.create_cephfilesystem(), (
-            f"Failed to create Ceph File System"
-        )
         self.interface_name = helpers.get_cephfs_data_pool_name()
+
+    self.secret_obj = helpers.create_secret(interface_type=self.interface_type)
+    assert self.secret_obj, f"Failed to create secret"
 
     self.sc_obj = helpers.create_storage_class(
         interface_type=self.interface_type,
@@ -66,17 +64,21 @@ def teardown(self):
     """
     logger.info(f"Deleting resources for {self.interface_type} interface")
 
-    PVC_OBJ.delete()
-    self.sc_obj.delete()
+    resources_list = [PVC_OBJ, self.sc_obj, self.secret_obj]
     if self.interface_type == constants.CEPHBLOCKPOOL:
-        self.cbp_obj.delete()
-    elif self.interface_type == constants.CEPHFILESYSTEM:
-        logger.info("Deleting CephFileSystem")
-        assert helpers.delete_all_cephfilesystem()
-    self.secret_obj.delete()
+        resources_list.append(self.cbp_obj)
+
+    for resource in resources_list:
+        try:
+            logger.info(f"Deleting {resource.kind} {resource.name}")
+            resource.delete()
+        except AttributeError:
+            continue
+        except exceptions.CommandFailed:
+            logger.error(f"Deletion of {resource.kind} {resource.name} failed")
 
 
-@tier1
+@tier2
 @pytest.mark.polarion_id("OCS-324")
 class TestCaseOCS324(ManageTest):
     """
@@ -92,11 +94,24 @@ class TestCaseOCS324(ManageTest):
         global PVC_OBJ
 
         PVC_OBJ = helpers.create_pvc(sc_name=self.sc_obj.name)
-        logger.info(f"Deleting PersistentVolumeClaim with name {PVC_OBJ.name}")
+        pv_obj = ocp.OCP(
+            kind=constants.PV, namespace=config.ENV_DATA['cluster_namespace']
+        )
+        backed_pv = PVC_OBJ.get().get('spec').get('volumeName')
+        pv_status = pv_obj.get(backed_pv).get('status').get('phase')
+        assert constants.STATUS_BOUND in pv_status, (
+            f"{pv_obj.kind} {backed_pv} failed to reach {constants.STATUS_BOUND}"
+        )
+
+        logger.info(f"Deleting {PVC_OBJ.kind} {PVC_OBJ.name}")
         assert PVC_OBJ.delete(), f"Failed to delete PVC"
+
+        logger.info(f"Creating {PVC_OBJ.kind} with same name {PVC_OBJ.name}")
         PVC_OBJ = helpers.create_pvc(
             sc_name=self.sc_obj.name, pvc_name=PVC_OBJ.name
         )
-        logger.info(
-            f"PersistentVolumeClaim created with same name {PVC_OBJ.name}"
+        backed_pv = PVC_OBJ.get().get('spec').get('volumeName')
+        pv_status = pv_obj.get(backed_pv).get('status').get('phase')
+        assert constants.STATUS_BOUND in pv_status, (
+            f"{pv_obj.kind} {backed_pv} failed to reach {constants.STATUS_BOUND}"
         )
