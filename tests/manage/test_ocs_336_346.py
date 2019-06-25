@@ -1,15 +1,15 @@
-import copy
 import logging
 
 import pytest
 
-from ocs import ocp, defaults, constants
+from ocs import ocp, constants
 from ocsci import config
 from ocsci.testlib import tier1, ManageTest
 from resources.ocs import OCS
 from resources.pod import get_admin_key_from_ceph_tools
 from resources.pvc import PVC
 from tests import helpers
+from utility import templating
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ def setup_fs(self):
     Setting up the environment for the test
     """
     global CEPH_OBJ
-    self.fs_data = copy.deepcopy(defaults.CEPHFILESYSTEM_DICT)
+    self.fs_data = templating.load_yaml_to_dict(constants.CEPHFILESYSTEM_YAML)
     self.fs_data['metadata']['name'] = helpers.create_unique_resource_name(
         'test', 'cephfs'
     )
@@ -73,7 +73,9 @@ class TestOSCBasics(ManageTest):
         Testing basics: secret creation,
         storage class creation and pvc with cephfs
         """
-        self.cephfs_secret = copy.deepcopy(defaults.CSI_CEPHFS_SECRET)
+        self.cephfs_secret = templating.load_yaml_to_dict(
+            constants.CSI_CEPHFS_SECRET_YAML
+        )
         del self.cephfs_secret['data']['userID']
         del self.cephfs_secret['data']['userKey']
         self.cephfs_secret['data']['adminKey'] = (
@@ -83,14 +85,18 @@ class TestOSCBasics(ManageTest):
         logging.info(self.cephfs_secret)
         secret = OCS(**self.cephfs_secret)
         secret.create()
-        self.cephfs_sc = copy.deepcopy(defaults.CSI_CEPHFS_STORAGECLASS_DICT)
+        self.cephfs_sc = templating.load_yaml_to_dict(
+            constants.CSI_CEPHFS_STORAGECLASS_YAML
+        )
         self.cephfs_sc['parameters']['monitors'] = self.mons
         self.cephfs_sc['parameters']['pool'] = (
             f"{self.fs_data['metadata']['name']}-data0"
         )
         storage_class = OCS(**self.cephfs_sc)
         storage_class.create()
-        self.cephfs_pvc = copy.deepcopy(defaults.CSI_CEPHFS_PVC)
+        self.cephfs_pvc = templating.load_yaml_to_dict(
+            constants.CSI_CEPHFS_PVC_YAML
+        )
         pvc = PVC(**self.cephfs_pvc)
         pvc.create()
         log.info(pvc.status)
@@ -105,18 +111,22 @@ class TestOSCBasics(ManageTest):
         Testing basics: secret creation,
          storage class creation  and pvc with rbd
         """
-        self.rbd_secret = copy.deepcopy(defaults.CSI_RBD_SECRET)
+        self.rbd_secret = templating.load_yaml_to_dict(
+            constants.CSI_RBD_SECRET_YAML
+        )
         del self.rbd_secret['data']['kubernetes']
         self.rbd_secret['data']['admin'] = get_admin_key_from_ceph_tools()
         logging.info(self.rbd_secret)
         secret = OCS(**self.rbd_secret)
         secret.create()
-        self.rbd_sc = copy.deepcopy(defaults.CSI_RBD_STORAGECLASS_DICT)
+        self.rbd_sc = templating.load_yaml_to_dict(
+            constants.CSI_RBD_STORAGECLASS_YAML
+        )
         self.rbd_sc['parameters']['monitors'] = self.mons
         del self.rbd_sc['parameters']['userid']
         storage_class = OCS(**self.rbd_sc)
         storage_class.create()
-        self.rbd_pvc = copy.deepcopy(defaults.CSI_RBD_PVC)
+        self.rbd_pvc = templating.load_yaml_to_dict(constants.CSI_RBD_PVC_YAML)
         pvc = PVC(**self.rbd_pvc)
         pvc.create()
         assert 'Bound' in pvc.status

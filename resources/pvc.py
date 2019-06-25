@@ -1,11 +1,10 @@
 """
 General PVC object
 """
-import copy
 import logging
 
 from ocs import constants
-from ocs.defaults import CSI_PVC_DICT
+from utility import templating
 from ocs.ocp import OCP
 from resources.ocs import OCS
 from ocsci import config
@@ -116,7 +115,7 @@ def create_multiple_pvc(number_of_pvc=1, pvc_data=None):
          list: List of PVC objects
     """
     if pvc_data is None:
-        pvc_data = copy.deepcopy(CSI_PVC_DICT)
+        pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
     pvc_objs = []
     pvc_base_name = pvc_data['metadata']['name']
 
