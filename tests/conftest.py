@@ -6,8 +6,7 @@ import time
 import yaml
 
 from ocsci import config
-from utility.environment_check import environment_checker  # noqa: F401
-from oc.openshift_ops import OCP
+from ocs.openshift_ops import OCP
 from ocs import constants, ocp, defaults
 from ocs.exceptions import CommandFailed, CephHealthException
 from ocs.utils import create_oc_resource, apply_oc_resource
