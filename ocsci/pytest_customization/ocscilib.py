@@ -149,7 +149,7 @@ def process_cluster_cli_params(config):
         os.makedirs(cluster_path)
     # Importing here cause once the function is invoked we have already config
     # loaded, so this is OK to import once you sure that config is loaded.
-    from oc.openshift_ops import OCP
+    from ocs.openshift_ops import OCP
     if cluster_path:
         OCP.set_kubeconfig(
             os.path.join(cluster_path, ocsci_config.RUN['kubeconfig_location'])

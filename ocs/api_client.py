@@ -12,7 +12,7 @@ from abc import ABCMeta, abstractmethod
 
 from openshift.dynamic import exceptions
 
-from oc import openshift_ops
+from ocs import openshift_ops
 
 logger = logging.getLogger(__name__)
 
