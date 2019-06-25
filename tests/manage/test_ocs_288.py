@@ -40,9 +40,6 @@ def setup():
     global CEPHFS_SECRET_OBJ
     CEPHFS_SECRET_OBJ = helpers.create_secret(constants.CEPHFILESYSTEM)
 
-    log.info("Creating CEPH FileSystem")
-    assert helpers.create_cephfilesystem()
-
     log.info("Creating RBD Storageclass")
     assert create_multiple_rbd_storageclasses(count=5)
 
@@ -55,9 +52,11 @@ def teardown():
     Tearing down the environment
     """
     global RBD_SECRET_OBJ, CEPHFS_SECRET_OBJ
+    pvc_list = []
     log.info("Deleting PVC")
-    for pvc_obj in PVC_OBJ_LIST:
-        assert pvc.delete_pvc(pvc_obj.name)
+    for pvc_names in PVC_OBJ_LIST:
+        pvc_list.append(pvc_names.name)
+    assert pvc.delete_pvc(pvc_list)
     log.info("Deleting CEPH BLOCK POOL")
     for pool in POOL_OBJ_LIST:
         assert helpers.delete_cephblockpool(pool.name)
@@ -65,8 +64,6 @@ def teardown():
     RBD_SECRET_OBJ.delete()
     log.info("Deleting CEPHFS Secret")
     CEPHFS_SECRET_OBJ.delete()
-    log.info("Deleting CEPH FILESYSTEM")
-    assert helpers.delete_all_cephfilesystem()
     log.info("Deleting RBD Storageclass")
     for sc in SC_RBD_OBJ_LIST:
         assert helpers.delete_storageclass(sc.name)

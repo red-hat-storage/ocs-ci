@@ -1,6 +1,7 @@
 """
 Helper functions file for OCS QE
 """
+import base64
 import datetime
 import logging
 
@@ -121,16 +122,16 @@ def create_secret(interface_type):
         secret_data = templating.load_yaml_to_dict(
             constants.CSI_RBD_SECRET_YAML
         )
-        secret_data['stringData']['userID'] = constants.ADMIN_USER
-        secret_data['stringData']['userKey'] = get_admin_key()
+        del secret_data['data']['kubernetes']
+        secret_data['data']['admin'] = get_admin_key()
     elif interface_type == constants.CEPHFILESYSTEM:
         secret_data = templating.load_yaml_to_dict(
             constants.CSI_CEPHFS_SECRET_YAML
         )
-        del secret_data['stringData']['userID']
-        del secret_data['stringData']['userKey']
-        secret_data['stringData']['adminID'] = constants.ADMIN_USER
-        secret_data['stringData']['adminKey'] = get_admin_key()
+        del secret_data['data']['userID']
+        del secret_data['data']['userKey']
+        secret_data['data']['adminID'] = constants.ADMIN_BASE64
+        secret_data['data']['adminKey'] = get_admin_key()
     secret_data['metadata']['name'] = create_unique_resource_name(
         'test', 'secret'
     )
@@ -264,7 +265,6 @@ def verify_block_pool_exists(pool_name):
     logger.info(f"Verifying that block pool {pool_name} exists")
     ct_pod = pod.get_ceph_tools_pod()
     pools = ct_pod.exec_ceph_cmd('ceph osd lspools')
-    logger.info(f'POOLS are {pools}')
     for pool in pools:
         if pool_name in pool.get('poolname'):
             return True
@@ -402,7 +402,7 @@ def delete_cephblockpool(cbp_name):
     Function for deleting specific CephBlockPool
 
     Args:
-        cbp_name (str): Name of cbp for deletion
+        cbp_name (str): Name of CBP for deletion
 
     Returns:
         bool: True if deletion of CephBlockPool is successful
@@ -432,7 +432,8 @@ def create_cephfilesystem(override_fs=True):
     fs_data = copy.deepcopy(defaults.CEPHFILESYSTEM_DICT)
     if override_fs:
         logger.info("Deleting CephFileSystem if exists")
-        delete_all_cephfilesystem()
+        fs_name = get_cephfs_name()
+        delete_cephfilesystem(fs_name)
     else:
         POD = pod.get_all_pods(
             namespace=defaults.ROOK_CLUSTER_NAMESPACE
@@ -463,9 +464,12 @@ def create_cephfilesystem(override_fs=True):
     return True
 
 
-def delete_all_cephfilesystem():
+def delete_cephfilesystem(fs_name):
     """
-    Function to Delete CephFileSysem
+    Function to Delete CephFileSystem
+
+    Args:
+        fs_name (str): Name of CFS for deletion
 
     Returns:
         bool: True if deletion of CephFileSystem is successful
