@@ -8,8 +8,8 @@ import logging
 from ocs import constants, defaults, ocp
 from utility import templating
 from ocsci import config
-from resources import pod
-from resources.ocs import OCS
+from ocs.resources import pod
+from ocs.resources.ocs import OCS
 
 logger = logging.getLogger(__name__)
 

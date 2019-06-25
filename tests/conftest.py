@@ -15,7 +15,7 @@ from utility.aws import AWS
 from utility.retry import retry
 from utility.utils import destroy_cluster, run_cmd, get_openshift_installer, get_openshift_client, is_cluster_running
 from ocs.parallel import parallel
-from resources.ocs import OCS
+from ocs.resources.ocs import OCS
 from tests import helpers
 
 log = logging.getLogger(__name__)

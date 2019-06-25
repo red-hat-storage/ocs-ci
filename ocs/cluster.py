@@ -9,8 +9,8 @@ functional and proper configurations are made for interaction.
 import logging
 import base64
 
-import resources.pod as pod
-from resources import ocs
+import ocs.resources.pod as pod
+from ocs.resources import ocs
 import ocs.constants as constant
 from utility.utils import TimeoutSampler
 from ocsci import config

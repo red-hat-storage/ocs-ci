@@ -16,7 +16,7 @@ from ocs import defaults, constants, exceptions
 from ocsci import config
 from ocs.exceptions import CommandFailed
 
-from resources.ocs import OCS
+from ocs.resources.ocs import OCS
 
 logger = logging.getLogger(__name__)
 

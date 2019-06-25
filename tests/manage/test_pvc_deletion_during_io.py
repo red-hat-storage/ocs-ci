@@ -2,7 +2,7 @@ import pytest
 import logging
 
 from ocs import defaults, exceptions, constants
-from resources import pod
+from ocs.resources import pod
 from ocsci.testlib import ManageTest, tier1
 from tests.fixtures import (
     create_rbd_storageclass, create_pod, create_pvc, create_ceph_block_pool,

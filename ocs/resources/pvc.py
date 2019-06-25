@@ -6,7 +6,7 @@ import logging
 from ocs import constants
 from utility import templating
 from ocs.ocp import OCP
-from resources.ocs import OCS
+from ocs.resources.ocs import OCS
 from ocsci import config
 
 log = logging.getLogger(__name__)

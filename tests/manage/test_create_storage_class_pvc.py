@@ -5,9 +5,9 @@ import pytest
 from ocs import ocp, constants
 from ocsci import config
 from ocsci.testlib import tier1, ManageTest
-from resources.ocs import OCS
-from resources.pod import get_admin_key_from_ceph_tools
-from resources.pvc import PVC
+from ocs.resources.ocs import OCS
+from ocs.resources.pod import get_admin_key_from_ceph_tools
+from ocs.resources.pvc import PVC
 from tests import helpers
 from utility import templating
 
