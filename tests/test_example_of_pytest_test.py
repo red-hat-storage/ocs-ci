@@ -4,8 +4,8 @@ import pytest
 
 from ocs import ocp
 
-from ocsci import config
-from ocsci.testlib import run_this, EcosystemTest, tier1
+from framework import config
+from framework.testlib import run_this, EcosystemTest, tier1
 
 
 logger = logging.getLogger(__name__)

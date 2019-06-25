@@ -5,7 +5,7 @@ import os
 import time
 import yaml
 
-from ocsci import config
+from framework import config
 from ocs.openshift_ops import OCP
 from ocs import constants, ocp, defaults
 from ocs.exceptions import CommandFailed, CephHealthException

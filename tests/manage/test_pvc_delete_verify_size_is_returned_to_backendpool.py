@@ -9,7 +9,7 @@ import pytest
 from ocs import constants, defaults
 from ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from tests import helpers
-from ocsci.testlib import tier1, ManageTest
+from framework.testlib import tier1, ManageTest
 from utility import templating
 from utility.retry import retry
 from ocs.resources import pod, pvc

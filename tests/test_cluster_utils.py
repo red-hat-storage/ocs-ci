@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocsci.testlib import tier1, ManageTest
+from framework.testlib import tier1, ManageTest
 from ocs.cluster import CephCluster
 
 

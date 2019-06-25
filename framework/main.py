@@ -3,7 +3,7 @@ import os
 import pytest
 import yaml
 
-import ocsci
+import framework
 from utility import utils
 
 
@@ -40,20 +40,20 @@ def init_ocsci_conf(arguments=None):
     if custom_config:
         with open(custom_config) as file_stream:
             custom_config_data = yaml.safe_load(file_stream)
-            ocsci.config.update(custom_config_data)
+            framework.config.update(custom_config_data)
     if cluster_config:
         with open(cluster_config) as file_stream:
             cluster_config_data = yaml.safe_load(file_stream)
-            ocsci.config.update(cluster_config_data)
+            framework.config.update(cluster_config_data)
 
 
 def main(arguments):
     init_ocsci_conf(arguments)
     arguments.extend([
-        '-p', 'ocsci.pytest_customization.ocscilib',
-        '-p', 'ocsci.pytest_customization.marks',
-        '-p', 'ocsci.pytest_customization.ocsci_logging',
-        '-p', 'ocsci.pytest_customization.reports',
+        '-p', 'framework.pytest_customization.ocscilib',
+        '-p', 'framework.pytest_customization.marks',
+        '-p', 'framework.pytest_customization.ocsci_logging',
+        '-p', 'framework.pytest_customization.reports',
     ])
-    utils.add_path_to_env_path(os.path.expanduser(ocsci.config.RUN['bin_dir']))
+    utils.add_path_to_env_path(os.path.expanduser(framework.config.RUN['bin_dir']))
     return pytest.main(arguments)

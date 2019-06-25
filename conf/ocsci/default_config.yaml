@@ -7,7 +7,7 @@
 #   ENV_DATA section
 #
 # Each section in this file will be available as an attribute of the
-# ocsci.config object.
+# framework.config object.
 #
 # ------------------------------------------------------------------------
 

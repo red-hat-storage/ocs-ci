@@ -2,11 +2,11 @@ import logging
 import pytest
 
 from ocs import constants
-from ocsci.testlib import tier1, ManageTest
+from framework.testlib import tier1, ManageTest
 from ocs.resources.ocs import OCS
 from ocs.exceptions import CommandFailed
 from utility import templating
-from ocsci import config
+from framework import config
 
 log = logging.getLogger(__name__)
 

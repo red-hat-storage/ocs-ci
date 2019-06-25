@@ -13,14 +13,14 @@ You can find them defined in [pytest.ini](../pytest.ini) where we inform
 pytest about those marks.
 
 We have markers defined in pytest_customization package under
-[marks.py](../ocsci/pytest_customization/marks.py) plugin. From your tests you
+[marks.py](../framework/pytest_customization/marks.py) plugin. From your tests you
 can import directly from `ocsci.testlib` module with this statement:
 `from ocsci.testlib import tier1` for example.
 
 
 ## Base test classes for teams
 
-Those are located in [testlib.py](../ocsci/testlib.py) which you can also
+Those are located in [testlib.py](../framework/testlib.py) which you can also
 import from `ocsci.testlib` module with statement:
 `from ocsci.testlib import manage` which is base test class for manage team.
 

@@ -13,7 +13,7 @@ import ocs.resources.pod as pod
 from ocs.resources import ocs
 import ocs.constants as constant
 from utility.utils import TimeoutSampler
-from ocsci import config
+from framework import config
 from ocs import ocp
 from ocs import exceptions
 
