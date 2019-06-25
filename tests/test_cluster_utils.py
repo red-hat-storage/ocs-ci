@@ -25,6 +25,7 @@ def setup(self):
     """
     Setting up the environment for the test
     """
+    self.cluster = CephCluster()
     assert self.cluster.create_user(self.username, self.caps)
 
 
@@ -47,8 +48,8 @@ def teardown(self):
     test_fixture.__name__,
 )
 class TestClusterUtils(ManageTest):
-
-    cluster = CephCluster()
+    # Cluster will be populated in the fixture
+    cluster = None
     username = "client.test"
     caps = "mon 'allow r' osd 'allow rwx'"
 
