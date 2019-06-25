@@ -4,9 +4,9 @@ import logging
 from kubernetes import config
 from openshift.dynamic import DynamicClient, exceptions
 
+from ocs import constants
 from ocs.exceptions import CommandFailed
 from utility.utils import run_cmd
-import ocs.defaults as default
 
 log = logging.getLogger(__name__)
 
@@ -26,16 +26,16 @@ class OCP(object):
             api_version='v1', kind='ServiceList'
         )
         self.v1_projects = dyn_client.resources.get(
-            api_version='project.openshift.io/v1', kind='Project'
+            api_version=constants.OCP_API_VERSION, kind='Project'
         )
         self.pods = dyn_client.resources.get(
-            api_version=default.API_VERSION, kind='Pod'
+            api_version=constants.API_VERSION, kind='Pod'
         )
         self.deployments = dyn_client.resources.get(
-            api_version=default.API_VERSION, kind='Deployment'
+            api_version=constants.API_VERSION, kind='Deployment'
         )
         self.services = dyn_client.resources.get(
-            api_version=default.API_VERSION, kind='Service'
+            api_version=constants.API_VERSION, kind='Service'
         )
 
     @staticmethod
@@ -204,7 +204,7 @@ class OCP(object):
         _rc = False
         body = {
             'kind': 'Project',
-            'apiVersion': 'project.openshift.io/v1',
+            'apiVersion': constants.OCP_API_VERSION,
             'metadata': {'name': project},
         }
         try:

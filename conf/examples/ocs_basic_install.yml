@@ -1,16 +1,6 @@
 ---
 # This is example of the config for deployment which allows you to overwrite
-# the default values from templates.
-
-# In default section you can overwrite data which will be then exposed to all
-# configs like ocsci/default_config.yaml. As you can see we are using there
-# default ENV_DATA section and you can see for example:
-# ceph_image: '{{ DEFAULTS["CEPH_IMAGE"] }}' which means is take by default
-# from DEFAULTS section from CEPH_IMAGE variable define in this section.
-DEFAULTS:
-  CEPH_IMAGE: "quay.io/rhceph-dev/rhceph-4.0-rhel-8"
-  # this will be used in ENV_DATA section as well cause of example mentioned
-  # above!
+# default config from ocs/defaults.py
 
 ENV_DATA:
   # take a look at deployment templates variables, here you is the place you
@@ -18,12 +8,6 @@ ENV_DATA:
   platform: 'aws'
   worker_replicas: 6  # here you can define diff number of workers
   master_replicas: 3  # no effect here as default is also 3
-  # you can overwrite default rook image right here. But you will redefine it
-  # just for ENV_DATA section. PPL who will access this ROOK Image from
-  # ocs/defaults.py will still get default one from ocsci/default_config.yaml
-  # from it's DEFAULTS section.
   rook_image: "quay.io/rhceph-dev/rook"
-
   # We don't define ceph_image: here so it will be taken from
-  # ocsci/default_config.yaml and as you can see from DEFAULTS which we
-  # re-defining in DEFAULTS section above.
+  # ocs/defaults.py

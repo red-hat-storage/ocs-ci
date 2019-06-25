@@ -8,7 +8,7 @@ import yaml
 from ocs.exceptions import CommandFailed
 from utility.utils import TimeoutSampler
 from utility.utils import run_cmd
-from ocs import defaults
+from ocsci import config
 
 log = logging.getLogger(__name__)
 
@@ -289,4 +289,4 @@ def switch_to_default_rook_cluster_project():
     Returns:
         bool: True on success, False otherwise
     """
-    return switch_to_project(defaults.ROOK_CLUSTER_NAMESPACE)
+    return switch_to_project(config.ENV_DATA['cluster_namespace'])

@@ -11,7 +11,7 @@ from threading import Thread
 import base64
 
 from ocs.ocp import OCP
-from ocs import defaults, constants, exceptions
+from ocs import constants, exceptions
 
 from ocsci import config
 from ocs.exceptions import CommandFailed
@@ -56,7 +56,7 @@ class Pod(OCS):
         self._labels = self.get_labels()
         self._roles = []
         self.ocp = OCP(
-            api_version=defaults.API_VERSION, kind=constants.POD,
+            api_version=constants.API_VERSION, kind=constants.POD,
             namespace=self.namespace
         )
         # TODO: get backend config !!
@@ -302,9 +302,9 @@ def get_mds_pods(mds_label=constants.MDS_APP_LABEL, namespace=None):
 
     Args:
         mds_label (str): label associated with mds pods
-            (default: defaults.MDS_APP_LABEL)
+            (default: constants.MDS_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: config.ENV_DATA['cluster_namespace'])
 
     Returns:
         list : of mds pod objects
@@ -321,9 +321,9 @@ def get_mon_pods(mon_label=constants.MON_APP_LABEL, namespace=None):
 
     Args:
         mon_label (str): label associated with mon pods
-            (default: defaults.MON_APP_LABEL)
+            (default: constants.MON_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: config.ENV_DATA['cluster_namespace'])
 
     Returns:
         list : of mon pod objects
@@ -340,9 +340,9 @@ def get_mgr_pods(mgr_label=constants.MGR_APP_LABEL, namespace=None):
 
     Args:
         mgr_label (str): label associated with mgr pods
-            (default: defaults.MGR_APP_LABEL)
+            (default: constants.MGR_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: config.ENV_DATA['cluster_namespace'])
 
     Returns:
         list : of mgr pod objects
@@ -359,9 +359,9 @@ def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
 
     Args:
         osd_label (str): label associated with osd pods
-            (default: defaults.OSD_APP_LABEL)
+            (default: constants.OSD_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: config.ENV_DATA['cluster_namespace'])
 
     Returns:
         list : of osd pod objects

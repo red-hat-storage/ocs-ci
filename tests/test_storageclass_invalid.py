@@ -6,8 +6,9 @@ import yaml
 
 from resources.pvc import PVC
 from tests import helpers
-from ocs import constants, defaults
+from ocs import constants
 from ocs.exceptions import TimeoutExpiredError
+from ocsci import config
 from ocsci.testlib import tier3, ManageTest
 from resources.ocs import OCS
 from utility import templating
@@ -106,7 +107,9 @@ class TestCaseOCS331_and_OC341(ManageTest):
         pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
         pvc_name = helpers.create_unique_resource_name('test', 'pvc')
         pvc_data['metadata']['name'] = pvc_name
-        pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+        pvc_data['metadata']['namespace'] = config.ENV_DATA[
+            "cluster_namespace"
+        ]
         pvc_data['spec']['storageClassName'] = invalid_storageclass[
             'metadata']['name']
         logger.info(

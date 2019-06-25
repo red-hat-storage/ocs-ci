@@ -5,7 +5,7 @@ import base64
 import datetime
 import logging
 
-from ocs import constants, defaults, ocp
+from ocs import constants, ocp
 from utility import templating
 from ocsci import config
 from resources import pod
@@ -30,7 +30,10 @@ def create_unique_resource_name(resource_description, resource_type):
     current_date_time = (
         datetime.datetime.now().strftime("%d%H%M%S%f")
     )
-    return f"{resource_type}-{resource_description[:23]}-{current_date_time[:10]}"
+    return (
+        f"{resource_type}-{resource_description[:23]}-"
+        f"{current_date_time[:10]}"
+    )
 
 
 def create_resource(
@@ -124,7 +127,9 @@ def create_secret(interface_type):
     secret_data['metadata']['name'] = create_unique_resource_name(
         'test', 'secret'
     )
-    secret_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    secret_data['metadata']['namespace'] = config.ENV_DATA[
+        "cluster_namespace"
+    ]
 
     return create_resource(**secret_data, wait=False)
 
@@ -145,7 +150,7 @@ def create_ceph_block_pool(pool_name=None):
             'test', 'cbp'
         )
     )
-    cbp_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    cbp_data['metadata']['namespace'] = config.ENV_DATA["cluster_namespace"]
     cbp_obj = create_resource(**cbp_data, wait=False)
 
     assert verify_block_pool_exists(cbp_obj.name), (
@@ -180,7 +185,7 @@ def create_storage_class(
         ] = secret_name
         sc_data['parameters'][
             'csi.storage.k8s.io/node-publish-secret-namespace'
-        ] = defaults.ROOK_CLUSTER_NAMESPACE
+        ] = config.ENV_DATA["cluster_namespace"]
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = templating.load_yaml_to_dict(
             constants.CSI_CEPHFS_STORAGECLASS_YAML
@@ -190,7 +195,7 @@ def create_storage_class(
         ] = secret_name
         sc_data['parameters'][
             'csi.storage.k8s.io/node-stage-secret-namespace'
-        ] = defaults.ROOK_CLUSTER_NAMESPACE
+        ] = config.ENV_DATA["cluster_namespace"]
     sc_data['parameters']['pool'] = interface_name
 
     mons = (
@@ -206,16 +211,18 @@ def create_storage_class(
             'test', 'storageclass'
         )
     )
-    sc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    sc_data['metadata']['namespace'] = config.ENV_DATA["cluster_namespace"]
     sc_data['parameters'][
         'csi.storage.k8s.io/provisioner-secret-name'
     ] = secret_name
     sc_data['parameters'][
         'csi.storage.k8s.io/provisioner-secret-namespace'
-    ] = defaults.ROOK_CLUSTER_NAMESPACE
+    ] = config.ENV_DATA["cluster_namespace"]
 
     if interface_type == constants.CEPHBLOCKPOOL:
-        sc_data['parameters']['clusterID'] = defaults.ROOK_CLUSTER_NAMESPACE
+        sc_data['parameters']['clusterID'] = config.ENV_DATA[
+            "cluster_namespace"
+        ]
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data['parameters']['monitors'] = mons
 
@@ -244,7 +251,7 @@ def create_pvc(sc_name, pvc_name=None):
             'test', 'pvc'
         )
     )
-    pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    pvc_data['metadata']['namespace'] = config.ENV_DATA["cluster_namespace"]
     pvc_data['spec']['storageClassName'] = sc_name
     return create_resource(
         desired_status=constants.STATUS_BOUND, **pvc_data
@@ -308,7 +315,7 @@ def validate_cephfilesystem(fs_name):
     """
     CFS = ocp.OCP(
         kind=constants.CEPHFILESYSTEM,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        namespace=config.ENV_DATA["cluster_namespace"]
     )
     ct_pod = pod.get_ceph_tools_pod()
     ceph_validate = False
@@ -344,7 +351,7 @@ def get_all_storageclass_name():
     """
     SC = ocp.OCP(
         kind=constants.STORAGECLASS,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        namespace=config.ENV_DATA["cluster_namespace"]
     )
     sc_obj = SC.get()
     sample = sc_obj['items']
@@ -367,7 +374,7 @@ def delete_all_storageclass():
 
     SC = ocp.OCP(
         kind=constants.STORAGECLASS,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        namespace=config.ENV_DATA["cluster_namespace"]
     )
     storageclass_list = get_all_storageclass_name()
     for item in storageclass_list:
@@ -385,7 +392,7 @@ def get_cephblockpool_name():
     """
     POOL = ocp.OCP(
         kind=constants.CEPHBLOCKPOOL,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        namespace=config.ENV_DATA["cluster_namespace"]
     )
     sc_obj = POOL.get()
     sample = sc_obj['items']
@@ -404,7 +411,7 @@ def delete_cephblockpool():
     """
     POOL = ocp.OCP(
         kind=constants.CEPHBLOCKPOOL,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        namespace=config.ENV_DATA["cluster_namespace"]
     )
     pool_list = get_cephblockpool_name()
     for item in pool_list:
@@ -429,7 +436,7 @@ def create_cephfilesystem():
     CEPHFS_OBJ = OCS(**fs_data)
     CEPHFS_OBJ.create()
     POD = pod.get_all_pods(
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        namespace=config.ENV_DATA["cluster_namespace"]
     )
     for pod_names in POD:
         if 'rook-ceph-mds' in pod_names.labels.values():
@@ -450,7 +457,7 @@ def delete_all_cephfilesystem():
     """
     CFS = ocp.OCP(
         kind=constants.CEPHFILESYSTEM,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        namespace=config.ENV_DATA["cluster_namespace"]
     )
     result = CFS.get()
     cephfs_dict = result['items']

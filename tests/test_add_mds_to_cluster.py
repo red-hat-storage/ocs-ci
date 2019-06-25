@@ -14,8 +14,8 @@ log = logging.getLogger(__name__)
 
 CEPHFS_DELETED = '"{cephfs_name}" deleted'
 
-POD = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace'])
-CEPHFS = ocp.OCP(kind=constants.CEPHFILESYSTEM)
+POD = None
+CEPHFS = None
 CEPH_OBJ = None
 
 
@@ -36,7 +36,8 @@ def setup(self):
     """
     Setting up the environment for the test
     """
-    global CEPHFS, CEPH_OBJ
+    global POD, CEPHFS, CEPH_OBJ
+    POD = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace'])
     CEPHFS = ocp.OCP(kind=constants.CEPHFILESYSTEM)
     self.fs_data = CEPHFS.get(defaults.CEPHFILESYSTEM_NAME)
     self.fs_name = self.fs_data['metadata']['name']

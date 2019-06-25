@@ -6,7 +6,7 @@ import logging
 
 import pytest
 
-from ocs import constants, defaults
+from ocs import constants
 from ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from tests import helpers
 from ocsci.testlib import tier1, ManageTest
@@ -14,6 +14,7 @@ from utility import templating
 from utility.retry import retry
 from resources import pod, pvc
 from ocs import ocp
+from ocsci import config
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool,
     create_rbd_secret
@@ -21,10 +22,6 @@ from tests.fixtures import (
 
 logger = logging.getLogger(__name__)
 _templating = templating.Templating()
-
-PV = ocp.OCP(
-    kind='PersistentVolume', namespace=defaults.ROOK_CLUSTER_NAMESPACE
-)
 
 used_space = 0
 
@@ -53,7 +50,10 @@ def verify_pv_not_exists(pv_name, cbp_name):
     """
     Ensure that pv does not exists
     """
-
+    PV = ocp.OCP(
+        kind=constants.PV,
+        namespace=config.ENV_DATA["cluster_namespace"]
+    )
     # Validate on ceph side
     logger.info(f"Verifying pv {pv_name} exists on backend")
     ct_pod = pod.get_ceph_tools_pod()

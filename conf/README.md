@@ -81,12 +81,18 @@ from ocs import defaults
 
 # From you code you can access those data like
 
-Taking data from ENV_DATA will always use right cluster_namespace passed via
-`--ocsci-conf` config file or default one defined in `default_config.yaml`.
-function_which_taking_namespace(namespace=config.ENV_DATA['cluster_namespace'])
+# Taking data from ENV_DATA will always use right cluster_namespace passed via
+#`--ocsci-conf` or `--cluster-conf` config files.
+
+# It's not possible to access config data from module level as config is not
+# properly initialized. So you have to access it from function or fixture!
+function_which_taking_namespace(namespace=None):
+    namespace = namespace if namespace else config.ENV_DATA[
+        'cluster_namespace'
+    ]
 
 # Defaults data you can access like in this example:
-print(f"Printing some default data like API version: {defaults.API_VERSION}")
+print(f"Printing some default data like API version: {defaults.SOME_VAR}")
 ```
 
 ## Priority of loading configs:

@@ -9,16 +9,10 @@ under section PYTEST_DONT_REWRITE
 # Use the new python 3.7 dataclass decorator, which provides an object similar
 # to a namedtuple, but allows type enforcement and defining methods.
 import collections
-import os
-import yaml
+import copy
 from dataclasses import dataclass, field, fields
 
-from ocs import constants
-
-DEFAULT_CONFIG_PATH = os.path.join(
-    constants.TOP_DIR,
-    "conf/ocsci/default_config.yaml"
-)
+from ocs import defaults
 
 
 @dataclass
@@ -43,8 +37,13 @@ class Config:
         """
         Return a fresh copy of the default configuration
         """
-        with open(DEFAULT_CONFIG_PATH) as file_stream:
-            return yaml.safe_load(file_stream)
+        default_config = dict(
+            RUN=copy.deepcopy(defaults.RUN),
+            DEPLOYMENT=copy.deepcopy(defaults.DEPLOYMENT),
+            REPORTING=copy.deepcopy(defaults.REPORTING),
+            ENV_DATA=copy.deepcopy(defaults.ENV_DATA),
+        )
+        return default_config
 
     def update(self, user_dict: dict):
         """

@@ -1,7 +1,9 @@
 import pytest
-from tests import helpers
-from ocs import defaults, constants
+
+from ocs import constants
+from ocsci import config
 from utility import templating
+from tests import helpers
 
 
 @pytest.fixture()
@@ -93,6 +95,6 @@ def create_pod(request):
     pod_data['metadata']['name'] = helpers.create_unique_resource_name(
         'test', 'pod'
     )
-    pod_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    pod_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
     pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = class_instance.pvc_obj.name
     class_instance.pod_obj = helpers.create_pod(**pod_data)

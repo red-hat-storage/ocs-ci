@@ -7,19 +7,47 @@ import os
 
 from ocs import constants
 
-STORAGE_API_VERSION = 'storage.k8s.io/v1'
-ROOK_API_VERSION = 'ceph.rook.io/v1'
-OCP_API_VERSION = 'project.openshift.io/v1'
-OPENSHIFT_REST_CLIENT_API_VERSION = 'v1'
 
-# Be aware that variables defined above and below are not used anywhere in the
-# config files and their sections when we rendering config!
+#############################################################################
+# Default Configuration - access those vars from config and not from here!  #
+#############################################################################
+ENV_DATA = {
+    'platform': 'AWS',
+    'cluster_name': 'ocs-ci',
+    'cluster_namespace': 'openshift-storage',
+    'region': 'us-east-2',
+    'ceph_image': "ceph/ceph:v14",
+    'rook_image': "rook/ceph:master",
+}
 
-INSTALLER_VERSION = '4.1.2'
-CLIENT_VERSION = INSTALLER_VERSION
-ROOK_CLUSTER_NAMESPACE = 'openshift-storage'
-KUBECONFIG_LOCATION = 'auth/kubeconfig'  # relative from cluster_dir
-API_VERSION = "v1"
-CEPHFILESYSTEM_NAME = 'ocsci-cephfs'
+DEPLOYMENT = {
+    'installer_version': "4.1.2",
+}
+
+REPORTING = {
+    'email': {
+        'address': 'ocs-ci@redhat.com',
+    },
+    'polarion': {
+        'project_id': 'OpenShiftContainerStorage',
+    }
+}
+
+RUN = {
+    'log_dir': '/tmp',
+    'run_id': None,
+    'kubeconfig_location': 'auth/kubeconfig',
+    'cli_params': {},
+    'client_version': DEPLOYMENT['installer_version'],
+    'bin_dir': './bin',
+}
+
+#############################################################################
+# End of Default Configuration                                              #
+#############################################################################
 
 TEMP_YAML = os.path.join(constants.TEMPLATE_DIR, "temp.yaml")
+
+# This variable is changed in deployment fixture. Don't want to change the
+# logic of this in this PR, so this needs to be probably solved better way.
+CEPHFILESYSTEM_NAME = 'ocsci-cephfs'

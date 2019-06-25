@@ -10,6 +10,14 @@ and with consideration of the entire project.
 """
 import os
 
+# Versions
+STORAGE_API_VERSION = 'storage.k8s.io/v1'
+ROOK_API_VERSION = 'ceph.rook.io/v1'
+OCP_API_VERSION = 'project.openshift.io/v1'
+OPENSHIFT_REST_CLIENT_API_VERSION = 'v1'
+API_VERSION = "v1"
+
+
 # Directories
 TOP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = os.path.join(TOP_DIR, "templates")
@@ -42,6 +50,8 @@ IGNORE_SC = "gp2"
 
 # encoded value of 'admin'
 ADMIN_BASE64 = 'YWRtaW4='
+
+# Sizes
 GB = 1024 ** 3
 
 MON_APP_LABEL = "app=rook-ceph-mon"

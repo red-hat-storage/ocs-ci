@@ -6,7 +6,7 @@ import os
 import logging
 
 import ocsci
-from ocs import defaults, constants
+from ocs import constants
 from kubernetes import config
 from openshift.dynamic import DynamicClient
 from utility.utils import get_random_str
@@ -44,7 +44,7 @@ class CephRBDVolume(KubeVolume):
     def __init__(self, name=None, namespace='default'):
         super().__init__(name, namespace)
         self.kind = constants.CEPHBLOCKPOOL
-        self.api_version = defaults.OPENSHIFT_REST_CLIENT_API_VERSION
+        self.api_version = constants.OPENSHIFT_REST_CLIENT_API_VERSION
         self.service_cbp = self.dyn_client.resources.get(
             api_version=self.api_version,
             kind=self.kind
@@ -112,7 +112,7 @@ class StorageClass(KubeVolume):
     def __init__(self, name=None, namespace='default'):
         super().__init__(name, namespace)
         self.kind = constants.STORAGECLASS
-        self.api_version = defaults.OPENSHIFT_REST_CLIENT_API_VERSION
+        self.api_version = constants.OPENSHIFT_REST_CLIENT_API_VERSION
         self.service_sc = self.dyn_client.resources.get(
             api_version=self.api_version,
             kind=self.kind
@@ -164,7 +164,7 @@ class StorageClass(KubeVolume):
             sc_name = f"{sc_name_prefix}-{get_random_str()}"
 
         sc_data = {}
-        sc_data['k8s_api_version'] = defaults.STORAGE_API_VERSION
+        sc_data['k8s_api_version'] = constants.STORAGE_API_VERSION
         sc_data['storageclass_name'] = sc_name
         sc_data['volume_expansion'] = allow_volume_expansion
         sc_data['reclaimPolicy'] = reclaim_policy
@@ -193,7 +193,7 @@ class PVC(KubeVolume):
     def __init__(self, name=None, namespace='default'):
         super().__init__(name, namespace)
         self.kind = constants.PVC
-        self.api_version = defaults.OPENSHIFT_REST_CLIENT_API_VERSION
+        self.api_version = constants.OPENSHIFT_REST_CLIENT_API_VERSION
         self.service_pvc = self.dyn_client.resources.get(
             api_version=self.api_version,
             kind=self.kind
