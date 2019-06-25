@@ -390,7 +390,7 @@ def get_cephblockpool_name():
     return pool_list
 
 
-def delete_cephblockpool():
+def delete_cephblockpool(pool_name=None):
     """
     Function for deleting CephBlockPool
 
