@@ -13,7 +13,7 @@ from libcloud.common.types import LibcloudError
 from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
 
-from mita.openstack import CephVMNode
+from ocs.openstack import CephVMNode
 from utility.retry import retry
 from .ceph import RolesContainer, CommandFailed, Ceph, CephNode
 from .clients import WinNode
