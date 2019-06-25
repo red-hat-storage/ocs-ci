@@ -4,7 +4,6 @@ import logging
 import os
 import time
 import yaml
-import copy
 
 from ocsci import config
 from utility.environment_check import environment_checker  # noqa: F401
@@ -230,7 +229,7 @@ def cluster(request):
     time.sleep(wait_time)
 
     # Create MDS pods for CephFileSystem
-    fs_data = copy.deepcopy(defaults.CEPHFILESYSTEM_DICT)
+    fs_data = templating.load_yaml_to_dict(constants.CEPHFILESYSTEM_YAML)
     fs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
 
     ceph_obj = OCS(**fs_data)
@@ -246,6 +245,7 @@ def cluster(request):
 
     if helpers.validate_cephfilesystem(cfs_name):
         log.info(f"MDS deployment is successful!")
+        defaults.CEPHFILESYSTEM_NAME = cfs_name
     else:
         log.error(
             f"MDS deployment Failed! Please check logs!"

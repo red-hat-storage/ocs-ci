@@ -49,3 +49,48 @@ MDS_APP_LABEL = "app=rook-ceph-mds"
 TOOL_APP_LABEL = "app=rook-ceph-tools"
 MGR_APP_LABEL = "app=rook-ceph-mgr"
 OSD_APP_LABEL = "app=rook-ceph-osd"
+
+# YAML paths
+TOOL_POD_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "toolbox_pod.yaml"
+)
+
+CEPHFILESYSTEM_YAML = os.path.join(
+    TEMPLATE_CSI_FS_DIR, "CephFileSystem.yaml"
+)
+
+CEPHBLOCKPOOL_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "cephblockpool.yaml"
+)
+
+CSI_RBD_STORAGECLASS_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "storageclass.yaml"
+)
+
+CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(
+    TEMPLATE_CSI_FS_DIR, "storageclass.yaml"
+)
+
+CSI_PVC_YAML = os.path.join(
+    TEMPLATE_PV_PVC_DIR, "PersistentVolumeClaim.yaml"
+)
+
+CSI_RBD_POD_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "pod.yaml"
+)
+
+CSI_RBD_SECRET_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "secret.yaml"
+)
+
+CSI_CEPHFS_SECRET_YAML = os.path.join(
+    TEMPLATE_CSI_FS_DIR, "secret.yaml"
+)
+
+CSI_CEPHFS_PVC_YAML = os.path.join(
+    TEMPLATE_CSI_FS_DIR, "pvc.yaml"
+)
+
+CSI_RBD_PVC_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "pvc.yaml"
+)
