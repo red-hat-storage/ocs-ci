@@ -650,7 +650,10 @@ def run_cmd(cmd, **kwargs):
     )
     log.debug(f"CMD output: {r.stdout.decode()}")
     if r.stderr:
-        log.error(f"CMD error:: {r.stderr.decode()}")
+        if r.returncode == 0:
+            log.debug(f"CMD error: {r.stderr.decode()}")
+        else:
+            log.error(f"CMD error: {r.stderr.decode()}")
     if r.returncode:
         raise CommandFailed(
             f"Error during execution of command: {cmd}."
