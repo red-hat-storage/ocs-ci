@@ -12,7 +12,7 @@ from tests import helpers
 from ocsci.testlib import tier1, ManageTest
 from utility import templating
 from utility.retry import retry
-from resources import pod, pvc
+from ocs.resources import pod, pvc
 from ocs import ocp
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool,

@@ -4,8 +4,8 @@ import pytest
 
 from ocs import constants
 from ocsci.testlib import tier3, ManageTest
-from resources.ocs import OCS
-from resources.pvc import PVC
+from ocs.resources.ocs import OCS
+from ocs.resources.pvc import PVC
 from tests import helpers
 from ocs.exceptions import CommandFailed
 from utility import templating

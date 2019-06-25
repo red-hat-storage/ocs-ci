@@ -8,7 +8,7 @@ import pytest
 
 from ocs import constants
 from ocsci.testlib import tier1, ManageTest
-from resources import pvc
+from ocs.resources import pvc
 from tests import helpers
 
 log = logging.getLogger(__name__)

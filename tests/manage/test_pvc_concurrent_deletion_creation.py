@@ -7,8 +7,8 @@ import pytest
 from ocs import constants, ocp, exceptions
 from utility.utils import run_async
 from ocsci.testlib import tier1, ManageTest
-from resources.pod import get_ceph_tools_pod
-from resources.pvc import create_multiple_pvc
+from ocs.resources.pod import get_ceph_tools_pod
+from ocs.resources.pvc import create_multiple_pvc
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool, create_rbd_secret
 )

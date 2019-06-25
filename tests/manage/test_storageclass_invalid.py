@@ -4,12 +4,12 @@ import pytest
 import os.path
 import yaml
 
-from resources.pvc import PVC
+from ocs.resources.pvc import PVC
 from tests import helpers
 from ocs import constants, defaults
 from ocs.exceptions import TimeoutExpiredError
 from ocsci.testlib import tier3, ManageTest
-from resources.ocs import OCS
+from ocs.resources.ocs import OCS
 from utility import templating
 
 

@@ -3,7 +3,7 @@ import pytest
 
 from ocs import constants
 from ocsci.testlib import tier1, ManageTest
-from resources.ocs import OCS
+from ocs.resources.ocs import OCS
 from ocs.exceptions import CommandFailed
 from utility import templating
 from ocsci import config
