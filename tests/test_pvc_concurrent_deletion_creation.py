@@ -3,9 +3,8 @@ Test to verify concurrent creation and deletion of multiple PVCs
 """
 import logging
 import pytest
-from copy import deepcopy
 
-from ocs import defaults, constants, ocp, exceptions
+from ocs import constants, ocp, exceptions
 from utility.utils import run_async
 from ocsci.testlib import tier1, ManageTest
 from resources.pod import get_ceph_tools_pod
@@ -13,6 +12,7 @@ from resources.pvc import create_multiple_pvc
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool, create_rbd_secret
 )
+from utility.templating import load_yaml_to_dict
 
 log = logging.getLogger(__name__)
 TEST_PROJECT = 'test-project'
@@ -43,7 +43,7 @@ def setup(self):
     )
 
     # Parameters for PVC yaml as dict
-    pvc_data = defaults.CSI_PVC_DICT.copy()
+    pvc_data = load_yaml_to_dict(constants.CSI_PVC_YAML)
     pvc_data['metadata']['namespace'] = TEST_PROJECT
     pvc_data['spec']['storageClassName'] = self.sc_obj.name
     pvc_data['metadata']['name'] = self.pvc_base_name
@@ -125,7 +125,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
 
         # Create 100 new PVCs
         # Parameters for PVC yaml as dict
-        pvc_data = deepcopy(defaults.CSI_PVC_DICT)
+        pvc_data = load_yaml_to_dict(constants.CSI_PVC_YAML)
         pvc_data['metadata']['namespace'] = TEST_PROJECT
         pvc_data['spec']['storageClassName'] = self.sc_obj.name
         pvc_data['metadata']['name'] = self.pvc_base_name_new
