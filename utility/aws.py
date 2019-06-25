@@ -1,7 +1,7 @@
 import logging
 import time
 
-from ocsci import config
+from framework import config
 from utility import utils
 import boto3
 

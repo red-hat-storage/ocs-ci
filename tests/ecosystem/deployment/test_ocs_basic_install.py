@@ -1,7 +1,7 @@
 import logging
 
-from ocsci import config
-from ocsci.testlib import deployment
+from framework import config
+from framework.testlib import deployment
 from utility.utils import is_cluster_running
 
 log = logging.getLogger(__name__)

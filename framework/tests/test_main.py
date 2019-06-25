@@ -4,7 +4,7 @@ import subprocess
 from pytest import fixture
 from unittest import mock
 
-from ocsci import config, main
+from framework import config, main
 
 pytest_plugins = [
     'pytester',
@@ -26,13 +26,13 @@ class TestEntrypoint(object):
         assert '--cluster-path' in result
         assert '--cluster-name' in result
 
-    @mock.patch('ocsci.main.pytest.main')
+    @mock.patch('framework.main.pytest.main')
     @mock.patch.object(config, 'update')
     def test_no_args(self, config_update, pytest_main, testdir):
         main.main([])
         assert config_update.call_count == 0
 
-    @mock.patch('ocsci.main.pytest.main')
+    @mock.patch('framework.main.pytest.main')
     @mock.patch.object(config, 'update')
     def test_config_passing(self, config_update, pytest_main, testdir):
         tempdir = testdir.makefile(

@@ -16,7 +16,7 @@ import smtplib
 from ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
 )
-from ocsci import config
+from framework import config
 from .aws import AWS
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText

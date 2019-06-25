@@ -11,8 +11,8 @@ import os
 import random
 import pytest
 
-from ocsci import config as ocsci_config
-from ocsci.exceptions import ClusterPathNotProvidedError
+from framework import config as ocsci_config
+from framework.exceptions import ClusterPathNotProvidedError
 from ocs.exceptions import CommandFailed
 from utility.utils import (
     get_cluster_version,
@@ -20,6 +20,7 @@ from utility.utils import (
     get_rook_version,
     get_csi_versions
 )
+
 
 __all__ = [
     "pytest_addoption",

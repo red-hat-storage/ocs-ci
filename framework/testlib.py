@@ -1,4 +1,4 @@
-from ocsci.pytest_customization.marks import *  # noqa: F403
+from framework.pytest_customization.marks import *  # noqa: F403
 from utility import environment_check as ec
 
 

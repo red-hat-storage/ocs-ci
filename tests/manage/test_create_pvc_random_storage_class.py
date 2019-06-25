@@ -7,7 +7,7 @@ import random
 import pytest
 
 from ocs import constants
-from ocsci.testlib import tier1, ManageTest
+from framework.testlib import tier1, ManageTest
 from ocs.resources import pvc
 from tests import helpers
 

@@ -6,7 +6,7 @@ import pytest
 
 from ocs import constants, ocp, exceptions
 from utility.utils import run_async
-from ocsci.testlib import tier1, ManageTest
+from framework.testlib import tier1, ManageTest
 from ocs.resources.pod import get_ceph_tools_pod
 from ocs.resources.pvc import create_multiple_pvc
 from tests.fixtures import (

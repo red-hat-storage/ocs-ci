@@ -13,7 +13,7 @@ import base64
 from ocs.ocp import OCP
 from ocs import defaults, constants, exceptions
 
-from ocsci import config
+from framework import config
 from ocs.exceptions import CommandFailed
 
 from ocs.resources.ocs import OCS

@@ -6,8 +6,8 @@ import logging
 import pytest
 
 from ocs import ocp, defaults, constants
-from ocsci import config
-from ocsci.testlib import tier1, ManageTest
+from framework import config
+from framework.testlib import tier1, ManageTest
 from ocs.resources.ocs import OCS
 
 log = logging.getLogger(__name__)

@@ -8,7 +8,7 @@ import pytest
 from gevent.threadpool import ThreadPoolExecutor
 
 from ocs import ocp, constants, exceptions
-from ocsci.pytest_customization.marks import (
+from framework.pytest_customization.marks import (
     deployment, destroy, ignore_leftovers
 )
 from deepdiff import DeepDiff

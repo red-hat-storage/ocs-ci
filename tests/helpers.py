@@ -7,7 +7,7 @@ import logging
 
 from ocs import constants, defaults, ocp
 from utility import templating
-from ocsci import config
+from framework import config
 from ocs.resources import pod
 from ocs.resources.ocs import OCS
 

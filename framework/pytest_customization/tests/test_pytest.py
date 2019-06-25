@@ -4,8 +4,8 @@ import logging
 import textwrap
 from pytest import fixture
 
-import ocsci
-from ocsci.main import init_ocsci_conf
+import framework
+from framework.main import init_ocsci_conf
 
 pytest_plugins = [
     'pytester',
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 @fixture(autouse=True)
 def reset_config():
-    ocsci.config.reset()
+    framework.config.reset()
 
 
 def test_pytest_works():
@@ -30,7 +30,7 @@ def test_help_message(testdir):
     ocscilib pytest plugin.
     """
     testdir.makeconftest(textwrap.dedent("""
-        pytest_plugins = ['ocsci.pytest_customization.ocscilib']
+        pytest_plugins = ['framework.pytest_customization.ocscilib']
     """))
     result = testdir.runpytest('--help')
     # fnmatch_lines does an assertion internally
@@ -65,13 +65,13 @@ def test_config_parametrize(testdir, tmpdir):
     https://github.com/red-hat-storage/ocs-ci/pull/61#issuecomment-494866745
     """
     testdir.makeconftest(textwrap.dedent("""
-        pytest_plugins = ['ocsci.pytest_customization.ocscilib']
+        pytest_plugins = ['framework.pytest_customization.ocscilib']
     """))
     # create a temporary pytest test module
     testdir.makepyfile(textwrap.dedent("""\
         import pytest
 
-        from ocsci import config as ocsci_config
+        from framework import config as ocsci_config
 
         @pytest.mark.parametrize("item", ocsci_config.RUN)
         def test_demo_parametrized_config(item):
@@ -91,7 +91,7 @@ def test_config_parametrize(testdir, tmpdir):
     # run pytest with the following pytest_argumetns
     result = testdir.runpytest(*pytest_arguments)
     # Build a list of lines we expect to see in the output
-    run_defaults = ocsci.config.get_defaults()['RUN']
+    run_defaults = framework.config.get_defaults()['RUN']
     expected_items = list(run_defaults.keys()) + ['things']
     expected_lines = [f'collecting*collected {len(expected_items)} items']
     expected_lines.extend([

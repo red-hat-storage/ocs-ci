@@ -1,11 +1,11 @@
 import sys
 
-import ocsci.main
+import framework.main
 
 
 def main():
     arguments = sys.argv[1:]
-    exit(ocsci.main.main(arguments))
+    exit(framework.main.main(arguments))
 
 
 if __name__ == "__main__":

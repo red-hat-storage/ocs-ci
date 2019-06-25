@@ -3,7 +3,7 @@ import os
 import time
 import pytest
 
-from ocsci import config as ocsci_config
+from framework import config as ocsci_config
 
 FORMATTER = logging.Formatter(
     "%(asctime)s - %(levelname)s - %(name)s.%(funcName)s.%(lineno)d"
