@@ -13,12 +13,8 @@ import os
 import yaml
 from dataclasses import dataclass, field, fields
 
-from ocs_ci.ocs import constants
-
-DEFAULT_CONFIG_PATH = os.path.join(
-    constants.TOP_DIR,
-    "conf/ocsci/default_config.yaml"
-)
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_CONFIG_PATH = os.path.join(THIS_DIR, "conf/default_config.yaml")
 
 
 @dataclass
