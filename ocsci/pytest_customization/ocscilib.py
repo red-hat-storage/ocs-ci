@@ -13,6 +13,7 @@ import pytest
 
 from ocsci import config as ocsci_config
 from ocsci.exceptions import ClusterPathNotProvidedError
+from ocs.exceptions import CommandFailed
 from utility.utils import (
     get_cluster_version,
     get_ceph_version,
@@ -92,23 +93,26 @@ def pytest_configure(config):
             del config._metadata['Plugins']
             del config._metadata['Platform']
 
-            # add cluster version
-            clusterversion = get_cluster_version()
-            config._metadata['Cluster Version'] = clusterversion
+            try:
+                # add cluster version
+                clusterversion = get_cluster_version()
+                config._metadata['Cluster Version'] = clusterversion
 
-            # add ceph version
-            ceph_version = get_ceph_version()
-            config._metadata['Ceph Version'] = ceph_version
+                # add ceph version
+                ceph_version = get_ceph_version()
+                config._metadata['Ceph Version'] = ceph_version
 
-            # add rook version
-            rook_version = get_rook_version()
-            config._metadata['Rook Version'] = rook_version
+                # add rook version
+                rook_version = get_rook_version()
+                config._metadata['Rook Version'] = rook_version
 
-            # add csi versions
-            csi_versions = get_csi_versions()
-            config._metadata['csi-provisioner'] = csi_versions.get('csi-provisioner')
-            config._metadata['cephfsplugin'] = csi_versions.get('cephfsplugin')
-            config._metadata['rbdplugin'] = csi_versions.get('rbdplugin')
+                # add csi versions
+                csi_versions = get_csi_versions()
+                config._metadata['csi-provisioner'] = csi_versions.get('csi-provisioner')
+                config._metadata['cephfsplugin'] = csi_versions.get('cephfsplugin')
+                config._metadata['rbdplugin'] = csi_versions.get('rbdplugin')
+            except CommandFailed:
+                pass
 
 
 def get_cli_param(config, name_of_param, default=None):
