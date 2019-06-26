@@ -259,34 +259,6 @@ class OCP(object):
 
         return False
 
-    def describe(
-        self, resource_name='', out_yaml_format=True, selector=None,
-        all_namespaces=False
-    ):
-        """
-        Get command - 'oc describe <kind> <resource>'
-
-        Args:
-            resource_name (str): The resource name to fetch
-            out_yaml_format (bool): Adding '-o yaml' to oc command
-            selector (str): The label selector to look for
-            all_namespaces (bool): Equal to oc get <resource> -A
-
-        Example:
-            describe(pod, csi-cephfsplugin-provisioner-0)
-
-        Returns:
-            dict: Dictionary represents a returned yaml file
-        """
-        command = f"get {self.kind} {resource_name}"
-        if all_namespaces and not self.namespace:
-            command += "-A"
-        if selector is not None:
-            command += f"--selector={selector}"
-        if out_yaml_format:
-            command += " -o yaml"
-        return self.exec_oc_cmd(command)
-
 
 def switch_to_project(project_name):
     """

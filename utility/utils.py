@@ -753,7 +753,6 @@ def decompose_html_attributes(soup, attributes):
     Returns: None
 
     """
-
     for attribute in attributes:
         tg = soup.find_all(attrs={"class": attribute})
         for each in tg:
@@ -788,10 +787,10 @@ def parse_html_for_email(soup):
         if not ip.has_attr('disabled'):
             ip['disabled'] = 'true'
 
-    for p in soup.find_all('td'):
-        if "pytest" in p.text or "html" in p.text:
-            data = p.text.replace('&apos', '')
-            p.string = data
+    for td in soup.find_all('td'):
+        if "pytest" in td.text or "html" in td.text:
+            data = td.text.replace('&apos', '')
+            td.string = data
 
     main_header = soup.find('h1')
     main_header.string.replace_with('OCS-CI RESULTS')
@@ -824,7 +823,6 @@ def email_reports():
         s.quit()
         log.info(f"Results have been emailed to {recipients}")
     except Exception as e:
-        print("\n")
         log.exception(e)
 
 
@@ -918,7 +916,7 @@ def get_csi_versions():
             f"oc -n {config.ENV_DATA['cluster_namespace']} get pod -l "
             f"'app={provisioner}' -o jsonpath='{{.items[0].metadata.name}}'"
         )
-        desc = ocp_pod_obj.describe(csi_provisioner_pod)
+        desc = ocp_pod_obj.get(csi_provisioner_pod)
         for container in desc['spec']['containers']:
             name = container['image'].split("/")[-1].split(":")[0]
             version = container['image'].split("/")[-1].split(":")[1]
