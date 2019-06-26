@@ -529,8 +529,13 @@ def get_openshift_client(
         delete_file(tarball)
         # return to the previous working directory
         os.chdir(previous_dir)
-
-    client_version = run_cmd(f"{client_binary_path} version")
+    try:
+        client_version = run_cmd(f"{client_binary_path} version")
+    except CommandFailed as ex:
+        if "Unable to connect to the server" in str(ex):
+            pass
+        else:
+            raise
     log.info(f"OpenShift Client version: {client_version}")
 
     return client_binary_path
