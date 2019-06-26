@@ -111,7 +111,7 @@ def pytest_configure(config):
                 config._metadata['csi-provisioner'] = csi_versions.get('csi-provisioner')
                 config._metadata['cephfsplugin'] = csi_versions.get('cephfsplugin')
                 config._metadata['rbdplugin'] = csi_versions.get('rbdplugin')
-            except CommandFailed:
+            except (FileNotFoundError, CommandFailed):
                 pass
 
 
