@@ -1,0 +1,10 @@
+--- https://raw.githubusercontent.com/rook/rook/master/cluster/examples/kubernetes/ceph/csi/example/rbd/snapshotclass.yaml
++++ templates/CSI/rbd/snapshotclass.yaml
+@@ -9,6 +9,6 @@
+   # Specify a string that identifies your cluster. Ceph CSI supports any
+   # unique string. When Ceph CSI is deployed by Rook use the Rook namespace,
+   # for example "rook-ceph".
+-  clusterID: rook-ceph
++  clusterID: openshift-storage
+   csi.storage.k8s.io/snapshotter-secret-name: csi-rbd-secret
+   csi.storage.k8s.io/snapshotter-secret-namespace: default
