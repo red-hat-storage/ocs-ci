@@ -100,4 +100,4 @@ Lower number == higher priority
 3) **ocsci config file** - ocsci related config passed by `--ocsci-conf`
     parameter.
 4) **default configuration** - default values and the lowest priority. You can
-    see [default config here](ocsci/default_config.yaml).
+    see [default config here](../ocs_ci/framework/conf/default_config.yaml).
