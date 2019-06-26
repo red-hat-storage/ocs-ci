@@ -1,0 +1,43 @@
+--- https://raw.githubusercontent.com/rook/rook/master/cluster/examples/kubernetes/ceph/csi/rbac/cephfs/csi-provisioner-rbac.yaml
++++ templates/ocs-deployment/csi/cephfs/csi-provisioner-rbac_cephfs.yaml
+@@ -3,7 +3,7 @@
+ kind: ServiceAccount
+ metadata:
+   name: rook-csi-cephfs-provisioner-sa
+-  namespace: rook-ceph
++  namespace: {{ cluster_namespace | default('openshift-storage') }}
+ ---
+ kind: ClusterRole
+ apiVersion: rbac.authorization.k8s.io/v1
+@@ -52,7 +52,7 @@
+ subjects:
+   - kind: ServiceAccount
+     name: rook-csi-cephfs-provisioner-sa
+-    namespace: rook-ceph
++    namespace: {{ cluster_namespace | default('openshift-storage') }}
+ roleRef:
+   kind: ClusterRole
+   name: cephfs-external-provisioner-runner
+@@ -62,7 +62,7 @@
+ kind: Role
+ apiVersion: rbac.authorization.k8s.io/v1
+ metadata:
+-  namespace: rook-ceph
++  namespace: {{ cluster_namespace | default('openshift-storage') }}
+   name: cephfs-external-provisioner-cfg
+ rules:
+   - apiGroups: [""]
+@@ -77,11 +77,11 @@
+ apiVersion: rbac.authorization.k8s.io/v1
+ metadata:
+   name: cephfs-csi-provisioner-role-cfg
+-  namespace: rook-ceph
++  namespace: {{ cluster_namespace | default('openshift-storage') }}
+ subjects:
+   - kind: ServiceAccount
+     name: cephfs-csi-provisioner
+-    namespace: rook-ceph
++    namespace: {{ cluster_namespace | default('openshift-storage') }}
+ roleRef:
+   kind: Role
+   name: cephfs-external-provisioner-cfg
