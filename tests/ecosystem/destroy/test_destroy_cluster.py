@@ -1,8 +1,8 @@
 import logging
 
-from framework import config
-from framework.testlib import EcosystemTest, destroy
-from utility.utils import destroy_cluster
+from ocs_ci.framework import config
+from ocs_ci.framework.testlib import EcosystemTest, destroy
+from ocs_ci.utility.utils import destroy_cluster
 
 log = logging.getLogger(__name__)
 

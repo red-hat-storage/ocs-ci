@@ -6,9 +6,9 @@ import random
 
 import pytest
 
-from ocs import constants
-from framework.testlib import tier1, ManageTest
-from ocs.resources import pvc
+from ocs_ci.ocs import constants
+from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.ocs.resources import pvc
 from tests import helpers
 
 log = logging.getLogger(__name__)
