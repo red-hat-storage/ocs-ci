@@ -91,7 +91,7 @@ run-ci -m "tier1 and manage" \
 
 #### Running tests on deployed environment and sending reports
 
-If you would like to send the test run results to emaild you can run
+If you would like to send the test run results to email you can run
 following command:
 ```bash
 
