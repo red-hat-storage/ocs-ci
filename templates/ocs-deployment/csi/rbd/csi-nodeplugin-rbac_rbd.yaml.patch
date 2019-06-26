@@ -1,0 +1,22 @@
+--- https://raw.githubusercontent.com/rook/rook/master/cluster/examples/kubernetes/ceph/csi/rbac/rbd/csi-nodeplugin-rbac.yaml
++++ templates/ocs-deployment/csi/rbd/csi-nodeplugin-rbac_rbd.yaml
+@@ -1,8 +1,9 @@
++---
+ apiVersion: v1
+ kind: ServiceAccount
+ metadata:
+   name: rook-csi-rbd-plugin-sa
+-  namespace: rook-ceph
++  namespace: {{ cluster_namespace | default('openshift-storage') }}
+ 
+ ---
+ kind: ClusterRole
+@@ -49,7 +50,7 @@
+ subjects:
+   - kind: ServiceAccount
+     name: rook-csi-rbd-plugin-sa
+-    namespace: rook-ceph
++    namespace: {{ cluster_namespace | default('openshift-storage') }}
+ roleRef:
+   kind: ClusterRole
+   name: rbd-csi-nodeplugin
