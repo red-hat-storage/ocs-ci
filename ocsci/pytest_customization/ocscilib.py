@@ -83,7 +83,8 @@ def pytest_configure(config):
     if not config.getoption("--help"):
         process_cluster_cli_params(config)
         # Add OCS related versions to the html report and remove extraneous metadata
-        if not ocsci_config.RUN['cli_params']['deploy']:
+        markers_arg = config.getoption('-m')
+        if not ("deployment" in markers_arg and ocsci_config.RUN['cli_params']['deploy']):
             print("Collecting Cluster versions")
             # remove extraneous metadata
             del config._metadata['Python']
