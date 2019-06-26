@@ -84,8 +84,8 @@ from ocs import defaults
 # Taking data from ENV_DATA will always use right cluster_namespace passed via
 #`--ocsci-conf` or `--cluster-conf` config files.
 
-# It's not possible to access config data from module level as config is not
-# properly initialized. So you have to access it from function or fixture!
+# Config data should not be accessed at module level and instead should be
+# used within function definitions (as in example below) or fixtures.
 function_which_taking_namespace(namespace=None):
     namespace = namespace if namespace else config.ENV_DATA[
         'cluster_namespace'
