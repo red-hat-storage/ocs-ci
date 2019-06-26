@@ -7,12 +7,11 @@ import os
 import pytest
 import yaml
 
-from framework import config
-from ocs import exceptions
-from ocs import ocp
-from ocs.constants import TEMPLATE_PV_PVC_DIR
-from framework.testlib import tier1, ManageTest
-from utility import utils, templating
+from ocs_ci.framework import config
+from ocs_ci.ocs import exceptions, ocp
+from ocs_ci.ocs.constants import TEMPLATE_PV_PVC_DIR
+from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.utility import templating, utils
 
 log = logging.getLogger(__name__)
 

@@ -2,14 +2,14 @@ import logging
 
 import pytest
 
-from ocs import ocp, constants
-from framework import config
-from framework.testlib import tier1, ManageTest
-from ocs.resources.ocs import OCS
-from ocs.resources.pod import get_admin_key_from_ceph_tools
-from ocs.resources.pvc import PVC
+from ocs_ci.ocs import ocp, constants
+from ocs_ci.framework import config
+from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.pod import get_admin_key_from_ceph_tools
+from ocs_ci.ocs.resources.pvc import PVC
 from tests import helpers
-from utility import templating
+from ocs_ci.utility import templating
 
 log = logging.getLogger(__name__)
 

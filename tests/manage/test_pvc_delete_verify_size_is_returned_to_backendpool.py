@@ -6,14 +6,14 @@ import logging
 
 import pytest
 
-from ocs import constants, defaults
-from ocs.exceptions import CommandFailed, UnexpectedBehaviour
+from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from tests import helpers
-from framework.testlib import tier1, ManageTest
-from utility import templating
-from utility.retry import retry
-from ocs.resources import pod, pvc
-from ocs import ocp
+from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.utility import templating
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.resources import pod, pvc
+from ocs_ci.ocs import ocp
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool,
     create_rbd_secret

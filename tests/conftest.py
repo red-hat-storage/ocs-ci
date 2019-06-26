@@ -5,17 +5,20 @@ import os
 import time
 import yaml
 
-from framework import config
-from ocs.openshift_ops import OCP
-from ocs import constants, ocp, defaults
-from ocs.exceptions import CommandFailed, CephHealthException
-from ocs.utils import create_oc_resource, apply_oc_resource
-from utility import templating, system
-from utility.aws import AWS
-from utility.retry import retry
-from utility.utils import destroy_cluster, run_cmd, get_openshift_installer, get_openshift_client, is_cluster_running
-from ocs.parallel import parallel
-from ocs.resources.ocs import OCS
+from ocs_ci.framework import config
+from ocs_ci.ocs.openshift_ops import OCP
+from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs.exceptions import CommandFailed, CephHealthException
+from ocs_ci.ocs.utils import create_oc_resource, apply_oc_resource
+from ocs_ci.utility import templating, system
+from ocs_ci.utility.aws import AWS
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import (
+    destroy_cluster, run_cmd, get_openshift_installer, get_openshift_client,
+    is_cluster_running
+)
+from ocs_ci.ocs.parallel import parallel
+from ocs_ci.ocs.resources.ocs import OCS
 from tests import helpers
 
 log = logging.getLogger(__name__)

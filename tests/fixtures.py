@@ -1,7 +1,7 @@
 import pytest
 from tests import helpers
-from ocs import defaults, constants
-from utility import templating
+from ocs_ci.ocs import constants, defaults
+from ocs_ci.utility import templating
 
 
 @pytest.fixture()
@@ -23,7 +23,7 @@ def create_rbd_secret(request):
     class_instance.secret_obj = helpers.create_secret(
         interface_type=constants.CEPHBLOCKPOOL
     )
-    assert class_instance.secret_obj, f"Failed to create secret"
+    assert class_instance.secret_obj, "Failed to create secret"
 
 
 @pytest.fixture()
@@ -43,7 +43,7 @@ def create_ceph_block_pool(request):
     request.addfinalizer(finalizer)
 
     class_instance.cbp_obj = helpers.create_ceph_block_pool()
-    assert class_instance.cbp_obj, f"Failed to create block pool"
+    assert class_instance.cbp_obj, "Failed to create block pool"
 
 
 @pytest.fixture()
@@ -67,7 +67,7 @@ def create_rbd_storageclass(request):
         interface_name=class_instance.cbp_obj.name,
         secret_name=class_instance.secret_obj.name
     )
-    assert class_instance.sc_obj, f"Failed to create storage class"
+    assert class_instance.sc_obj, "Failed to create storage class"
 
 
 @pytest.fixture()

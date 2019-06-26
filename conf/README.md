@@ -18,7 +18,7 @@ For more information please read the rest of the documentation.
 ## OCS CI Config
 
 ## defaults file
-* [defaults.py](../ocs/defaults.py) - this is main defaults file which is
+* [defaults.py](../ocs_ci/ocs/defaults.py) - this is main defaults file which is
   a python file, All default values should reside here.
 
 We moved most of the OCSCI framework related config under
@@ -37,7 +37,7 @@ overwrites below ENV data:
 * `worker_replicas` - number of replicas of worker.
 * `rook_image` - which rook image can be used.
 * and many more - look at the deployment templates under
-    [../templates/ocs-deployment/](../templates/ocs-deployment/) and you can
+    [../templates/ocs-deployment/](../ocs_ci/templates/ocs-deployment/) and you can
     see the variables in templates. In the deploment we are using ENV_DATA
     section as data for rendering the templates which allow us to add new
     values just in config and we don't have to also update the code on all

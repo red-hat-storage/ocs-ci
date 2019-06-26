@@ -1,8 +1,8 @@
 import logging
 import pytest
 
-from framework.testlib import tier1, ManageTest
-from ocs.cluster import CephCluster
+from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.ocs.cluster import CephCluster
 
 
 log = logging.getLogger(__name__)
