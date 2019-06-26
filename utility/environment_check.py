@@ -140,18 +140,28 @@ def get_status_after_execution():
     leftovers = {'Leftovers added': [], 'Leftovers removed': []}
     for kind, kind_diff in diffs_dict.items():
         if ADDED_RESOURCE in kind_diff:
-            leftovers['Leftovers added'].append({
-                kind: kind_diff[ADDED_RESOURCE][
-                    ''.join(kind_diff[ADDED_RESOURCE])
-                ]
-            })
+            try:
+                leftovers['Leftovers added'].append({
+                    kind: kind_diff[ADDED_RESOURCE][
+                        ''.join(kind_diff[ADDED_RESOURCE])
+                    ]
+                })
+            except KeyError:
+                leftovers['Leftovers added'].append({
+                    kind: kind_diff[ADDED_RESOURCE]
+                })
             leftover_detected = True
         if REMOVED_RESOURCE in kind_diff:
-            leftovers['Leftovers added'].append({
-                kind: kind_diff[REMOVED_RESOURCE][
-                    ''.join(kind_diff[REMOVED_RESOURCE])
-                ]
-            })
+            try:
+                leftovers['Leftovers added'].append({
+                    kind: kind_diff[REMOVED_RESOURCE][
+                        ''.join(kind_diff[REMOVED_RESOURCE])
+                    ]
+                })
+            except KeyError:
+                leftovers['Leftovers added'].append({
+                    kind: kind_diff[REMOVED_RESOURCE]
+                })
             leftover_detected = True
     if leftover_detected:
         raise exceptions.ResourceLeftoversException(
