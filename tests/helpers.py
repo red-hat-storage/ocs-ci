@@ -155,7 +155,7 @@ def create_ceph_block_pool(pool_name=None):
 
 
 def create_storage_class(
-    interface_type, interface_name, secret_name, sc_name=None
+    interface_type, interface_name, secret_name, sc_name=None, fs_name='myfs'
 ):
     """
     Create a storage class
@@ -166,6 +166,8 @@ def create_storage_class(
         interface_name (str): The name of the interface
         secret_name (str): The name of the secret
         sc_name (str): The name of storage class to create
+        fs_name (str): CephFS filesystem name into which the volume shall be
+            created
 
     Returns:
         OCS: An OCS instance for the storage class
@@ -191,6 +193,8 @@ def create_storage_class(
         sc_data['parameters'][
             'csi.storage.k8s.io/node-stage-secret-namespace'
         ] = defaults.ROOK_CLUSTER_NAMESPACE
+        sc_data['parameters']['fsName'] = fs_name
+    sc_data['parameters']['clusterID'] = config.ENV_DATA['cluster_namespace']
     sc_data['parameters']['pool'] = interface_name
 
     mons = (
