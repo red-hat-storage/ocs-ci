@@ -105,9 +105,9 @@ def pytest_configure(config):
 
             # add csi versions
             csi_versions = get_csi_versions()
-            config._metadata['csi-provisioner'] = csi_versions['csi-provisioner']
-            config._metadata['cephfsplugin'] = csi_versions['cephfsplugin']
-            config._metadata['rbdplugin'] = csi_versions['rbdplugin']
+            config._metadata['csi-provisioner'] = csi_versions.get('csi-provisioner')
+            config._metadata['cephfsplugin'] = csi_versions.get('cephfsplugin')
+            config._metadata['rbdplugin'] = csi_versions.get('rbdplugin')
 
 
 def get_cli_param(config, name_of_param, default=None):
