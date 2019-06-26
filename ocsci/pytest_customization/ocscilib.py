@@ -9,9 +9,16 @@ pytest which proccess config and passes all params to pytest.
 import logging
 import os
 import random
+import pytest
 
 from ocsci import config as ocsci_config
 from ocsci.exceptions import ClusterPathNotProvidedError
+from utility.utils import (
+    get_cluster_version,
+    get_ceph_version,
+    get_rook_version,
+    get_csi_versions
+)
 
 __all__ = [
     "pytest_addoption",
@@ -58,6 +65,11 @@ def pytest_addoption(parser):
         default=False,
         help="If provided a test cluster will be deployed on AWS to use for testing",
     )
+    parser.addoption(
+        '--email',
+        dest='email',
+        help="Email ID to send results",
+    )
 
 
 def pytest_configure(config):
@@ -70,6 +82,32 @@ def pytest_configure(config):
     """
     if not config.getoption("--help"):
         process_cluster_cli_params(config)
+        # Add OCS related versions to the html report and remove extraneous metadata
+        print("Collecting Cluster versions .....")
+        if not ocsci_config.RUN['cli_params']['deploy']:
+            # remove extraneous metadata
+            del config._metadata['Python']
+            del config._metadata['Packages']
+            del config._metadata['Plugins']
+            del config._metadata['Platform']
+
+            # add cluster version
+            clusterversion = get_cluster_version()
+            config._metadata['Cluster Version'] = clusterversion
+
+            # add ceph version
+            ceph_version = get_ceph_version()
+            config._metadata['Ceph Version'] = ceph_version
+
+            # add rook version
+            rook_version = get_rook_version()
+            config._metadata['Rook Version'] = rook_version
+
+            # add csi versions
+            csi_versions = get_csi_versions()
+            config._metadata['csi-provisioner'] = csi_versions['csi-provisioner']
+            config._metadata['cephfsplugin'] = csi_versions['cephfsplugin']
+            config._metadata['rbdplugin'] = csi_versions['rbdplugin']
 
 
 def get_cli_param(config, name_of_param, default=None):
@@ -126,6 +164,10 @@ def process_cluster_cli_params(config):
     ocsci_config.RUN['cli_params']['deploy'] = get_cli_param(config, "deploy", default=False)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
+    ocsci_config.ENV_DATA['email'] = get_cli_param(config, 'email')
+    ocsci_config.ENV_DATA['report'] = get_cli_param(config, '--html')
+    if ocsci_config.ENV_DATA['email'] and not ocsci_config.ENV_DATA['report']:
+        pytest.exit("--html option must be provided to send email reports")
 
 
 def pytest_collection_modifyitems(session, config, items):

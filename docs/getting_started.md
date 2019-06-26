@@ -67,3 +67,11 @@ CLI option
 
 Cluster configuration that defines Openshift/Kubernetes Cluster along with Ceph Configuration
 will reside in conf/ folder, This is still a work in progress.
+
+### Email
+
+To send test run reports to email ID's, postfix should be installed on fedora
+
+    * `sudo dnf install postfix`
+    * `systemctl enable postfix.service`
+    * `systemctl start postfix.service`
