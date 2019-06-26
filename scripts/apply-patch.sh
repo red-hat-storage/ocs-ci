@@ -4,7 +4,7 @@
 # particular file.
 
 # If you don't provide any parameter:
-# This script look for all .patch files in ocs-ci repo and trying to download
+# This script looks for all .patch files in ocs-ci repo and tries to download
 # original file written in the first line of patch file. (Count that patch was
 # created by create-patch.sh script with labeling and contains URL)
 

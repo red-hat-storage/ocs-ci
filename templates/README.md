@@ -17,7 +17,7 @@ and applying patches.
 
 Once we will have all patch files we can just run the script
 [scripts/apply-patch.sh](../scripts/apply-patch.sh) and see what was changed
-via `git diff` command  and we can send PR with latest changes to our
+via `git diff` command and you can send PR with latest changes to our
 templates. Advantage is also that if there will be some conflict, the script
 `apply-patch.sh` will fail and we will need to solve the conflict.
 
