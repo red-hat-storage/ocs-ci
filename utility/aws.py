@@ -9,6 +9,10 @@ import boto3
 logger = logging.getLogger(name=__file__)
 
 
+PENDING = 0
+STOPPING = 64
+
+
 class AWSTimeoutException(Exception):
     pass
 
@@ -238,3 +242,35 @@ class AWS(object):
             "Delete response for volume: %s is: %s", ec2_volume.volume_id,
             delete_response
         )
+
+    def stop_node(self, instance_id):
+        """
+        Stopping an instance
+
+        Args:
+            instance_id (str): ID of the instance to stop
+
+        Returns:
+            bool: True in case operation succeeded, False otherwise
+        """
+        res = self.ec2_client.stop_instances(
+            InstanceIds=[instance_id], Force=True
+        )
+        state = res.get('StoppingInstances')[0].get('CurrentState').get('Code')
+        return state == STOPPING
+
+    def start_node(self, instance_id):
+        """
+        Starting an instance
+
+        Args:
+            instance_id (str): ID of the instance to start
+
+        Returns:
+            bool: True in case operation succeeded, False otherwise
+        """
+        res = self.ec2_client.stop_instances(
+            InstanceIds=[instance_id], Force=True
+        )
+        state = res.get('StartingInstances')[0].get('CurrentState').get('Code')
+        return state == PENDING
