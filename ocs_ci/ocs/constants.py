@@ -98,3 +98,8 @@ CSI_CEPHFS_PVC_YAML = os.path.join(
 CSI_RBD_PVC_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pvc.yaml"
 )
+
+# Workload-io yamls
+FIO_IO_PARAMS_YAML = os.path.join(
+    TEMPLATE_FIO_DIR, "workload_io.yaml"
+)

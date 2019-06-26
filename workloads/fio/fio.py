@@ -1,8 +1,29 @@
 import logging
 
+from ocs import exceptions
 
-# Log file will be on pod
 log = logging.getLogger(__name__)
+
+DISTROS = {"Debian": "apt-get", "RHEL": "yum"}
+
+
+def find_distro(io_pod):
+    """
+    Find whats the os distro on pod
+
+    Args:
+        io_pod (Pod): app pod object
+
+    Returns:
+        distro (str): representing 'Debian' or 'RHEL' as of now
+    """
+    for distro, pkg_mgr in DISTROS.items():
+        try:
+            io_pod.exec_cmd_on_pod(f"which {pkg_mgr}")
+        except exceptions.CommandFailed:
+            log.debug(f"Distro is not {distro}")
+        else:
+            return distro
 
 
 def setup(**kwargs):
@@ -17,8 +38,14 @@ def setup(**kwargs):
     """
     io_pod = kwargs['pod']
     # For first cut doing simple fio install
-    # TODO: we can use fio container image
-    cmd = "yum -y install fio"
+    distro = find_distro(io_pod)
+    pkg_mgr = DISTROS[distro]
+
+    if distro == 'Debian':
+        cmd = f'{pkg_mgr} update'
+        io_pod.exec_cmd_on_pod(cmd)
+
+    cmd = f"{pkg_mgr} -y install fio"
     return io_pod.exec_cmd_on_pod(cmd)
 
 
@@ -42,7 +69,12 @@ def run(**kwargs):
         if k == 'filename':
             if st_type == 'fs':
                 args = args + f" --{k}={path}/{v}"
-        args = args + f" --{k}={v}"
+            else:
+                # For raw block device
+                args = args + f" --{k}={path}"
+        else:
+            args = args + f" --{k}={v}"
     fio_cmd = fio_cmd + args
+    log.info(f"Running cmd: {fio_cmd}")
 
     return io_pod.exec_cmd_on_pod(fio_cmd)

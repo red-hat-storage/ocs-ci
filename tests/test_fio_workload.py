@@ -1,11 +1,11 @@
 import pytest
 import logging
-import copy
 
-from ocs import defaults, exceptions
+from ocs import constants, exceptions
 from ocs import workload
 from ocsci.testlib import ManageTest
 from utility.utils import TimeoutSampler
+from utility import templating
 
 
 from tests.fixtures import (
@@ -27,27 +27,36 @@ class TestFIOWorkload(ManageTest):
 
     def test_fio_with_block_storage(self):
         name = 'test_workload'
-        spec = self.pod_obj['spec']
+        spec = self.pod_obj.data.get('spec')
         path = spec['containers'][0]['volumeMounts'][0]['mountPath']
-        wrk_load = 'fio'
-        storage_type = 'block'
+        work_load = 'fio'
+        storage_type = 'fs'
+        # few io parameters for Fio
+        runtime = 10
+        size = '200M'
 
         wl = workload.WorkLoad(
-            name, path, wrk_load, storage_type, self.pod_obj
+            name, path, work_load, storage_type, self.pod_obj
         )
         assert wl.setup()
-        io_conf = copy.deep_copy(defaults.FIO_IO_PARAMS)
-        future_result = wl.run(io_conf)
+        io_params = templating.load_yaml_to_dict(constants.FIO_IO_PARAMS_YAML)
+        io_params['runtime'] = runtime
+        io_params['size'] = size
+
+        future_result = wl.run(**io_params)
 
         timeout = 1200
         sample = TimeoutSampler(
             timeout=timeout, sleep=3, func=future_result.done
         )
         assert sample.wait_for_func_status(result=True)
+
         try:
-            out = future_result.result()
+            logger.info(future_result.result())
         except exceptions.CommandFailed as ex:
             logger.error("FIO failed")
             logger.error(ex)
-
-        logger.info(out)
+            assert False
+        except Exception as exc:
+            logger.error(f"Exception: {exc}")
+            assert False

@@ -253,6 +253,7 @@ def verify_block_pool_exists(pool_name):
     logger.info(f"Verifying that block pool {pool_name} exists")
     ct_pod = pod.get_ceph_tools_pod()
     pools = ct_pod.exec_ceph_cmd('ceph osd lspools')
+    logger.info(f'POOLS are {pools}')
     for pool in pools:
         if pool_name in pool.get('poolname'):
             return True

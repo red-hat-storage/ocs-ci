@@ -1,9 +1,6 @@
 import logging
-import os
 import importlib
 import concurrent.futures
-
-from ocs import constants
 
 
 log = logging.getLogger(__name__)
@@ -11,7 +8,7 @@ log = logging.getLogger(__name__)
 
 class WorkLoad(object):
     def __init__(
-            self, name=None, path=None, wrk_load=None,
+            self, name=None, path=None, work_load=None,
             storage_type='fs', pod=None
     ):
         """
@@ -21,7 +18,7 @@ class WorkLoad(object):
             path (str): Mount point OR blk device on the pod where workload
                 should do IO (note: this need not be known at this
                 point in time)
-            wrk_load (str): example fio, mongodb, pgsql etc.
+            work_load (str): example fio, mongodb, pgsql etc.
             storage_type (str): type on which we will be running IOs,
                 if type is 'fs' we will interpret 'path' as mount point else
                 if type is 'block' we will interpret 'path' as a block device
@@ -29,26 +26,24 @@ class WorkLoad(object):
         """
         self.name = name
         self.path = path
-        self.wrk_load = wrk_load
+        self.work_load = work_load
         self.storage_type = storage_type
-        # Pod on which we will be running IO
         self.pod = pod
-        self.wrk_load_dir = os.path.join(
-            constants.TEMPLATE_WORKLOAD_DIR, self.wrk_load
-        )
+
         try:
-            self.wrk_load_mod = importlib.import_module(
-                self.wrk_load_dir.self.wrk_load
+            self.work_load_mod = importlib.import_module(
+                f'workloads.{self.work_load}.{self.work_load}'
             )
         except ModuleNotFoundError as ex:
-            log.error(f"No workload found with name {self.wrk_load}")
+            log.error(f"No workload found with name {self.work_load}")
             log.error(ex)
-            raise ModuleNotFoundError
-        self.tp_exec = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+            raise
+
+        self.thread_exec = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
     def setup(self, **setup_conf):
         """
-        perform wrk_load_mod.setup to setup the workload
+        perform work_load_mod.setup to setup the workload
 
         Args:
             setup_conf (dict): work load setup configuration, varies from
@@ -60,20 +55,22 @@ class WorkLoad(object):
         """
         if self.pod:
             setup_conf['pod'] = self.pod
-        return self.wrk_load_mod.setup(**setup_conf)
+        return self.work_load_mod.setup(**setup_conf)
 
-    def run(self, **run_conf):
+    def run(self, **conf):
         """
-        perform wrk_load_mod.run in order to run actual io
+        perform work_load_mod.run in order to run actual io
 
         Args:
-            run_conf (dict): run configuration a.k.a parameters for workload
+            **conf (dict): run configuration a.k.a parameters for workload
                 io runs
 
         Returns:
             result (Future): returns a concurrent.future object
         """
-        run_conf['pod'] = self.pod
-        run_conf['path'] = self.path
-        run_conf['type'] = self.storage_type
-        return self.tp_exec.submit(self.wrk_load_mod.run(**run_conf))
+        conf['pod'] = self.pod
+        conf['path'] = self.path
+        conf['type'] = self.storage_type
+        future_obj = self.thread_exec.submit(self.work_load_mod.run, **conf)
+        log.info("Done submitting.. ")
+        return future_obj
