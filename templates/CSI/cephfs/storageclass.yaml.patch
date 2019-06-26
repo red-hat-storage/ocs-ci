@@ -1,0 +1,11 @@
+--- https://raw.githubusercontent.com/rook/rook/master/cluster/examples/kubernetes/ceph/csi/example/cephfs/storageclass.yaml
++++ templates/CSI/cephfs/storageclass.yaml
+@@ -5,7 +5,7 @@
+ provisioner: cephfs.csi.ceph.com
+ parameters:
+   # clusterID is the namespace where operator is deployed.
+-  clusterID: rook-ceph
++  clusterID: openshift-storage
+ 
+   # CephFS filesystem name into which the volume shall be created
+   fsName: myfs
