@@ -51,13 +51,10 @@ def teardown():
     test_fixture.__name__,
 )
 @pytest.mark.polarion_id("OCS-347")
-class TestCaseOCS347(ManageTest):
+class TestBasicPVCOperations(ManageTest):
     """
     Testing default storage class creation and pvc creation
     with default rbd pool
-
-    https://polarion.engineering.redhat.com/polarion/#/project/
-    OpenShiftContainerStorage/workitem?id=OCS-347
     """
 
     def test_ocs_347(self):

@@ -97,7 +97,7 @@ def invalid_storageclass(request):
 
 
 @tier3
-class TestCaseOCS331_and_OC341(ManageTest):
+class TestStorageClassInvalid(ManageTest):
     def test_storageclass_invalid(self, invalid_storageclass):
         """
         Test that Persistent Volume Claim can not be created from misconfigured

@@ -68,7 +68,7 @@ class TestOSCBasics(ManageTest):
     )
 
     @pytest.mark.polarion_id("OCS-336")
-    def test_ocs_336(self, test_fixture):
+    def test_basics_rbd(self, test_fixture):
         """
         Testing basics: secret creation,
         storage class creation and pvc with cephfs
@@ -106,7 +106,7 @@ class TestOSCBasics(ManageTest):
         secret.delete()
 
     @pytest.mark.polarion_id("OCS-346")
-    def test_ocs_346(self):
+    def test_basics_cephfs(self):
         """
         Testing basics: secret creation,
          storage class creation  and pvc with rbd

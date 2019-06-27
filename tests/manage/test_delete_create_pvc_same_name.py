@@ -80,12 +80,9 @@ def teardown(self):
 
 @tier2
 @pytest.mark.polarion_id("OCS-324")
-class TestCaseOCS324(ManageTest):
+class TestDeleteCreatePVCSameName(ManageTest):
     """
     Delete PVC and create a new PVC with same name
-
-    https://polarion.engineering.redhat.com/polarion/#/project
-    /OpenShiftContainerStorage/workitem?id=OCS-324
     """
     def test_pvc_delete_create_same_name(self, test_fixture):
         """
