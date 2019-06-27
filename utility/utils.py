@@ -801,7 +801,7 @@ def email_reports():
     Email results of test run
 
     """
-    mailids = config.ENV_DATA['email']
+    mailids = config.RUN['cli_params']['email']
     recipients = []
     [recipients.append(mailid) for mailid in mailids.split(",")]
     sender = "ocs-ci@redhat.com"
@@ -810,7 +810,7 @@ def email_reports():
     msg['From'] = sender
     msg['To'] = ", ".join(recipients)
 
-    html = config.ENV_DATA['report']
+    html = config.RUN['cli_params']['--html']
     html_data = open(html).read()
     soup = BeautifulSoup(html_data, "html.parser")
 

@@ -169,9 +169,7 @@ def process_cluster_cli_params(config):
     ocsci_config.RUN['cli_params']['deploy'] = get_cli_param(config, "deploy", default=False)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
-    ocsci_config.ENV_DATA['email'] = get_cli_param(config, 'email')
-    ocsci_config.ENV_DATA['report'] = get_cli_param(config, '--html')
-    if ocsci_config.ENV_DATA['email'] and not ocsci_config.ENV_DATA['report']:
+    if get_cli_param(config, 'email') and not get_cli_param(config, '--html'):
         pytest.exit("--html option must be provided to send email reports")
 
 

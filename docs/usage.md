@@ -48,6 +48,8 @@ to the pytest.
 * `--teardown` - if this is given the testing cluster will be destroyed after
     the test have completed, regardless of if the tests passed or failed.
 * `--html` - to generate html reports of the test run
+* `--self-contained-html` - creates self-contained html file containing all
+   necessary styles and scripts
 * `--email` - to send the email reports of the test run which was generated
    by --html option. MUST specify --html to send email reports.
 
