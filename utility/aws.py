@@ -2,15 +2,21 @@ import logging
 import time
 
 from ocsci import config
+from utils import TimeoutSampler
 
 import boto3
 
 
 logger = logging.getLogger(name=__file__)
 
+TIMEOUT = 60
+SLEEP = 3
 
+# Instance statuses
 PENDING = 0
 STOPPING = 64
+STOPPED = 80
+RUNNING = 16
 
 
 class AWSTimeoutException(Exception):
@@ -107,6 +113,20 @@ class AWS(object):
             instances.append(instance_data)
         logger.debug("All found instances: %s", instances)
         return instances
+
+    def get_instances_status_by_id(self, instance_id):
+        """
+        Get instances by ID
+
+        Args:
+            instance_id (str): ID of the instance
+
+        Returns:
+            str: The instance status
+        """
+        return self.ec2_client.describe_instances(
+            InstanceIds=[instance_id],
+        )['Reservations']['Instances'][0]['State']['Code']
 
     def create_volume_and_attach(
         self,
@@ -243,12 +263,14 @@ class AWS(object):
             delete_response
         )
 
-    def stop_node(self, instance_id):
+    def stop_ec2_instance(self, instance_id, wait=False):
         """
         Stopping an instance
 
         Args:
             instance_id (str): ID of the instance to stop
+            wait (bool): True in case wait for status is needed,
+                False otherwise
 
         Returns:
             bool: True in case operation succeeded, False otherwise
@@ -256,15 +278,24 @@ class AWS(object):
         res = self.ec2_client.stop_instances(
             InstanceIds=[instance_id], Force=True
         )
+        if wait:
+            for sample in TimeoutSampler(
+                TIMEOUT, SLEEP, self.get_instances_status_by_id, instance_id
+            ):
+                if sample == STOPPED:
+                    return True
+            return False
         state = res.get('StoppingInstances')[0].get('CurrentState').get('Code')
         return state == STOPPING
 
-    def start_node(self, instance_id):
+    def start_ec2_instance(self, instance_id, wait=False):
         """
         Starting an instance
 
         Args:
             instance_id (str): ID of the instance to start
+            wait (bool): True in case wait for status is needed,
+                False otherwise
 
         Returns:
             bool: True in case operation succeeded, False otherwise
@@ -272,5 +303,12 @@ class AWS(object):
         res = self.ec2_client.stop_instances(
             InstanceIds=[instance_id], Force=True
         )
+        if wait:
+            for sample in TimeoutSampler(
+                TIMEOUT, SLEEP, self.get_instances_status_by_id, instance_id
+            ):
+                if sample == RUNNING:
+                    return True
+            return False
         state = res.get('StartingInstances')[0].get('CurrentState').get('Code')
         return state == PENDING
