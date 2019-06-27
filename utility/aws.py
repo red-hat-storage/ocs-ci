@@ -2,8 +2,7 @@ import logging
 import time
 
 from ocsci import config
-from utils import TimeoutSampler
-
+from utility import utils
 import boto3
 
 
@@ -126,7 +125,7 @@ class AWS(object):
         """
         return self.ec2_client.describe_instances(
             InstanceIds=[instance_id],
-        )['Reservations']['Instances'][0]['State']['Code']
+        ).get('Reservations')[0].get('Instances')[0].get('State').get('Code')
 
     def create_volume_and_attach(
         self,
@@ -279,7 +278,7 @@ class AWS(object):
             InstanceIds=[instance_id], Force=True
         )
         if wait:
-            for sample in TimeoutSampler(
+            for sample in utils.TimeoutSampler(
                 TIMEOUT, SLEEP, self.get_instances_status_by_id, instance_id
             ):
                 if sample == STOPPED:
@@ -300,11 +299,9 @@ class AWS(object):
         Returns:
             bool: True in case operation succeeded, False otherwise
         """
-        res = self.ec2_client.stop_instances(
-            InstanceIds=[instance_id], Force=True
-        )
+        res = self.ec2_client.start_instances(InstanceIds=[instance_id])
         if wait:
-            for sample in TimeoutSampler(
+            for sample in utils.TimeoutSampler(
                 TIMEOUT, SLEEP, self.get_instances_status_by_id, instance_id
             ):
                 if sample == RUNNING:
