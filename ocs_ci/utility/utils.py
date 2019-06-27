@@ -17,10 +17,10 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
 )
 from ocs_ci.framework import config
-from .aws import AWS
+from ocs_ci.utility.aws import AWS
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from ocs import constants
+from ocs_ci.ocs import constants
 from bs4 import BeautifulSoup
 
 log = logging.getLogger(__name__)
