@@ -8,8 +8,8 @@ log = logging.getLogger(__name__)
 
 class WorkLoad(object):
     def __init__(
-            self, name=None, path=None, work_load=None,
-            storage_type='fs', pod=None
+        self, name=None, path=None, work_load=None, storage_type='fs',
+        pod=None
     ):
         """
         Args:

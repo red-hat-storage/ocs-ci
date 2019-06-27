@@ -28,7 +28,9 @@ class TestFIOWorkload(ManageTest):
     def test_fio_with_block_storage(self):
         name = 'test_workload'
         spec = self.pod_obj.data.get('spec')
-        path = spec['containers'][0]['volumeMounts'][0]['mountPath']
+        path = (
+            spec.get('containers')[0].get('volumeMounts')[0].get('mountPath')
+        )
         work_load = 'fio'
         storage_type = 'fs'
         # few io parameters for Fio
