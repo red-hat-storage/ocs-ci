@@ -55,7 +55,7 @@ class TestFIOWorkload(ManageTest):
 
         try:
             logger.info(future_result.result())
-        except exceptions.CommandFailed as ex:
+        except exceptions.CommandFailed:
             logger.exception(f"FIO failed")
             raise
         except Exception:
