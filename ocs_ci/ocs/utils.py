@@ -15,10 +15,10 @@ from libcloud.compute.types import Provider
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.retry import retry
-from .ceph import RolesContainer, CommandFailed, Ceph, CephNode
-from .clients import WinNode
-from .openstack import CephVMNode
-from .parallel import parallel
+from ocs_ci.ocs.ceph import RolesContainer, CommandFailed, Ceph, CephNode
+from ocs_ci.ocs.clients import WinNode
+from ocs_ci.ocs.openstack import CephVMNode
+from ocs_ci.ocs.parallel import parallel
 
 log = logging.getLogger(__name__)
 

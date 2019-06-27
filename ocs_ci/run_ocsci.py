@@ -1,6 +1,6 @@
 import sys
 
-from .framework import main as runner
+from ocs_ci.framework import main as runner
 
 
 def main():
