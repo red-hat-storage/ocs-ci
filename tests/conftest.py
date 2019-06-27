@@ -31,6 +31,34 @@ from tests import helpers
 log = logging.getLogger(__name__)
 
 
+class OCSLogFormatter(logging.Formatter):
+
+    def __init__(self):
+        fmt = (
+            "%(asctime)s - %(levelname)s - %(name)s.%(funcName)s.%(lineno)d "
+            "- %(message)s"
+        )
+        super(OCSLogFormatter, self).__init__(fmt)
+
+
+def pytest_logger_config(logger_config):
+    logger_config.add_loggers([''], stdout_level='debug')
+    logger_config.set_log_option_default('')
+    logger_config.split_by_outcome()
+    logger_config.set_formatter_class(OCSLogFormatter)
+
+
+ep_time = int(time.time())
+log_dir = f"logs_{ep_time}"
+log_path = os.path.expanduser(
+    os.path.join(config.RUN['log_dir'], log_dir)
+)
+
+
+def pytest_logger_logdirlink():
+    return log_path
+
+
 @pytest.fixture(scope="session", autouse=True)
 def polarion_testsuite_properties(record_testsuite_property):
     """
@@ -53,6 +81,7 @@ def cluster_teardown():
 
 @pytest.fixture(scope="session", autouse=True)
 def cluster(request):
+    log.info(f"All logs located at {log_path}")
     log.info("Running OCS basic installation")
     cluster_path = config.ENV_DATA['cluster_path']
     deploy = config.RUN['cli_params']['deploy']
