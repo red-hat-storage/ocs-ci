@@ -13,16 +13,16 @@ class WorkLoad(object):
     ):
         """
         Args:
-            name (str): name for this workload instance (for identifying in a
+            name (str): Name for this workload instance (for identifying in a
                 test run)
             path (str): Mount point OR blk device on the pod where workload
                 should do IO (note: this need not be known at this
                 point in time)
-            work_load (str): example fio, mongodb, pgsql etc.
-            storage_type (str): type on which we will be running IOs,
+            work_load (str): Example fio, mongodb, pgsql etc.
+            storage_type (str): Type on which we will be running IOs,
                 if type is 'fs' we will interpret 'path' as mount point else
                 if type is 'block' we will interpret 'path' as a block device
-            pod (Pod): pod on which we want to run this workload
+            pod (Pod): Pod on which we want to run this workload
         """
         self.name = name
         self.path = path
@@ -31,6 +31,11 @@ class WorkLoad(object):
         self.pod = pod
 
         try:
+            # Each workload module will be present in
+            # workloads/<name>/<name>.py for ex: fio can be found in
+            # workloads/fio/fio.py which will have related functions to work
+            # with fio workload. We will be dynamically loading the module
+            # based on its name.
             self.work_load_mod = importlib.import_module(
                 f'workloads.{self.work_load}.{self.work_load}'
             )
@@ -43,10 +48,12 @@ class WorkLoad(object):
 
     def setup(self, **setup_conf):
         """
-        perform work_load_mod.setup to setup the workload
+        Perform work_load_mod.setup() to setup the workload.
+        Every workload module should implement setup() method so that
+        respective <workload_module>.setup() function can be called from here
 
         Args:
-            setup_conf (dict): work load setup configuration, varies from
+            setup_conf (dict): Work load setup configuration, varies from
                 workload to workload. Refer constants.TEMPLATE_WORKLOAD_DIR
                 for various available workloads
 
@@ -59,14 +66,16 @@ class WorkLoad(object):
 
     def run(self, **conf):
         """
-        perform work_load_mod.run in order to run actual io
+        Perform work_load_mod.run in order to run actual io.
+        Every workload module should implement run() function so that we can
+        invoke <workload_module>.run() to run IOs.
 
         Args:
-            **conf (dict): run configuration a.k.a parameters for workload
+            **conf (dict): Run configuration a.k.a parameters for workload
                 io runs
 
         Returns:
-            result (Future): returns a concurrent.future object
+            result (Future): Returns a concurrent.future object
         """
         conf['pod'] = self.pod
         conf['path'] = self.path

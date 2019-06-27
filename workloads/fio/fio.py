@@ -1,3 +1,15 @@
+"""
+This module implements all the functionalities required for setting up and
+running Fio workloads on the pods.
+
+This module implements few functions
+setup(): for setting up fio utility on the pod and any necessary
+    environmental params.
+run(): for running fio on pod on specified mount point
+
+Note: The above mentioned functions will be invoked from Workload.setup()
+and Workload.run() methods along with user provided parameters.
+"""
 import logging
 
 from ocs import exceptions
@@ -51,7 +63,10 @@ def setup(**kwargs):
 
 def run(**kwargs):
     """
-    Run fio with params from kwargs
+    Run fio with params from kwargs.
+    Default parameter list can be found in
+    templates/workloads/fio/workload_io.yaml and user can update the
+    dict as per the requirement.
 
     Args:
         kwargs (dict): params for fio
