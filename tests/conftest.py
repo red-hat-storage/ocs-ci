@@ -22,12 +22,18 @@ from tests import helpers
 log = logging.getLogger(__name__)
 
 
+@pytest.fixture(scope="session", autouse=True)
 def polarion_testsuite_properties(record_testsuite_property):
     """
     Configures polarion testsuite properties for junit xml
     """
     polarion_project_id = config.REPORTING['polarion']['project_id']
-    record_testsuite_property('polarion-projct-id', polarion_project_id)
+    record_testsuite_property('polarion-project-id', polarion_project_id)
+    jenkins_build_url = config.RUN.get('jenkins_build_url')
+    if jenkins_build_url:
+        record_testsuite_property(
+            'polarion-custom-description', jenkins_build_url
+        )
 
 
 def cluster_teardown():
