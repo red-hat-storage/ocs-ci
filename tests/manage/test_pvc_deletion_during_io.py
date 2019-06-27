@@ -20,12 +20,9 @@ logger = logging.getLogger(__name__)
     create_pod.__name__
 )
 @pytest.mark.polarion_id("OCS-371")
-class TestCaseOCS371(ManageTest):
+class TestDeletePVCWhileRunningIO(ManageTest):
     """
     Delete PVC while IO is in progress
-
-    https://polarion.engineering.redhat.com/polarion/#/project/
-    OpenShiftContainerStorage/workitem?id=OCS-371
     """
 
     @tier1

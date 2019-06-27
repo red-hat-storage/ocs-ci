@@ -118,12 +118,9 @@ def create_storageclass_cephfs():
     ocs288_fixture.__name__,
 )
 @pytest.mark.polarion_id("OCS-288")
-class TestCaseOCS288(ManageTest):
+class TestCreatePVCRandomStorageClass(ManageTest):
     """
     Creating PVC with random SC
-
-    https://polarion.engineering.redhat.com/polarion/#/project/
-    OpenShiftContainerStorage/workitem?id=OCS-288
     """
 
     def test_create_pvc_with_random_sc(self):
