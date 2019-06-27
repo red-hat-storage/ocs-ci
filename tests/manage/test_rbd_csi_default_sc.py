@@ -51,7 +51,7 @@ def teardown():
     test_fixture.__name__,
 )
 @pytest.mark.polarion_id("OCS-347")
-class TestDefaults(ManageTest):
+class TestBasicPVCOperations(ManageTest):
     """
     Testing default storage class creation and pvc creation
     with default rbd pool
