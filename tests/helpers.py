@@ -5,11 +5,11 @@ import base64
 import datetime
 import logging
 
-from ocs import constants, defaults, ocp
-from utility import templating
-from ocsci import config
-from resources import pod
-from resources.ocs import OCS
+from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.utility import templating
+from ocs_ci.framework import config
+from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.ocs import OCS
 
 logger = logging.getLogger(__name__)
 

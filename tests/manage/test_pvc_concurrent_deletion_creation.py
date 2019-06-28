@@ -4,15 +4,15 @@ Test to verify concurrent creation and deletion of multiple PVCs
 import logging
 import pytest
 
-from ocs import constants, ocp, exceptions
-from utility.utils import run_async
-from ocsci.testlib import tier1, ManageTest
-from resources.pod import get_ceph_tools_pod
-from resources.pvc import create_multiple_pvc
+from ocs_ci.ocs import constants, ocp, exceptions
+from ocs_ci.utility.utils import run_async
+from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+from ocs_ci.ocs.resources.pvc import create_multiple_pvc
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool, create_rbd_secret
 )
-from utility.templating import load_yaml_to_dict
+from ocs_ci.utility.templating import load_yaml_to_dict
 
 log = logging.getLogger(__name__)
 TEST_PROJECT = 'test-project'

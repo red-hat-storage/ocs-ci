@@ -4,9 +4,9 @@ A test for deleting an existing PVC and create a new PVC with the same name
 import logging
 import pytest
 
-from ocs import constants, exceptions, ocp
-from ocsci import config
-from ocsci.testlib import ManageTest, tier2
+from ocs_ci.ocs import constants, exceptions, ocp
+from ocs_ci.framework import config
+from ocs_ci.framework.testlib import ManageTest, tier2
 from tests import helpers
 
 logger = logging.getLogger(__name__)

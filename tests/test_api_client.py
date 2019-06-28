@@ -7,7 +7,7 @@ perform a basic functionality check using api-client
 import logging
 import yaml
 
-from ocs import api_client as ac
+from ocs_ci.ocs import api_client as ac
 
 
 log = logging.getLogger(__name__)

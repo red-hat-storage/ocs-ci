@@ -1,9 +1,9 @@
 import pytest
 import logging
 
-from ocs import defaults, exceptions, constants
-from resources import pod
-from ocsci.testlib import ManageTest, tier1
+from ocs_ci.ocs import defaults, exceptions, constants
+from ocs_ci.ocs.resources import pod
+from ocs_ci.framework.testlib import ManageTest, tier1
 from tests.fixtures import (
     create_rbd_storageclass, create_pod, create_pvc, create_ceph_block_pool,
     create_rbd_secret
