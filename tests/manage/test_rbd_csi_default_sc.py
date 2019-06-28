@@ -5,9 +5,9 @@ Basic test for creating PVC with default StorageClass - RBD-CSI
 import logging
 import pytest
 
-from ocsci.testlib import tier1, ManageTest
+from ocs_ci.framework.testlib import tier1, ManageTest
 from tests import helpers
-from ocs import constants
+from ocs_ci.ocs import constants
 
 log = logging.getLogger(__name__)
 

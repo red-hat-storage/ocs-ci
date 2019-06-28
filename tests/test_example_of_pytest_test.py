@@ -2,10 +2,10 @@
 import logging
 import pytest
 
-from ocs import ocp
+from ocs_ci.ocs import ocp
 
-from ocsci import config
-from ocsci.testlib import run_this, EcosystemTest, tier1
+from ocs_ci.framework import config
+from ocs_ci.framework.testlib import run_this, EcosystemTest, tier1
 
 
 logger = logging.getLogger(__name__)
