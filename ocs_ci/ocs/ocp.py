@@ -43,13 +43,17 @@ class OCP(object):
     def namespace(self):
         return self._namespace
 
-    def exec_oc_cmd(self, command):
+    def exec_oc_cmd(self, command, raw_output=False):
         """
         Executing 'oc' command
 
         Args:
             command (str): The command to execute (e.g. create -f file.yaml)
                 without the initial 'oc' at the beginning
+
+            raw_output (bool): whether to return raw_output or yaml loaded
+                python object
+
 
         Returns:
             dict: Dictionary represents a returned yaml file
@@ -71,6 +75,8 @@ class OCP(object):
         except ValueError:
             pass
 
+        if raw_output:
+            return out
         return yaml.safe_load(out)
 
     def get(
