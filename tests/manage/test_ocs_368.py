@@ -202,7 +202,6 @@ class TestOcs368(ManageTest):
         pvc_chg = threading.Thread(target=update_pvc)
         pvc_chg.start()
         cmd_str = 'delete deployment.apps/rook-ceph-osd-2'
-        cmd_str = 'get pods'
         cmd_str = f'oc -n {config.ENV_DATA["my_namespace"]} {cmd_str}'
         run_cmd(cmd_str)
         pvc_chg.join()
