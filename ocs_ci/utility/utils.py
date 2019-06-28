@@ -835,7 +835,7 @@ def get_cluster_version_info():
 
     """
     # importing here to avoid circular imports
-    from ocs.ocp import OCP
+    from ocs_ci.ocs.ocp import OCP
     ocp = OCP(kind="clusterversion")
     cluster_version_info = ocp.get("version")
     return cluster_version_info
@@ -872,7 +872,7 @@ def get_ceph_version():
 
     """
     # importing here to avoid circular imports
-    from resources import pod
+    from ocs_ci.ocs.resources import pod
     ct_pod = pod.get_ceph_tools_pod()
     ceph_version = ct_pod.exec_ceph_cmd("ceph version")
     return re.split(r'ceph version ', ceph_version['version'])[1]
@@ -887,7 +887,7 @@ def get_rook_version():
 
     """
     # importing here to avoid circular imports
-    from resources import pod
+    from ocs_ci.ocs.resources import pod
     ct_pod = pod.get_ceph_tools_pod()
     rook_versions = ct_pod.exec_ceph_cmd("rook version", format='')
     return rook_versions['rook']
@@ -903,7 +903,7 @@ def get_csi_versions():
     """
     csi_versions = {}
     # importing here to avoid circular imports
-    from ocs.ocp import OCP
+    from ocs_ci.ocs.ocp import OCP
     ocp_pod_obj = OCP(
         kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
     )
