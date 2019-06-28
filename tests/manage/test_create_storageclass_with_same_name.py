@@ -97,9 +97,6 @@ class TestCaseOCS322(ManageTest):
     def test_create_storageclass_with_same_name(self):
         """
         To test that Storageclass creation with duplicate names is not allowed
-
-        TC Name = https://polarion.engineering.redhat.com/polarion/#/project/
-        OpenShiftContainerStorage/workitem?id=OCS-322
         """
 
         sc_name = "ocs-322-sc"

@@ -63,9 +63,6 @@ def teardown():
 class TestPvcCreationInvalidInputs(ManageTest):
     """
     PVC creation with invaid inputs in pvc yaml
-
-    https://polarion.engineering.redhat.com/polarion/#/project/
-    OpenShiftContainerStorage/workitem?id=OCS-284
     """
     def test_pvccreation_invalid_inputs(self):
         """
