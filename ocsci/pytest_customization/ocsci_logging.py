@@ -10,6 +10,7 @@ FORMATTER = logging.Formatter(
     " - %(message)s"
 )
 ep_time = int(time.time())
+ocsci_config.RUN['run_id'] = ep_time
 log_dir = f"logs_{ep_time}"
 log_dir_path = os.path.expanduser(
     os.path.join(ocsci_config.RUN['log_dir'], log_dir)
@@ -33,6 +34,7 @@ def create_symlink():
     Creates symbolic link for current test run logs
     """
     # check whether source exists or not. otherwise it creates stale symlinks
+    logging.info(f"RUN ID: {ep_time}")
     logging.info(f"All logs are located under {sym_link}")
     create_directory_path(log_dir_path)
     if os.path.lexists(sym_link):

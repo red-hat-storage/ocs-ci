@@ -53,6 +53,7 @@ def main(arguments):
         '-p', 'ocsci.pytest_customization.ocscilib',
         '-p', 'ocsci.pytest_customization.marks',
         '-p', 'ocsci.pytest_customization.ocsci_logging',
+        '-p', 'ocsci.pytest_customization.reports',
     ])
     utils.add_path_to_env_path(os.path.expanduser(ocsci.config.RUN['bin_dir']))
     return pytest.main(arguments)

@@ -8,15 +8,20 @@ import string
 import subprocess
 import time
 import traceback
-
 import requests
 import yaml
+import re
+import smtplib
 
 from ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
 )
 from ocsci import config
 from .aws import AWS
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from ocs import constants
+from bs4 import BeautifulSoup
 
 log = logging.getLogger(__name__)
 
@@ -735,3 +740,185 @@ def is_cluster_running(cluster_path):
     return config.RUN['cli_params'].get('cluster_path') and OCP.set_kubeconfig(
         os.path.join(cluster_path, config.RUN.get('kubeconfig_location'))
     )
+
+
+def decompose_html_attributes(soup, attributes):
+    """
+    Decomposes the given html attributes
+
+    Args:
+        soup (obj): BeautifulSoup object
+        attributes (list): attributes to decompose
+
+    Returns: None
+
+    """
+    for attribute in attributes:
+        tg = soup.find_all(attrs={"class": attribute})
+        for each in tg:
+            each.decompose()
+
+
+def parse_html_for_email(soup):
+    """
+    Parses the html and filters out the unnecessary data/tags/attributes
+    for email reporting
+
+    Args:
+        soup (obj): BeautifulSoup object
+
+    """
+    decompose_html_attributes(soup, ["extra", "col-links"])
+    soup.find(id="not-found-message").decompose()
+
+    for tr in soup.find_all('tr'):
+        for th in tr.find_all('th'):
+            if "Links" in th.text:
+                th.decompose()
+
+    for p in soup.find_all('p'):
+        if "(Un)check the boxes to filter the results." in p.text:
+            p.decompose()
+        if "pytest-html" in p.text:
+            data = p.text.split("by")[0]
+            p.string = data
+
+    for ip in soup.find_all('input'):
+        if not ip.has_attr('disabled'):
+            ip['disabled'] = 'true'
+
+    for td in soup.find_all('td'):
+        if "pytest" in td.text or "html" in td.text:
+            data = td.text.replace('&apos', '')
+            td.string = data
+
+    main_header = soup.find('h1')
+    main_header.string.replace_with('OCS-CI RESULTS')
+
+
+def email_reports():
+    """
+    Email results of test run
+
+    """
+    mailids = config.RUN['cli_params']['email']
+    recipients = []
+    [recipients.append(mailid) for mailid in mailids.split(",")]
+    sender = "ocs-ci@redhat.com"
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = f"ocs-ci results for RUN ID: {config.RUN['run_id']}"
+    msg['From'] = sender
+    msg['To'] = ", ".join(recipients)
+
+    html = config.RUN['cli_params']['--html']
+    html_data = open(html).read()
+    soup = BeautifulSoup(html_data, "html.parser")
+
+    parse_html_for_email(soup)
+    part1 = MIMEText(soup, 'html')
+    msg.attach(part1)
+    try:
+        s = smtplib.SMTP('localhost')
+        s.sendmail(sender, recipients, msg.as_string())
+        s.quit()
+        log.info(f"Results have been emailed to {recipients}")
+    except Exception as e:
+        log.exception(e)
+
+
+def get_cluster_version_info():
+    """
+    Gets the complete cluster version information
+
+    Returns:
+        dict: cluster version information
+
+    """
+    # importing here to avoid circular imports
+    from ocs.ocp import OCP
+    ocp = OCP(kind="clusterversion")
+    cluster_version_info = ocp.get("version")
+    return cluster_version_info
+
+
+def get_cluster_version():
+    """
+    Gets the cluster version
+
+    Returns:
+         str: cluster version
+
+    """
+    return get_cluster_version_info()["status"]["desired"]["version"]
+
+
+def get_cluster_image():
+    """
+    Gets the cluster image
+
+    Returns:
+         str: cluster image
+
+    """
+    return get_cluster_version_info()["status"]["desired"]["image"]
+
+
+def get_ceph_version():
+    """
+    Gets the ceph version
+
+    Returns:
+         str: ceph version
+
+    """
+    # importing here to avoid circular imports
+    from resources import pod
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_version = ct_pod.exec_ceph_cmd("ceph version")
+    return re.split(r'ceph version ', ceph_version['version'])[1]
+
+
+def get_rook_version():
+    """
+    Gets the rook version
+
+    Returns:
+        str: rook version
+
+    """
+    # importing here to avoid circular imports
+    from resources import pod
+    ct_pod = pod.get_ceph_tools_pod()
+    rook_versions = ct_pod.exec_ceph_cmd("rook version", format='')
+    return rook_versions['rook']
+
+
+def get_csi_versions():
+    """
+    Gets the CSI related version information
+
+    Returns:
+        dict: CSI related version information
+
+    """
+    csi_versions = {}
+    # importing here to avoid circular imports
+    from ocs.ocp import OCP
+    ocp_pod_obj = OCP(
+        kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
+    )
+    csi_provisioners = [
+        'csi-cephfsplugin-provisioner',
+        'csi-rbdplugin-provisioner'
+    ]
+    for provisioner in csi_provisioners:
+        csi_provisioner_pod = run_cmd(
+            f"oc -n {config.ENV_DATA['cluster_namespace']} get pod -l "
+            f"'app={provisioner}' -o jsonpath='{{.items[0].metadata.name}}'"
+        )
+        desc = ocp_pod_obj.get(csi_provisioner_pod)
+        for container in desc['spec']['containers']:
+            name = container['image'].split("/")[-1].split(":")[0]
+            version = container['image'].split("/")[-1].split(":")[1]
+            csi_versions[name] = version
+    return csi_versions
