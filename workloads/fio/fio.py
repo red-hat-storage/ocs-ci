@@ -43,7 +43,10 @@ def setup(**kwargs):
     setup fio workload
 
     Args:
-        **kwargs (dict): fio setup configuration
+        **kwargs (dict): fio setup configuration.
+            At this point in time only argument present in kwargs will be
+            'pod' on which we want to setup. In future if we move to
+            containerized fio then pod.yaml will be presented in kwargs.
 
     Returns:
         bool: True if setup succeeds else False
@@ -69,7 +72,7 @@ def run(**kwargs):
     dict as per the requirement.
 
     Args:
-        kwargs (dict): params for fio
+        kwargs (dict): IO params for fio
 
     Result:
         result of command
