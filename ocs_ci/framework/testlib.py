@@ -1,11 +1,10 @@
 from ocs_ci.framework.pytest_customization.marks import *  # noqa: F403
-from ocs_ci.utility import environment_check as ec
 
 
 @pytest.mark.usefixtures(  # noqa: F405
-    ec.environment_checker.__name__,
+    'environment_checker',
 )
-class BaseTest():
+class BaseTest:
     """
     Base test class for our testing.
     If some functionality/property needs to be implemented in all test classes

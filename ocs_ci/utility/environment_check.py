@@ -2,16 +2,13 @@
 Util for environment check before and after test to compare and find stale
 leftovers
 """
-import logging
 import copy
-import pytest
+import logging
+
+from deepdiff import DeepDiff
 from gevent.threadpool import ThreadPoolExecutor
 
 from ocs_ci.ocs import ocp, constants, exceptions
-from ocs_ci.framework.pytest_customization.marks import (
-    deployment, destroy, ignore_leftovers
-)
-from deepdiff import DeepDiff
 
 log = logging.getLogger(__name__)
 
@@ -42,20 +39,6 @@ ENV_STATUS_POST = copy.deepcopy(ENV_STATUS_DICT)
 
 ADDED_RESOURCE = 'iterable_item_added'
 REMOVED_RESOURCE = 'iterable_item_removed'
-
-# List of marks for which we will ignore the leftover checker
-MARKS_TO_IGNORE = [m.mark for m in [deployment, destroy, ignore_leftovers]]
-
-
-@pytest.fixture(scope='class')
-def environment_checker(request):
-    node = request.node
-    for mark in node.iter_markers():
-        if mark in MARKS_TO_IGNORE:
-            return
-
-    request.addfinalizer(get_status_after_execution)
-    get_status_before_execution()
 
 
 def assign_get_values(env_status_dict, key, kind):
