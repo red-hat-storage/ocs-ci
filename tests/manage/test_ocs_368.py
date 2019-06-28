@@ -7,17 +7,15 @@ import json
 from time import sleep
 import threading
 
-from ocs import ocp, defaults, constants
+from ocs import ocp, constants
 from ocsci import config
 from ocsci.testlib import tier1, ManageTest
-from resources.ocs import OCS
 from resources.pvc import PVC
 from resources.pod import Pod
 from resources.pod import get_ceph_tools_pod
 from utility.utils import run_cmd
 from ocs.exceptions import CommandFailed
 from utility import templating
-from tests import helpers
 
 log = logging.getLogger(__name__)
 
@@ -64,7 +62,7 @@ def setup(self):
     Create pod
     """
     NAMESPACE.create(resource_name=OCS_BUG_ID)
-    config.ENV_DATA["my_namespace"] = OCS_BUG_ID 
+    config.ENV_DATA["my_namespace"] = OCS_BUG_ID
 
     pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
     pvc_data['metadata']['namespace'] = config.ENV_DATA["my_namespace"]
@@ -120,7 +118,7 @@ def teardown():
 def cmd_on_my_namespace(real_cmd):
     """
     Run an oc command on app pod in the test namespace
-    
+
     Retries if the command fails.
 
     Raises:
@@ -149,14 +147,14 @@ def cmd_on_my_namespace(real_cmd):
 def test_add_stuff_to_rbd():
     """
     Make sure that there is data in the rbd pool.
-    
+
     The /mnt/{OCS_BUG_ID} diretory on the app pod is mounted on a
     block device that is implemented by openshift-storage rbd.
     Writing here will add data to that storage.
     """
     df_info = CEPH_TOOL.exec_ceph_cmd('ceph df')
     prev_avail = df_info['stats']['total_avail_bytes']
-    BIG_FILE='/usr/lib/x86_64-linux-gnu/libicudata.so.57.1'
+    BIG_FILE = '/usr/lib/x86_64-linux-gnu/libicudata.so.57.1'
     for i in range(0, 10):
         param = f'cp {BIG_FILE} /mnt/{OCS_BUG_ID}/xx.{i}'
         cmd_on_my_namespace(param)
