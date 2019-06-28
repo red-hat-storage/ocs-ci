@@ -47,6 +47,11 @@ to the pytest.
     provided `--cluster-path` then a new test cluster will be deployed.
 * `--teardown` - if this is given the testing cluster will be destroyed after
     the test have completed, regardless of if the tests passed or failed.
+* `--html` - to generate html reports of the test run
+* `--self-contained-html` - creates self-contained html file containing all
+   necessary styles and scripts
+* `--email` - to send the email reports of the test run which was generated
+   by --html option. MUST specify --html to send email reports.
 
 ## Examples
 
@@ -84,6 +89,30 @@ environment variable.
 run-ci -m "tier1 and manage" \
     --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir tests/
+ ```
+
+#### Running tests on deployed environment and sending reports
+
+If you would like to send the test run results to email you can run
+following command:
+```bash
+
+run-ci tests/
+    --cluster-name kerberos_ID-ocs-deployment \
+    --cluster-path /home/my_user/my-ocs-dir \
+    --html=report.html --self-contained-html \
+    --email=<emailid>
+ ```
+
+If you want to send reports to multiple email ID's, use comma separated
+email ID's like below
+```bash
+
+run-ci tests/
+    --cluster-name kerberos_ID-ocs-deployment \
+    --cluster-path /home/my_user/my-ocs-dir \
+    --html=report.html --self-contained-html \
+    --email=<emailid1>,<emailid2>,<emailid3>
  ```
 
 #### Destroy of cluster
