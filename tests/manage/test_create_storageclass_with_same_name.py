@@ -63,17 +63,18 @@ def create_storageclass(sc_name, expect_fail=False):
     try:
         SC_OBJ.create()
         assert not expect_fail, (
-            "SC creation with same name passed. Expected to fail !!"
+            "SC creation with same name passed. Expected to fail !"
         )
         log.info(
-            f"Storage class: {SC_OBJ.name} created successfully !!"
+            f"Storage class: {SC_OBJ.name} created successfully !"
         )
         log.debug(sc_data)
 
     except CommandFailed as ecf:
         assert "AlreadyExists" in str(ecf)
-        log.error(
-            f"Cannot create two StorageClasses with same name !! \n"
+        log.info(
+            f"Cannot create two StorageClasses with same name !"
+            f" Error message:  \n"
             f"{ecf}"
         )
 
@@ -92,7 +93,7 @@ class TestCreateSCSameName(ManageTest):
         sc_name = "ocs-322-sc"
         create_storageclass(sc_name)
         log.info(
-            f"Attempting to create a storageclass "
+            f"Attempting to create another storageclass "
             f"with duplicate name {sc_name}"
         )
         create_storageclass(sc_name, expect_fail=True)
