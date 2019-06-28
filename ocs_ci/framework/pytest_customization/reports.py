@@ -1,8 +1,8 @@
 import pytest
 import logging
 from py.xml import html
-from utility.utils import email_reports
-from ocsci import config as ocsci_config
+from ocs_ci.utility.utils import email_reports
+from ocs_ci.framework import config as ocsci_config
 
 
 @pytest.mark.optionalhook
