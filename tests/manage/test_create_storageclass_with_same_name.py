@@ -1,12 +1,11 @@
 import logging
 import pytest
 
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.framework.testlib import tier1, ManageTest
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import templating
-from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
@@ -52,19 +51,9 @@ def create_storageclass(sc_name, expect_fail=False):
     """
 
     # Create a storage class
-    namespace = config.ENV_DATA["cluster_namespace"]
-    mons = (
-        f'rook-ceph-mon-a.{namespace}'
-        f'.svc.cluster.local:6789,'
-        f'rook-ceph-mon-b.{namespace}.'
-        f'svc.cluster.local:6789,'
-        f'rook-ceph-mon-c.{namespace}'
-        f'.svc.cluster.local:6789'
-    )
-    log.info("Creating a Storage Class")
     sc_data = templating.load_yaml_to_dict(constants.CSI_RBD_STORAGECLASS_YAML)
     sc_data['metadata']['name'] = sc_name
-    sc_data['parameters']['monitors'] = mons
+    sc_data['parameters']['clusterID'] = defaults.ROOK_CLUSTER_NAMESPACE
 
     global SC_OBJ
     SC_OBJ = OCS(**sc_data)
@@ -73,17 +62,18 @@ def create_storageclass(sc_name, expect_fail=False):
     try:
         SC_OBJ.create()
         assert not expect_fail, (
-            "SC creation with same name passed. Expected to fail !!"
+            "SC creation with same name passed. Expected to fail !"
         )
         log.info(
-            f"Storage class: {SC_OBJ.name} created successfully !!"
+            f"Storage class: {SC_OBJ.name} created successfully !"
         )
         log.debug(sc_data)
 
     except CommandFailed as ecf:
         assert "AlreadyExists" in str(ecf)
-        log.error(
-            f"Cannot create two StorageClasses with same name !! \n"
+        log.info(
+            f"Cannot create two StorageClasses with same name !"
+            f" Error message:  \n"
             f"{ecf}"
         )
 
@@ -93,7 +83,7 @@ def create_storageclass(sc_name, expect_fail=False):
     test_fixture.__name__,
 )
 @pytest.mark.polarion_id("OCS-322")
-class TestCaseOCS322(ManageTest):
+class TestCreateSCSameName(ManageTest):
     def test_create_storageclass_with_same_name(self):
         """
         To test that Storageclass creation with duplicate names is not allowed
@@ -102,7 +92,7 @@ class TestCaseOCS322(ManageTest):
         sc_name = "ocs-322-sc"
         create_storageclass(sc_name)
         log.info(
-            f"Attempting to create a storageclass "
+            f"Attempting to create another storageclass "
             f"with duplicate name {sc_name}"
         )
         create_storageclass(sc_name, expect_fail=True)
