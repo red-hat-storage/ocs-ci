@@ -46,18 +46,18 @@ def teardown():
     """
     global RBD_SECRET_OBJ, CEPHFS_SECRET_OBJ
     log.info("Deleting PVC")
-    for count in range(len(PVC_OBJ)):
-        assert pvc.delete_pvcs(PVC_OBJ[count].name)
+    for pvc_name in PVC_OBJ:
+        assert pvc.delete_pvcs(pvc_name.name)
     log.info("Deleting CEPH BLOCK POOL")
-    for count in range(len(POOL_OBJ)):
-        assert helpers.delete_cephblockpool(POOL_OBJ[count].name)
+    for pool in POOL_OBJ:
+        assert helpers.delete_cephblockpool(pool.name)
     log.info("Deleting RBD Secret")
     RBD_SECRET_OBJ.delete()
     log.info("Deleting CEPHFS Secret")
     CEPHFS_SECRET_OBJ.delete()
     log.info("Deleting RBD Storageclass")
-    for count in range(len(SC_RBD_OBJ)):
-        assert helpers.delete_storageclass(SC_RBD_OBJ[count].name)
+    for sc in SC_RBD_OBJ:
+        assert helpers.delete_storageclass(sc.name)
     log.info("Deleting CephFS Storageclass")
     assert helpers.delete_storageclass(SC_CEPHFS_OBJ.name)
 
@@ -134,4 +134,3 @@ class TestCreatePVCRandomStorageClass(ManageTest):
             assert create_pvc(storageclass_list, count=20)
         else:
             log.error("No Storageclass Found")
-            return False
