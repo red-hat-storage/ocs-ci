@@ -74,6 +74,9 @@ def delete_all_pvcs(namespace=None):
     """
     Deletes all pvc in namespace
 
+    Args:
+        namespace (str): Name of namespace
+
     Returns:
         bool: True if deletion is successful
     """
@@ -93,6 +96,9 @@ def delete_all_pvcs(namespace=None):
 def get_all_pvcs(namespace=None):
     """
     Gets all pvc in given namespace
+
+    Args:
+        namespace (str): Name of namespace
 
     Returns:
          dict: Dict of all pvc in namespaces
