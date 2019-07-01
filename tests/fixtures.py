@@ -89,10 +89,6 @@ def create_pod(request):
     """
     class_instance = request.node.cls
 
-    pod_data = templating.load_yaml_to_dict(constants.CSI_RBD_POD_YAML)
-    pod_data['metadata']['name'] = helpers.create_unique_resource_name(
-        'test', 'pod'
+    class_instance.pod_obj = helpers.create_pod(
+        interface_type=constants.CEPHBLOCKPOOL, pvc=class_instance.pvc_obj.name
     )
-    pod_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = class_instance.pvc_obj.name
-    class_instance.pod_obj = helpers.create_pod(**pod_data)

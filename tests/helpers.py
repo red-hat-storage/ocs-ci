@@ -7,7 +7,7 @@ import logging
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility import templating
 from ocs_ci.framework import config
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 
 logger = logging.getLogger(__name__)
@@ -64,15 +64,16 @@ def create_resource(
     return ocs_obj
 
 
-def create_pod(desired_status=constants.STATUS_RUNNING, wait=True, **kwargs):
+def create_pod(interface_type=None, pvc=None, desired_status=constants.STATUS_RUNNING, wait=True):
     """
     Create a pod
 
     Args:
+        interface_type (str): The type of the Ceph interface
+        pvc (str): The name of the PVC to attach to the pod
         desired_status (str): The status of the pod to wait for
         wait (bool): True for waiting for the pod to reach the desired
             status, False otherwise
-        **kwargs: The pod data yaml converted to dict
 
     Returns:
         Pod: A Pod instance
@@ -80,8 +81,20 @@ def create_pod(desired_status=constants.STATUS_RUNNING, wait=True, **kwargs):
     Raises:
         AssertionError: In case of any failure
     """
-    pod_obj = pod.Pod(**kwargs)
-    pod_name = kwargs.get('metadata').get('name')
+    if interface_type == constants.CEPHBLOCKPOOL:
+        pod_dict = constants.CSI_RBD_POD_YAML
+    else:
+        pod_dict = constants.CSI_CEPHFS_POD_YAML
+
+    pod_data = templating.load_yaml_to_dict(pod_dict)
+    pod_data['metadata']['name'] = create_unique_resource_name(
+        'test', 'pod'
+    )
+    pod_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    if pvc:
+        pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc
+    pod_obj = pod.Pod(**pod_data)
+    pod_name = pod_data.get('metadata').get('name')
     created_resource = pod_obj.create()
     assert created_resource, (
         f"Failed to create resource {pod_name}"
@@ -215,7 +228,7 @@ def create_storage_class(
     return create_resource(**sc_data, wait=False)
 
 
-def create_pvc(sc_name, pvc_name=None):
+def create_pvc(sc_name, pvc_name=None, wait=True):
     """
     Create a PVC
 
@@ -223,6 +236,8 @@ def create_pvc(sc_name, pvc_name=None):
         sc_name (str): The name of the storage class for the PVC to be
             associated with
         pvc_name (str): The name of the PVC to create
+        wait (bool): True for waiting for the pod to reach the desired
+            status, False otherwise
 
     Returns:
         OCS: An OCS instance for the PVC
@@ -235,9 +250,16 @@ def create_pvc(sc_name, pvc_name=None):
     )
     pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     pvc_data['spec']['storageClassName'] = sc_name
-    return create_resource(
-        desired_status=constants.STATUS_BOUND, **pvc_data
-    )
+
+    ocs_obj = pvc.PVC(**pvc_data)
+    pvc_name = pvc_data.get('metadata').get('name')
+    created_pvc = ocs_obj.create()
+    assert created_pvc, f"Failed to create resource {pvc_name}"
+    if wait:
+        assert ocs_obj.ocp.wait_for_resource(
+            condition=constants.STATUS_BOUND, resource_name=pvc_name
+        ), f"PVC {pvc_name} failed to reach status {constants.STATUS_BOUND}"
+    return ocs_obj
 
 
 def verify_block_pool_exists(pool_name):
