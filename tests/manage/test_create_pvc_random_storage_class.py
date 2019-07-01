@@ -6,17 +6,10 @@ import random
 
 import pytest
 
-<<<<<<< HEAD:tests/manage/test_create_pvc_random_storage_class.py
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.framework.testlib import ManageTest, tier2
 from ocs_ci.ocs.resources import pvc
-=======
-from ocs import constants
-from ocsci.testlib import tier2, ManageTest
-from resources import pvc
->>>>>>> - updated based on modification done in tests/helpers.py:tests/manage/test_ocs_288.py
 from tests import helpers
-
 log = logging.getLogger(__name__)
 
 
@@ -40,9 +33,6 @@ def setup():
     global CEPHFS_SECRET_OBJ
     CEPHFS_SECRET_OBJ = helpers.create_secret(constants.CEPHFILESYSTEM)
 
-    log.info("Creating CEPH FileSystem")
-    assert helpers.create_cephfilesystem()
-
     log.info("Creating RBD Storageclass")
     assert create_multiple_rbd_storageclasses(count=5)
 
@@ -65,8 +55,6 @@ def teardown():
     RBD_SECRET_OBJ.delete()
     log.info("Deleting CEPHFS Secret")
     CEPHFS_SECRET_OBJ.delete()
-    log.info("Deleting CEPH FILESYSTEM")
-    assert helpers.delete_all_cephfilesystem()
     log.info("Deleting RBD Storageclass")
     for count in range(len(SC_RBD_OBJ)):
         assert helpers.delete_storageclass(SC_RBD_OBJ[count].name)

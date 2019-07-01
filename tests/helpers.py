@@ -5,22 +5,13 @@ import base64
 import datetime
 import logging
 
-<<<<<<< HEAD
-from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.utility import templating
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
-=======
-from ocs.exceptions import TimeoutExpiredError
-
-from ocs import constants, defaults, ocp
-from utility import templating
-from ocsci import config
-from resources import pod
-from resources.ocs import OCS
-from utility.retry import retry
->>>>>>> - Modified delete_all_storageclass to delete_storageclass now it accept arg with name sc_name which is used to delete specific sc
+from ocs_ci.utility import templating
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +36,7 @@ def create_unique_resource_name(resource_description, resource_type):
 
 
 def create_resource(
-    desired_status=constants.STATUS_AVAILABLE, wait=True, **kwargs
+        desired_status=constants.STATUS_AVAILABLE, wait=True, **kwargs
 ):
     """
     Create a resource
@@ -166,7 +157,7 @@ def create_ceph_block_pool(pool_name=None):
 
 
 def create_storage_class(
-    interface_type, interface_name, secret_name, sc_name=None
+        interface_type, interface_name, secret_name, sc_name=None
 ):
     """
     Create a storage class
@@ -315,24 +306,29 @@ def validate_cephfilesystem(fs_name):
     ceph_validate = False
     ocp_validate = False
     cmd = "ceph fs ls"
-    logger.info(fs_name)
+
+    try:
+        result = CFS.get(resource_name=fs_name)
+        if result['metadata']['name']:
+            logger.info("Filesystem %s got created from Openshift Side", fs_name)
+            ocp_validate = True
+        else:
+            logger.info(
+                "Filesystem %s was not create at Openshift Side", fs_name
+            )
+            return False
+    except CommandFailed:
+        raise TimeoutExpiredError("Wating for resource creation")
+
     out = ct_pod.exec_ceph_cmd(ceph_cmd=cmd)
     if out:
         out = out[0]['name']
-        logger.info(out)
         if out == fs_name:
-            logger.info(f"FileSystem {out} got created from Ceph Side")
+            logger.info("FileSystem %s got created from Ceph Side", fs_name)
             ceph_validate = True
         else:
-            logger.error(f"FileSystem {out} was not present at Ceph Side")
+            logger.error("FileSystem %s was not present at Ceph Side", fs_name)
             return False
-    result = CFS.get(resource_name=fs_name)
-    if result['metadata']['name']:
-        logger.info(f"Filesystem {out} got created from Openshift Side")
-        ocp_validate = True
-    else:
-        logger.error(f"Filesystem {out} was not create at Openshift Side")
-        return False
     return True if (ceph_validate and ocp_validate) else False
 
 
@@ -443,10 +439,19 @@ def create_cephfilesystem(override_fs=True):
                 logger.info("CephFileSystem already exists")
                 logger.info("Skipping CephFileSystem Creation")
                 return True
+<<<<<<< HEAD
 >>>>>>> - Modified delete_all_storageclass to delete_storageclass now it accept arg with name sc_name which is used to delete specific sc
     fs_data['metadata']['name'] = create_unique_resource_name(
         'test', 'cephfs'
     )
+=======
+    if fs_name:
+        fs_data['metadata']['name'] = fs_name
+    else:
+        fs_data['metadata']['name'] = create_unique_resource_name(
+            'test', 'cephfs'
+        )
+>>>>>>> - Update based on pr comments
     fs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
     global CEPHFS_OBJ
     CEPHFS_OBJ = OCS(**fs_data)
