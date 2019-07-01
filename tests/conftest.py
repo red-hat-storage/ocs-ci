@@ -95,6 +95,9 @@ def cluster(request):
     install_config_str = _templating.render_template(
         "install-config.yaml.j2", config.ENV_DATA
     )
+    # Log the install config *before* adding the pull secret, so we don't leak
+    # sensitive data.
+    log.info(f"Install config: \n{install_config_str}")
     # Parse the rendered YAML so that we can manipulate the object directly
     install_config_obj = yaml.safe_load(install_config_str)
     with open(pull_secret_path, "r") as f:
@@ -103,7 +106,6 @@ def cluster(request):
         # also to ensure it ends up as a single line.
         install_config_obj['pullSecret'] = json.dumps(json.loads(f.read()))
     install_config_str = yaml.safe_dump(install_config_obj)
-    log.info(f"Install config: \n{install_config_str}")
     install_config = os.path.join(cluster_path, "install-config.yaml")
     with open(install_config, "w") as f:
         f.write(install_config_str)
