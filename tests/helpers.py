@@ -10,11 +10,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.utility import templating
-from ocs_ci.framework import config
-from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.resources.ocs import OCS
 
 logger = logging.getLogger(__name__)
 
