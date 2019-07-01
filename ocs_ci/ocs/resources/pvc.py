@@ -70,15 +70,17 @@ class PVC(OCS):
         return True
 
 
-def delete_all_pvcs():
+def delete_all_pvcs(namespace=None):
     """
     Deletes all pvc in namespace
 
     Returns:
         bool: True if deletion is successful
     """
+    if not namespace:
+        namespace = config.ENV_DATA['cluster_namespace']
     ocp_pvc_obj = OCP(
-        kind=constants.PVC, namespace=config.ENV_DATA['cluster_namespace']
+        kind=constants.PVC, namespace=namespace
     )
     ocp_pvc_list = get_all_pvcs()
     pvc_list = ocp_pvc_list['items']
@@ -88,16 +90,17 @@ def delete_all_pvcs():
     return True
 
 
-def get_all_pvcs():
+def get_all_pvcs(namespace=None):
     """
     Gets all pvc in given namespace
 
     Returns:
          dict: Dict of all pvc in namespaces
     """
-
+    if not namespace:
+        namespace = config.ENV_DATA['cluster_namespace']
     ocp_pvc_obj = OCP(
-        kind=constants.PVC, namespace=config.ENV_DATA['cluster_namespace']
+        kind=constants.PVC, namespace=namespace
     )
     out = ocp_pvc_obj.get()
     return out
