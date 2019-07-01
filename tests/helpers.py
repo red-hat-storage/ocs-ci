@@ -1,7 +1,6 @@
 """
 Helper functions file for OCS QE
 """
-import base64
 import datetime
 import logging
 
@@ -119,7 +118,7 @@ def create_secret(interface_type):
         )
         del secret_data['stringData']['userID']
         del secret_data['stringData']['userKey']
-        secret_data['stringData']['adminID'] =constants.ADMIN_USER
+        secret_data['stringData']['adminID'] = constants.ADMIN_USER
         secret_data['stringData']['adminKey'] = get_admin_key()
     secret_data['metadata']['name'] = create_unique_resource_name(
         'test', 'secret'
