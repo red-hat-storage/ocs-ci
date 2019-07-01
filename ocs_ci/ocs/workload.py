@@ -37,7 +37,7 @@ class WorkLoad(object):
             # with fio workload. We will be dynamically loading the module
             # based on its name.
             self.work_load_mod = importlib.import_module(
-                f'workloads.{self.work_load}.{self.work_load}'
+                f'ocs_ci.utility.workloads.{self.work_load}'
             )
         except ModuleNotFoundError as ex:
             log.error(f"No workload found with name {self.work_load}")

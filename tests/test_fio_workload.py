@@ -1,11 +1,11 @@
 import pytest
 import logging
 
-from ocs import constants, exceptions
-from ocs import workload
-from ocsci.testlib import ManageTest
-from utility.utils import TimeoutSampler
-from utility import templating
+from ocs_ci.ocs import constants, exceptions
+from ocs_ci.ocs import workload
+from ocs_ci.framework.testlib import ManageTest
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility import templating
 
 
 from tests.fixtures import (
