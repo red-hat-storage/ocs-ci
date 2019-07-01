@@ -2,16 +2,12 @@ apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
    name: csi-rbd
-   namespace: default
 provisioner: rbd.csi.ceph.com
 parameters:
-    # Comma separated list of Ceph monitors
-    # if using FQDN, make sure csi plugin's dns policy is appropriate.
-    clusterID: rook-ceph
-    # if "monitors" parameter is not set, driver to get monitors from same
-    # secret as admin/user credentials. "monValueFromSecret" provides the
-    # key in the secret whose value is the mons
-    #monValueFromSecret: "monitors"
+    # Specify a string that identifies your cluster. Ceph CSI supports any
+    # unique string. When Ceph CSI is deployed by Rook use the Rook namespace,
+    # for example "rook-ceph".
+    clusterID: openshift-storage
 
     # Ceph pool into which the RBD image shall be created
     pool: rbd
@@ -28,9 +24,6 @@ parameters:
     csi.storage.k8s.io/node-publish-secret-name: csi-rbd-secret
     csi.storage.k8s.io/node-publish-secret-namespace: default
 
-    # Ceph users for operating RBD
-    adminid: admin
-    userid: kubernetes
     # uncomment the following to use rbd-nbd as mounter on supported nodes
     #mounter: rbd-nbd
 reclaimPolicy: Delete

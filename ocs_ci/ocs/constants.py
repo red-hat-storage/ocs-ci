@@ -43,7 +43,7 @@ NAMESPACE = 'Namespace'
 IGNORE_SC = "gp2"
 
 # encoded value of 'admin'
-ADMIN_BASE64 = 'YWRtaW4='
+ADMIN_USER = 'admin'
 GB = 1024 ** 3
 
 MON_APP_LABEL = "app=rook-ceph-mon"
