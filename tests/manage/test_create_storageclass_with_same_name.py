@@ -6,7 +6,6 @@ from ocs_ci.framework.testlib import tier1, ManageTest
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import templating
-from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
