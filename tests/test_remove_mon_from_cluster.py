@@ -11,12 +11,12 @@ import re
 import random
 import time
 import pytest
-from ocs import ocp, constants
-from ocsci.testlib import tier4, ManageTest
-from ocsci import config
-from resources import pod
+from ocs_ci.ocs import ocp, constants
+from ocs_ci.framework.testlib import tier4, ManageTest
+from ocs_ci.framework import config
+from ocs_ci.ocs.resources import pod
 from tests.helpers import run_io_with_rados_bench, delete_cephblockpool
-from ocs.cluster import CephCluster
+from ocs_ci.ocs.cluster import CephCluster
 
 
 log = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ def run_io_on_pool():
 
     return run_io_with_rados_bench(
         ceph_pods=[tools_pod],
-        config={'time': 5, 'cleanup': False,
+        config={'time': 45, 'cleanup': False,
                 'pool': 'test-pool'
                 }
     )
