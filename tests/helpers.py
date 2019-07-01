@@ -1,15 +1,14 @@
 """
 Helper functions file for OCS QE
 """
-import base64
 import datetime
 import logging
 
-from ocs import constants, defaults, ocp
-from utility import templating
-from ocsci import config
-from resources import pod
-from resources.ocs import OCS
+from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.utility import templating
+from ocs_ci.framework import config
+from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.ocs import OCS
 
 logger = logging.getLogger(__name__)
 
@@ -111,16 +110,16 @@ def create_secret(interface_type):
         secret_data = templating.load_yaml_to_dict(
             constants.CSI_RBD_SECRET_YAML
         )
-        del secret_data['data']['kubernetes']
-        secret_data['data']['admin'] = get_admin_key()
+        secret_data['stringData']['userID'] = constants.ADMIN_USER
+        secret_data['stringData']['userKey'] = get_admin_key()
     elif interface_type == constants.CEPHFILESYSTEM:
         secret_data = templating.load_yaml_to_dict(
             constants.CSI_CEPHFS_SECRET_YAML
         )
-        del secret_data['data']['userID']
-        del secret_data['data']['userKey']
-        secret_data['data']['adminID'] = constants.ADMIN_BASE64
-        secret_data['data']['adminKey'] = get_admin_key()
+        del secret_data['stringData']['userID']
+        del secret_data['stringData']['userKey']
+        secret_data['stringData']['adminID'] = constants.ADMIN_USER
+        secret_data['stringData']['adminKey'] = get_admin_key()
     secret_data['metadata']['name'] = create_unique_resource_name(
         'test', 'secret'
     )
@@ -191,16 +190,9 @@ def create_storage_class(
         sc_data['parameters'][
             'csi.storage.k8s.io/node-stage-secret-namespace'
         ] = defaults.ROOK_CLUSTER_NAMESPACE
+        sc_data['parameters']['fsName'] = get_cephfs_name()
     sc_data['parameters']['pool'] = interface_name
 
-    mons = (
-        f'rook-ceph-mon-a.{config.ENV_DATA["cluster_namespace"]}'
-        f'.svc.cluster.local:6789,'
-        f'rook-ceph-mon-b.{config.ENV_DATA["cluster_namespace"]}.'
-        f'svc.cluster.local:6789,'
-        f'rook-ceph-mon-c.{config.ENV_DATA["cluster_namespace"]}'
-        f'.svc.cluster.local:6789'
-    )
     sc_data['metadata']['name'] = (
         sc_name if sc_name else create_unique_resource_name(
             'test', 'storageclass'
@@ -214,10 +206,7 @@ def create_storage_class(
         'csi.storage.k8s.io/provisioner-secret-namespace'
     ] = defaults.ROOK_CLUSTER_NAMESPACE
 
-    if interface_type == constants.CEPHBLOCKPOOL:
-        sc_data['parameters']['clusterID'] = defaults.ROOK_CLUSTER_NAMESPACE
-    elif interface_type == constants.CEPHFILESYSTEM:
-        sc_data['parameters']['monitors'] = mons
+    sc_data['parameters']['clusterID'] = defaults.ROOK_CLUSTER_NAMESPACE
 
     try:
         del sc_data['parameters']['userid']
@@ -279,8 +268,7 @@ def get_admin_key():
     """
     ct_pod = pod.get_ceph_tools_pod()
     out = ct_pod.exec_ceph_cmd('ceph auth get-key client.admin')
-    base64_output = base64.b64encode(out['key'].encode()).decode()
-    return base64_output
+    return out['key']
 
 
 def get_cephfs_data_pool_name():
@@ -457,3 +445,17 @@ def delete_all_cephfilesystem():
     for item in cephfs_dict:
         assert CFS.delete(resource_name=item.get('metadata').get('name'))
     return True
+
+
+def get_cephfs_name():
+    """
+    Function to retrive CephFS name
+    Returns:
+        str: Name of CFS
+    """
+    CFS = ocp.OCP(
+        kind=constants.CEPHFILESYSTEM,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    result = CFS.get()
+    return result['items'][0].get('metadata').get('name')

@@ -1,7 +1,7 @@
 import os
 os.sys.path.append(os.path.dirname(os.getcwd()))
 
-from resources import pod
+from ocs_ci.ocs.resources import pod
 
 
 def test_main():

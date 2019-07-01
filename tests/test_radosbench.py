@@ -1,6 +1,6 @@
 import logging
 import random
-from ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 

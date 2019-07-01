@@ -4,13 +4,13 @@ import pytest
 import os.path
 import yaml
 
-from resources.pvc import PVC
+from ocs_ci.ocs.resources.pvc import PVC
 from tests import helpers
-from ocs import constants, defaults
-from ocs.exceptions import TimeoutExpiredError
-from ocsci.testlib import tier3, ManageTest
-from resources.ocs import OCS
-from utility import templating
+from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.framework.testlib import tier3, ManageTest
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.utility import templating
 
 
 logger = logging.getLogger(__name__)

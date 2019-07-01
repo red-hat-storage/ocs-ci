@@ -1,33 +1,48 @@
-import pytest
 import json
 import logging
 import os
 import time
+
+import pytest
 import yaml
 
-from ocsci import config
-from utility.environment_check import environment_checker  # noqa: F401
-from oc.openshift_ops import OCP
-from ocs import constants, ocp, defaults
-from ocs.exceptions import CommandFailed, CephHealthException
-from ocs.utils import create_oc_resource, apply_oc_resource
-from utility import templating, system
-from utility.aws import AWS
-from utility.retry import retry
-from utility.utils import destroy_cluster, run_cmd, get_openshift_installer, get_openshift_client, is_cluster_running
-from ocs.parallel import parallel
-from resources.ocs import OCS
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import (
+    deployment, destroy, ignore_leftovers
+)
+from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs.exceptions import CommandFailed, CephHealthException
+from ocs_ci.ocs.openshift_ops import OCP
+from ocs_ci.ocs.parallel import parallel
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.utils import create_oc_resource, apply_oc_resource
+from ocs_ci.utility import templating, system
+from ocs_ci.utility.aws import AWS
+from ocs_ci.utility.environment_check import (
+    get_status_before_execution, get_status_after_execution
+)
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import (
+    destroy_cluster, run_cmd, get_openshift_installer, get_openshift_client,
+    is_cluster_running
+)
 from tests import helpers
 
 log = logging.getLogger(__name__)
 
 
+@pytest.fixture(scope="session", autouse=True)
 def polarion_testsuite_properties(record_testsuite_property):
     """
     Configures polarion testsuite properties for junit xml
     """
     polarion_project_id = config.REPORTING['polarion']['project_id']
-    record_testsuite_property('polarion-projct-id', polarion_project_id)
+    record_testsuite_property('polarion-project-id', polarion_project_id)
+    jenkins_build_url = config.RUN.get('jenkins_build_url')
+    if jenkins_build_url:
+        record_testsuite_property(
+            'polarion-custom-description', jenkins_build_url
+        )
 
 
 def cluster_teardown():
@@ -324,3 +339,16 @@ def ceph_health_check(namespace=None):
         raise CephHealthException(
             f"Ceph cluster health is not OK. Health: {health}"
         )
+
+
+@pytest.fixture(scope='class')
+def environment_checker(request):
+    node = request.node
+    # List of marks for which we will ignore the leftover checker
+    marks_to_ignore = [m.mark for m in [deployment, destroy, ignore_leftovers]]
+    for mark in node.iter_markers():
+        if mark in marks_to_ignore:
+            return
+
+    request.addfinalizer(get_status_after_execution)
+    get_status_before_execution()
