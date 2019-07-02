@@ -42,7 +42,7 @@ class OCSLogFormatter(logging.Formatter):
 
 
 def pytest_logger_config(logger_config):
-    logger_config.add_loggers([''], stdout_level='debug')
+    logger_config.add_loggers([''], stdout_level='info')
     logger_config.set_log_option_default('')
     logger_config.split_by_outcome()
     logger_config.set_formatter_class(OCSLogFormatter)
