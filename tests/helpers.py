@@ -52,6 +52,7 @@ def create_resource(**kwargs):
     assert created_resource, (
         f"Failed to create resource {resource_name}"
     )
+    return ocs_obj
 
 
 def wait_for_resource_state(resource, state):

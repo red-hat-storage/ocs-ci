@@ -1,6 +1,6 @@
 import pytest
 from tests import helpers
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, exceptions
 
 
 @pytest.fixture()
@@ -14,8 +14,11 @@ def create_rbd_secret(request):
         """
         Delete the project
         """
-        if class_instance.secret_obj.get():
-            class_instance.secret_obj.delete()
+        try:
+            class_instance.secret_obj.get()
+        except exceptions.CommandFailed as ex:
+            if "NotFound" in str(ex):
+                pass
 
     request.addfinalizer(finalizer)
 
@@ -36,8 +39,11 @@ def create_ceph_block_pool(request):
         """
         Delete the Ceph block pool
         """
-        if class_instance.cbp_obj.get():
-            class_instance.cbp_obj.delete()
+        try:
+            class_instance.cbp_obj.get()
+        except exceptions.CommandFailed as ex:
+            if "NotFound" in str(ex):
+                pass
 
     request.addfinalizer(finalizer)
 
@@ -56,8 +62,11 @@ def create_rbd_storageclass(request):
         """
         Delete the storage class
         """
-        if class_instance.sc_obj.get():
-            class_instance.sc_obj.delete()
+        try:
+            class_instance.sc_obj.get()
+        except exceptions.CommandFailed as ex:
+            if "NotFound" in str(ex):
+                pass
 
     request.addfinalizer(finalizer)
 
@@ -80,8 +89,11 @@ def create_pvc(request):
         """
         Delete the PVC
         """
-        if class_instance.pvc_obj.get():
-            class_instance.pvc_obj.delete()
+        try:
+            class_instance.pvc_obj.get()
+        except exceptions.CommandFailed as ex:
+            if "NotFound" in str(ex):
+                pass
 
     request.addfinalizer(finalizer)
 
@@ -90,10 +102,7 @@ def create_pvc(request):
     )
     assert helpers.wait_for_resource_state(
         resource=class_instance.pvc_obj, state=constants.STATUS_BOUND
-    ), (
-            f"PVC {class_instance.pvc_obj.name} failed "
-            f"to reach status {constants.STATUS_BOUND}"
-    )
+    ), f"PVC {class_instance.pvc_obj.name} failed to reach status {constants.STATUS_BOUND}"
 
 
 @pytest.fixture()
@@ -107,7 +116,12 @@ def create_rbd_pod(request):
         """
         Delete the pod
         """
-        if class_instance.pod_obj.get():
+        try:
+            class_instance.pod_obj.get()
+        except exceptions.CommandFailed as ex:
+            if "NotFound" in str(ex):
+                pass
+        else:
             class_instance.pod_obj.delete()
 
     request.addfinalizer(finalizer)
@@ -121,4 +135,3 @@ def create_rbd_pod(request):
         f"Pod {class_instance.pod_obj.name} failed to reach "
         f"status {constants.STATUS_RUNNING}"
     )
-
