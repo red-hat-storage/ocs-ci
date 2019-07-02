@@ -1,13 +1,12 @@
 """
 Helper functions file for OCS QE
 """
-import base64
 import datetime
 import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
@@ -35,9 +34,7 @@ def create_unique_resource_name(resource_description, resource_type):
     return f"{resource_type}-{resource_description[:23]}-{current_date_time[:10]}"
 
 
-def create_resource(
-        desired_status=constants.STATUS_AVAILABLE, wait=True, **kwargs
-):
+def create_resource(desired_status=constants.STATUS_AVAILABLE, wait=True, **kwargs):
     """
     Create a resource
 
@@ -156,9 +153,7 @@ def create_ceph_block_pool(pool_name=None):
     return cbp_obj
 
 
-def create_storage_class(
-        interface_type, interface_name, secret_name, sc_name=None
-):
+def create_storage_class(interface_type, interface_name, secret_name, sc_name=None):
     """
     Create a storage class
 
@@ -286,7 +281,7 @@ def get_cephfs_data_pool_name():
     return out[0]['data_pools'][0]
 
 
-@retry(TimeoutExpiredError, tries=5, delay=3, backoff=1)
+@retry(CommandFailed, tries=5, delay=3, backoff=1)
 def validate_cephfilesystem(fs_name):
     """
      Verify CephFileSystem exists at ceph and Ocp
@@ -307,18 +302,15 @@ def validate_cephfilesystem(fs_name):
     ocp_validate = False
     cmd = "ceph fs ls"
 
-    try:
-        result = CFS.get(resource_name=fs_name)
-        if result['metadata']['name']:
-            logger.info("Filesystem %s got created from Openshift Side", fs_name)
-            ocp_validate = True
-        else:
-            logger.info(
-                "Filesystem %s was not create at Openshift Side", fs_name
-            )
-            return False
-    except CommandFailed:
-        raise TimeoutExpiredError("Wating for resource creation")
+    result = CFS.get(resource_name=fs_name)
+    if result['metadata']['name']:
+        logger.info("Filesystem %s got created from Openshift Side", fs_name)
+        ocp_validate = True
+    else:
+        logger.info(
+            "Filesystem %s was not create at Openshift Side", fs_name
+        )
+        return False
 
     out = ct_pod.exec_ceph_cmd(ceph_cmd=cmd)
     if out:
@@ -329,7 +321,7 @@ def validate_cephfilesystem(fs_name):
         else:
             logger.error("FileSystem %s was not present at Ceph Side", fs_name)
             return False
-    return True if (ceph_validate and ocp_validate) else False
+    return ceph_validate and ocp_validate
 
 
 def get_all_storageclass_name():
@@ -339,11 +331,11 @@ def get_all_storageclass_name():
     Returns:
          list: list of storageclass name
     """
-    SC = ocp.OCP(
+    sc = ocp.OCP(
         kind=constants.STORAGECLASS,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
-    sc_obj = SC.get()
+    sc_obj = sc.get()
     sample = sc_obj['items']
 
     storageclass = [
@@ -365,13 +357,12 @@ def delete_storageclass(sc_name):
         bool: True if deletion is successful
     """
 
-    SC = ocp.OCP(
+    sc = ocp.OCP(
         kind=constants.STORAGECLASS,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
     logger.info(f"Deleting StorageClass with name {sc_name}")
-    assert SC.delete(resource_name=sc_name)
-    return True
+    return sc.delete(resource_name=sc_name)
 
 
 def get_cephblockpool_name():
@@ -381,11 +372,11 @@ def get_cephblockpool_name():
     Returns:
          list: list of cephblockpool name
     """
-    POOL = ocp.OCP(
+    pool = ocp.OCP(
         kind=constants.CEPHBLOCKPOOL,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
-    sc_obj = POOL.get()
+    sc_obj = pool.get()
     sample = sc_obj['items']
     pool_list = [
         item.get('metadata').get('name') for item in sample
@@ -408,6 +399,7 @@ def delete_cephblockpool(cbp_name):
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
     logger.info(f"Deleting CephBlockPool with name {cbp_name}")
+<<<<<<< HEAD
     assert POOL.delete(resource_name=cbp_name)
     return True
 
@@ -467,6 +459,9 @@ def create_cephfilesystem(override_fs=True):
             )
     assert validate_cephfilesystem(fs_name=fs_data['metadata']['name'])
     return True
+=======
+    return POOL.delete(resource_name=cbp_name)
+>>>>>>> - Update based on pr comments
 
 
 def delete_cephfilesystem(fs_name):
@@ -483,6 +478,7 @@ def delete_cephfilesystem(fs_name):
         kind=constants.CEPHFILESYSTEM,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
+<<<<<<< HEAD
     result = CFS.get()
     cephfs_dict = result['items']
     for item in cephfs_dict:
@@ -502,3 +498,6 @@ def get_cephfs_name():
     )
     result = CFS.get()
     return result['items'][0].get('metadata').get('name')
+=======
+    return CFS.delete(resource_name=fs_name)
+>>>>>>> - Update based on pr comments

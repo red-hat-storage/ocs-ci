@@ -46,18 +46,18 @@ def teardown():
     """
     global RBD_SECRET_OBJ, CEPHFS_SECRET_OBJ
     log.info("Deleting PVC")
-    for pvc_name in PVC_OBJ:
-        assert pvc.delete_pvcs(pvc_name.name)
+    pvc_names = [pvcs.name for pvcs in PVC_OBJS]
+    assert pvc.delete_pvcs(pvc_names)
     log.info("Deleting CEPH BLOCK POOL")
-    for pool in POOL_OBJ:
-        assert helpers.delete_cephblockpool(pool.name)
+    pool_list = [pool.name for pool in POOL_OBJS]
+    assert helpers.delete_cephblockpool(pool_list)
     log.info("Deleting RBD Secret")
     RBD_SECRET_OBJ.delete()
     log.info("Deleting CEPHFS Secret")
     CEPHFS_SECRET_OBJ.delete()
     log.info("Deleting RBD Storageclass")
-    for sc in SC_RBD_OBJ:
-        assert helpers.delete_storageclass(sc.name)
+    sc_list = [sc.name for sc in SC_RBD_OBJS]
+    assert helpers.delete_storageclass(sc_list)
     log.info("Deleting CephFS Storageclass")
     assert helpers.delete_storageclass(SC_CEPHFS_OBJ.name)
 
@@ -72,15 +72,15 @@ def create_multiple_rbd_storageclasses(count=1):
          count (int): count specify no of storageclass want to create by
             default count is set to one i.e it will create one sc
     """
-    global POOL_OBJ, SC_RBD_OBJ
-    POOL_OBJ = [0] * count
-    SC_RBD_OBJ = [0] * count
+    global POOL_OBJS, SC_RBD_OBJS
+    POOL_OBJS = [0] * count
+    SC_RBD_OBJS = [0] * count
     for sc_count in range(count):
         log.info("Creating CephBlockPool")
-        POOL_OBJ[sc_count] = helpers.create_ceph_block_pool()
-        SC_RBD_OBJ[sc_count] = helpers.create_storage_class(
+        POOL_OBJS[sc_count] = helpers.create_ceph_block_pool()
+        SC_RBD_OBJS[sc_count] = helpers.create_storage_class(
             constants.CEPHBLOCKPOOL,
-            interface_name=POOL_OBJ[sc_count].name,
+            interface_name=POOL_OBJS[sc_count].name,
             secret_name=RBD_SECRET_OBJ.name
         )
 
@@ -95,12 +95,12 @@ def create_pvc(storageclass_list, count=1):
         storageclass_list (list): This will contain storageclass list
         count (int): count specify no of pvc want's to create
     """
-    global PVC_OBJ
-    PVC_OBJ = [0] * count
+    global PVC_OBJS
+    PVC_OBJS = [0] * count
     for i in range(count):
         sc_name = random.choice(storageclass_list)
-        PVC_OBJ[i] = helpers.create_pvc(sc_name)
-        log.info(f"{PVC_OBJ[i].name} got Created and got Bounded")
+        PVC_OBJS[i] = helpers.create_pvc(sc_name)
+        log.info(f"{PVC_OBJS[i].name} got created and got Bounded")
     return True
 
 
