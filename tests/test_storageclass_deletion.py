@@ -6,15 +6,16 @@ Automates the test OCS-297:-
 """
 import logging
 import pytest
-
 from ocsci.testlib import tier1, ManageTest
 from ocs import constants
 from tests import helpers
-import ocs.defaults as defaults
+from ocs_ci.utility import templating
+from ocs_ci.ocs.resources.pvc import PVC
+from ocs_ci.ocs.resources.ocs import OCS
 
 
 log = logging.getLogger(__name__)
-
+SC_OBJ = None
 
 @pytest.fixture(scope='class')
 def test_fixture(request):
@@ -33,16 +34,13 @@ def teardown(self):
     """
     Remove the resources after execution of tests
     """
-
+    log.info("Deleting the pvc")
+    self.pvc.delete()
 
 def setup(self):
     """
     Setting up the Environment : Creating project
     """
-    project_name = defaults.NAMESPACE
-    log.info("Creating project")
-    NAMESPACE.new_project(project_name)
-
 
 @tier1
 @pytest.mark.usefixtures(
@@ -50,22 +48,31 @@ def setup(self):
 )
 class TestStorageClass(ManageTest):
 
-    @tier1
-    def test_storage_class(self, request):
+    def test_storage_class(self):
         """
         Test to validate OCS-297
         """
-        project_name = defaults.NAMESPACE
-        global PVC, STORAGE_CLASS, NAMESPACE
-        log.info("Creating StorageClass")
-        STORAGE_CLASS = helpers.create_storage_class(
-            constants.CEPHBLOCKPOOL, 'rbd'
+        # Create a storage class
+        log.info("Creating a Storage Class")
+        self.sc_data = templating.load_yaml_to_dict(
+            constants.CSI_RBD_STORAGECLASS_YAML
         )
-        log.info("Creating a PVC")
-        PVC = helpers.create_pvc(STORAGE_CLASS.name)
-        log.info("Deleting PVC")
-        PVC.delete()
-        log.info("Deleting Storage Class")
-        STORAGE_CLASS.delete()
-        log.info("Deleting project")
-        NAMESPACE.delete(resource_name=project_name)
+        self.sc_data['metadata']['name'] = helpers.create_unique_resource_name(
+            'test', 'csi-rbd'
+        )
+        global SC_OBJ
+        SC_OBJ = OCS(**self.sc_data)
+        assert SC_OBJ.create()
+        log.info("Storage class created successfully")
+        log.debug(self.sc_data)
+
+        # Create a pvc
+        log.info("Creating a pvc")
+        self.rbd_pvc = templating.load_yaml_to_dict(constants.CSI_RBD_PVC_YAML)
+        pvc = PVC(**self.rbd_pvc)
+        pvc.create()
+
+        # Delete the storage class
+        log.info("Deleting created storage class")
+        SC_OBJ.delete()
+        log.info("Storage class deleted successfully")
