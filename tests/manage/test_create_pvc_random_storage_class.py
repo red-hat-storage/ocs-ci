@@ -49,8 +49,8 @@ def teardown():
     pvc_names = [pvcs.name for pvcs in PVC_OBJS]
     assert pvc.delete_pvcs(pvc_names)
     log.info("Deleting CEPH BLOCK POOL")
-    pool_list = [pool.name for pool in POOL_OBJS]
-    assert helpers.delete_cephblockpool(pool_list)
+    for pool in POOL_OBJS:
+        assert helpers.delete_cephblockpool(pool.name)
     log.info("Deleting RBD Secret")
     RBD_SECRET_OBJ.delete()
     log.info("Deleting CEPHFS Secret")
