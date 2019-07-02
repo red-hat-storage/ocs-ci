@@ -17,6 +17,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 log = logging.getLogger(__name__)
 SC_OBJ = None
 
+
 @pytest.fixture(scope='class')
 def test_fixture(request):
     """
@@ -37,10 +38,12 @@ def teardown(self):
     log.info("Deleting the pvc")
     self.pvc.delete()
 
+
 def setup(self):
     """
     Setting up the Environment : Creating project
     """
+
 
 @tier1
 @pytest.mark.usefixtures(
