@@ -108,4 +108,3 @@ FIO_IO_PARAMS_YAML = os.path.join(
 CIRROS_APP_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "cirros.yaml"
 )
-
