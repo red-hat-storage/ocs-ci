@@ -39,14 +39,19 @@ PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
 POD = "Pod"
 
+
 # Other
 SECRET = "Secret"
 NAMESPACE = 'Namespace'
 IGNORE_SC = "gp2"
-
+DEFAULT_BLOCKPOOL = 'rbd'
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
 GB = 1024 ** 3
+
+# Reclaim Policy
+RECLAIM_POLICY_RETAIN = 'Retain'
+RECLAIM_POLICY_DELETE = 'Delete'
 
 MON_APP_LABEL = "app=rook-ceph-mon"
 MDS_APP_LABEL = "app=rook-ceph-mds"
