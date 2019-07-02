@@ -21,6 +21,8 @@ TEMPLATE_CSI_RBD_DIR = os.path.join(TEMPLATE_CSI_DIR, "rbd")
 TEMPLATE_CSI_FS_DIR = os.path.join(TEMPLATE_CSI_DIR, "cephfs")
 TEMPLATE_PV_PVC_DIR = os.path.join(TEMPLATE_DIR, "pv_pvc")
 TEMPLATE_APP_POD_DIR = os.path.join(TEMPLATE_DIR, "app-pods")
+TEMPLATE_WORKLOAD_DIR = os.path.join(TEMPLATE_DIR, "workloads")
+TEMPLATE_FIO_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fio")
 
 # Statuses
 STATUS_PENDING = 'Pending'
@@ -95,4 +97,9 @@ CSI_CEPHFS_PVC_YAML = os.path.join(
 
 CSI_RBD_PVC_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pvc.yaml"
+)
+
+# Workload-io yamls
+FIO_IO_PARAMS_YAML = os.path.join(
+    TEMPLATE_FIO_DIR, "workload_io.yaml"
 )
