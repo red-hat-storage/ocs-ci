@@ -97,7 +97,7 @@ def create_pvc(request):
 
 
 @pytest.fixture()
-def create_pod(request):
+def create_rbd_pod(request):
     """
     Create a pod
     """
