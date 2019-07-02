@@ -361,6 +361,6 @@ class CephCluster(object):
         """
 
         mons = self.get_mons_from_cluster()
-        logging.info(mons)
         remove_mon = self.DEP.delete(resource_name=random.choice(mons))
+        logging.info(f"Removed the mon {mons} from the cluster")
         return remove_mon

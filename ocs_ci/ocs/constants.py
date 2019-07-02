@@ -35,7 +35,6 @@ STATUS_BOUND = 'Bound'
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
 STORAGECLASS = "StorageClass"
-DEPLOYMENT = "Deployment"
 PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
 POD = "Pod"

@@ -71,8 +71,9 @@ class TestOcs355(ManageTest):
         """
         health = CephCluster()
         list_mons = health.get_mons_from_cluster()
-        assert len(list_mons) > 1, pytest.skip("INVALID: Mon count should "
-                                               "be more than one to delete.")
+        assert len(list_mons) > 1, pytest.skip(
+            "INVALID: Mon count should be more than one to delete."
+        )
         assert run_io_on_pool(), 'Failed to run I/O on the pool'
         assert delete_cephblockpool('test-pool'), 'Failed to delete pool'
         health.cluster_health_check(timeout=0)
