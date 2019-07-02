@@ -811,7 +811,7 @@ def email_reports():
     msg['To'] = ", ".join(recipients)
 
     html = config.RUN['cli_params']['--html']
-    html_data = open(html).read()
+    html_data = open(os.path.expanduser(html)).read()
     soup = BeautifulSoup(html_data, "html.parser")
 
     parse_html_for_email(soup)
