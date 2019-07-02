@@ -345,6 +345,7 @@ def ceph_health_check(namespace=None):
 
 @pytest.fixture(scope='class')
 def environment_checker(request):
+    return
     node = request.node
     # List of marks for which we will ignore the leftover checker
     marks_to_ignore = [m.mark for m in [deployment, destroy, ignore_leftovers]]

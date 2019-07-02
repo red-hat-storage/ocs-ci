@@ -7,8 +7,6 @@ Polarion-ID- OCS-355
 """
 
 import logging
-import re
-import random
 import time
 import pytest
 from ocs_ci.ocs import ocp, constants
@@ -21,34 +19,9 @@ from ocs_ci.ocs.cluster import CephCluster
 
 log = logging.getLogger(__name__)
 
-DEP = ocp.OCP(
-    kind=constants.DEPLOYMENT, namespace=config.ENV_DATA['cluster_namespace']
-)
 POD = ocp.OCP(
     kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
 )
-
-
-def get_mons_from_cluster():
-    """
-    Getting the list of mons from the cluster
-
-    Returns:
-        available_mon (list): Returns the mons from the cluster
-    """
-
-    ret = DEP.get(
-        resource_name='', out_yaml_format=False, selector='app=rook-ceph-mon'
-    )
-    available_mon = re.findall(r'[\w-]+mon-+[\w-]', ret)
-    return available_mon
-
-
-def remove_mon_from_cluster(mon):
-    """
-    Removing the mon pod from deployment
-    """
-    assert DEP.delete(resource_name=mon), f"Failed to delete mon {mon}"
 
 
 def verify_mon_pod_up():
@@ -97,12 +70,12 @@ class TestOcs355(ManageTest):
 
         """
         health = CephCluster()
-        list_mons = get_mons_from_cluster()
+        list_mons = health.get_mons_from_cluster()
         assert len(list_mons) > 1, pytest.skip("INVALID: Mon count should "
                                                "be more than one to delete.")
         assert run_io_on_pool(), 'Failed to run I/O on the pool'
         assert delete_cephblockpool('test-pool'), 'Failed to delete pool'
         health.cluster_health_check(timeout=0)
-        remove_mon_from_cluster(random.choice(list_mons))
+        health.remove_mon_from_cluster()
         assert verify_mon_pod_up(), f"Mon pods are not up and running state"
         health.cluster_health_check(timeout=60)
