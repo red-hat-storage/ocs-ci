@@ -31,6 +31,34 @@ from tests import helpers
 log = logging.getLogger(__name__)
 
 
+class OCSLogFormatter(logging.Formatter):
+
+    def __init__(self):
+        fmt = (
+            "%(asctime)s - %(levelname)s - %(name)s.%(funcName)s.%(lineno)d "
+            "- %(message)s"
+        )
+        super(OCSLogFormatter, self).__init__(fmt)
+
+
+def pytest_logger_config(logger_config):
+    logger_config.add_loggers([''], stdout_level='info')
+    logger_config.set_log_option_default('')
+    logger_config.split_by_outcome()
+    logger_config.set_formatter_class(OCSLogFormatter)
+
+
+ep_time = int(time.time())
+log_dir = f"logs_{ep_time}"
+log_path = os.path.expanduser(
+    os.path.join(config.RUN['log_dir'], log_dir)
+)
+
+
+def pytest_logger_logdirlink():
+    return log_path
+
+
 @pytest.fixture(scope="session", autouse=True)
 def polarion_testsuite_properties(record_testsuite_property):
     """
@@ -53,6 +81,7 @@ def cluster_teardown():
 
 @pytest.fixture(scope="session", autouse=True)
 def cluster(request):
+    log.info(f"All logs located at {log_path}")
     log.info("Running OCS basic installation")
     cluster_path = config.ENV_DATA['cluster_path']
     deploy = config.RUN['cli_params']['deploy']
@@ -95,6 +124,9 @@ def cluster(request):
     install_config_str = _templating.render_template(
         "install-config.yaml.j2", config.ENV_DATA
     )
+    # Log the install config *before* adding the pull secret, so we don't leak
+    # sensitive data.
+    log.info(f"Install config: \n{install_config_str}")
     # Parse the rendered YAML so that we can manipulate the object directly
     install_config_obj = yaml.safe_load(install_config_str)
     with open(pull_secret_path, "r") as f:
@@ -103,7 +135,6 @@ def cluster(request):
         # also to ensure it ends up as a single line.
         install_config_obj['pullSecret'] = json.dumps(json.loads(f.read()))
     install_config_str = yaml.safe_dump(install_config_obj)
-    log.info(f"Install config: \n{install_config_str}")
     install_config = os.path.join(cluster_path, "install-config.yaml")
     with open(install_config, "w") as f:
         f.write(install_config_str)

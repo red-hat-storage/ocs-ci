@@ -52,7 +52,6 @@ def main(arguments):
     arguments.extend([
         '-p', 'ocs_ci.framework.pytest_customization.ocscilib',
         '-p', 'ocs_ci.framework.pytest_customization.marks',
-        '-p', 'ocs_ci.framework.pytest_customization.ocsci_logging',
         '-p', 'ocs_ci.framework.pytest_customization.reports',
     ])
     utils.add_path_to_env_path(os.path.expanduser(

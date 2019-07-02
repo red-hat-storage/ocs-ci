@@ -87,19 +87,21 @@ class Pod(OCS):
         """
         self._roles.append(role)
 
-    def exec_cmd_on_pod(self, command):
+    def exec_cmd_on_pod(self, command, out_yaml_format=True):
         """
         Execute a command on a pod (e.g. oc rsh)
 
         Args:
             command (str): The command to execute on the given pod
+            out_yaml_format (bool): whether to return yaml loaded python
+                object OR to return raw output
 
         Returns:
             Munch Obj: This object represents a returned yaml file
         """
         rsh_cmd = f"rsh {self.name} "
         rsh_cmd += command
-        return self.ocp.exec_oc_cmd(rsh_cmd)
+        return self.ocp.exec_oc_cmd(rsh_cmd, out_yaml_format)
 
     def get_labels(self):
         """
