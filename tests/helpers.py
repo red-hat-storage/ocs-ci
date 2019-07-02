@@ -341,26 +341,24 @@ def get_all_storageclass_name():
     return storageclass
 
 
-def delete_storageclass(sc_name):
+def delete_storageclass(sc_objs):
     """"
-    Function for Deleting specific storageclass
+    Function for Deleting storageclass
 
     Args:
-        sc_name (str): Name of sc for deletion
+        sc_objs (list): List of SC objects for deletion
 
     Returns:
         bool: True if deletion is successful
     """
 
-    sc_obj = ocp.OCP(
-        kind=constants.STORAGECLASS,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
-    )
-    logger.info(f"Deleting StorageClass with name {sc_name}")
-    return sc_obj.delete(resource_name=sc_name)
+    for sc in sc_objs:
+        logger.info("Deleting StorageClass with name %s", sc.name)
+        sc.delete()
+    return True
 
 
-def get_cephblockpool_name():
+def get_cephblockpool_names():
     """
     Function for getting all CephBlockPool
 
@@ -379,22 +377,20 @@ def get_cephblockpool_name():
     return pool_list
 
 
-def delete_cephblockpool(cbp_name):
+def delete_cephblockpools(cbp_objs):
     """
-    Function for deleting specific CephBlockPool
+    Function for deleting CephBlockPool
 
     Args:
-        cbp_name (str): Name of CBP for deletion
+        cbp_objs (list): List of CBP objects for deletion
 
     Returns:
         bool: True if deletion of CephBlockPool is successful
     """
-    pool_obj = ocp.OCP(
-        kind=constants.CEPHBLOCKPOOL,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
-    )
-    logger.info(f"Deleting CephBlockPool with name {cbp_name}")
-    return pool_obj.delete(resource_name=cbp_name)
+    for cbp in cbp_objs:
+        logger.info("Deleting CephBlockPool with name %s", cbp.name)
+        cbp.delete()
+    return True
 
 
 def delete_cephfilesystem(fs_name):

@@ -46,20 +46,20 @@ def teardown():
     """
     global RBD_SECRET_OBJ, CEPHFS_SECRET_OBJ
     log.info("Deleting PVC")
-    pvc_names = [pvcs for pvcs in PVC_OBJS]
-    assert pvc.delete_pvcs(pvc_names)
+    pvc_objs = [pvcs for pvcs in PVC_OBJS]
+    assert pvc.delete_pvcs(pvc_objs)
     log.info("Deleting CEPH BLOCK POOL")
-    for pool in POOL_OBJS:
-        assert helpers.delete_cephblockpool(pool.name)
+    pool_objs = [pools for pools in POOL_OBJS]
+    assert helpers.delete_cephblockpools(pool_objs)
     log.info("Deleting RBD Secret")
     RBD_SECRET_OBJ.delete()
     log.info("Deleting CEPHFS Secret")
     CEPHFS_SECRET_OBJ.delete()
     log.info("Deleting RBD Storageclass")
-    for sc in SC_RBD_OBJS:
-        assert helpers.delete_storageclass(sc.name)
+    sc_objs = [sc for sc in SC_RBD_OBJS]
+    assert helpers.delete_storageclass(sc_objs)
     log.info("Deleting CephFS Storageclass")
-    assert helpers.delete_storageclass(SC_CEPHFS_OBJ.name)
+    assert helpers.delete_storageclass([SC_CEPHFS_OBJ])
 
 
 def create_multiple_rbd_storageclasses(count=1):
