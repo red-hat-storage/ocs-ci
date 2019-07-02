@@ -21,6 +21,7 @@ from ocs_ci.utility.utils import (
     get_rook_version,
     get_csi_versions
 )
+from ocs_ci.ocs.utils import collect_ocs_logs
 
 __all__ = [
     "pytest_addoption",
@@ -183,3 +184,13 @@ def pytest_collection_modifyitems(session, config, items):
                 f"{item.name} in {item.fspath}",
                 exc_info=True
             )
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    rep = outcome.get_result()
+    # we only look at actual failing test calls, not setup/teardown
+    if rep.when == "call" and rep.failed:
+        test_case_name = item.name
+        collect_ocs_logs(test_case_name)

@@ -19,6 +19,9 @@ from ocs_ci.ocs.ceph import RolesContainer, CommandFailed, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
 from ocs_ci.ocs.openstack import CephVMNode
 from ocs_ci.ocs.parallel import parallel
+from ocs_ci.utility.utils import create_directory_path
+from ocs_ci.framework import config as ocsci_config
+from ocs_ci.ocs import defaults
 
 log = logging.getLogger(__name__)
 
@@ -624,3 +627,25 @@ def apply_oc_resource(
     log.info(f"Applying rook resource from {template_name}")
     occli = OCP()
     occli.apply(cfg_file)
+
+
+def collect_ocs_logs(dir_name):
+    """
+    Collects OCS logs
+
+    Args:
+        dir_name (str): directory name to store OCS logs. Logs will be stored
+        in dir_name suffix with _ocs_logs.
+
+    Returns:
+        None
+
+    """
+    log_dir_path = os.path.join(ocsci_config.RUN['log_dir'], f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}")
+    create_directory_path(log_dir_path)
+    dir_name = f"{dir_name}_ocs_logs"
+    dump_dir = os.path.join(log_dir_path, dir_name)
+    cmd = f"cluster-info dump --output-directory={dump_dir}"
+    log.info(f"OCS logs are placed in location {dump_dir}")
+    occli = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    occli.exec_oc_cmd(cmd)
