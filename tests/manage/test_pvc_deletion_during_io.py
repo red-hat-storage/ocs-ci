@@ -1,7 +1,7 @@
 import pytest
 import logging
 
-from ocs_ci.ocs import defaults, exceptions, constants
+from ocs_ci.ocs import exceptions, constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import ManageTest, tier1
 from tests.fixtures import (
@@ -36,7 +36,8 @@ class TestDeletePVCWhileRunningIO(ManageTest):
         # This is a workaround for bug 1715627 (replaces wait_for_resource)
         pvc_out = self.pvc_obj.get(out_yaml_format=False)
         assert constants.STATUS_TERMINATING in pvc_out, (
-            f"PVC {self.pvc_obj.name} failed to reach status {defaults.STATUS_TERMINATING}"
+            f"PVC {self.pvc_obj.name} "
+            f"failed to reach status {constants.STATUS_TERMINATING}"
         )
 
         thread.join(timeout=15)
@@ -50,3 +51,10 @@ class TestDeletePVCWhileRunningIO(ManageTest):
         except exceptions.CommandFailed as ex:
             if "NotFound" in str(ex):
                 pass
+
+    @tier1
+    def test_run_io(self):
+        """
+        Test IO
+        """
+        self.pod_obj.run_io('fs', '1G', run_in_bg=False)

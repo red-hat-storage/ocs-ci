@@ -11,10 +11,11 @@ from threading import Thread
 import base64
 
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants, defaults, workload
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.utility import templating
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ class Pod(OCS):
             api_version=defaults.API_VERSION, kind=constants.POD,
             namespace=self.namespace
         )
+        self.thread = None
         # TODO: get backend config !!
 
     @property
@@ -142,6 +144,58 @@ class Pod(OCS):
         if isinstance(out, list):
             return [item for item in out if item]
         return out
+
+    def run_io(
+        self, storage_type, size, direction='rw', workers=1, runtime=60,
+        run_in_bg=True
+    ):
+        """
+        Execute FIO on a pod
+
+        Args:
+             storage_type (str): 'fs' or 'block'
+             size (str): Size in MB, e.g. '200M'
+             direction (str): Determines the operation:
+                'ro', 'wo', 'rw' (default: 'rw')
+            workers (int): Number of threads to execute FIO
+            runtime (int): Number of seconds IO should run for
+            run_in_bg (bool): True in case the FIO should run in background,
+                False otherwise
+        """
+        def execute_fio():
+            name = 'test_workload'
+            spec = self.pod_data.get('spec')
+            path = (
+                spec.get('containers')[0].get('volumeMounts')[0].get(
+                    'mountPath'
+                )
+            )
+            work_load = 'fio'
+            # few io parameters for Fio
+
+            wl = workload.WorkLoad(
+                name, path, work_load, storage_type, self, workers
+            )
+            assert wl.setup()
+            if direction == 'rw':
+                io_params = templating.load_yaml_to_dict(
+                    constants.FIO_IO_RW_PARAMS_YAML
+                )
+            else:
+                io_params = templating.load_yaml_to_dict(
+                    constants.FIO_IO_PARAMS_YAML
+                )
+            io_params['runtime'] = runtime
+            io_params['size'] = size
+
+            future_result = wl.run(**io_params)
+            logger.info(future_result.result())
+
+        if run_in_bg:
+            self.thread = Thread(target=execute_fio,)
+            self.thread.start()
+        else:
+            execute_fio()
 
 
 # Helper functions for Pods

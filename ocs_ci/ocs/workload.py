@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 class WorkLoad(object):
     def __init__(
         self, name=None, path=None, work_load=None, storage_type='fs',
-        pod=None
+        pod=None, workers=1
     ):
         """
         Args:
@@ -23,6 +23,7 @@ class WorkLoad(object):
                 if type is 'fs' we will interpret 'path' as mount point else
                 if type is 'block' we will interpret 'path' as a block device
             pod (Pod): Pod on which we want to run this workload
+            workers (int): Number of threads to execute FIO
         """
         self.name = name
         self.path = path
@@ -44,7 +45,9 @@ class WorkLoad(object):
             log.error(ex)
             raise
 
-        self.thread_exec = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+        self.thread_exec = concurrent.futures.ThreadPoolExecutor(
+            max_workers=workers
+        )
 
     def setup(self, **setup_conf):
         """
