@@ -96,7 +96,13 @@ def create_pvc(storageclass_list, count=1):
     for i in range(count):
         sc_name = random.choice(storageclass_list)
         pvc_obj = helpers.create_pvc(sc_name)
-        log.info(f"{pvc_obj.name} got Created and got Bounded")
+        assert helpers.wait_for_resource_state(
+            pvc_obj, constants.STATUS_BOUND
+        ), (
+            f"PVC {pvc_obj.name} failed to reach "
+            f"status {constants.STATUS_BOUND}"
+        )
+
     return True
 
 

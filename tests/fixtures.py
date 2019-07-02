@@ -76,8 +76,23 @@ def create_pvc(request):
     """
     class_instance = request.node.cls
 
+    def finalizer():
+        """
+        Delete the PVC
+        """
+        if class_instance.pvc_obj.get():
+            class_instance.pvc_obj.delete()
+
+    request.addfinalizer(finalizer)
+
     class_instance.pvc_obj = helpers.create_pvc(
         sc_name=class_instance.sc_obj.name
+    )
+    assert helpers.wait_for_resource_state(
+        resource=class_instance.pvc_obj, state=constants.STATUS_BOUND
+    ), (
+            f"PVC {class_instance.pvc_obj.name} failed "
+            f"to reach status {constants.STATUS_BOUND}"
     )
 
 
@@ -88,6 +103,22 @@ def create_pod(request):
     """
     class_instance = request.node.cls
 
+    def finalizer():
+        """
+        Delete the pod
+        """
+        if class_instance.pod_obj.get():
+            class_instance.pod_obj.delete()
+
+    request.addfinalizer(finalizer)
+
     class_instance.pod_obj = helpers.create_pod(
         interface_type=constants.CEPHBLOCKPOOL, pvc=class_instance.pvc_obj.name
     )
+    assert helpers.wait_for_resource_state(
+        class_instance.pod_obj, constants.STATUS_RUNNING
+    ), (
+        f"Pod {class_instance.pod_obj.name} failed to reach "
+        f"status {constants.STATUS_RUNNING}"
+    )
+

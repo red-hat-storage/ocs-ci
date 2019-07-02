@@ -66,3 +66,6 @@ class TestBasicPVCOperations(ManageTest):
 
         log.info("Creating a PVC")
         PVC = helpers.create_pvc(STORAGE_CLASS.name)
+        assert helpers.wait_for_resource_state(PVC, constants.STATUS_BOUND), (
+            f"PVC {PVC.name} failed to reach status {constants.STATUS_BOUND}"
+        )

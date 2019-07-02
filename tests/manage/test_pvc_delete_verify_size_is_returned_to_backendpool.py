@@ -139,6 +139,10 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         pod_obj = helpers.create_pod(
             interface_type=constants.CEPHBLOCKPOOL, pvc=pvc_obj.name
         )
+        assert helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING), (
+            f"Pod {pod_obj.name} failed to reach "
+            f"status {constants.STATUS_RUNNING}"
+        )
         used_percentage = pod.run_io_and_verify_mount_point(pod_obj)
         assert used_percentage > '90%', "I/O's didn't run completely"
         used_after_creating_pvc = check_ceph_used_space()

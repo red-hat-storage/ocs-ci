@@ -91,6 +91,9 @@ class TestDeleteCreatePVCSameName(ManageTest):
         global PVC_OBJ
 
         PVC_OBJ = helpers.create_pvc(sc_name=self.sc_obj.name)
+        assert helpers.wait_for_resource_state(PVC_OBJ, constants.STATUS_BOUND), (
+            f"PVC {PVC_OBJ.name} failed to reach status {constants.STATUS_BOUND}"
+        )
         pv_obj = ocp.OCP(
             kind=constants.PV, namespace=config.ENV_DATA['cluster_namespace']
         )
@@ -106,6 +109,9 @@ class TestDeleteCreatePVCSameName(ManageTest):
         logger.info(f"Creating {PVC_OBJ.kind} with same name {PVC_OBJ.name}")
         PVC_OBJ = helpers.create_pvc(
             sc_name=self.sc_obj.name, pvc_name=PVC_OBJ.name
+        )
+        assert helpers.wait_for_resource_state(PVC_OBJ, constants.STATUS_BOUND), (
+            f"PVC {PVC_OBJ.name} failed to reach status {constants.STATUS_BOUND}"
         )
         backed_pv = PVC_OBJ.get().get('spec').get('volumeName')
         pv_status = pv_obj.get(backed_pv).get('status').get('phase')

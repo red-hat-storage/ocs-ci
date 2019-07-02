@@ -4,6 +4,7 @@ Helper functions file for OCS QE
 import datetime
 import logging
 
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility import templating
 from ocs_ci.framework import config
@@ -32,16 +33,11 @@ def create_unique_resource_name(resource_description, resource_type):
     return f"{resource_type}-{resource_description[:23]}-{current_date_time[:10]}"
 
 
-def create_resource(
-    desired_status=constants.STATUS_AVAILABLE, wait=True, **kwargs
-):
+def create_resource(**kwargs):
     """
     Create a resource
 
     Args:
-        desired_status (str): The status of the resource to wait for
-        wait (bool): True for waiting for the resource to reach the desired
-            status, False otherwise
         kwargs (dict): Dictionary of the OCS resource
 
     Returns:
@@ -56,24 +52,36 @@ def create_resource(
     assert created_resource, (
         f"Failed to create resource {resource_name}"
     )
-    if wait:
-        assert ocs_obj.ocp.wait_for_resource(
-            condition=desired_status, resource_name=resource_name
-        ), f"{ocs_obj.kind} {resource_name} failed to reach"
-        f"status {desired_status}"
-    return ocs_obj
 
 
-def create_pod(interface_type=None, pvc=None, desired_status=constants.STATUS_RUNNING, wait=True):
+def wait_for_resource_state(resource, state):
+    """
+    Wait for a resource to get to a given status
+
+    Args:
+        resource (OCS obj): The resource object
+        state (str): The status to wait for
+
+    Returns:
+        bool: True if resource reached the desired state, False otherwise
+    """
+    try:
+        resource.ocp.wait_for_resource(
+            condition=state, resource_name=resource.name
+        )
+    except TimeoutExpiredError:
+        return False
+    logger.info(f"{resource.kind} {resource.name} reached state {state}")
+    return True
+
+
+def create_pod(interface_type=None, pvc=None):
     """
     Create a pod
 
     Args:
         interface_type (str): The type of the Ceph interface
         pvc (str): The name of the PVC to attach to the pod
-        desired_status (str): The status of the pod to wait for
-        wait (bool): True for waiting for the pod to reach the desired
-            status, False otherwise
 
     Returns:
         Pod: A Pod instance
@@ -99,11 +107,6 @@ def create_pod(interface_type=None, pvc=None, desired_status=constants.STATUS_RU
     assert created_resource, (
         f"Failed to create resource {pod_name}"
     )
-    if wait:
-        assert pod_obj.ocp.wait_for_resource(
-            condition=desired_status, resource_name=pod_name
-        ), f"{pod_obj.kind} {pod_name} failed to reach"
-        f"status {desired_status}"
     return pod_obj
 
 
@@ -138,7 +141,7 @@ def create_secret(interface_type):
     )
     secret_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
 
-    return create_resource(**secret_data, wait=False)
+    return create_resource(**secret_data)
 
 
 def create_ceph_block_pool(pool_name=None):
@@ -158,7 +161,7 @@ def create_ceph_block_pool(pool_name=None):
         )
     )
     cbp_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    cbp_obj = create_resource(**cbp_data, wait=False)
+    cbp_obj = create_resource(**cbp_data)
 
     assert verify_block_pool_exists(cbp_obj.name), (
         f"Block pool {cbp_obj.name} does not exist"
@@ -225,10 +228,10 @@ def create_storage_class(
         del sc_data['parameters']['userid']
     except KeyError:
         pass
-    return create_resource(**sc_data, wait=False)
+    return create_resource(**sc_data)
 
 
-def create_pvc(sc_name, pvc_name=None, wait=True):
+def create_pvc(sc_name, pvc_name=None):
     """
     Create a PVC
 
@@ -236,8 +239,6 @@ def create_pvc(sc_name, pvc_name=None, wait=True):
         sc_name (str): The name of the storage class for the PVC to be
             associated with
         pvc_name (str): The name of the PVC to create
-        wait (bool): True for waiting for the pod to reach the desired
-            status, False otherwise
 
     Returns:
         OCS: An OCS instance for the PVC
@@ -255,10 +256,6 @@ def create_pvc(sc_name, pvc_name=None, wait=True):
     pvc_name = pvc_data.get('metadata').get('name')
     created_pvc = ocs_obj.create()
     assert created_pvc, f"Failed to create resource {pvc_name}"
-    if wait:
-        assert ocs_obj.ocp.wait_for_resource(
-            condition=constants.STATUS_BOUND, resource_name=pvc_name
-        ), f"PVC {pvc_name} failed to reach status {constants.STATUS_BOUND}"
     return ocs_obj
 
 
