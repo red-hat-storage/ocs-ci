@@ -96,11 +96,9 @@ def create_pod(desired_status=constants.STATUS_RUNNING, wait=True, **kwargs):
 def create_secret(interface_type):
     """
     Create a secret
-
     Args:
         interface_type (str): The type of the interface
             (e.g. CephBlockPool, CephFileSystem)
-
     Returns:
         OCS: An OCS instance for the secret
     """
@@ -109,16 +107,16 @@ def create_secret(interface_type):
         secret_data = templating.load_yaml_to_dict(
             constants.CSI_RBD_SECRET_YAML
         )
-        del secret_data['data']['kubernetes']
-        secret_data['data']['admin'] = get_admin_key()
+        secret_data['stringData']['userID'] = constants.ADMIN_USER
+        secret_data['stringData']['userKey'] = get_admin_key()
     elif interface_type == constants.CEPHFILESYSTEM:
         secret_data = templating.load_yaml_to_dict(
             constants.CSI_CEPHFS_SECRET_YAML
         )
-        del secret_data['data']['userID']
-        del secret_data['data']['userKey']
-        secret_data['data']['adminID'] = constants.ADMIN_BASE64
-        secret_data['data']['adminKey'] = get_admin_key()
+        del secret_data['stringData']['userID']
+        del secret_data['stringData']['userKey']
+        secret_data['stringData']['adminID'] = constants.ADMIN_USER
+        secret_data['stringData']['adminKey'] = get_admin_key()
     secret_data['metadata']['name'] = create_unique_resource_name(
         'test', 'secret'
     )
@@ -155,14 +153,12 @@ def create_ceph_block_pool(pool_name=None):
 def create_storage_class(interface_type, interface_name, secret_name, sc_name=None):
     """
     Create a storage class
-
     Args:
         interface_type (str): The type of the interface
             (e.g. CephBlockPool, CephFileSystem)
         interface_name (str): The name of the interface
         secret_name (str): The name of the secret
         sc_name (str): The name of storage class to create
-
     Returns:
         OCS: An OCS instance for the storage class
     """
@@ -302,7 +298,7 @@ def validate_cephfilesystem(fs_name):
     cmd = "ceph fs ls"
 
     result = CFS.get(resource_name=fs_name)
-    if result['metadata']['name']:
+    if result.get('metadata').get('name'):
         logger.info("Filesystem %s got created from Openshift Side", fs_name)
         ocp_validate = True
     else:

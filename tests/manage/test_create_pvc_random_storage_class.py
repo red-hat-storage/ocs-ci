@@ -46,7 +46,7 @@ def teardown():
     """
     global RBD_SECRET_OBJ, CEPHFS_SECRET_OBJ
     log.info("Deleting PVC")
-    pvc_names = [pvcs.name for pvcs in PVC_OBJS]
+    pvc_names = [pvcs for pvcs in PVC_OBJS]
     assert pvc.delete_pvcs(pvc_names)
     log.info("Deleting CEPH BLOCK POOL")
     for pool in POOL_OBJS:
