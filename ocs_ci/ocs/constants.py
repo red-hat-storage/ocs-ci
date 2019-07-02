@@ -38,6 +38,7 @@ STORAGECLASS = "StorageClass"
 PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
 POD = "Pod"
+DEPLOYMENTCONFIG = "DeploymentConfig"
 
 # Other
 SECRET = "Secret"
@@ -103,3 +104,8 @@ CSI_RBD_PVC_YAML = os.path.join(
 FIO_IO_PARAMS_YAML = os.path.join(
     TEMPLATE_FIO_DIR, "workload_io.yaml"
 )
+
+CIRROS_APP_POD_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "cirros.yaml"
+)
+
