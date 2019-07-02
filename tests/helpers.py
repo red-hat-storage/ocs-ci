@@ -4,7 +4,6 @@ Helper functions file for OCS QE
 import datetime
 import logging
 
-from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources import pod
@@ -271,7 +270,7 @@ def get_admin_key():
 
 def get_cephfs_data_pool_name():
     """
-    Fetches ceph fs datapool name from Ceph
+    Fetches ceph fs datapool name from CEPH
 
     Returns:
         str: fs datapool name
@@ -284,7 +283,7 @@ def get_cephfs_data_pool_name():
 @retry(CommandFailed, tries=5, delay=3, backoff=1)
 def validate_cephfilesystem(fs_name):
     """
-     Verify CephFileSystem exists at ceph and Ocp
+     Verify CephFileSystem exists at CEPH and OCP
 
      Args:
         fs_name (str): The name of the Ceph FileSystem
@@ -331,12 +330,12 @@ def get_all_storageclass_name():
     Returns:
          list: list of storageclass name
     """
-    sc = ocp.OCP(
+    sc_obj = ocp.OCP(
         kind=constants.STORAGECLASS,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
-    sc_obj = sc.get()
-    sample = sc_obj['items']
+    result = sc_obj.get()
+    sample = result['items']
 
     storageclass = [
         item.get('metadata').get('name') for item in sample if (
@@ -357,12 +356,12 @@ def delete_storageclass(sc_name):
         bool: True if deletion is successful
     """
 
-    sc = ocp.OCP(
+    sc_obj = ocp.OCP(
         kind=constants.STORAGECLASS,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
     logger.info(f"Deleting StorageClass with name {sc_name}")
-    return sc.delete(resource_name=sc_name)
+    return sc_obj.delete(resource_name=sc_name)
 
 
 def get_cephblockpool_name():
@@ -372,12 +371,12 @@ def get_cephblockpool_name():
     Returns:
          list: list of cephblockpool name
     """
-    pool = ocp.OCP(
+    pool_obj = ocp.OCP(
         kind=constants.CEPHBLOCKPOOL,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
-    sc_obj = pool.get()
-    sample = sc_obj['items']
+    result = pool_obj.get()
+    sample = result['items']
     pool_list = [
         item.get('metadata').get('name') for item in sample
     ]
@@ -394,74 +393,12 @@ def delete_cephblockpool(cbp_name):
     Returns:
         bool: True if deletion of CephBlockPool is successful
     """
-    POOL = ocp.OCP(
+    pool_obj = ocp.OCP(
         kind=constants.CEPHBLOCKPOOL,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
     logger.info(f"Deleting CephBlockPool with name {cbp_name}")
-<<<<<<< HEAD
-    assert POOL.delete(resource_name=cbp_name)
-    return True
-
-
-def create_cephfilesystem(override_fs=True):
-    """
-    Function for deploying CephFileSystem (MDS)
-
-    Args:
-        override_fs (bool): If true it will delete old CFS and recreate new one, If False will skip creation of CFS
-
-    Returns:
-        bool: True if CephFileSystem creates successful
-    """
-<<<<<<< HEAD
-    fs_data = templating.load_yaml_to_dict(constants.CEPHFILESYSTEM_YAML)
-=======
-    fs_data = copy.deepcopy(defaults.CEPHFILESYSTEM_DICT)
-    if override_fs:
-        logger.info("Deleting CephFileSystem if exists")
-        fs_name = get_cephfs_name()
-        delete_cephfilesystem(fs_name)
-    else:
-        POD = pod.get_all_pods(
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE
-        )
-        for pod_names in POD:
-            if 'rook-ceph-mds' in pod_names.labels.values():
-                logger.info("CephFileSystem already exists")
-                logger.info("Skipping CephFileSystem Creation")
-                return True
-<<<<<<< HEAD
->>>>>>> - Modified delete_all_storageclass to delete_storageclass now it accept arg with name sc_name which is used to delete specific sc
-    fs_data['metadata']['name'] = create_unique_resource_name(
-        'test', 'cephfs'
-    )
-=======
-    if fs_name:
-        fs_data['metadata']['name'] = fs_name
-    else:
-        fs_data['metadata']['name'] = create_unique_resource_name(
-            'test', 'cephfs'
-        )
->>>>>>> - Update based on pr comments
-    fs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
-    global CEPHFS_OBJ
-    CEPHFS_OBJ = OCS(**fs_data)
-    CEPHFS_OBJ.create()
-    POD = pod.get_all_pods(
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
-    )
-    for pod_names in POD:
-        if 'rook-ceph-mds' in pod_names.labels.values():
-            assert pod_names.ocp.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                selector='app=rook-ceph-mds'
-            )
-    assert validate_cephfilesystem(fs_name=fs_data['metadata']['name'])
-    return True
-=======
-    return POOL.delete(resource_name=cbp_name)
->>>>>>> - Update based on pr comments
+    return pool_obj.delete(resource_name=cbp_name)
 
 
 def delete_cephfilesystem(fs_name):
@@ -474,16 +411,11 @@ def delete_cephfilesystem(fs_name):
     Returns:
         bool: True if deletion of CephFileSystem is successful
     """
-    CFS = ocp.OCP(
+    cfs_obj = ocp.OCP(
         kind=constants.CEPHFILESYSTEM,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
-<<<<<<< HEAD
-    result = CFS.get()
-    cephfs_dict = result['items']
-    for item in cephfs_dict:
-        assert CFS.delete(resource_name=item.get('metadata').get('name'))
-    return True
+    return cfs_obj.delete(resource_name=fs_name)
 
 
 def get_cephfs_name():
@@ -492,12 +424,9 @@ def get_cephfs_name():
     Returns:
         str: Name of CFS
     """
-    CFS = ocp.OCP(
+    cfs_obj = ocp.OCP(
         kind=constants.CEPHFILESYSTEM,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
-    result = CFS.get()
+    result = cfs_obj.get()
     return result['items'][0].get('metadata').get('name')
-=======
-    return CFS.delete(resource_name=fs_name)
->>>>>>> - Update based on pr comments

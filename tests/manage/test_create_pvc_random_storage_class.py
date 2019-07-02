@@ -56,8 +56,8 @@ def teardown():
     log.info("Deleting CEPHFS Secret")
     CEPHFS_SECRET_OBJ.delete()
     log.info("Deleting RBD Storageclass")
-    sc_list = [sc.name for sc in SC_RBD_OBJS]
-    assert helpers.delete_storageclass(sc_list)
+    for sc in SC_RBD_OBJS:
+        assert helpers.delete_storageclass(sc.name)
     log.info("Deleting CephFS Storageclass")
     assert helpers.delete_storageclass(SC_CEPHFS_OBJ.name)
 
