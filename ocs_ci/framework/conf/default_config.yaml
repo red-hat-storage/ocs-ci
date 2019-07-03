@@ -37,7 +37,7 @@ REPORTING:
 # This is the default information about environment. Will be overwritten with
 # --cluster-conf file.yaml data you will pass to the pytest.
 ENV_DATA:
-  cluster_name: "ocs-ci"  # needs to be changed in ocscilib plugin
+  cluster_name: null  # will be changed in ocscilib plugin
   cluster_namespace: 'openshift-storage'
   platform: 'AWS'
   region: 'us-east-2'
