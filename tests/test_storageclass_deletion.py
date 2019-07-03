@@ -38,10 +38,10 @@ def teardown():
     Remove the resources after execution of tests
     """
     log.info("Deleting PVC")
-    PVC.delete()
+    assert PVC.delete()
 
     log.info("Deleting Secret")
-    SECRET.delete()
+    assert SECRET.delete()
 
 
 @tier1
@@ -54,5 +54,5 @@ class TestStorageClass(ManageTest):
         """
         # Delete the storage class
         log.info("Deleting created storage class")
-        STORAGE_CLASS.delete()
+        assert STORAGE_CLASS.delete()
         log.info("Storage class deleted successfully")
