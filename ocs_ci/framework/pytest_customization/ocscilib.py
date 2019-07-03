@@ -8,7 +8,8 @@ pytest which proccess config and passes all params to pytest.
 """
 import logging
 import os
-import random
+from getpass import getuser
+
 import pytest
 
 from ocs_ci.framework import config as ocsci_config
@@ -20,7 +21,6 @@ from ocs_ci.utility.utils import (
     get_rook_version,
     get_csi_versions
 )
-
 
 __all__ = [
     "pytest_addoption",
@@ -151,21 +151,12 @@ def process_cluster_cli_params(config):
     # Importing here cause once the function is invoked we have already config
     # loaded, so this is OK to import once you sure that config is loaded.
     from ocs_ci.ocs.openshift_ops import OCP
-    if cluster_path:
-        OCP.set_kubeconfig(
-            os.path.join(cluster_path, ocsci_config.RUN['kubeconfig_location'])
-        )
-    # TODO: determine better place for parent dir
-    cluster_dir_parent = "/tmp"
-    default_cluster_name = ocsci_config.ENV_DATA.get('cluster_name', None)
+    OCP.set_kubeconfig(
+        os.path.join(cluster_path, ocsci_config.RUN['kubeconfig_location'])
+    )
     cluster_name = get_cli_param(config, 'cluster_name')
     if not cluster_name:
-        cluster_name = default_cluster_name
-    cid = random.randint(10000, 99999)
-    if not (cluster_name and cluster_path):
-        cluster_name = f"{cluster_name}-{cid}"
-    if not cluster_path:
-        cluster_path = os.path.join(cluster_dir_parent, cluster_name)
+        cluster_name = f"ocs-ci-{getuser()[:8]}"
     ocsci_config.RUN['cli_params']['teardown'] = get_cli_param(config, "teardown", default=False)
     ocsci_config.RUN['cli_params']['deploy'] = get_cli_param(config, "deploy", default=False)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
