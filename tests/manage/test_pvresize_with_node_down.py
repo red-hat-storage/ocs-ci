@@ -209,10 +209,6 @@ class TestOcs368(ManageTest):
             num_up_osds = sval['osdmap']['osdmap']['num_up_osds']
             if num_osds == num_up_osds:
                 break
-        #
-        # TO DO: Talk to Ceph developers to see what can be done to make
-        #        repairs here faster
-        #
         while True:
             health = CEPH_TOOL.exec_ceph_cmd('ceph health')
             if health['status'] == 'HEALTH_OK':
