@@ -460,30 +460,3 @@ def get_cephfs_name():
     )
     result = CFS.get()
     return result['items'][0].get('metadata').get('name')
-
-
-def get_pv_for_pvc(pvc_obj):
-    """
-    Function to return a PV object for the given PVC
-
-    Args:
-        pvc_obj (OCS): OCS object representing PVC
-
-    Returns:
-        pv_obj (OCS): A OCS object for PV
-    """
-    pvc_obj.reload()
-    namespace = pvc_obj.namespace
-    pv_name = pvc_obj.data.get('spec').get('volumeName')
-    api_version = pvc_obj.api_version
-    kind = 'PersistentVolume'
-    kwargs = dict()
-    kwargs['api_version'] = api_version
-    kwargs['kind'] = kind
-
-    metadata = {'name': pv_name, 'namespace': namespace}
-    kwargs['metadata'] = metadata
-
-    pv_obj = OCS(**kwargs)
-    pv_obj.reload()
-    return pv_obj
