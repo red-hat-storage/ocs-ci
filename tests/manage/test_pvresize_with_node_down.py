@@ -166,10 +166,10 @@ def update_pvc():
     Update the size of the pvc.
 
     First modify the storage class to allow expansion.
-    Then read the pv so that we are sure that the change has taken effect 
+    Then read the pv so that we are sure that the change has taken effect
     before increasing the size of the pvc
     """
-    NEW_SIZE='200Gi'
+    NEW_SIZE = '200Gi'
     cmd_front = f"oc -n {config.ENV_DATA['my_namespace']} patch"
     cmd1_middle = 'storageclass/"rook-ceph-block"'
     cmd2_middle = 'pvc/ocs-pvc'
