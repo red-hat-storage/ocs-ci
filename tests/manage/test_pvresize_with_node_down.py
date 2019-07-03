@@ -164,13 +164,24 @@ def test_add_stuff_to_rbd():
 def update_pvc():
     """
     Update the size of the pvc.
+
+    First modify the storage class to allow expansion.
+    Then read the pv so that we are sure that the change has taken effect 
+    before increasing the size of the pvc
     """
-    pass
-    #
-    # TO DO: run pvc patch command to raise the size of the pvc.
-    # Current not implemented due to bugs encountered while changing
-    # size on pvc associated with an rbd device
-    #
+    NEW_SIZE='200Gi'
+    cmd_front = f"oc -n {config.ENV_DATA['my_namespace']} patch"
+    cmd1_middle = 'storageclass/"rook-ceph-block"'
+    cmd2_middle = 'pvc/ocs-pvc'
+    cmd_1 = ' '.join([cmd_front, cmd1_middle, '--patch'])
+    cmd_1 += " '{\"allowVolumeExpansion\": true}'"
+    run_cmd(cmd_1)
+    run_cmd('oc get pv')
+    cmd_2 = ' '.join([cmd_front, cmd2_middle, '--patch'])
+    cmd_2 += " '{\"spec\": {\"resources\": {\"requests\": {\"storage\": \""
+    cmd_2 += NEW_SIZE
+    cmd_2 += "\"}}}}'"
+    run_cmd(cmd_2)
 
 
 @tier1
