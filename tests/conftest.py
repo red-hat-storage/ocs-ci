@@ -150,8 +150,7 @@ def cluster(request):
     log.info("Deploying cluster")
     run_cmd(
         f"{installer} create cluster "
-        f"--dir {cluster_path} "
-        f"--log-level debug"
+        f"--dir {cluster_path}"
     )
 
     # Test cluster access

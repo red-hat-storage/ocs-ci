@@ -413,8 +413,7 @@ def destroy_cluster(cluster_path):
 
     destroy_cmd = (
         f"{installer} destroy cluster "
-        f"--dir {cluster_path} "
-        f"--log-level debug"
+        f"--dir {cluster_path}"
     )
 
     try:
