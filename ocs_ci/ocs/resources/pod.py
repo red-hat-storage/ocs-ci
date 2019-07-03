@@ -146,56 +146,57 @@ class Pod(OCS):
         return out
 
     def run_io(
-        self, storage_type, size, direction='rw', workers=1, runtime=60,
-        run_in_bg=True
+        self, storage_type, size, io_direction='rw', rw_ratio=75,
+        jobs=1, runtime=60,
     ):
         """
         Execute FIO on a pod
+        This operation will run in background and will store the results in
+        'self.thread.result()'.
+        In order to wait for the output and not continue with the test until
+        FIO is done, call self.thread.result() right after calling run_io.
+        See tests/manage/test_pvc_deletion_during_io.py::test_run_io
+        for usage of FIO
 
         Args:
-             storage_type (str): 'fs' or 'block'
-             size (str): Size in MB, e.g. '200M'
-             direction (str): Determines the operation:
+            storage_type (str): 'fs' or 'block'
+            size (str): Size in MB, e.g. '200M'
+            io_direction (str): Determines the operation:
                 'ro', 'wo', 'rw' (default: 'rw')
-            workers (int): Number of threads to execute FIO
+            rw_ratio (int): Determines the reads and writes using a
+                <rw_ratio>%/100-<rw_ratio>%
+                (e.g. the default is 75 which means it is 75%/25% which
+                equivalent to 3 reads are performed for every 1 write)
+            jobs (int): Number of jobs to execute FIO
             runtime (int): Number of seconds IO should run for
-            run_in_bg (bool): True in case the FIO should run in background,
-                False otherwise
         """
-        def execute_fio():
-            name = 'test_workload'
-            spec = self.pod_data.get('spec')
-            path = (
-                spec.get('containers')[0].get('volumeMounts')[0].get(
-                    'mountPath'
-                )
+        name = 'test_workload'
+        spec = self.pod_data.get('spec')
+        path = (
+            spec.get('containers')[0].get('volumeMounts')[0].get(
+                'mountPath'
             )
-            work_load = 'fio'
-            # few io parameters for Fio
+        )
+        work_load = 'fio'
+        # few io parameters for Fio
 
-            wl = workload.WorkLoad(
-                name, path, work_load, storage_type, self, workers
+        wl = workload.WorkLoad(
+            name, path, work_load, storage_type, self, jobs
+        )
+        assert wl.setup()
+        if io_direction == 'rw':
+            io_params = templating.load_yaml_to_dict(
+                constants.FIO_IO_RW_PARAMS_YAML
             )
-            assert wl.setup()
-            if direction == 'rw':
-                io_params = templating.load_yaml_to_dict(
-                    constants.FIO_IO_RW_PARAMS_YAML
-                )
-            else:
-                io_params = templating.load_yaml_to_dict(
-                    constants.FIO_IO_PARAMS_YAML
-                )
-            io_params['runtime'] = runtime
-            io_params['size'] = size
-
-            future_result = wl.run(**io_params)
-            logger.info(future_result.result())
-
-        if run_in_bg:
-            self.thread = Thread(target=execute_fio,)
-            self.thread.start()
+            io_params['rwmixread'] = rw_ratio
         else:
-            execute_fio()
+            io_params = templating.load_yaml_to_dict(
+                constants.FIO_IO_PARAMS_YAML
+            )
+        io_params['runtime'] = runtime
+        io_params['size'] = size
+
+        self.thread = wl.run(**io_params)
 
 
 # Helper functions for Pods

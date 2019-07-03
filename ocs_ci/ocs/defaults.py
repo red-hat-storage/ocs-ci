@@ -15,7 +15,7 @@ OPENSHIFT_REST_CLIENT_API_VERSION = 'v1'
 # Be aware that variables defined above and below are not used anywhere in the
 # config files and their sections when we rendering config!
 
-INSTALLER_VERSION = '4.1.2'
+INSTALLER_VERSION = '4.1.4'
 CLIENT_VERSION = INSTALLER_VERSION
 ROOK_CLUSTER_NAMESPACE = 'openshift-storage'
 KUBECONFIG_LOCATION = 'auth/kubeconfig'  # relative from cluster_dir
