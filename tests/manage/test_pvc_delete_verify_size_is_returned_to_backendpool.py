@@ -104,15 +104,17 @@ def create_pvc_and_verify_pvc_exists(
         f"status {desired_status}"
     pvc_obj.reload()
 
+    # ToDo: Add validation to check pv exists on bcaekend
+    # Commenting the below code: https://bugzilla.redhat.com/show_bug.cgi?id=1723656
     # Validate pv is created on ceph
-    logger.info(f"Verifying pv exists on backend")
-    ct_pod = pod.get_ceph_tools_pod()
-    pv_list = ct_pod.exec_ceph_cmd(
-        ceph_cmd=f"rbd ls -p {cbp_name}", format='json'
-    )
-    _rc = pvc_obj.backed_pv in pv_list
-    assert _rc, f"pv doesn't exist on backend"
-    logger.info(f"pv {pvc_obj.backed_pv} exists on backend")
+    # logger.info(f"Verifying pv exists on backend")
+    # ct_pod = pod.get_ceph_tools_pod()
+    # pv_list = ct_pod.exec_ceph_cmd(
+    #     ceph_cmd=f"rbd ls -p {cbp_name}", format='json'
+    # )
+    # _rc = pvc_obj.backed_pv in pv_list
+    # assert _rc, f"pv doesn't exist on backend"
+    # logger.info(f"pv {pvc_obj.backed_pv} exists on backend")
     return pvc_obj
 
 
