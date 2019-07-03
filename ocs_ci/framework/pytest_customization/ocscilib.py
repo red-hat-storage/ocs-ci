@@ -156,7 +156,7 @@ def process_cluster_cli_params(config):
     )
     cluster_name = get_cli_param(config, 'cluster_name')
     if not cluster_name:
-        cluster_name = getuser()[:8]  # use first 8 chars of username
+        cluster_name = f"ocs-ci-{getuser()[:8]}"
     ocsci_config.RUN['cli_params']['teardown'] = get_cli_param(config, "teardown", default=False)
     ocsci_config.RUN['cli_params']['deploy'] = get_cli_param(config, "deploy", default=False)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
