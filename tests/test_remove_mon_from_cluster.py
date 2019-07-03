@@ -15,6 +15,8 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
 from tests.helpers import run_io_with_rados_bench, delete_cephblockpool
 from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.exceptions import CephHealthException
 
 
 log = logging.getLogger(__name__)
@@ -22,8 +24,10 @@ log = logging.getLogger(__name__)
 POD = ocp.OCP(
     kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
 )
+HEALTH = CephCluster()
 
 
+@retry(CephHealthException, 8, 3, 1)
 def verify_mon_pod_up():
     """
     Verify mon pods are in Running state.
@@ -33,7 +37,7 @@ def verify_mon_pod_up():
 
     """
     log.info(f"Verifying all mons pods are up and Running")
-    time.sleep(15)
+    HEALTH.cluster_health_check(timeout=3)
     ret = POD.wait_for_resource(
         condition=constants.STATUS_RUNNING, selector='app=rook-ceph-mon',
         resource_count=3, timeout=700)
@@ -69,14 +73,13 @@ class TestOcs355(ManageTest):
         new mon pod on its own
 
         """
-        health = CephCluster()
-        list_mons = health.get_mons_from_cluster()
+        list_mons = HEALTH.get_mons_from_cluster()
         assert len(list_mons) > 1, pytest.skip(
             "INVALID: Mon count should be more than one to delete."
         )
         assert run_io_on_pool(), 'Failed to run I/O on the pool'
         assert delete_cephblockpool('test-pool'), 'Failed to delete pool'
-        health.cluster_health_check(timeout=0)
-        health.remove_mon_from_cluster()
+        HEALTH.cluster_health_check(timeout=0)
+        HEALTH.remove_mon_from_cluster()
         assert verify_mon_pod_up(), f"Mon pods are not up and running state"
-        health.cluster_health_check(timeout=60)
+        HEALTH.cluster_health_check(timeout=60)
