@@ -373,7 +373,7 @@ def run_cmd(cmd, **kwargs):
         stdin=subprocess.PIPE,
         **kwargs
     )
-    log.debug(f"Command output: {r.stdout.decode()}")
+    #log.debug(f"Command output: {r.stdout.decode()}")
     if r.stderr and not r.returncode:
         log.warning(f"Command warning:: {r.stderr.decode()}")
     if r.returncode:
