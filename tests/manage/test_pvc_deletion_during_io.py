@@ -62,5 +62,9 @@ class TestDeletePVCWhileRunningIO(ManageTest):
         logging.info("Waiting for results")
         fio_result = yaml.load(self.pod_obj.thread.result())
         logging.info("IOPs after FIO:")
-        logging.info(f"Read: {fio_result['jobs'][0]['read']['iops']}")
-        logging.info(f"Write: {fio_result['jobs'][0]['write']['iops']}")
+        logging.info(
+            f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
+        )
+        logging.info(
+            f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
+        )

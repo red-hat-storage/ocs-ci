@@ -183,7 +183,7 @@ class Pod(OCS):
         wl = workload.WorkLoad(
             name, path, work_load, storage_type, self, jobs
         )
-        assert wl.setup()
+        assert wl.setup(), "Setup up for FIO failed"
         if io_direction == 'rw':
             io_params = templating.load_yaml_to_dict(
                 constants.FIO_IO_RW_PARAMS_YAML
