@@ -42,27 +42,15 @@ class TestVerifyAllFieldsInScYamlWithOcDescribe(ManageTest):
         """
         Test function for RBD
         """
-        if interface == "RBD":
-            log.info("Creating a RBD Storage Class")
-            self.sc_data = templating.load_yaml_to_dict(
-                constants.CSI_RBD_STORAGECLASS_YAML
+        log.info(f"Creating a {interface} storage class")
+        self.sc_data = templating.load_yaml_to_dict(
+            getattr(constants, f"CSI_{interface}_STORAGECLASS_YAML")
+        )
+        self.sc_data['metadata']['name'] = (
+            helpers.create_unique_resource_name(
+                'test', f'csi-{interface.lower()}'
             )
-            self.sc_data['metadata']['name'] = (
-                helpers.create_unique_resource_name(
-                'test', 'csi-rbd'
-                )
-            )
-        elif interface == "CEPHFS":
-            log.info("Creating a CephFS Storage Class")
-            self.sc_data = templating.load_yaml_to_dict(
-                constants.CSI_CEPHFS_STORAGECLASS_YAML
-                )
-            self.sc_data['metadata']['name'] = (
-                helpers.create_unique_resource_name(
-                    'test', 'csi-cephfs'
-                )
-            )
-
+        )
         global SC_OBJ
         SC_OBJ = OCS(**self.sc_data)
         assert SC_OBJ.create()
@@ -82,7 +70,9 @@ class TestVerifyAllFieldsInScYamlWithOcDescribe(ManageTest):
         if len(value) == 1 and value['volumeBindingMode'] == 'Immediate':
             log.info("OC describe sc output matches storage class yaml")
         else:
-            assert ("OC describe sc output didn't match storage class yaml")
+            assert (
+                True,"OC describe sc output didn't match storage class yaml"
+            )
 
         # Delete Storage Class
         log.info(f"Deleting Storageclass: {SC_OBJ.name}")
