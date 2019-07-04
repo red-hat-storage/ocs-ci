@@ -23,6 +23,9 @@ TEMPLATE_PV_PVC_DIR = os.path.join(TEMPLATE_DIR, "pv_pvc")
 TEMPLATE_APP_POD_DIR = os.path.join(TEMPLATE_DIR, "app-pods")
 TEMPLATE_WORKLOAD_DIR = os.path.join(TEMPLATE_DIR, "workloads")
 TEMPLATE_FIO_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fio")
+TEMPLATE_CONFIGURE_PVC_MONITORING_POD = os.path.join(
+    TEMPLATE_DIR, "openshift-infra/monitoring/"
+)
 
 # Statuses
 STATUS_PENDING = 'Pending'
@@ -97,6 +100,9 @@ CSI_CEPHFS_PVC_YAML = os.path.join(
 
 CSI_RBD_PVC_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pvc.yaml"
+)
+CONFIGURE_PVC_ON_MONITORING_POD = os.path.join(
+    TEMPLATE_CONFIGURE_PVC_MONITORING_POD, "configuring_pvc.yaml"
 )
 
 # Workload-io yamls
