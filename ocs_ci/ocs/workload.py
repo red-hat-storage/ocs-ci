@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 class WorkLoad(object):
     def __init__(
         self, name=None, path=None, work_load=None, storage_type='fs',
-        pod=None
+        pod=None, jobs=1
     ):
         """
         Args:
@@ -23,12 +23,14 @@ class WorkLoad(object):
                 if type is 'fs' we will interpret 'path' as mount point else
                 if type is 'block' we will interpret 'path' as a block device
             pod (Pod): Pod on which we want to run this workload
+            jobs (int): Number of jobs to execute FIO
         """
         self.name = name
         self.path = path
         self.work_load = work_load
         self.storage_type = storage_type
         self.pod = pod
+        self.jobs = jobs
 
         try:
             # Each workload module will be present in
@@ -44,7 +46,7 @@ class WorkLoad(object):
             log.error(ex)
             raise
 
-        self.thread_exec = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+        self.thread_exec = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
     def setup(self, **setup_conf):
         """
@@ -80,6 +82,7 @@ class WorkLoad(object):
         conf['pod'] = self.pod
         conf['path'] = self.path
         conf['type'] = self.storage_type
+        conf['numjobs'] = self.jobs
         future_obj = self.thread_exec.submit(self.work_load_mod.run, **conf)
-        log.info("Done submitting.. ")
+        log.info("Done submitting..")
         return future_obj
