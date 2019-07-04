@@ -40,7 +40,8 @@ class TestVerifyAllFieldsInScYamlWithOcDescribe(ManageTest):
     )
     def test_verify_all_fields_in_sc_yaml_with_oc_describe(self, interface):
         """
-        Test function for RBD
+        Test function to create RBD and CephFS SC, and match with oc describe sc
+        output
         """
         log.info(f"Creating a {interface} storage class")
         self.sc_data = templating.load_yaml_to_dict(
@@ -71,7 +72,7 @@ class TestVerifyAllFieldsInScYamlWithOcDescribe(ManageTest):
             log.info("OC describe sc output matches storage class yaml")
         else:
             assert (
-                True,"OC describe sc output didn't match storage class yaml"
+                True, "OC describe sc output didn't match storage class yaml"
             )
 
         # Delete Storage Class
