@@ -265,7 +265,6 @@ def run_io_and_verify_mount_point(pod_obj, bs='10M', count='950'):
         pod_obj (Pod): The object of the pod
         bs (str): Read and write up to bytes at a time
         count (str): Copy only N input blocks
-        fname (str): Name of file
 
     Returns:
          used_percentage (str): Used percentage on mount point
