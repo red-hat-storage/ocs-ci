@@ -7,7 +7,7 @@ from ocs_ci.utility import templating
 @pytest.fixture()
 def create_rbd_secret(request):
     """
-    Create a secret
+    Create a rbd secret
     """
     class_instance = request.node.cls
 
@@ -15,15 +15,37 @@ def create_rbd_secret(request):
         """
         Delete the project
         """
-        if class_instance.secret_obj.get():
-            class_instance.secret_obj.delete()
+        if class_instance.rbd_secret_obj.get():
+            class_instance.rbd_secret_obj.delete()
 
     request.addfinalizer(finalizer)
 
-    class_instance.secret_obj = helpers.create_secret(
+    class_instance.rbd_secret_obj = helpers.create_secret(
         interface_type=constants.CEPHBLOCKPOOL
     )
-    assert class_instance.secret_obj, "Failed to create secret"
+    assert class_instance.rbd_secret_obj, "Failed to create rbd secret"
+
+
+@pytest.fixture()
+def create_cephfs_secret(request):
+    """
+    Create a cephfs secret
+    """
+    class_instance = request.node.cls
+
+    def finalizer():
+        """
+        Delete the project
+        """
+        if class_instance.cephfs_secret_obj.get():
+            class_instance.cephfs_secret_obj.delete()
+
+    request.addfinalizer(finalizer)
+
+    class_instance.cephfs_secret_obj = helpers.create_secret(
+        interface_type=constants.CEPHFILESYSTEM
+    )
+    assert class_instance.cephfs_secret_obj, "Failed to create cephfs secret"
 
 
 @pytest.fixture()
