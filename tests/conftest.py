@@ -49,6 +49,7 @@ def pytest_logger_config(logger_config):
 
 
 ep_time = int(time.time())
+config.RUN['run_id'] = ep_time
 log_dir = f"logs_{ep_time}"
 log_path = os.path.expanduser(
     os.path.join(config.RUN['log_dir'], log_dir)
