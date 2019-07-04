@@ -1,12 +1,11 @@
 import logging
 import pytest
 
-from ocs_ci.ocs.resources.pod import run_io_and_verify_mount_point
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.utility import templating
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError, CommandFailed, UnexpectedBehaviour
 )
@@ -31,49 +30,23 @@ def test_fixture(request):
 
 def setup(self):
     """
-    Create new pod using available PVC
+    Create new project
     """
-    # Create Storage Class with reclaimPolicy: Delete
-    self.sc_obj = helpers.create_storage_class(
-        interface_type=constants.CEPHBLOCKPOOL,
-        interface_name=self.cbp_obj.name,
-        secret_name=self.secret_obj.name,
-        reclaim_policy='Delete'
+    self.namespace = helpers.create_unique_resource_name(
+        'test', 'namespace'
     )
+    self.project_obj = OCP(kind='Project', namespace=self.namespace)
 
-    # Create PVC with 'accessModes' 'ReadWriteOnce'
-    pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
-    pvc_data['metadata']['name'] = helpers.create_unique_resource_name(
-        'test', 'pvc'
+    assert self.project_obj.new_project(self.namespace), (
+        f'Failed to create new project {self.namespace}'
     )
-    pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    pvc_data['spec']['storageClassName'] = self.sc_obj.name
-    pvc_data['spec']['accessModes'] = ['ReadWriteOnce']
-    self.pvc_obj = PVC(**pvc_data)
-    self.pvc_obj.create()
-
-    # Create two pods
-    log.info(f"Creating two pods which use PVC {self.pvc_obj.name}")
-    pod_data = templating.load_yaml_to_dict(constants.CSI_RBD_POD_YAML)
-    pod_data['metadata']['name'] = helpers.create_unique_resource_name(
-        'test', 'pod'
-    )
-    pod_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = (
-        self.pvc_obj.name
-    )
-    self.pod_obj = helpers.create_pod(**pod_data)
-    pod_data['metadata']['name'] = helpers.create_unique_resource_name(
-        'test', 'pod'
-    )
-    self.pod_obj2 = helpers.create_pod(wait=False, **pod_data)
 
 
 def teardown(self):
     """
-    Delete Storage Class
+    Delete project
     """
-    self.sc_obj.delete()
+    self.project_obj.delete(resource_name=self.namespace)
 
 
 @tier1
@@ -82,129 +55,236 @@ def teardown(self):
     create_ceph_block_pool.__name__,
     test_fixture.__name__
 )
-@pytest.mark.polarion_id("OCS-533")
 class TestRbdBasedRwoPvc(ManageTest):
     """
     Verifies RBD Based RWO Dynamic PVC creation
     """
-    def test_rbd_based_rwo_pvc_reclaim_delete(self):
+    @pytest.mark.parametrize(
+        argnames="reclaim_policy",
+        argvalues=[
+            pytest.param(
+                *["Delete"], marks=pytest.mark.polarion_id("OCS-533")
+            ),
+            pytest.param(
+                *["Retain"], marks=pytest.mark.polarion_id("OCS-525")
+            )
+        ]
+    )
+    def test_rbd_based_rwo_pvc(self, reclaim_policy):
         """
         Verifies RBD Based RWO Dynamic PVC creation with Reclaim policy set to
-        Delete
+        Delete/Retain
 
         Steps:
-        1. Create two pods using same PVC
-        2. Run IO on first pod
-        3. Verify second pod is not getting into Running state
-        4. Delete first pod
-        5. Verify second pod is in Running state
-        6. Verify usage of volume in second pod is matching with usage in
+        1. Create Storage Class with reclaimPolicy: Delete/Retain
+        2. Create PVC with 'accessModes' 'ReadWriteOnce'
+        3. Create two pods using same PVC
+        4. Run IO on first pod
+        5. Verify second pod is not getting into Running state
+        6. Delete first pod
+        7. Verify second pod is in Running state
+        8. Verify usage of volume in second pod is matching with usage in
            first pod
-        7. Run IO on second pod
-        8. Delete second pod
-        9. Delete PVC
-        10. Verify PV associated with deleted PVC is also deleted
+        9. Run IO on second pod
+        10. Delete second pod
+        11. Delete PVC
+        12. Verify PV associated with deleted PVC is also deleted/released
         """
-        # Run IO on first pod
-        log.info(f"Running IO on first pod {self.pod_obj.name}")
-        usage = run_io_and_verify_mount_point(
-            self.pod_obj, '10M', '100', 'dd_1'
+        # Create Storage Class with reclaimPolicy: Delete
+        sc_obj = helpers.create_storage_class(
+            interface_type=constants.CEPHBLOCKPOOL,
+            interface_name=self.cbp_obj.name,
+            secret_name=self.rbd_secret_obj.name,
+            reclaim_policy=reclaim_policy
         )
-        assert usage, f"IO failed on pod {self.pod_obj.name}"
+
+        # Create PVC with 'accessModes' 'ReadWriteOnce'
+        pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
+        pvc_data['metadata']['name'] = helpers.create_unique_resource_name(
+            'test', 'pvc'
+        )
+        pvc_data['metadata']['namespace'] = self.namespace
+        pvc_data['spec']['storageClassName'] = sc_obj.name
+        pvc_data['spec']['accessModes'] = ['ReadWriteOnce']
+        pvc_obj = PVC(**pvc_data)
+        pvc_obj.create()
+
+        # Create first pod
+        log.info(f"Creating two pods which use PVC {pvc_obj.name}")
+        pod_data = templating.load_yaml_to_dict(constants.CSI_RBD_POD_YAML)
+        pod_data['metadata']['name'] = helpers.create_unique_resource_name(
+            'test', 'pod'
+        )
+        pod_data['metadata']['namespace'] = self.namespace
+        pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = (
+            pvc_obj.name
+        )
+        pod_obj = helpers.create_pod(**pod_data)
+
+        node_pod1 = pod_obj.get()['spec']['nodeName']
+
+        # Create second pod
+        # Try creating pod until it is on a different node than first pod
+        for retry in range(1, 6):
+            pod_data['metadata']['name'] = helpers.create_unique_resource_name(
+                'test', 'pod'
+            )
+            pod_obj2 = helpers.create_pod(wait=False, **pod_data)
+            node_pod2 = pod_obj2.get()['spec']['nodeName']
+            if node_pod1 != node_pod2:
+                break
+            log.info(
+                f"Both pods are on same node. Deleting second pod and "
+                f"creating another pod. Retry count:{retry}"
+            )
+            pod_obj2.delete()
+            if retry == 5:
+                raise UnexpectedBehaviour(
+                    "Second pod is always created on same node as of first "
+                    "pod even after trying 5 times."
+                )
+
+        # Run IO on first pod
+        log.info(f"Running IO on first pod {pod_obj.name}")
+        pod_obj.run_io('fs', '1G')
+        logging.info(f"Waiting for IO results from pod {pod_obj.name}")
+        fio_result = pod_obj.get_fio_results()
+        logging.info("IOPs after FIO:")
+        logging.info(
+            f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
+        )
+        logging.info(
+            f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
+        )
+
+        # Fetch usage details
+        mount_point = pod_obj.exec_cmd_on_pod(command="df -kh")
+        mount_point = mount_point.split()
+        usage = mount_point[mount_point.index('/var/lib/www/html') - 1]
 
         # Verify that second pod is not getting into Running state. Check it
         # for some period of time.
         try:
-            assert not self.pod_obj2.ocp.wait_for_resource(
-                condition='Running', resource_name=self.pod_obj2.name,
+            assert not pod_obj2.ocp.wait_for_resource(
+                condition='Running', resource_name=pod_obj2.name,
             ), "Unexpected: Second pod is in Running state"
         except TimeoutExpiredError:
             log.info(
-                f"Verified: Second pod {self.pod_obj2.name} is not in "
+                f"Verified: Second pod {pod_obj2.name} is not in "
                 f"Running state"
             )
 
         # Delete first pod
-        self.pod_obj.delete(wait=True)
+        pod_obj.delete(wait=True)
 
         # Verify pod is deleted
         try:
-            self.pod_obj.get()
+            pod_obj.get()
             raise UnexpectedBehaviour(
-                f"First pod {self.pod_obj.name} is not deleted."
+                f"First pod {pod_obj.name} is not deleted."
             )
         except CommandFailed as exp:
             assert "not found" in str(exp), (
                 "Failed to fetch pod details"
             )
-            log.info(f"First pod {self.pod_obj.name} is deleted.")
+            log.info(f"First pod {pod_obj.name} is deleted.")
 
         # Wait for second pod to be in Running state
-        assert self.pod_obj2.ocp.wait_for_resource(
-            condition='Running', resource_name=self.pod_obj2.name
-        )
+        try:
+            pod_obj2.ocp.wait_for_resource(
+                condition='Running', resource_name=pod_obj2.name, timeout=90
+            )
+        except TimeoutExpiredError as exp:
+            raise TimeoutExpiredError(
+                f"Second pod {pod_obj2.name} is not in Running state "
+                f"after deleting first pod."
+            ) from exp
         log.info(
-            f"Second pod {self.pod_obj2.name} is in Running state after "
-            f"the first pod is deleted"
+            f"Second pod {pod_obj2.name} is in Running state after "
+            f"deleting the first pod."
         )
 
         # Verify that volume usage in second pod is matching with the usage in
         # first pod
-        mount_point = self.pod_obj2.exec_cmd_on_pod(command="df -kh")
+        mount_point = pod_obj2.exec_cmd_on_pod(command="df -kh")
         mount_point = mount_point.split()
         usage_re = mount_point[mount_point.index('/var/lib/www/html') - 1]
         assert usage_re == usage, (
             "Use percentage in new pod is not matching with old pod"
         )
 
-        # Run IO on new pod
-        assert run_io_and_verify_mount_point(
-            self.pod_obj2, '10M', '100', 'dd_2'
-        ), f"IO failed on second pod {self.pod_obj2.name}"
+        # Run IO on second pod
+        log.info(f"Running IO on second pod {pod_obj2.name}")
+        pod_obj2.run_io('fs', '1G')
+        logging.info(f"Waiting for IO results from pod {pod_obj2.name}")
+        fio_result = pod_obj2.get_fio_results()
+        logging.info("IOPs after FIO:")
+        logging.info(
+            f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
+        )
+        logging.info(
+            f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
+        )
 
         # Delete second pod
-        self.pod_obj2.delete()
+        pod_obj2.delete()
 
         # Verify pod is deleted
         try:
-            self.pod_obj2.get()
+            pod_obj2.get()
             raise UnexpectedBehaviour(
-                f"Second pod {self.pod_obj2.name} is not deleted."
+                f"Second pod {pod_obj2.name} is not deleted."
             )
         except CommandFailed as exp:
             assert "not found" in str(exp), (
                 "Failed to fetch pod details"
             )
-            log.info(f"Second pod {self.pod_obj2.name} is deleted.")
+            log.info(f"Second pod {pod_obj2.name} is deleted.")
 
         # Get PV name
-        self.pvc_obj.reload()
-        pv_name = self.pvc_obj.backed_pv
+        pvc_obj.reload()
+        pv_name = pvc_obj.backed_pv
 
         # Delete PVC
-        self.pvc_obj.delete()
+        pvc_obj.delete()
 
         # Verify PVC is deleted
         try:
-            self.pvc_obj.get()
+            pvc_obj.get()
             raise UnexpectedBehaviour(
-                f"PVC {self.pvc_obj.name} is not deleted."
+                f"PVC {pvc_obj.name} is not deleted."
             )
         except CommandFailed as exp:
             assert "not found" in str(exp), (
-                f"Failed to fetch PVC details"
+                "Failed to verify PVC deletion."
             )
-            log.info(f"PVC {self.pvc_obj.name} is deleted.")
+            log.info(f"PVC {pvc_obj.name} is deleted.")
 
-        # Verify PV is deleted
         pv_obj = OCP(
-            kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            kind=constants.PV, namespace=self.namespace
         )
-        pv_info = pv_obj.get(out_yaml_format=False)
-        if pv_info:
-            assert not (pv_name in pv_info), (
-                f"PV {pv_name} exists after deleting PVC {self.pvc_obj.name}"
-            )
 
-        # TODO: Verify PV using ceph toolbox. PV should be deleted.
-        # Not implemented due to bz 1723656
+        if reclaim_policy == "Delete":
+            # Verify PV is deleted
+            pv_info = pv_obj.get(out_yaml_format=False)
+            if pv_info:
+                assert not (pv_name in pv_info), (
+                    f"PV {pv_name} exists after deleting PVC {pvc_obj.name}"
+                )
+
+            # TODO: Verify PV using ceph toolbox. PV should be deleted.
+            # Blocked by bz 1723656
+
+        elif reclaim_policy == "Retain":
+            # Wait for PV to be in Released state
+            assert pv_obj.wait_for_resource(
+                condition='Released', resource_name=pv_name
+            )
+            log.info(f"PV {pv_name} is in Released state")
+
+            # TODO: Delete PV from backend and verify
+            # Blocked by bz 1723656
+            pv_obj.delete(resource_name=pv_name)
+
+        # Delete Storage Class
+        sc_obj.delete()
