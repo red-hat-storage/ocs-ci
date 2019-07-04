@@ -37,6 +37,7 @@ setup(
     entry_points={
         'console_scripts': [
             'run-ci=ocs_ci.run_ocsci:main',
+            'report-version=ocs_ci.ocs.version:main',
         ],
     },
     zip_safe=True,

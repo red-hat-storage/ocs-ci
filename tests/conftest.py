@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+from datetime import datetime
 
 import pytest
 import yaml
@@ -16,6 +17,7 @@ from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.utils import create_oc_resource, apply_oc_resource
+from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.utility import templating, system
 from ocs_ci.utility.aws import AWS
 from ocs_ci.utility.environment_check import (
@@ -77,6 +79,34 @@ def cluster_teardown():
     log.info("Destroying the test cluster")
     destroy_cluster(config.ENV_DATA['cluster_path'])
     log.info("Destroying the test cluster complete")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def log_ocs_version(cluster):
+    """
+    Fixture handling version reporting for OCS.
+
+    This fixture handles alignment of the version reporting, so that we:
+
+     * report version for each test run (no matter if just deployment, just
+       test or both deployment and tests are executed)
+     * prevent conflict of version reporting with deployment/teardown (eg. we
+       should not run the version logging before actual deployment, or after
+       a teardown)
+
+    Version is reported in:
+
+     * log entries of INFO log level during test setup phase
+     * ocs_version file in cluster path directory (for copy pasting into bug
+       reports)
+    """
+    cluster_version, image_dict = get_ocs_version()
+    file_name = os.path.join(
+        config.ENV_DATA['cluster_path'],
+        "ocs_version." + datetime.now().isoformat())
+    with open(file_name, "w") as file_obj:
+        report_ocs_version(cluster_version, image_dict, file_obj)
+    log.info("human readable ocs version info written into %s", file_name)
 
 
 @pytest.fixture(scope="session", autouse=True)
