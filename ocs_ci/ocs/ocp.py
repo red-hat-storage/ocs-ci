@@ -66,6 +66,10 @@ class OCP(object):
             oc_cmd += f"--kubeconfig {kubeconfig} "
 
         oc_cmd += command
+
+        if out_yaml_format:
+            oc_cmd += " -o yaml"
+
         out = run_cmd(cmd=oc_cmd)
 
         try:
@@ -103,8 +107,10 @@ class OCP(object):
         if selector is not None:
             command += f"--selector={selector}"
         if out_yaml_format:
-            command += " -o yaml"
-        return self.exec_oc_cmd(command)
+            return self.exec_oc_cmd(command, True)
+        else:
+            return self.exec_oc_cmd(command, False)
+
 
     def create(self, yaml_file=None, resource_name='', out_yaml_format=True):
         """
@@ -132,9 +138,11 @@ class OCP(object):
             # e.g "oc namespace my-project"
             command += f"{self.kind} {resource_name}"
         if out_yaml_format:
-            command += " -o yaml"
+            return self.exec_oc_cmd(command, True)
+        else:
+            return self.exec_oc_cmd(command, False)
 
-        return self.exec_oc_cmd(command)
+
 
     def delete(self, yaml_file=None, resource_name='', wait=True):
         """
