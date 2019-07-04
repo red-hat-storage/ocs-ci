@@ -68,13 +68,10 @@ class TestVerifyAllFieldsInScYamlWithOcDescribe(ManageTest):
         value = {
             k: describe_out[k] for k in set(describe_out) - set(self.sc_data)
         }
-        if len(value) == 1 and value['volumeBindingMode'] == 'Immediate':
-            log.info("OC describe sc output matches storage class yaml")
-        else:
-            assert (
-                True, "OC describe sc output didn't match storage class yaml"
-            )
-
+        assert len(value) == 1 and value['volumeBindingMode'] == 'Immediate', (
+            "OC describe sc output didn't match storage class yaml"
+        )
+        log.info("OC describe sc output matches storage class yaml")
         # Delete Storage Class
         log.info(f"Deleting Storageclass: {SC_OBJ.name}")
         assert SC_OBJ.delete()
