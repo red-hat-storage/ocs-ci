@@ -256,7 +256,7 @@ def get_admin_key_from_ceph_tools():
     return base64_output
 
 
-def run_io_and_verify_mount_point(pod_obj, bs='10M', count='950', fname='dd_a'):
+def run_io_and_verify_mount_point(pod_obj, bs='10M', count='950'):
     """
     Run I/O on mount point
 
@@ -271,7 +271,7 @@ def run_io_and_verify_mount_point(pod_obj, bs='10M', count='950', fname='dd_a'):
          used_percentage (str): Used percentage on mount point
     """
     pod_obj.exec_cmd_on_pod(
-        command=f"dd if=/dev/urandom of=/var/lib/www/html/{fname} bs={bs} count={count}"
+        command=f"dd if=/dev/urandom of=/var/lib/www/html/dd_a bs={bs} count={count}"
     )
 
     # Verify data's are written to mount-point
