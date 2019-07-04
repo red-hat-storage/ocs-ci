@@ -111,7 +111,6 @@ class OCP(object):
         else:
             return self.exec_oc_cmd(command, False)
 
-
     def create(self, yaml_file=None, resource_name='', out_yaml_format=True):
         """
         Creates a new resource
@@ -141,8 +140,6 @@ class OCP(object):
             return self.exec_oc_cmd(command, True)
         else:
             return self.exec_oc_cmd(command, False)
-
-
 
     def delete(self, yaml_file=None, resource_name='', wait=True):
         """
