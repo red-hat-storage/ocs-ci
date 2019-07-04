@@ -70,4 +70,3 @@ def validate_monitoring_pods_are_respinned_and_running_state(pods_list):
             condition=constants.STATUS_RUNNING, resource_name=pod
         ), f"failed to reach pod {pod} "
         f"desired status {constants.STATUS_RUNNING}"
-
