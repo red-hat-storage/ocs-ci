@@ -20,6 +20,7 @@ import argparse
 import logging
 import os.path
 import pprint
+import re
 import sys
 
 from ocs_ci import framework
@@ -53,20 +54,38 @@ def get_ocs_version():
     # version in a similar way as it's done for OCP itself above.
     # Reference: Jose A. Rivera on ocs-qe list.
 
+    # Get all openshift storage related namespaces. Eg. at the time of writing
+    # this code (July 2019), there were these storage namespaces:
+    #  * openshift-cluster-storage-operator
+    #  * openshift-storage
+    # TODO: how to do this in upstream where namespace is rook-ceph?
+    # TODO: should we use defaults.ROOK_CLUSTER_NAMESPACE somehow here?
+    storage_namespaces = []
+    all_namespaces = OCP(kind="namespace").get()['items']
+    ns_re = re.compile("^openshift.*storage")
+    for ns in all_namespaces:
+        if (ns_re.match(ns['metadata']['name'])):
+            storage_namespaces.append(ns['metadata']['name'])
+
+    logger.info("found storage namespaces %s", storage_namespaces)
+
     # Now get the OCS version by asking for version of all container images of
     # all pods in openshift-storage namespace.
-    ocs = OCP(kind="pod", namespace="openshift-storage")
-    ocs_pods = ocs.get()
     image_dict = {}
-    for pod in ocs_pods['items']:
-        for container in pod['spec']['containers']:
-            logger.debug(
-                'container %s (in pod %s) uses image %s',
-                container['name'],
-                pod['metadata']['name'],
-                container['image'])
-        for cs in pod['status']['containerStatuses']:
-            image_dict.setdefault(cs['image'], set()).add(cs['imageID'])
+    for ns in storage_namespaces:
+        ocs = OCP(kind="pod", namespace=ns)
+        ocs_pods = ocs.get()
+        ns_dict = {}
+        for pod in ocs_pods['items']:
+            for container in pod['spec']['containers']:
+                logger.debug(
+                    'container %s (in pod %s) uses image %s',
+                    container['name'],
+                    pod['metadata']['name'],
+                    container['image'])
+            for cs in pod['status']['containerStatuses']:
+                ns_dict.setdefault(cs['image'], set()).add(cs['imageID'])
+        image_dict.setdefault(ns, ns_dict)
 
     logger.debug("ocs version collected")
 
@@ -89,16 +108,18 @@ def report_ocs_version(cluster_version, image_dict, file_obj):
     print(f'cluster channel: {cluster_version["spec"]["channel"]}', file=file_obj)
     print(f'cluster version: {cluster_version["status"]["desired"]["version"]}', file=file_obj)
     print(f'cluster image: {cluster_version["status"]["desired"]["image"]}', file=file_obj)
-    print('', file=file_obj)
 
-    for image, image_ids in image_dict.items():
-        logger.info("image %s %s", image, image_ids)
-        print(f"image {image}", file=file_obj)
-        # TODO: should len(image_ids) == 1?
-        if len(image_ids) > 1:
-            logging.warning("there are at least 2 different imageIDs for image %s", image)
-        for image_id in image_ids:
-            print(f" * {image_id}", file=file_obj)
+    for ns, ns_dict in image_dict.items():
+        logger.info("storage namespace %s", ns)
+        print(f"\nstorage namespace {ns}", file=file_obj)
+        for image, image_ids in ns_dict.items():
+            logger.info("image %s %s", image, image_ids)
+            print(f"image {image}", file=file_obj)
+            # TODO: should len(image_ids) == 1?
+            if len(image_ids) > 1:
+                logging.warning("there are at least 2 different imageIDs for image %s", image)
+            for image_id in image_ids:
+                print(f" * {image_id}", file=file_obj)
 
 
 def main():
