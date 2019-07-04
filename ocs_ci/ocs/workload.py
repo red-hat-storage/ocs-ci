@@ -23,6 +23,7 @@ class WorkLoad(object):
                 if type is 'fs' we will interpret 'path' as mount point else
                 if type is 'block' we will interpret 'path' as a block device
             pod (Pod): Pod on which we want to run this workload
+            jobs (int): Number of jobs to execute FIO
         """
         self.name = name
         self.path = path

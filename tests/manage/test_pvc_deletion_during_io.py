@@ -1,6 +1,5 @@
 import pytest
 import logging
-import yaml
 
 from ocs_ci.ocs import exceptions, constants
 from ocs_ci.ocs.resources import pod
@@ -60,7 +59,7 @@ class TestDeletePVCWhileRunningIO(ManageTest):
         """
         self.pod_obj.run_io('fs', '1G')
         logging.info("Waiting for results")
-        fio_result = yaml.load(self.pod_obj.thread.result())
+        fio_result = self.pod_obj.get_fio_results()
         logging.info("IOPs after FIO:")
         logging.info(
             f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"

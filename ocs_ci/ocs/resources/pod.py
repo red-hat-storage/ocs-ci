@@ -5,6 +5,7 @@ Each pod in the openshift cluster will have a corresponding pod object
 """
 import logging
 import re
+import yaml
 import tempfile
 from time import sleep
 from threading import Thread
@@ -16,8 +17,10 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
+FIO_TIMEOUT = 600
 
 
 TEXT_CONTENT = (
@@ -58,7 +61,7 @@ class Pod(OCS):
             api_version=defaults.API_VERSION, kind=constants.POD,
             namespace=self.namespace
         )
-        self.thread = None
+        self.fio_thread = None
         # TODO: get backend config !!
 
     @property
@@ -88,6 +91,33 @@ class Pod(OCS):
             role (str): New role to be assigned for this pod
         """
         self._roles.append(role)
+
+    def get_fio_results(self):
+        """
+        Get FIO execution results
+
+        Returns:
+            dict: Dictionary represents the FIO execution results
+
+        Raises:
+            Exception: In case of exception from FIO
+        """
+        try:
+            if self.fio_thread and self.fio_thread.done():
+                return yaml.load(self.fio_thread.result())
+            elif self.fio_thread.running():
+                for sample in TimeoutSampler(
+                    timeout=FIO_TIMEOUT, sleep=3, func=self.fio_thread.done
+                ):
+                    if sample:
+                        return yaml.load(self.fio_thread.result())
+
+        except CommandFailed as ex:
+            logger.exception(f"FIO failed: {ex}")
+            raise
+        except Exception as ex:
+            logger.exception(f"Found Exception: {ex}")
+            raise
 
     def exec_cmd_on_pod(self, command, out_yaml_format=True):
         """
@@ -196,7 +226,7 @@ class Pod(OCS):
         io_params['runtime'] = runtime
         io_params['size'] = size
 
-        self.thread = wl.run(**io_params)
+        self.fio_thread = wl.run(**io_params)
 
 
 # Helper functions for Pods
