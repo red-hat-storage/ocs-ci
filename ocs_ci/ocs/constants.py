@@ -103,3 +103,6 @@ CSI_RBD_PVC_YAML = os.path.join(
 FIO_IO_PARAMS_YAML = os.path.join(
     TEMPLATE_FIO_DIR, "workload_io.yaml"
 )
+FIO_IO_RW_PARAMS_YAML = os.path.join(
+    TEMPLATE_FIO_DIR, "workload_io_rw.yaml"
+)

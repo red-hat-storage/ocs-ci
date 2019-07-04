@@ -17,13 +17,13 @@ RUN:
   run_id: null  # this will be redefined in the execution
   kubeconfig_location: 'auth/kubeconfig' # relative from cluster_dir
   cli_params: {}  # this will be filled with CLI parameters data
-  client_version: '4.1.2'
+  client_version: '4.1.4'
   bin_dir: './bin'
 
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
 DEPLOYMENT:
-  installer_version: "4.1.2"
+  installer_version: "4.1.4"
   force_download_installer: True
   force_download_client: True
 
