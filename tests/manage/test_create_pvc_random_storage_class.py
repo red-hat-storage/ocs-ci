@@ -54,9 +54,9 @@ def teardown():
     log.info("Deleting CEPHFS Secret")
     CEPHFS_SECRET_OBJ.delete()
     log.info("Deleting RBD Storageclass")
-    assert helpers.delete_storageclass(SC_RBD_OBJS)
+    assert helpers.delete_storageclasses(SC_RBD_OBJS)
     log.info("Deleting CephFS Storageclass")
-    assert helpers.delete_storageclass([SC_CEPHFS_OBJ])
+    assert helpers.delete_storageclasses([SC_CEPHFS_OBJ])
 
 
 def create_multiple_rbd_storageclasses(count=1):
@@ -126,7 +126,7 @@ class TestCreatePVCRandomStorageClass(ManageTest):
     """
 
     def test_create_pvc_with_random_sc(self):
-        storageclass_list = helpers.get_all_storageclass_name()
+        storageclass_list = helpers.get_all_storageclass_names()
         if len(storageclass_list):
             assert create_pvc(storageclass_list, count=20)
         else:

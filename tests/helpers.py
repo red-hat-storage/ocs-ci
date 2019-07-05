@@ -319,7 +319,7 @@ def validate_cephfilesystem(fs_name):
     return ceph_validate and ocp_validate
 
 
-def get_all_storageclass_name():
+def get_all_storageclass_names():
     """
     Function for getting all storageclass
 
@@ -341,7 +341,7 @@ def get_all_storageclass_name():
     return storageclass
 
 
-def delete_storageclass(sc_objs):
+def delete_storageclasses(sc_objs):
     """"
     Function for Deleting storageclass
 
