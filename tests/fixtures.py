@@ -87,7 +87,7 @@ def create_rbd_storageclass(request):
     class_instance.sc_obj = helpers.create_storage_class(
         interface_type=constants.CEPHBLOCKPOOL,
         interface_name=class_instance.cbp_obj.name,
-        secret_name=class_instance.secret_obj.name
+        secret_name=class_instance.rbd_secret_obj.name
     )
     assert class_instance.sc_obj, "Failed to create storage class"
 
