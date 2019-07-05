@@ -38,11 +38,15 @@ to the pytest.
 ### Additional arguments:
 
 * `--cluster-name <name>` - name of cluster.
-* `--ocsci-conf` - with this configuration you can overwrite the default
-    OCS-CI parameters defined in `conf/ocsci/default_config.yaml`
+* `--ocsci-conf` - with this configuration parameter you can overwrite the
+    default OCS-CI config parameters defined in
+    [default config](/ocs_ci/framework/conf/default_config.yaml).
+    This is the repeatable parameter and you can use it multiple times for
+    adding multiple config files. (The last one overwrites previous config!)
 * `--cluster-conf` - with this configuration you can overwrite the default
     parameters for cluster and deployment. See the example of such file
-    [here](../conf/ocs_basic_install.yml).
+    [here](../conf/ocs_basic_install.yml). This parameter is obsolete and going
+    to be repleced by the --ocsci-conf parameter.
 * `--deploy` - if this is given and a cluster can not be accessed from the
     provided `--cluster-path` then a new test cluster will be deployed.
 * `--teardown` - if this is given the testing cluster will be destroyed after
@@ -52,6 +56,19 @@ to the pytest.
    necessary styles and scripts
 * `--email` - to send the email reports of the test run which was generated
    by --html option. MUST specify --html to send email reports.
+* `--bugzilla` - allows you to skip tests with unresolved bug (test case
+  needs to be properly decorated as you can see in
+  [documentation](./writing_tests.md)). You will also need to
+  create configuration file for `pytest_marker_bugzilla` plugin. See the
+  [plugin documentation](https://github.com/eanxgeek/pytest_marker_bugzilla)
+  or example of `/etc/bugzilla.cfg` file:
+  ```bash
+  [DEFAULT]
+  bugzilla_url = https://bugzilla.redhat.com/xmlrpc.cgi
+  bugzilla_username = kerberos@redhat.com
+  bugzilla_password = yourPassword
+  ```
+* `--collect-logs` - to collect OCS logs for failed test cases.
 
 ## Examples
 
@@ -82,6 +99,21 @@ Note that during deployment, openshift command line tools like `oc` and
 repository](../bin). These tools are then available to both deployment and test
 code because `run-ci` wrapper includes the `bin` directory into `PATH`
 environment variable.
+
+#### Deployment of cluster on vSphere Platform
+
+terraform and jq is needed for deployment of OCS on vSphere platform.
+
+Change the [vsphere_upi_vars.yaml.example](../conf/ocsci/vsphere_upi_vars.yaml.example) to vsphere_upi_vars.yaml and update the values accordingly.
+Check for vsphere_upi_vars.yaml.skeleton(../conf/ocsci/vsphere_upi_vars.yaml.skeleton) for more options.
+
+After filling all the required parameters, run the following command:
+```bash
+run-ci -m deployment --ocsci-conf conf/ocsci/vsphere_upi.yaml \
+    --cluster-name kerberos_ID-ocs-deployment \
+    --cluster-path /home/my_user/my-ocs-dir tests/ \
+    --deploy
+```
 
 #### Running tests on deployed environment
 

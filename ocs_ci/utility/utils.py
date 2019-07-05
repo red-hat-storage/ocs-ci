@@ -7,21 +7,27 @@ import shlex
 import string
 import subprocess
 import time
-import traceback
+from copy import deepcopy
+from shutil import which
+
 import requests
 import yaml
 import re
 import smtplib
 
+from ocs_ci.ocs.exceptions import CephHealthException
 from ocs_ci.ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
+    TagNotFoundException, UnavailableBuildException,
 )
 from ocs_ci.framework import config
-from ocs_ci.utility.aws import AWS
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from ocs_ci.ocs import constants
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.constants import OPERATOR_CATALOG_SOURCE_NAME
 from bs4 import BeautifulSoup
+from paramiko import SSHClient, AutoAddPolicy
 
 log = logging.getLogger(__name__)
 
@@ -323,7 +329,7 @@ def custom_ceph_config(suite_config, custom_config, custom_config_file):
     # retrieve custom config from file
     if custom_config_file:
         with open(custom_config_file) as f:
-            custom_config_dict = yaml.load(f)
+            custom_config_dict = yaml.safe_load(f)
             log.info("File contents: {}".format(custom_config_dict))
 
     # format cli configs into dict
@@ -349,12 +355,34 @@ def custom_ceph_config(suite_config, custom_config, custom_config_file):
     return full_custom_config
 
 
-def run_cmd(cmd, **kwargs):
+def mask_secrets(plaintext, secrets):
+    """
+    Replace secrets in plaintext with asterisks
+
+    Args:
+        plaintext (str): The plaintext to remove the secrets from
+        secrets (list): List of secret strings to replace in the plaintext
+
+    Returns:
+        str: The censored version of plaintext
+
+    """
+    if secrets:
+        for secret in secrets:
+            plaintext = plaintext.replace(secret, '*' * 5)
+    return plaintext
+
+
+def run_cmd(cmd, secrets=None, **kwargs):
     """
     Run an arbitrary command locally
 
     Args:
         cmd (str): command to run
+
+        secrets (list): A list of secrets to be masked with asterisks
+            This kwarg is popped in order to not interfere with
+            subprocess.run(**kwargs)
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -363,7 +391,8 @@ def run_cmd(cmd, **kwargs):
         (str) Decoded stdout of command
 
     """
-    log.info(f"Executing command: {cmd}")
+    masked_cmd = mask_secrets(cmd, secrets)
+    log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str):
         cmd = shlex.split(cmd)
     r = subprocess.run(
@@ -375,13 +404,29 @@ def run_cmd(cmd, **kwargs):
     )
     log.debug(f"Command output: {r.stdout.decode()}")
     if r.stderr and not r.returncode:
-        log.warning(f"Command warning:: {r.stderr.decode()}")
+        log.warning(f"Command warning: {mask_secrets(r.stderr.decode(), secrets)}")
     if r.returncode:
         raise CommandFailed(
-            f"Error during execution of command: {cmd}."
-            f"\nError is {r.stderr.decode()}"
+            f"Error during execution of command: {masked_cmd}."
+            f"\nError is {mask_secrets(r.stderr.decode(), secrets)}"
         )
-    return r.stdout.decode()
+    return mask_secrets(r.stdout.decode(), secrets)
+
+
+def run_mcg_cmd(cmd, namespace=None):
+    """
+    Invokes `run_cmd` with a noobaa prefix
+
+    Args:
+        cmd: The MCG command to be run
+        namespace: The namespace to use for the command
+
+    Returns:
+        str: Stdout of the command
+
+    """
+    namespace = namespace if namespace else config.ENV_DATA['cluster_namespace']
+    return run_cmd(f'noobaa -n {namespace} ' + cmd)
 
 
 def download_file(url, filename):
@@ -396,55 +441,55 @@ def download_file(url, filename):
     log.debug(f"Download '{url}' to '{filename}'.")
     with open(filename, "wb") as f:
         r = requests.get(url)
+        assert r.ok, (
+            f"The URL {url} is not available! Status: {r.status_code}."
+        )
         f.write(r.content)
-    assert r.ok
 
 
-def destroy_cluster(cluster_path):
+def get_url_content(url):
     """
-    Destroy existing cluster resources in AWS.
+    Return URL content
 
     Args:
-        cluster_path (str): filepath to cluster directory to be destroyed
+        url (str): URL address to return
+    Returns:
+        str: Content of URL
+
+    Raises:
+        AssertionError: When couldn't load URL
 
     """
-    # Download installer
-    installer = get_openshift_installer()
+    log.debug(f"Download '{url}' content.")
+    r = requests.get(url)
+    assert r.ok, f"Couldn't load URL: {url} content! Status: {r.status_code}."
+    return r.content
 
-    destroy_cmd = (
-        f"{installer} destroy cluster "
-        f"--dir {cluster_path} "
-        f"--log-level debug"
-    )
 
-    try:
-        cluster_path = os.path.normpath(cluster_path)
+def expose_nightly_ocp_version(version):
+    """
+    This helper function exposes latest nightly version of OCP. When the
+    version string ends with .nightly (e.g. 4.2.0-0.nightly) it will expose
+    the version to latest accepted OCP build
+    (e.g. 4.2.0-0.nightly-2019-08-08-103722)
 
-        # Retrieve cluster name and aws region from metadata
-        metadata_file = os.path.join(cluster_path, "metadata.json")
-        with open(metadata_file) as f:
-            metadata = json.loads(f.read())
-        cluster_name = metadata.get("clusterName")
-        region_name = metadata.get("aws").get("region")
+    Args:
+        version (str): Verison of OCP
 
-        # Execute destroy cluster using OpenShift installer
-        log.info(f"Destroying cluster defined in {cluster_path}")
-        run_cmd(destroy_cmd)
+    Returns:
+        str: Version of OCP exposed to full version if latest nighly passed
 
-        # Find and delete volumes
-        aws = AWS(region_name)
-        volume_pattern = f"{cluster_name}*"
-        log.debug(f"Finding volumes with pattern: {volume_pattern}")
-        volumes = aws.get_volumes_by_name_pattern(volume_pattern)
-        log.debug(f"Found volumes: \n {volumes}")
-        for volume in volumes:
-            aws.detach_and_delete_volume(volume)
-
-        # Remove installer
-        delete_file(installer)
-
-    except Exception:
-        log.error(traceback.format_exc())
+    """
+    if not version.endswith(".nightly"):
+        return version
+    else:
+        latest_nightly_url = (
+            f"https://openshift-release.svc.ci.openshift.org/api/v1/"
+            f"releasestream/{version}/latest"
+        )
+        version_url_content = get_url_content(latest_nightly_url)
+        version_json = json.loads(version_url_content)
+        return version_json['name']
 
 
 def get_openshift_installer(
@@ -466,6 +511,7 @@ def get_openshift_installer(
 
     """
     version = version or config.DEPLOYMENT['installer_version']
+    version = expose_nightly_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
@@ -514,6 +560,7 @@ def get_openshift_client(
 
     """
     version = version or config.RUN['client_version']
+    version = expose_nightly_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     client_binary_path = os.path.join(bin_dir, 'oc')
     if os.path.isfile(client_binary_path) and force_download:
@@ -535,10 +582,19 @@ def get_openshift_client(
         # return to the previous working directory
         os.chdir(previous_dir)
 
-    client_version = run_cmd(f"{client_binary_path} version")
+    client_version = run_cmd(f"{client_binary_path} version --client")
     log.info(f"OpenShift Client version: {client_version}")
 
     return client_binary_path
+
+
+def ensure_nightly_build_availability(build_url):
+    base_build_url = build_url.rsplit('/', 1)[0]
+    r = requests.get(base_build_url)
+    extracting_condition = b"Extracting" in r.content
+    if extracting_condition:
+        log.info("Build is extracting now, may take up to a minute.")
+    return r.ok and not extracting_condition
 
 
 def get_openshift_mirror_url(file_name, version):
@@ -552,6 +608,9 @@ def get_openshift_mirror_url(file_name, version):
     Returns:
         str: Url of the desired file (installer or client)
 
+    Raises:
+        UnsupportedOSType: In case the OS type is not supported
+        UnavailableBuildException: In case the build url is not reachable
     """
     if platform.system() == "Darwin":
         os_type = "mac"
@@ -559,10 +618,24 @@ def get_openshift_mirror_url(file_name, version):
         os_type = "linux"
     else:
         raise UnsupportedOSType
-    url = (
-        f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
-        f"{version}/{file_name}-{os_type}-{version}.tar.gz"
+    url_template = config.DEPLOYMENT.get(
+        'ocp_url_template',
+        "https://openshift-release-artifacts.svc.ci.openshift.org/"
+        "{version}/{file_name}-{os_type}-{version}.tar.gz"
     )
+    url = url_template.format(
+        version=version,
+        file_name=file_name,
+        os_type=os_type,
+    )
+    sample = TimeoutSampler(
+        timeout=60, sleep=5, func=ensure_nightly_build_availability,
+        build_url=url,
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise UnavailableBuildException(
+            f"The build url {url} is not reachable"
+        )
     return url
 
 
@@ -669,7 +742,7 @@ class TimeoutSampler(object):
                 timeout=60, sleep=1, func=some_func, func_arg1="1",
                 func_arg2="2"
             )
-            if not sample.waitForFuncStatus(result=True):
+            if not sample.wait_for_func_status(result=True):
                 raise Exception
         """
         try:
@@ -801,12 +874,18 @@ def email_reports():
     Email results of test run
 
     """
+    build_id = get_ocs_build_number()
+    build_str = f"BUILD ID: {build_id} " if build_id else ""
     mailids = config.RUN['cli_params']['email']
     recipients = []
     [recipients.append(mailid) for mailid in mailids.split(",")]
     sender = "ocs-ci@redhat.com"
     msg = MIMEMultipart('alternative')
-    msg['Subject'] = f"ocs-ci results for RUN ID: {config.RUN['run_id']}"
+    msg['Subject'] = (
+        f"ocs-ci results for {get_testrun_name()} "
+        f"({build_str}"
+        f"RUN ID: {config.RUN['run_id']})"
+    )
     msg['From'] = sender
     msg['To'] = ", ".join(recipients)
 
@@ -818,7 +897,7 @@ def email_reports():
     part1 = MIMEText(soup, 'html')
     msg.attach(part1)
     try:
-        s = smtplib.SMTP('localhost')
+        s = smtplib.SMTP(config.REPORTING['email']['smtp_server'])
         s.sendmail(sender, recipients, msg.as_string())
         s.quit()
         log.info(f"Results have been emailed to {recipients}")
@@ -839,6 +918,30 @@ def get_cluster_version_info():
     ocp = OCP(kind="clusterversion")
     cluster_version_info = ocp.get("version")
     return cluster_version_info
+
+
+def get_ocs_build_number():
+    """
+    Gets the build number for ocs operator
+
+    Return:
+        str: build number for ocs operator version
+
+    """
+    from ocs_ci.ocs.resources.catalog_source import CatalogSource
+
+    build_num = ""
+    ocs_catalog = CatalogSource(
+        resource_name=OPERATOR_CATALOG_SOURCE_NAME,
+        namespace="openshift-marketplace"
+    )
+    if config.REPORTING['us_ds'] == 'DS':
+        build_info = ocs_catalog.get_image_name()
+        try:
+            return build_info.split("-")[1].split(".")[0]
+        except (IndexError, AttributeError):
+            logging.warning("No version info found for OCS operator")
+    return build_num
 
 
 def get_cluster_version():
@@ -918,7 +1021,376 @@ def get_csi_versions():
         )
         desc = ocp_pod_obj.get(csi_provisioner_pod)
         for container in desc['spec']['containers']:
-            name = container['image'].split("/")[-1].split(":")[0]
+            name = container['name']
             version = container['image'].split("/")[-1].split(":")[1]
             csi_versions[name] = version
     return csi_versions
+
+
+def parse_pgsql_logs(data):
+    """
+    Parse the pgsql benchmark data from ripsaw and return
+    the data in list format
+
+    Args:
+        data (str): log data from pgsql bench run
+
+    Returns:
+        list_data (list): data digestable by scripts with below
+                        format
+            eg: ( with only one item in the list)
+            [{'num_clients': '2', 'num_threads': '7', 'latency_avg': '7',
+             'lat_stddev': '0', 'tps_incl': '234', 'tps_excl': '243'}]
+
+    """
+
+    match = re.findall(
+        r'\[\{\'number_.*?\'number_of_transactions_per_client\':\s+\w+}\]',
+        data
+    )
+
+    list_data = []
+    for log in match:
+        pgsql_data = dict()
+        clients = re.search(r"number_of_clients\':\s+(\d+),", log)
+        if clients and clients.group(1):
+            pgsql_data['num_clients'] = clients.group(1)
+        threads = re.search(r"number of threads\':\s+(\d+)", log)
+        if threads and threads.group(1):
+            pgsql_data['num_threads'] = threads.group(1)
+        lat_avg = re.search(r"latency_average_ms\':\s+(\d+)", log)
+        if lat_avg and lat_avg.group(1):
+            pgsql_data['latency_avg'] = lat_avg.group(1)
+        lat_stddev = re.search(r"latency_stddev_ms\':\s+(\d+)", log)
+        if lat_stddev and lat_stddev.group(1):
+            pgsql_data['lat_stddev'] = lat_stddev.group(1)
+        tps_incl = re.search(r"tps_incl_con_est\':\s+(\w+)", log)
+        if tps_incl and tps_incl.group(1):
+            pgsql_data['tps_incl'] = tps_incl.group(1)
+        tps_excl = re.search(r"tps_excl_con_est\':\s+(\w+)", log)
+        if tps_excl and tps_excl.group(1):
+            pgsql_data['tps_excl'] = tps_excl.group(1)
+        list_data.append(pgsql_data)
+
+    return list_data
+
+
+def create_directory_path(path):
+    """
+    Creates directory if path doesn't exists
+    """
+    path = os.path.expanduser(path)
+    if not os.path.exists(path):
+        os.makedirs(path)
+    else:
+        log.debug(f"{path} already exists")
+
+
+def ocsci_log_path():
+    """
+    Construct the full path for the log directory.
+
+    Returns:
+        str: full path for ocs-ci log directory
+
+    """
+    return os.path.expanduser(
+        os.path.join(
+            config.RUN['log_dir'],
+            f"ocs-ci-logs-{config.RUN['run_id']}"
+        )
+    )
+
+
+def get_testrun_name():
+    """
+    Prepare testrun ID for Polarion (and other reports).
+
+    Return config.REPORTING["polarion"]["testrun_name"], if configured.
+    Otherwise prepare testrun ID based on Upstream/Downstream information,
+    OCS version and used markers.
+
+    Returns:
+        str: String containing testrun ID
+
+    """
+    markers = config.RUN['cli_params'].get('-m', '').replace(" ", "-")
+    us_ds = config.REPORTING.get("us_ds")
+    us_ds = "Upstream" if us_ds.upper() == "US" else "Downstream" if us_ds.upper() == "DS" else us_ds
+    if config.REPORTING["polarion"].get("testrun_name"):
+        testrun_name = config.REPORTING["polarion"]["testrun_name"]
+    elif markers:
+        testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}_{markers}"
+    else:
+        testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}"
+
+    # form complete testrun name that includes deployment platform and type
+    testrun_name = (
+        f"{testrun_name}-{config.ENV_DATA.get('platform').upper()}-"
+        f"{config.ENV_DATA.get('deployment_type').upper()}"
+    )
+    # replace invalid character(s) by '-'
+    testrun_name = testrun_name.translate(
+        str.maketrans(
+            {key: '-' for key in ''' \\/.:*"<>|~!@#$?%^&'*(){}+`,=\t'''}
+        )
+    )
+    return testrun_name
+
+
+@retry((CephHealthException, CommandFailed), tries=20, delay=30, backoff=1)
+def ceph_health_check(namespace=None):
+    """
+    Exec `ceph health` cmd on tools pod to determine health of cluster.
+
+    Args:
+        namespace (str): Namespace of OCS
+            (default: config.ENV_DATA['cluster_namespace'])
+
+    Raises:
+        CephHealthException: If the ceph health returned is not HEALTH_OK
+        CommandFailed: If the command to retrieve the tools pod name or the
+            command to get ceph health returns a non-zero exit code
+    Returns:
+        boolean: True if HEALTH_OK
+
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    run_cmd(
+        f"oc wait --for condition=ready pod "
+        f"-l app=rook-ceph-tools "
+        f"-n {namespace} "
+        f"--timeout=120s"
+    )
+    tools_pod = run_cmd(
+        f"oc -n {namespace} get pod -l 'app=rook-ceph-tools' "
+        f"-o jsonpath='{{.items[0].metadata.name}}'"
+    )
+    health = run_cmd(f"oc -n {namespace} exec {tools_pod} ceph health")
+    if health.strip() == "HEALTH_OK":
+        log.info("HEALTH_OK, install successful.")
+        return True
+    else:
+        raise CephHealthException(
+            f"Ceph cluster health is not OK. Health: {health}"
+        )
+
+
+def get_rook_repo(branch='master', to_checkout=None):
+    """
+    Clone and checkout the rook repository to specific branch/commit.
+
+    Args:
+        branch (str): Branch name to checkout
+        to_checkout (str): Commit id or tag to checkout
+
+    """
+    cwd = constants.ROOK_REPO_DIR
+    if not os.path.isdir(cwd):
+        log.info(f"Cloning rook repository into {cwd}.")
+        run_cmd(f"git clone {constants.ROOK_REPOSITORY} {cwd}")
+    else:
+        log.info(
+            f"The rook directory {cwd} already exists, ocs-ci will skip the "
+            f"clone of rook repository."
+        )
+        log.info("Fetching latest changes from rook repository.")
+        run_cmd("git fetch --all", cwd=cwd)
+    log.info(f"Checkout rook repository to specific branch: {branch}")
+    run_cmd(f"git checkout {branch}", cwd=cwd)
+    log.info(f"Reset branch: {branch} with latest changes")
+    run_cmd(f"git reset --hard origin/{branch}", cwd=cwd)
+    if to_checkout:
+        run_cmd(f"git checkout {to_checkout}", cwd=cwd)
+
+
+def clone_repo(url, location, branch='master', to_checkout=None):
+    """
+    Clone a repository or checkout latest changes if it already exists at
+        specified location.
+
+    Args:
+        url (str): location of the repository to clone
+        location (str): path where the repository will be cloned to
+        branch (str): branch name to checkout
+        to_checkout (str): commit id or tag to checkout
+    """
+    if not os.path.isdir(location):
+        log.info("Cloning repository into %s", location)
+        run_cmd(f"git clone {url} {location}")
+    else:
+        log.info("Repository already cloned at %s, skipping clone", location)
+        log.info("Fetching latest changes from repository")
+        run_cmd('git fetch --all', cwd=location)
+    log.info("Checking out repository to specific branch: %s", branch)
+    run_cmd(f"git checkout {branch}", cwd=location)
+    log.info("Reset branch: %s with latest changes", branch)
+    run_cmd(f"git reset --hard origin/{branch}", cwd=location)
+    if to_checkout:
+        run_cmd(f"git checkout {to_checkout}", cwd=location)
+
+
+def get_latest_ds_olm_tag():
+    """
+    This function returns latest tag of OCS downstream registry
+
+    Returns:
+        str: latest tag for downstream image from quay registry
+
+    Raises:
+        TagNotFoundException: In case no tag found
+
+    """
+    _req = requests.get(constants.OPERATOR_CS_QUAY_API_QUERY)
+    req = list(filter(lambda x: x['name'] != 'latest', _req.json()['tags']))
+    if len(req) != 1:
+        raise TagNotFoundException(f"Couldn't find any tag!")
+    return req[0]['name']
+
+
+def check_if_executable_in_path(exec_name):
+    """
+    Checks whether an executable can be found in the $PATH
+
+    Args:
+        exec_name: Name of executable to look for
+
+    Returns:
+        Boolean: Whether the executable was found
+
+    """
+    return which(exec_name) is not None
+
+
+def upload_file(server, localpath, remotepath, user=None, password=None):
+    """
+    Upload a file to remote server
+
+    Args:
+        server (str): Name of the server to upload
+        localpath (str): Local file to upload
+        remotepath (str): Target path on the remote server. filename should be included
+        user (str): User to use for the remote connection
+
+    """
+    if not user:
+        user = 'root'
+
+    ssh = SSHClient()
+    ssh.set_missing_host_key_policy(
+        AutoAddPolicy())
+    ssh.connect(hostname=server, username=user, password=password)
+    sftp = ssh.open_sftp()
+    log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
+    sftp.put(localpath, remotepath)
+    sftp.close()
+    ssh.close()
+
+
+def read_file_as_str(filepath):
+    """
+    Reads the file content
+
+    Args:
+        filepath (str): File to read
+
+    Returns:
+        str : File contents in string
+
+    """
+    with open(rf"{filepath}") as fd:
+        content = fd.read()
+    return content
+
+
+def replace_content_in_file(file, old, new):
+    """
+    Replaces contents in file, if old value is not found, it adds
+    new value to the file
+
+    Args:
+        file (str): Name of the file in which contents will be replaced
+        old (str): Data to search for
+        new (str): Data to replace the old value
+
+    """
+    # Read the file
+    with open(rf"{file}", 'r') as fd:
+        file_data = fd.read()
+
+    # Replace/add the new data
+    if old in file_data:
+        file_data = file_data.replace(old, new)
+    else:
+        file_data = new + file_data
+
+    # Write the file out again
+    with open(rf"{file}", 'w') as fd:
+        fd.write(file_data)
+
+
+@retry((CommandFailed), tries=100, delay=10, backoff=1)
+def wait_for_co(operator):
+    """
+    Waits for ClusterOperator to created
+
+    Args:
+        operator (str): Name of the ClusterOperator
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+    ocp = OCP(kind='ClusterOperator')
+    ocp.get(operator)
+
+
+def censor_values(data_to_censor):
+    """
+    This function censor values in dictionary keys that match pattern defined
+    in config_keys_patterns_to_censor in constants.
+
+    Args:
+        data_to_censor (dict): Data to censor.
+
+    """
+    for key in data_to_censor:
+        for pattern in constants.config_keys_patterns_to_censor:
+            if pattern in key:
+                data_to_censor[key] = '*' * 5
+
+
+def dump_config_to_file(file_path):
+    """
+    Dump the config to the yaml file with censored secret values.
+
+    Args:
+        file_path (str): Path to file where to write the configuration.
+
+    """
+    config_copy = deepcopy(config.to_dict())
+    for key in config_copy:
+        censor_values(config_copy[key])
+    with open(file_path, "w+") as fs:
+        yaml.safe_dump(config_copy, fs)
+
+
+def create_rhelpod(namespace, pod_name):
+    """
+    Creates the RHEL pod
+
+    Args:
+        namespace (str): Namespace to create RHEL pod
+        pod_name (str): Pod name
+
+    Returns:
+        pod: Pod instance for RHEL
+
+    """
+    # importing here to avoid dependencies
+    from tests import helpers
+    rhelpod_obj = helpers.create_pod(
+        namespace=namespace,
+        pod_name=pod_name,
+        pod_dict_path=constants.RHEL_7_7_POD_YAML
+    )
+    helpers.wait_for_resource_state(rhelpod_obj, constants.STATUS_RUNNING)
+    return rhelpod_obj

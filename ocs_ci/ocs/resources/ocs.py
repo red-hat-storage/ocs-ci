@@ -26,7 +26,7 @@ class OCS(object):
                 resource's dictionary and use it to pass as **kwargs
                 2) For new resource, use yaml files templates under
                 /templates/CSI like:
-                obj_dict = load_yaml_to_dict(
+                obj_dict = load_yaml(
                     os.path.join(
                         TEMPLATE_DIR, "some_resource.yaml"
                         )
@@ -46,6 +46,9 @@ class OCS(object):
         self.temp_yaml = tempfile.NamedTemporaryFile(
             mode='w+', prefix=self._kind, delete=False
         )
+        # This _is_delete flag is set to True if the delete method was called
+        # on object of this class and was successfull.
+        self._is_deleted = False
 
     @property
     def api_version(self):
@@ -63,6 +66,10 @@ class OCS(object):
     def name(self):
         return self._name
 
+    @property
+    def is_deleted(self):
+        return self._is_deleted
+
     def reload(self):
         """
         Reloading the OCS instance with the new information from its actual
@@ -78,15 +85,42 @@ class OCS(object):
             resource_name=self.name, out_yaml_format=out_yaml_format
         )
 
-    def create(self):
+    def describe(self):
+        return self.ocp.describe(resource_name=self.name)
+
+    def create(self, do_reload=True):
         log.info(f"Adding {self.kind} with name {self.name}")
-        templating.dump_dict_to_temp_yaml(self.data, self.temp_yaml.name)
+        templating.dump_data_to_temp_yaml(self.data, self.temp_yaml.name)
         status = self.ocp.create(yaml_file=self.temp_yaml.name)
-        self.reload()
+        if do_reload:
+            self.reload()
         return status
 
-    def delete(self, wait=True):
-        return self.ocp.delete(resource_name=self.name, wait=wait)
+    def delete(self, wait=True, force=False):
+        """
+        Delete the OCS object if its not already deleted
+        (using the internal is_deleted flag)
+
+        Args:
+            wait (bool): Wait for object to be deleted
+            force (bool): Force delete object
+
+        Returns:
+            bool: True if deleted, False otherwise
+
+        """
+        if self._is_deleted:
+            log.info(
+                f"Attempt to remove resource: {self.name} which is"
+                f"already deleted! Skipping delete of this resource!"
+            )
+            result = True
+        else:
+            result = self.ocp.delete(
+                resource_name=self.name, wait=wait, force=force
+            )
+            self._is_deleted = True
+        return result
 
     def apply(self, **data):
         with open(self.temp_yaml.name, 'w') as yaml_file:

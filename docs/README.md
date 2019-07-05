@@ -20,3 +20,6 @@ Rest of the information you can find in those sections
 * [Config files](../conf/README.md) - information about all our config files.
 * [Results](./results.md) - information about results publishing.
 * [Writing tests](./writing_tests.md) - information about how to write tests.
+* [Fixture usage](./fixture_usage.md) - information about how to write and use
+  fixtures.
+* [Debugging](./debugging.md) - useful debugging information.

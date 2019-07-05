@@ -3,6 +3,11 @@
 **Lets use the following guidelines for Code Reviews and contribution:**
 
 * Create own fork of the repository and submit PR from your fork.
+* If a github issue describing the changes you are making does not exist be sure to
+    create one before creating a pull request. This is a *requirement* for all
+    bugs, feature requests, and enhancements to the framework or our tests that
+    involve more than a few lines of code changes. If the PR is extremely small,
+    still be sure to include a purpose for the change in the description.
 * Please follow rules we have set in [coding guidelines](./coding_guidelines.md)
     and read it properly before submitting your first PR.
 * Run couple of real tests before submitting for library changes.
@@ -16,6 +21,10 @@
     installed this [application WIP](https://github.com/marketplace/wip). This
     magic word will prevent us to merge this change which contains WIP in the
     name. Once you finish with patch you can remove it from the PR name.
+* Include `Fixes: #issue_id` in the description of your pull request in order
+    to have github automatically close the issue when the pull request is
+    merged. This also helps maintain a reference to the issue for merge commits
+    in our git log.
 * Request review from a few of project maintainers or related folks.
     Currently we are using the CODEOWNERS file which should auto assign
     [top level reviewers](https://github.com/orgs/red-hat-storage/teams/top-level-reviewers/members).
@@ -26,6 +35,9 @@
     approved  from github by at least 2 project maintainers before merge.
 * All comments should be addressed or responded and once comment is considered
     as closed we should Resolve conversation to close the comment.
+* If there are new review comments for a PR that is older than 4 days, the
+    author can take it up as follow on PR after the issue is filed in github
+    to address new review comments.
 * If some fixes required from the comment, please do not do
     `git commit --amend` and `git push --force` as we lose the history of
     changes and it's hard for reviewer to see what was really changed from the
@@ -35,3 +47,7 @@
     changes, and once all comments are addressed, you can squash related
     commits together and force push to the branch. Then we will just merge
     whole PR.
+* If the pull request introduces a workaround, the reviewer should check that
+  rules noted in [Tracking of workarounds](./workarounds.md) page are
+  followed. The person merging a workaround is responsible for checking that all
+  information related to the workaround is correct.

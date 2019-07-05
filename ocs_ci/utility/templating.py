@@ -1,9 +1,12 @@
-import os
-
-import yaml
+import json
+import logging
 from jinja2 import Environment, FileSystemLoader, Template
+import yaml
 
 from ocs_ci.ocs.constants import TEMPLATE_DIR
+from ocs_ci.utility.utils import get_url_content
+
+logger = logging.getLogger(__name__)
 
 
 def load_config_data(data_path):
@@ -134,11 +137,80 @@ def dump_to_temp_yaml(src_file, dst_file, **kwargs):
         yaml.dump(data, yaml_file)
 
 
-def load_yaml_to_dict(file):
-    template = os.path.join(file)
-    return yaml.safe_load(open(template, 'r'))
+def load_yaml(file, multi_document=False):
+    """
+    Load yaml file (local or from URL) and convert it to dictionary
+
+    Args:
+        file (str): Path to the file or URL address
+        multi_document (bool): True if yaml contains more documents
+
+    Returns:
+        dict: If multi_document == False, returns loaded data from yaml file
+            with one document.
+        generator: If multi_document == True, returns generator which each
+            iteration returns dict from one loaded document from a file.
+
+    """
+    loader = yaml.safe_load_all if multi_document else yaml.safe_load
+    if file.startswith('http'):
+        return loader(get_url_content(file))
+    else:
+        with open(file, 'r') as fs:
+            return loader(fs.read())
 
 
-def dump_dict_to_temp_yaml(data, temp_yaml):
+def get_n_document_from_yaml(yaml_generator, index=0):
+    """
+    Returns n document from yaml generator loaded by load_yaml with
+    multi_document = True.
+
+    Args:
+        yaml_generator (generator): Generator from yaml.safe_load_all
+        index (int): Index of document to return. (0 - 1st, 1 - 2nd document)
+
+    Returns:
+        dict: Data from n document from yaml file.
+
+    Raises:
+        IndexError: In case that yaml generator doesn't have such index.
+
+    """
+    for idx, document in enumerate(yaml_generator):
+        if index == idx:
+            return document
+    raise IndexError(f"Passed yaml generator doesn't have index {index}")
+
+
+def dump_data_to_temp_yaml(data, temp_yaml):
+    """
+    Dump data to temporary yaml file
+
+    Args:
+        data (dict or list): dict or list (in case of multi_document) with
+            data to dump to the yaml file.
+        temp_yaml (str): file path of yaml file
+
+    Returns:
+        str: dumped yaml data
+
+    """
+    dumper = yaml.dump if type(data) == dict else yaml.dump_all
+    yaml_data = dumper(data)
     with open(temp_yaml, 'w') as yaml_file:
-        return yaml.dump(data, yaml_file)
+        yaml_file.write(yaml_data)
+    logger.info(yaml_data)
+    return yaml_data
+
+
+def dump_data_to_json(data, json_file):
+    """
+    Dump data to json file
+
+    Args:
+        data (dict): dictionary with data to dump to the json file.
+        json_file (str): file path to json file
+
+    """
+    with open(json_file, 'w') as fd:
+        json.dump(data, fd)

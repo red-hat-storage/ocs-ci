@@ -1,0 +1,135 @@
+"""
+A test case to verify after deleting pvc whether
+size is returned to backend pool
+"""
+import logging
+
+import pytest
+
+from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from tests import helpers
+from ocs_ci.framework.testlib import tier1, acceptance, ManageTest
+from ocs_ci.utility import templating
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs import ocp
+from tests.fixtures import (
+    create_rbd_storageclass, create_ceph_block_pool,
+    create_rbd_secret
+)
+from ocs_ci.ocs.cluster import CephCluster
+logger = logging.getLogger(__name__)
+_templating = templating.Templating()
+
+PV = ocp.OCP(
+    kind='PersistentVolume', namespace=defaults.ROOK_CLUSTER_NAMESPACE
+)
+
+
+@retry(UnexpectedBehaviour, tries=5, delay=3, backoff=1)
+def verify_pv_not_exists(pvc_obj, cbp_name, rbd_image_id):
+    """
+    Ensure that pv does not exists
+    """
+
+    # Validate on ceph side
+    logger.info(f"Verifying PV {pvc_obj.backed_pv} exists on backend")
+
+    status = helpers.verify_volume_deleted_in_backend(
+        interface=constants.CEPHBLOCKPOOL, image_uuid=rbd_image_id,
+        pool_name=cbp_name
+    )
+
+    if not status:
+        raise UnexpectedBehaviour(f"PV {pvc_obj.backed_pv} exists on backend")
+    logger.info(
+        f"Expected: PV {pvc_obj.backed_pv} "
+        f"doesn't exist on backend after deleting PVC"
+    )
+
+    # Validate on oc side
+    logger.info("Verifying whether PV is deleted")
+    try:
+        assert helpers.validate_pv_delete(pvc_obj.backed_pv)
+    except AssertionError as ecf:
+        assert "not found" in str(ecf), (
+            f"Unexpected: PV {pvc_obj.backed_pv} still exists"
+        )
+    logger.info(
+        f"Expected: PV should not be found "
+        f"after deleting corresponding PVC"
+    )
+
+
+def create_pvc_and_verify_pvc_exists(sc_name, cbp_name):
+    """
+    Create pvc, verify pvc is bound in state and
+    pvc exists on ceph side
+    """
+    pvc_obj = helpers.create_pvc(sc_name=sc_name, size='10Gi')
+    helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+    pvc_obj.reload()
+
+    # Validate pv is created on ceph
+    logger.info(f"Verifying PV exists on backend")
+    assert not helpers.verify_volume_deleted_in_backend(
+        interface=constants.CEPHBLOCKPOOL, image_uuid=pvc_obj.image_uuid,
+        pool_name=cbp_name
+    )
+    return pvc_obj
+
+
+@pytest.mark.usefixtures(
+    create_rbd_secret.__name__,
+    create_ceph_block_pool.__name__,
+    create_rbd_storageclass.__name__
+)
+@pytest.mark.polarion_id("OCS-372")
+class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
+    """
+    Testing after pvc deletion the size is returned to backendpool
+    """
+
+    @acceptance
+    @tier1
+    def test_pvc_delete_and_verify_size_is_returned_to_backend_pool(self):
+        """
+        Test case to verify after delete pvc size returned to backend pools
+        """
+        failed_to_delete = []
+        ceph_obj1 = CephCluster()
+        used_before_creating_pvc = ceph_obj1.check_ceph_pool_used_space(cbp_name=self.cbp_obj.name)
+        logger.info(f"Used before creating PVC {used_before_creating_pvc}")
+        pvc_obj = create_pvc_and_verify_pvc_exists(
+            self.sc_obj.name, self.cbp_obj.name
+        )
+        pod_obj = helpers.create_pod(
+            interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvc_obj.name
+        )
+        helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
+        pod_obj.reload()
+        pod.run_io_and_verify_mount_point(pod_obj, bs='10M', count='300')
+        used_after_creating_pvc = ceph_obj1.check_ceph_pool_used_space(cbp_name=self.cbp_obj.name)
+        logger.info(f"Used after creating PVC {used_after_creating_pvc}")
+        assert used_before_creating_pvc < used_after_creating_pvc
+        rbd_image_id = pvc_obj.image_uuid
+        for resource in pod_obj, pvc_obj:
+            resource.delete()
+            try:
+                resource.ocp.wait_for_delete(resource)
+            except TimeoutError:
+                failed_to_delete.append(resource)
+        if failed_to_delete:
+            raise UnexpectedBehaviour(
+                f"Failed to delete resources: {failed_to_delete}"
+            )
+        verify_pv_not_exists(pvc_obj, self.cbp_obj.name, rbd_image_id)
+        ceph_obj2 = CephCluster()
+        used_after_deleting_pvc = ceph_obj2.check_ceph_pool_used_space(cbp_name=self.cbp_obj.name)
+
+        logger.info(f"Used after deleting PVC {used_after_deleting_pvc}")
+        assert used_after_deleting_pvc < used_after_creating_pvc
+        assert (abs(
+            used_after_deleting_pvc - used_before_creating_pvc) < 0.5
+        )

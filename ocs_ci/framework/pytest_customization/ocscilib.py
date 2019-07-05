@@ -16,11 +16,16 @@ from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework.exceptions import ClusterPathNotProvidedError
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import (
+    dump_config_to_file,
     get_cluster_version,
     get_ceph_version,
     get_rook_version,
-    get_csi_versions
+    get_csi_versions,
+    get_testrun_name,
 )
+from ocs_ci.ocs.utils import collect_ocs_logs
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.constants import OPERATOR_CATALOG_SOURCE_NAME
 
 __all__ = [
     "pytest_addoption",
@@ -36,6 +41,7 @@ def pytest_addoption(parser):
     parser.addoption(
         '--ocsci-conf',
         dest='ocsci_conf',
+        action="append",
         help="Path to config file of OCS CI",
     )
     parser.addoption(
@@ -72,6 +78,20 @@ def pytest_addoption(parser):
         dest='email',
         help="Email ID to send results",
     )
+    parser.addoption(
+        '--collect-logs',
+        dest='collect-logs',
+        action="store_true",
+        default=False,
+        help="Collect OCS logs when test case failed",
+    )
+    parser.addoption(
+        '--io_in_bg',
+        dest='io_in_bg',
+        action="store_true",
+        default=False,
+        help="Run IO in the background",
+    )
 
 
 def pytest_configure(config):
@@ -82,38 +102,69 @@ def pytest_configure(config):
         config (pytest.config): Pytest config object
 
     """
-    if not config.getoption("--help"):
+    if not (config.getoption("--help") or config.getoption("collectonly")):
         process_cluster_cli_params(config)
+        config_file = os.path.expanduser(
+            os.path.join(
+                ocsci_config.RUN['log_dir'],
+                f"run-{ocsci_config.RUN['run_id']}-config.yaml",
+            )
+        )
+        dump_config_to_file(config_file)
+        log.info(
+            f"Dump of the consolidated config file is located here: "
+            f"{config_file}"
+        )
         # Add OCS related versions to the html report and remove extraneous metadata
         markers_arg = config.getoption('-m')
-        if not ("deployment" in markers_arg and ocsci_config.RUN['cli_params']['deploy']):
-            print("Collecting Cluster versions")
-            # remove extraneous metadata
-            del config._metadata['Python']
-            del config._metadata['Packages']
-            del config._metadata['Plugins']
-            del config._metadata['Platform']
+        if ocsci_config.RUN['cli_params'].get('teardown') or (
+            "deployment" in markers_arg
+            and ocsci_config.RUN['cli_params'].get('deploy')
+        ):
+            log.info(
+                "Skiping versions collecting because: Deploy or destroy of "
+                "cluster is performed."
+            )
+            return
+        print("Collecting Cluster versions")
+        # remove extraneous metadata
+        del config._metadata['Python']
+        del config._metadata['Packages']
+        del config._metadata['Plugins']
+        del config._metadata['Platform']
 
-            try:
-                # add cluster version
-                clusterversion = get_cluster_version()
-                config._metadata['Cluster Version'] = clusterversion
+        config._metadata['Test Run Name'] = get_testrun_name()
 
-                # add ceph version
-                ceph_version = get_ceph_version()
-                config._metadata['Ceph Version'] = ceph_version
+        try:
+            # add cluster version
+            clusterversion = get_cluster_version()
+            config._metadata['Cluster Version'] = clusterversion
 
-                # add rook version
-                rook_version = get_rook_version()
-                config._metadata['Rook Version'] = rook_version
+            # add ceph version
+            ceph_version = get_ceph_version()
+            config._metadata['Ceph Version'] = ceph_version
 
-                # add csi versions
-                csi_versions = get_csi_versions()
-                config._metadata['csi-provisioner'] = csi_versions.get('csi-provisioner')
-                config._metadata['cephfsplugin'] = csi_versions.get('cephfsplugin')
-                config._metadata['rbdplugin'] = csi_versions.get('rbdplugin')
-            except (FileNotFoundError, CommandFailed):
-                pass
+            # add rook version
+            rook_version = get_rook_version()
+            config._metadata['Rook Version'] = rook_version
+
+            # add csi versions
+            csi_versions = get_csi_versions()
+            config._metadata['csi-provisioner'] = csi_versions.get('csi-provisioner')
+            config._metadata['cephfsplugin'] = csi_versions.get('csi-cephfsplugin')
+            config._metadata['rbdplugin'] = csi_versions.get('csi-rbdplugin')
+
+            # add ocs operator version
+            ocs_catalog = CatalogSource(
+                resource_name=OPERATOR_CATALOG_SOURCE_NAME,
+                namespace="openshift-marketplace"
+            )
+            if ocsci_config.REPORTING['us_ds'] == 'DS':
+                config._metadata['OCS operator'] = (
+                    ocs_catalog.get_image_name()
+                )
+        except (FileNotFoundError, CommandFailed):
+            pass
 
 
 def get_cli_param(config, name_of_param, default=None):
@@ -146,6 +197,7 @@ def process_cluster_cli_params(config):
     cluster_path = get_cli_param(config, 'cluster_path')
     if not cluster_path:
         raise ClusterPathNotProvidedError()
+    cluster_path = os.path.expanduser(cluster_path)
     if not os.path.exists(cluster_path):
         os.makedirs(cluster_path)
     # Importing here cause once the function is invoked we have already config
@@ -159,10 +211,13 @@ def process_cluster_cli_params(config):
         cluster_name = f"ocs-ci-{getuser()[:8]}"
     ocsci_config.RUN['cli_params']['teardown'] = get_cli_param(config, "teardown", default=False)
     ocsci_config.RUN['cli_params']['deploy'] = get_cli_param(config, "deploy", default=False)
+    ocsci_config.RUN['cli_params']['io_in_bg'] = get_cli_param(config, "io_in_bg", default=False)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
+    get_cli_param(config, 'collect-logs')
     if get_cli_param(config, 'email') and not get_cli_param(config, '--html'):
         pytest.exit("--html option must be provided to send email reports")
+    get_cli_param(config, '-m')
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -183,3 +238,17 @@ def pytest_collection_modifyitems(session, config, items):
                 f"{item.name} in {item.fspath}",
                 exc_info=True
             )
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    rep = outcome.get_result()
+    # we only look at actual failing test calls, not setup/teardown
+    if (
+        rep.when == "call"
+        and rep.failed
+        and ocsci_config.RUN.get('cli_params').get('collect-logs')
+    ):
+        test_case_name = item.name
+        collect_ocs_logs(test_case_name)

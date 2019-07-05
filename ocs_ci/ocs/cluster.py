@@ -9,15 +9,19 @@ functional and proper configurations are made for interaction.
 import logging
 import base64
 import random
+import yaml
 import re
 
 import ocs_ci.ocs.resources.pod as pod
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import ocs
 import ocs_ci.ocs.constants as constant
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import TimeoutSampler, run_cmd
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
-from ocs_ci. ocs import ocp
-from ocs_ci.ocs import exceptions
+from ocs_ci.ocs import ocp, constants, exceptions
+from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +82,8 @@ class CephCluster(object):
         self.cluster = ocs.OCS(**self.cluster_resource_config)
         if self.cephfs_config:
             self.cephfs = ocs.OCS(**self.cephfs_config)
+        else:
+            self.cephfs = None
 
         self.mon_selector = constant.MON_APP_LABEL
         self.mds_selector = constant.MDS_APP_LABEL
@@ -99,6 +105,8 @@ class CephCluster(object):
         logging.info(f"Number of mons = {self.mon_count}")
         logging.info(f"Number of mds = {self.mds_count}")
 
+        self.used_space = 0
+
     @property
     def cluster_name(self):
         return self._cluster_name
@@ -116,7 +124,12 @@ class CephCluster(object):
         Get accurate info on current state of pods
         """
         self._ceph_pods = pod.get_all_pods(self._namespace)
-        self.mons = pod.get_mon_pods(self.mon_selector, self.namespace)
+        # TODO: Workaround for BZ1748325:
+        mons = pod.get_mon_pods(self.mon_selector, self.namespace)
+        for mon in mons:
+            if mon.ocp.get_resource_status(mon.name) == constant.STATUS_RUNNING:
+                self.mons.append(mon)
+        # TODO: End of workaround for BZ1748325
         self.mdss = pod.get_mds_pods(self.mds_selector, self.namespace)
         self.mgrs = pod.get_mgr_pods(self.mgr_selector, self.namespace)
         self.osds = pod.get_osd_pods(self.osd_selector, self.namespace)
@@ -125,8 +138,16 @@ class CephCluster(object):
         # set port attrib on mon pods
         self.mons = list(map(self.set_port, self.mons))
         self.cluster.reload()
-        if self.cephfs_config:
+        if self.cephfs:
             self.cephfs.reload()
+        else:
+            try:
+                self.cephfs_config = self.CEPHFS.get().get('items')[0]
+                self.cephfs = ocs.OCS(**self.cephfs_config)
+                self.cephfs.reload()
+            except IndexError as e:
+                logging.warning(e)
+                logging.warning("No CephFS found")
 
         self.mon_count = len(self.mons)
         self.mds_count = len(self.mdss)
@@ -161,7 +182,7 @@ class CephCluster(object):
         self.cluster.reload()
         return self.cluster.data['status']['ceph']['health'] == "HEALTH_OK"
 
-    def cluster_health_check(self, timeout=0):
+    def cluster_health_check(self, timeout=None):
         """
         Check overall cluster health.
         Relying on health reported by CephCluster.get()
@@ -178,7 +199,8 @@ class CephCluster(object):
         Raises:
             CephHealthException: if cluster is not healthy
         """
-        timeout = 10 * len(self.pods)
+        # Scale timeout only if user hasn't passed any value
+        timeout = timeout or (10 * len(self.pods))
         sample = TimeoutSampler(
             timeout=timeout, sleep=3, func=self.is_health_ok
         )
@@ -249,6 +271,17 @@ class CephCluster(object):
                 condition='Running', selector=self.mon_selector,
                 resource_count=count, timeout=timeout, sleep=3,
             )
+
+            # TODO: Workaround for BZ1748325:
+            actual_mons = pod.get_mon_pods()
+            actual_running_mons = list()
+            for mon in actual_mons:
+                if mon.ocp.get_resource_status(mon.name) == constant.STATUS_RUNNING:
+                    actual_running_mons.append(mon)
+            actual = len(actual_running_mons)
+            # TODO: End of workaround for BZ1748325
+
+            assert count == actual, f"Expected {count},  Got {actual}"
         except exceptions.TimeoutExpiredError as e:
             logger.error(e)
             raise exceptions.MonCountException(
@@ -359,8 +392,79 @@ class CephCluster(object):
         Returns:
             remove_mon(bool): True if removal of mon is successful, False otherwise
         """
-
         mons = self.get_mons_from_cluster()
-        remove_mon = self.DEP.delete(resource_name=random.choice(mons))
-        logging.info(f"Removed the mon {mons} from the cluster")
+        after_delete_mon_count = len(mons) - 1
+        random_mon = random.choice(mons)
+        remove_mon = self.DEP.delete(resource_name=random_mon)
+        assert self.POD.wait_for_resource(
+            condition=constant.STATUS_RUNNING,
+            resource_count=after_delete_mon_count,
+            selector='app=rook-ceph-mon'
+        )
+        logging.info(f"Removed the mon {random_mon} from the cluster")
         return remove_mon
+
+    @retry(UnexpectedBehaviour, tries=20, delay=10, backoff=1)
+    def check_ceph_pool_used_space(self, cbp_name):
+        """
+        Check for the used space of a pool in cluster
+
+         Returns:
+            used_in_gb (float): Amount of used space in pool (in GBs)
+
+         Raises:
+            UnexpectedBehaviour: If used size keeps varying in Ceph status
+        """
+        ct_pod = pod.get_ceph_tools_pod()
+        rados_status = ct_pod.exec_ceph_cmd(ceph_cmd=f"rados df -p {cbp_name}")
+        assert rados_status is not None
+        used = rados_status['pools'][0]['size_bytes']
+        used_in_gb = format(used / constants.GB, '.4f')
+        if self.used_space and self.used_space == used_in_gb:
+            return float(self.used_space)
+        self.used_space = used_in_gb
+        raise UnexpectedBehaviour(
+            f"In Rados df, Used size is varying"
+        )
+
+
+def validate_cluster_on_pvc():
+    """
+    Validate creation of PVCs for MON and OSD pods.
+    Also validate that those PVCs are attached to the OCS pods
+
+    Raises:
+         AssertionError: If PVC is not mounted on one or more OCS pods
+
+    """
+    # Get the PVCs for selected label (MON/OSD)
+    ns = config.ENV_DATA['cluster_namespace']
+    ocs_pvc_obj = get_all_pvc_objs(namespace=ns)
+
+    # Check all pvc's are in bound state
+
+    pvc_names = []
+    for pvc_obj in ocs_pvc_obj:
+        if (pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME)
+                or pvc_obj.name.startswith(constants.DEFAULT_MON_PVC_NAME)):
+            assert pvc_obj.status == constants.STATUS_BOUND, (
+                f"PVC {pvc_obj.name} is not Bound"
+            )
+            logger.info(f"PVC {pvc_obj.name} is in Bound state")
+            pvc_names.append(pvc_obj.name)
+
+    mon_pods = get_pod_name_by_pattern('rook-ceph-mon', ns)
+    osd_pods = get_pod_name_by_pattern('rook-ceph-osd', ns, filter='prepare')
+    assert len(mon_pods) + len(osd_pods) == len(pvc_names), (
+        "Not enough PVC's available for all Ceph Pods"
+    )
+    for ceph_pod in mon_pods + osd_pods:
+        out = run_cmd(f'oc -n {ns} get pods {ceph_pod} -o yaml')
+        out_yaml = yaml.safe_load(out)
+        for vol in out_yaml['spec']['volumes']:
+            if vol.get('persistentVolumeClaim'):
+                claimName = vol.get('persistentVolumeClaim').get('claimName')
+                logger.info(f"{ceph_pod} backed by pvc {claimName}")
+                assert claimName in pvc_names, (
+                    "Ceph Internal Volume not backed by PVC"
+                )

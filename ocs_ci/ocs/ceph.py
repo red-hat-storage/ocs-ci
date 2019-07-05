@@ -2,6 +2,7 @@ import logging
 import json
 import re
 from distutils.version import LooseVersion
+from ocs_ci.ocs.exceptions import CommandFailed
 from select import select
 from time import sleep
 
@@ -822,10 +823,6 @@ class Ceph(object):
         """
         osd_partition_path = self.get_osd_data_partition_path(osd_id, client)
         return osd_partition_path[osd_partition_path.rfind('/') + 1::]
-
-
-class CommandFailed(Exception):
-    pass
 
 
 class RolesContainer(object):

@@ -7,8 +7,8 @@
 #   oc create -f cluster.yaml
 #################################################################################################################
 ---
+# scc for the Rook and Ceph daemons
 kind: SecurityContextConstraints
-# older versions of openshift have "apiVersion: v1"
 apiVersion: security.openshift.io/v1
 metadata:
   name: rook-ceph
@@ -52,7 +52,46 @@ users:
   - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-ceph-mgr
   - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-ceph-osd
 ---
+# scc for the CSI driver
+kind: SecurityContextConstraints
+apiVersion: security.openshift.io/v1
+metadata:
+  name: rook-ceph-csi
+allowPrivilegedContainer: true
+allowHostNetwork: true
+allowHostDirVolumePlugin: true
+priority:
+allowedCapabilities: ['*']
+allowHostPorts: true
+allowHostPID: true
+allowHostIPC: true
+readOnlyRootFilesystem: false
+requiredDropCapabilities: []
+defaultAddCapabilities: []
+runAsUser:
+  type: RunAsAny
+seLinuxContext:
+  type: RunAsAny
+fsGroup:
+  type: RunAsAny
+supplementalGroups:
+  type: RunAsAny
+allowedFlexVolumes:
+  - driver: "ceph.rook.io/rook"
+  - driver: "ceph.rook.io/rook-ceph"
+volumes: ['*']
+users:
+  # A user needs to be added for each rook service account.
+  # This assumes running in the default sample "rook-ceph" namespace.
+  # If other namespaces or service accounts are configured, they need to be updated here.
+  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-csi-rbd-plugin-sa
+  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-csi-rbd-provisioner-sa
+  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-csi-rbd-attacher-sa
+  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-csi-cephfs-plugin-sa
+  - system:serviceaccount:{{ cluster_namespace | default('openshift-storage') }}:rook-csi-cephfs-provisioner-sa
+---
 # The deployment for the rook operator
+# OLM: BEGIN OPERATOR DEPLOYMENT
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -74,7 +113,7 @@ spec:
       serviceAccountName: rook-ceph-system
       containers:
       - name: rook-ceph-operator
-        image: {{ rook_image | default('rook/ceph:v0.9.0-519.g111610e') }}
+        image: {{ rook_image | default('rook/ceph:master') }}
         args: ["ceph", "operator"]
         volumeMounts:
         - mountPath: /var/lib/rook
@@ -94,6 +133,9 @@ spec:
         # (Optional) Rook Agent toleration key. Set this to the key of the taint you want to tolerate
         # - name: AGENT_TOLERATION_KEY
         #   value: "<KeyOfTheTaintToTolerate>"
+        # (Optional) Rook Agent NodeAffinity.
+        # - name: AGENT_NODE_AFFINITY
+        #   value: "role=storage-node; storage=rook,ceph"
         # (Optional) Rook Agent mount security mode. Can by `Any` or `Restricted`.
         # `Any` uses Ceph admin credentials by default/fallback.
         # For using `Restricted` you must have a Ceph secret in each namespace storage should be consumed from and
@@ -117,22 +159,25 @@ spec:
         # (Optional) Rook Discover toleration key. Set this to the key of the taint you want to tolerate
         # - name: DISCOVER_TOLERATION_KEY
         #  value: "<KeyOfTheTaintToTolerate>"
+        # (Optional) Discover Agent NodeAffinity.
+        # - name: DISCOVER_AGENT_NODE_AFFINITY
+        #   value: "role=storage-node; storage=rook, ceph"
         # Allow rook to create multiple file systems. Note: This is considered
         # an experimental feature in Ceph as described at
         # http://docs.ceph.com/docs/master/cephfs/experimental-features/#multiple-filesystems-within-a-ceph-cluster
         # which might cause mons to crash as seen in https://github.com/rook/rook/issues/1027
         - name: ROOK_ALLOW_MULTIPLE_FILESYSTEMS
-          value: "{{ rook_allow_multiple_filesystems | default('true') }}"
+          value: "{{ rook_allow_multiple_filesystems | default('false') }}"
         # The logging level for the operator: INFO | DEBUG
         - name: ROOK_LOG_LEVEL
           value: "{{ rook_log_level | default('INFO') }}"
         # The interval to check if every mon is in the quorum.
         - name: ROOK_MON_HEALTHCHECK_INTERVAL
-          value: "{{ rook_mon_healthcheck_interval | default('30s') }}"
+          value: "{{ rook_mon_healthcheck_interval | default('45s') }}"
         # The duration to wait before trying to failover or remove/replace the
         # current mon with a new mon (useful for compensating flapping network).
         - name: ROOK_MON_OUT_TIMEOUT
-          value: "{{ rook_mon_out_timeout | default('40s') }}"
+          value: "{{ rook_mon_out_timeout | default('600s') }}"
         # The duration between discovering devices in the rook-discover daemonset.
         - name: ROOK_DISCOVER_DEVICES_INTERVAL
           value: "{{ rook_discover_devices_interval | default('60m') }}"
@@ -153,6 +198,49 @@ spec:
         # Disable automatic orchestration when new devices are discovered
         - name: ROOK_DISABLE_DEVICE_HOTPLUG
           value: "{{ rook_disable_device_hotplug | default('false') }}"
+
+       # Whether to enable the flex driver. By default it is enabled and is fully supported, but will be deprecated in some future release
+        # in favor of the CSI driver.
+        - name: ROOK_ENABLE_FLEX_DRIVER
+          value: "{{ rook_enable_flex_driver | default('false') }}"
+
+        # Whether to start the discovery daemon to watch for raw storage devices on nodes in the cluster.
+        # This daemon does not need to run if you are only going to create your OSDs based on StorageClassDeviceSets with PVCs.
+        - name: ROOK_ENABLE_DISCOVERY_DAEMON
+          value: "{{ rook_enable_discovery_daemon | default('true') }}"
+
+        # Enable the CSI driver.
+        # To run the non-default version of the CSI driver, see the override-able image properties in operator.yaml
+        - name: ROOK_CSI_ENABLE_CEPHFS
+          value: "{{ rook_csi_enable_cephfs | default('true') }}"
+        - name: ROOK_CSI_ENABLE_RBD
+          value: "{{ rook_csi_enable_rbd | default('true') }}"
+
+# CSI images definition for https://jira.coreos.com/browse/RHSTOR-150
+{% if ceph_csi_image %}
+        - name: ROOK_CSI_CEPH_IMAGE
+          value: "{{ ceph_csi_image }}"
+{% endif %}
+{% if rook_csi_registrar_image %}
+        - name: ROOK_CSI_REGISTRAR_IMAGE
+          value: "{{ rook_csi_registrar_image }}"
+{% endif %}
+{% if rook_csi_provisioner_image %}
+        - name: ROOK_CSI_PROVISIONER_IMAGE
+          value: "{{ rook_csi_provisioner_image }}"
+{% endif %}
+{% if rook_csi_snapshotter_image %}
+        - name: ROOK_CSI_SNAPSHOTTER_IMAGE
+          value: "{{ rook_csi_snapshotter_image }}"
+{% endif %}
+{% if rook_csi_attacher_image  %}
+        - name: ROOK_CSI_ATTACHER_IMAGE
+          value: "{{ rook_csi_attacher_image }}"
+{% endif %}
+# End of CSI sidecars definition
+
+        - name: ROOK_HOSTPATH_REQUIRES_PRIVILEGED
+          value: "{{ rook_hostpath_requires_privileged | default('true') }}"
         # The name of the node to pass with the downward API
         - name: NODE_NAME
           valueFrom:
@@ -173,4 +261,4 @@ spec:
         emptyDir: {}
       - name: default-config-dir
         emptyDir: {}
-
+# OLM: END OPERATOR DEPLOYMENT

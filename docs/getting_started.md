@@ -10,6 +10,26 @@
 3. oc client binary is installed on your localhost and binary is listed in $PATH
    (running oc version on terminal should display version > 3.11).
    Latest client can be downloaded from [oc-client](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/).
+4. For vSphere based installations, [terraform](https://learn.hashicorp.com/terraform/getting-started/install.html)
+   and [jq]( https://stedolan.github.io/jq/download/) should be installed ( terraform version should be 0.11.13  )
+
+#### AWS UPI
+There are additional prerequisites if you plan to execute AWS UPI deployments
+
+1. Install the `jq` and `awscli` system packages
+
+##### Mac OSX Users
+The system `sed` package is not compatible with the script used to install AWS
+UPI. To resolve this issue, you must install `gnu-sed`. You can do this with brew.
+
+    brew install gnu-sed
+
+In addition to this, you will need to ensure that `gnu-sed` is used instead
+of the system `sed`. To do this you will need to update your PATH accordingly.
+In your shell rc file (`~/.bashrc`, `~/.zshrc`, etc.) add the following
+line to the end of the file.
+
+    export PATH="/usr/local/opt/gnu-sed/libexec/gnubin:$PATH"
 
 ## Installing
 
@@ -27,7 +47,7 @@ necessary dependencies
     * `python3.7 -m venv <path/to/venv>`
     * `source <path/to/.venv>/bin/activate`
 
-4. Upgrade pip with `pip install --upgrade pip`
+4. Upgrade pip and setuptools with `pip install --upgrade pip setuptools`
 5. Install requirements with `pip install -r requirements.txt`
 
 ## Initial Setup
@@ -37,8 +57,7 @@ necessary dependencies
 Configure your ocs-ci.yaml and pass it with --ocsci-conf parameter
 
 This file is used to allow configuration around a number of things within ocs-ci.
-The default file is in conf/ocsci/default_config.yaml.
-TODO: Once moved to pytest update properly this file: `ocs-ci.yaml.template`.
+The default file is in `ocs_ci/framework/conf/default_config.yaml`.
 
 The required keys are in the template. Values are placeholders and should be replaced by legitimate values.
 Values for report portal or polarion are only required if you plan on posting to that particular service.
@@ -55,6 +74,40 @@ Download this file from [openshift.com](https://cloud.openshift.com/clusters/ins
 and place in the `data` directory at the root level of the project.
 If there is no `data` directory, create one.
 The name of the file should be `pull-secret`.
+
+In addition you will need to add a registry auth to your pull-secret to
+support deploying CI / Nightly builds. Please follow the instructions
+[here](https://mojo.redhat.com/docs/DOC-1204026) to do so.
+
+### SSH key
+
+We would like to use a shared ssh key with engineering which allows us to connect
+to the nodes via known ssh key for QE and engineering.
+To setup the shared public ssh key for your deployment you have to follow
+these steps:
+
+Download private openshift-dev ssh key from secret location to
+`~/.ssh/openshift-dev.pem`.
+
+```console
+chmod 600 ~/.ssh/openshift-dev.pem
+ssh-keygen -y -f ~/.ssh/openshift-dev.pem > ~/.ssh/openshift-dev.pub
+```
+
+Ask people on ocs-qe mailing list or chat room if you don't know where to find the
+secret URL for openshift-dev key. Or look for this mail thread:
+`Libra ssh key replaced by openshift-dev key` where the URL was mentioned.
+
+If you would like to use a different path, you can overwrite it in the custom
+config file under the DEPLOYMENT section with this key and value:
+`ssh_key: "~/your/custom/path/ssh-key.pub"`.
+
+If you don't want to use the shared key, you can change this value to
+`~/.ssh/id_rsa.pub` to use your own public key.
+
+> If the public key does not exist, the deployment of this public key is skipped.
+
+How to connect to the node via SSH you can find [here](./debugging.md).
 
 ## Tests
 

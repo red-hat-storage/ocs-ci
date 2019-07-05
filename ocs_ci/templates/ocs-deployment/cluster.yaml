@@ -20,7 +20,7 @@ spec:
     # v12 is luminous, v13 is mimic, and v14 is nautilus.
     # RECOMMENDATION: In production, use a specific version tag instead of the general v14 flag, which pulls the latest release and could result in different
     # versions running within the cluster. See tags available at https://hub.docker.com/r/ceph/ceph/tags/.
-    image: {{ ceph_image | default('ceph/ceph:v14.2.0-20190410') }}
+    image: {{ ceph_image | default('ceph/ceph:v14.2.2-20190826') }}
     # Whether to allow unsupported versions of Ceph. Currently luminous, mimic and nautilus are supported, with the recommendation to upgrade to nautilus.
     # Do not set to true in production.
     allowUnsupported: {{ allow_unsupported_ceph | default('true') }}
@@ -43,6 +43,16 @@ spec:
     {% endif %}
     # serve the dashboard using SSL
     # ssl: true
+  # enable prometheus alerting for cluster
+  monitoring:
+    # requires Prometheus to be pre-installed
+    enabled: {{ monitoring_enabled | default('false') }}
+    # namespace to deploy prometheusRule in. If empty, namespace of the cluster will be used.
+    # Recommended:
+    # If you have a single rook-ceph cluster, set the rulesNamespace to the same namespace as the cluster or keep it empty.
+    # If you have multiple rook-ceph clusters in the same k8s cluster, choose the same namespace (ideally, namespace with prometheus
+    # deployed) to set rulesNamespace for all the clusters. Otherwise, you will get duplicate alerts with multiple alert definitions.
+    rulesNamespace: {{ cluster_namespace | default('openshift-storage') }}
   network:
     # toggle to use hostNetwork
     hostNetwork: false
@@ -103,6 +113,7 @@ spec:
       # The default and recommended storeType is dynamically set to bluestore for devices and filestore for directories.
       # Set the storeType explicitly only if it is required not to use the default.
       # storeType: bluestore
+      # metadataDevice: "md0" # specify a non-rotational storage so ceph-volume will use it as block db device of bluestore.
       # databaseSizeMB: "1024" # uncomment if the disks are smaller than 100 GB
       # journalSizeMB: "1024"  # uncomment if the disks are 20 GB or smaller
       # osdsPerDevice: "1" # this value can be overridden at the node or device level
