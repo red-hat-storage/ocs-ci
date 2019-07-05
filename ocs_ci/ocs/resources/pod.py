@@ -13,6 +13,8 @@ import base64
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants, defaults, workload
+from ocs_ci.ocs import constants, defaults
+from ocs_ci.utility import templating
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.ocs import OCS
@@ -455,3 +457,20 @@ def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
     osds = get_pods_having_label(osd_label, namespace)
     osd_pods = [Pod(**osd) for osd in osds]
     return osd_pods
+
+
+def get_resource_obj(name, kind, namespace=None):
+    """
+    Returns the pod obj for the given pod
+
+    Args:
+        name (str): name of the resources
+        kind (str): kind of the resources
+
+    Returns:
+        obj : obj of the given name of the rsource
+    """
+    ocp_obj = OCP(api_version='v1', kind=kind, namespace=namespace)
+    ocp_dict = ocp_obj.get(resource_name=name)
+    pod_obj = Pod(**ocp_dict)
+    return pod_obj
