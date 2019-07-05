@@ -57,7 +57,8 @@ def run_io_on_pool():
 
 
 @tier4
-class TestOcs355(ManageTest):
+@pytest.mark.polarion_id("OCS-355")
+class TestRemoveMonFromCluster(ManageTest):
 
     def test_remove_mon_pod_from_cluster(self):
         """
