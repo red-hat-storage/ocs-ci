@@ -154,7 +154,8 @@ def create_ceph_block_pool(pool_name=None):
 
 
 def create_storage_class(
-    interface_type, interface_name, secret_name, sc_name=None
+    interface_type, interface_name, secret_name,
+    reclaim_policy='Delete', sc_name=None
 ):
     """
     Create a storage class
@@ -165,6 +166,8 @@ def create_storage_class(
         interface_name (str): The name of the interface
         secret_name (str): The name of the secret
         sc_name (str): The name of storage class to create
+        reclaim_policy (str): Type of reclaim policy. Defaults to 'Delete'
+            (eg., 'Delete', 'Retain')
 
     Returns:
         OCS: An OCS instance for the storage class
@@ -207,6 +210,7 @@ def create_storage_class(
     ] = defaults.ROOK_CLUSTER_NAMESPACE
 
     sc_data['parameters']['clusterID'] = defaults.ROOK_CLUSTER_NAMESPACE
+    sc_data['reclaimPolicy'] = reclaim_policy
 
     try:
         del sc_data['parameters']['userid']
