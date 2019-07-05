@@ -4,7 +4,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
-from ocs_ci.ocs.resources.pod import get_resource_obj
+from ocs_ci.ocs.resources.pod import get_pod_obj
 from tests import helpers
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ def validate_pvc_are_mounted_on_monitoring_pods(pod_list):
         pod_list (list): List of the pods where pvc are mounted
     """
     for pod in pod_list:
-        pod_obj = get_resource_obj(
+        pod_obj = get_pod_obj(
             name=pod, kind='Pod', namespace='openshift-monitoring'
         )
         mount_point = pod_obj.exec_cmd_on_pod(command="df -kh")
