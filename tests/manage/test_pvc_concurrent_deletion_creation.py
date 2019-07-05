@@ -13,10 +13,9 @@ from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool, create_rbd_secret
 )
 from ocs_ci.utility.templating import load_yaml_to_dict
+from tests.helpers import create_unique_resource_name
 
 log = logging.getLogger(__name__)
-TEST_PROJECT = 'test-project'
-PROJECT = ocp.OCP(kind='Project', namespace=TEST_PROJECT)
 
 
 @pytest.fixture()
@@ -38,13 +37,15 @@ def setup(self):
     Create PVCs
     """
     # Create new project
-    assert PROJECT.new_project(TEST_PROJECT), (
-        f'Failed to create new project {TEST_PROJECT}'
+    self.namespace = create_unique_resource_name('test', 'namespace')
+    self.project_obj = ocp.OCP(kind='Project', namespace=self.namespace)
+    assert self.project_obj.new_project(self.namespace), (
+        f'Failed to create new project {self.namespace}'
     )
 
     # Parameters for PVC yaml as dict
     pvc_data = load_yaml_to_dict(constants.CSI_PVC_YAML)
-    pvc_data['metadata']['namespace'] = TEST_PROJECT
+    pvc_data['metadata']['namespace'] = self.namespace
     pvc_data['spec']['storageClassName'] = self.sc_obj.name
     pvc_data['metadata']['name'] = self.pvc_base_name
 
@@ -69,7 +70,7 @@ def teardown(self):
     Delete project
     """
     # Delete newly created PVCs
-    assert delete_all_pvcs(namespace=TEST_PROJECT), 'Failed to delete PVCs'
+    assert delete_all_pvcs(namespace=self.namespace), 'Failed to delete PVCs'
     log.info(f'Newly created {self.number_of_pvc} PVCs are now deleted.')
 
     # Switch to default project
@@ -77,7 +78,7 @@ def teardown(self):
     assert ret, 'Failed to switch to default rook cluster project'
 
     # Delete project created for the test case
-    PROJECT.delete(resource_name=TEST_PROJECT)
+    self.project_obj.delete(resource_name=self.namespace)
 
 
 @tier1
@@ -105,7 +106,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         # Start deleting 100 PVCs
         command = (
             f'for i in `seq 1 {self.number_of_pvc}`;do oc delete pvc '
-            f'{self.pvc_base_name}$i -n {TEST_PROJECT};done'
+            f'{self.pvc_base_name}$i -n {self.namespace};done'
         )
         proc = run_async(command)
         assert proc, (
@@ -115,7 +116,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         # Create 100 new PVCs
         # Parameters for PVC yaml as dict
         pvc_data = load_yaml_to_dict(constants.CSI_PVC_YAML)
-        pvc_data['metadata']['namespace'] = TEST_PROJECT
+        pvc_data['metadata']['namespace'] = self.namespace
         pvc_data['spec']['storageClassName'] = self.sc_obj.name
         pvc_data['metadata']['name'] = self.pvc_base_name_new
 
