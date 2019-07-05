@@ -8,6 +8,8 @@ functional and proper configurations are made for interaction.
 
 import logging
 import base64
+import random
+import re
 
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.resources import ocs
@@ -48,6 +50,10 @@ class CephCluster(object):
         )
         self.CEPHFS = ocp.OCP(
             kind='CephFilesystem',
+            namespace=config.ENV_DATA['cluster_namespace']
+        )
+        self.DEP = ocp.OCP(
+            kind='Deployment',
             namespace=config.ENV_DATA['cluster_namespace']
         )
 
@@ -331,3 +337,30 @@ class CephCluster(object):
         out = self.toolbox.exec_cmd_on_pod(cmd)
         logging.info(type(out))
         return self.get_user_key(username)
+
+    def get_mons_from_cluster(self):
+        """
+        Getting the list of mons from the cluster
+
+        Returns:
+            available_mon (list): Returns the mons from the cluster
+        """
+
+        ret = self.DEP.get(
+            resource_name='', out_yaml_format=False, selector='app=rook-ceph-mon'
+        )
+        available_mon = re.findall(r'[\w-]+mon-+[\w-]', ret)
+        return available_mon
+
+    def remove_mon_from_cluster(self):
+        """
+        Removing the mon pod from deployment
+
+        Returns:
+            remove_mon(bool): True if removal of mon is successful, False otherwise
+        """
+
+        mons = self.get_mons_from_cluster()
+        remove_mon = self.DEP.delete(resource_name=random.choice(mons))
+        logging.info(f"Removed the mon {mons} from the cluster")
+        return remove_mon
