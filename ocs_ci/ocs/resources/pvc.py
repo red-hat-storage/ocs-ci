@@ -85,7 +85,7 @@ def delete_all_pvcs(namespace=None):
     ocp_pvc_obj = OCP(
         kind=constants.PVC, namespace=namespace
     )
-    ocp_pvc_list = get_all_pvcs()
+    ocp_pvc_list = get_all_pvcs(namespace=namespace)
     pvc_list = ocp_pvc_list['items']
     for item in pvc_list:
         ocp_pvc_obj.delete(resource_name=item.get('metadata').get('name'))
