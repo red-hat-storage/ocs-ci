@@ -12,9 +12,8 @@ from threading import Thread
 import base64
 
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs import constants, defaults, workload
+from ocs_ci.ocs import workload
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.utility import templating
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.ocs import OCS
@@ -474,4 +473,3 @@ def get_pod_obj(name, kind, namespace=None):
     ocp_dict = ocp_obj.get(resource_name=name)
     pod_obj = Pod(**ocp_dict)
     return pod_obj
-
