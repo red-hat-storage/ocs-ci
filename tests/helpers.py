@@ -304,6 +304,8 @@ def validate_cephfilesystem(fs_name):
     cmd = "ceph fs ls"
     logger.info(fs_name)
     out = ct_pod.exec_ceph_cmd(ceph_cmd=cmd)
+    # TO DELETE
+    logger.info(f"OUT={out}")
     if out:
         out = out[0]['name']
         logger.info(out)
@@ -419,12 +421,12 @@ def create_cephfilesystem():
     POD = pod.get_all_pods(
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
-    for pod_names in POD:
-        if 'rook-ceph-mds' in pod_names.labels.values():
-            assert pod_names.ocp.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                selector='app=rook-ceph-mds'
-            )
+    assert POD[0].ocp.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector='app=rook-ceph-mds',
+        timeout=120
+    )
+
     assert validate_cephfilesystem(fs_name=fs_data['metadata']['name'])
     return True
 

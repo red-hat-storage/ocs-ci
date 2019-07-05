@@ -20,6 +20,9 @@ from ocs_ci.ocs import exceptions
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_TIMEOUT = 1200
+
+
 class CephCluster(object):
     """
     Handles all cluster related operations from ceph perspective
@@ -72,6 +75,8 @@ class CephCluster(object):
         self.cluster = ocs.OCS(**self.cluster_resource_config)
         if self.cephfs_config:
             self.cephfs = ocs.OCS(**self.cephfs_config)
+        else:
+            self.cephfs = None
 
         self.mon_selector = constant.MON_APP_LABEL
         self.mds_selector = constant.MDS_APP_LABEL
@@ -119,8 +124,16 @@ class CephCluster(object):
         # set port attrib on mon pods
         self.mons = list(map(self.set_port, self.mons))
         self.cluster.reload()
-        if self.cephfs_config:
+        if self.cephfs:
             self.cephfs.reload()
+        else:
+            try:
+                self.cephfs_config = self.CEPHFS.get().get('items')[0]
+                self.cephfs = ocs.OCS(**self.cephfs_config)
+                self.cephfs.reload()
+            except IndexError as e:
+                logging.warning(e)
+                logging.warning("No CephFS found")
 
         self.mon_count = len(self.mons)
         self.mds_count = len(self.mdss)
@@ -155,7 +168,7 @@ class CephCluster(object):
         self.cluster.reload()
         return self.cluster.data['status']['ceph']['health'] == "HEALTH_OK"
 
-    def cluster_health_check(self, timeout=0):
+    def cluster_health_check(self, timeout=DEFAULT_TIMEOUT):
         """
         Check overall cluster health.
         Relying on health reported by CephCluster.get()
@@ -172,7 +185,9 @@ class CephCluster(object):
         Raises:
             CephHealthException: if cluster is not healthy
         """
-        timeout = 10 * len(self.pods)
+        if timeout == DEFAULT_TIMEOUT:
+            # Scale timeout only if user hasn't passed any value
+            timeout = 10 * len(self.pods)
         sample = TimeoutSampler(
             timeout=timeout, sleep=3, func=self.is_health_ok
         )
@@ -243,6 +258,8 @@ class CephCluster(object):
                 condition='Running', selector=self.mon_selector,
                 resource_count=count, timeout=timeout, sleep=3,
             )
+            actual = len(pod.get_mon_pods())
+            assert count == actual, f"Expected {count},  Got{actual}"
         except exceptions.TimeoutExpiredError as e:
             logger.error(e)
             raise exceptions.MonCountException(
