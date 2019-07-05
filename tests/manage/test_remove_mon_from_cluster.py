@@ -20,14 +20,9 @@ from ocs_ci.ocs.exceptions import CephHealthException
 
 log = logging.getLogger(__name__)
 
-POD = ocp.OCP(
-    kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
-)
-HEALTH = CephCluster()
-
 
 @retry(CephHealthException, 8, 3, 1)
-def verify_mon_pod_up():
+def verify_mon_pod_up(ceph_cluster, pods):
     """
     Verify mon pods are in Running state.
 
@@ -36,8 +31,8 @@ def verify_mon_pod_up():
 
     """
     log.info(f"Verifying all mons pods are up and Running")
-    HEALTH.cluster_health_check(timeout=3)
-    ret = POD.wait_for_resource(
+    ceph_cluster.cluster_health_check(timeout=3)
+    ret = pods.wait_for_resource(
         condition=constants.STATUS_RUNNING, selector='app=rook-ceph-mon',
         resource_count=3, timeout=700)
     log.info(f"waited for all mon pod to come up and running {ret}")
@@ -62,7 +57,8 @@ def run_io_on_pool():
 
 
 @tier4
-class TestOcs355(ManageTest):
+@pytest.mark.polarion_id("OCS-355")
+class TestRemoveMonFromCluster(ManageTest):
 
     def test_remove_mon_pod_from_cluster(self):
         """
@@ -72,13 +68,17 @@ class TestOcs355(ManageTest):
         new mon pod on its own
 
         """
-        list_mons = HEALTH.get_mons_from_cluster()
+        ceph_cluster = CephCluster()
+        pods = ocp.OCP(
+            kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
+        )
+        list_mons = ceph_cluster.get_mons_from_cluster()
         assert len(list_mons) > 1, pytest.skip(
             "INVALID: Mon count should be more than one to delete."
         )
         assert run_io_on_pool(), 'Failed to run I/O on the pool'
         assert delete_cephblockpool('test-pool'), 'Failed to delete pool'
-        HEALTH.cluster_health_check(timeout=0)
-        HEALTH.remove_mon_from_cluster()
-        assert verify_mon_pod_up(), f"Mon pods are not up and running state"
-        HEALTH.cluster_health_check(timeout=60)
+        ceph_cluster.cluster_health_check(timeout=0)
+        ceph_cluster.remove_mon_from_cluster()
+        assert verify_mon_pod_up(ceph_cluster, pods), f"Mon pods are not up and running state"
+        ceph_cluster.cluster_health_check(timeout=60)
