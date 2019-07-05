@@ -9,6 +9,7 @@ from ocs_ci.utility import templating
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.exceptions import CommandFailed
 
 logger = logging.getLogger(__name__)
 
@@ -388,7 +389,7 @@ def get_cephblockpool_name():
     return pool_list
 
 
-def delete_cephblockpool():
+def delete_cephblockpool(pool_name=None):
     """
     Function for deleting CephBlockPool
 
@@ -400,9 +401,12 @@ def delete_cephblockpool():
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
     pool_list = get_cephblockpool_name()
-    for item in pool_list:
-        logger.info(f"Deleting CephBlockPool with name {item}")
-        assert POOL.delete(resource_name=item)
+    if pool_name:
+        assert POOL.delete(resource_name=pool_name)
+    else:
+        for item in pool_list:
+            logger.info(f"Deleting CephBlockPool with name {item}")
+            assert POOL.delete(resource_name=item)
     return True
 
 
@@ -464,3 +468,62 @@ def get_cephfs_name():
     )
     result = CFS.get()
     return result['items'][0].get('metadata').get('name')
+
+
+def run_io_with_rados_bench(**kw):
+    """ A task for radosbench
+
+        Runs radosbench command on specified pod . If parameters are
+        not provided task assumes few default parameters.This task
+        runs command in synchronous fashion.
+
+
+        Args:
+            **kw: Needs a dictionary of various radosbench parameters.
+                ex: pool_name:pool
+                    pg_num:number of pgs for pool
+                    op: type of operation {read, write}
+                    cleanup: True OR False
+
+
+        Returns:
+            ret: return value of radosbench command
+    """
+
+    logger.info("Running radosbench task")
+    ceph_pods = kw.get('ceph_pods')  # list of pod objects of ceph cluster
+    config = kw.get('config')
+
+    clients = []
+    role = config.get('role', 'client')
+    clients = [cpod for cpod in ceph_pods if role in cpod.roles]
+
+    idx = config.get('idx', 0)
+    client = clients[idx]
+    op = config.get('op', 'write')
+    cleanup = ['--no-cleanup', '--cleanup'][config.get('cleanup', True)]
+    pool = config.get('pool')
+
+    pool = create_ceph_block_pool(pool)
+    block = str(config.get('size', 4 << 20))
+    time = config.get('time', 120)
+    time = str(time)
+
+    rados_bench = (
+        f"rados --no-log-to-stderr "
+        f"-b {block} "
+        f"-p {pool.name} "
+        f"bench "
+        f"{time} "
+        f"{op} "
+        f"{cleanup} "
+    )
+    try:
+        ret = client.exec_ceph_cmd(ceph_cmd=rados_bench)
+    except CommandFailed as ex:
+        logger.error(f"Rados bench failed\n Error is: {ex}")
+        return False
+
+    logger.info(ret)
+    logger.info("Finished radosbench")
+    return ret
