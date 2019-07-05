@@ -7,7 +7,6 @@ Polarion-ID- OCS-355
 """
 
 import logging
-import time
 import pytest
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.testlib import tier4, ManageTest
