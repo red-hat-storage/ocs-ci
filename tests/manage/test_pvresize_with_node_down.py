@@ -3,7 +3,6 @@ OCS-368
 """
 import logging
 import pytest
-import json
 from time import sleep
 import threading
 
