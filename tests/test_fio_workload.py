@@ -17,29 +17,35 @@ from tests.fixtures import (
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='class')
-def test_fixture(request):
-    """
-    Fixture only for teardown
-    """
-
+@pytest.fixture()
+def pod_cleanup(request):
     self = request.node.cls
 
     def finalizer():
-        teardown(self)
+        if 'pod_obj' in self.__dict__:
+            logger.info(f"Deleting pod {self.pod_obj.name}")
+            self.pod_obj.delete()
+        else:
+            logger.info(f"No pod_obj is present")
     request.addfinalizer(finalizer)
 
 
-def teardown(self):
-    logger.info(f"Deleting pod {self.pod_obj.name}")
-    self.pod_obj.delete()
-    self.pvc_obj.reload()
-    pv = pvc.get_pv_for_pvc(self.pvc_obj)
-    logger.info(f"PV for PVC is {pv.name}")
-    logger.info(f"Deleting PVC {self.pvc_obj.name}")
-    self.pvc_obj.delete()
-    logger.info(f"Deleting PV {pv.name}")
-    pv.delete()
+@pytest.fixture()
+def pvc_cleanup(request):
+    self = request.node.cls
+
+    def finalizer():
+        if 'pvc_obj' in self.__dict__:
+            self.pvc_obj.reload()
+            pv = pvc.get_pv_for_pvc(self.pvc_obj)
+            logger.info(f"PV for PVC is {pv.name}")
+            logger.info(f"Deleting PVC {self.pvc_obj.name}")
+            self.pvc_obj.delete()
+            logger.info(f"Deleting PV {pv.name}")
+            pv.delete()
+        else:
+            logger.warning(f"No PVC found")
+    request.addfinalizer(finalizer)
 
 
 @pytest.mark.usefixtures(
@@ -48,7 +54,8 @@ def teardown(self):
     create_rbd_storageclass.__name__,
     create_pvc.__name__,
     create_pod.__name__,
-    test_fixture.__name__,
+    pvc_cleanup.__name__,
+    pod_cleanup.__name__,
 )
 class TestFIOWorkload(ManageTest):
 
