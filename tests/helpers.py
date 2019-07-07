@@ -304,8 +304,6 @@ def validate_cephfilesystem(fs_name):
     cmd = "ceph fs ls"
     logger.info(fs_name)
     out = ct_pod.exec_ceph_cmd(ceph_cmd=cmd)
-    # TO DELETE
-    logger.info(f"OUT={out}")
     if out:
         out = out[0]['name']
         logger.info(out)

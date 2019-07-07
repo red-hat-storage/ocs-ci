@@ -20,7 +20,9 @@ from ocs_ci.ocs import exceptions
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_TIMEOUT = 1200
+# This value will not be consumed as is , instead it will be scaled based on
+# number of pods in the cluster
+DEFAULT_TIMEOUT = 300
 
 
 class CephCluster(object):
@@ -259,7 +261,7 @@ class CephCluster(object):
                 resource_count=count, timeout=timeout, sleep=3,
             )
             actual = len(pod.get_mon_pods())
-            assert count == actual, f"Expected {count},  Got{actual}"
+            assert count == actual, f"Expected {count},  Got {actual}"
         except exceptions.TimeoutExpiredError as e:
             logger.error(e)
             raise exceptions.MonCountException(
