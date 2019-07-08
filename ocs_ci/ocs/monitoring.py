@@ -3,7 +3,7 @@ import logging
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pvc import get_all_pvcs
+from ocs_ci.ocs.resources.pvc import get_all_pvcs, PVC
 from ocs_ci.ocs.resources.pod import get_pod_obj
 from tests import helpers
 
@@ -59,7 +59,7 @@ def validate_pvc_are_mounted_on_monitoring_pods(pod_list):
             name=pod, kind='Pod', namespace='openshift-monitoring'
         )
         mount_point = pod_obj.exec_cmd_on_pod(command="df -kh")
-        assert "/dev/rbd" in mount_point
+        assert "/dev/rbd" in mount_point, f"pvc is not mounted on pod {pod}"
     logger.info("Verified all pvc are mounted on monitoring pods")
 
 
@@ -80,3 +80,19 @@ def validate_monitoring_pods_are_respinned_and_running_state(pods_list):
             condition=constants.STATUS_RUNNING, resource_name=pod
         ), f"failed to reach pod {pod} "
         f"desired status {constants.STATUS_RUNNING}"
+
+
+def get_list_pvc_objs_created_on_monitoring_pods():
+    """
+    Returns list of pvc objects
+    """
+    pvc_list = get_all_pvcs(namespace='openshift-monitoring')
+    ocp_pvc_obj = OCP(
+        kind=constants.PVC, namespace='openshift-monitoring'
+    )
+    pvc_obj_list = []
+    for pvc in pvc_list['items']:
+        pvc_dict = ocp_pvc_obj.get(resource_name=pvc.get('metadata').get('name'))
+        pvc_obj = PVC(**pvc_dict)
+        pvc_obj_list.append(pvc_obj)
+    return pvc_obj_list

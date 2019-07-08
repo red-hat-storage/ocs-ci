@@ -458,13 +458,12 @@ def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
     return osd_pods
 
 
-def get_pod_obj(name, kind, namespace=None):
+def get_pod_obj(name, kind='Pod', namespace=None):
     """
     Returns the pod obj for the given pod
 
     Args:
-        name (str): name of the resources
-        kind (str): kind of the resources
+        name (str): Name of the resources
 
     Returns:
         obj : A pod object

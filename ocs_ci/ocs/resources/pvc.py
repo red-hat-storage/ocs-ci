@@ -73,8 +73,10 @@ class PVC(OCS):
 def delete_pvcs(pvc_objs):
     """
     Deletes list of the pvc objects
+
     Args:
         pvc_objs (list): List of the pvc objects to be deleted
+
     Returns:
         bool: True if deletion is successful
     """
