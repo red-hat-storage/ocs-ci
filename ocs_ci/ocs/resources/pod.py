@@ -177,7 +177,7 @@ class Pod(OCS):
 
     def run_io(
         self, storage_type, size, io_direction='rw', rw_ratio=75,
-        jobs=1, runtime=60,
+        jobs=1, runtime=60, fio_filename=None
     ):
         """
         Execute FIO on a pod
@@ -199,6 +199,7 @@ class Pod(OCS):
                 equivalent to 3 reads are performed for every 1 write)
             jobs (int): Number of jobs to execute FIO
             runtime (int): Number of seconds IO should run for
+            fio_filename(str): Name of fio file created on app pod's mount point
         """
         name = 'test_workload'
         spec = self.pod_data.get('spec')
@@ -225,6 +226,8 @@ class Pod(OCS):
             )
         io_params['runtime'] = runtime
         io_params['size'] = size
+        if fio_filename:
+            io_params['filename'] = fio_filename
 
         self.fio_thread = wl.run(**io_params)
 
