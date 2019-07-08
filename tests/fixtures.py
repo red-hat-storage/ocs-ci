@@ -1,7 +1,6 @@
 import pytest
 from tests import helpers
-from ocs_ci.ocs import constants, defaults
-from ocs_ci.utility import templating
+from ocs_ci.ocs import constants
 
 
 @pytest.fixture()

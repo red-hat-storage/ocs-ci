@@ -20,6 +20,7 @@ class BaseDisruption(ManageTest):
     """
     pod_obj = None
     pvc_obj = None
+    storage_type = None
 
     def disruptive_base(self, operation_to_disrupt, resource_to_delete):
         """
@@ -40,12 +41,12 @@ class BaseDisruption(ManageTest):
         if operation_to_disrupt == 'create_pod':
             DISRUPTION_OPS.delete_resource()
         self.pod_obj.reload()
-        assert self.pod_obj.ocp.wait_for_resource(condition=constants.STATUS_RUNNING, resource_name=self.pod_obj.name)
 
-        thread = pod.run_io_in_bg(self.pod_obj, expect_to_fail=True)
+        assert self.pod_obj.ocp.wait_for_resource(condition=constants.STATUS_RUNNING, resource_name=self.pod_obj.name)
+        self.pod_obj.run_io(storage_type=self.storage_type, size='1G')
         if operation_to_disrupt == 'run_io':
             DISRUPTION_OPS.delete_resource()
-        thread.join(timeout=10)
+
         self.pod_obj.delete()
         self.pvc_obj.delete()
 
@@ -60,6 +61,8 @@ class TestRBDDisruption(BaseDisruption):
     """
     RBD PVC related disruption tests class
     """
+    storage_type = 'block'
+
     @pytest.mark.parametrize(
         argnames=["operation_to_disrupt", "resource_to_delete"],
         argvalues=[
@@ -91,6 +94,8 @@ class TestFSDisruption(BaseDisruption):
     """
     CephFS PVC related disruption tests class
     """
+    storage_type = 'fs'
+
     @pytest.mark.parametrize(
         argnames=["operation_to_disrupt", "resource_to_delete"],
         argvalues=[
