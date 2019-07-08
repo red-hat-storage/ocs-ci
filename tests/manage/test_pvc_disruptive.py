@@ -1,7 +1,6 @@
 import pytest
 import logging
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources import pod
 from tests import helpers, disruption_helpers
 from ocs_ci.framework.testlib import ManageTest, tier4
 from tests.fixtures import (
