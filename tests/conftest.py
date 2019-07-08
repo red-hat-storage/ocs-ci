@@ -111,7 +111,6 @@ def cluster(request):
 
     # Generate install-config from template
     log.info("Generating install-config")
-    run_cmd(f"mkdir -p {cluster_path}")
     pull_secret_path = os.path.join(
         constants.TOP_DIR,
         "data",
