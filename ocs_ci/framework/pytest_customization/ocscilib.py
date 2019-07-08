@@ -146,6 +146,7 @@ def process_cluster_cli_params(config):
     cluster_path = get_cli_param(config, 'cluster_path')
     if not cluster_path:
         raise ClusterPathNotProvidedError()
+    cluster_path = os.path.expanduser(cluster_path)
     if not os.path.exists(cluster_path):
         os.makedirs(cluster_path)
     # Importing here cause once the function is invoked we have already config
