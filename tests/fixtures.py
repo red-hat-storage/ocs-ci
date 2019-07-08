@@ -26,7 +26,7 @@ def create_rbd_secret(request):
 
 
 @pytest.fixture()
-def create_fs_secret(request):
+def create_cephfs_secret(request):
     """
     Create a CephFS secret
     """

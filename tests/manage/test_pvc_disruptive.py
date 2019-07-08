@@ -5,7 +5,7 @@ from tests import helpers, disruption_helpers
 from ocs_ci.framework.testlib import ManageTest, tier4
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool, create_cephfs_storageclass,
-    create_rbd_secret, create_fs_secret
+    create_rbd_secret, create_cephfs_secret
 )
 
 logger = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ class TestRBDDisruption(BaseDisruption):
 
 
 @pytest.mark.usefixtures(
-    create_fs_secret.__name__,
+    create_cephfs_secret.__name__,
     create_cephfs_storageclass.__name__,
 )
 @tier4
