@@ -38,11 +38,11 @@ def init_ocsci_conf(arguments=None):
     custom_config = get_param('--ocsci-conf', arguments)
     cluster_config = get_param('--cluster-conf', arguments)
     if custom_config:
-        with open(custom_config) as file_stream:
+        with open(os.path.expanduser(custom_config)) as file_stream:
             custom_config_data = yaml.safe_load(file_stream)
             framework.config.update(custom_config_data)
     if cluster_config:
-        with open(cluster_config) as file_stream:
+        with open(os.path.expanduser(cluster_config)) as file_stream:
             cluster_config_data = yaml.safe_load(file_stream)
             framework.config.update(cluster_config_data)
 
