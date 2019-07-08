@@ -17,6 +17,30 @@ We have markers defined in pytest_customization package under
 can import directly from `ocsci.testlib` module with this statement:
 `from ocsci.testlib import tier1` for example.
 
+## Bugzilla decorator
+
+You can mark test with specific bugzilla decorator as you can see in following
+example:
+:
+```python
+import pytest
+
+from ocs_ci.framework.testlib import bugzilla, ManageTest
+
+@bugzilla('1726266')
+class TestPvCreation(ManageTest):
+    pass
+
+
+# or you can directly use pytest.mark like:
+@pytest.mark.bugzilla('bugzilla_id')  # where bugzilla_id can be e.g. 1726266
+    pass
+```
+
+For more details what else is possible with `pytest_marker_bugzilla` plugin
+look at the
+[project documentation](https://github.com/eanxgeek/pytest_marker_bugzilla).
+
 
 ## Base test classes for teams
 

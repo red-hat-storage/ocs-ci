@@ -35,6 +35,7 @@ deployment = pytest.mark.deployment
 destroy = pytest.mark.destroy
 upgrade = pytest.mark.upgrade
 polarion_id = pytest.mark.polarion_id
+bugzilla = pytest.mark.bugzilla
 
 # mark the test class with marker below to ignore leftover check
 ignore_leftovers = pytest.mark.ignore_leftovers
