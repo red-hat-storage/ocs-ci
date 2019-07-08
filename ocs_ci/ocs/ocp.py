@@ -107,6 +107,28 @@ class OCP(object):
             command += " -o yaml"
         return self.exec_oc_cmd(command)
 
+    def describe(self, resource_name='', selector=None, all_namespaces=False):
+        """
+        Get command - 'oc describe <resource>'
+
+        Args:
+            resource_name (str): The resource name to fetch
+            selector (str): The label selector to look for
+            all_namespaces (bool): Equal to oc describe <resource> -A
+
+        Example:
+            describe('my-pv1')
+
+        Returns:
+            dict: Dictionary represents a returned yaml file
+        """
+        command = f"describe {self.kind} {resource_name}"
+        if all_namespaces and not self.namespace:
+            command += " -A"
+        if selector is not None:
+            command += f" --selector={selector}"
+        return self.exec_oc_cmd(command, out_yaml_format=False)
+
     def create(self, yaml_file=None, resource_name='', out_yaml_format=True):
         """
         Creates a new resource

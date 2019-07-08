@@ -1,0 +1,19 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo-pod
+  namespace: default
+spec:
+  nodeName: foo-node
+  containers:
+   - name: web-server
+     image: nginx
+     volumeMounts:
+       - name: mypvc
+         mountPath: /var/lib/www/html
+  volumes:
+   - name: mypvc
+     persistentVolumeClaim:
+       claimName: pvc
+       readOnly: false
