@@ -135,7 +135,7 @@ class OCP(object):
         if out_yaml_format:
             command += " -o yaml"
         output = self.exec_oc_cmd(command)
-        logging.info(f"{yaml.dump(output)}")
+        logging.debug(f"{yaml.dump(output)}")
         return output
 
     def delete(self, yaml_file=None, resource_name='', wait=True):
