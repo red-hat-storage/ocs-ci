@@ -266,6 +266,17 @@ def get_ceph_tools_pod():
     return ceph_pod
 
 
+def list_ceph_images(pool_name='rbd'):
+    """
+    Args:
+        pool_name (str): Name of the pool to get the ceph images
+
+    Returns (List): List of RBD images in the pool
+    """
+    ct_pod = get_ceph_tools_pod()
+    return ct_pod.exec_ceph_cmd(ceph_cmd=f"rbd ls {pool_name}", format='json')
+
+
 def check_file_existence(pod_obj, file_name):
     """
     Check if file exists inside the pod
