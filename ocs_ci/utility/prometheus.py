@@ -1,6 +1,7 @@
 import errno
 import logging
 import os
+import requests
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
@@ -57,11 +58,21 @@ class PrometheusAPI(object):
         route_obj = ocp.get(
             resource_name=defaults.PROMETHEUS_ROUTE
         )
-        self._endpoint = route_obj['spec']['host']
+        self._endpoint = 'https://' + route_obj['spec']['host']
         logger.info(self._endpoint)
 
     def alerts(self):
         """
         Get alerts from Prometheus API.
+
+        Returns:
+            dict: Response from Prometheus alerts api
         """
-        logger.info(f"token: {self._token}")
+        pattern = '/api/v1/alerts'
+        headers = {'Authorization': f"Bearer {self._token}"}
+        response = requests.get(
+            self._endpoint + pattern,
+            headers = headers,
+            verify=False
+        )
+        return response
