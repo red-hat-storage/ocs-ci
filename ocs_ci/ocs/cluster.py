@@ -20,11 +20,6 @@ from ocs_ci.ocs import exceptions
 logger = logging.getLogger(__name__)
 
 
-# This value will not be consumed as is , instead it will be scaled based on
-# number of pods in the cluster
-DEFAULT_TIMEOUT = 300
-
-
 class CephCluster(object):
     """
     Handles all cluster related operations from ceph perspective
@@ -170,7 +165,7 @@ class CephCluster(object):
         self.cluster.reload()
         return self.cluster.data['status']['ceph']['health'] == "HEALTH_OK"
 
-    def cluster_health_check(self, timeout=DEFAULT_TIMEOUT):
+    def cluster_health_check(self, timeout=None):
         """
         Check overall cluster health.
         Relying on health reported by CephCluster.get()
@@ -187,9 +182,8 @@ class CephCluster(object):
         Raises:
             CephHealthException: if cluster is not healthy
         """
-        if timeout == DEFAULT_TIMEOUT:
-            # Scale timeout only if user hasn't passed any value
-            timeout = 10 * len(self.pods)
+        # Scale timeout only if user hasn't passed any value
+        timeout = timeout or (10 * len(self.pods))
         sample = TimeoutSampler(
             timeout=timeout, sleep=3, func=self.is_health_ok
         )

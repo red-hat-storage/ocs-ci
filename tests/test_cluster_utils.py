@@ -22,7 +22,7 @@ def test_fixture(request):
     setup(self)
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture
 def mon_resource(request):
     self = request.node.cls
     mon_count = self.cluster_obj.mon_count
@@ -40,12 +40,13 @@ def mon_resource(request):
             f"but found {self.cluster_obj.mon_count}"
         )
     log.info("Removed mon")
-    (self.cluster_obj.cluster.data
-        ['spec']['mon']['allowMultiplePerNode']) = False
+    self.cluster_obj.cluster.data['spec']['mon'][
+        'allowMultiplePerNode'
+    ] = False
     self.cluster_obj.cluster.apply(**self.cluster_obj.cluster.data)
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture
 def mds_resource(request):
     self = request.node.cls
     we_created_fs = False
@@ -67,7 +68,7 @@ def mds_resource(request):
         self.cluster_obj.cephfs = None
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture
 def user_resource(request):
     self = request.node.cls
     log.info("Creating user")
