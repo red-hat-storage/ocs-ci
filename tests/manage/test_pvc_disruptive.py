@@ -32,7 +32,9 @@ class BaseDisruption(ManageTest):
         if operation_to_disrupt == 'create_pvc':
             DISRUPTION_OPS.delete_resource()
         self.pvc_obj.reload()
-        assert self.pvc_obj.ocp.wait_for_resource(condition=constants.STATUS_BOUND, resource_name=self.pvc_obj.name)
+        assert self.pvc_obj.ocp.wait_for_resource(
+            condition=constants.STATUS_BOUND, resource_name=self.pvc_obj.name, timeout=120
+        )
 
         self.pod_obj = helpers.create_pod(
             interface_type=constants.CEPHBLOCKPOOL, pvc=self.pvc_obj.name, wait=False
@@ -41,7 +43,9 @@ class BaseDisruption(ManageTest):
             DISRUPTION_OPS.delete_resource()
         self.pod_obj.reload()
 
-        assert self.pod_obj.ocp.wait_for_resource(condition=constants.STATUS_RUNNING, resource_name=self.pod_obj.name)
+        assert self.pod_obj.ocp.wait_for_resource(
+            condition=constants.STATUS_RUNNING, resource_name=self.pod_obj.name, timeout=120
+        )
         self.pod_obj.run_io(storage_type=self.storage_type, size='1G')
         if operation_to_disrupt == 'run_io':
             DISRUPTION_OPS.delete_resource()

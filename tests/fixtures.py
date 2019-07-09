@@ -14,15 +14,15 @@ def create_rbd_secret(request):
         """
         Delete the RBD secret
         """
-        if class_instance.secret_obj.get():
-            class_instance.secret_obj.delete()
+        if hasattr(class_instance, 'rbd_secret_obj'):
+            class_instance.rbd_secret_obj.delete()
 
     request.addfinalizer(finalizer)
 
-    class_instance.secret_obj = helpers.create_secret(
+    class_instance.rbd_secret_obj = helpers.create_secret(
         interface_type=constants.CEPHBLOCKPOOL
     )
-    assert class_instance.secret_obj, "Failed to create secret"
+    assert class_instance.rbd_secret_obj, "Failed to create secret"
 
 
 @pytest.fixture()
@@ -36,15 +36,15 @@ def create_cephfs_secret(request):
         """
         Delete the FS secret
         """
-        if class_instance.secret_obj.get():
-            class_instance.secret_obj.delete()
+        if hasattr(class_instance, 'cephfs_secret_obj'):
+            class_instance.cephfs_secret_obj.delete()
 
     request.addfinalizer(finalizer)
 
-    class_instance.secret_obj = helpers.create_secret(
+    class_instance.cephfs_secret_obj = helpers.create_secret(
         interface_type=constants.CEPHFILESYSTEM
     )
-    assert class_instance.secret_obj, f"Failed to create secret"
+    assert class_instance.cephfs_secret_obj, f"Failed to create secret"
 
 
 @pytest.fixture()
@@ -86,7 +86,7 @@ def create_rbd_storageclass(request):
     class_instance.sc_obj = helpers.create_storage_class(
         interface_type=constants.CEPHBLOCKPOOL,
         interface_name=class_instance.cbp_obj.name,
-        secret_name=class_instance.secret_obj.name
+        secret_name=class_instance.rbd_secret_obj.name
     )
     assert class_instance.sc_obj, "Failed to create storage class"
 
@@ -110,7 +110,7 @@ def create_cephfs_storageclass(request):
     class_instance.sc_obj = helpers.create_storage_class(
         interface_type=constants.CEPHFILESYSTEM,
         interface_name=helpers.get_cephfs_data_pool_name(),
-        secret_name=class_instance.secret_obj.name
+        secret_name=class_instance.cephfs_secret_obj.name
     )
     assert class_instance.sc_obj, f"Failed to create storage class"
 

@@ -24,12 +24,11 @@ class Disruptions:
             self.resource_obj = pod.get_mgr_pods()
         if self.resource == 'mon':
             self.resource_obj = pod.get_mon_pods()
-            self.resource_count = 3
         if self.resource == 'osd':
             self.resource_obj = pod.get_osd_pods()
         if self.resource == 'mds':
             self.resource_obj = pod.get_mds_pods()
-            self.resource_count = 2
+        self.resource_count = len(self.resource_obj)
 
     def delete_resource(self):
         self.resource_obj[0].delete(force=True)
