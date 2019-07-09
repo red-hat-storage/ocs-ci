@@ -21,7 +21,6 @@ from ocs_ci.ocs.openstack import CephVMNode
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.utility.utils import create_directory_path
 from ocs_ci.framework import config as ocsci_config
-from ocs_ci.ocs import defaults
 
 log = logging.getLogger(__name__)
 
