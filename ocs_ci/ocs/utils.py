@@ -646,5 +646,5 @@ def collect_ocs_logs(dir_name):
     dump_dir = os.path.join(log_dir_path, dir_name)
     cmd = f"adm must-gather --image=ashishranjan738/ocs-must-gather --dest-dir={dump_dir}"
     log.info(f"OCS logs are placed in location {dump_dir}")
-    occli = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    occli = OCP()
     occli.exec_oc_cmd(cmd, out_yaml_format=False)
