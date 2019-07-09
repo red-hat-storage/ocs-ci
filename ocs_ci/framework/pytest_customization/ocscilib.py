@@ -21,6 +21,7 @@ from ocs_ci.utility.utils import (
     get_rook_version,
     get_csi_versions
 )
+from ocs_ci.ocs.utils import collect_ocs_logs
 
 __all__ = [
     "pytest_addoption",
@@ -71,6 +72,13 @@ def pytest_addoption(parser):
         '--email',
         dest='email',
         help="Email ID to send results",
+    )
+    parser.addoption(
+        '--collect-logs',
+        dest='collect-logs',
+        action="store_true",
+        default=False,
+        help="Collect OCS logs when test case failed",
     )
 
 
@@ -170,6 +178,7 @@ def process_cluster_cli_params(config):
     ocsci_config.RUN['cli_params']['deploy'] = get_cli_param(config, "deploy", default=False)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
+    get_cli_param(config, 'collect-logs')
     if get_cli_param(config, 'email') and not get_cli_param(config, '--html'):
         pytest.exit("--html option must be provided to send email reports")
 
@@ -192,3 +201,17 @@ def pytest_collection_modifyitems(session, config, items):
                 f"{item.name} in {item.fspath}",
                 exc_info=True
             )
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    rep = outcome.get_result()
+    # we only look at actual failing test calls, not setup/teardown
+    if (
+        rep.when == "call"
+        and rep.failed
+        and ocsci_config.RUN.get('cli_params').get('collect-logs')
+    ):
+        test_case_name = item.name
+        collect_ocs_logs(test_case_name)
