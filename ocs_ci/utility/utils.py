@@ -323,7 +323,7 @@ def custom_ceph_config(suite_config, custom_config, custom_config_file):
     # retrieve custom config from file
     if custom_config_file:
         with open(custom_config_file) as f:
-            custom_config_dict = yaml.load(f)
+            custom_config_dict = yaml.safe_load(f)
             log.info("File contents: {}".format(custom_config_dict))
 
     # format cli configs into dict

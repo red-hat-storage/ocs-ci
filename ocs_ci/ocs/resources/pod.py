@@ -104,13 +104,13 @@ class Pod(OCS):
         """
         try:
             if self.fio_thread and self.fio_thread.done():
-                return yaml.load(self.fio_thread.result())
+                return yaml.safe_load(self.fio_thread.result())
             elif self.fio_thread.running():
                 for sample in TimeoutSampler(
                     timeout=FIO_TIMEOUT, sleep=3, func=self.fio_thread.done
                 ):
                     if sample:
-                        return yaml.load(self.fio_thread.result())
+                        return yaml.safe_load(self.fio_thread.result())
 
         except CommandFailed as ex:
             logger.exception(f"FIO failed: {ex}")
