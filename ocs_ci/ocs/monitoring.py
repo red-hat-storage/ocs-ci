@@ -1,4 +1,5 @@
 import logging
+import yaml
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
@@ -22,9 +23,11 @@ def create_configmap_cluster_monitoring_pod(sc_name):
     config_map = templating.load_yaml_to_dict(
         constants.CONFIGURE_PVC_ON_MONITORING_POD
     )
-    config_map['data']['config.yaml'] = config_map['data']['config.yaml'].replace(
-        'csi-rbd', sc_name
-    )
+    config = yaml.load(config_map['data']['config.yaml'])
+    config['prometheusK8s']['volumeClaimTemplate']['spec']['storageClassName'] = sc_name
+    config['alertmanagerMain']['volumeClaimTemplate']['spec']['storageClassName'] = sc_name
+    config = yaml.dump(config)
+    config_map['data']['config.yaml'] = config
     assert helpers.create_resource(**config_map, wait=False)
     ocp = OCP('v1', 'ConfigMap', 'openshift-monitoring')
     assert ocp.get(resource_name='cluster-monitoring-config')
@@ -56,7 +59,7 @@ def validate_pvc_are_mounted_on_monitoring_pods(pod_list):
     """
     for pod in pod_list:
         pod_obj = get_pod_obj(
-            name=pod, kind='Pod', namespace='openshift-monitoring'
+            name=pod, namespace='openshift-monitoring'
         )
         mount_point = pod_obj.exec_cmd_on_pod(command="df -kh")
         assert "/dev/rbd" in mount_point, f"pvc is not mounted on pod {pod}"

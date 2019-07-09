@@ -458,7 +458,7 @@ def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
     return osd_pods
 
 
-def get_pod_obj(name, kind='Pod', namespace=None):
+def get_pod_obj(name, namespace=None):
     """
     Returns the pod obj for the given pod
 
@@ -468,7 +468,7 @@ def get_pod_obj(name, kind='Pod', namespace=None):
     Returns:
         obj : A pod object
     """
-    ocp_obj = OCP(api_version='v1', kind=kind, namespace=namespace)
+    ocp_obj = OCP(api_version='v1', kind=constants.POD, namespace=namespace)
     ocp_dict = ocp_obj.get(resource_name=name)
     pod_obj = Pod(**ocp_dict)
     return pod_obj
