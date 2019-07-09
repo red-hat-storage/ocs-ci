@@ -58,6 +58,9 @@ def create_resource(**kwargs):
     return ocs_obj
 
 
+<<<<<<< HEAD
+def create_pod(interface_type=None, pvc=None, desired_status=constants.STATUS_RUNNING, wait=True):
+=======
 def wait_for_resource_state(resource, state):
     """
     Wait for a resource to get to a given status
