@@ -235,7 +235,7 @@ class OCP(object):
             str: access token
         """
         command = 'whoami --show-token'
-        token = self.exec_oc_cmd(command, out_yaml_format=False)
+        token = self.exec_oc_cmd(command, out_yaml_format=False).rstrip()
         return token
 
     def wait_for_resource(
