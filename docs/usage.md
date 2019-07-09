@@ -52,6 +52,18 @@ to the pytest.
    necessary styles and scripts
 * `--email` - to send the email reports of the test run which was generated
    by --html option. MUST specify --html to send email reports.
+* `--bugzilla` - allows you to skip tests with unresolved bug (test case
+  needs to be properly decorated as you can see in
+  [documentation](./writing_tests.md)). You will also need to
+  create configuration file for `pytest_marker_bugzilla` plugin. See the
+  [plugin documentation](https://github.com/eanxgeek/pytest_marker_bugzilla)
+  or example of `/etc/bugzilla.cfg` file:
+  ```bash
+  [DEFAULT]
+  bugzilla_url = https://bugzilla.redhat.com/xmlrpc.cgi
+  bugzilla_username = kerberos@redhat.com
+  bugzilla_password = yourPassword
+  ```
 
 ## Examples
 
