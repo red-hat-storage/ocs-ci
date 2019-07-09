@@ -930,3 +930,5 @@ def create_directory_path(path):
     """
     if not os.path.exists(path):
         os.makedirs(path)
+    else:
+        log.debug(f"{path} already exists")

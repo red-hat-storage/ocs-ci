@@ -637,15 +637,15 @@ def collect_ocs_logs(dir_name):
         dir_name (str): directory name to store OCS logs. Logs will be stored
         in dir_name suffix with _ocs_logs.
 
-    Returns:
-        None
-
     """
-    log_dir_path = os.path.join(ocsci_config.RUN['log_dir'], f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}")
+    log_dir_path = os.path.join(
+        ocsci_config.RUN['log_dir'],
+        f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}"
+    )
     create_directory_path(log_dir_path)
     dir_name = f"{dir_name}_ocs_logs"
     dump_dir = os.path.join(log_dir_path, dir_name)
-    cmd = f"cluster-info dump --output-directory={dump_dir}"
+    cmd = f"adm must-gather --image=ashishranjan738/ocs-must-gather --dest-dir={dump_dir}"
     log.info(f"OCS logs are placed in location {dump_dir}")
     occli = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-    occli.exec_oc_cmd(cmd)
+    occli.exec_oc_cmd(cmd, out_yaml_format=False)
