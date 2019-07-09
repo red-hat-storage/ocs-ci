@@ -421,7 +421,7 @@ def create_cephfilesystem():
     )
     assert POD[0].ocp.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector='app=rook-ceph-mds',
+        selector=constants.MDS_APP_LABEL,
         timeout=120
     )
 

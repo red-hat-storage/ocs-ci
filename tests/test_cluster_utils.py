@@ -24,6 +24,10 @@ def test_fixture(request):
 
 @pytest.fixture
 def mon_resource(request):
+    """
+    A fixture to handle mon resource cleanup,
+    this function brings the mon count to what it was before test started
+    """
     self = request.node.cls
     mon_count = self.cluster_obj.mon_count
     log.info(f"Mon count before add = {mon_count}")
@@ -48,6 +52,10 @@ def mon_resource(request):
 
 @pytest.fixture
 def mds_resource(request):
+    """
+    A fixture to handle mds resource cleanup
+    This function brings mds count to what it was before test started
+    """
     self = request.node.cls
     we_created_fs = False
     if not self.cluster_obj.cephfs:
@@ -70,6 +78,9 @@ def mds_resource(request):
 
 @pytest.fixture
 def user_resource(request):
+    """
+    A fixture for creating user for test and cleaning up after test is done
+    """
     self = request.node.cls
     log.info("Creating user")
     assert self.cluster_obj.create_user(self.username, self.caps)
@@ -81,16 +92,16 @@ def user_resource(request):
 
 def setup(self):
     """
-    Setting up the environment for the test
+    Create CephCluster object to be consumed by tests
     """
     self.cluster_obj = CephCluster()
 
 
 def teardown(self):
     """
-    Tearing down the environment
+    Make sure at the end cluster is in HEALTH_OK state
     """
-    assert self.cluster_obj.cluster_health_check()
+    assert self.cluster_obj.cluster_health_check(timeout=1200)
 
 
 @tier1
