@@ -212,6 +212,32 @@ class OCP(object):
             return True
         return False
 
+    def login(self, user, password):
+        """
+        Logs user in
+
+        Args:
+            user (str): Name of user to be logged in
+            password (str): Password of user to be logged in
+
+        Returns:
+            str: output of login command
+        """
+        command = f"oc login -u {user} -p {password}"
+        status = run_cmd(command)
+        return status
+
+    def get_user_token(self):
+        """
+        Get user access token
+
+        Returns:
+            str: access token
+        """
+        command = 'whoami --show-token'
+        token = self.exec_oc_cmd(command, out_yaml_format=False)
+        return token
+
     def wait_for_resource(
         self, condition, resource_name='', selector=None, resource_count=0,
         timeout=60, sleep=3
