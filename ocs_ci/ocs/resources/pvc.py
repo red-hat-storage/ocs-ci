@@ -71,26 +71,15 @@ class PVC(OCS):
 
 def delete_pvcs(pvc_objs):
     """
-<<<<<<< HEAD
     Deletes list of the pvc objects
 
     Args:
         pvc_objs (list): List of the pvc objects to be deleted
-=======
-    deletes multiple PVCs
-
-    Args:
-        pvc_objs (list): List of PVC objects for deletion
->>>>>>> - Fix for issue 241
 
     Returns:
         bool: True if deletion is successful
     """
     for pvc in pvc_objs:
-<<<<<<< HEAD
-=======
-        log.info("Deleting PersistentVolumeClaim with name %s", pvc.name)
->>>>>>> - Fix for issue 241
         pvc.delete()
     return True
 
