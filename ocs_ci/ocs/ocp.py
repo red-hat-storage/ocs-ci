@@ -138,7 +138,7 @@ class OCP(object):
         logging.debug(f"{yaml.dump(output)}")
         return output
 
-    def delete(self, yaml_file=None, resource_name='', wait=True):
+    def delete(self, yaml_file=None, resource_name='', wait=True, force=False):
         """
         Deletes a resource
 
@@ -148,6 +148,8 @@ class OCP(object):
             resource_name (str): Name of the resource you want to delete
             wait (bool): Determines if the delete command should wait to
                 completion
+            force (bool): True for force deletion with --grace-period=0,
+                False otherwise
 
         Returns:
             dict: Dictionary represents a returned yaml file
@@ -166,6 +168,8 @@ class OCP(object):
             command += f"{self.kind} {resource_name}"
         else:
             command += f"-f {yaml_file}"
+        if force:
+            command += " --grace-period=0 --force"
         # oc default for wait is True
         if not wait:
             command += " --wait=false"
