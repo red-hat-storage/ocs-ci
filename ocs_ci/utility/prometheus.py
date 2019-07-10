@@ -59,7 +59,6 @@ class PrometheusAPI(object):
             resource_name=defaults.PROMETHEUS_ROUTE
         )
         self._endpoint = 'https://' + route_obj['spec']['host']
-        logger.info(self._endpoint)
 
     def alerts(self):
         """
