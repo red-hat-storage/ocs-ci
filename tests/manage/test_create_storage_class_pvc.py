@@ -100,7 +100,8 @@ class TestOSCBasics(ManageTest):
             'test-rbd', 'pvc'
         )
         RBD_PVC_OBJ = helpers.create_pvc(
-            sc_name=RBD_SC_OBJ.name, pvc_name=pvc_name)
+            sc_name=RBD_SC_OBJ.name, pvc_name=pvc_name
+        )
         if RBD_PVC_OBJ.backed_pv is None:
             RBD_PVC_OBJ.reload()
         RBD_POD_OBJ = helpers.create_pod(
