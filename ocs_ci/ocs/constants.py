@@ -91,7 +91,6 @@ CSI_RBD_POD_YAML = os.path.join(
 CSI_CEPHFS_POD_YAML = os.path.join(
     TEMPLATE_CSI_FS_DIR, "pod.yaml"
 )
-
 CSI_RBD_SECRET_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "secret.yaml"
 )
@@ -115,3 +114,7 @@ FIO_IO_PARAMS_YAML = os.path.join(
 FIO_IO_RW_PARAMS_YAML = os.path.join(
     TEMPLATE_FIO_DIR, "workload_io_rw.yaml"
 )
+
+# constants
+RBD_INTERFACE = 'rbd'
+CEPHFS_INTERFACE = 'cephfs'

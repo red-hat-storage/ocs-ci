@@ -1,135 +1,128 @@
 import logging
-
 import pytest
 
-from ocs_ci.ocs import ocp, constants
-from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import tier1, ManageTest
-from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import get_admin_key_from_ceph_tools
-from ocs_ci.ocs.resources.pvc import PVC
 from tests import helpers
-from ocs_ci.utility import templating
 
 log = logging.getLogger(__name__)
 
 
-POD = ocp.OCP(kind='Pod', namespace=config.ENV_DATA['cluster_namespace'])
-CEPH_OBJ = None
+@pytest.fixture(scope='function')
+def test_fixture_rbd(request):
+    request.addfinalizer(teardown_rbd)
+    setup_rbd()
 
 
-@pytest.fixture()
-def test_fixture(request):
+def setup_rbd():
     """
-    Create disks
+    Setting up the environment
+    Creating replicated pool,secret,storageclass for rbd
     """
-    self = request.node.cls
-    setup_fs(self)
-    yield
-    teardown_fs()
-
-
-def setup_fs(self):
-    """
-    Setting up the environment for the test
-    """
-    global CEPH_OBJ
-    self.fs_data = templating.load_yaml_to_dict(constants.CEPHFILESYSTEM_YAML)
-    self.fs_data['metadata']['name'] = helpers.create_unique_resource_name(
-        'test', 'cephfs'
+    log.info("Creating CephBlockPool")
+    global RBD_POOL
+    RBD_POOL = helpers.create_ceph_block_pool()
+    global RBD_SECRET_OBJ
+    RBD_SECRET_OBJ = helpers.create_secret(constants.CEPHBLOCKPOOL)
+    global RBD_SC_OBJ
+    log.info("Creating RBD Storage class ")
+    RBD_SC_OBJ = helpers.create_storage_class(
+        interface_type=constants.CEPHBLOCKPOOL,
+        interface_name=RBD_POOL.name,
+        secret_name=RBD_SECRET_OBJ.name
     )
-    self.fs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
-    CEPH_OBJ = OCS(**self.fs_data)
-    CEPH_OBJ.create()
-    assert POD.wait_for_resource(
-        condition='Running', selector='app=rook-ceph-mds'
+
+
+def teardown_rbd():
+    """
+    Tearing down the environment
+    Deleting pod,replicated pool,pvc,storageclass,secret of rbd
+    """
+    global RBD_PVC_OBJ, RBD_POD_OBJ
+    log.info('deleting rbd pod')
+    RBD_POD_OBJ.delete()
+    log.info("Deleting RBD PVC")
+    RBD_PVC_OBJ.delete()
+    assert helpers.validate_pv_delete(RBD_PVC_OBJ.backed_pv)
+    log.info("Deleting CEPH BLOCK POOL")
+    RBD_POOL.delete()
+    log.info("Deleting RBD Secret")
+    RBD_SECRET_OBJ.delete()
+    log.info("Deleting RBD Storageclass")
+    RBD_SC_OBJ.delete()
+
+
+@pytest.fixture(scope='function')
+def test_fixture_cephfs(request):
+
+    request.addfinalizer(teardown_fs)
+    setup_fs()
+
+
+def setup_fs():
+    log.info("Creating CEPHFS Secret")
+    global CEPHFS_SECRET_OBJ
+    CEPHFS_SECRET_OBJ = helpers.create_secret(constants.CEPHFILESYSTEM)
+
+    global CEPHFS_SC_OBJ
+    log.info("Creating CephFS Storage class ")
+    CEPHFS_SC_OBJ = helpers.create_storage_class(
+        constants.CEPHFILESYSTEM,
+        helpers.get_cephfs_data_pool_name(),
+        CEPHFS_SECRET_OBJ.name
     )
-    pods = POD.get(selector='app=rook-ceph-mds')['items']
-    assert len(pods) == 2
 
 
 def teardown_fs():
-    """
-    Tearing down the environment
-    """
-    global CEPH_OBJ
-    CEPH_OBJ.delete()
+    global CEPHFS_PVC_OBJ, CEPHFS_POD_OBJ
+    log.info('deleting cephfs pod')
+    CEPHFS_POD_OBJ.delete()
+    log.info('deleting cephfs pvc')
+    CEPHFS_PVC_OBJ.delete()
+    assert helpers.validate_pv_delete(CEPHFS_PVC_OBJ.backed_pv)
+    log.info("Deleting CEPHFS Secret")
+    CEPHFS_SECRET_OBJ.delete()
+    log.info("Deleting CephFS Storageclass")
+    CEPHFS_SC_OBJ.delete()
 
 
 @tier1
 class TestOSCBasics(ManageTest):
-    mons = (
-        f'rook-ceph-mon-a.{config.ENV_DATA["cluster_namespace"]}'
-        f'.svc.cluster.local:6789,'
-        f'rook-ceph-mon-b.{config.ENV_DATA["cluster_namespace"]}.'
-        f'svc.cluster.local:6789,'
-        f'rook-ceph-mon-c.{config.ENV_DATA["cluster_namespace"]}'
-        f'.svc.cluster.local:6789'
-    )
-
     @pytest.mark.polarion_id("OCS-336")
-    def test_basics_rbd(self, test_fixture):
+    def test_basics_rbd(self, test_fixture_rbd):
         """
         Testing basics: secret creation,
-        storage class creation and pvc with cephfs
+        storage class creation,pvc and pod with rbd
         """
-        self.cephfs_secret = templating.load_yaml_to_dict(
-            constants.CSI_CEPHFS_SECRET_YAML
+        global RBD_PVC_OBJ, RBD_POD_OBJ
+        log.info('creating pvc for RBD ')
+        pvc_name = helpers.create_unique_resource_name(
+            'test-rbd', 'pvc'
         )
-        del self.cephfs_secret['data']['userID']
-        del self.cephfs_secret['data']['userKey']
-        self.cephfs_secret['data']['adminKey'] = (
-            get_admin_key_from_ceph_tools()
+        RBD_PVC_OBJ = helpers.create_pvc(
+            sc_name=RBD_SC_OBJ.name, pvc_name=pvc_name
         )
-        self.cephfs_secret['data']['adminID'] = constants.ADMIN_BASE64
-        logging.info(self.cephfs_secret)
-        secret = OCS(**self.cephfs_secret)
-        secret.create()
-        self.cephfs_sc = templating.load_yaml_to_dict(
-            constants.CSI_CEPHFS_STORAGECLASS_YAML
+        if RBD_PVC_OBJ.backed_pv is None:
+            RBD_PVC_OBJ.reload()
+        RBD_POD_OBJ = helpers.create_pod(
+            interface_type=constants.CEPHBLOCKPOOL, pvc_name=RBD_PVC_OBJ.name
         )
-        self.cephfs_sc['parameters']['monitors'] = self.mons
-        self.cephfs_sc['parameters']['pool'] = (
-            f"{self.fs_data['metadata']['name']}-data0"
-        )
-        storage_class = OCS(**self.cephfs_sc)
-        storage_class.create()
-        self.cephfs_pvc = templating.load_yaml_to_dict(
-            constants.CSI_CEPHFS_PVC_YAML
-        )
-        pvc = PVC(**self.cephfs_pvc)
-        pvc.create()
-        log.info(pvc.status)
-        assert 'Bound' in pvc.status
-        pvc.delete()
-        storage_class.delete()
-        secret.delete()
 
     @pytest.mark.polarion_id("OCS-346")
-    def test_basics_cephfs(self):
+    def test_basics_cephfs(self, test_fixture_cephfs):
         """
         Testing basics: secret creation,
-         storage class creation  and pvc with rbd
+         storage class creation, pvc and pod with cephfs
         """
-        self.rbd_secret = templating.load_yaml_to_dict(
-            constants.CSI_RBD_SECRET_YAML
+        global CEPHFS_PVC_OBJ, CEPHFS_POD_OBJ
+        log.info('creating pvc for CephFS ')
+        pvc_name = helpers.create_unique_resource_name(
+            'test-cephfs', 'pvc'
         )
-        del self.rbd_secret['data']['kubernetes']
-        self.rbd_secret['data']['admin'] = get_admin_key_from_ceph_tools()
-        logging.info(self.rbd_secret)
-        secret = OCS(**self.rbd_secret)
-        secret.create()
-        self.rbd_sc = templating.load_yaml_to_dict(
-            constants.CSI_RBD_STORAGECLASS_YAML
+        CEPHFS_PVC_OBJ = helpers.create_pvc(
+            sc_name=CEPHFS_SC_OBJ.name, pvc_name=pvc_name
         )
-        self.rbd_sc['parameters']['monitors'] = self.mons
-        del self.rbd_sc['parameters']['userid']
-        storage_class = OCS(**self.rbd_sc)
-        storage_class.create()
-        self.rbd_pvc = templating.load_yaml_to_dict(constants.CSI_RBD_PVC_YAML)
-        pvc = PVC(**self.rbd_pvc)
-        pvc.create()
-        assert 'Bound' in pvc.status
-        pvc.delete()
-        storage_class.delete()
-        secret.delete()
+        log.info('creating cephfs pod')
+        CEPHFS_POD_OBJ = helpers.create_pod(
+            interface_type=constants.CEPHFILESYSTEM, pvc_name=CEPHFS_PVC_OBJ.name
+        )
