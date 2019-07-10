@@ -200,8 +200,8 @@ class Pod(OCS):
             jobs (int): Number of jobs to execute FIO
             runtime (int): Number of seconds IO should run for
             fio_filename(str): Name of fio file created on app pod's mount point
-            wait (bool): weather to wait for results or run in async mode
-                         default is wait for fio run to complete
+            wait (bool): Whether to wait for results or run in async mode
+                (default: True - waits for fio run to complete)
         """
         name = 'test_workload'
         spec = self.pod_data.get('spec')
