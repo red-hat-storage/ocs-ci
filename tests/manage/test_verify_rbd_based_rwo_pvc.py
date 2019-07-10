@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.ocs.resources.pod import Pod
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework.testlib import ManageTest, tier1
@@ -116,20 +117,27 @@ class TestRbdBasedRwoPvc(ManageTest):
             'test', 'pod'
         )
         pod_data['metadata']['namespace'] = self.namespace
-        pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = (
-            pvc_obj.name
-        )
-        pod_obj = helpers.create_pod(**pod_data)
+        pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_obj.name
+
+        pod_obj = Pod(**pod_data)
+        pod_obj.create()
+        assert helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
 
         node_pod1 = pod_obj.get()['spec']['nodeName']
 
         # Create second pod
         # Try creating pod until it is on a different node than first pod
         for retry in range(1, 6):
+            pod_data = templating.load_yaml_to_dict(constants.CSI_RBD_POD_YAML)
             pod_data['metadata']['name'] = helpers.create_unique_resource_name(
                 'test', 'pod'
             )
-            pod_obj2 = helpers.create_pod(wait=False, **pod_data)
+            pod_data['metadata']['namespace'] = self.namespace
+            pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_obj.name
+            pod_obj2 = Pod(**pod_data)
+            pod_obj2.create()
+            assert helpers.wait_for_resource_state(pod_obj2, constants.STATUS_PENDING)
+
             node_pod2 = pod_obj2.get()['spec']['nodeName']
             if node_pod1 != node_pod2:
                 break
