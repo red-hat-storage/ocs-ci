@@ -99,6 +99,7 @@ def create_pod(
     Args:
         interface_type (str): The interface type (CephFS, RBD, etc.)
         pvc_name (str): The PVC that should be attached to the newly created pod
+        pvc_name (str): Name of pvc that should be attached to the newly created pod
         desired_status (str): The status of the pod to wait for
         wait (bool): True for waiting for the pod to reach the desired
             status, False otherwise
