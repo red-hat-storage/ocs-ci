@@ -22,7 +22,7 @@ def pod_cleanup(request):
     self = request.node.cls
 
     def finalizer():
-        if 'pod_obj' in self.__dict__:
+        if hasattr(self, 'pod_obj'):
             logger.info(f"Deleting pod {self.pod_obj.name}")
             self.pod_obj.delete()
         else:
@@ -35,7 +35,7 @@ def pvc_cleanup(request):
     self = request.node.cls
 
     def finalizer():
-        if 'pvc_obj' in self.__dict__:
+        if hasattr(self, 'pvc_obj'):
             self.pvc_obj.reload()
             pv = pvc.get_pv_for_pvc(self.pvc_obj)
             logger.info(f"PV for PVC is {pv.name}")
