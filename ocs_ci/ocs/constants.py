@@ -88,6 +88,10 @@ CSI_RBD_POD_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pod.yaml"
 )
 
+CSI_CEPHFS_POD_YAML = os.path.join(
+    TEMPLATE_CSI_FS_DIR, "pod.yaml"
+)
+
 CSI_RBD_SECRET_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "secret.yaml"
 )
