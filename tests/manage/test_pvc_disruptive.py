@@ -3,6 +3,7 @@ import logging
 from ocs_ci.ocs import constants
 from tests import helpers, disruption_helpers
 from ocs_ci.framework.testlib import ManageTest, tier4
+from time import sleep
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool, create_cephfs_storageclass,
     create_rbd_secret, create_cephfs_secret
@@ -46,7 +47,11 @@ class BaseDisruption(ManageTest):
         assert self.pod_obj.ocp.wait_for_resource(
             condition=constants.STATUS_RUNNING, resource_name=self.pod_obj.name, timeout=120
         )
-        self.pod_obj.run_io(storage_type=self.storage_type, size='1G')
+        self.pod_obj.run_io(
+            storage_type=self.storage_type, size='1G', wait=False
+        )
+        # wait for atleast 10 seconds for IO to start
+        sleep(10)
         if operation_to_disrupt == 'run_io':
             DISRUPTION_OPS.delete_resource()
 

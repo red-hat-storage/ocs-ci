@@ -154,7 +154,7 @@ class TestRbdBasedRwoPvc(ManageTest):
 
         # Run IO on first pod
         log.info(f"Running IO on first pod {pod_obj.name}")
-        pod_obj.run_io('fs', '1G')
+        pod_obj.run_io('fs', '1G', wait=False)
         logging.info(f"Waiting for IO results from pod {pod_obj.name}")
         fio_result = pod_obj.get_fio_results()
         logging.info("IOPs after FIO:")
@@ -223,7 +223,7 @@ class TestRbdBasedRwoPvc(ManageTest):
 
         # Run IO on second pod
         log.info(f"Running IO on second pod {pod_obj2.name}")
-        pod_obj2.run_io('fs', '1G')
+        pod_obj2.run_io('fs', '1G', wait=False)
         logging.info(f"Waiting for IO results from pod {pod_obj2.name}")
         fio_result = pod_obj2.get_fio_results()
         logging.info("IOPs after FIO:")

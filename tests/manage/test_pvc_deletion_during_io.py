@@ -57,7 +57,7 @@ class TestDeletePVCWhileRunningIO(ManageTest):
         """
         Test IO
         """
-        self.pod_obj.run_io('fs', '1G')
+        self.pod_obj.run_io('fs', '1G', wait=False)
         logging.info("Waiting for results")
         fio_result = self.pod_obj.get_fio_results()
         logging.info("IOPs after FIO:")
