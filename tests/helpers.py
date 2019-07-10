@@ -9,11 +9,11 @@ from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility import templating
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod, pvc
+from ocs_ci.ocs.resources import pvc
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import TimeoutSampler
-
-from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
