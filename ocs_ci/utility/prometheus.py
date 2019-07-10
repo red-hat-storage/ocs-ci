@@ -1,7 +1,10 @@
+import base64
 import errno
 import logging
 import os
 import requests
+import tempfile
+import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
@@ -19,6 +22,7 @@ class PrometheusAPI(object):
     _user = None
     _password = None
     _endpoint = None
+    _cacert = None
 
     def __init__(self, user=None, password=None):
         """
@@ -44,6 +48,7 @@ class PrometheusAPI(object):
                 )
         self._password = password
         self.refresh_connection()
+        self.generate_cert()
 
     def refresh_connection(self):
         """
@@ -60,6 +65,28 @@ class PrometheusAPI(object):
         )
         self._endpoint = 'https://' + route_obj['spec']['host']
 
+    def generate_cert(self):
+        """
+        Generate CA certificate from kubeconfig for API.
+
+        TODO: find proper way how to generate/load cert files.
+        """
+        kubeconfig_path = os.path.join(
+            config.ENV_DATA['cluster_path'],
+            config.RUN['kubeconfig_location']
+        )
+        with open(kubeconfig_path, "r") as f:
+            kubeconfig = yaml.load(f, yaml.Loader)
+        cert_file = tempfile.NamedTemporaryFile(delete=False)
+        cert_file.write(
+            base64.b64decode(
+                kubeconfig['clusters'][0]['cluster']['certificate-authority-data']
+            )
+        )
+        cert_file.close()
+        self._cacert = cert_file.name
+        logger.info(f"Generated CA certification file: {self._cacert}")
+
     def alerts(self):
         """
         Get alerts from Prometheus API.
@@ -72,6 +99,6 @@ class PrometheusAPI(object):
         response = requests.get(
             self._endpoint + pattern,
             headers=headers,
-            verify=False
+            verify=self._cacert
         )
         return response
