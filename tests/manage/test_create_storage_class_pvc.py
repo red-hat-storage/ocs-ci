@@ -122,8 +122,6 @@ class TestOSCBasics(ManageTest):
         CEPHFS_PVC_OBJ = helpers.create_pvc(
             sc_name=CEPHFS_SC_OBJ.name, pvc_name=pvc_name
         )
-        if CEPHFS_PVC_OBJ.backed_pv is None:
-            CEPHFS_PVC_OBJ.reload()
         log.info('creating cephfs pod')
         CEPHFS_POD_OBJ = helpers.create_pod(
             interface_type=constants.CEPHFILESYSTEM, pvc_name=CEPHFS_PVC_OBJ.name

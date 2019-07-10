@@ -270,7 +270,6 @@ def create_pvc(sc_name, pvc_name=None, size=None, wait=True):
         pvc_name (str): The name of the PVC to create
         size(str): Size of pvc to create
         wait (bool): True for wait for the VPC operation to complete, False otherwise
-        size(str): Size of pvc to create
 
     Returns:
         PVC: PVC instance
@@ -289,8 +288,8 @@ def create_pvc(sc_name, pvc_name=None, size=None, wait=True):
     created_pvc = ocs_obj.create(do_reload=wait)
     assert created_pvc, f"Failed to create resource {pvc_name}"
     if wait:
-        ocs_obj.reload()
         assert wait_for_resource_state(ocs_obj, constants.STATUS_BOUND)
+        ocs_obj.reload()
 
     return ocs_obj
 
@@ -587,7 +586,8 @@ def get_all_pvs():
          dict: Dict of all pv in openshift-storage namespace
     """
     ocp_pv_obj = ocp.OCP(
-        kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
     return ocp_pv_obj.get()
 
 
@@ -602,7 +602,7 @@ def validate_pv_delete(pv_name):
         bool: True if deletion is successful
 
     Raises:
-        CommandFailed: If pv is not deleted
+        AssertionError: If pv is not deleted
     """
     ocp_pv_obj = ocp.OCP(
         kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE
