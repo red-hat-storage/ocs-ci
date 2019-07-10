@@ -177,7 +177,7 @@ class Pod(OCS):
 
     def run_io(
         self, storage_type, size, io_direction='rw', rw_ratio=75,
-        jobs=1, runtime=60, fio_filename=None
+        jobs=1, runtime=60, fio_filename=None, wait=True
     ):
         """
         Execute FIO on a pod
@@ -200,6 +200,8 @@ class Pod(OCS):
             jobs (int): Number of jobs to execute FIO
             runtime (int): Number of seconds IO should run for
             fio_filename(str): Name of fio file created on app pod's mount point
+            wait (bool): weather to wait for results or run in async mode
+                         default is wait for fio run to complete
         """
         name = 'test_workload'
         spec = self.pod_data.get('spec')
@@ -230,6 +232,9 @@ class Pod(OCS):
             io_params['filename'] = fio_filename
 
         self.fio_thread = wl.run(**io_params)
+        if wait:
+            logger.info("Waiting for fio job to complete")
+            self.get_fio_results()
 
 
 # Helper functions for Pods
