@@ -95,6 +95,7 @@ def create_pvc_and_verify_pvc_exists(
     )
     pvc_data['spec']['storageClassName'] = sc_name
     pvc_data['spec']['resources']['requests']['storage'] = "10Gi"
+    pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     pvc_obj = pvc.PVC(**pvc_data)
     pvc_obj.create()
     if wait:
@@ -104,7 +105,7 @@ def create_pvc_and_verify_pvc_exists(
         f"status {desired_status}"
     pvc_obj.reload()
 
-    # ToDo: Add validation to check pv exists on bcaekend
+    # ToDo: Add validation to check pv exists on backend
     # Commenting the below code: https://bugzilla.redhat.com/show_bug.cgi?id=1723656
     # Validate pv is created on ceph
     # logger.info(f"Verifying pv exists on backend")
@@ -138,11 +139,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         pvc_obj = create_pvc_and_verify_pvc_exists(
             self.sc_obj.name, self.cbp_obj.name
         )
-        pod_data = templating.load_yaml_to_dict(constants.CSI_RBD_POD_YAML)
-        pod_data['spec']['volumes'][0]['persistentVolumeClaim'][
-            'claimName'
-        ] = pvc_obj.name
-        pod_obj = helpers.create_pod(**pod_data)
+        pod_obj = helpers.create_pod(interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvc_obj.name)
         used_percentage = pod.run_io_and_verify_mount_point(pod_obj)
         assert used_percentage > '90%', "I/O's didn't run completely"
         used_after_creating_pvc = check_ceph_used_space()

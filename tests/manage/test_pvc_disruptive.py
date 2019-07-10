@@ -37,7 +37,7 @@ class BaseDisruption(ManageTest):
         )
 
         self.pod_obj = helpers.create_pod(
-            interface_type=constants.CEPHBLOCKPOOL, pvc=self.pvc_obj.name, wait=False
+            interface_type=constants.CEPHBLOCKPOOL, pvc_name=self.pvc_obj.name, wait=False
         )
         if operation_to_disrupt == 'create_pod':
             DISRUPTION_OPS.delete_resource()
