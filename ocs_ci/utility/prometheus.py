@@ -72,7 +72,7 @@ class PrometheusAPI(object):
         headers = {'Authorization': f"Bearer {self._token}"}
         response = requests.get(
             self._endpoint + pattern,
-            headers = headers,
+            headers=headers,
             verify=False
         )
         return response
