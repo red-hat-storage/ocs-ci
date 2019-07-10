@@ -50,6 +50,9 @@ class BaseDisruption(ManageTest):
         if operation_to_disrupt == 'run_io':
             DISRUPTION_OPS.delete_resource()
 
+            # Validate that it's possible to run IO again
+            self.pod_obj.run_io(storage_type=self.storage_type, size='1G')
+
         self.pod_obj.delete()
         self.pvc_obj.delete()
 
