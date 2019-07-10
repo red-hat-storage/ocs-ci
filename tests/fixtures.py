@@ -142,5 +142,5 @@ def create_rbd_pod(request):
     class_instance = request.node.cls
     class_instance.pod_obj = helpers.create_pod(
         interface_type=constants.CEPHBLOCKPOOL,
-        pvc=class_instance.pvc_obj.name
+        pvc_name=class_instance.pvc_obj.name
     )
