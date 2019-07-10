@@ -78,15 +78,16 @@ class OCS(object):
             resource_name=self.name, out_yaml_format=out_yaml_format
         )
 
-    def create(self):
+    def create(self, do_reload=True):
         log.info(f"Adding {self.kind} with name {self.name}")
         templating.dump_dict_to_temp_yaml(self.data, self.temp_yaml.name)
         status = self.ocp.create(yaml_file=self.temp_yaml.name)
-        self.reload()
+        if do_reload:
+            self.reload()
         return status
 
-    def delete(self, wait=True):
-        return self.ocp.delete(resource_name=self.name, wait=wait)
+    def delete(self, wait=True, force=False):
+        return self.ocp.delete(resource_name=self.name, wait=wait, force=force)
 
     def apply(self, **data):
         with open(self.temp_yaml.name, 'w') as yaml_file:
