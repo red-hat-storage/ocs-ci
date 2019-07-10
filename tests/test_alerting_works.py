@@ -1,10 +1,10 @@
 import logging
-import pytest
 
 import ocs_ci.utility.prometheus
 
 
 log = logging.getLogger(__name__)
+
 
 def test_alerting_works():
     """
@@ -12,7 +12,7 @@ def test_alerting_works():
     """
     prometheus = ocs_ci.utility.prometheus.PrometheusAPI()
     alerts_response = prometheus.alerts()
-    assert alerts_response.ok == True
+    assert alerts_response.ok is True
     alerts = alerts_response.json()['data']['alerts']
     log.info(f"Prometheus Alerts: {alerts}")
     assert len(alerts) > 0
