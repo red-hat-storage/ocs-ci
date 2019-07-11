@@ -5,7 +5,7 @@ from ocs_ci.ocs import exceptions, constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import ManageTest, tier1
 from tests.fixtures import (
-    create_rbd_storageclass, create_pod, create_pvc, create_ceph_block_pool,
+    create_rbd_storageclass, create_rbd_pod, create_pvc, create_ceph_block_pool,
     create_rbd_secret
 )
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
     create_ceph_block_pool.__name__,
     create_rbd_storageclass.__name__,
     create_pvc.__name__,
-    create_pod.__name__
+    create_rbd_pod.__name__
 )
 @pytest.mark.polarion_id("OCS-371")
 class TestDeletePVCWhileRunningIO(ManageTest):

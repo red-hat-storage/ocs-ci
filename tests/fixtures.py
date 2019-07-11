@@ -1,21 +1,20 @@
 import pytest
 from tests import helpers
-from ocs_ci.ocs import constants, defaults
-from ocs_ci.utility import templating
+from ocs_ci.ocs import constants
 
 
 @pytest.fixture()
 def create_rbd_secret(request):
     """
-    Create a rbd secret
+    Create an RBD secret
     """
     class_instance = request.node.cls
 
     def finalizer():
         """
-        Delete the project
+        Delete the RBD secret
         """
-        if class_instance.rbd_secret_obj.get():
+        if hasattr(class_instance, 'rbd_secret_obj'):
             class_instance.rbd_secret_obj.delete()
 
     request.addfinalizer(finalizer)
@@ -23,21 +22,21 @@ def create_rbd_secret(request):
     class_instance.rbd_secret_obj = helpers.create_secret(
         interface_type=constants.CEPHBLOCKPOOL
     )
-    assert class_instance.rbd_secret_obj, "Failed to create rbd secret"
+    assert class_instance.rbd_secret_obj, "Failed to create secret"
 
 
 @pytest.fixture()
 def create_cephfs_secret(request):
     """
-    Create a cephfs secret
+    Create a CephFS secret
     """
     class_instance = request.node.cls
 
     def finalizer():
         """
-        Delete the project
+        Delete the FS secret
         """
-        if class_instance.cephfs_secret_obj.get():
+        if hasattr(class_instance, 'cephfs_secret_obj'):
             class_instance.cephfs_secret_obj.delete()
 
     request.addfinalizer(finalizer)
@@ -45,7 +44,7 @@ def create_cephfs_secret(request):
     class_instance.cephfs_secret_obj = helpers.create_secret(
         interface_type=constants.CEPHFILESYSTEM
     )
-    assert class_instance.cephfs_secret_obj, "Failed to create cephfs secret"
+    assert class_instance.cephfs_secret_obj, f"Failed to create secret"
 
 
 @pytest.fixture()
@@ -59,7 +58,7 @@ def create_ceph_block_pool(request):
         """
         Delete the Ceph block pool
         """
-        if class_instance.cbp_obj.get():
+        if hasattr(class_instance, 'cbp_obj'):
             class_instance.cbp_obj.delete()
 
     request.addfinalizer(finalizer)
@@ -71,13 +70,13 @@ def create_ceph_block_pool(request):
 @pytest.fixture()
 def create_rbd_storageclass(request):
     """
-    Create a storage class
+    Create an RBD storage class
     """
     class_instance = request.node.cls
 
     def finalizer():
         """
-        Delete the storage class
+        Delete the RBD storage class
         """
         if class_instance.sc_obj.get():
             class_instance.sc_obj.delete()
@@ -93,28 +92,55 @@ def create_rbd_storageclass(request):
 
 
 @pytest.fixture()
+def create_cephfs_storageclass(request):
+    """
+    Create a CephFS storage class
+    """
+    class_instance = request.node.cls
+
+    def finalizer():
+        """
+        Delete the CephFS storage class
+        """
+        if class_instance.sc_obj.get():
+            class_instance.sc_obj.delete()
+
+    request.addfinalizer(finalizer)
+
+    class_instance.sc_obj = helpers.create_storage_class(
+        interface_type=constants.CEPHFILESYSTEM,
+        interface_name=helpers.get_cephfs_data_pool_name(),
+        secret_name=class_instance.cephfs_secret_obj.name
+    )
+    assert class_instance.sc_obj, f"Failed to create storage class"
+
+
+@pytest.fixture()
 def create_pvc(request):
     """
     Create a persistent Volume Claim
     """
     class_instance = request.node.cls
 
+    def finalizer():
+        """
+        Delete the PVC
+        """
+        class_instance.pvc_obj.delete()
+
+    request.addfinalizer(finalizer)
     class_instance.pvc_obj = helpers.create_pvc(
         sc_name=class_instance.sc_obj.name
     )
 
 
 @pytest.fixture()
-def create_pod(request):
+def create_rbd_pod(request):
     """
     Create a pod
     """
     class_instance = request.node.cls
-
-    pod_data = templating.load_yaml_to_dict(constants.CSI_RBD_POD_YAML)
-    pod_data['metadata']['name'] = helpers.create_unique_resource_name(
-        'test', 'pod'
+    class_instance.pod_obj = helpers.create_pod(
+        interface_type=constants.CEPHBLOCKPOOL,
+        pvc_name=class_instance.pvc_obj.name
     )
-    pod_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = class_instance.pvc_obj.name
-    class_instance.pod_obj = helpers.create_pod(**pod_data)

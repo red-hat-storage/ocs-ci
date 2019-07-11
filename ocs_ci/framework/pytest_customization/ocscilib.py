@@ -21,6 +21,7 @@ from ocs_ci.utility.utils import (
     get_rook_version,
     get_csi_versions
 )
+from ocs_ci.ocs.utils import collect_ocs_logs
 
 __all__ = [
     "pytest_addoption",
@@ -72,6 +73,13 @@ def pytest_addoption(parser):
         dest='email',
         help="Email ID to send results",
     )
+    parser.addoption(
+        '--collect-logs',
+        dest='collect-logs',
+        action="store_true",
+        default=False,
+        help="Collect OCS logs when test case failed",
+    )
 
 
 def pytest_configure(config):
@@ -86,34 +94,42 @@ def pytest_configure(config):
         process_cluster_cli_params(config)
         # Add OCS related versions to the html report and remove extraneous metadata
         markers_arg = config.getoption('-m')
-        if not ("deployment" in markers_arg and ocsci_config.RUN['cli_params']['deploy']):
-            print("Collecting Cluster versions")
-            # remove extraneous metadata
-            del config._metadata['Python']
-            del config._metadata['Packages']
-            del config._metadata['Plugins']
-            del config._metadata['Platform']
+        if ocsci_config.RUN['cli_params'].get('teardown') or (
+            "deployment" in markers_arg
+            and ocsci_config.RUN['cli_params'].get('deploy')
+        ):
+            log.info(
+                "Skiping versions collecting because: Deploy or destroy of "
+                "cluster is performed."
+            )
+            return
+        print("Collecting Cluster versions")
+        # remove extraneous metadata
+        del config._metadata['Python']
+        del config._metadata['Packages']
+        del config._metadata['Plugins']
+        del config._metadata['Platform']
 
-            try:
-                # add cluster version
-                clusterversion = get_cluster_version()
-                config._metadata['Cluster Version'] = clusterversion
+        try:
+            # add cluster version
+            clusterversion = get_cluster_version()
+            config._metadata['Cluster Version'] = clusterversion
 
-                # add ceph version
-                ceph_version = get_ceph_version()
-                config._metadata['Ceph Version'] = ceph_version
+            # add ceph version
+            ceph_version = get_ceph_version()
+            config._metadata['Ceph Version'] = ceph_version
 
-                # add rook version
-                rook_version = get_rook_version()
-                config._metadata['Rook Version'] = rook_version
+            # add rook version
+            rook_version = get_rook_version()
+            config._metadata['Rook Version'] = rook_version
 
-                # add csi versions
-                csi_versions = get_csi_versions()
-                config._metadata['csi-provisioner'] = csi_versions.get('csi-provisioner')
-                config._metadata['cephfsplugin'] = csi_versions.get('cephfsplugin')
-                config._metadata['rbdplugin'] = csi_versions.get('rbdplugin')
-            except (FileNotFoundError, CommandFailed):
-                pass
+            # add csi versions
+            csi_versions = get_csi_versions()
+            config._metadata['csi-provisioner'] = csi_versions.get('csi-provisioner')
+            config._metadata['cephfsplugin'] = csi_versions.get('cephfsplugin')
+            config._metadata['rbdplugin'] = csi_versions.get('rbdplugin')
+        except (FileNotFoundError, CommandFailed):
+            pass
 
 
 def get_cli_param(config, name_of_param, default=None):
@@ -162,6 +178,7 @@ def process_cluster_cli_params(config):
     ocsci_config.RUN['cli_params']['deploy'] = get_cli_param(config, "deploy", default=False)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
+    get_cli_param(config, 'collect-logs')
     if get_cli_param(config, 'email') and not get_cli_param(config, '--html'):
         pytest.exit("--html option must be provided to send email reports")
 
@@ -184,3 +201,17 @@ def pytest_collection_modifyitems(session, config, items):
                 f"{item.name} in {item.fspath}",
                 exc_info=True
             )
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    rep = outcome.get_result()
+    # we only look at actual failing test calls, not setup/teardown
+    if (
+        rep.when == "call"
+        and rep.failed
+        and ocsci_config.RUN.get('cli_params').get('collect-logs')
+    ):
+        test_case_name = item.name
+        collect_ocs_logs(test_case_name)

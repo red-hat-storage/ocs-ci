@@ -922,3 +922,13 @@ def get_csi_versions():
             version = container['image'].split("/")[-1].split(":")[1]
             csi_versions[name] = version
     return csi_versions
+
+
+def create_directory_path(path):
+    """
+    Creates directory if path doesn't exists
+    """
+    if not os.path.exists(path):
+        os.makedirs(path)
+    else:
+        log.debug(f"{path} already exists")

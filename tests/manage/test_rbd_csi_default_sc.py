@@ -27,7 +27,10 @@ def setup():
     """
     Setting up the environment - Creating Secret
     """
-    global SECRET
+    global SECRET, POOL
+    log.info("Creating RBD Pool")
+    POOL = helpers.create_ceph_block_pool()
+
     log.info("Creating RBD Secret")
     SECRET = helpers.create_secret(constants.CEPHBLOCKPOOL)
 
@@ -45,6 +48,9 @@ def teardown():
     log.info("Deleting Secret")
     SECRET.delete()
 
+    log.info("Delete RBD Pool")
+    POOL.delete()
+
 
 @tier1
 @pytest.mark.usefixtures(
@@ -54,14 +60,14 @@ def teardown():
 class TestBasicPVCOperations(ManageTest):
     """
     Testing default storage class creation and pvc creation
-    with default rbd pool
+    with rbd pool
     """
 
     def test_ocs_347(self):
         global PVC, STORAGE_CLASS
         log.info("Creating RBD StorageClass")
         STORAGE_CLASS = helpers.create_storage_class(
-            constants.CEPHBLOCKPOOL, 'rbd', SECRET.name
+            constants.CEPHBLOCKPOOL, POOL.name, SECRET.name
         )
 
         log.info("Creating a PVC")

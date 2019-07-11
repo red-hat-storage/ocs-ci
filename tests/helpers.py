@@ -4,12 +4,15 @@ Helper functions file for OCS QE
 import datetime
 import logging
 
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility import templating
 from ocs_ci.framework import config
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed
+
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -53,27 +56,48 @@ def create_resource(
     """
     ocs_obj = OCS(**kwargs)
     resource_name = kwargs.get('metadata').get('name')
-    created_resource = ocs_obj.create()
+    created_resource = ocs_obj.create(do_reload=wait)
     assert created_resource, (
         f"Failed to create resource {resource_name}"
     )
     if wait:
-        assert ocs_obj.ocp.wait_for_resource(
-            condition=desired_status, resource_name=resource_name
-        ), f"{ocs_obj.kind} {resource_name} failed to reach"
-        f"status {desired_status}"
+        assert wait_for_resource_state(
+            resource=resource_name, state=desired_status)
     return ocs_obj
 
 
-def create_pod(desired_status=constants.STATUS_RUNNING, wait=True, **kwargs):
+def wait_for_resource_state(resource, state):
+    """
+    Wait for a resource to get to a given status
+
+    Args:
+        resource (OCS obj): The resource object
+        state (str): The status to wait for
+
+    Returns:
+        bool: True if resource reached the desired state, False otherwise
+    """
+    try:
+        resource.ocp.wait_for_resource(
+            condition=state, resource_name=resource.name
+        )
+    except TimeoutExpiredError:
+        logger.info(f"{resource.kind} {resource.name} failed to reach {state}")
+        return False
+    logger.info(f"{resource.kind} {resource.name} reached state {state}")
+    return True
+
+
+def create_pod(interface_type=None, pvc_name=None, desired_status=constants.STATUS_RUNNING, wait=True):
     """
     Create a pod
 
     Args:
+        interface_type (str): The interface type (CephFS, RBD, etc.)
+        pvc (str): The PVC that should be attached to the newly created pod
         desired_status (str): The status of the pod to wait for
         wait (bool): True for waiting for the pod to reach the desired
             status, False otherwise
-        **kwargs: The pod data yaml converted to dict
 
     Returns:
         Pod: A Pod instance
@@ -81,17 +105,29 @@ def create_pod(desired_status=constants.STATUS_RUNNING, wait=True, **kwargs):
     Raises:
         AssertionError: In case of any failure
     """
-    pod_obj = pod.Pod(**kwargs)
-    pod_name = kwargs.get('metadata').get('name')
-    created_resource = pod_obj.create()
+    if interface_type == constants.CEPHBLOCKPOOL:
+        pod_dict = constants.CSI_RBD_POD_YAML
+        interface = constants.RBD_INTERFACE
+    else:
+        pod_dict = constants.CSI_CEPHFS_POD_YAML
+        interface = constants.CEPHFS_INTERFACE
+
+    pod_data = templating.load_yaml_to_dict(pod_dict)
+    pod_data['metadata']['name'] = create_unique_resource_name(
+        f'test-{interface}', 'pod'
+    )
+    pod_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    if pvc_name:
+        pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
+    pod_obj = pod.Pod(**pod_data)
+    pod_name = pod_data.get('metadata').get('name')
+    created_resource = pod_obj.create(do_reload=wait)
     assert created_resource, (
         f"Failed to create resource {pod_name}"
     )
     if wait:
-        assert pod_obj.ocp.wait_for_resource(
-            condition=desired_status, resource_name=pod_name
-        ), f"{pod_obj.kind} {pod_name} failed to reach"
-        f"status {desired_status}"
+        assert wait_for_resource_state(pod_obj, desired_status)
+
     return pod_obj
 
 
@@ -113,6 +149,7 @@ def create_secret(interface_type):
         )
         secret_data['stringData']['userID'] = constants.ADMIN_USER
         secret_data['stringData']['userKey'] = get_admin_key()
+        interface = constants.RBD_INTERFACE
     elif interface_type == constants.CEPHFILESYSTEM:
         secret_data = templating.load_yaml_to_dict(
             constants.CSI_CEPHFS_SECRET_YAML
@@ -121,8 +158,9 @@ def create_secret(interface_type):
         del secret_data['stringData']['userKey']
         secret_data['stringData']['adminID'] = constants.ADMIN_USER
         secret_data['stringData']['adminKey'] = get_admin_key()
+        interface = constants.CEPHFS_INTERFACE
     secret_data['metadata']['name'] = create_unique_resource_name(
-        'test', 'secret'
+        f'test-{interface}', 'secret'
     )
     secret_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
 
@@ -184,6 +222,7 @@ def create_storage_class(
         sc_data['parameters'][
             'csi.storage.k8s.io/node-publish-secret-namespace'
         ] = defaults.ROOK_CLUSTER_NAMESPACE
+        interface = constants.RBD_INTERFACE
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = templating.load_yaml_to_dict(
             constants.CSI_CEPHFS_STORAGECLASS_YAML
@@ -194,12 +233,13 @@ def create_storage_class(
         sc_data['parameters'][
             'csi.storage.k8s.io/node-stage-secret-namespace'
         ] = defaults.ROOK_CLUSTER_NAMESPACE
+        interface = constants.CEPHFS_INTERFACE
         sc_data['parameters']['fsName'] = get_cephfs_name()
     sc_data['parameters']['pool'] = interface_name
 
     sc_data['metadata']['name'] = (
         sc_name if sc_name else create_unique_resource_name(
-            'test', 'storageclass'
+            f'test-{interface}', 'storageclass'
         )
     )
     sc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
@@ -220,7 +260,7 @@ def create_storage_class(
     return create_resource(**sc_data, wait=False)
 
 
-def create_pvc(sc_name, pvc_name=None):
+def create_pvc(sc_name, pvc_name=None, size=None, wait=True):
     """
     Create a PVC
 
@@ -228,9 +268,11 @@ def create_pvc(sc_name, pvc_name=None):
         sc_name (str): The name of the storage class for the PVC to be
             associated with
         pvc_name (str): The name of the PVC to create
+        size(str): Size of pvc to create
+        wait (bool): True for wait for the VPC operation to complete, False otherwise
 
     Returns:
-        OCS: An OCS instance for the PVC
+        PVC: PVC instance
     """
     pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
     pvc_data['metadata']['name'] = (
@@ -240,9 +282,16 @@ def create_pvc(sc_name, pvc_name=None):
     )
     pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     pvc_data['spec']['storageClassName'] = sc_name
-    return create_resource(
-        desired_status=constants.STATUS_BOUND, **pvc_data
-    )
+    if size:
+        pvc_data['spec']['resources']['requests']['storage'] = size
+    ocs_obj = pvc.PVC(**pvc_data)
+    created_pvc = ocs_obj.create(do_reload=wait)
+    assert created_pvc, f"Failed to create resource {pvc_name}"
+    if wait:
+        assert wait_for_resource_state(ocs_obj, constants.STATUS_BOUND)
+        ocs_obj.reload()
+
+    return ocs_obj
 
 
 def verify_block_pool_exists(pool_name):
@@ -527,3 +576,41 @@ def run_io_with_rados_bench(**kw):
     logger.info(ret)
     logger.info("Finished radosbench")
     return ret
+
+
+def get_all_pvs():
+    """
+    Gets all pv in openshift-storage namespace
+
+    Returns:
+         dict: Dict of all pv in openshift-storage namespace
+    """
+    ocp_pv_obj = ocp.OCP(
+        kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    return ocp_pv_obj.get()
+
+
+@retry(AssertionError, tries=10, delay=5, backoff=1)
+def validate_pv_delete(pv_name):
+    """
+    validates if pv is deleted after pvc deletion
+
+    Args:
+        pv_name (str): pv from pvc to validates
+    Returns:
+        bool: True if deletion is successful
+
+    Raises:
+        AssertionError: If pv is not deleted
+    """
+    ocp_pv_obj = ocp.OCP(
+        kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+
+    try:
+        if ocp_pv_obj.get(resource_name=pv_name):
+            raise AssertionError
+
+    except CommandFailed:
+        return True
