@@ -2,6 +2,7 @@
 A test for creating a CephFS
 """
 import logging
+import pytest
 
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.framework import config
@@ -28,36 +29,45 @@ def verify_fs_exist(pod_count):
     return False
 
 
+@pytest.fixture(scope="class")
+def cephfs():
+    cephfs = ocp.OCP(kind=constants.CEPHFILESYSTEM)
+    return cephfs
+
+
+@pytest.fixture(scope="class")
+def fs_data(cephfs):
+    fs_data = cephfs.get(defaults.CEPHFILESYSTEM_NAME)
+    return fs_data
+
+@pytest.fixture(scope="class")
+def ceph_obj(request, fs_data):
+    ceph_obj = OCS(**fs_data)
+    original_active_count = 1
+
+    def teardown():
+        ceph_obj.apply(**fs_data)
+        assert verify_fs_exists(original_active_count * 2)
+
+    request.addfinalizer(teardown)
+    return ceph_obj
+
+
 @tier1
 class TestCephFilesystemCreation(ManageTest):
     """
     Testing creation of Ceph FileSystem
     """
     new_active_count = 2
-    original_active_count = 1
-    fs_name = None
 
-    def setup_class(self):
-        self.CEPHFS = ocp.OCP(kind=constants.CEPHFILESYSTEM)
-        self.fs_data = self.CEPHFS.get(defaults.CEPHFILESYSTEM_NAME)
-        self.fs_name = self.fs_data['metadata']['name']
-        self.CEPH_OBJ = OCS(**self.fs_data)
 
-    def teardown_class(self):
-        self.fs_data = self.CEPHFS.get(defaults.CEPHFILESYSTEM_NAME)
-        self.fs_data['spec']['metadataServer']['activeCount'] = (
-            self.original_active_count
-        )
-        self.CEPH_OBJ.apply(**self.fs_data)
-        assert verify_fs_exist(self.original_active_count * 2)
-
-    def test_cephfilesystem_creation(self):
+    def test_cephfilesystem_creation(self, ceph_obj, fs_data):
         """
         Creating a Ceph Filesystem
         """
 
-        self.fs_data['spec']['metadataServer']['activeCount'] = (
+        fs_data['spec']['metadataServer']['activeCount'] = (
             self.new_active_count
         )
-        self.CEPH_OBJ.apply(**self.fs_data)
+        ceph_obj.apply(**fs_data)
         assert verify_fs_exist(self.new_active_count * 2)
