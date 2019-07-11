@@ -614,3 +614,18 @@ def validate_pv_delete(pv_name):
 
     except CommandFailed:
         return True
+
+
+def verify_fs_exist(pod_count):
+    """
+    Verifying if a ceph FS exist
+    """
+    POD = ocp.OCP(kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace'])
+    assert POD.wait_for_resource(
+        condition='Running', selector='app=rook-ceph-mds',
+        resource_count=pod_count
+    )
+    pods = POD.get(selector='app=rook-ceph-mds')['items']
+    if len(pods) == pod_count:
+        return True
+    return False
