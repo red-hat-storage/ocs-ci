@@ -153,3 +153,19 @@ def create_rbd_pod(request):
         interface_type=constants.CEPHBLOCKPOOL,
         pvc_name=class_instance.pvc_obj.name
     )
+
+
+@pytest.fixture()
+def delete_pod(request):
+    """
+    Delete a pod
+    """
+    class_instance = request.node.cls
+
+    def finalizer():
+        """
+        Delete the pod
+        """
+        class_instance.pod_obj.delete()
+
+    request.addfinalizer(finalizer)
