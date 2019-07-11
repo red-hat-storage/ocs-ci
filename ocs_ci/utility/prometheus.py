@@ -87,26 +87,22 @@ class PrometheusAPI(object):
         self._cacert = cert_file.name
         logger.info(f"Generated CA certification file: {self._cacert}")
 
-    def alerts(self, silenced=False, inhibited=False):
+    def get(self, resource, payload=None):
         """
         Get alerts from Prometheus API.
 
         Args:
-            silenced (bool): If alerts that are silenced should be searched.
-                If `None` is provided then the flag is not set.
-            inhibited (bool): If alerts that are inhibited should be searched.
-                If `None` is provided then the flag is not set.
+            resource (str): Represents part of uri that specifies given
+                resource.
+            payload (dict): Provide parameters to GET API call.
+                e.g. for `alerts` resource this can be
+                {'silenced': False, 'inhibited': False}
 
         Returns:
             dict: Response from Prometheus alerts api
         """
-        pattern = '/api/v1/alerts'
+        pattern = f"/api/v1/{resource}"
         headers = {'Authorization': f"Bearer {self._token}"}
-        payload = {}
-        if silenced is not None:
-            payload['silenced'] = silenced
-        if inhibited is not None:
-            payload['inhibited'] = silenced
 
         logger.info(f"GET {self._endpoint + pattern}")
         logger.info(f"headers={headers}")
