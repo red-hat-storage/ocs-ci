@@ -64,6 +64,7 @@ to the pytest.
   bugzilla_username = kerberos@redhat.com
   bugzilla_password = yourPassword
   ```
+* `--collect-logs` - to collect OCS logs for failed test cases.
 
 ## Examples
 
