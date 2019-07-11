@@ -3,6 +3,7 @@ General OCP object
 """
 import os
 import logging
+import time
 import yaml
 
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -133,10 +134,11 @@ class OCP(object):
             command += f"{self.kind} {resource_name}"
         if out_yaml_format:
             command += " -o yaml"
+        output = self.exec_oc_cmd(command)
+        logging.debug(f"{yaml.dump(output)}")
+        return output
 
-        return self.exec_oc_cmd(command)
-
-    def delete(self, yaml_file=None, resource_name='', wait=True):
+    def delete(self, yaml_file=None, resource_name='', wait=True, force=False):
         """
         Deletes a resource
 
@@ -146,6 +148,8 @@ class OCP(object):
             resource_name (str): Name of the resource you want to delete
             wait (bool): Determines if the delete command should wait to
                 completion
+            force (bool): True for force deletion with --grace-period=0,
+                False otherwise
 
         Returns:
             dict: Dictionary represents a returned yaml file
@@ -164,6 +168,8 @@ class OCP(object):
             command += f"{self.kind} {resource_name}"
         else:
             command += f"-f {yaml_file}"
+        if force:
+            command += " --grace-period=0 --force"
         # oc default for wait is True
         if not wait:
             command += " --wait=false"
@@ -213,7 +219,7 @@ class OCP(object):
 
     def wait_for_resource(
         self, condition, resource_name='', selector=None, resource_count=0,
-        to_delete=False, timeout=60, sleep=3
+        timeout=60, sleep=3
     ):
         """
         Wait for a resource to reach to a desired condition
@@ -228,8 +234,6 @@ class OCP(object):
             selector (str): The resource selector to search with.
                 Example: 'app=rook-ceph-mds'
             resource_count (int): How many resources expected to be
-            to_delete (bool): Determines if wait_for_resource should wait for
-                a resource to be deleted
             timeout (int): Time in seconds to wait
             sleep (int): Sampling time in seconds
 
@@ -241,6 +245,7 @@ class OCP(object):
         for sample in TimeoutSampler(
             timeout, sleep, self.get, resource_name, True, selector
         ):
+
             # Only 1 resource expected to be returned
             if resource_name:
                 if sample.get('status').get('phase') == condition:
@@ -259,10 +264,35 @@ class OCP(object):
                             return True
                     elif len(sample) == len(in_condition):
                         return True
-            if to_delete and not sample:
-                return True
 
         return False
+
+    def wait_for_delete(self, resource_name='', timeout=60, sleep=3):
+        """
+        Wait for a resource to be deleted
+
+        Args:
+            resource_name (str): The name of the resource to wait
+                for (e.g.my-pv1)
+            timeout (int): Time in seconds to wait
+            sleep (int): Sampling time in seconds
+
+        Returns:
+            bool: True in case resource deletion is successful
+                False otherwise
+
+        """
+        start_time = time.time()
+        while True:
+            try:
+                self.get(resource_name=resource_name)
+            except CommandFailed as ex:
+                logging.info(ex)
+                return True
+
+            if timeout < (time.time() - start_time):
+                raise TimeoutError(f"Timeout when waiting for {resource_name} to delete")
+            time.sleep(sleep)
 
 
 def switch_to_project(project_name):

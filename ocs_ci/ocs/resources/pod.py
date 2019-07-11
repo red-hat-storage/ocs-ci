@@ -5,18 +5,22 @@ Each pod in the openshift cluster will have a corresponding pod object
 """
 import logging
 import re
+import yaml
 import tempfile
 from time import sleep
 from threading import Thread
 import base64
 
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants, defaults, workload
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.utility import templating
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
+FIO_TIMEOUT = 600
 
 
 TEXT_CONTENT = (
@@ -57,6 +61,7 @@ class Pod(OCS):
             api_version=defaults.API_VERSION, kind=constants.POD,
             namespace=self.namespace
         )
+        self.fio_thread = None
         # TODO: get backend config !!
 
     @property
@@ -86,6 +91,33 @@ class Pod(OCS):
             role (str): New role to be assigned for this pod
         """
         self._roles.append(role)
+
+    def get_fio_results(self):
+        """
+        Get FIO execution results
+
+        Returns:
+            dict: Dictionary represents the FIO execution results
+
+        Raises:
+            Exception: In case of exception from FIO
+        """
+        try:
+            if self.fio_thread and self.fio_thread.done():
+                return yaml.load(self.fio_thread.result())
+            elif self.fio_thread.running():
+                for sample in TimeoutSampler(
+                    timeout=FIO_TIMEOUT, sleep=3, func=self.fio_thread.done
+                ):
+                    if sample:
+                        return yaml.load(self.fio_thread.result())
+
+        except CommandFailed as ex:
+            logger.exception(f"FIO failed: {ex}")
+            raise
+        except Exception as ex:
+            logger.exception(f"Found Exception: {ex}")
+            raise
 
     def exec_cmd_on_pod(self, command, out_yaml_format=True):
         """
@@ -143,6 +175,62 @@ class Pod(OCS):
             return [item for item in out if item]
         return out
 
+    def run_io(
+        self, storage_type, size, io_direction='rw', rw_ratio=75,
+        jobs=1, runtime=60, fio_filename=None
+    ):
+        """
+        Execute FIO on a pod
+        This operation will run in background and will store the results in
+        'self.thread.result()'.
+        In order to wait for the output and not continue with the test until
+        FIO is done, call self.thread.result() right after calling run_io.
+        See tests/manage/test_pvc_deletion_during_io.py::test_run_io
+        for usage of FIO
+
+        Args:
+            storage_type (str): 'fs' or 'block'
+            size (str): Size in MB, e.g. '200M'
+            io_direction (str): Determines the operation:
+                'ro', 'wo', 'rw' (default: 'rw')
+            rw_ratio (int): Determines the reads and writes using a
+                <rw_ratio>%/100-<rw_ratio>%
+                (e.g. the default is 75 which means it is 75%/25% which
+                equivalent to 3 reads are performed for every 1 write)
+            jobs (int): Number of jobs to execute FIO
+            runtime (int): Number of seconds IO should run for
+            fio_filename(str): Name of fio file created on app pod's mount point
+        """
+        name = 'test_workload'
+        spec = self.pod_data.get('spec')
+        path = (
+            spec.get('containers')[0].get('volumeMounts')[0].get(
+                'mountPath'
+            )
+        )
+        work_load = 'fio'
+        # few io parameters for Fio
+
+        wl = workload.WorkLoad(
+            name, path, work_load, storage_type, self, jobs
+        )
+        assert wl.setup(), "Setup up for FIO failed"
+        if io_direction == 'rw':
+            io_params = templating.load_yaml_to_dict(
+                constants.FIO_IO_RW_PARAMS_YAML
+            )
+            io_params['rwmixread'] = rw_ratio
+        else:
+            io_params = templating.load_yaml_to_dict(
+                constants.FIO_IO_PARAMS_YAML
+            )
+        io_params['runtime'] = runtime
+        io_params['size'] = size
+        if fio_filename:
+            io_params['filename'] = fio_filename
+
+        self.fio_thread = wl.run(**io_params)
+
 
 # Helper functions for Pods
 
@@ -176,6 +264,17 @@ def get_ceph_tools_pod():
     assert ct_pod, f"No Ceph tools pod found"
     ceph_pod = Pod(**ct_pod)
     return ceph_pod
+
+
+def list_ceph_images(pool_name='rbd'):
+    """
+    Args:
+        pool_name (str): Name of the pool to get the ceph images
+
+    Returns (List): List of RBD images in the pool
+    """
+    ct_pod = get_ceph_tools_pod()
+    return ct_pod.exec_ceph_cmd(ceph_cmd=f"rbd ls {pool_name}", format='json')
 
 
 def check_file_existence(pod_obj, file_name):

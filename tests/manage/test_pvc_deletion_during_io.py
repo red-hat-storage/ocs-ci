@@ -1,11 +1,11 @@
 import pytest
 import logging
 
-from ocs_ci.ocs import defaults, exceptions, constants
+from ocs_ci.ocs import exceptions, constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import ManageTest, tier1
 from tests.fixtures import (
-    create_rbd_storageclass, create_pod, create_pvc, create_ceph_block_pool,
+    create_rbd_storageclass, create_rbd_pod, create_pvc, create_ceph_block_pool,
     create_rbd_secret
 )
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
     create_ceph_block_pool.__name__,
     create_rbd_storageclass.__name__,
     create_pvc.__name__,
-    create_pod.__name__
+    create_rbd_pod.__name__
 )
 @pytest.mark.polarion_id("OCS-371")
 class TestDeletePVCWhileRunningIO(ManageTest):
@@ -36,7 +36,8 @@ class TestDeletePVCWhileRunningIO(ManageTest):
         # This is a workaround for bug 1715627 (replaces wait_for_resource)
         pvc_out = self.pvc_obj.get(out_yaml_format=False)
         assert constants.STATUS_TERMINATING in pvc_out, (
-            f"PVC {self.pvc_obj.name} failed to reach status {defaults.STATUS_TERMINATING}"
+            f"PVC {self.pvc_obj.name} "
+            f"failed to reach status {constants.STATUS_TERMINATING}"
         )
 
         thread.join(timeout=15)
@@ -50,3 +51,19 @@ class TestDeletePVCWhileRunningIO(ManageTest):
         except exceptions.CommandFailed as ex:
             if "NotFound" in str(ex):
                 pass
+
+    @tier1
+    def test_run_io(self):
+        """
+        Test IO
+        """
+        self.pod_obj.run_io('fs', '1G')
+        logging.info("Waiting for results")
+        fio_result = self.pod_obj.get_fio_results()
+        logging.info("IOPs after FIO:")
+        logging.info(
+            f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
+        )
+        logging.info(
+            f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
+        )

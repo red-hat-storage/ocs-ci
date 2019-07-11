@@ -8,15 +8,14 @@ from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.utility.utils import run_async
 from ocs_ci.framework.testlib import tier1, ManageTest
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
-from ocs_ci.ocs.resources.pvc import create_multiple_pvc
+from ocs_ci.ocs.resources.pvc import create_multiple_pvc, delete_all_pvcs
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool, create_rbd_secret
 )
 from ocs_ci.utility.templating import load_yaml_to_dict
+from tests.helpers import create_unique_resource_name
 
 log = logging.getLogger(__name__)
-TEST_PROJECT = 'test-project'
-PROJECT = ocp.OCP(kind='Project', namespace=TEST_PROJECT)
 
 
 @pytest.fixture()
@@ -38,13 +37,15 @@ def setup(self):
     Create PVCs
     """
     # Create new project
-    assert PROJECT.new_project(TEST_PROJECT), (
-        f'Failed to create new project {TEST_PROJECT}'
+    self.namespace = create_unique_resource_name('test', 'namespace')
+    self.project_obj = ocp.OCP(kind='Project', namespace=self.namespace)
+    assert self.project_obj.new_project(self.namespace), (
+        f'Failed to create new project {self.namespace}'
     )
 
     # Parameters for PVC yaml as dict
     pvc_data = load_yaml_to_dict(constants.CSI_PVC_YAML)
-    pvc_data['metadata']['namespace'] = TEST_PROJECT
+    pvc_data['metadata']['namespace'] = self.namespace
     pvc_data['spec']['storageClassName'] = self.sc_obj.name
     pvc_data['metadata']['name'] = self.pvc_base_name
 
@@ -69,18 +70,7 @@ def teardown(self):
     Delete project
     """
     # Delete newly created PVCs
-    command = (
-        f'for i in `seq 1 {self.number_of_pvc}`;do oc delete pvc '
-        f'{self.pvc_base_name_new}$i -n {TEST_PROJECT};done'
-    )
-    proc = run_async(command)
-    assert proc, (
-        f'Failed to execute command for deleting {self.number_of_pvc} PVCs'
-    )
-
-    # Verify command to delete PVCs
-    ret, _, _ = proc.async_communicate()
-    assert not ret, 'Deletion of newly created PVCs failed'
+    assert delete_all_pvcs(namespace=self.namespace), 'Failed to delete PVCs'
     log.info(f'Newly created {self.number_of_pvc} PVCs are now deleted.')
 
     # Switch to default project
@@ -88,7 +78,7 @@ def teardown(self):
     assert ret, 'Failed to switch to default rook cluster project'
 
     # Delete project created for the test case
-    PROJECT.delete(resource_name=TEST_PROJECT)
+    self.project_obj.delete(resource_name=self.namespace)
 
 
 @tier1
@@ -116,7 +106,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         # Start deleting 100 PVCs
         command = (
             f'for i in `seq 1 {self.number_of_pvc}`;do oc delete pvc '
-            f'{self.pvc_base_name}$i -n {TEST_PROJECT};done'
+            f'{self.pvc_base_name}$i -n {self.namespace};done'
         )
         proc = run_async(command)
         assert proc, (
@@ -126,7 +116,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         # Create 100 new PVCs
         # Parameters for PVC yaml as dict
         pvc_data = load_yaml_to_dict(constants.CSI_PVC_YAML)
-        pvc_data['metadata']['namespace'] = TEST_PROJECT
+        pvc_data['metadata']['namespace'] = self.namespace
         pvc_data['spec']['storageClassName'] = self.sc_obj.name
         pvc_data['metadata']['name'] = self.pvc_base_name_new
 

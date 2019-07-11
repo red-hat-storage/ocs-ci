@@ -7,3 +7,6 @@ and other supported platforms. The framework is based on CephCI
 Documentation is structured and available under docs directory
 inside this project. You can click [HERE](docs/README.md) to see
 the Table Of Content(TOC) of our documentation.
+
+## License
+This project is open sourced under MIT License.

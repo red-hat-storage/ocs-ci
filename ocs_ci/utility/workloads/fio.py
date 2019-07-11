@@ -94,6 +94,7 @@ def run(**kwargs):
         else:
             args = args + f" --{k}={v}"
     fio_cmd = fio_cmd + args
+    fio_cmd += " --output-format=json"
     log.info(f"Running cmd: {fio_cmd}")
 
     return io_pod.exec_cmd_on_pod(fio_cmd, out_yaml_format=False)
