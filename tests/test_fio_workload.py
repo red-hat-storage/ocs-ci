@@ -10,7 +10,7 @@ from ocs_ci.utility import templating
 
 from tests.fixtures import (
     create_rbd_storageclass, create_rbd_pod, create_pvc, create_ceph_block_pool,
-    create_rbd_secret
+    create_rbd_secret, delete_pvc
 )
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
     create_ceph_block_pool.__name__,
     create_rbd_storageclass.__name__,
     create_pvc.__name__,
-    create_rbd_pod.__name__
+    create_rbd_pod.__name__,
+    delete_pvc.__name__
 )
 class TestFIOWorkload(ManageTest):
 

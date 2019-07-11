@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
     create_ceph_block_pool.__name__,
     create_rbd_storageclass.__name__,
     create_pvc.__name__,
-    create_rbd_pod.__name__
+    create_rbd_pod.__name__,
 )
 @pytest.mark.polarion_id("OCS-371")
 class TestDeletePVCWhileRunningIO(ManageTest):
