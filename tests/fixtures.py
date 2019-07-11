@@ -58,7 +58,7 @@ def create_ceph_block_pool(request):
         """
         Delete the Ceph block pool
         """
-        if class_instance.cbp_obj.get():
+        if hasattr(class_instance, 'cbp_obj'):
             class_instance.cbp_obj.delete()
 
     request.addfinalizer(finalizer)
