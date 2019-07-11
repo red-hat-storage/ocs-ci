@@ -400,12 +400,13 @@ def download_file(url, filename):
     assert r.ok
 
 
-def destroy_cluster(cluster_path):
+def destroy_cluster(cluster_path, log_level="DEBUG"):
     """
     Destroy existing cluster resources in AWS.
 
     Args:
         cluster_path (str): filepath to cluster directory to be destroyed
+        log_level (str): log level to set for openshift_installer
 
     """
     # Download installer
@@ -414,7 +415,7 @@ def destroy_cluster(cluster_path):
     destroy_cmd = (
         f"{installer} destroy cluster "
         f"--dir {cluster_path} "
-        f"--log-level debug"
+        f"--log-level {log_level}"
     )
 
     try:
