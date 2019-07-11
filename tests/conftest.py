@@ -74,22 +74,23 @@ def polarion_testsuite_properties(record_testsuite_property):
         )
 
 
-def cluster_teardown():
+def cluster_teardown(log_level="DEBUG"):
     log.info("Destroying the test cluster")
-    destroy_cluster(config.ENV_DATA['cluster_path'])
+    destroy_cluster(config.ENV_DATA['cluster_path'], log_level)
     log.info("Destroying the test cluster complete")
 
 
 @pytest.fixture(scope="session", autouse=True)
-def cluster(request):
+def cluster(request, log_cli_level):
     log.info(f"All logs located at {log_path}")
     log.info("Running OCS basic installation")
+    log.info(f"Openshift Installer will use log level: {log_cli_level}")
     cluster_path = config.ENV_DATA['cluster_path']
     deploy = config.RUN['cli_params']['deploy']
     teardown = config.RUN['cli_params']['teardown']
     # Add a finalizer to teardown the cluster after test execution is finished
     if teardown:
-        request.addfinalizer(cluster_teardown)
+        request.addfinalizer(cluster_teardown(log_cli_level))
         log.info("Will teardown cluster because --teardown was provided")
     # Test cluster access and if exist just skip the deployment.
     if is_cluster_running(cluster_path):
@@ -151,7 +152,7 @@ def cluster(request):
     run_cmd(
         f"{installer} create cluster "
         f"--dir {cluster_path} "
-        f"--log-level debug"
+        f"--log-level {log_cli_level}"
     )
 
     # Test cluster access
@@ -383,3 +384,15 @@ def environment_checker(request):
 
     request.addfinalizer(get_status_after_execution)
     get_status_before_execution()
+
+
+@pytest.fixture(scope="session")
+def log_cli_level(pytestconfig):
+    """
+    Retrieves the log_cli_level set in pytest.ini
+
+    Returns:
+        str: log_cli_level set in pytest.ini or DEBUG if not set
+
+    """
+    return pytestconfig.getini('log_cli_level') or 'DEBUG'
