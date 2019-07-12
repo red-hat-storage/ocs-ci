@@ -90,7 +90,9 @@ def cluster(request, log_cli_level):
     teardown = config.RUN['cli_params']['teardown']
     # Add a finalizer to teardown the cluster after test execution is finished
     if teardown:
-        request.addfinalizer(cluster_teardown(log_cli_level))
+        def cluster_teardown_finalizer():
+            cluster_teardown(log_cli_level)
+        request.addfinalizer(cluster_teardown_finalizer)
         log.info("Will teardown cluster because --teardown was provided")
     # Test cluster access and if exist just skip the deployment.
     if is_cluster_running(cluster_path):
