@@ -138,7 +138,8 @@ def delete_pvc(request):
         """
         Delete the PVC
         """
-        class_instance.pvc_obj.delete()
+        if hasattr(class_instance, 'pvc_obj'):
+            class_instance.pvc_obj.delete()
 
     request.addfinalizer(finalizer)
 
@@ -166,6 +167,7 @@ def delete_pod(request):
         """
         Delete the pod
         """
-        class_instance.pod_obj.delete()
+        if hasattr(class_instance, 'pod_obj'):
+            class_instance.pod_obj.delete()
 
     request.addfinalizer(finalizer)
