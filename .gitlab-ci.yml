@@ -4,11 +4,14 @@ before_script:
    - pip install tox
 
 stages:
-   - build
+   - lint and unit test
 
-tox:
-   stage: build
-   script:
-      - tox
-   tags:
-      - docker
+lint:
+  stage: lint and unit test
+  script:
+    - tox -e flake8
+
+unit tests:
+  stage: lint and unit test
+  script:
+    - tox -e py37
