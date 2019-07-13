@@ -17,7 +17,7 @@ from ocs_ci.utility import templating
 
 log = logging.getLogger(__name__)
 
-OCS_BUG_ID = 'test-ocs-368'
+TEST_ID = 'test-ocs-368'
 
 NAMESPACE = ocp.OCP(kind='namespace')
 OUR_PVC = None
@@ -44,8 +44,8 @@ def setup():
     Create pvc
     Create pod
     """
-    NAMESPACE.create(resource_name=OCS_BUG_ID)
-    config.ENV_DATA["my_namespace"] = OCS_BUG_ID
+    NAMESPACE.create(resource_name=TEST_ID)
+    config.ENV_DATA["my_namespace"] = TEST_ID
 
     pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
     pvc_data['metadata']['namespace'] = config.ENV_DATA["my_namespace"]
@@ -58,12 +58,12 @@ def setup():
 
     pod_data = templating.load_yaml_to_dict(constants.CSI_RBD_POD_YAML)
     pod_data['metadata']['namespace'] = config.ENV_DATA["my_namespace"]
-    pod_data['metadata']['name'] = f'{OCS_BUG_ID}-pod'
+    pod_data['metadata']['name'] = f'{TEST_ID}-pod'
     first_claim = pod_data['spec']['volumes'][0]
     first_claim['persistentVolumeClaim']['claimName'] = pvc_name
     first_container = pod_data['spec']['containers'][0]
     first_volume_mount = first_container['volumeMounts'][0]
-    first_volume_mount['mountPath'] = f'/mnt/{OCS_BUG_ID}'
+    first_volume_mount['mountPath'] = f'/mnt/{TEST_ID}'
 
     global POD
     POD = Pod(**pod_data)
@@ -87,7 +87,7 @@ def teardown():
     POD.delete_temp_yaml_file()
     OUR_PVC.delete()
     OUR_PVC.delete_temp_yaml_file()
-    NAMESPACE.delete(resource_name=OCS_BUG_ID)
+    NAMESPACE.delete(resource_name=TEST_ID)
     run_cmd(f'oc delete pv {pv_name}')
 
 
@@ -104,7 +104,7 @@ def cmd_on_my_namespace(real_cmd):
         real_cmd (str): oc command to be run ('get pods', for example)
     """
     fail_limit = 100
-    setup_cmd = f'rsh {OCS_BUG_ID}-pod {real_cmd}'
+    setup_cmd = f'rsh {TEST_ID}-pod {real_cmd}'
     full_cmd = f'oc -n {config.ENV_DATA["my_namespace"]} {setup_cmd}'
     not_run = True
     fcount = 0
@@ -124,7 +124,7 @@ def test_add_stuff_to_rbd():
     """
     Make sure that there is data in the rbd pool.
 
-    The /mnt/{OCS_BUG_ID} diretory on the app pod is mounted on a
+    The /mnt/{TEST_ID} diretory on the app pod is mounted on a
     block device that is implemented by openshift-storage rbd.
     Writing here will add data to that storage.
     """
@@ -132,7 +132,7 @@ def test_add_stuff_to_rbd():
     prev_avail = df_info['stats']['total_avail_bytes']
     big_file = '/usr/lib/x86_64-linux-gnu/libicudata.so.57.1'
     for i in range(0, 10):
-        param = f'cp {big_file} /mnt/{OCS_BUG_ID}/xx.{i}'
+        param = f'cp {big_file} /mnt/{TEST_ID}/xx.{i}'
         cmd_on_my_namespace(param)
     df_info = CEPH_TOOL.exec_ceph_cmd('ceph df')
     now_avail = df_info['stats']['total_avail_bytes']
