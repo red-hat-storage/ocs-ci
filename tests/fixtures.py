@@ -122,16 +122,26 @@ def create_pvc(request):
     """
     class_instance = request.node.cls
 
+    class_instance.pvc_obj = helpers.create_pvc(
+        sc_name=class_instance.sc_obj.name
+    )
+
+
+@pytest.fixture()
+def delete_pvc(request):
+    """
+    Delete a persistent Volume Claim
+    """
+    class_instance = request.node.cls
+
     def finalizer():
         """
         Delete the PVC
         """
-        class_instance.pvc_obj.delete()
+        if hasattr(class_instance, 'pvc_obj'):
+            class_instance.pvc_obj.delete()
 
     request.addfinalizer(finalizer)
-    class_instance.pvc_obj = helpers.create_pvc(
-        sc_name=class_instance.sc_obj.name
-    )
 
 
 @pytest.fixture()
@@ -144,3 +154,20 @@ def create_rbd_pod(request):
         interface_type=constants.CEPHBLOCKPOOL,
         pvc_name=class_instance.pvc_obj.name
     )
+
+
+@pytest.fixture()
+def delete_pod(request):
+    """
+    Delete a pod
+    """
+    class_instance = request.node.cls
+
+    def finalizer():
+        """
+        Delete the pod
+        """
+        if hasattr(class_instance, 'pod_obj'):
+            class_instance.pod_obj.delete()
+
+    request.addfinalizer(finalizer)
