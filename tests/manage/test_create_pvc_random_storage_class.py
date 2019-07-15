@@ -97,8 +97,9 @@ def create_pvc(storageclass_list, count=1):
     PVC_OBJS = []
     for i in range(count):
         sc_name = random.choice(storageclass_list)
-        PVC_OBJS[i] = helpers.create_pvc(sc_name)
-        log.info(f"{PVC_OBJS[i].name} got created and got Bounded")
+        pvc_objs = helpers.create_pvc(sc_name)
+        PVC_OBJS.append(pvc_objs)
+        log.info(f"{pvc_objs.name} got created and got Bounded")
     return True
 
 

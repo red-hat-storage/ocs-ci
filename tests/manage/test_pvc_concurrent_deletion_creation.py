@@ -124,7 +124,6 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         pvc_objs = create_multiple_pvc(self.number_of_pvc, pvc_data)
 
         log.info(f'Created {self.number_of_pvc} new PVCs.')
-        # global pvc_objs_new
         self.pvc_objs_new = pvc_objs[:]
 
         # Verify PVCs are Bound
