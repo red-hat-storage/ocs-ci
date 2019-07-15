@@ -18,7 +18,10 @@ def pytest_html_results_table_row(report, cells):
     """
     Add content to the column Description
     """
-    cells.insert(2, html.td(report.description))
+    try:
+        cells.insert(2, html.td(report.description))
+    except AttributeError:
+        cells.insert(2, html.td('--- no description ---'))
 
 
 @pytest.mark.hookwrapper
