@@ -70,7 +70,7 @@ def teardown(self):
     Delete project
     """
     # Delete newly created PVCs
-    assert delete_pvcs(pvc_objs_new), 'Failed to delete PVCs'
+    assert delete_pvcs(self.pvc_objs_new), 'Failed to delete PVCs'
     log.info(f'Newly created {self.number_of_pvc} PVCs are now deleted.')
 
     # Switch to default project
@@ -97,6 +97,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
     pvc_base_name_new = 'test-pvc-re'
     initial_pvs = []
     pvc_objs_initial = []
+    pvc_objs_new = []
 
     def test_multiple_pvc_concurrent_creation_deletion(self):
         """
@@ -123,11 +124,11 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         pvc_objs = create_multiple_pvc(self.number_of_pvc, pvc_data)
 
         log.info(f'Created {self.number_of_pvc} new PVCs.')
-        global pvc_objs_new
-        pvc_objs_new = pvc_objs[:]
+        # global pvc_objs_new
+        self.pvc_objs_new = pvc_objs[:]
 
         # Verify PVCs are Bound
-        for pvc in pvc_objs_new:
+        for pvc in self.pvc_objs_new:
             pvc.reload()
             assert pvc.status == constants.STATUS_BOUND, (
                 f'PVC {pvc.name} is not Bound'
