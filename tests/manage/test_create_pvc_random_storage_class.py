@@ -49,8 +49,6 @@ def teardown():
     Tearing down the environment
     """
     global RBD_SECRET_OBJ, CEPHFS_SECRET_OBJ
-    log.info("Deleting PVC")
-    assert pvc.delete_all_pvcs()
     log.info("Deleting CEPH BLOCK POOL")
     assert helpers.delete_cephblockpool()
     log.info("Deleting RBD Secret")
@@ -85,17 +83,19 @@ def create_multiple_rbd_storageclasses(count=1):
     return True
 
 
-def create_pvc(storageclass_list, count=1):
+def create_pvc(storageclass_list, pvcs, count=1):
     """
     Function for creating pvc and multiple pvc
 
     Args:
         storageclass_list (list): This will contain storageclass list
+        pvcs (list): reference to list object where to append created pvcs
         count (int): count specify no of pvc want's to create
     """
     for i in range(count):
         sc_name = random.choice(storageclass_list)
         pvc_obj = helpers.create_pvc(sc_name)
+        pvcs.append(pvc_obj)
         log.info(f"{pvc_obj.name} got Created and got Bounded")
     return True
 
@@ -113,8 +113,20 @@ def create_storageclass_cephfs():
     return True
 
 
+@pytest.fixture(scope='class')
+def delete_pvcs(request):
+    cls_ref = request.node.cls
+
+    def fin():
+        log.info("Deleting PVCs")
+        if cls_ref.created_pvcs:
+            assert pvc.delete_pvcs(cls_ref.created_pvcs)
+    request.addfinalizer(fin)
+
+
 @tier1
 @pytest.mark.usefixtures(
+    delete_pvcs.__name__,
     ocs288_fixture.__name__,
 )
 @pytest.mark.polarion_id("OCS-288")
@@ -122,11 +134,12 @@ class TestCreatePVCRandomStorageClass(ManageTest):
     """
     Creating PVC with random SC
     """
+    created_pvcs = []
 
     def test_create_pvc_with_random_sc(self):
         storageclass_list = helpers.get_all_storageclass_name()
         if len(storageclass_list):
-            assert create_pvc(storageclass_list, count=20)
+            assert create_pvc(storageclass_list, self.created_pvcs, count=20)
         else:
             log.error("No Storageclass Found")
             return False
