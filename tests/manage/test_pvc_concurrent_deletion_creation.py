@@ -124,11 +124,10 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
 
         log.info(f'Created {self.number_of_pvc} new PVCs.')
         global pvc_objs_new
-        pvc_objs_new = [0] * self.number_of_pvc
         pvc_objs_new = pvc_objs[:]
 
         # Verify PVCs are Bound
-        for pvc in self.pvc_objs_new:
+        for pvc in pvc_objs_new:
             pvc.reload()
             assert pvc.status == constants.STATUS_BOUND, (
                 f'PVC {pvc.name} is not Bound'
