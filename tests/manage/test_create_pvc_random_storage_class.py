@@ -94,7 +94,7 @@ def create_pvc(storageclass_list, count=1):
         count (int): count specify no of pvc want's to create
     """
     global PVC_OBJS
-    PVC_OBJS = [0] * count
+    PVC_OBJS = []
     for i in range(count):
         sc_name = random.choice(storageclass_list)
         PVC_OBJS[i] = helpers.create_pvc(sc_name)
