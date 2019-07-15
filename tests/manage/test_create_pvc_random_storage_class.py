@@ -50,7 +50,7 @@ def teardown():
     """
     global RBD_SECRET_OBJ, CEPHFS_SECRET_OBJ
     log.info("Deleting PVC")
-    assert pvc.delete_all_pvcs()
+    assert pvc.delete_pvcs(PVC_OBJS)
     log.info("Deleting CEPH BLOCK POOL")
     assert helpers.delete_cephblockpool()
     log.info("Deleting RBD Secret")
@@ -93,10 +93,12 @@ def create_pvc(storageclass_list, count=1):
         storageclass_list (list): This will contain storageclass list
         count (int): count specify no of pvc want's to create
     """
+    global PVC_OBJS
+    PVC_OBJS = [0] * count
     for i in range(count):
         sc_name = random.choice(storageclass_list)
-        pvc_obj = helpers.create_pvc(sc_name)
-        log.info(f"{pvc_obj.name} got Created and got Bounded")
+        PVC_OBJS[i] = helpers.create_pvc(sc_name)
+        log.info(f"{PVC_OBJS[i].name} got created and got Bounded")
     return True
 
 
