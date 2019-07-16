@@ -41,6 +41,7 @@ STORAGECLASS = "StorageClass"
 PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
 POD = "Pod"
+ROUTE = "Route"
 
 
 # Other
