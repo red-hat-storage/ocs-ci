@@ -265,7 +265,7 @@ def create_storage_class(
 
 
 def create_pvc(
-    sc_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE, pvc_name=None,
+    sc_name, pvc_name=None, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     size=None, wait=True
 ):
     """
@@ -274,8 +274,8 @@ def create_pvc(
     Args:
         sc_name (str): The name of the storage class for the PVC to be
             associated with
-        namespace (str): The namespace for the PVC creation
         pvc_name (str): The name of the PVC to create
+        namespace (str): The namespace for the PVC creation
         size(str): Size of pvc to create
         wait (bool): True for wait for the VPC operation to complete, False otherwise
 

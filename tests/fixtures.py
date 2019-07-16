@@ -1,6 +1,6 @@
 import pytest
 from tests import helpers
-from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs import constants, ocp
 
 
 @pytest.fixture()
@@ -19,9 +19,6 @@ def create_rbd_secret(request):
 
     request.addfinalizer(finalizer)
 
-    class_instance.namespace = getattr(
-        class_instance, 'namespace', defaults.ROOK_CLUSTER_NAMESPACE
-    )
     class_instance.rbd_secret_obj = helpers.create_secret(
         interface_type=constants.CEPHBLOCKPOOL
     )
@@ -66,9 +63,6 @@ def create_ceph_block_pool(request):
 
     request.addfinalizer(finalizer)
 
-    class_instance.namespace = getattr(
-        class_instance, 'namespace', defaults.ROOK_CLUSTER_NAMESPACE
-    )
     class_instance.cbp_obj = helpers.create_ceph_block_pool()
     assert class_instance.cbp_obj, "Failed to create block pool"
 
@@ -89,9 +83,6 @@ def create_rbd_storageclass(request):
 
     request.addfinalizer(finalizer)
 
-    class_instance.namespace = getattr(
-        class_instance, 'namespace', defaults.ROOK_CLUSTER_NAMESPACE
-    )
     class_instance.sc_obj = helpers.create_storage_class(
         interface_type=constants.CEPHBLOCKPOOL,
         interface_name=class_instance.cbp_obj.name,
@@ -188,7 +179,8 @@ def create_rbd_pod(request):
     class_instance = request.node.cls
     class_instance.pod_obj = helpers.create_pod(
         interface_type=constants.CEPHBLOCKPOOL,
-        pvc_name=class_instance.pvc_obj.name
+        pvc_name=class_instance.pvc_obj.name,
+        namespace=class_instance.namespace
     )
 
 
@@ -249,12 +241,9 @@ def create_pods(request):
 
     request.addfinalizer(finalizer)
 
-    class_instance.namespace = getattr(
-        class_instance, 'namespace', defaults.ROOK_CLUSTER_NAMESPACE
-    )
     class_instance.pod_objs = [
         helpers.create_pod(
-            interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvc_obj.name,
+            interface_type=class_instance.interface, pvc_name=pvc_obj.name,
             wait=False, namespace=class_instance.namespace
         ) for pvc_obj in class_instance.pvc_objs
     ]

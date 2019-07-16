@@ -65,7 +65,7 @@ class PVC(OCS):
         self.data['status']['capacity']['storage'] = f"{new_size}Gi"
         self.apply(**self.data)
         if verify:
-            return self.get_size() == new_size
+            return self.size == new_size
         return True
 
 

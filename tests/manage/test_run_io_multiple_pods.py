@@ -2,11 +2,13 @@ import pytest
 import logging
 import random
 from concurrent.futures import ThreadPoolExecutor
+from ocs_ci.ocs import constants
 
 from ocs_ci.framework.testlib import ManageTest, tier2
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool,
-    create_rbd_secret, create_pods, create_pvcs, create_project
+    create_rbd_secret, create_pods, create_pvcs, create_project,
+    create_cephfs_secret, create_cephfs_storageclass
 )
 
 
@@ -27,22 +29,18 @@ def init_pvc_size(request):
 
 @tier2
 @pytest.mark.usefixtures(
-    create_rbd_secret.__name__,
-    create_ceph_block_pool.__name__,
-    create_rbd_storageclass.__name__,
     create_project.__name__,
     init_pvc_size.__name__,
-    create_pvcs.__name__,
-    create_pods.__name__
 )
-class TestRunIOMultiplePods(ManageTest):
+class BaseRunIOMultiplePods(ManageTest):
     """
     Run IO on multiple pods in parallel
     """
     pvc_size_int = 5
-    num_of_pvcs = 25
+    num_of_pvcs = 5
+    interface = None
 
-    def test_run_io_multiple_pods(self):
+    def run_io_multiple_pods(self):
         """
         Run IO on multiple pods in parallel
         """
@@ -64,3 +62,42 @@ class TestRunIOMultiplePods(ManageTest):
             logger.info(
                 f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
             )
+
+
+@tier2
+@pytest.mark.usefixtures(
+    create_rbd_secret.__name__,
+    create_ceph_block_pool.__name__,
+    create_rbd_storageclass.__name__,
+    create_pvcs.__name__,
+    create_pods.__name__
+)
+class TestRunIOMultiplePodsRBD(BaseRunIOMultiplePods):
+    """
+    Run IO on multiple pods in parallel - RBD
+    """
+    interface = constants.CEPHBLOCKPOOL
+
+    def test_run_io_multiple_pods_rbd(self):
+        """
+        """
+        self.run_io_multiple_pods()
+
+
+@tier2
+@pytest.mark.usefixtures(
+    create_cephfs_secret.__name__,
+    create_cephfs_storageclass.__name__,
+    create_pvcs.__name__,
+    create_pods.__name__
+)
+class TestRunIOMultiplePodsFS(BaseRunIOMultiplePods):
+    """
+    Run IO on multiple pods in parallel - CephFS
+    """
+    interface = constants.CEPHFILESYSTEM
+
+    def test_run_io_multiple_pods_fs(self):
+        """
+        """
+        self.run_io_multiple_pods()
