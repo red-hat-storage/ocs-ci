@@ -234,6 +234,19 @@ class Pod(OCS):
 
         self.fio_thread = wl.run(**io_params)
 
+    def run_git_clone(self):
+        """
+        Execute git clone on a pod to simulate a Jenkins user
+        """
+        name = 'test_workload'
+        work_load = 'jenkins'
+
+        wl = workload.WorkLoad(
+            name=name, work_load=work_load, pod=self
+        )
+        assert wl.setup(), "Setup up for git failed"
+        wl.run()
+
 
 # Helper functions for Pods
 
