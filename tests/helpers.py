@@ -436,8 +436,8 @@ def get_all_storageclass_name():
 
     storageclass = [
         item.get('metadata').get('name') for item in sample if (
-            (item.get('metadata').get('name') not in constants.IGNORE_SC_GP2) and
-            (item.get('metadata').get('name') not in constants.IGNORE_SC_FLEX)
+            (item.get('metadata').get('name') not in constants.IGNORE_SC_GP2)
+            and (item.get('metadata').get('name') not in constants.IGNORE_SC_FLEX)
         )
     ]
     return storageclass
