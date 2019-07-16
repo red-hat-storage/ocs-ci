@@ -1,0 +1,8 @@
+---
+ENV_DATA:
+  platform: 'aws'
+  deployment_type: 'ipi'
+  skip_ocp_deployment: false
+  skip_ocs_deployment: false
+  ceph_image: 'quay.io/rhceph-dev/rhceph-4.0-rhel-8:latest'
+  rook_image: 'quay.io/rhceph-dev/rook:latest'
