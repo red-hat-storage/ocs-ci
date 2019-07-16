@@ -88,16 +88,20 @@ def wait_for_resource_state(resource, state):
     return True
 
 
-def create_pod(interface_type=None, pvc_name=None, desired_status=constants.STATUS_RUNNING, wait=True):
+def create_pod(
+    interface_type=None, pvc_name=None, desired_status=constants.STATUS_RUNNING, wait=True,
+    namespace=defaults.ROOK_CLUSTER_NAMESPACE
+):
     """
     Create a pod
 
     Args:
         interface_type (str): The interface type (CephFS, RBD, etc.)
-        pvc (str): The PVC that should be attached to the newly created pod
+        pvc_name (str): The PVC that should be attached to the newly created pod
         desired_status (str): The status of the pod to wait for
         wait (bool): True for waiting for the pod to reach the desired
             status, False otherwise
+        namespace (str): The namespace for the new resource creation
 
     Returns:
         Pod: A Pod instance
@@ -116,7 +120,7 @@ def create_pod(interface_type=None, pvc_name=None, desired_status=constants.STAT
     pod_data['metadata']['name'] = create_unique_resource_name(
         f'test-{interface}', 'pod'
     )
-    pod_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    pod_data['metadata']['namespace'] = namespace
     if pvc_name:
         pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
     pod_obj = pod.Pod(**pod_data)
@@ -194,7 +198,7 @@ def create_ceph_block_pool(pool_name=None):
 
 def create_storage_class(
     interface_type, interface_name, secret_name,
-    reclaim_policy='Delete', sc_name=None
+    reclaim_policy=constants.RECLAIM_POLICY_DELETE, sc_name=None
 ):
     """
     Create a storage class
@@ -260,13 +264,17 @@ def create_storage_class(
     return create_resource(**sc_data, wait=False)
 
 
-def create_pvc(sc_name, pvc_name=None, size=None, wait=True):
+def create_pvc(
+    sc_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE, pvc_name=None,
+    size=None, wait=True
+):
     """
     Create a PVC
 
     Args:
         sc_name (str): The name of the storage class for the PVC to be
             associated with
+        namespace (str): The namespace for the PVC creation
         pvc_name (str): The name of the PVC to create
         size(str): Size of pvc to create
         wait (bool): True for wait for the VPC operation to complete, False otherwise
@@ -280,7 +288,7 @@ def create_pvc(sc_name, pvc_name=None, size=None, wait=True):
             'test', 'pvc'
         )
     )
-    pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    pvc_data['metadata']['namespace'] = namespace
     pvc_data['spec']['storageClassName'] = sc_name
     if size:
         pvc_data['spec']['resources']['requests']['storage'] = size
@@ -292,6 +300,26 @@ def create_pvc(sc_name, pvc_name=None, size=None, wait=True):
         ocs_obj.reload()
 
     return ocs_obj
+
+
+def create_multiple_pvc(sc_name, namespace, number_of_pvc=1, size=None):
+    """
+    Create one or more PVC
+
+    Args:
+        sc_name (str): The name of the storage class to provision the PVCs from
+        number_of_pvc (int): Number of PVCs to be created
+        size (str): The size of the PVCs to create
+        namespace (str): The namespace for the PVCs creation
+
+    Returns:
+         list: List of PVC objects
+    """
+    return [
+        create_pvc(
+            sc_name=sc_name, size=size, namespace=namespace
+        ) for _ in range(number_of_pvc)
+    ]
 
 
 def verify_block_pool_exists(pool_name):

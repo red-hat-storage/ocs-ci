@@ -4,7 +4,6 @@ General PVC object
 import logging
 
 from ocs_ci.ocs import constants
-from ocs_ci.utility import templating
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.framework import config
@@ -102,32 +101,3 @@ def get_all_pvcs(namespace=None):
     )
     out = ocp_pvc_obj.get()
     return out
-
-
-def create_multiple_pvc(number_of_pvc=1, pvc_data=None):
-    """
-    Create one or more PVC
-
-    Args:
-        number_of_pvc (int): Number of PVCs to be created
-        pvc_data (dict): Parameters for PVC yaml
-
-    Returns:
-         list: List of PVC objects
-    """
-    if pvc_data is None:
-        pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
-    pvc_objs = []
-    pvc_base_name = pvc_data['metadata']['name']
-
-    for count in range(1, number_of_pvc + 1):
-        if number_of_pvc != 1:
-            pvc_name = f'{pvc_base_name}{count}'
-            pvc_data['metadata']['name'] = pvc_name
-        pvc_name = pvc_data['metadata']['name']
-        log.info(f'Creating Persistent Volume Claim {pvc_name}')
-        pvc_obj = PVC(**pvc_data)
-        pvc_obj.create()
-        pvc_objs.append(pvc_obj)
-        log.info(f'Created Persistent Volume Claim {pvc_name}')
-    return pvc_objs

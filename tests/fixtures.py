@@ -1,6 +1,6 @@
 import pytest
 from tests import helpers
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp, defaults
 
 
 @pytest.fixture()
@@ -19,6 +19,9 @@ def create_rbd_secret(request):
 
     request.addfinalizer(finalizer)
 
+    class_instance.namespace = getattr(
+        class_instance, 'namespace', defaults.ROOK_CLUSTER_NAMESPACE
+    )
     class_instance.rbd_secret_obj = helpers.create_secret(
         interface_type=constants.CEPHBLOCKPOOL
     )
@@ -63,6 +66,9 @@ def create_ceph_block_pool(request):
 
     request.addfinalizer(finalizer)
 
+    class_instance.namespace = getattr(
+        class_instance, 'namespace', defaults.ROOK_CLUSTER_NAMESPACE
+    )
     class_instance.cbp_obj = helpers.create_ceph_block_pool()
     assert class_instance.cbp_obj, "Failed to create block pool"
 
@@ -83,10 +89,13 @@ def create_rbd_storageclass(request):
 
     request.addfinalizer(finalizer)
 
+    class_instance.namespace = getattr(
+        class_instance, 'namespace', defaults.ROOK_CLUSTER_NAMESPACE
+    )
     class_instance.sc_obj = helpers.create_storage_class(
         interface_type=constants.CEPHBLOCKPOOL,
         interface_name=class_instance.cbp_obj.name,
-        secret_name=class_instance.rbd_secret_obj.name
+        secret_name=class_instance.rbd_secret_obj.name,
     )
     assert class_instance.sc_obj, "Failed to create storage class"
 
@@ -116,6 +125,33 @@ def create_cephfs_storageclass(request):
 
 
 @pytest.fixture()
+def create_project(request):
+    """
+    Create a new project
+    """
+    class_instance = request.node.cls
+
+    def finalizer():
+        """
+        Delete the project
+        """
+        class_instance.project_obj.delete(resource_name=class_instance.namespace)
+
+    request.addfinalizer(finalizer)
+
+    class_instance.namespace = helpers.create_unique_resource_name(
+        'test', 'namespace'
+    )
+    class_instance.project_obj = ocp.OCP(
+        kind='Project', namespace=class_instance.namespace
+    )
+
+    assert class_instance.project_obj.new_project(class_instance.namespace), (
+        f'Failed to create new project {class_instance.namespace}'
+    )
+
+
+@pytest.fixture()
 def create_pvc(request):
     """
     Create a persistent Volume Claim
@@ -123,7 +159,7 @@ def create_pvc(request):
     class_instance = request.node.cls
 
     class_instance.pvc_obj = helpers.create_pvc(
-        sc_name=class_instance.sc_obj.name
+        sc_name=class_instance.sc_obj.name, namespace=class_instance.namespace
     )
 
 
@@ -171,3 +207,58 @@ def delete_pod(request):
             class_instance.pod_obj.delete()
 
     request.addfinalizer(finalizer)
+
+
+@pytest.fixture()
+def create_pvcs(request):
+    """
+    Create multiple PVCs
+    """
+    class_instance = request.node.cls
+
+    def finalizer():
+        """
+        Delete multiple PVCs
+        """
+        if hasattr(class_instance, 'pvc_objs'):
+            for pvc in class_instance.pvc_objs:
+                pvc.delete()
+
+    request.addfinalizer(finalizer)
+
+    class_instance.pvc_objs = helpers.create_multiple_pvc(
+        sc_name=class_instance.sc_obj.name, number_of_pvc=class_instance.num_of_pvcs,
+        size=class_instance.pvc_size, namespace=class_instance.namespace
+    )
+
+
+@pytest.fixture()
+def create_pods(request):
+    """
+    Create multiple pods
+    """
+    class_instance = request.node.cls
+
+    def finalizer():
+        """
+        Delete multiple pods
+        """
+        if hasattr(class_instance, 'pod_objs'):
+            for pod in class_instance.pod_objs:
+                pod.delete()
+
+    request.addfinalizer(finalizer)
+
+    class_instance.namespace = getattr(
+        class_instance, 'namespace', defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    class_instance.pod_objs = [
+        helpers.create_pod(
+            interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvc_obj.name,
+            wait=False, namespace=class_instance.namespace
+        ) for pvc_obj in class_instance.pvc_objs
+    ]
+    for pod in class_instance.pod_objs:
+        assert helpers.wait_for_resource_state(
+            pod, constants.STATUS_RUNNING
+        ), f"Pod {pod} failed to reach {constants.STATUS_RUNNING}"
