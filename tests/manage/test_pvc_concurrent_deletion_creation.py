@@ -8,7 +8,7 @@ from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.utility.utils import run_async
 from ocs_ci.framework.testlib import tier1, ManageTest
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
-from ocs_ci.ocs.resources.pvc import create_multiple_pvc, delete_all_pvcs
+from ocs_ci.ocs.resources.pvc import create_multiple_pvc, delete_pvcs
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool, create_rbd_secret
 )
@@ -70,7 +70,7 @@ def teardown(self):
     Delete project
     """
     # Delete newly created PVCs
-    assert delete_all_pvcs(namespace=self.namespace), 'Failed to delete PVCs'
+    assert delete_pvcs(self.pvc_objs_new), 'Failed to delete PVCs'
     log.info(f'Newly created {self.number_of_pvc} PVCs are now deleted.')
 
     # Switch to default project
