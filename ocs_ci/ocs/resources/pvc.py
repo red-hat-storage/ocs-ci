@@ -104,7 +104,7 @@ def get_all_pvcs(namespace=None):
     return out
 
 
-def create_multiple_pvc(number_of_pvc=1, pvc_data=None):
+def create_multiple_pvc(number_of_pvc=1, **pvc_data):
     """
     Create one or more PVC
 

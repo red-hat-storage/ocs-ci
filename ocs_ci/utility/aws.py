@@ -309,3 +309,33 @@ class AWS(object):
             return False
         state = res.get('StartingInstances')[0].get('CurrentState').get('Code')
         return state == PENDING
+
+    def get_volumes_attached_to_instance(self, instance_id):
+        """
+        Get a list of volumes attached to a given instance
+
+        Args:
+            instance_id (str): ID of the instance
+
+        Returns:
+            volumes: List, of volumes attached to the instance
+        """
+        logger.info(instance_id)
+        volumes_response = self.ec2_client.describe_volumes(
+            Filters=[
+                {
+                    'Name': 'attachment.instance-id',
+                    'Values': [instance_id],
+                },
+            ],
+        )
+        volumes = []
+        for volume in volumes_response['Volumes']:
+            volumes.append(
+                dict(
+                    id=volume['VolumeId'],
+                    attachments=volume['Attachments']
+                )
+            )
+        logger.info(volumes)
+        return volumes
