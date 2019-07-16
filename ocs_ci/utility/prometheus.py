@@ -1,5 +1,4 @@
 import base64
-import errno
 import logging
 import os
 import requests
