@@ -40,7 +40,7 @@ class TestRunIOMultiplePods(ManageTest):
     Run IO on multiple pods in parallel
     """
     pvc_size_int = 5
-    num_of_pvcs = 50
+    num_of_pvcs = 25
 
     def test_run_io_multiple_pods(self):
         """
