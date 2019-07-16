@@ -22,7 +22,7 @@ def init_pvc_size(request):
     """
     class_instance = request.node.cls
     class_instance.pvc_size_int = getattr(
-        class_instance, 'pvc_size_int', random.randint(-1, 100)
+        class_instance, 'pvc_size_int', random.randint(1, 10)
     )
     class_instance.pvc_size = f'{class_instance.pvc_size_int}Gi'
 
@@ -37,7 +37,7 @@ class BaseRunIOMultiplePods(ManageTest):
     Run IO on multiple pods in parallel
     """
     pvc_size_int = 5
-    num_of_pvcs = 5
+    num_of_pvcs = 10
     interface = None
 
     def run_io_multiple_pods(self):

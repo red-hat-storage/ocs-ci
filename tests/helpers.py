@@ -302,7 +302,7 @@ def create_pvc(
     return ocs_obj
 
 
-def create_multiple_pvc(sc_name, namespace, number_of_pvc=1, size=None):
+def create_multiple_pvcs(sc_name, namespace, number_of_pvc=1, size=None):
     """
     Create one or more PVC
 
@@ -315,11 +315,17 @@ def create_multiple_pvc(sc_name, namespace, number_of_pvc=1, size=None):
     Returns:
          list: List of PVC objects
     """
-    return [
+
+    pvc_objs = [
         create_pvc(
-            sc_name=sc_name, size=size, namespace=namespace
+            sc_name=sc_name, size=size, namespace=namespace, wait=False
         ) for _ in range(number_of_pvc)
     ]
+    for pvc in pvc_objs:
+        assert wait_for_resource_state(pvc, constants.STATUS_BOUND), (
+            f"PVC {pvc.name} failed to reach {constants.STATUS_BOUND} status"
+        )
+    return pvc_objs
 
 
 def verify_block_pool_exists(pool_name):

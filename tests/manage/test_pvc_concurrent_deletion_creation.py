@@ -12,7 +12,7 @@ from ocs_ci.ocs.resources.pvc import delete_pvcs
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool, create_rbd_secret
 )
-from tests.helpers import create_unique_resource_name, create_multiple_pvc
+from tests.helpers import create_unique_resource_name, create_multiple_pvcs
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def setup(self):
         f'Failed to create new project {self.namespace}'
     )
     # Create 100 PVCs
-    pvc_objs = create_multiple_pvc(
+    pvc_objs = create_multiple_pvcs(
         sc_name=self.sc_obj.name, namespace=self.namespace,
         number_of_pvc=self.number_of_pvc
     )
@@ -109,7 +109,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         )
 
         # Create 100 PVCs
-        pvc_objs = create_multiple_pvc(
+        pvc_objs = create_multiple_pvcs(
             sc_name=self.sc_obj.name, namespace=self.namespace,
             number_of_pvc=self.number_of_pvc
         )
