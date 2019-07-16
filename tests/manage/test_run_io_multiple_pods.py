@@ -16,10 +16,12 @@ logger = logging.getLogger(__name__)
 @pytest.fixture()
 def init_pvc_size(request):
     """
-
+    Initialize the PVC size for PVC creation
     """
     class_instance = request.node.cls
-    class_instance.pvc_size_int = getattr(class_instance, 'pvc_size_int', random.randint(-1, 100))
+    class_instance.pvc_size_int = getattr(
+        class_instance, 'pvc_size_int', random.randint(-1, 100)
+    )
     class_instance.pvc_size = f'{class_instance.pvc_size_int}Gi'
 
 
@@ -47,7 +49,11 @@ class TestRunIOMultiplePods(ManageTest):
         results = list()
         with ThreadPoolExecutor(max_workers=self.num_of_pvcs) as executor:
             for pod in self.pod_objs:
-                results.append(executor.submit(pod.run_io('fs', f'{self.pvc_size_int - 1}G')))
+                results.append(
+                    executor.submit(
+                        pod.run_io('fs', f'{self.pvc_size_int - 1}G')
+                    )
+                )
 
         for pod in self.pod_objs:
             fio_result = pod.get_fio_results()
