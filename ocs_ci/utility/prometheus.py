@@ -37,15 +37,8 @@ class PrometheusAPI(object):
                 config.ENV_DATA['cluster_path'],
                 config.RUN['password_location']
             )
-            if os.path.exists(filename):
-                with open(filename) as f:
-                    password = f.read()
-            else:
-                raise FileNotFoundError(
-                    errno.ENOENT,
-                    os.strerror(errno.ENOENT),
-                    filename
-                )
+            with open(filename) as f:
+                password = f.read()
         self._password = password
         self.refresh_connection()
         self.generate_cert()
