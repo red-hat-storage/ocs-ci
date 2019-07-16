@@ -13,6 +13,8 @@
 
 # in this RUN section we will keep default parameters for run of OCS-CI
 RUN:
+  username: 'kubeadmin'
+  password_location: 'auth/kubeadmin-password'
   log_dir: "/tmp"
   run_id: null  # this will be redefined in the execution
   kubeconfig_location: 'auth/kubeconfig' # relative from cluster_dir
