@@ -47,7 +47,10 @@ ROUTE = "Route"
 # Other
 SECRET = "Secret"
 NAMESPACE = 'Namespace'
-IGNORE_SC = "gp2"
+IGNORE_SC_GP2 = "gp2"
+IGNORE_SC_FLEX = "rook-ceph-block"
+
+
 DEFAULT_BLOCKPOOL = 'rbd'
 # encoded value of 'admin'
 ADMIN_USER = 'admin'

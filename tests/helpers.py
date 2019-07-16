@@ -436,7 +436,8 @@ def get_all_storageclass_name():
 
     storageclass = [
         item.get('metadata').get('name') for item in sample if (
-            item.get('metadata').get('name') not in constants.IGNORE_SC
+            (item.get('metadata').get('name') not in constants.IGNORE_SC_GP2) and
+            (item.get('metadata').get('name') not in constants.IGNORE_SC_FLEX)
         )
     ]
     return storageclass
@@ -501,6 +502,7 @@ def delete_cephblockpool(pool_name=None):
     return True
 
 
+<<<<<<< HEAD
 def create_cephfilesystem():
     """
     Function for deploying CephFileSystem (MDS)
@@ -547,6 +549,8 @@ def delete_all_cephfilesystem():
     return True
 
 
+=======
+>>>>>>> - Update based on pr comments
 def get_cephfs_name():
     """
     Function to retrive CephFS name
