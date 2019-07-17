@@ -11,7 +11,6 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError, CommandFailed, UnexpectedBehaviour
 )
 from tests import helpers
-from tests.fixtures import create_ceph_block_pool, create_rbd_secret
 
 log = logging.getLogger(__name__)
 
@@ -52,8 +51,6 @@ def teardown(self):
 
 @tier1
 @pytest.mark.usefixtures(
-    create_rbd_secret.__name__,
-    create_ceph_block_pool.__name__,
     test_fixture.__name__
 )
 class TestRbdBasedRwoPvc(ManageTest):
@@ -71,7 +68,8 @@ class TestRbdBasedRwoPvc(ManageTest):
             )
         ]
     )
-    def test_rbd_based_rwo_pvc(self, reclaim_policy):
+    def test_rbd_based_rwo_pvc(
+            self, reclaim_policy, rbd_secret, ceph_block_pool):
         """
         Verifies RBD Based RWO Dynamic PVC creation with Reclaim policy set to
         Delete/Retain
@@ -94,8 +92,8 @@ class TestRbdBasedRwoPvc(ManageTest):
         # Create Storage Class with reclaimPolicy: Delete
         sc_obj = helpers.create_storage_class(
             interface_type=constants.CEPHBLOCKPOOL,
-            interface_name=self.cbp_obj.name,
-            secret_name=self.rbd_secret_obj.name,
+            interface_name=ceph_block_pool.name,
+            secret_name=rbd_secret.name,
             reclaim_policy=reclaim_policy
         )
 
