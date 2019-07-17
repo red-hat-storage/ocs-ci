@@ -4,170 +4,163 @@ from ocs_ci.ocs import constants
 
 
 @pytest.fixture()
-def create_rbd_secret(request):
+def rbd_secret(request):
     """
     Create an RBD secret
     """
-    class_instance = request.node.cls
+    rbd_secret_obj = helpers.create_secret(
+        interface_type=constants.CEPHBLOCKPOOL
+    )
+    assert rbd_secret_obj, "Failed to create secret"
 
     def finalizer():
         """
         Delete the RBD secret
         """
-        if hasattr(class_instance, 'rbd_secret_obj'):
-            class_instance.rbd_secret_obj.delete()
+        rbd_secret_obj.delete()
 
     request.addfinalizer(finalizer)
-
-    class_instance.rbd_secret_obj = helpers.create_secret(
-        interface_type=constants.CEPHBLOCKPOOL
-    )
-    assert class_instance.rbd_secret_obj, "Failed to create secret"
+    return rbd_secret_obj
 
 
 @pytest.fixture()
-def create_cephfs_secret(request):
+def cephfs_secret(request):
     """
     Create a CephFS secret
     """
-    class_instance = request.node.cls
+    cephfs_secret_obj = helpers.create_secret(
+        interface_type=constants.CEPHFILESYSTEM
+    )
+    assert cephfs_secret_obj, f"Failed to create secret"
 
     def finalizer():
         """
         Delete the FS secret
         """
-        if hasattr(class_instance, 'cephfs_secret_obj'):
-            class_instance.cephfs_secret_obj.delete()
+        cephfs_secret_obj.delete()
 
     request.addfinalizer(finalizer)
-
-    class_instance.cephfs_secret_obj = helpers.create_secret(
-        interface_type=constants.CEPHFILESYSTEM
-    )
-    assert class_instance.cephfs_secret_obj, f"Failed to create secret"
+    return cephfs_secret_obj
 
 
 @pytest.fixture()
-def create_ceph_block_pool(request):
+def ceph_block_pool(request):
     """
     Create a Ceph block pool
     """
-    class_instance = request.node.cls
+    cbp_obj = helpers.create_ceph_block_pool()
+    assert cbp_obj, "Failed to create block pool"
 
     def finalizer():
         """
         Delete the Ceph block pool
         """
-        if hasattr(class_instance, 'cbp_obj'):
-            class_instance.cbp_obj.delete()
+        cbp_obj.delete()
 
     request.addfinalizer(finalizer)
-
-    class_instance.cbp_obj = helpers.create_ceph_block_pool()
-    assert class_instance.cbp_obj, "Failed to create block pool"
+    return cbp_obj
 
 
 @pytest.fixture()
-def create_rbd_storageclass(request):
+def rbd_storageclass(request, ceph_block_pool, rbd_secret):
     """
     Create an RBD storage class
     """
-    class_instance = request.node.cls
+    sc_obj = helpers.create_storage_class(
+        interface_type=constants.CEPHBLOCKPOOL,
+        interface_name=ceph_block_pool.name,
+        secret_name=rbd_secret.name
+    )
+    assert sc_obj, "Failed to create storage class"
 
     def finalizer():
         """
         Delete the RBD storage class
         """
-        if class_instance.sc_obj.get():
-            class_instance.sc_obj.delete()
+        sc_obj.delete()
 
     request.addfinalizer(finalizer)
-
-    class_instance.sc_obj = helpers.create_storage_class(
-        interface_type=constants.CEPHBLOCKPOOL,
-        interface_name=class_instance.cbp_obj.name,
-        secret_name=class_instance.rbd_secret_obj.name
-    )
-    assert class_instance.sc_obj, "Failed to create storage class"
+    return sc_obj
 
 
 @pytest.fixture()
-def create_cephfs_storageclass(request):
+def cephfs_storageclass(request, cephfs_secret):
     """
     Create a CephFS storage class
     """
-    class_instance = request.node.cls
+    sc_obj = helpers.create_storage_class(
+        interface_type=constants.CEPHFILESYSTEM,
+        interface_name=helpers.get_cephfs_data_pool_name(),
+        secret_name=cephfs_secret.name
+    )
+    assert sc_obj, f"Failed to create storage class"
 
     def finalizer():
         """
         Delete the CephFS storage class
         """
-        if class_instance.sc_obj.get():
-            class_instance.sc_obj.delete()
+        sc_obj.delete()
 
     request.addfinalizer(finalizer)
-
-    class_instance.sc_obj = helpers.create_storage_class(
-        interface_type=constants.CEPHFILESYSTEM,
-        interface_name=helpers.get_cephfs_data_pool_name(),
-        secret_name=class_instance.cephfs_secret_obj.name
-    )
-    assert class_instance.sc_obj, f"Failed to create storage class"
+    return sc_obj
 
 
 @pytest.fixture()
-def create_pvc(request):
+def rbd_pvc(request, rbd_storageclass):
     """
-    Create a persistent Volume Claim
+    Create a persistent Volume Claim using RBD
     """
-    class_instance = request.node.cls
-
-    class_instance.pvc_obj = helpers.create_pvc(
-        sc_name=class_instance.sc_obj.name
+    pvc_obj = helpers.create_pvc(
+        sc_name=rbd_storageclass.name
     )
-
-
-@pytest.fixture()
-def delete_pvc(request):
-    """
-    Delete a persistent Volume Claim
-    """
-    class_instance = request.node.cls
+    assert pvc_obj, f"Failed to create PVC"
 
     def finalizer():
         """
         Delete the PVC
         """
-        if hasattr(class_instance, 'pvc_obj'):
-            class_instance.pvc_obj.delete()
+        pvc_obj.delete()
 
     request.addfinalizer(finalizer)
+    return pvc_obj
 
 
 @pytest.fixture()
-def create_rbd_pod(request):
+def cephfs_pvc(request, cephfs_pvc):
+    """
+    Create a persistent Volume Claim using CephFS
+    """
+    pvc_obj = helpers.create_pvc(
+        sc_name=cephfs_pvc.name
+    )
+    assert pvc_obj, f"Failed to create PVC"
+
+    def finalizer():
+        """
+        Delete the PVC
+        """
+        pvc_obj.delete()
+
+    request.addfinalizer(finalizer)
+    return pvc_obj
+
+
+@pytest.fixture()
+def rbd_pod(request, rbd_pvc):
     """
     Create a pod
     """
-    class_instance = request.node.cls
-    class_instance.pod_obj = helpers.create_pod(
+    pod_obj = helpers.create_pod(
         interface_type=constants.CEPHBLOCKPOOL,
-        pvc_name=class_instance.pvc_obj.name
+        pvc_name=rbd_pvc.name
     )
-
-
-@pytest.fixture()
-def delete_pod(request):
-    """
-    Delete a pod
-    """
-    class_instance = request.node.cls
+    assert pod_obj, f"Failed to create RBD pod"
 
     def finalizer():
         """
         Delete the pod
         """
-        if hasattr(class_instance, 'pod_obj'):
-            class_instance.pod_obj.delete()
+        pod_obj.delete()
 
     request.addfinalizer(finalizer)
+    return pod_obj
