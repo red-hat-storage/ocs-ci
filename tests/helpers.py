@@ -322,7 +322,7 @@ def create_multiple_pvcs(sc_name, namespace, number_of_pvc=1, size=None):
         ) for _ in range(number_of_pvc)
     ]
     for pvc_obj in pvc_objs:
-        assert wait_for_resource_state(pvc, constants.STATUS_BOUND), (
+        assert wait_for_resource_state(pvc_obj, constants.STATUS_BOUND), (
             f"PVC {pvc_obj.name} failed to reach {constants.STATUS_BOUND} status"
         )
     return pvc_objs

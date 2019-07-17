@@ -126,7 +126,6 @@ def create_project(request):
         """
         Delete the project
         """
-        from ipdb import set_trace; set_trace()
         class_instance.project_obj.delete(resource_name=class_instance.namespace)
 
     request.addfinalizer(finalizer)
@@ -217,9 +216,7 @@ def create_pvcs(request):
             for pvc_obj in class_instance.pvc_objs:
                 pvc_obj.delete()
             for pvc_obj in class_instance.pvc_objs:
-                assert pvc_obj.wait_for_delete(pvc_obj.name), (
-                    f"PVC {pvc_obj.name} failed to be deleted"
-                )
+                pvc_obj.ocp.wait_for_delete(pvc_obj.name)
 
     request.addfinalizer(finalizer)
 
