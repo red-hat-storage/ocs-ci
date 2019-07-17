@@ -1,4 +1,5 @@
 import os
+import time
 
 import pytest
 import yaml
@@ -49,10 +50,17 @@ def init_ocsci_conf(arguments=None):
 
 def main(arguments):
     init_ocsci_conf(arguments)
+    run_id = int(time.time())
+    framework.config.RUN['run_id'] = run_id
+    pytest_logs_dir = os.path.join(os.path.expanduser(
+        framework.config.RUN['log_dir']
+    ), f'pytest-logs-{run_id}')
+    utils.create_directory_path(pytest_logs_dir)
     arguments.extend([
         '-p', 'ocs_ci.framework.pytest_customization.ocscilib',
         '-p', 'ocs_ci.framework.pytest_customization.marks',
         '-p', 'ocs_ci.framework.pytest_customization.reports',
+        '--logger-logsdir', pytest_logs_dir,
     ])
     utils.add_path_to_env_path(os.path.expanduser(
         framework.config.RUN['bin_dir']))
