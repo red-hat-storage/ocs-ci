@@ -129,6 +129,7 @@ def rbd_storageclass(request, ceph_block_pool, rbd_secret):
     )
     assert sc_obj, "Failed to create storage class"
     sc_obj.secret = rbd_secret
+    sc_obj.blockpool = ceph_block_pool
 
     def finalizer():
         """
