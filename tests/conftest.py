@@ -48,8 +48,7 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
-ep_time = config.RUN['run_id']
-log_dir = f"logs_{ep_time}"
+log_dir = f"logs_{config.RUN['run_id']}"
 log_path = os.path.expanduser(
     os.path.join(config.RUN['log_dir'], log_dir)
 )

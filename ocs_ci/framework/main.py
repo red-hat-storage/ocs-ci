@@ -46,15 +46,14 @@ def init_ocsci_conf(arguments=None):
         with open(os.path.expanduser(cluster_config)) as file_stream:
             cluster_config_data = yaml.safe_load(file_stream)
             framework.config.update(cluster_config_data)
+    framework.config.RUN['run_id'] = int(time.time())
 
 
 def main(arguments):
     init_ocsci_conf(arguments)
-    run_id = int(time.time())
-    framework.config.RUN['run_id'] = run_id
     pytest_logs_dir = os.path.join(os.path.expanduser(
         framework.config.RUN['log_dir']
-    ), f'pytest-logs-{run_id}')
+    ), f"pytest-logs-{framework.config.RUN['run_id']}")
     utils.create_directory_path(pytest_logs_dir)
     arguments.extend([
         '-p', 'ocs_ci.framework.pytest_customization.ocscilib',
