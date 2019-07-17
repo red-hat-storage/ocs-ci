@@ -36,22 +36,17 @@ class BaseRunIOMultiplePods(ManageTest):
     """
     Run IO on multiple pods in parallel
     """
-    pvc_size_int = 5
     num_of_pvcs = 10
+    pvc_size_int = 5
     interface = None
 
     def run_io_multiple_pods(self):
         """
         Run IO on multiple pods in parallel
         """
-        results = list()
-        with ThreadPoolExecutor(max_workers=self.num_of_pvcs) as executor:
-            for pod in self.pod_objs:
-                results.append(
-                    executor.submit(
-                        pod.run_io('fs', f'{self.pvc_size_int - 1}G')
-                    )
-                )
+
+        for pod in self.pod_objs:
+            pod.run_io('fs', f'{self.pvc_size_int - 1}G')
 
         for pod in self.pod_objs:
             fio_result = pod.get_fio_results()
@@ -77,6 +72,7 @@ class TestRunIOMultiplePodsRBD(BaseRunIOMultiplePods):
     Run IO on multiple pods in parallel - RBD
     """
     interface = constants.CEPHBLOCKPOOL
+    storage_type = 'block'
 
     def test_run_io_multiple_pods_rbd(self):
         """
@@ -96,6 +92,7 @@ class TestRunIOMultiplePodsFS(BaseRunIOMultiplePods):
     Run IO on multiple pods in parallel - CephFS
     """
     interface = constants.CEPHFILESYSTEM
+    storage_type = 'fs'
 
     def test_run_io_multiple_pods_fs(self):
         """

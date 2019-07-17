@@ -126,6 +126,7 @@ def create_project(request):
         """
         Delete the project
         """
+        from ipdb import set_trace; set_trace()
         class_instance.project_obj.delete(resource_name=class_instance.namespace)
 
     request.addfinalizer(finalizer)
