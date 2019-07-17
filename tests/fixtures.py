@@ -214,8 +214,12 @@ def create_pvcs(request):
         Delete multiple PVCs
         """
         if hasattr(class_instance, 'pvc_objs'):
-            for pvc in class_instance.pvc_objs:
-                pvc.delete()
+            for pvc_obj in class_instance.pvc_objs:
+                pvc_obj.delete()
+            for pvc_obj in class_instance.pvc_objs:
+                assert pvc_obj.wait_for_delete(pvc_obj.name), (
+                    f"PVC {pvc_obj.name} failed to be deleted"
+                )
 
     request.addfinalizer(finalizer)
 
