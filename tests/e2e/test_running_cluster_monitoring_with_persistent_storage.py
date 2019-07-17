@@ -12,10 +12,6 @@ from ocs_ci.ocs.monitoring import (
     validate_monitoring_pods_are_respinned_and_running_state,
     get_list_pvc_objs_created_on_monitoring_pods
 )
-from tests.fixtures import (
-    create_rbd_storageclass, create_ceph_block_pool,
-    create_rbd_secret
-)
 
 logger = logging.getLogger(__name__)
 ocp = OCP('v1', 'ConfigMap', 'openshift-monitoring')
@@ -43,9 +39,6 @@ def teardown(self):
 
 
 @pytest.mark.usefixtures(
-    create_rbd_secret.__name__,
-    create_ceph_block_pool.__name__,
-    create_rbd_storageclass.__name__,
     test_fixture.__name__
 )
 class TestRunningClusterMonitoringWithPersistentStorage(E2ETest):
@@ -57,13 +50,14 @@ class TestRunningClusterMonitoringWithPersistentStorage(E2ETest):
                  'alertmanager-main-2']
 
     @tier1
-    def test_running_cluster_mointoring_with_persistent_stoarge(self):
+    def test_running_cluster_mointoring_with_persistent_stoarge(
+            self, rbd_storageclass):
         """
         A test case to configure the persistent volume on monitoring pods
         """
 
         # Create configmap cluster-monitoring-config
-        create_configmap_cluster_monitoring_pod(self.sc_obj.name)
+        create_configmap_cluster_monitoring_pod(rbd_storageclass.name)
 
         # Validate the pods are respinned and in running state
         validate_monitoring_pods_are_respinned_and_running_state(
