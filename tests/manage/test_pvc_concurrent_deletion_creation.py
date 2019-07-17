@@ -9,9 +9,6 @@ from ocs_ci.utility.utils import run_async
 from ocs_ci.framework.testlib import tier1, ManageTest
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.ocs.resources.pvc import create_multiple_pvc, delete_pvcs
-from tests.fixtures import (
-    create_rbd_storageclass, create_ceph_block_pool, create_rbd_secret
-)
 from ocs_ci.utility.templating import load_yaml_to_dict
 from tests.helpers import create_unique_resource_name
 
@@ -19,7 +16,7 @@ log = logging.getLogger(__name__)
 
 
 @pytest.fixture()
-def test_fixture(request):
+def test_fixture(request, rbd_storageclass):
     """
     Setup and teardown
     """
@@ -28,10 +25,10 @@ def test_fixture(request):
     def finalizer():
         teardown(self)
     request.addfinalizer(finalizer)
-    setup(self)
+    setup(self, rbd_storageclass)
 
 
-def setup(self):
+def setup(self, storageclass):
     """
     Create new project
     Create PVCs
@@ -46,7 +43,7 @@ def setup(self):
     # Parameters for PVC yaml as dict
     pvc_data = load_yaml_to_dict(constants.CSI_PVC_YAML)
     pvc_data['metadata']['namespace'] = self.namespace
-    pvc_data['spec']['storageClassName'] = self.sc_obj.name
+    pvc_data['spec']['storageClassName'] = storageclass.name
     pvc_data['metadata']['name'] = self.pvc_base_name
 
     # Create 100 PVCs
@@ -83,9 +80,6 @@ def teardown(self):
 
 @tier1
 @pytest.mark.usefixtures(
-    create_rbd_secret.__name__,
-    create_ceph_block_pool.__name__,
-    create_rbd_storageclass.__name__,
     test_fixture.__name__
 )
 class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
@@ -99,7 +93,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
     pvc_objs_initial = []
     pvc_objs_new = []
 
-    def test_multiple_pvc_concurrent_creation_deletion(self):
+    def test_multiple_pvc_concurrent_creation_deletion(self, rbd_storageclass):
         """
         To exercise resource creation and deletion
         """
@@ -117,7 +111,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         # Parameters for PVC yaml as dict
         pvc_data = load_yaml_to_dict(constants.CSI_PVC_YAML)
         pvc_data['metadata']['namespace'] = self.namespace
-        pvc_data['spec']['storageClassName'] = self.sc_obj.name
+        pvc_data['spec']['storageClassName'] = rbd_storageclass.name
         pvc_data['metadata']['name'] = self.pvc_base_name_new
 
         # Create 100 PVCs
@@ -156,7 +150,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
 
         # Verify PVs using ceph toolbox. PVs should be deleted because
         # reclaimPolicy is Delete
-        ceph_cmd = f'rbd ls -p {self.cbp_obj.name}'
+        ceph_cmd = f'rbd ls -p {rbd_storageclass.blockpool.name}'
         ct_pod = get_ceph_tools_pod()
         final_pv_list = ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd, format='json')
         assert not any(pv in final_pv_list for pv in self.initial_pvs), (
