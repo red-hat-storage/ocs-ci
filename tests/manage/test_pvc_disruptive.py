@@ -3,10 +3,6 @@ import logging
 from ocs_ci.ocs import constants
 from tests import helpers, disruption_helpers
 from ocs_ci.framework.testlib import ManageTest, tier4
-from tests.fixtures import (
-    create_rbd_storageclass, create_ceph_block_pool, create_cephfs_storageclass,
-    create_rbd_secret, create_cephfs_secret
-)
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +13,7 @@ class BaseDisruption(ManageTest):
     """
     Base class for PVC related disruption tests
     """
+    sc_obj = None
     pod_obj = None
     pvc_obj = None
     storage_type = None
@@ -54,11 +51,6 @@ class BaseDisruption(ManageTest):
         self.pvc_obj.delete()
 
 
-@pytest.mark.usefixtures(
-    create_rbd_secret.__name__,
-    create_ceph_block_pool.__name__,
-    create_rbd_storageclass.__name__,
-)
 @tier4
 class TestRBDDisruption(BaseDisruption):
     """
@@ -81,19 +73,17 @@ class TestRBDDisruption(BaseDisruption):
 
         ]
     )
-    def test_disruptive_block(self, operation_to_disrupt, resource_to_delete):
+    def test_disruptive_block(
+            self, operation_to_disrupt, resource_to_delete, cephfs_storageclass):
         """
         RBD PVC related disruption tests class method
         """
+        self.sc_obj = cephfs_storageclass
         self.disruptive_base(operation_to_disrupt, resource_to_delete)
 
 
-@pytest.mark.usefixtures(
-    create_cephfs_secret.__name__,
-    create_cephfs_storageclass.__name__,
-)
 @tier4
-class TestFSDisruption(BaseDisruption):
+class TestFSDisruption(BaseDisruption, ):
     """
     CephFS PVC related disruption tests class
     """
@@ -116,8 +106,10 @@ class TestFSDisruption(BaseDisruption):
             pytest.param(*['run_io', 'mds'], marks=pytest.mark.polarion_id("OCS-556")),
         ]
     )
-    def test_disruptive_file(self, operation_to_disrupt, resource_to_delete):
+    def test_disruptive_file(
+            self, operation_to_disrupt, resource_to_delete, rbd_storageclass):
         """
         CephFS PVC related disruption tests class method
         """
+        self.sc_obj = rbd_storageclass
         self.disruptive_base(operation_to_disrupt, resource_to_delete)
