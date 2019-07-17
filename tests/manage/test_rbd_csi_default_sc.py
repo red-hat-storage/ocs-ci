@@ -71,4 +71,4 @@ class TestBasicPVCOperations(ManageTest):
         )
 
         log.info("Creating a PVC")
-        PVC = helpers.create_pvc(STORAGE_CLASS.name)
+        PVC = helpers.create_pvc(sc_name=STORAGE_CLASS.name)
