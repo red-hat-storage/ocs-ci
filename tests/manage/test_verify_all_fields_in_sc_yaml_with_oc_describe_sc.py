@@ -6,10 +6,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.framework.testlib import ManageTest, tier1
-from tests.fixtures import (
-    create_ceph_block_pool,
-    create_rbd_secret, create_cephfs_secret
-)
 
 log = logging.getLogger(__name__)
 
@@ -17,11 +13,6 @@ SC_OBJ = None
 
 
 @tier1
-@pytest.mark.usefixtures(
-    create_rbd_secret.__name__,
-    create_cephfs_secret.__name__,
-    create_ceph_block_pool.__name__,
-)
 class TestVerifyAllFieldsInScYamlWithOcDescribe(ManageTest):
     """
     This class checks whether all the fields in the Storage Class
