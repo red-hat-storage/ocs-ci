@@ -128,6 +128,7 @@ def rbd_storageclass(request, ceph_block_pool, rbd_secret):
         secret_name=rbd_secret.name
     )
     assert sc_obj, "Failed to create storage class"
+    sc_obj.secret = rbd_secret
 
     def finalizer():
         """
@@ -150,6 +151,7 @@ def cephfs_storageclass(request, cephfs_secret):
         secret_name=cephfs_secret.name
     )
     assert sc_obj, f"Failed to create storage class"
+    sc_obj.secret = cephfs_secret
 
     def finalizer():
         """
@@ -170,6 +172,7 @@ def rbd_pvc(request, rbd_storageclass):
         sc_name=rbd_storageclass.name
     )
     assert pvc_obj, f"Failed to create PVC"
+    pvc_obj.storageclass = rbd_storageclass
 
     def finalizer():
         """
@@ -182,7 +185,7 @@ def rbd_pvc(request, rbd_storageclass):
 
 
 @pytest.fixture()
-def cephfs_pvc(request, cephfs_pvc):
+def cephfs_pvc(request, cephfs_storageclass):
     """
     Create a persistent Volume Claim using CephFS
     """
@@ -190,6 +193,7 @@ def cephfs_pvc(request, cephfs_pvc):
         sc_name=cephfs_pvc.name
     )
     assert pvc_obj, f"Failed to create PVC"
+    pvc_obj.storageclass = cephfs_storageclass
 
     def finalizer():
         """
@@ -204,13 +208,36 @@ def cephfs_pvc(request, cephfs_pvc):
 @pytest.fixture()
 def rbd_pod(request, rbd_pvc):
     """
-    Create a pod
+    Create a pod with RBD
     """
     pod_obj = helpers.create_pod(
         interface_type=constants.CEPHBLOCKPOOL,
         pvc_name=rbd_pvc.name
     )
     assert pod_obj, f"Failed to create RBD pod"
+    pod_obj.pvc = rbd_pvc
+
+    def finalizer():
+        """
+        Delete the pod
+        """
+        pod_obj.delete()
+
+    request.addfinalizer(finalizer)
+    return pod_obj
+
+
+@pytest.fixture()
+def cephfs_pod(request, rbd_pvc):
+    """
+    Create a pod with CephFS
+    """
+    pod_obj = helpers.create_pod(
+        interface_type=constants.CEPHBLOCKPOOL,
+        pvc_name=cephfs_pvc.name
+    )
+    assert pod_obj, f"Failed to create RBD pod"
+    pod_obj.pvc = cephfs_pvc
 
     def finalizer():
         """
