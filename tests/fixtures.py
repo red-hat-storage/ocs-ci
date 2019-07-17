@@ -16,6 +16,9 @@ def create_rbd_secret(request):
         """
         if hasattr(class_instance, 'rbd_secret_obj'):
             class_instance.rbd_secret_obj.delete()
+            class_instance.rbd_secret_obj.ocp.wait_for_delete(
+                class_instance.rbd_secret_obj.name
+            )
 
     request.addfinalizer(finalizer)
 
@@ -38,6 +41,9 @@ def create_cephfs_secret(request):
         """
         if hasattr(class_instance, 'cephfs_secret_obj'):
             class_instance.cephfs_secret_obj.delete()
+            class_instance.cephfs_secret_obj.ocp.wait_for_delete(
+                class_instance.cephfs_secret_obj.name
+            )
 
     request.addfinalizer(finalizer)
 
@@ -80,6 +86,9 @@ def create_rbd_storageclass(request):
         """
         if class_instance.sc_obj.get():
             class_instance.sc_obj.delete()
+            class_instance.sc_obj.ocp.wait_for_delete(
+                class_instance.sc_obj.name
+            )
 
     request.addfinalizer(finalizer)
 
@@ -104,6 +113,9 @@ def create_cephfs_storageclass(request):
         """
         if class_instance.sc_obj.get():
             class_instance.sc_obj.delete()
+            class_instance.sc_obj.ocp.wait_for_delete(
+                class_instance.sc_obj.name
+            )
 
     request.addfinalizer(finalizer)
 
@@ -127,6 +139,7 @@ def create_project(request):
         Delete the project
         """
         class_instance.project_obj.delete(resource_name=class_instance.namespace)
+        class_instance.project_obj.wait_for_delete(class_instance.namespace)
 
     request.addfinalizer(finalizer)
 
