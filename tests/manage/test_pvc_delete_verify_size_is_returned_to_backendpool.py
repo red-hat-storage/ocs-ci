@@ -14,10 +14,6 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs import ocp
-from tests.fixtures import (
-    create_rbd_storageclass, create_ceph_block_pool,
-    create_rbd_secret
-)
 
 logger = logging.getLogger(__name__)
 _templating = templating.Templating()
@@ -119,25 +115,21 @@ def create_pvc_and_verify_pvc_exists(
     return pvc_obj
 
 
-@pytest.mark.usefixtures(
-    create_rbd_secret.__name__,
-    create_ceph_block_pool.__name__,
-    create_rbd_storageclass.__name__
-)
 class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
     """
     Testing after pvc deletion the size is returned to backendpool
     """
 
     @tier1
-    def test_pvc_delete_and_verify_size_is_returned_to_backend_pool(self):
+    def test_pvc_delete_and_verify_size_is_returned_to_backend_pool(
+            self, rbd_storageclass):
         """
         Test case to verify after delete pvc size returned to backend pools
         """
         used_before_creating_pvc = check_ceph_used_space()
         logger.info(f"Used before creating pvc {used_before_creating_pvc}")
         pvc_obj = create_pvc_and_verify_pvc_exists(
-            self.sc_obj.name, self.cbp_obj.name
+            rbd_storageclass.name, rbd_storageclass.blockpool.name
         )
         pod_obj = helpers.create_pod(interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvc_obj.name)
         used_percentage = pod.run_io_and_verify_mount_point(pod_obj)
@@ -147,7 +139,10 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         assert used_before_creating_pvc < used_after_creating_pvc
         pod_obj.delete()
         pvc_obj.delete()
-        verify_pv_not_exists(pvc_obj.backed_pv, self.cbp_obj.name)
+        verify_pv_not_exists(
+            pvc_obj.backed_pv,
+            rbd_storageclass.blockpool.name
+        )
         used_after_deleting_pvc = check_ceph_used_space()
         logger.info(f"Used after deleting pvc {used_after_deleting_pvc}")
         assert used_after_deleting_pvc < used_after_creating_pvc
