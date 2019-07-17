@@ -221,6 +221,11 @@ class Pod(OCS):
                 constants.FIO_IO_RW_PARAMS_YAML
             )
             io_params['rwmixread'] = rw_ratio
+        elif io_direction == 'wv':
+            logging.info("Verify data integrity....")
+            io_params = templating.load_yaml_to_dict(
+                    constants.FIO_IO_WRITE_VERIFY_PARAMS_YAML
+                )
         else:
             io_params = templating.load_yaml_to_dict(
                 constants.FIO_IO_PARAMS_YAML

@@ -33,6 +33,7 @@ STATUS_AVAILABLE = 'Available'
 STATUS_RUNNING = 'Running'
 STATUS_TERMINATING = 'Terminating'
 STATUS_BOUND = 'Bound'
+STATUS_SUCCEEDED = 'Succeeded'
 
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
@@ -120,6 +121,9 @@ FIO_IO_PARAMS_YAML = os.path.join(
 )
 FIO_IO_RW_PARAMS_YAML = os.path.join(
     TEMPLATE_FIO_DIR, "workload_io_rw.yaml"
+)
+FIO_IO_WRITE_VERIFY_PARAMS_YAML = os.path.join(
+    TEMPLATE_FIO_DIR, "workload_io_wrverify.yaml"
 )
 
 # constants

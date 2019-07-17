@@ -1,0 +1,12 @@
+name: fio-write-verify
+filename: fio-write-verify
+rw: randwrite
+bs: 4K
+direct: 1
+numjobs: 4
+time_based: 1
+runtime: 50
+size: 100M
+ioengine: libaio
+iodepth: 16
+verify: crc32c
