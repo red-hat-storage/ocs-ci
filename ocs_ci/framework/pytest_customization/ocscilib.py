@@ -80,6 +80,13 @@ def pytest_addoption(parser):
         default=False,
         help="Collect OCS logs when test case failed",
     )
+    parser.addoption(
+        '--io_in_bg',
+        dest='io_in_bg',
+        action="store_true",
+        default=False,
+        help="Run IO in the background",
+    )
 
 
 def pytest_configure(config):
@@ -176,6 +183,7 @@ def process_cluster_cli_params(config):
         cluster_name = f"ocs-ci-{getuser()[:8]}"
     ocsci_config.RUN['cli_params']['teardown'] = get_cli_param(config, "teardown", default=False)
     ocsci_config.RUN['cli_params']['deploy'] = get_cli_param(config, "deploy", default=False)
+    ocsci_config.RUN['cli_params']['io_in_bg'] = get_cli_param(config, "io_in_bg", default=False)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
     get_cli_param(config, 'collect-logs')

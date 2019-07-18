@@ -2,9 +2,15 @@ import json
 import logging
 import os
 import time
-
+import tempfile
 import pytest
 import yaml
+import threading
+from datetime import datetime
+
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -396,3 +402,117 @@ def log_cli_level(pytestconfig):
 
     """
     return pytestconfig.getini('log_cli_level') or 'DEBUG'
+
+
+@pytest.fixture(scope="session")
+def run_io_in_background(request):
+    """
+    Run IO during the test execution
+    """
+    if config.RUN['cli_params'].get('io_in_bg'):
+        log.info(f"Tests will be running while IO is in the background")
+
+        request.results = list()
+        request.temp_file = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='test_status', delete=False
+        )
+
+        def get_test_status():
+            with open(request.temp_file.name, 'r') as t_file:
+                return t_file.readline()
+
+        def set_test_status(status):
+            with open(request.temp_file.name, 'w') as t_file:
+                t_file.writelines(status)
+
+        set_test_status('running')
+        request.g_sheet = GoogleSpreadSheetAPI("IO BG results", 0)
+
+        def finalizer():
+            """
+            Delete the resources created during setup, used for
+            running IO in the test background
+            """
+            set_test_status('finished')
+            try:
+                for status in TimeoutSampler(90, 3, get_test_status):
+                    if status == 'terminated':
+                        break
+            except TimeoutExpiredError:
+                log.warning(
+                    "Background IO was still in progress before IO "
+                    "thread termination"
+                )
+
+            request.thread.join()
+            log.info(f"Background IO has stopped")
+            for result in request.results:
+                log.info(f"IOPs after FIO for pod {request.pod_obj.name}:")
+                log.info(f"Read: {result[0]}")
+                log.info(f"Write: {result[1]}")
+
+            if hasattr(request, 'pod_obj'):
+                request.pod_obj.delete()
+                request.pod_obj.ocp.wait_for_delete(
+                    resource_name=request.pod_obj.name
+                )
+            if hasattr(request, 'pvc_obj'):
+                request.pvc_obj.delete()
+                request.pvc_obj.ocp.wait_for_delete(
+                    resource_name=request.pvc_obj.name
+                )
+            if hasattr(request, 'sc_obj'):
+                request.sc_obj.delete()
+            if hasattr(request, 'cbp_obj'):
+                request.cbp_obj.delete()
+            if hasattr(request, 'secret_obj'):
+                request.secret_obj.delete()
+
+        request.addfinalizer(finalizer)
+
+        request.secret_obj = helpers.create_secret(
+            interface_type=constants.CEPHBLOCKPOOL
+        )
+        request.cbp_obj = helpers.create_ceph_block_pool()
+        request.sc_obj = helpers.create_storage_class(
+            interface_type=constants.CEPHBLOCKPOOL,
+            interface_name=request.cbp_obj.name,
+            secret_name=request.secret_obj.name
+        )
+        request.pvc_obj = helpers.create_pvc(
+            sc_name=request.sc_obj.name, size='2Gi',
+        )
+        request.pod_obj = helpers.create_pod(
+            interface_type=constants.CEPHBLOCKPOOL,
+            pvc_name=request.pvc_obj.name
+        )
+
+        def run_io_in_bg():
+            """
+            Run IO by executing FIO and deleting the file created for FIO on
+            the pod, in a while true loop. Will be running as long as
+            the test is running.
+            """
+            while get_test_status() == 'running':
+                request.pod_obj.run_io('fs', '1G')
+                result = request.pod_obj.get_fio_results()
+
+                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                reads = result.get('jobs')[0].get('read').get('iops')
+                writes = result.get('jobs')[0].get('write').get('iops')
+                request.g_sheet.insert_row(
+                    [f"{now}", f"Reads: {reads}", f"Writes: {writes}"]
+                )
+
+                request.results.append((reads, writes))
+
+                file_path = os.path.join(
+                    request.pod_obj.get_mount_path(),
+                    request.pod_obj.io_params['filename']
+                )
+                request.pod_obj.exec_cmd_on_pod(f'rm -rf {file_path}')
+            set_test_status('terminated')
+
+        log.info(f"Start running IO in the test background")
+        request.thread = threading.Thread(target=run_io_in_bg)
+        request.thread.start()

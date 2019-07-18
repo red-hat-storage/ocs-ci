@@ -177,6 +177,19 @@ class Pod(OCS):
             return [item for item in out if item]
         return out
 
+    def get_mount_path(self):
+        """
+        Get the pod volume mount path
+
+        Returns:
+            str: The mount path of the volume on the pod (e.g. /var/lib/www/html/)
+        """
+        return (
+            self.pod_data.get(
+                'spec'
+            ).get('containers')[0].get('volumeMounts')[0].get('mountPath')
+        )
+
     def run_io(
         self, storage_type, size, io_direction='rw', rw_ratio=75,
         jobs=1, runtime=60, depth=4, fio_filename=None
@@ -205,12 +218,7 @@ class Pod(OCS):
             fio_filename(str): Name of fio file created on app pod's mount point
         """
         name = 'test_workload'
-        spec = self.pod_data.get('spec')
-        path = (
-            spec.get('containers')[0].get('volumeMounts')[0].get(
-                'mountPath'
-            )
-        )
+        path = self.get_mount_path()
         work_load = 'fio'
         # few io parameters for Fio
 
@@ -219,21 +227,20 @@ class Pod(OCS):
         )
         assert wl.setup(), "Setup up for FIO failed"
         if io_direction == 'rw':
-            io_params = templating.load_yaml_to_dict(
+            self.io_params = templating.load_yaml_to_dict(
                 constants.FIO_IO_RW_PARAMS_YAML
             )
-            io_params['rwmixread'] = rw_ratio
+            self.io_params['rwmixread'] = rw_ratio
         else:
-            io_params = templating.load_yaml_to_dict(
+            self.io_params = templating.load_yaml_to_dict(
                 constants.FIO_IO_PARAMS_YAML
             )
-        io_params['runtime'] = runtime
-        io_params['size'] = size
+        self.io_params['runtime'] = runtime
+        self.io_params['size'] = size
         if fio_filename:
-            io_params['filename'] = fio_filename
-        io_params['iodepth'] = depth
-
-        self.fio_thread = wl.run(**io_params)
+            self.io_params['filename'] = fio_filename
+        self.io_params['iodepth'] = depth
+        self.fio_thread = wl.run(**self.io_params)
 
 
 # Helper functions for Pods
