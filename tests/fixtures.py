@@ -70,7 +70,6 @@ def create_ceph_block_pool(request):
     request.addfinalizer(finalizer)
 
     class_instance.cbp_obj = helpers.create_ceph_block_pool()
-    from ipdb import set_trace; set_trace()
     assert class_instance.cbp_obj, "Failed to create block pool"
 
 
