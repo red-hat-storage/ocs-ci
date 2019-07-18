@@ -88,7 +88,7 @@ def cephfs_secret(request):
     cephfs_secret_obj = helpers.create_secret(
         interface_type=constants.CEPHFILESYSTEM
     )
-    assert cephfs_secret_obj, f"Failed to create secret"
+    assert cephfs_secret_obj, "Failed to create secret"
 
     def finalizer():
         """
@@ -152,7 +152,7 @@ def cephfs_storageclass(request, cephfs_secret):
         interface_name=helpers.get_cephfs_data_pool_name(),
         secret_name=cephfs_secret.name
     )
-    assert sc_obj, f"Failed to create storage class"
+    assert sc_obj, "Failed to create storage class"
     sc_obj.secret = cephfs_secret
 
     def finalizer():
@@ -173,7 +173,7 @@ def rbd_pvc(request, rbd_storageclass):
     pvc_obj = helpers.create_pvc(
         sc_name=rbd_storageclass.name
     )
-    assert pvc_obj, f"Failed to create PVC"
+    assert pvc_obj, "Failed to create PVC"
     pvc_obj.storageclass = rbd_storageclass
 
     def finalizer():
@@ -194,7 +194,7 @@ def cephfs_pvc(request, cephfs_storageclass):
     pvc_obj = helpers.create_pvc(
         sc_name=cephfs_pvc.name
     )
-    assert pvc_obj, f"Failed to create PVC"
+    assert pvc_obj, "Failed to create PVC"
     pvc_obj.storageclass = cephfs_storageclass
 
     def finalizer():
@@ -216,7 +216,7 @@ def rbd_pod(request, rbd_pvc):
         interface_type=constants.CEPHBLOCKPOOL,
         pvc_name=rbd_pvc.name
     )
-    assert pod_obj, f"Failed to create RBD pod"
+    assert pod_obj, "Failed to create RBD pod"
     pod_obj.pvc = rbd_pvc
 
     def finalizer():
@@ -238,7 +238,7 @@ def cephfs_pod(request, rbd_pvc):
         interface_type=constants.CEPHBLOCKPOOL,
         pvc_name=cephfs_pvc.name
     )
-    assert pod_obj, f"Failed to create RBD pod"
+    assert pod_obj, "Failed to create RBD pod"
     pod_obj.pvc = cephfs_pvc
 
     def finalizer():

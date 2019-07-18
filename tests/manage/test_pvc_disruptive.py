@@ -83,7 +83,7 @@ class TestRBDDisruption(BaseDisruption):
 
 
 @tier4
-class TestFSDisruption(BaseDisruption, ):
+class TestFSDisruption(BaseDisruption):
     """
     CephFS PVC related disruption tests class
     """
