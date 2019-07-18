@@ -23,7 +23,7 @@ def create_configmap_cluster_monitoring_pod(sc_name):
     config_map = templating.load_yaml_to_dict(
         constants.CONFIGURE_PVC_ON_MONITORING_POD
     )
-    config = yaml.load(config_map['data']['config.yaml'])
+    config = yaml.safe_load(config_map['data']['config.yaml'])
     config['prometheusK8s']['volumeClaimTemplate']['spec']['storageClassName'] = sc_name
     config['alertmanagerMain']['volumeClaimTemplate']['spec']['storageClassName'] = sc_name
     config = yaml.dump(config)
