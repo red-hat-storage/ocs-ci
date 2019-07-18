@@ -339,18 +339,21 @@ def verify_block_pool_exists(pool_name):
 
     Returns:
         bool: True if the Ceph block pool exists, False otherwise
+
+    Raises:
     """
     logger.info(f"Verifying that block pool {pool_name} exists")
     ct_pod = pod.get_ceph_tools_pod()
-
-    for pools in TimeoutSampler(
-        60, 3, ct_pod.exec_ceph_cmd, 'ceph osd lspools'
-    ):
-        logger.info(f'POOLS are {pools}')
-        for pool in pools:
-            if pool_name in pool.get('poolname'):
-                return True
-    return False
+    try:
+        for pools in TimeoutSampler(
+            60, 3, ct_pod.exec_ceph_cmd, 'ceph osd lspools'
+        ):
+            logger.info(f'POOLS are {pools}')
+            for pool in pools:
+                if pool_name in pool.get('poolname'):
+                    return True
+    except TimeoutExpiredError:
+        return False
 
 
 def get_admin_key():
