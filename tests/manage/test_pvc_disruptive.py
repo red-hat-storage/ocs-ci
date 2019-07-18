@@ -17,6 +17,7 @@ class BaseDisruption(ManageTest):
     pod_obj = None
     pvc_obj = None
     storage_type = None
+    namespace = None
 
     def disruptive_base(self, operation_to_disrupt, resource_to_delete):
         """
@@ -24,7 +25,7 @@ class BaseDisruption(ManageTest):
         """
         DISRUPTION_OPS.set_resource(resource=resource_to_delete)
         self.pvc_obj = helpers.create_pvc(
-            sc_name=self.sc_obj.name, wait=False
+            sc_name=self.sc_obj.name, namespace=self.namespace, wait=False
         )
         if operation_to_disrupt == 'create_pvc':
             DISRUPTION_OPS.delete_resource()
@@ -34,7 +35,8 @@ class BaseDisruption(ManageTest):
         )
 
         self.pod_obj = helpers.create_pod(
-            interface_type=constants.CEPHBLOCKPOOL, pvc_name=self.pvc_obj.name, wait=False
+            interface_type=constants.CEPHBLOCKPOOL, pvc_name=self.pvc_obj.name, wait=False,
+            namespace=self.namespace
         )
         if operation_to_disrupt == 'create_pod':
             DISRUPTION_OPS.delete_resource()
@@ -61,15 +63,33 @@ class TestRBDDisruption(BaseDisruption):
     @pytest.mark.parametrize(
         argnames=["operation_to_disrupt", "resource_to_delete"],
         argvalues=[
-            pytest.param(*['create_pvc', 'mgr'], marks=pytest.mark.polarion_id("OCS-568")),
-            pytest.param(*['create_pod', 'mgr'], marks=pytest.mark.polarion_id("OCS-569")),
-            pytest.param(*['run_io', 'mgr'], marks=pytest.mark.polarion_id("OCS-570")),
-            pytest.param(*['create_pvc', 'mon'], marks=pytest.mark.polarion_id("OCS-561")),
-            pytest.param(*['create_pod', 'mon'], marks=pytest.mark.polarion_id("OCS-562")),
-            pytest.param(*['run_io', 'mon'], marks=pytest.mark.polarion_id("OCS-563")),
-            pytest.param(*['create_pvc', 'osd'], marks=pytest.mark.polarion_id("OCS-565")),
-            pytest.param(*['create_pod', 'osd'], marks=pytest.mark.polarion_id("OCS-554")),
-            pytest.param(*['run_io', 'osd'], marks=pytest.mark.polarion_id("OCS-566")),
+            pytest.param(
+                *['create_pvc', 'mgr'], marks=pytest.mark.polarion_id("OCS-568")
+            ),
+            pytest.param(
+                *['create_pod', 'mgr'], marks=pytest.mark.polarion_id("OCS-569")
+            ),
+            pytest.param(
+                *['run_io', 'mgr'], marks=pytest.mark.polarion_id("OCS-570")
+            ),
+            pytest.param(
+                *['create_pvc', 'mon'], marks=pytest.mark.polarion_id("OCS-561")
+            ),
+            pytest.param(
+                *['create_pod', 'mon'], marks=pytest.mark.polarion_id("OCS-562")
+            ),
+            pytest.param(
+                *['run_io', 'mon'], marks=pytest.mark.polarion_id("OCS-563")
+            ),
+            pytest.param(
+                *['create_pvc', 'osd'], marks=pytest.mark.polarion_id("OCS-565")
+            ),
+            pytest.param(
+                *['create_pod', 'osd'], marks=pytest.mark.polarion_id("OCS-554")
+            ),
+            pytest.param(
+                *['run_io', 'osd'], marks=pytest.mark.polarion_id("OCS-566")
+            ),
 
         ]
     )
@@ -79,6 +99,7 @@ class TestRBDDisruption(BaseDisruption):
         RBD PVC related disruption tests class method
         """
         self.sc_obj = cephfs_storageclass
+        self.namespace = cephfs_storageclass.namespace
         self.disruptive_base(operation_to_disrupt, resource_to_delete)
 
 
@@ -92,18 +113,42 @@ class TestFSDisruption(BaseDisruption):
     @pytest.mark.parametrize(
         argnames=["operation_to_disrupt", "resource_to_delete"],
         argvalues=[
-            pytest.param(*['create_pvc', 'mgr'], marks=pytest.mark.polarion_id("OCS-555")),
-            pytest.param(*['create_pod', 'mgr'], marks=pytest.mark.polarion_id("OCS-558")),
-            pytest.param(*['run_io', 'mgr'], marks=pytest.mark.polarion_id("OCS-559")),
-            pytest.param(*['create_pvc', 'mon'], marks=pytest.mark.polarion_id("OCS-560")),
-            pytest.param(*['create_pod', 'mon'], marks=pytest.mark.polarion_id("OCS-550")),
-            pytest.param(*['run_io', 'mon'], marks=pytest.mark.polarion_id("OCS-551")),
-            pytest.param(*['create_pvc', 'osd'], marks=pytest.mark.polarion_id("OCS-552")),
-            pytest.param(*['create_pod', 'osd'], marks=pytest.mark.polarion_id("OCS-553")),
-            pytest.param(*['run_io', 'osd'], marks=pytest.mark.polarion_id("OCS-549")),
-            pytest.param(*['create_pvc', 'mds'], marks=pytest.mark.polarion_id("OCS-564")),
-            pytest.param(*['create_pod', 'mds'], marks=pytest.mark.polarion_id("OCS-567")),
-            pytest.param(*['run_io', 'mds'], marks=pytest.mark.polarion_id("OCS-556")),
+            pytest.param(
+                *['create_pvc', 'mgr'], marks=pytest.mark.polarion_id("OCS-555")
+            ),
+            pytest.param(
+                *['create_pod', 'mgr'], marks=pytest.mark.polarion_id("OCS-558")
+            ),
+            pytest.param(
+                *['run_io', 'mgr'], marks=pytest.mark.polarion_id("OCS-559")
+            ),
+            pytest.param(
+                *['create_pvc', 'mon'], marks=pytest.mark.polarion_id("OCS-560")
+            ),
+            pytest.param(
+                *['create_pod', 'mon'], marks=pytest.mark.polarion_id("OCS-550")
+            ),
+            pytest.param(
+                *['run_io', 'mon'], marks=pytest.mark.polarion_id("OCS-551")
+            ),
+            pytest.param(
+                *['create_pvc', 'osd'], marks=pytest.mark.polarion_id("OCS-552")
+            ),
+            pytest.param(
+                *['create_pod', 'osd'], marks=pytest.mark.polarion_id("OCS-553")
+            ),
+            pytest.param(
+                *['run_io', 'osd'], marks=pytest.mark.polarion_id("OCS-549")
+            ),
+            pytest.param(
+                *['create_pvc', 'mds'], marks=pytest.mark.polarion_id("OCS-564")
+            ),
+            pytest.param(
+                *['create_pod', 'mds'], marks=pytest.mark.polarion_id("OCS-567")
+            ),
+            pytest.param(
+                *['run_io', 'mds'], marks=pytest.mark.polarion_id("OCS-556")
+            ),
         ]
     )
     def test_disruptive_file(
@@ -112,4 +157,5 @@ class TestFSDisruption(BaseDisruption):
         CephFS PVC related disruption tests class method
         """
         self.sc_obj = rbd_storageclass
+        self.namespace = rbd_storageclass.namespace
         self.disruptive_base(operation_to_disrupt, resource_to_delete)

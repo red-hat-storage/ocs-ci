@@ -48,9 +48,7 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
-ep_time = int(time.time())
-config.RUN['run_id'] = ep_time
-log_dir = f"logs_{ep_time}"
+log_dir = f"logs_{config.RUN['run_id']}"
 log_path = os.path.expanduser(
     os.path.join(config.RUN['log_dir'], log_dir)
 )
@@ -75,6 +73,9 @@ def rbd_secret(request):
         Delete the RBD secret
         """
         rbd_secret_obj.delete()
+        rbd_secret_obj.ocp.wait_for_delete(
+            rbd_secret_obj.name
+        )
 
     request.addfinalizer(finalizer)
     return rbd_secret_obj
@@ -95,6 +96,9 @@ def cephfs_secret(request):
         Delete the FS secret
         """
         cephfs_secret_obj.delete()
+        cephfs_secret_obj.ocp.wait_for_delete(
+            cephfs_secret_obj.name
+        )
 
     request.addfinalizer(finalizer)
     return cephfs_secret_obj
@@ -137,6 +141,9 @@ def rbd_storageclass(request, ceph_block_pool, rbd_secret):
         Delete the RBD storage class
         """
         sc_obj.delete()
+        sc_obj.ocp.wait_for_delete(
+            sc_obj.name
+        )
 
     request.addfinalizer(finalizer)
     return sc_obj
@@ -160,21 +167,53 @@ def cephfs_storageclass(request, cephfs_secret):
         Delete the CephFS storage class
         """
         sc_obj.delete()
+        sc_obj.ocp.wait_for_delete(
+            sc_obj.name
+        )
 
     request.addfinalizer(finalizer)
     return sc_obj
 
 
 @pytest.fixture()
-def rbd_pvc(request, rbd_storageclass):
+def project(request):
+    """
+    Create a new project
+    """
+    namespace = helpers.create_unique_resource_name(
+        'test',
+        'namespace'
+    )
+    project_obj = ocp.OCP(
+        kind='Project',
+        namespace=namespace
+    )
+    assert project_obj.new_project(namespace),
+        f"Failed to create new project {namespace}"
+
+    def finalizer():
+        """
+        Delete the project
+        """
+        project_obj.delete(resource_name=namespace)
+        project_obj.wait_for_delete(namespace)
+
+    request.addfinalizer(finalizer)
+    return project_obj
+
+
+@pytest.fixture()
+def rbd_pvc(request, rbd_storageclass, project):
     """
     Create a persistent Volume Claim using RBD
     """
     pvc_obj = helpers.create_pvc(
-        sc_name=rbd_storageclass.name
+        sc_name=rbd_storageclass.name,
+        namespace=project.namespace
     )
     assert pvc_obj, "Failed to create PVC"
     pvc_obj.storageclass = rbd_storageclass
+    pvc_obj.project = project
 
     def finalizer():
         """
@@ -187,15 +226,17 @@ def rbd_pvc(request, rbd_storageclass):
 
 
 @pytest.fixture()
-def cephfs_pvc(request, cephfs_storageclass):
+def cephfs_pvc(request, cephfs_storageclass, project):
     """
     Create a persistent Volume Claim using CephFS
     """
     pvc_obj = helpers.create_pvc(
-        sc_name=cephfs_pvc.name
+        sc_name=cephfs_pvc.name,
+        namespace=project.namespace
     )
     assert pvc_obj, "Failed to create PVC"
     pvc_obj.storageclass = cephfs_storageclass
+    pvc_obj.project = project
 
     def finalizer():
         """
@@ -208,16 +249,18 @@ def cephfs_pvc(request, cephfs_storageclass):
 
 
 @pytest.fixture()
-def rbd_pod(request, rbd_pvc):
+def rbd_pod(request, rbd_pvc, project):
     """
     Create a pod with RBD
     """
     pod_obj = helpers.create_pod(
         interface_type=constants.CEPHBLOCKPOOL,
-        pvc_name=rbd_pvc.name
+        pvc_name=rbd_pvc.name,
+        namespace=project.namespace
     )
     assert pod_obj, "Failed to create RBD pod"
     pod_obj.pvc = rbd_pvc
+    pod_obj.project = project
 
     def finalizer():
         """
@@ -230,16 +273,18 @@ def rbd_pod(request, rbd_pvc):
 
 
 @pytest.fixture()
-def cephfs_pod(request, rbd_pvc):
+def cephfs_pod(request, rbd_pvc, project):
     """
     Create a pod with CephFS
     """
     pod_obj = helpers.create_pod(
         interface_type=constants.CEPHBLOCKPOOL,
-        pvc_name=cephfs_pvc.name
+        pvc_name=cephfs_pvc.name,
+        namespace=project.namespace
     )
     assert pod_obj, "Failed to create RBD pod"
     pod_obj.pvc = cephfs_pvc
+    pod_obj.project = project
 
     def finalizer():
         """

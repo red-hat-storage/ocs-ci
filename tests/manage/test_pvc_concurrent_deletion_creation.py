@@ -8,9 +8,8 @@ from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.utility.utils import run_async
 from ocs_ci.framework.testlib import tier1, ManageTest
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
-from ocs_ci.ocs.resources.pvc import create_multiple_pvc, delete_pvcs
-from ocs_ci.utility.templating import load_yaml_to_dict
-from tests.helpers import create_unique_resource_name
+from ocs_ci.ocs.resources.pvc import delete_pvcs
+from tests.helpers import create_unique_resource_name, create_multiple_pvcs
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +27,7 @@ def test_fixture(request, rbd_storageclass):
     setup(self, rbd_storageclass)
 
 
-def setup(self, storageclass):
+def setup(self, storageclass, project):
     """
     Create new project
     Create PVCs
@@ -39,15 +38,12 @@ def setup(self, storageclass):
     assert self.project_obj.new_project(self.namespace), (
         f'Failed to create new project {self.namespace}'
     )
-
-    # Parameters for PVC yaml as dict
-    pvc_data = load_yaml_to_dict(constants.CSI_PVC_YAML)
-    pvc_data['metadata']['namespace'] = self.namespace
-    pvc_data['spec']['storageClassName'] = storageclass.name
-    pvc_data['metadata']['name'] = self.pvc_base_name
-
     # Create 100 PVCs
-    pvc_objs = create_multiple_pvc(self.number_of_pvc, pvc_data)
+    pvc_objs = create_multiple_pvcs(
+        sc_name=storageclass,
+        namespace=project.namespace,
+        number_of_pvc=self.number_of_pvc
+    )
     log.info(f'Created initial {self.number_of_pvc} PVCs')
     self.pvc_objs_initial = pvc_objs[:]
 
@@ -93,7 +89,8 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
     pvc_objs_initial = []
     pvc_objs_new = []
 
-    def test_multiple_pvc_concurrent_creation_deletion(self, rbd_storageclass):
+    def test_multiple_pvc_concurrent_creation_deletion(
+            self, rbd_storageclass, project):
         """
         To exercise resource creation and deletion
         """
@@ -107,16 +104,12 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
             f'Failed to execute command for deleting {self.number_of_pvc} PVCs'
         )
 
-        # Create 100 new PVCs
-        # Parameters for PVC yaml as dict
-        pvc_data = load_yaml_to_dict(constants.CSI_PVC_YAML)
-        pvc_data['metadata']['namespace'] = self.namespace
-        pvc_data['spec']['storageClassName'] = rbd_storageclass.name
-        pvc_data['metadata']['name'] = self.pvc_base_name_new
-
         # Create 100 PVCs
-        pvc_objs = create_multiple_pvc(self.number_of_pvc, pvc_data)
-
+        pvc_objs = create_multiple_pvcs(
+            sc_name=rbd_storageclass.name,
+            namespace=project.namespace,
+            number_of_pvc=self.number_of_pvc
+        )
         log.info(f'Created {self.number_of_pvc} new PVCs.')
         self.pvc_objs_new = pvc_objs[:]
 
