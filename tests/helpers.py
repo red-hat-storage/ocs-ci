@@ -339,8 +339,6 @@ def verify_block_pool_exists(pool_name):
 
     Returns:
         bool: True if the Ceph block pool exists, False otherwise
-
-    Raises:
     """
     logger.info(f"Verifying that block pool {pool_name} exists")
     ct_pod = pod.get_ceph_tools_pod()
