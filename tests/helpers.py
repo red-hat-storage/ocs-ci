@@ -11,6 +11,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.utility.utils import TimeoutSampler
 
 from ocs_ci.utility.retry import retry
 
@@ -189,6 +190,7 @@ def create_ceph_block_pool(pool_name=None):
     )
     cbp_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
     cbp_obj = create_resource(**cbp_data, wait=False)
+    cbp_obj.reload()
 
     assert verify_block_pool_exists(cbp_obj.name), (
         f"Block pool {cbp_obj.name} does not exist"
@@ -340,12 +342,16 @@ def verify_block_pool_exists(pool_name):
     """
     logger.info(f"Verifying that block pool {pool_name} exists")
     ct_pod = pod.get_ceph_tools_pod()
-    pools = ct_pod.exec_ceph_cmd('ceph osd lspools')
-    logger.info(f'POOLS are {pools}')
-    for pool in pools:
-        if pool_name in pool.get('poolname'):
-            return True
-    return False
+    try:
+        for pools in TimeoutSampler(
+            60, 3, ct_pod.exec_ceph_cmd, 'ceph osd lspools'
+        ):
+            logger.info(f'POOLS are {pools}')
+            for pool in pools:
+                if pool_name in pool.get('poolname'):
+                    return True
+    except TimeoutExpiredError:
+        return False
 
 
 def get_admin_key():
