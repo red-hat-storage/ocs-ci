@@ -660,7 +660,7 @@ def create_pods(
     A pod will be created for each PVC in 'pvc_objs_list'.
     Args:
         pvc_objs_list (list): List of PVC objects
-        interface_type (str): The interface type (CephFS, RBD, etc.)
+        interface_type (str): The interface type (CephFS, Cephblockpool, etc.)
         desired_status (str): The status of the pod to wait for
         wait (bool): True for waiting for pod to reach the desired
             status, False otherwise

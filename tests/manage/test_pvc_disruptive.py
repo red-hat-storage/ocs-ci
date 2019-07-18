@@ -28,19 +28,6 @@ class BaseDisruption(ManageTest):
     pvc_obj = None
     storage_type = None
 
-    def create_pvcs(self):
-        """
-        Create PVCs
-
-        Returns:
-            list: List of PVC objects
-        """
-        # Create 5 PVCs
-        pvc_objs = helpers.create_multiple_pvcs(
-            sc_name=self.sc_obj.name, namespace=self.namespace, number_of_pvc=5
-        )
-        return pvc_objs
-
     def num_of_resources_added(self, func_to_use, previous_num):
         """
         Wait for new resources to be created and find the number of new
@@ -77,8 +64,11 @@ class BaseDisruption(ManageTest):
 
         DISRUPTION_OPS.set_resource(resource=resource_to_delete)
 
-        # Start creation of multiple PVCs
-        bulk_pvc_create = executor.submit(self.create_pvcs)
+        # Start creation of multiple PVCs. Create 5 PVCs
+        bulk_pvc_create = executor.submit(
+            helpers.create_multiple_pvcs, sc_name=self.sc_obj.name,
+            namespace=self.namespace, number_of_pvc=5
+        )
 
         if operation_to_disrupt == 'create_pvc':
             # Ensure PVCs are being created before deleting the resource
