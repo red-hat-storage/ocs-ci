@@ -188,8 +188,9 @@ def project(request):
         kind='Project',
         namespace=namespace
     )
-    assert project_obj.new_project(namespace),
-        f"Failed to create new project {namespace}"
+    assert project_obj.new_project(
+        namespace
+    ), f"Failed to create new project {namespace}"
 
     def finalizer():
         """

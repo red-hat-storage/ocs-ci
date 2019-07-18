@@ -1,6 +1,7 @@
 import pytest
 import logging
 import random
+from tests import helpers
 from ocs_ci.ocs import constants
 
 from ocs_ci.framework.testlib import ManageTest, tier2
@@ -77,7 +78,6 @@ def init_pvc_size(request):
 
 @tier2
 @pytest.mark.usefixtures(
-    create_project.__name__,
     init_pvc_size.__name__,
 )
 class BaseRunIOMultiplePods(ManageTest):
@@ -88,10 +88,11 @@ class BaseRunIOMultiplePods(ManageTest):
     pvc_size_int = 5
     interface = None
 
-    def run_io_multiple_pods(self):
+    def run_io_multiple_pods(self, project):
         """
         Run IO on multiple pods in parallel
         """
+        self.namespace = project.namespace
 
         for pod in self.pod_objs:
             pod.run_io('fs', f'{self.pvc_size_int - 1}G')
