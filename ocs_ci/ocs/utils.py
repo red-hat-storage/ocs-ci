@@ -638,7 +638,7 @@ def collect_ocs_logs(dir_name):
 
     """
     log_dir_path = os.path.join(
-        ocsci_config.RUN['log_dir'],
+        os.path.expanduser(ocsci_config.RUN['log_dir']),
         f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}"
     )
     create_directory_path(log_dir_path)
