@@ -46,6 +46,9 @@ class OCS(object):
         self.temp_yaml = tempfile.NamedTemporaryFile(
             mode='w+', prefix=self._kind, delete=False
         )
+        # This _is_delete flag is set to True if the delete method was called
+        # on object of this class and was successfull.
+        self._is_deleted = False
 
     @property
     def api_version(self):
@@ -62,6 +65,10 @@ class OCS(object):
     @property
     def name(self):
         return self._name
+
+    @property
+    def is_deleted(self):
+        return self._is_deleted
 
     def reload(self):
         """
@@ -87,7 +94,11 @@ class OCS(object):
         return status
 
     def delete(self, wait=True, force=False):
-        return self.ocp.delete(resource_name=self.name, wait=wait, force=force)
+        result = self.ocp.delete(
+            resource_name=self.name, wait=wait, force=force
+        )
+        self._is_deleted = True
+        return result
 
     def apply(self, **data):
         with open(self.temp_yaml.name, 'w') as yaml_file:
