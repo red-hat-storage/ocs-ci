@@ -198,7 +198,8 @@ def create_ceph_block_pool(pool_name=None):
 
 def create_storage_class(
     interface_type, interface_name, secret_name,
-    reclaim_policy=constants.RECLAIM_POLICY_DELETE, sc_name=None
+    reclaim_policy=constants.RECLAIM_POLICY_DELETE, sc_name=None,
+    provisioner=None
 ):
     """
     Create a storage class
@@ -227,6 +228,9 @@ def create_storage_class(
             'csi.storage.k8s.io/node-publish-secret-namespace'
         ] = defaults.ROOK_CLUSTER_NAMESPACE
         interface = constants.RBD_INTERFACE
+        sc_data['provisioner'] = (
+            provisioner if provisioner else defaults.RBD_PROVISIONER
+        )
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = templating.load_yaml_to_dict(
             constants.CSI_CEPHFS_STORAGECLASS_YAML
@@ -239,6 +243,9 @@ def create_storage_class(
         ] = defaults.ROOK_CLUSTER_NAMESPACE
         interface = constants.CEPHFS_INTERFACE
         sc_data['parameters']['fsName'] = get_cephfs_name()
+        sc_data['provisioner'] = (
+            provisioner if provisioner else defaults.CEPHFS_PROVISIONER
+        )
     sc_data['parameters']['pool'] = interface_name
 
     sc_data['metadata']['name'] = (
