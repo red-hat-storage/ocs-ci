@@ -412,16 +412,16 @@ def pod_factory(request, project_factory):
             namespace=project.namespace,
             **kwargs
         )
-        assert pvc_obj, "Failed to create PVC"
-        pvc_obj.storageclass = storageclass
-        pvc_obj.project = project
+        assert pod_obj, "Failed to create PVC"
+        pod_obj.project = project
+        pod_obj.pvc = pvc
 
-        instances.append(pvc_obj)
-        return pvc_obj
+        instances.append(pod_obj)
+        return pod_obj
 
     def finalizer():
         """
-        Delete the PVC
+        Delete the Pod
         """
         for instance in instances:
             if instance:

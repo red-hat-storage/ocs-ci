@@ -1,8 +1,6 @@
 import logging
 import pytest
 
-from ocs_ci.ocs.resources.pod import Pod
-from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.utility import templating
