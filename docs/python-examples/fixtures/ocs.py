@@ -54,14 +54,14 @@ class PVC:
 
 class StorageClass:
     """
-    Example dummy class of PVC
+    Example dummy class of StorageClass
     """
     def __init__(self, name):
         """
-        Constructor for PVC
+        Constructor for StorageClass
 
         Args:
-            name (str): name of pvc
+            name (str): name of storage class
         """
         self.name = name
         self.is_deleted = False
