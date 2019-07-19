@@ -15,10 +15,11 @@ class TestDeletePVCWhileRunningIO(ManageTest):
     """
 
     @tier1
-    def test_run_io_and_delete_pvc(self, rbd_pod):
+    def test_run_io_and_delete_pvc(self, rbd_pod_factory):
         """
         Delete PVC while IO is in progress
         """
+        rbd_pod = rbd_pod_factory()
         thread = pod.run_io_in_bg(rbd_pod, expect_to_fail=True)
         rbd_pod.pvc.delete(wait=False)
 
@@ -42,10 +43,11 @@ class TestDeletePVCWhileRunningIO(ManageTest):
                 pass
 
     @tier1
-    def test_run_io(self, rbd_pod):
+    def test_run_io(self, rbd_pod_factory):
         """
         Test IO
         """
+        rbd_pod = rbd_pod_factory()
         rbd_pod.run_io('fs', '1G')
         logging.info("Waiting for results")
         fio_result = rbd_pod.get_fio_results()

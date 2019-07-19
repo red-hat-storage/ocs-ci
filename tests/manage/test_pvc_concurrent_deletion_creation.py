@@ -15,16 +15,18 @@ log = logging.getLogger(__name__)
 
 
 @pytest.fixture()
-def test_fixture(request, rbd_storageclass):
+def test_fixture(request, rbd_storageclass_factory, project_factory):
     """
     Setup and teardown
     """
+    rbd_storageclass = rbd_storageclass_factory()
+    project = project_factory()
     self = request.node.cls
 
     def finalizer():
         teardown(self)
     request.addfinalizer(finalizer)
-    setup(self, rbd_storageclass)
+    setup(self, rbd_storageclass, project)
 
 
 def setup(self, storageclass, project):
@@ -33,8 +35,8 @@ def setup(self, storageclass, project):
     Create PVCs
     """
     # Create new project
-    self.namespace = create_unique_resource_name('test', 'namespace')
-    self.project_obj = ocp.OCP(kind='Project', namespace=self.namespace)
+    self.namespace = project.namespace
+    self.project_obj = project
     assert self.project_obj.new_project(self.namespace), (
         f'Failed to create new project {self.namespace}'
     )

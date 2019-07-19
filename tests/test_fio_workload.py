@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 
 class TestFIOWorkload(ManageTest):
 
-    def test_fio_with_block_storage(self, rbd_pod):
+    def test_fio_with_block_storage(self, rbd_pod_factory):
+        rbd_pod = rbd_pod_factory()
         name = 'test_workload'
         spec = rbd_pod.data.get('spec')
         path = (

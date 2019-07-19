@@ -69,7 +69,12 @@ class TestRbdBasedRwoPvc(ManageTest):
         ]
     )
     def test_rbd_based_rwo_pvc(
-            self, reclaim_policy, rbd_secret, ceph_block_pool):
+            self,
+            reclaim_policy,
+            rbd_storageclass_factory,
+            rbd_pvc_factory,
+            rbd_pod_factory
+    ):
         """
         Verifies RBD Based RWO Dynamic PVC creation with Reclaim policy set to
         Delete/Retain
@@ -89,11 +94,9 @@ class TestRbdBasedRwoPvc(ManageTest):
         11. Delete PVC
         12. Verify PV associated with deleted PVC is also deleted/released
         """
+
         # Create Storage Class with reclaimPolicy: Delete
-        sc_obj = helpers.create_storage_class(
-            interface_type=constants.CEPHBLOCKPOOL,
-            interface_name=ceph_block_pool.name,
-            secret_name=rbd_secret.name,
+        sc_obj = rbd_storageclass_factory(
             reclaim_policy=reclaim_policy
         )
 
@@ -102,23 +105,13 @@ class TestRbdBasedRwoPvc(ManageTest):
         pvc_data['metadata']['name'] = helpers.create_unique_resource_name(
             'test', 'pvc'
         )
-        pvc_data['metadata']['namespace'] = self.namespace
         pvc_data['spec']['storageClassName'] = sc_obj.name
         pvc_data['spec']['accessModes'] = ['ReadWriteOnce']
-        pvc_obj = PVC(**pvc_data)
-        pvc_obj.create()
+        pvc_obj = rbd_pvc_factory(storageclass=sc_obj, **pvc_data)
 
         # Create first pod
         log.info(f"Creating two pods which use PVC {pvc_obj.name}")
-        pod_data = templating.load_yaml_to_dict(constants.CSI_RBD_POD_YAML)
-        pod_data['metadata']['name'] = helpers.create_unique_resource_name(
-            'test', 'pod'
-        )
-        pod_data['metadata']['namespace'] = self.namespace
-        pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_obj.name
-
-        pod_obj = Pod(**pod_data)
-        pod_obj.create()
+        pod_obj = rbd_pod_factory(pvc=pvc_obj)
         assert helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
 
         node_pod1 = pod_obj.get()['spec']['nodeName']
@@ -126,14 +119,7 @@ class TestRbdBasedRwoPvc(ManageTest):
         # Create second pod
         # Try creating pod until it is on a different node than first pod
         for retry in range(1, 6):
-            pod_data = templating.load_yaml_to_dict(constants.CSI_RBD_POD_YAML)
-            pod_data['metadata']['name'] = helpers.create_unique_resource_name(
-                'test', 'pod'
-            )
-            pod_data['metadata']['namespace'] = self.namespace
-            pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_obj.name
-            pod_obj2 = Pod(**pod_data)
-            pod_obj2.create()
+            pod_obj2 = rbd_pod_factory(pvc=pvc_obj)
             assert helpers.wait_for_resource_state(pod_obj2, constants.STATUS_PENDING)
 
             node_pod2 = pod_obj2.get()['spec']['nodeName']

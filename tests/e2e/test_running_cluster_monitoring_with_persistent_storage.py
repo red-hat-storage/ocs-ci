@@ -50,11 +50,12 @@ class TestRunningClusterMonitoringWithPersistentStorage(E2ETest):
                  'alertmanager-main-2']
 
     @tier1
-    def test_running_cluster_mointoring_with_persistent_stoarge(
-            self, rbd_storageclass):
+    def test_running_cluster_mointoring_with_persistent_storage(
+            self, rbd_storageclass_factory):
         """
         A test case to configure the persistent volume on monitoring pods
         """
+        rbd_storageclass = rbd_storageclass_factory()
 
         # Create configmap cluster-monitoring-config
         create_configmap_cluster_monitoring_pod(rbd_storageclass.name)

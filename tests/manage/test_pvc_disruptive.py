@@ -94,12 +94,12 @@ class TestRBDDisruption(BaseDisruption):
         ]
     )
     def test_disruptive_block(
-            self, operation_to_disrupt, resource_to_delete, cephfs_storageclass):
+            self, operation_to_disrupt, resource_to_delete, cephfs_storageclass_factory):
         """
         RBD PVC related disruption tests class method
         """
-        self.sc_obj = cephfs_storageclass
-        self.namespace = cephfs_storageclass.namespace
+        self.sc_obj = cephfs_storageclass_factory()
+        self.namespace = self.sc_obj.namespace
         self.disruptive_base(operation_to_disrupt, resource_to_delete)
 
 
@@ -152,10 +152,14 @@ class TestFSDisruption(BaseDisruption):
         ]
     )
     def test_disruptive_file(
-            self, operation_to_disrupt, resource_to_delete, rbd_storageclass):
+            self,
+            operation_to_disrupt,
+            resource_to_delete,
+            rbd_storageclass_factory
+    ):
         """
         CephFS PVC related disruption tests class method
         """
-        self.sc_obj = rbd_storageclass
-        self.namespace = rbd_storageclass.namespace
+        self.sc_obj = rbd_storageclass_factory()
+        self.namespace = self.sc_obj.namespace
         self.disruptive_base(operation_to_disrupt, resource_to_delete)

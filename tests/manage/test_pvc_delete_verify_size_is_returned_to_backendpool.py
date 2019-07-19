@@ -120,10 +120,11 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
 
     @tier1
     def test_pvc_delete_and_verify_size_is_returned_to_backend_pool(
-            self, rbd_storageclass):
+            self, rbd_storageclass_factory):
         """
         Test case to verify after delete pvc size returned to backend pools
         """
+        rbd_storageclass = rbd_storageclass_factory()
         used_before_creating_pvc = check_ceph_used_space()
         logger.info(f"Used before creating pvc {used_before_creating_pvc}")
         pvc_obj = create_pvc_and_verify_pvc_exists(
