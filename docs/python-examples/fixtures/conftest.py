@@ -49,13 +49,13 @@ def cls_pvc(request, storage_class):
 
 
 @pytest.fixture(scope='class')
-def pvcs_factory(request, storage_class):
+def create_pvcs(request, storage_class):
     """
     Fixture factory for creating pvcs.
-    This fixture is returning function with with which you can create objects
-    of PVC as a part of test and cares about teardown of created PVCs.
+    This fixture returns function with which you can create objects of PVC as
+    a part of test and cares about teardown of created PVCs.
 
-    Usage of this fixter is for usecases when:
+    Usage of this fixture is for use cases when:
     * you need to create PVC resources as part of test and the teardown is
       done automatically by its teardown
     * you need to create PVC resources as part of test and you can also delete
@@ -86,8 +86,8 @@ def pvcs_factory(request, storage_class):
     def wrapper_crate_pvcs(count, storage_class, pvcs=pvcs):
         """
         Function wrapper for ocs.create_pvcs. This wrapper append created PVCs
-        into pvcs list referenced from pvcs_factory which allows to do proper
-        teardown of created objects.
+        into pvcs list referenced from create_pvcs factroy which allows to do
+        proper teardown of created objects.
 
         Args:
             count (int): desired count of pvcs to be created
