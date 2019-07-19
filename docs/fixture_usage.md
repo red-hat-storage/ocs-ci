@@ -2,14 +2,15 @@
 
 ## Basic information
 
-What is pytest Fixture? You can find definition and examples documentation in
+What is a pytest Fixture? You can find definition and examples documentation in
 [pytest web](https://docs.pytest.org/en/latest/fixture.html). Please read this
-as the first.
+documentation first.
 
 We should keep our fixtures organized and have all the dependencies well
 defined in fixtures.
 
-All the fixtures should be documented - mandatory is document return value.
+All the fixtures should be documented - documenting the return value is
+mandatory.
 
 Fixture is compose of its setup part, the code which is done for prepare
 resource and teardown part which is after yield of added via
@@ -26,9 +27,10 @@ with yield)
 TODO: Mention function factories and use cases and when to use which approach.
 Something like:
 
-* Setup resource,  test (using resources) , teardown - regular usage of fixture
+* Setup resource, test (using resources), teardown - regular usage of fixture
 * Test creating resources as part of test, teardown of resources - fixture
-  factory solve the issue here.
+  factory solve the issue here, see the
+  [documentation](https://docs.pytest.org/en/latest/fixture.html#factories-as-fixtures)
 * Setup resources,  test (using resources , deleting resources), teardown
   shouldn’t fail on those deleted resources
 
@@ -47,7 +49,7 @@ Here is the list of things we should avoid in our fixtures:
 
 ## Examples of fixtures and tests
 
-Here are few simple examples how to use fixtures.
+Here are few simple examples of how to use fixtures.
 
 * [conftest.py](./python-examples/fixtures/conftest.py) - Example of fixture
   definitions in conftest.py file for fixtures meant to be shared between tests.
@@ -57,13 +59,17 @@ Here are few simple examples how to use fixtures.
 
 Please go over example files above to understand the logic of fixtures.
 
-## Output of tests:
+## Output of tests examples
+
+Below you can see output of test examples linked above. From this output you
+can see order of creating and teardowning objects.
 
 ```bash
-============================================== test session starts ==============================================
-platform darwin -- Python 3.7.3, pytest-5.0.1, py-1.8.0, pluggy-0.12.0 -- /Users/pbalogh/sandbox/pytest/fixture_factories/.venv/bin/python3
+=========================== test session starts ===============================
+platform darwin -- Python 3.7.3, pytest-5.0.1, py-1.8.0, pluggy-0.12.0 --
+.venv/bin/python3
 cachedir: .pytest_cache
-rootdir: /Users/pbalogh/sandbox/pytest/fixture_factories
+rootdir: ./fixtures
 collected 7 items
 
 test_fixtures.py::TestCreatingPVCsFromTest::test_create_pvcs[2]
@@ -115,5 +121,5 @@ INFO:test_fixtures:This test is using same one pvc:  pvc_4810
 INFO:test_fixtures:Storage class used is storage_class_1006
 PASSEDINFO:ocs:Deleting pvc: pvc_4810
 INFO:ocs:Deleting storage class: storage_class_1006
-============================================== 7 passed in 0.02 seconds ==============================================
+=========================== 7 passed in 0.02 seconds ==========================
 ```

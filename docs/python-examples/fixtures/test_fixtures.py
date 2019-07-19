@@ -67,8 +67,8 @@ class TestCreatingPVCsFromTest:
 
 class TestPVCsCreatedInSetup:
     """
-    This is example of test which needs 3 PVCs and do some operation on top of
-    them and delete 1 PVC as part of test.
+    This is an example of a test which needs 3 PVCs and does some operation on
+    with them and delete 1 PVC as part of test case.
     1) Setup is done outside of test (in setup part of the fixture)
     2) Test is using PVCs, delete on of them
     3) Teardown of PVCs is done outside of test and shouldn't fail cause one
