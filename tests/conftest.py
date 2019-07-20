@@ -32,7 +32,9 @@ from ocs_ci.utility.utils import (
     destroy_cluster, run_cmd, get_openshift_installer, get_openshift_client,
     is_cluster_running, ocsci_log_path
 )
+from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
+
 
 log = logging.getLogger(__name__)
 
@@ -68,26 +70,38 @@ def polarion_testsuite_properties(record_testsuite_property):
         )
 
 
-def cluster_teardown(log_level="DEBUG"):
+def cluster_teardown(deployer, log_level="DEBUG"):
     log.info("Destroying the test cluster")
-    destroy_cluster(config.ENV_DATA['cluster_path'], log_level)
+    deployer.destroy_cluster(log_level)
     log.info("Destroying the test cluster complete")
 
 
 @pytest.fixture(scope="session", autouse=True)
 def cluster(request, log_cli_level):
+    """
+    This fixture is exclusively for OCP deployment.
+    we can skip or include this deployment using variables in
+    config.ENV_DATA['skip_ocp_deployment']
+    """
+
     log.info(f"All logs located at {ocsci_log_path()}")
     log.info("Running OCS basic installation")
     log.info(f"Openshift Installer will use log level: {log_cli_level}")
     cluster_path = config.ENV_DATA['cluster_path']
     deploy = config.RUN['cli_params']['deploy']
     teardown = config.RUN['cli_params']['teardown']
+    factory = dep_factory.DeploymentFactory()
+    deployer = factory.get_deployment()
+
+    if config.ENV_DATA['skip_ocp_deployment']:
+        return
     # Add a finalizer to teardown the cluster after test execution is finished
     if teardown:
         def cluster_teardown_finalizer():
-            cluster_teardown(log_cli_level)
+            cluster_teardown(deployer, log_cli_level)
         request.addfinalizer(cluster_teardown_finalizer)
         log.info("Will teardown cluster because --teardown was provided")
+
     # Test cluster access and if exist just skip the deployment.
     if is_cluster_running(cluster_path):
         log.info("The installation is skipped because the cluster is running")
@@ -136,40 +150,36 @@ def cluster(request, log_cli_level):
     with open(install_config, "w") as f:
         f.write(install_config_str)
 
-    # Download installer
-    installer = get_openshift_installer(
-        config.DEPLOYMENT['installer_version']
-    )
     # Download client
     get_openshift_client()
 
     # Deploy cluster
-    log.info("Deploying cluster")
-    run_cmd(
-        f"{installer} create cluster "
-        f"--dir {cluster_path} "
-        f"--log-level {log_cli_level}"
-    )
+    deployer.deploy(log_cli_level)
+    deployer.add_volume()
 
-    # Test cluster access
-    if not OCP.set_kubeconfig(
-        os.path.join(cluster_path, config.RUN.get('kubeconfig_location'))
-    ):
-        pytest.fail("Cluster is not available!")
 
-    # TODO: Create cluster object, add to config.ENV_DATA for other tests to
-    # utilize.
-    # Determine worker pattern and create ebs volumes
-    with open(os.path.join(cluster_path, "terraform.tfvars")) as f:
-        tfvars = json.load(f)
+@pytest.fixture(scope="session", autouse=True)
+def ocs_cluster(cluster):
+    """
+    This fixture is exclusively for OCS deployment.
+    No OCS teardown is done here
+    # TODO: figure out proper steps for only OCS teardown
+    we can skip ocs deployment using config.ENV_DATA['skip_ocs_deployment']
+    """
 
-    cluster_id = tfvars['cluster_id']
-    worker_pattern = f'{cluster_id}-worker*'
-    log.info(f'Worker pattern: {worker_pattern}')
-    create_ebs_volumes(worker_pattern, region_name=config.ENV_DATA['region'])
+    if config.ENV_DATA['skip_ocs_deployment']:
+        return
+    cluster_path = config.ENV_DATA['cluster_path']
+    _templating = templating.Templating()
 
-    # render templates and create resources
-    create_oc_resource('common.yaml', cluster_path, _templating, config.ENV_DATA)
+    try:
+        create_oc_resource('common.yaml', cluster_path, _templating, config.ENV_DATA)
+    except CommandFailed:
+        # TODO: This can't be a solid reasoning to tell that
+        # ocs cluster doesn't exist, find efficient method
+        log.info("OCS cluster already exists")
+        return
+
     run_cmd(
         f'oc label namespace {config.ENV_DATA["cluster_namespace"]} '
         f'"openshift.io/cluster-monitoring=true"'
