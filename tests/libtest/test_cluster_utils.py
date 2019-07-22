@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.framework.testlib import tier1, ManageTest, libtest
 from ocs_ci.ocs.cluster import CephCluster
 from tests import helpers
 
@@ -105,6 +105,7 @@ def teardown(self):
 
 
 @tier1
+@libtest
 @pytest.mark.usefixtures(
     test_fixture.__name__,
 )

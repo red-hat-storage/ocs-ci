@@ -8,11 +8,12 @@ import logging
 import yaml
 
 from ocs_ci.ocs import api_client as ac
-
+from ocs_ci.framework.testlib import libtest
 
 log = logging.getLogger(__name__)
 
 
+@libtest
 def test_create_simple_service():
     """
     Create a simple openshift service
