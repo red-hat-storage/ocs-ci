@@ -78,7 +78,7 @@ def rbd_secret_factory(request):
         Delete the RBD secrets
         """
         for instance in instances:
-            if instance:
+            if not instance.is_deleted:
                 instance.delete()
                 instance.ocp.wait_for_delete(
                     instance.name
@@ -108,7 +108,7 @@ def cephfs_secret_factory(request):
         Delete the FS secrets
         """
         for instance in instances:
-            if instance:
+            if not instance.is_deleted:
                 instance.delete()
                 instance.ocp.wait_for_delete(
                     instance.name
@@ -137,7 +137,7 @@ def ceph_block_pool_factory(request):
         Delete the Ceph block pool
         """
         for instance in instances:
-            if instance:
+            if not instance.is_deleted:
                 instance.delete()
                 instance.ocp.wait_for_delete(
                     instance.name
@@ -187,7 +187,7 @@ def rbd_storageclass_factory(
         Delete the Ceph block pool
         """
         for instance in instances:
-            if instance:
+            if not instance.is_deleted:
                 instance.delete()
                 instance.ocp.wait_for_delete(
                     instance.name
@@ -232,7 +232,7 @@ def cephfs_storageclass_factory(request, cephfs_secret_factory):
         Delete the Ceph block pool
         """
         for instance in instances:
-            if instance:
+            if not instance.is_deleted:
                 instance.delete()
                 instance.ocp.wait_for_delete(
                     instance.name
@@ -281,7 +281,7 @@ def project_factory(request):
         Delete the Ceph block pool
         """
         for instance in instances:
-            if instance:
+            if not instance.is_deleted:
                 instance.delete()
                 instance.ocp.wait_for_delete(
                     instance.name
@@ -328,7 +328,7 @@ def pvc_factory(request, rbd_storageclass_factory, project_factory):
         Delete the PVC
         """
         for instance in instances:
-            if instance:
+            if not instance.is_deleted:
                 instance.delete()
                 instance.ocp.wait_for_delete(
                     instance.name
@@ -424,7 +424,7 @@ def pod_factory(request, project_factory):
         Delete the Pod
         """
         for instance in instances:
-            if instance:
+            if not instance.is_deleted:
                 instance.delete()
                 instance.ocp.wait_for_delete(
                     instance.name
