@@ -7,4 +7,4 @@ ENV_DATA:
   platform: 'aws'
   worker_replicas: 3  # here you can define diff number of workers
   master_replicas: 3
-  rook_image: "rook/ceph:v1.0.4" # you can overwrite default rook image
+  rook_image: "rook/ceph:v1.0.0-256.g01ba50e" # you can overwrite default rook image

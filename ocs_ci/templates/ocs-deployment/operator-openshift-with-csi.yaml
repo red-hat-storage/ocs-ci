@@ -110,7 +110,7 @@ spec:
       serviceAccountName: rook-ceph-system
       containers:
       - name: rook-ceph-operator
-        image: {{ rook_image | default('rook/ceph:v1.0.4') }}
+        image: {{ rook_image | default('rook/ceph:v1.0.0-256.g01ba50e') }}
         args: ["ceph", "operator"]
         volumeMounts:
         - mountPath: /var/lib/rook
