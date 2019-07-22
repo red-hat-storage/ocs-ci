@@ -1,8 +1,11 @@
+"""
+Module to perform IOs with several weights
+"""
 import pytest
 import logging
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier1, google_api_required
 from tests.fixtures import (
     create_rbd_storageclass, create_rbd_pod, create_pvc, create_ceph_block_pool,
     create_rbd_secret, create_project
@@ -19,9 +22,9 @@ logger = logging.getLogger(__name__)
     create_pvc.__name__,
     create_rbd_pod.__name__,
 )
+@google_api_required
 @tier1
-#@pytest.mark.polarion_id("OCS-371")
-class TestDeletePVCWhileRunningIO(ManageTest):
+class TestIOPerformance(ManageTest):
     """
     Test IO performance
     """
@@ -33,15 +36,15 @@ class TestDeletePVCWhileRunningIO(ManageTest):
         ],
         argvalues=[
             pytest.param(
-                *['50GB', 'rw', 1, 120, 4, (5, 2)],
+                *['1GB', 'rw', 1, 120, 4, (5, 2)],
                 #marks=pytest.mark.polarion_id("OCS-555")
             ),
             pytest.param(
-                *['50GB', 'rw', 6, 120, 16, (15, 2)],
+                *['1GB', 'rw', 6, 120, 16, (13, 2)],
                 #marks=pytest.mark.polarion_id("OCS-558")
             ),
             pytest.param(
-                *['50GB', 'rw', 12, 120, 32, (23, 2)],
+                *['1GB', 'rw', 12, 120, 32, (21, 2)],
                 #marks=pytest.mark.polarion_id("OCS-559")
             ),
         ]

@@ -2,8 +2,9 @@
 In this pytest plugin we will keep all our pytest marks used in our tests and
 all related hooks/plugins to markers.
 """
-
+import os
 import pytest
+from ocs_ci.framework import config
 
 
 # tier marks
@@ -44,6 +45,12 @@ ignore_leftovers = pytest.mark.ignore_leftovers
 # under development, you can mark it with @run_this and run pytest -m run_this
 run_this = pytest.mark.run_this
 
+# Skipif marks
+google_api_required = pytest.mark.skipif(
+    not os.path.exists(os.path.expanduser(
+        config.RUN['google_api_secret'])
+    ), reason="Google API credentials don't exists"
+)
 
 # here is the place to implement some plugins hooks which will process marks
 # if some operation needs to be done for some specific marked tests.

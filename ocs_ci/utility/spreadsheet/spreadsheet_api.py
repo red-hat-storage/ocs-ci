@@ -1,10 +1,12 @@
 """
 API module to interact with Google spreadsheets
-In order to create a new spreadsheet, share the spreadsheet with:
-ocs-qe@ocs-qe.iam.gserviceaccount.com with write permissions.
+In order to create a new spreadsheet, share the spreadsheet with the
+'client_email' in your credentials json file with write permissions.
 
 
 """
+import os
+from ocs_ci.framework import config
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
@@ -19,8 +21,9 @@ class GoogleSpreadSheetAPI(object):
             'https://spreadsheets.google.com/feeds',
             'https://www.googleapis.com/auth/drive'
         ]
+        google_api = os.path.expanduser(config.RUN['google_api_secret'])
         creds = ServiceAccountCredentials.from_json_keyfile_name(
-            'client_secret.json', scope
+            google_api, scope
         )
         client = gspread.authorize(creds)
 
