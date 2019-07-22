@@ -18,7 +18,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.exceptions import CommandFailed, CephHealthException
-from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.utils import create_oc_resource, apply_oc_resource
@@ -29,8 +28,7 @@ from ocs_ci.utility.environment_check import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
-    destroy_cluster, run_cmd, get_openshift_installer, get_openshift_client,
-    is_cluster_running, ocsci_log_path
+    run_cmd, get_openshift_client, is_cluster_running, ocsci_log_path
 )
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers

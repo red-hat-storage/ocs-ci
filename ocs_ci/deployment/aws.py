@@ -135,7 +135,6 @@ class AWSIPI(AWSBase):
             with open(metadata_file) as f:
                 metadata = json.loads(f.read())
             cluster_name = metadata.get("clusterName")
-            region_name = metadata.get("aws").get("region")
 
             # Execute destroy cluster using OpenShift installer
             logger.info(f"Destroying cluster defined in {self.cluster_path}")
