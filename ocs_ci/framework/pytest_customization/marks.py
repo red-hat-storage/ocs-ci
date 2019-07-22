@@ -49,7 +49,7 @@ run_this = pytest.mark.run_this
 google_api_required = pytest.mark.skipif(
     not os.path.exists(os.path.expanduser(
         config.RUN['google_api_secret'])
-    ), reason="Google API credentials don't exists"
+    ), reason="Google API credentials don't exist"
 )
 
 # here is the place to implement some plugins hooks which will process marks

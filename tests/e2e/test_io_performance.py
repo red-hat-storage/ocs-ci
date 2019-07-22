@@ -37,15 +37,15 @@ class TestIOPerformance(ManageTest):
         argvalues=[
             pytest.param(
                 *['1GB', 'rw', 1, 120, 4, (5, 2)],
-                #marks=pytest.mark.polarion_id("OCS-555")
+                marks=pytest.mark.polarion_id("OCS-676")
             ),
             pytest.param(
                 *['1GB', 'rw', 6, 120, 16, (13, 2)],
-                #marks=pytest.mark.polarion_id("OCS-558")
+                marks=pytest.mark.polarion_id("OCS-677")
             ),
             pytest.param(
                 *['1GB', 'rw', 12, 120, 32, (21, 2)],
-                #marks=pytest.mark.polarion_id("OCS-559")
+                marks=pytest.mark.polarion_id("OCS-678")
             ),
         ]
     )
