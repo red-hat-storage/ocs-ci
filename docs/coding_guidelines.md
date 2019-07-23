@@ -22,6 +22,8 @@ Lets follow the following guidelines for the Core Libraries and Test Scripts
 * Try to follow this convention for brackets and indentions like in example
     below if the line doesn't fit in 79 chars!  (This makes code much more
     readable):
+* If you are introducing a workaround, follow rules noted in
+  [Tracking of workarounds](./workarounds.md) page.
 
 ```python
 def function(
