@@ -43,6 +43,8 @@ PVC = "PersistentVolumeClaim"
 POD = "Pod"
 ROUTE = "Route"
 
+# Provisioners
+AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
 
 # Other
 SECRET = "Secret"
