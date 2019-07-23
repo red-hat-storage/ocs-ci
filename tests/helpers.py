@@ -654,3 +654,38 @@ def validate_pv_delete(pv_name):
 
     except CommandFailed:
         return True
+
+
+def create_pods(
+    pvc_objs_list, interface_type=None,
+    desired_status=constants.STATUS_RUNNING, wait=True, wait_each=False,
+    namespace=None
+):
+    """
+    Create Pods.
+    A pod will be created for each PVC in 'pvc_objs_list'.
+    Args:
+        pvc_objs_list (list): List of PVC objects
+        interface_type (str): The interface type (CephFS, Cephblockpool, etc.)
+        desired_status (str): The status of the pod to wait for
+        wait (bool): True for waiting for pod to reach the desired
+            status, False otherwise
+        wait_each (bool): True for waiting for each pod to reach the desired
+            status before creating next pod, False otherwise
+        namespace(str): Name of the namespace
+    Returns:
+        list: List of Pod objects
+    """
+    pod_objs = []
+    for pvc_obj in pvc_objs_list:
+        pod_obj = create_pod(
+            interface_type=interface_type, pvc_name=pvc_obj.name,
+            desired_status=desired_status, wait=wait_each, namespace=namespace
+        )
+        pod_objs.append(pod_obj)
+
+    if wait and not wait_each:
+        for pod_obj in pod_objs:
+            assert wait_for_resource_state(pod_obj, desired_status)
+        logging.info(f"Verified: All pods are in '{desired_status}' state.")
+    return pod_objs
