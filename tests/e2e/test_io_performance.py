@@ -32,25 +32,25 @@ class TestIOPerformance(ManageTest):
     @pytest.mark.parametrize(
         argnames=[
             "size", "io_direction", "jobs", "runtime", "depth",
-            "cell_to_update"
+            "sheet_index"
         ],
         argvalues=[
             pytest.param(
-                *['1GB', 'rw', 1, 120, 4, (5, 2)],
+                *['1GB', 'rw', 1, 60, 4, 1],
                 marks=pytest.mark.polarion_id("OCS-676")
             ),
             pytest.param(
-                *['1GB', 'rw', 6, 120, 16, (13, 2)],
+                *['1GB', 'rw', 6, 60, 16, 2],
                 marks=pytest.mark.polarion_id("OCS-677")
             ),
             pytest.param(
-                *['1GB', 'rw', 12, 120, 32, (21, 2)],
+                *['1GB', 'rw', 12, 60, 32, 3],
                 marks=pytest.mark.polarion_id("OCS-678")
             ),
         ]
     )
     def test_run_io(
-        self, size, io_direction, jobs, runtime, depth, cell_to_update
+        self, size, io_direction, jobs, runtime, depth, sheet_index
     ):
         """
         Test IO
@@ -70,6 +70,5 @@ class TestIOPerformance(ManageTest):
         writes = fio_result.get('jobs')[0].get('write').get('iops')
         logging.info(f"Read: {reads}")
         logging.info(f"Write: {writes}")
-        g_sheet = GoogleSpreadSheetAPI("OCS FIO")
-        g_sheet.update_sheet(cell_to_update[0], cell_to_update[1], reads)
-        g_sheet.update_sheet(cell_to_update[0] + 1, cell_to_update[1], writes)
+        g_sheet = GoogleSpreadSheetAPI("OCS FIO", sheet_index)
+        g_sheet.insert_row([reads, writes], 2)

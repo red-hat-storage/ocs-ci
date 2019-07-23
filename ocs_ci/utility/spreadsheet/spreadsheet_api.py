@@ -15,7 +15,7 @@ class GoogleSpreadSheetAPI(object):
     """
     A class to interact with Google Spreadsheet
     """
-    def __init__(self, sheet_name):
+    def __init__(self, sheet_name, sheet_index):
         # use creds to create a client to interact with the Google Drive API
         scope = [
             'https://spreadsheets.google.com/feeds',
@@ -27,7 +27,7 @@ class GoogleSpreadSheetAPI(object):
         )
         client = gspread.authorize(creds)
 
-        self.sheet = client.open(sheet_name).sheet1
+        self.sheet = client.open(sheet_name).get_worksheet(sheet_index)
 
     def update_sheet(self, row, col, value):
         """
@@ -41,3 +41,6 @@ class GoogleSpreadSheetAPI(object):
 
     def get_cell_value(self, row, col):
         return self.sheet.cell(row, col).value
+
+    def insert_row(self, value, row_index=2):
+        return self.sheet.insert_row(value, row_index)
