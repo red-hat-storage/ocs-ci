@@ -38,7 +38,8 @@ class BaseDisruption(ManageTest):
             previous_num (int): Previous number of resources
 
         Returns:
-            bool: True if resources has started, False in case of timeout
+            bool: True if resource creation has started.
+                  False in case of timeout.
         """
         try:
             for sample in TimeoutSampler(10, 1, func_to_use, self.namespace):
