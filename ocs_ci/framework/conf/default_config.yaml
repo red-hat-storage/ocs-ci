@@ -21,6 +21,7 @@ RUN:
   cli_params: {}  # this will be filled with CLI parameters data
   client_version: '4.1.4'
   bin_dir: './bin'
+  google_api_secret: '~/.ocs-ci/google_api_secret.json'
 
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
