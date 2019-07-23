@@ -90,8 +90,8 @@ def wait_for_resource_state(resource, state):
 
 
 def create_pod(
-    interface_type=None, pvc_name=None, desired_status=constants.STATUS_RUNNING, wait=True,
-    namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    interface_type=None, pvc_name=None, desired_status=constants.STATUS_RUNNING,
+    wait=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE
 ):
     """
     Create a pod
