@@ -122,6 +122,9 @@ class AWSIPI(AWSBase):
             # OCP cluster details, check base class for more info
             return
         logger.info("Deploying OCP cluster")
+        logger.info(
+            f"Openshift-installer will be using loglevel:{log_cli_level}"
+        )
         run_cmd(
             f"{self.installer} create cluster "
             f"--dir {self.cluster_path} "

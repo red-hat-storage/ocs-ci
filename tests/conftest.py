@@ -63,16 +63,11 @@ def cluster(request, log_cli_level):
     Specific platform deployment classes will handle the fine details
     of action
     """
-
     log.info(f"All logs located at {ocsci_log_path()}")
-    log.info("Running OCS basic installation")
-    log.info(f"Openshift Installer will use log level: {log_cli_level}")
 
     teardown = config.RUN['cli_params']['teardown']
     factory = dep_factory.DeploymentFactory()
     deployer = factory.get_deployment()
-    log.info(type(deployer))
-    log.info(deployer.name)
 
     # Add a finalizer to teardown the cluster after test execution is finished
     if teardown:

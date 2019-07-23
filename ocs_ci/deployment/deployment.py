@@ -106,9 +106,6 @@ class Deployment(object):
             "pull-secret"
         )
 
-        # TODO: check for supported platform and raise the exception if not
-        # supported. Currently we support just AWS.
-
         _templating = templating.Templating()
         install_config_str = _templating.render_template(
             "install-config.yaml.j2", config.ENV_DATA
@@ -136,6 +133,7 @@ class Deployment(object):
         platform, implementing OCS deployment here in base class.
         """
         _templating = templating.Templating()
+        logger.info("Running OCS basic installation")
 
         try:
             create_oc_resource(

@@ -1,6 +1,7 @@
 import logging
 
 from ocs_ci.framework import config
+from ocs_ci.ocs import exceptions
 from .aws import AWSIPI
 
 logger = logging.getLogger(name=__file__)
@@ -35,4 +36,9 @@ class DeploymentFactory(object):
             f"{deployment_platform},"
             f"deployment type: {deployment_type}"
         )
-        return self.cls_map[deployment_cls_key]()
+        try:
+            return self.cls_map[deployment_cls_key]()
+        except KeyError:
+            raise exceptions.DeploymentPlatformNotSupported(
+                f"Deployment platform specified is not supported"
+            )
