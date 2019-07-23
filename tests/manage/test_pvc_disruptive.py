@@ -75,7 +75,7 @@ class BaseDisruption(ManageTest):
 
         if operation_to_disrupt == 'create_pvc':
             # Ensure PVCs are being created before deleting the resource
-            ret = self.num_of_resources_added(
+            ret = self.verify_resource_creation(
                 get_all_pvcs, initial_num_of_pvc
             )
             assert ret, "Wait timeout: PVCs are not being created."
@@ -106,7 +106,7 @@ class BaseDisruption(ManageTest):
 
         if operation_to_disrupt == 'create_pod':
             # Ensure that pods are being created before deleting the resource
-            ret = self.num_of_resources_added(
+            ret = self.verify_resource_creation(
                 pod.get_all_pods, initial_num_of_pods
             )
             assert ret, "Wait timeout: Pods are not being created."
