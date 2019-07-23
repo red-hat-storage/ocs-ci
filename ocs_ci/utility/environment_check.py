@@ -6,6 +6,7 @@ import copy
 import logging
 
 from deepdiff import DeepDiff
+import pprint
 from gevent.threadpool import ThreadPoolExecutor
 
 from ocs_ci.ocs import ocp, constants, exceptions
@@ -136,19 +137,21 @@ def get_status_after_execution():
             leftover_detected = True
         if REMOVED_RESOURCE in kind_diff:
             try:
-                leftovers['Leftovers added'].append({
+                leftovers['Leftovers removed'].append({
                     kind: kind_diff[REMOVED_RESOURCE][
                         ''.join(kind_diff[REMOVED_RESOURCE])
                     ]
                 })
             except KeyError:
-                leftovers['Leftovers added'].append({
+                leftovers['Leftovers removed'].append({
                     kind: kind_diff[REMOVED_RESOURCE]
                 })
             leftover_detected = True
+    pp = pprint.PrettyPrinter(indent=2)
     if leftover_detected:
         raise exceptions.ResourceLeftoversException(
             f"\nThere are leftovers in the environment after test case:"
-            f"\nResources added: {leftovers['Leftovers added']}"
-            f"\nResources removed: {leftovers['Leftovers removed']}"
+            f"\nResources added:\n{pp.pformat(leftovers['Leftovers added'])}"
+            f"\nResources "
+            f"removed:\n {pp.pformat(leftovers['Leftovers removed'])}"
         )
