@@ -929,6 +929,7 @@ def create_directory_path(path):
     """
     Creates directory if path doesn't exists
     """
+    path = os.path.expanduser(path)
     if not os.path.exists(path):
         os.makedirs(path)
     else:
