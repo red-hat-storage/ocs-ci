@@ -355,7 +355,7 @@ def verify_block_pool_exists(pool_name):
 
 def get_admin_key():
     """
-    Fetches admin key secret from CEPH
+    Fetches admin key secret from Ceph
 
     Returns:
         str: The admin key
@@ -367,7 +367,7 @@ def get_admin_key():
 
 def get_cephfs_data_pool_name():
     """
-    Fetches ceph fs datapool name from CEPH
+    Fetches ceph fs datapool name from Ceph
 
     Returns:
         str: fs datapool name
@@ -377,28 +377,26 @@ def get_cephfs_data_pool_name():
     return out[0]['data_pools'][0]
 
 
-@retry(CommandFailed, tries=5, delay=3, backoff=1)
 def validate_cephfilesystem(fs_name):
     """
-     Verify CephFileSystem exists at CEPH and OCP
+     Verify CephFileSystem exists at Ceph and OCP
 
      Args:
         fs_name (str): The name of the Ceph FileSystem
 
      Returns:
-         bool: True if CephFileSystem is created at CEPH and OCP side else
+         bool: True if cephfilesystem is created at CEPH and OCP side else
             will return False with valid msg i.e Failure cause
     """
-    CFS = ocp.OCP(
+    cfs = ocp.OCP(
         kind=constants.CEPHFILESYSTEM,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
     ct_pod = pod.get_ceph_tools_pod()
     ceph_validate = False
     ocp_validate = False
-    cmd = "ceph fs ls"
 
-    result = CFS.get(resource_name=fs_name)
+    result = cfs.get(resource_name=fs_name)
     if result.get('metadata').get('name'):
         logger.info("Filesystem %s got created from Openshift Side", fs_name)
         ocp_validate = True
@@ -408,16 +406,25 @@ def validate_cephfilesystem(fs_name):
         )
         return False
 
-    out = ct_pod.exec_ceph_cmd(ceph_cmd=cmd)
-    if out:
-        out = out[0]['name']
-        if out == fs_name:
-            logger.info("FileSystem %s got created from Ceph Side", fs_name)
-            ceph_validate = True
-        else:
-            logger.error("FileSystem %s was not present at Ceph Side", fs_name)
-            return False
-    return ceph_validate and ocp_validate
+    try:
+        for pools in TimeoutSampler(
+                60, 3, ct_pod.exec_ceph_cmd, 'ceph fs ls'
+        ):
+            for out in pools:
+                result = out.get('name')
+                if result == fs_name:
+                    logger.info("FileSystem %s got created from Ceph Side", fs_name)
+                    ceph_validate = True
+                    break
+                else:
+                    logger.error("FileSystem %s was not present at Ceph Side", fs_name)
+                    ceph_validate = False
+            if ceph_validate:
+                break
+    except TimeoutExpiredError:
+        pass
+
+    return True if (ceph_validate and ocp_validate) else False
 
 
 def get_all_storageclass_names():
@@ -445,7 +452,7 @@ def get_all_storageclass_names():
 
 def delete_storageclasses(sc_objs):
     """"
-    Function for Deleting storageclass
+    Function for Deleting storageclasses
 
     Args:
         sc_objs (list): List of SC objects for deletion
