@@ -77,7 +77,7 @@ class AWSBase(Deployment):
 
     def add_node(self):
         # TODO: Implement later
-        pass
+        super(AWSBase, self).add_node()
 
 
 class AWSIPI(AWSBase):
@@ -91,15 +91,37 @@ class AWSIPI(AWSBase):
             config.DEPLOYMENT['installer_version']
         )
 
-    def deploy(self, log_cli_level='DEBUG'):
+    def deploy_cluster(self, log_cli_level='DEBUG'):
         """
         Deployment method specific to aws ipi
+        We are handling both OCP and OCS deployment here based on flags
 
         Args:
             log_cli_level (str): log level for installer (default: DEBUG)
-
         """
-        logger.info("Deploying cluster")
+        if not config.ENV_DATA['skip_ocp_deployment']:
+            self.deploy_ocp(log_cli_level)
+        else:
+            logger.warning("OCP deployment will be skipped")
+
+        if not config.ENV_DATA['skip_ocs_deployment']:
+            self.deploy_ocs()
+        else:
+            logger.warning("OCS deployment will be skipped")
+
+    def deploy_ocp(self, log_cli_level='DEBUG'):
+        """
+        Deployment specific to OCP cluster on this platform
+
+        Args:
+            log_cli_level (str): openshift installer's log level
+                (default: "DEBUG")
+        """
+        if not self.deploy_ocp_prereq():
+            # We will return if cluster is already running OR couldn't find
+            # OCP cluster details, check base class for more info
+            return
+        logger.info("Deploying OCP cluster")
         run_cmd(
             f"{self.installer} create cluster "
             f"--dir {self.cluster_path} "
@@ -107,10 +129,14 @@ class AWSIPI(AWSBase):
         )
         # Test cluster access
         if not OCP.set_kubeconfig(
-                os.path.join(self.cluster_path,
-                             config.RUN.get('kubeconfig_location'))
+            os.path.join(
+                self.cluster_path, config.RUN.get('kubeconfig_location'),
+            )
         ):
             pytest.fail("Cluster is not available!")
+
+        volume_size = config.ENV_DATA.get('DEFAULT_EBS_VOLUME_SIZE', 100)
+        self.add_volume(volume_size)
 
     def destroy_cluster(self, log_level="DEBUG"):
         """

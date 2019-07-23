@@ -13,17 +13,26 @@ class DeploymentFactory(object):
     def __init__(self):
         # A map all existing deployments and respective classes
         # should be put here
-        self.cls_map = {'awsipi': AWSIPI}
+        self.cls_map = {'aws_ipi': AWSIPI, 'aws_upi': None}
 
     def get_deployment(self):
         """
         Get the exact deployment class based on ENV_DATA
         Example:
-        deployment_name may look like 'aws', 'vmware', 'baremetal'
+        deployment_platform may look like 'aws', 'vmware', 'baremetal'
         deployment_type may be like 'ipi' or 'upi'
         """
-        deployment_name = config.ENV_DATA['platform']
+        deployment_platform = config.ENV_DATA['platform']
         deployment_type = config.ENV_DATA['deployment_type']
-        cls_name = deployment_name + deployment_type
-        logger.info(f"Current deployment will be {cls_name} ")
-        return self.cls_map[cls_name]()
+        deployment_cls_key = (
+            f"{deployment_platform.lower()}"
+            f"_"
+            f"{deployment_type.lower()}"
+        )
+        logger.info(f"Deployment key = {deployment_cls_key}")
+        logger.info(
+            f"Current deployment platform: "
+            f"{deployment_platform},"
+            f"deployment type: {deployment_type}"
+        )
+        return self.cls_map[deployment_cls_key]()
