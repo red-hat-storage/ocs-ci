@@ -35,3 +35,7 @@
     changes, and once all comments are addressed, you can squash related
     commits together and force push to the branch. Then we will just merge
     whole PR.
+* If the pull request introduces a workaround, the reviewer should check that
+  rules noted in [Tracking of workarounds](./workarounds.md) page are
+  followed. The person merging a workaround is responsible for checking that all
+  information related to the workaround is correct.
