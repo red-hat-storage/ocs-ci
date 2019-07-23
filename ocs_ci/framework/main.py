@@ -52,6 +52,7 @@ def init_ocsci_conf(arguments=None):
 def main(arguments):
     init_ocsci_conf(arguments)
     pytest_logs_dir = utils.ocsci_log_path()
+    utils.create_directory_path(framework.config.RUN['log_dir'])
     arguments.extend([
         '-p', 'ocs_ci.framework.pytest_customization.ocscilib',
         '-p', 'ocs_ci.framework.pytest_customization.marks',
