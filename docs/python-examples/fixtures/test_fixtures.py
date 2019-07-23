@@ -40,7 +40,7 @@ class TestCreatingPVCsFromTest:
         storage_class).
         """
         pvcs_created = create_pvcs_factory(pvcs_number, storage_class)
-        len(pvcs_created) == pvcs_number
+        assert len(pvcs_created) == pvcs_number
         logger.info([p.name for p in pvcs_created])
 
     def test_share_pvcs(self, create_pvcs_factory, storage_class):
