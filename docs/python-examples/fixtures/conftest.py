@@ -16,15 +16,15 @@ def storage_class(request):
     Returns:
         StorageClass: object of storage class
     """
-    sc_name = ocs.get_random_name('storage_class')
-    sc = ocs.StorageClass(sc_name)
-    logger.info(f"Creating storage class: {sc.name}")
-
     def fin():
         if not sc.is_deleted:
             sc.delete()
 
     request.addfinalizer(fin)
+
+    sc_name = ocs.get_random_name('storage_class')
+    logger.info(f"Creating storage class: {sc_name}")
+    sc = ocs.StorageClass(sc_name)
     return sc_name
 
 
@@ -36,20 +36,19 @@ def cls_pvc(request, storage_class):
     Returns:
         PVC: object of pvc class
     """
-    pvc_name = ocs.get_random_name('pvc')
-    pvc = ocs.PVC(pvc_name, storage_class)
-    logger.info(f"Creating pvc: {pvc.name}")
-
     def fin():
         if not pvc.is_deleted:
             pvc.delete()
 
     request.addfinalizer(fin)
+    pvc_name = ocs.get_random_name('pvc')
+    logger.info(f"Creating pvc: {pvc_name}")
+    pvc = ocs.PVC(pvc_name, storage_class)
     return pvc
 
 
 @pytest.fixture(scope='class')
-def create_pvcs(request, storage_class):
+def create_pvcs_factory(request, storage_class):
     """
     Fixture factory for creating pvcs.
     This fixture returns function with which you can create objects of PVC as
@@ -71,18 +70,22 @@ def create_pvcs(request, storage_class):
     # this is list of pvcs where we will append all created pvcs by helper
     # function for creating PVC and will be used in finalizer as well.
     pvcs = []
+
+    def fin():
+        logger.info("In finalizer")
+        for pvc in pvcs:
+            if not pvc.is_deleted:
+                pvc.delete()
+
+    request.addfinalizer(fin)
+
     logger.info("Setup of pvcs")
 
-    # the pvcs=pvcs reference needs to be here otherwise it's not visible
-    # from scope of class/method from which we will call the wrapper function
-    # returned by this fixture factory.
     # There is possibility to define helper function inside this factory like
     # in example:
     # https://docs.pytest.org/en/latest/fixture.html#factories-as-fixtures
-    # But then we will use capability of rusability of code. So this solution
-    # should work for us. Another solution is using decorator but this is more
-    # comples, otherwise I didn't come with other solution how to reuse easily
-    # code in our fixture factories.
+    # But then we will use capability of reusability of the code. So this
+    # doesn't work for us.
     def wrapper_crate_pvcs(count, storage_class):
         """
         Function wrapper for ocs.create_pvcs. This wrapper append created PVCs
@@ -96,16 +99,10 @@ def create_pvcs(request, storage_class):
                 pvcs by helper function ocs.create_pvcs
         """
         ret_value = ocs.create_pvcs(count, storage_class)
+        # Note:
         # Here we cannot use += like: pvcs += ret_value as it redefine the
         # reference to the object from upper scope and breaks the logic here.
         pvcs.extend(ret_value)
         return ret_value
 
-    def fin():
-        logger.info("In finalizer")
-        for pvc in pvcs:
-            if not pvc.is_deleted:
-                pvc.delete()
-
-    request.addfinalizer(fin)
     return wrapper_crate_pvcs

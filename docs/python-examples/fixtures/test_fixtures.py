@@ -16,38 +16,39 @@ def alter_pvc(pvc):
 
 
 @pytest.fixture(scope='class')
-def three_pvcs(create_pvcs, storage_class):
+def three_pvcs(create_pvcs_factory, storage_class):
     """
     This is fixture related just to one specific test in this module so no
     need to have it defined in conftest
     """
-    return create_pvcs(3, storage_class)
+    return create_pvcs_factory(3, storage_class)
 
 
 class TestCreatingPVCsFromTest:
     # If the test suite needs to share some resources it's possible to do it
     # via class member like below, when you fill resources from test case.
-    # We just need to document that test suit needs run like whole cause if
-    # some test case depends on resources created by other test case in same 
-    # test suite (class) it's not possible to run just last test case.
+    # We just need to document that test suite needs run like whole cause if
+    # some test case depends on resources created by other test case in the 
+    # same test suite (class) it's not possible to run just last test case.
     shared_pvcs = []
 
     @pytest.mark.parametrize("pvcs_number", (2, 4))
-    def test_create_pvcs(self, pvcs_number, create_pvcs, storage_class):
+    def test_create_pvcs(self, pvcs_number, create_pvcs_factory, storage_class):
         """
         You can access all needed resources via fixtures as parameters in
-        method definition like in example above (create_pvcs or
+        method definition like in example above (create_pvcs_factory or
         storage_class).
         """
-        pvcs_created = create_pvcs(pvcs_number, storage_class)
+        pvcs_created = create_pvcs_factory(pvcs_number, storage_class)
         len(pvcs_created) == pvcs_number
         logger.info([p.name for p in pvcs_created])
 
-    def test_share_pvcs(self, create_pvcs, storage_class):
-        my_shared_pvcs = create_pvcs(2, storage_class)
+    def test_share_pvcs(self, create_pvcs_factory, storage_class):
+        my_shared_pvcs = create_pvcs_factory(2, storage_class)
         logger.info(f"Shared pvcs usage: {[p.name for p in my_shared_pvcs]}")
 
-        # Is this acceptable to do below for share PVCs to test 3rd test?
+        # If you need to share the resources in test suite created by test, you
+        # can do it like below.
         self.shared_pvcs.extend(my_shared_pvcs)
 
     def test_use_shared_pvcs(self):
