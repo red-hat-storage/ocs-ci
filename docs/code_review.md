@@ -38,4 +38,4 @@
 * If the pull request introduces a workaround, reviewer should check that
   rules noted in [Tracking of workarounds](./workarounds.md) page are
   followed. Person merging a workaround is responsible of checking that all
-  information related to the workaround are correct.
+  information related to the workaround is correct.

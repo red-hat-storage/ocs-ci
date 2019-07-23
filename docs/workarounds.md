@@ -30,7 +30,7 @@ way:
   and the pull request which introduces the workaround, to be reverted later.
 - The workaround issue has a title starting with "remove workaround" and
   "workaround" label.
-- Person who do a review of a pull request with a workaround needs to check
+- Person who does a review of a pull request with a workaround needs to check
   these rules and the validity of "workaround removal" issue as well.
 
 ## Example
@@ -39,5 +39,5 @@ A pull request with a workaround: [ocs-ci #433](https://github.com/red-hat-stora
 
 Workaround removal issue: [ocs-ci #438](https://github.com/red-hat-storage/ocs-ci/issues/438)
 
-Note that this example has on problem: the root cause issue is not linked, and
+Note that this example has one problem: the root cause issue is not linked, and
 so we don't know when we can safely remove the workaround.
