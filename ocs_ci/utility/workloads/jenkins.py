@@ -46,8 +46,8 @@ def run(**kwargs):
     """
     Run git clone
 
-    Result:
-        result of command
+    Returns:
+        str: result of command
     """
     io_pod = kwargs.pop('pod')
     git_repo = kwargs.get('repo', "https://github.com/ceph/ceph.git")
