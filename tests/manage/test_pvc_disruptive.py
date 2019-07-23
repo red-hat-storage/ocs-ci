@@ -6,6 +6,7 @@ from ocs_ci.framework.testlib import ManageTest, tier4
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
 from tests import helpers, disruption_helpers
 from tests.fixtures import (
@@ -28,25 +29,27 @@ class BaseDisruption(ManageTest):
     pvc_obj = None
     storage_type = None
 
-    def num_of_resources_added(self, func_to_use, previous_num):
+    def verify_resource_creation(self, func_to_use, previous_num):
         """
-        Wait for new resources to be created and find the number of new
-        resources created.
+        Wait for new resources to be created.
 
         Args:
             func_to_use (function): Function to be used to fetch resource info
             previous_num (int): Previous number of resources
 
         Returns:
-            int: Number of newly added resources
+            bool: True if resources has started, False in case of timeout
         """
-        for sample in TimeoutSampler(10, 1, func_to_use, self.namespace):
-            if func_to_use == get_all_pvcs:
-                current_num = len(sample['items'])
-            else:
-                current_num = len(sample)
-            if current_num > previous_num:
-                return current_num - previous_num
+        try:
+            for sample in TimeoutSampler(10, 1, func_to_use, self.namespace):
+                if func_to_use == get_all_pvcs:
+                    current_num = len(sample['items'])
+                else:
+                    current_num = len(sample)
+                if current_num > previous_num:
+                    return True
+        except TimeoutExpiredError:
+            return False
 
     def disruptive_base(self, operation_to_disrupt, resource_to_delete):
         """
@@ -72,11 +75,12 @@ class BaseDisruption(ManageTest):
 
         if operation_to_disrupt == 'create_pvc':
             # Ensure PVCs are being created before deleting the resource
-            num_of_new_pvc = self.num_of_resources_added(
+            ret = self.num_of_resources_added(
                 get_all_pvcs, initial_num_of_pvc
             )
+            assert ret, "Wait timeout: PVCs are not being created."
             logging.info(
-                f"PVCs creation has started. Found {num_of_new_pvc} new PVC."
+                f"PVCs creation has started."
             )
             DISRUPTION_OPS.delete_resource()
 
@@ -102,11 +106,12 @@ class BaseDisruption(ManageTest):
 
         if operation_to_disrupt == 'create_pod':
             # Ensure that pods are being created before deleting the resource
-            num_of_new_pods = self.num_of_resources_added(
+            ret = self.num_of_resources_added(
                 pod.get_all_pods, initial_num_of_pods
             )
+            assert ret, "Wait timeout: Pods are not being created."
             logging.info(
-                f"Pods creation has started. Found {num_of_new_pods} new pod."
+                f"Pods creation has started."
             )
             DISRUPTION_OPS.delete_resource()
 
