@@ -62,7 +62,7 @@ class TestRbdBasedRwoPvc(ManageTest):
                 *["Delete"], marks=pytest.mark.polarion_id("OCS-533")
             ),
             pytest.param(
-                *["Retain"], marks=pytest.mark.polarion_id("OCS-525")
+                *["Retain"], marks=pytest.mark.polarion_id("OCS-530")
             )
         ]
     )

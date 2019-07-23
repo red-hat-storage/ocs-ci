@@ -33,6 +33,8 @@ setup(
         'dataclasses',  # For compatibility with python 3.6
         'pytest-html',
         'bs4',
+        'gspread',
+        'oauth2client',
         # issue opened for pytest_marker_bugzilla here:
         # https://github.com/eanxgeek/pytest_marker_bugzilla/issues/43
         'pytest_marker_bugzilla==0.9.1.dev2'

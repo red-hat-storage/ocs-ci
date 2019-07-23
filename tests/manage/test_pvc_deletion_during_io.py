@@ -41,20 +41,3 @@ class TestDeletePVCWhileRunningIO(ManageTest):
         except exceptions.CommandFailed as ex:
             if "NotFound" in str(ex):
                 pass
-
-    @tier1
-    def test_run_io(self, rbd_pod_factory):
-        """
-        Test IO
-        """
-        rbd_pod = rbd_pod_factory()
-        rbd_pod.run_io('fs', '1G')
-        logging.info("Waiting for results")
-        fio_result = rbd_pod.get_fio_results()
-        logging.info("IOPs after FIO:")
-        logging.info(
-            f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
-        )
-        logging.info(
-            f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
-        )
