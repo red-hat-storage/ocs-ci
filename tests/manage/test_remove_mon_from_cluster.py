@@ -50,9 +50,10 @@ def run_io_on_pool(pool_obj):
 
     return run_io_with_rados_bench(
         ceph_pods=[tools_pod],
-        config={'time': 45, 'cleanup': False,
-                'pool': pool_obj.name
-                }
+        config={
+            'time': 45, 'cleanup': False,
+            'pool': pool_obj.name
+        }
     )
 
 
