@@ -8,8 +8,6 @@ import pytest
 import logging
 import json
 
-from ocs_ci.ocs import exceptions, constants
-from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import ManageTest, tier1
 from tests.fixtures import (
     create_rbd_storageclass, create_rbd_pod, create_pvc, create_ceph_block_pool,
@@ -22,7 +20,7 @@ logger = logging.getLogger(__name__)
 def do_io_actions(io_type, io_info):
     """
     Display fio statistics and stash fio results somewhere.
- 
+
     Args:
         io_type (str):  either "Read" or "Write"
         io_info (dict): results of fio run.
