@@ -83,7 +83,7 @@ def create_pvcs(request, storage_class):
     # should work for us. Another solution is using decorator but this is more
     # comples, otherwise I didn't come with other solution how to reuse easily
     # code in our fixture factories.
-    def wrapper_crate_pvcs(count, storage_class, pvcs=pvcs):
+    def wrapper_crate_pvcs(count, storage_class):
         """
         Function wrapper for ocs.create_pvcs. This wrapper append created PVCs
         into pvcs list referenced from create_pvcs factroy which allows to do
@@ -96,7 +96,9 @@ def create_pvcs(request, storage_class):
                 pvcs by helper function ocs.create_pvcs
         """
         ret_value = ocs.create_pvcs(count, storage_class)
-        pvcs += ret_value
+        # Here we cannot use += like: pvcs += ret_value as it redefine the
+        # reference to the object from upper scope and breaks the logic here.
+        pvcs.extend(ret_value)
         return ret_value
 
     def fin():

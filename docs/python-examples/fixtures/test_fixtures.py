@@ -25,8 +25,11 @@ def three_pvcs(create_pvcs, storage_class):
 
 
 class TestCreatingPVCsFromTest:
-    # This needs to be discussed! How to solve the issue of sharing resources
-    # created by factory fixtures in class level scope.
+    # If the test suite needs to share some resources it's possible to do it
+    # via class member like below, when you fill resources from test case.
+    # We just need to document that test suit needs run like whole cause if
+    # some test case depends on resources created by other test case in same 
+    # test suite (class) it's not possible to run just last test case.
     shared_pvcs = []
 
     @pytest.mark.parametrize("pvcs_number", (2, 4))
@@ -45,7 +48,7 @@ class TestCreatingPVCsFromTest:
         logger.info(f"Shared pvcs usage: {[p.name for p in my_shared_pvcs]}")
 
         # Is this acceptable to do below for share PVCs to test 3rd test?
-        self.shared_pvcs += my_shared_pvcs
+        self.shared_pvcs.extend(my_shared_pvcs)
 
     def test_use_shared_pvcs(self):
         logger.info(

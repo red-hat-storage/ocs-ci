@@ -7,7 +7,10 @@ logger = logging.getLogger(__name__)
 
 def get_random_name(obj_type):
     """
-    Random
+    Helper function for generate random name for object
+
+    Returns:
+        str: random name composed from {obj_type}_{random}
     """
     rand = random.randint(1000, 9999)
     return f"{obj_type}_{rand}"
