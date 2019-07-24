@@ -6,22 +6,10 @@ import logging
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 
 from ocs_ci.framework.testlib import ManageTest, tier1, google_api_required
-from tests.fixtures import (
-    create_rbd_storageclass, create_rbd_pod, create_pvc, create_ceph_block_pool,
-    create_rbd_secret, create_project
-)
 
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.usefixtures(
-    create_rbd_secret.__name__,
-    create_ceph_block_pool.__name__,
-    create_rbd_storageclass.__name__,
-    create_project.__name__,
-    create_pvc.__name__,
-    create_rbd_pod.__name__,
-)
 @google_api_required
 @tier1
 class TestIOPerformance(ManageTest):
