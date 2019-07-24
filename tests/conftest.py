@@ -156,26 +156,35 @@ def rbd_storageclass_factory(
     """
     instances = []
 
-    def factory(block_pool=None, secret=None, **kwargs):
+    def factory(block_pool=None, secret=None, custom_data=None):
         """
         Args:
             block_pool (object): An OCS instance for the block pool.
             secret (object): An OCS instance for the secret.
+            custom_data (dict): If provided then storageclass object is created
+                by using these data. Parameters `block_pool` and `secret`
+                are not useds but references are set if provided.
 
         Returns:
             object: helpers.create_storage_class instance with links to
                 block_pool and secret.
         """
-        block_pool = block_pool or ceph_block_pool_factory()
-        secret = secret or rbd_secret_factory()
+        if custom_data:
+            sc_obj = helpers.crate_resource(**custom_data)
+        else:
+            block_pool = block_pool or ceph_block_pool_factory()
+            secret = secret or rbd_secret_factory()
 
-        sc_obj = helpers.create_storage_class(
-            interface_type=constants.CEPHBLOCKPOOL,
-            interface_name=block_pool.name,
-            secret_name=secret.name,
-            **kwargs
-        )
-        assert sc_obj, "Failed to create storage class"
+            if custom_data:
+                custom_data
+
+            sc_obj = helpers.create_storage_class(
+                interface_type=constants.CEPHBLOCKPOOL,
+                interface_name=block_pool.name,
+                secret_name=secret.name,
+                **kwargs
+            )
+            assert sc_obj, "Failed to create storage class"
         sc_obj.block_pool = block_pool
         sc_obj.secret = secret
 
@@ -205,23 +214,29 @@ def cephfs_storageclass_factory(request, cephfs_secret_factory):
     """
     instances = []
 
-    def factory(secret=None, **kwargs):
+    def factory(secret=None, custom_data=None):
         """
         Args:
             secret (object): An OCS instance for the secret.
+            custom_data (dict): If provided then storageclass object is created
+                by using these data. Parameter `secret` is not used but
+                reference is set if provided.
 
         Returns:
             object: helpers.create_storage_class instance with link to secret.
         """
-        secret = secret or cephfs_secret_factory()
+        if custom_data:
+            sc_obj = helpers.crate_resource(**custom_data)
+        else:
+            secret = secret or cephfs_secret_factory()
 
-        sc_obj = helpers.create_storage_class(
-            interface_type=constants.CEPHFILESYSTEM,
-            interface_name=helpers.get_cephfs_data_pool_name(),
-            secret_name=secret.name,
-            **kwargs
-        )
-        assert sc_obj, "Failed to create storage class"
+            sc_obj = helpers.create_storage_class(
+                interface_type=constants.CEPHFILESYSTEM,
+                interface_name=helpers.get_cephfs_data_pool_name(),
+                secret_name=secret.name,
+                **kwargs
+            )
+            assert sc_obj, "Failed to create storage class"
         sc_obj.secret = secret
 
         instances.append(sc_obj)
@@ -300,26 +315,32 @@ def pvc_factory(request, rbd_storageclass_factory, project_factory):
     """
     instances = []
 
-    def factory(project=None, storageclass=None, **kwargs):
+    def factory(project=None, storageclass=None, custom_data=None):
         """
         Args:
             project (object): ocs_ci.ocs.resources.ocs.OCS instance
                 of 'Project' kind.
             storageclass (object): ocs_ci.ocs.resources.ocs.OCS instance
                 of 'StorageClass' kind.
+            custom_data (dict): If provided then PVC object is created
+                by using these data. Parameters `project` and `storageclass`
+                are not used but reference is set if provided.
 
         Returns:
             object: helpers.create_pvc instance.
         """
-        project = project or project_factory()
-        storageclass = storageclass or rbd_storageclass_factory()
+        if custom_data:
+            pvc_obj = helpers.crate_resource(**custom_data)
+        else:
+            project = project or project_factory()
+            storageclass = storageclass or rbd_storageclass_factory()
 
-        pvc_obj = helpers.create_pvc(
-            sc_name=storageclass.name,
-            namespace=project.namespace,
-            **kwargs
-        )
-        assert pvc_obj, "Failed to create PVC"
+            pvc_obj = helpers.create_pvc(
+                sc_name=storageclass.name,
+                namespace=project.namespace,
+                **kwargs
+            )
+            assert pvc_obj, "Failed to create PVC"
         pvc_obj.storageclass = storageclass
         pvc_obj.project = project
 
@@ -348,13 +369,16 @@ def rbd_pvc_factory(request, pvc_factory, rbd_storageclass_factory):
     RBD based PVC. For custom PVC provide 'storageclass' parameter.
     """
 
-    def factory(project=None, storageclass=None, **kwargs):
+    def factory(project=None, storageclass=None, custom_data=None):
         """
         Args:
             project (object): ocs_ci.ocs.resources.ocs.OCS instance
                 of 'Project' kind.
             storageclass (object): ocs_ci.ocs.resources.ocs.OCS instance
                 of 'StorageClass' kind.
+            custom_data (dict): If provided then PVC object is created
+                by using these data. Parameters `project` and `storageclass`
+                are not used but reference is set if provided.
 
         Returns:
             object: helpers.create_pvc instance.
@@ -363,7 +387,7 @@ def rbd_pvc_factory(request, pvc_factory, rbd_storageclass_factory):
         return pvc_factory(
             storageclass=storageclass,
             project=project,
-            **kwargs
+            custom_data=custom_data
         )
     return factory
 
@@ -375,13 +399,16 @@ def cephfs_pvc_factory(request, pvc_factory, cephfs_storageclass_factory):
     CephFS based PVC. For custom PVC provide 'storageclass' parameter.
     """
 
-    def factory(project=None, storageclass=None, **kwargs):
+    def factory(project=None, storageclass=None, custom_data=None):
         """
         Args:
             project (object): ocs_ci.ocs.resources.ocs.OCS instance
                 of 'Project' kind.
             storageclass (object): ocs_ci.ocs.resources.ocs.OCS instance
                 of 'StorageClass' kind.
+            custom_data (dict): If provided then PVC object is created
+                by using these data. Parameters `project` and `storageclass`
+                are not used but reference is set if provided.
 
         Returns:
             object: helpers.create_pvc instance.
@@ -390,7 +417,7 @@ def cephfs_pvc_factory(request, pvc_factory, cephfs_storageclass_factory):
         return pvc_factory(
             storageclass=storageclass,
             project=project,
-            **kwargs
+            custom_data=custom_data
         )
     return factory
 
@@ -403,24 +430,30 @@ def pod_factory(request, project_factory):
     """
     instances = []
 
-    def factory(project=None, pvc=None, **kwargs):
+    def factory(project=None, pvc=None, custom_data=None):
         """
         Args:
             project (object): ocs_ci.ocs.resources.ocs.OCS instance
                 of 'Project' kind.
             pvc (object): ocs_ci.ocs.resources.ocs.OCS instance of 'PVC' kind.
+            custom_data (dict): If provided then Pod object is created
+                by using these data. Parameters `project` and `pvc`
+                are not used but reference is set if provided.
 
         Returns:
             object: helpers.create_pvc instance.
         """
-        project = project or project_factory()
+        if custom_data:
+            pod_obj = helpers.crate_resource(**custom_data)
+        else:
+            project = project or project_factory()
 
-        pod_obj = helpers.create_pod(
-            pvc_name=pvc.name,
-            namespace=project.namespace,
-            **kwargs
-        )
-        assert pod_obj, "Failed to create PVC"
+            pod_obj = helpers.create_pod(
+                pvc_name=pvc.name,
+                namespace=project.namespace,
+                **kwargs
+            )
+            assert pod_obj, "Failed to create PVC"
         pod_obj.project = project
         pod_obj.pvc = pvc
 
@@ -448,12 +481,15 @@ def rbd_pod_factory(pod_factory, rbd_pvc_factory):
     Create a RBD based Pod factory. Calling this fixture creates new RBD Pod.
     For custom Pods provide 'pvc' parameter.
     """
-    def factory(project=None, pvc=None, **kwargs):
+    def factory(project=None, pvc=None, custom_data=None):
         """
         Args:
             project (object): ocs_ci.ocs.resources.ocs.OCS instance
                 of 'Project' kind.
             pvc (object): ocs_ci.ocs.resources.ocs.OCS instance of 'PVC' kind.
+            custom_data (dict): If provided then Pod object is created
+                by using these data. Parameters `project` and `pvc`
+                are not used but reference is set if provided.
 
         Returns:
             object: helpers.create_pvc instance.
@@ -463,7 +499,7 @@ def rbd_pod_factory(pod_factory, rbd_pvc_factory):
             interface_type=constants.CEPHBLOCKPOOL,
             pvc=pvc,
             project=project,
-            **kwargs
+            custom_data=custom_data
         )
     return factory
 
@@ -474,12 +510,15 @@ def cephfs_pod_factory(pod_factory, cephfs_pvc_factory):
     Create a CephFS based Pod factory. Calling this fixture creates new Pod.
     For custom Pods provide 'pvc' parameter.
     """
-    def factory(project=None, pvc=None, **kwargs):
+    def factory(project=None, pvc=None, custom_data=None):
         """
         Args:
             project (object): ocs_ci.ocs.resources.ocs.OCS instance
                 of 'Project' kind.
             pvc (object): ocs_ci.ocs.resources.ocs.OCS instance of 'PVC' kind.
+            custom_data (dict): If provided then Pod object is created
+                by using these data. Parameters `project` and `pvc`
+                are not used but reference is set if provided.
 
         Returns:
             object: helpers.create_pvc instance.
@@ -489,7 +528,7 @@ def cephfs_pod_factory(pod_factory, cephfs_pvc_factory):
             interface_type=constants.CEPHFILESYSTEM,
             pvc=pvc,
             project=project,
-            **kwargs
+            custom_data=custom_data
         )
     return factory
 
