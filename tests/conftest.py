@@ -411,22 +411,27 @@ def run_io_in_background(request):
     """
     if config.RUN['cli_params'].get('io_in_bg'):
         log.info(f"Tests will be running while IO is in the background")
-
-        request.results = list()
-        request.temp_file = tempfile.NamedTemporaryFile(
+        if config.RUN['google_api_secret']:
+            g_sheet = GoogleSpreadSheetAPI("IO BG results", 0)
+        else:
+            log.warning(
+                "Google API secret was not found. IO won't be reported to "
+                "a Google spreadsheet"
+            )
+        results = list()
+        temp_file = tempfile.NamedTemporaryFile(
             mode='w+', prefix='test_status', delete=False
         )
 
         def get_test_status():
-            with open(request.temp_file.name, 'r') as t_file:
+            with open(temp_file.name, 'r') as t_file:
                 return t_file.readline()
 
         def set_test_status(status):
-            with open(request.temp_file.name, 'w') as t_file:
+            with open(temp_file.name, 'w') as t_file:
                 t_file.writelines(status)
 
         set_test_status('running')
-        request.g_sheet = GoogleSpreadSheetAPI("IO BG results", 0)
 
         def finalizer():
             """
@@ -443,49 +448,49 @@ def run_io_in_background(request):
                     "Background IO was still in progress before IO "
                     "thread termination"
                 )
-            if hasattr(request, 'thread'):
-                request.thread.join()
+            if thread:
+                thread.join()
 
             log.info(f"Background IO has stopped")
-            for result in request.results:
-                log.info(f"IOPs after FIO for pod {request.pod_obj.name}:")
+            for result in results:
+                log.info(f"IOPs after FIO for pod {pod_obj.name}:")
                 log.info(f"Read: {result[0]}")
                 log.info(f"Write: {result[1]}")
 
-            if hasattr(request, 'pod_obj'):
-                request.pod_obj.delete()
-                request.pod_obj.ocp.wait_for_delete(
-                    resource_name=request.pod_obj.name
+            if pod_obj:
+                pod_obj.delete()
+                pod_obj.ocp.wait_for_delete(
+                    resource_name=pod_obj.name
                 )
-            if hasattr(request, 'pvc_obj'):
-                request.pvc_obj.delete()
-                request.pvc_obj.ocp.wait_for_delete(
-                    resource_name=request.pvc_obj.name
+            if pvc_obj:
+                pvc_obj.delete()
+                pvc_obj.ocp.wait_for_delete(
+                    resource_name=pvc_obj.name
                 )
-            if hasattr(request, 'sc_obj'):
-                request.sc_obj.delete()
-            if hasattr(request, 'cbp_obj'):
-                request.cbp_obj.delete()
-            if hasattr(request, 'secret_obj'):
-                request.secret_obj.delete()
+            if sc_obj:
+                sc_obj.delete()
+            if cbp_obj:
+                cbp_obj.delete()
+            if secret_obj:
+                secret_obj.delete()
 
         request.addfinalizer(finalizer)
 
-        request.secret_obj = helpers.create_secret(
+        secret_obj = helpers.create_secret(
             interface_type=constants.CEPHBLOCKPOOL
         )
-        request.cbp_obj = helpers.create_ceph_block_pool()
-        request.sc_obj = helpers.create_storage_class(
+        cbp_obj = helpers.create_ceph_block_pool()
+        sc_obj = helpers.create_storage_class(
             interface_type=constants.CEPHBLOCKPOOL,
-            interface_name=request.cbp_obj.name,
-            secret_name=request.secret_obj.name
+            interface_name=cbp_obj.name,
+            secret_name=secret_obj.name
         )
-        request.pvc_obj = helpers.create_pvc(
-            sc_name=request.sc_obj.name, size='2Gi',
+        pvc_obj = helpers.create_pvc(
+            sc_name=sc_obj.name, size='2Gi',
         )
-        request.pod_obj = helpers.create_pod(
+        pod_obj = helpers.create_pod(
             interface_type=constants.CEPHBLOCKPOOL,
-            pvc_name=request.pvc_obj.name
+            pvc_name=pvc_obj.name
         )
 
         def run_io_in_bg():
@@ -495,24 +500,24 @@ def run_io_in_background(request):
             the test is running.
             """
             while get_test_status() == 'running':
-                request.pod_obj.run_io('fs', '1G')
-                result = request.pod_obj.get_fio_results()
-
-                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                pod_obj.run_io('fs', '1G')
+                result = pod_obj.get_fio_results()
                 reads = result.get('jobs')[0].get('read').get('iops')
                 writes = result.get('jobs')[0].get('write').get('iops')
-                request.g_sheet.insert_row([now, reads, writes])
+                if g_sheet:
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    g_sheet.insert_row([now, reads, writes])
 
-                request.results.append((reads, writes))
+                results.append((reads, writes))
 
                 file_path = os.path.join(
-                    request.pod_obj.get_mount_path(),
-                    request.pod_obj.io_params['filename']
+                    pod_obj.get_mount_path(),
+                    pod_obj.io_params['filename']
                 )
-                request.pod_obj.exec_cmd_on_pod(f'rm -rf {file_path}')
+                pod_obj.exec_cmd_on_pod(f'rm -rf {file_path}')
             set_test_status('terminated')
 
         log.info(f"Start running IO in the test background")
 
-        request.thread = threading.Thread(target=run_io_in_bg)
-        request.thread.start()
+        thread = threading.Thread(target=run_io_in_bg)
+        thread.start()

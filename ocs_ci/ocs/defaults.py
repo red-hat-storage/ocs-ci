@@ -24,7 +24,6 @@ API_VERSION = "v1"
 CEPHFILESYSTEM_NAME = 'ocsci-cephfs'
 RBD_PROVISIONER = 'rbd.csi.ceph.com'
 CEPHFS_PROVISIONER = 'cephfs.csi.ceph.com'
-DEFAULT_STORAGECLASS_NAME = 'rook-ceph-block'
 
 TEMP_YAML = os.path.join(constants.TEMPLATE_DIR, "temp.yaml")
 
