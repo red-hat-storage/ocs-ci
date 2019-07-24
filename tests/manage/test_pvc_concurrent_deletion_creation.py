@@ -15,18 +15,16 @@ log = logging.getLogger(__name__)
 
 
 @pytest.fixture()
-def test_fixture(request, rbd_storageclass_factory, project_factory):
+def test_fixture(request, project_factory, rbd_storageclass_factory):
     """
     Setup and teardown
     """
-    rbd_storageclass = rbd_storageclass_factory()
-    project = project_factory()
     self = request.node.cls
 
     def finalizer():
         teardown(self)
     request.addfinalizer(finalizer)
-    setup(self, rbd_storageclass, project)
+    setup(self, rbd_storageclass_factory(), project_factory())
 
 
 def setup(self, storageclass, project):
@@ -34,15 +32,12 @@ def setup(self, storageclass, project):
     Create new project
     Create PVCs
     """
-    # Create new project
+    # Setup project
     self.namespace = project.namespace
-    self.project_obj = project
-    assert self.project_obj.new_project(self.namespace), (
-        f'Failed to create new project {self.namespace}'
-    )
+    self.sc_obj = storageclass
     # Create 100 PVCs
     pvc_objs = create_multiple_pvcs(
-        sc_name=storageclass,
+        sc_name=storageclass.name,
         namespace=project.namespace,
         number_of_pvc=self.number_of_pvc
     )
@@ -72,9 +67,6 @@ def teardown(self):
     ret = ocp.switch_to_default_rook_cluster_project()
     assert ret, 'Failed to switch to default rook cluster project'
 
-    # Delete project created for the test case
-    self.project_obj.delete(resource_name=self.namespace)
-
 
 @tier1
 @pytest.mark.usefixtures(
@@ -91,8 +83,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
     pvc_objs_initial = []
     pvc_objs_new = []
 
-    def test_multiple_pvc_concurrent_creation_deletion(
-            self, rbd_storageclass, project):
+    def test_multiple_pvc_concurrent_creation_deletion(self):
         """
         To exercise resource creation and deletion
         """
@@ -101,6 +92,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
             f'for i in `seq 1 {self.number_of_pvc}`;do oc delete pvc '
             f'{self.pvc_base_name}$i -n {self.namespace};done'
         )
+        log.info(f"Created command: {command}")
         proc = run_async(command)
         assert proc, (
             f'Failed to execute command for deleting {self.number_of_pvc} PVCs'
@@ -108,8 +100,8 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
 
         # Create 100 PVCs
         pvc_objs = create_multiple_pvcs(
-            sc_name=rbd_storageclass.name,
-            namespace=project.namespace,
+            sc_name=self.sc_obj.name,
+            namespace=self.namespace,
             number_of_pvc=self.number_of_pvc
         )
         log.info(f'Created {self.number_of_pvc} new PVCs.')
@@ -145,7 +137,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
 
         # Verify PVs using ceph toolbox. PVs should be deleted because
         # reclaimPolicy is Delete
-        ceph_cmd = f'rbd ls -p {rbd_storageclass.blockpool.name}'
+        ceph_cmd = f'rbd ls -p {self.sc_obj.blockpool.name}'
         ct_pod = get_ceph_tools_pod()
         final_pv_list = ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd, format='json')
         assert not any(pv in final_pv_list for pv in self.initial_pvs), (
