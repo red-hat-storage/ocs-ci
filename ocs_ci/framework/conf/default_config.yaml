@@ -41,7 +41,7 @@ REPORTING:
 # --cluster-conf file.yaml data you will pass to the pytest.
 ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
-  cluster_namespace: 'openshift-storage'
+  cluster_namespace: 'rook-ceph'
   platform: 'AWS'
   region: 'us-east-2'
   # Do not change to specific version like v14.2.1-20190430 if not needed
