@@ -55,6 +55,25 @@ class PVC(OCS):
         """
         return self.data.get('spec').get('volumeName')
 
+    @property
+    def backed_pv_obj(self):
+        """
+        Returns the backed PV object of pvc_name in namespace
+
+        Returns:
+            OCS: An OCS instance for PV
+        """
+        self.reload()
+        data = dict()
+        data['api_version'] = self.api_version
+        data['kind'] = 'PersistentVolume'
+        data['metadata'] = {
+            'name': self.backed_pv, 'namespace': self.namespace
+        }
+        pv_obj = OCS(**data)
+        pv_obj.reload()
+        return pv_obj
+
     def resize_pvc(self, new_size, verify=False):
         """
         Returns the PVC size pvc_name in namespace
