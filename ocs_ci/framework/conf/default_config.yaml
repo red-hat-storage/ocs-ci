@@ -41,11 +41,11 @@ REPORTING:
 # --cluster-conf file.yaml data you will pass to the pytest.
 ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
-  cluster_namespace: 'rook-ceph'
+  cluster_namespace: 'openshift-storage'
   platform: 'AWS'
   region: 'us-east-2'
   # Do not change to specific version like v14.2.1-20190430 if not needed
   # cause we don't need to update it each time new 14.x version is released
   # but only once when move to new version like v15.
   ceph_image: 'ceph/daemon-base:latest-nautilus-devel'
-  rook_image: 'rook/ceph:v1.0.0-256.g01ba50e'
+  rook_image: 'rook/ceph:master'
