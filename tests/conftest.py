@@ -428,34 +428,6 @@ def run_io_in_background(request):
         set_test_status('running')
         request.g_sheet = GoogleSpreadSheetAPI("IO BG results", 0)
 
-        def run_io_in_bg():
-            """
-            Run IO by executing FIO and deleting the file created for FIO on
-            the pod, in a while true loop. Will be running as long as
-            the test is running.
-            """
-            while get_test_status() == 'running':
-                request.pod_obj.run_io('fs', '1G')
-                result = request.pod_obj.get_fio_results()
-
-                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                reads = result.get('jobs')[0].get('read').get('iops')
-                writes = result.get('jobs')[0].get('write').get('iops')
-                request.g_sheet.insert_row([now, reads, writes])
-
-                request.results.append((reads, writes))
-
-                file_path = os.path.join(
-                    request.pod_obj.get_mount_path(),
-                    request.pod_obj.io_params['filename']
-                )
-                request.pod_obj.exec_cmd_on_pod(f'rm -rf {file_path}')
-            set_test_status('terminated')
-
-        log.info(f"Start running IO in the test background")
-
-        request.thread = threading.Thread(target=run_io_in_bg)
-
         def finalizer():
             """
             Delete the resources created during setup, used for
@@ -471,8 +443,9 @@ def run_io_in_background(request):
                     "Background IO was still in progress before IO "
                     "thread termination"
                 )
+            if hasattr(request, 'thread'):
+                request.thread.join()
 
-            request.thread.join()
             log.info(f"Background IO has stopped")
             for result in request.results:
                 log.info(f"IOPs after FIO for pod {request.pod_obj.name}:")
@@ -515,4 +488,31 @@ def run_io_in_background(request):
             pvc_name=request.pvc_obj.name
         )
 
+        def run_io_in_bg():
+            """
+            Run IO by executing FIO and deleting the file created for FIO on
+            the pod, in a while true loop. Will be running as long as
+            the test is running.
+            """
+            while get_test_status() == 'running':
+                request.pod_obj.run_io('fs', '1G')
+                result = request.pod_obj.get_fio_results()
+
+                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                reads = result.get('jobs')[0].get('read').get('iops')
+                writes = result.get('jobs')[0].get('write').get('iops')
+                request.g_sheet.insert_row([now, reads, writes])
+
+                request.results.append((reads, writes))
+
+                file_path = os.path.join(
+                    request.pod_obj.get_mount_path(),
+                    request.pod_obj.io_params['filename']
+                )
+                request.pod_obj.exec_cmd_on_pod(f'rm -rf {file_path}')
+            set_test_status('terminated')
+
+        log.info(f"Start running IO in the test background")
+
+        request.thread = threading.Thread(target=run_io_in_bg)
         request.thread.start()
