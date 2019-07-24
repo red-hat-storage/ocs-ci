@@ -33,6 +33,7 @@ STATUS_AVAILABLE = 'Available'
 STATUS_RUNNING = 'Running'
 STATUS_TERMINATING = 'Terminating'
 STATUS_BOUND = 'Bound'
+STATUS_RELEASED = 'Released'
 
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
@@ -42,6 +43,7 @@ PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
 POD = "Pod"
 ROUTE = "Route"
+NODE = "Node"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -58,6 +60,11 @@ GB = 1024 ** 3
 # Reclaim Policy
 RECLAIM_POLICY_RETAIN = 'Retain'
 RECLAIM_POLICY_DELETE = 'Delete'
+
+# Access Mode
+ACCESS_MODE_RWO = 'ReadWriteOnce'
+ACCESS_MODE_ROX = 'ReadOnlyMany'
+ACCESS_MODE_RWX = 'ReadWriteMany'
 
 MON_APP_LABEL = "app=rook-ceph-mon"
 MDS_APP_LABEL = "app=rook-ceph-mds"
@@ -114,6 +121,10 @@ CSI_RBD_PVC_YAML = os.path.join(
 )
 CONFIGURE_PVC_ON_MONITORING_POD = os.path.join(
     TEMPLATE_CONFIGURE_PVC_MONITORING_POD, "configuring_pvc.yaml"
+)
+
+NGINX_POD_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "nginx.yaml"
 )
 
 # Workload-io yamls

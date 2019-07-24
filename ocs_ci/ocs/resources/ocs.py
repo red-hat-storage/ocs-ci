@@ -85,6 +85,9 @@ class OCS(object):
             resource_name=self.name, out_yaml_format=out_yaml_format
         )
 
+    def describe(self):
+        return self.ocp.describe(resource_name=self.name)
+
     def create(self, do_reload=True):
         log.info(f"Adding {self.kind} with name {self.name}")
         templating.dump_dict_to_temp_yaml(self.data, self.temp_yaml.name)

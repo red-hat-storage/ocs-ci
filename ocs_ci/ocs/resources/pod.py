@@ -4,6 +4,7 @@ Pod related functionalities and context info
 Each pod in the openshift cluster will have a corresponding pod object
 """
 import logging
+import os
 import re
 import yaml
 import tempfile
@@ -280,22 +281,108 @@ def list_ceph_images(pool_name='rbd'):
     return ct_pod.exec_ceph_cmd(ceph_cmd=f"rbd ls {pool_name}", format='json')
 
 
-def check_file_existence(pod_obj, file_name):
+def check_file_existence(pod_obj, file_path):
     """
     Check if file exists inside the pod
 
     Args:
         pod_obj (Pod): The object of the pod
-        file_name (str): The name (full path) of the file to look for inside
+        file_path (str): The full path of the file to look for inside
             the pod
 
     Returns:
         bool: True if the file exist, False otherwise
     """
-    ret = pod_obj.exec_cmd_on_pod(f"bash -c \"find {file_name}\"")
-    if re.search(file_name, ret):
+    ret = pod_obj.exec_cmd_on_pod(f"bash -c \"find {file_path}\"")
+    if re.search(file_path, ret):
         return True
     return False
+
+
+def get_file_path(pod_obj, file_name):
+    """
+    Get the full path of the file
+
+    Args:
+        pod_obj (Pod): The object of the pod
+        file_name (str): The name of the file for which path to get
+
+    Returns:
+        str: The full path of the file
+    """
+    path = (
+        pod_obj.get().get('spec').get('containers')[0].get(
+            'volumeMounts')[0].get('mountPath')
+    )
+    file_path = os.path.join(path, file_name)
+    return file_path
+
+
+def cal_md5sum(pod_obj, file_name):
+    """
+    Calculates the md5sum of the file
+
+    Args:
+        pod_obj (Pod): The object of the pod
+        file_name (str): The name of the file for which md5sum to be calculated
+
+    Returns:
+        str: The md5sum of the file
+    """
+    file_path = get_file_path(pod_obj, file_name)
+    md5sum_cmd_out = pod_obj.exec_cmd_on_pod(
+        command=f"bash -c \"md5sum {file_path}\"", out_yaml_format=False
+    )
+    md5sum = md5sum_cmd_out.split()[0]
+    logger.info(f"md5sum of file {file_name}: {md5sum}")
+    return md5sum
+
+
+def verify_data_integrity(pod_obj, file_name, original_md5sum):
+    """
+    Verifies existence and md5sum of file created from first pod
+
+    Args:
+        pod_obj (Pod): The object of the pod
+        file_name (str): The name of the file for which md5sum to be calculated
+        original_md5sum (str): The original md5sum of the file
+
+    Returns:
+        bool: True if the file exists and md5sum matches
+
+    Raises:
+        AssertionError: If file doesn't exist or md5sum mismatch
+    """
+    file_path = get_file_path(pod_obj, file_name)
+    assert check_file_existence(pod_obj, file_path), (
+        f"File {file_name} doesn't exists"
+    )
+    current_md5sum = cal_md5sum(pod_obj, file_name)
+    logger.info(f"Original md5sum of file: {original_md5sum}")
+    logger.info(f"Current md5sum of file: {current_md5sum}")
+    assert current_md5sum == original_md5sum, (
+        'Data corruption found'
+    )
+    logger.info(f"File {file_name} exists and md5sum matches")
+    return True
+
+
+def get_fio_rw_iops(pod_obj):
+    """
+    Execute FIO on a pod
+
+    Args:
+        pod_obj (Pod): The object of the pod
+    """
+    logging.info(f"Waiting for IO results from pod {pod_obj.name}")
+    fio_result = pod_obj.get_fio_results()
+    logging.info("IOPs after FIO:")
+    logging.info(
+        f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
+    )
+    logging.info(
+        f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
+    )
 
 
 def run_io_in_bg(pod_obj, expect_to_fail=False):
