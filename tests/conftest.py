@@ -24,7 +24,7 @@ from ocs_ci.utility.environment_check import (
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     destroy_cluster, run_cmd, get_openshift_installer, get_openshift_client,
-    is_cluster_running
+    is_cluster_running, ocsci_log_path
 )
 from tests import helpers
 
@@ -46,16 +46,6 @@ def pytest_logger_config(logger_config):
     logger_config.set_log_option_default('')
     logger_config.split_by_outcome()
     logger_config.set_formatter_class(OCSLogFormatter)
-
-
-log_dir = f"logs_{config.RUN['run_id']}"
-log_path = os.path.expanduser(
-    os.path.join(config.RUN['log_dir'], log_dir)
-)
-
-
-def pytest_logger_logdirlink():
-    return log_path
 
 
 @pytest.fixture()
@@ -562,7 +552,7 @@ def cluster_teardown(log_level="DEBUG"):
 
 @pytest.fixture(scope="session", autouse=True)
 def cluster(request, log_cli_level):
-    log.info(f"All logs located at {log_path}")
+    log.info(f"All logs located at {ocsci_log_path()}")
     log.info("Running OCS basic installation")
     log.info(f"Openshift Installer will use log level: {log_cli_level}")
     cluster_path = config.ENV_DATA['cluster_path']

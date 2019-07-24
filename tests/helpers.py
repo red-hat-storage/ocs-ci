@@ -67,20 +67,21 @@ def create_resource(
     return ocs_obj
 
 
-def wait_for_resource_state(resource, state):
+def wait_for_resource_state(resource, state, timeout=60):
     """
     Wait for a resource to get to a given status
 
     Args:
         resource (OCS obj): The resource object
         state (str): The status to wait for
+        timeout (int): Time in seconds to wait
 
     Returns:
         bool: True if resource reached the desired state, False otherwise
     """
     try:
         resource.ocp.wait_for_resource(
-            condition=state, resource_name=resource.name
+            condition=state, resource_name=resource.name, timeout=timeout
         )
     except TimeoutExpiredError:
         logger.info(f"{resource.kind} {resource.name} failed to reach {state}")
@@ -91,7 +92,8 @@ def wait_for_resource_state(resource, state):
 
 def create_pod(
     interface_type=None, pvc_name=None, desired_status=constants.STATUS_RUNNING,
-    wait=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    wait=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE, node_name=None,
+    pod_dict_path=None
 ):
     """
     Create a pod
@@ -103,6 +105,8 @@ def create_pod(
         wait (bool): True for waiting for the pod to reach the desired
             status, False otherwise
         namespace (str): The namespace for the new resource creation
+        node_name (str): The name of specific node to schedule the pod
+        pod_dict_path (str): YAML path for the pod
 
     Returns:
         Pod: A Pod instance
@@ -111,10 +115,10 @@ def create_pod(
         AssertionError: In case of any failure
     """
     if interface_type == constants.CEPHBLOCKPOOL:
-        pod_dict = constants.CSI_RBD_POD_YAML
+        pod_dict = pod_dict_path if pod_dict_path else constants.CSI_RBD_POD_YAML
         interface = constants.RBD_INTERFACE
     else:
-        pod_dict = constants.CSI_CEPHFS_POD_YAML
+        pod_dict = pod_dict_path if pod_dict_path else constants.CSI_CEPHFS_POD_YAML
         interface = constants.CEPHFS_INTERFACE
 
     pod_data = templating.load_yaml_to_dict(pod_dict)
@@ -124,6 +128,13 @@ def create_pod(
     pod_data['metadata']['namespace'] = namespace
     if pvc_name:
         pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
+
+    if node_name:
+        pod_data['spec']['nodeName'] = node_name
+    else:
+        if 'nodeName' in pod_data.get('spec'):
+            del pod_data['spec']['nodeName']
+
     pod_obj = pod.Pod(**pod_data)
     pod_name = pod_data.get('metadata').get('name')
     created_resource = pod_obj.create(do_reload=wait)
@@ -200,7 +211,8 @@ def create_ceph_block_pool(pool_name=None):
 
 def create_storage_class(
     interface_type, interface_name, secret_name,
-    reclaim_policy=constants.RECLAIM_POLICY_DELETE, sc_name=None
+    reclaim_policy=constants.RECLAIM_POLICY_DELETE, sc_name=None,
+    provisioner=None
 ):
     """
     Create a storage class
@@ -229,6 +241,9 @@ def create_storage_class(
             'csi.storage.k8s.io/node-publish-secret-namespace'
         ] = defaults.ROOK_CLUSTER_NAMESPACE
         interface = constants.RBD_INTERFACE
+        sc_data['provisioner'] = (
+            provisioner if provisioner else defaults.RBD_PROVISIONER
+        )
     elif interface_type == constants.CEPHFILESYSTEM:
         sc_data = templating.load_yaml_to_dict(
             constants.CSI_CEPHFS_STORAGECLASS_YAML
@@ -241,6 +256,9 @@ def create_storage_class(
         ] = defaults.ROOK_CLUSTER_NAMESPACE
         interface = constants.CEPHFS_INTERFACE
         sc_data['parameters']['fsName'] = get_cephfs_name()
+        sc_data['provisioner'] = (
+            provisioner if provisioner else defaults.CEPHFS_PROVISIONER
+        )
     sc_data['parameters']['pool'] = interface_name
 
     sc_data['metadata']['name'] = (
@@ -268,7 +286,7 @@ def create_storage_class(
 
 def create_pvc(
     sc_name, pvc_name=None, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-    size=None, wait=True
+    size=None, wait=True, access_mode=constants.ACCESS_MODE_RWO
 ):
     """
     Create a PVC
@@ -279,7 +297,8 @@ def create_pvc(
         pvc_name (str): The name of the PVC to create
         namespace (str): The namespace for the PVC creation
         size(str): Size of pvc to create
-        wait (bool): True for wait for the VPC operation to complete, False otherwise
+        wait (bool): True for wait for the PVC operation to complete, False otherwise
+        access_mode (str): The access mode to be used for the PVC
 
     Returns:
         PVC: PVC instance
@@ -291,6 +310,7 @@ def create_pvc(
         )
     )
     pvc_data['metadata']['namespace'] = namespace
+    pvc_data['spec']['accessModes'] = [access_mode]
     pvc_data['spec']['storageClassName'] = sc_name
     if size:
         pvc_data['spec']['resources']['requests']['storage'] = size
@@ -654,3 +674,52 @@ def validate_pv_delete(pv_name):
 
     except CommandFailed:
         return True
+
+
+def create_pods(
+    pvc_objs_list, interface_type=None,
+    desired_status=constants.STATUS_RUNNING, wait=True, wait_each=False,
+    namespace=None
+):
+    """
+    Create Pods.
+    A pod will be created for each PVC in 'pvc_objs_list'.
+    Args:
+        pvc_objs_list (list): List of PVC objects
+        interface_type (str): The interface type (CephFS, Cephblockpool, etc.)
+        desired_status (str): The status of the pod to wait for
+        wait (bool): True for waiting for pod to reach the desired
+            status, False otherwise
+        wait_each (bool): True for waiting for each pod to reach the desired
+            status before creating next pod, False otherwise
+        namespace(str): Name of the namespace
+    Returns:
+        list: List of Pod objects
+    """
+    pod_objs = []
+    for pvc_obj in pvc_objs_list:
+        pod_obj = create_pod(
+            interface_type=interface_type, pvc_name=pvc_obj.name,
+            desired_status=desired_status, wait=wait_each, namespace=namespace
+        )
+        pod_objs.append(pod_obj)
+
+    if wait and not wait_each:
+        for pod_obj in pod_objs:
+            assert wait_for_resource_state(pod_obj, desired_status)
+        logging.info(f"Verified: All pods are in '{desired_status}' state.")
+    return pod_objs
+
+
+def get_worker_nodes():
+    """
+    Fetches all worker nodes.
+
+    Returns:
+        list: List of names of worker nodes
+    """
+    label = 'node-role.kubernetes.io/worker'
+    ocp_node_obj = ocp.OCP(kind=constants.NODE)
+    nodes = ocp_node_obj.get(selector=label).get('items')
+    worker_nodes_list = [node.get('metadata').get('name') for node in nodes]
+    return worker_nodes_list
