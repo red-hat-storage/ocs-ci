@@ -10,7 +10,7 @@ But the important part is that any workaround is *minimal* and *temporary*. We
 need to make sure that:
 
 - a workaround is removed when the bug is fixed
-- we know which workarounds we have in the code and why so that we can reason
+- we know which workarounds we have in the code and why, so that we can reason
   about validity of test results at any point in time
 
 Without this our testing results could be spolied by incorrect results.
