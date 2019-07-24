@@ -128,10 +128,12 @@ def create_pod(
     pod_data['metadata']['namespace'] = namespace
     if pvc_name:
         pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
+
     if node_name:
         pod_data['spec']['nodeName'] = node_name
     else:
-        del pod_data['spec']['nodeName']
+        if 'nodeName' in pod_data.get('spec'):
+            del pod_data['spec']['nodeName']
 
     pod_obj = pod.Pod(**pod_data)
     pod_name = pod_data.get('metadata').get('name')
