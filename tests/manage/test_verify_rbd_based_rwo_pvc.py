@@ -69,7 +69,8 @@ class TestRbdBasedRwoPvc(ManageTest):
     def test_rbd_based_rwo_pvc(
             self,
             reclaim_policy,
-            rbd_storageclass_factory,
+            ceph_block_pool_factory,
+            rbd_secret_factory,
             rbd_pvc_factory,
             rbd_pod_factory
     ):
@@ -94,7 +95,11 @@ class TestRbdBasedRwoPvc(ManageTest):
         """
 
         # Create Storage Class with reclaimPolicy: Delete
-        sc_obj = rbd_storageclass_factory(
+        cbp_obj = ceph_block_pool_factory()
+        sc_obj = helpers.create_storage_class(
+            interface_type=constants.CEPHBLOCKPOOL,
+            interface_name=cbp_obj.name,
+            secret_name=rbd_secret_factory().name,
             reclaim_policy=reclaim_policy
         )
 
@@ -103,9 +108,10 @@ class TestRbdBasedRwoPvc(ManageTest):
         pvc_data['metadata']['name'] = helpers.create_unique_resource_name(
             'test', 'pvc'
         )
+        pvc_data['metadata']['namespace'] = self.namespace
         pvc_data['spec']['storageClassName'] = sc_obj.name
         pvc_data['spec']['accessModes'] = ['ReadWriteOnce']
-        pvc_obj = rbd_pvc_factory(storageclass=sc_obj, **pvc_data)
+        pvc_obj = rbd_pvc_factory(storageclass=sc_obj, custom_data=pvc_data)
 
         # Create first pod
         log.info(f"Creating two pods which use PVC {pvc_obj.name}")
@@ -278,3 +284,5 @@ class TestRbdBasedRwoPvc(ManageTest):
 
         # Delete Storage Class
         sc_obj.delete()
+        # Delete Block pool
+        cbp_obj.delete()
