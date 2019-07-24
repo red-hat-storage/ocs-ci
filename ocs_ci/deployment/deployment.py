@@ -14,10 +14,10 @@ import yaml
 from ocs_ci.framework import config
 from ocs_ci.utility import templating, system
 from ocs_ci.ocs.utils import create_oc_resource, apply_oc_resource
-from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import (
     run_cmd, ceph_health_check, is_cluster_running
 )
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.resources.ocs import OCS
 from tests import helpers
@@ -64,7 +64,7 @@ class Deployment(object):
         """
         # Test cluster access and if exist just skip the deployment.
         if is_cluster_running(self.cluster_path):
-            logger.info(
+            logger.warning(
                 "The OCP installation is skipped because the cluster is "
                 "running"
             )
@@ -127,23 +127,26 @@ class Deployment(object):
 
         return True
 
-    def deploy_ocs(self, ):
+    def deploy_ocs(self):
         """
         Handle OCS deployment, since OCS deployment steps are common to any
         platform, implementing OCS deployment here in base class.
         """
         _templating = templating.Templating()
-        logger.info("Running OCS basic installation")
 
+        CEPHCLUSTER = ocp.OCP(
+            kind='CephCluster', namespace=config.ENV_DATA['cluster_namespace']
+        )
         try:
-            create_oc_resource(
-                'common.yaml', self.cluster_path, _templating, config.ENV_DATA
-            )
-        except CommandFailed:
-            # TODO: This can't be a solid reasoning to tell that
-            # ocs cluster doesn't exist, find efficient method
+            CEPHCLUSTER.get().get('items')[0]
             logger.warning("OCS cluster already exists")
             return
+        except (IndexError, CommandFailed):
+            logger.info("Running OCS basic installation")
+
+        create_oc_resource(
+            'common.yaml', self.cluster_path, _templating, config.ENV_DATA
+        )
 
         run_cmd(
             f'oc label namespace {config.ENV_DATA["cluster_namespace"]} '
