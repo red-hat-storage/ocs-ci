@@ -16,38 +16,37 @@ def get_random_name(obj_type):
     return f"{obj_type}_{rand}"
 
 
-def create_pvcs(count, storage_class):
+def create_pvc(storage_class, some_parameter):
     """
-    Helper function for creating PVCs
+    Helper function for creating PVC
 
     Args:
-        count (int): number of PVC to create
         storage_class (StorageClass): storage class object reference
+        some_parameter (str): you can have some parameter here to utilize pvc
 
     Returns:
         list: PVCs objects
     """
-    _pvcs = []
-    for number in range(count):
-        pvc_name = get_random_name('pvc')
-        _pvcs.append(PVC(pvc_name, storage_class))
-    return _pvcs
+    pvc_name = get_random_name('pvc')
+    return PVC(pvc_name, storage_class, some_parameter)
 
 
 class PVC:
     """
     Example dummy class of PVC
     """
-    def __init__(self, name, storage_class):
+    def __init__(self, name, storage_class, some_parameter):
         """
         Constructor for PVC
 
         Args:
             name (str): name of pvc
             storage_class (StorageClass): storage class object reference
+            some_parameter (str): you can have some parameter here to utilize pvc
         """
         self.storage_class = storage_class
         self.name = name
+        self.some_parameter = some_parameter
         self.is_deleted = False
 
     def delete(self):

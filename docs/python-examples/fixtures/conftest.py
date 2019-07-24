@@ -25,7 +25,7 @@ def storage_class(request):
     sc_name = ocs.get_random_name('storage_class')
     logger.info(f"Creating storage class: {sc_name}")
     sc = ocs.StorageClass(sc_name)
-    return sc_name
+    return sc
 
 
 @pytest.fixture(scope='class')
@@ -34,7 +34,7 @@ def cls_pvc(request, storage_class):
     PVC fixture
 
     Returns:
-        PVC: object of pvc class
+        PVC: object of PVC class
     """
     def fin():
         if not pvc.is_deleted:
@@ -43,12 +43,12 @@ def cls_pvc(request, storage_class):
     request.addfinalizer(fin)
     pvc_name = ocs.get_random_name('pvc')
     logger.info(f"Creating pvc: {pvc_name}")
-    pvc = ocs.PVC(pvc_name, storage_class)
+    pvc = ocs.PVC(pvc_name, storage_class, some_parameter="Default value")
     return pvc
 
 
 @pytest.fixture(scope='class')
-def create_pvcs_factory(request, storage_class):
+def pvc_factory(request, storage_class):
     """
     Fixture factory for creating pvcs.
     This fixture returns function with which you can create objects of PVC as
@@ -86,23 +86,17 @@ def create_pvcs_factory(request, storage_class):
     # https://docs.pytest.org/en/latest/fixture.html#factories-as-fixtures
     # But then we will use capability of reusability of the code. So this
     # doesn't work for us.
-    def wrapper_crate_pvcs(count, storage_class):
+    def wrapper_crate_pvc(some_parameter="default_value"):
         """
         Function wrapper for ocs.create_pvcs. This wrapper append created PVCs
         into pvcs list referenced from create_pvcs factroy which allows to do
         proper teardown of created objects.
 
         Args:
-            count (int): desired count of pvcs to be created
-            storage_class (StorageClass): reference to storage class object
-            pvcs (list): reference to pvcs list where to append all created
-                pvcs by helper function ocs.create_pvcs
+            some_parameter (str): you can have some parameter here used below
         """
-        ret_value = ocs.create_pvcs(count, storage_class)
-        # Note:
-        # Here we cannot use += like: pvcs += ret_value as it redefine the
-        # reference to the object from upper scope and breaks the logic here.
-        pvcs.extend(ret_value)
-        return ret_value
+        pvc = ocs.create_pvc(storage_class, some_parameter)
+        pvcs.append(pvc)
+        return pvc
 
-    return wrapper_crate_pvcs
+    return wrapper_crate_pvc

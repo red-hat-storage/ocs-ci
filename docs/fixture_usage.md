@@ -65,61 +65,84 @@ Below you can see output of test examples linked above. From this output you
 can see order of creating and teardowning objects.
 
 ```bash
-=========================== test session starts ===============================
-platform darwin -- Python 3.7.3, pytest-5.0.1, py-1.8.0, pluggy-0.12.0 --
-.venv/bin/python3
-cachedir: .pytest_cache
-rootdir: ./fixtures
+============================= test session starts ==============================
+platform darwin -- Python 3.7.3, pytest-5.0.1, py-1.8.0, pluggy-0.12.0
+rootdir: ocs-ci, inifile: pytest.ini
 collected 7 items
 
 test_fixtures.py::TestCreatingPVCsFromTest::test_create_pvcs[2]
-INFO:conftest:Creating storage class: storage_class_6543
-INFO:conftest:Setup of pvcs
-INFO:test_fixtures:['pvc_2800', 'pvc_2580']
+-------------------------------- live log setup --------------------------------
+11:30:55 - MainThread - conftest - INFO - Creating storage class: storage_class_9884
+11:30:55 - MainThread - conftest - INFO - Setup of pvcs
+-------------------------------- live log call ---------------------------------
+11:30:55 - MainThread - test_fixtures - INFO - Here you can do something with storage class: storage_class_9884, it should be the same class level scope SC which will be used in pvc_factory function as well
+11:30:55 - MainThread - test_fixtures - INFO - Created pvcs: ['pvc_2563', 'pvc_6782']
 PASSED
 test_fixtures.py::TestCreatingPVCsFromTest::test_create_pvcs[4]
-INFO:test_fixtures:['pvc_7185', 'pvc_5700', 'pvc_3564', 'pvc_5209']
+-------------------------------- live log call ---------------------------------
+11:30:55 - MainThread - test_fixtures - INFO - Here you can do something with storage class: storage_class_9884, it should be the same class level scope SC which will be used in pvc_factory function as well
+11:30:55 - MainThread - test_fixtures - INFO - Created pvcs: ['pvc_7217', 'pvc_5011', 'pvc_2953', 'pvc_6950']
 PASSED
-test_fixtures.py::TestCreatingPVCsFromTest::test_share_pvcs
-INFO:test_fixtures:Shared pvcs usage: ['pvc_5280', 'pvc_6276']
+test_fixtures.py::TestCreatingPVCsFromTest::test_alter_shared_pvcs
+-------------------------------- live log call ---------------------------------
+11:30:55 - MainThread - test_fixtures - INFO - Not shared pvc has name pvc_2552
+11:30:55 - MainThread - test_fixtures - INFO - Mark PVC: pvc_2563 for delete in next test.
+11:30:55 - MainThread - test_fixtures - INFO - Mark PVC: pvc_7217 for delete in next test.
+11:30:55 - MainThread - test_fixtures - INFO - Mark PVC: pvc_2953 for delete in next test.
+11:30:55 - MainThread - test_fixtures - INFO - Shared pvcs: ['pvc_2563', 'pvc_6782', 'pvc_7217', 'pvc_5011', 'pvc_2953', 'pvc_6950']
 PASSED
-test_fixtures.py::TestCreatingPVCsFromTest::test_use_shared_pvcs
-INFO:test_fixtures:self.shared_pvcs are: ['pvc_5280', 'pvc_6276']
-INFO:test_fixtures:Deleting shared pvc: pvc_5280 from test
-INFO:ocs:Deleting pvc: pvc_5280
-INFO:test_fixtures:Deleted pvc pvc_5280 from test, shouldn't be deleted in finalizer!
-INFO:test_fixtures:Doing something with pvc: <ocs.PVC object at 0x10d95fa90>
-PASSEDINFO:conftest:In finalizer
-INFO:ocs:Deleting pvc: pvc_2800
-INFO:ocs:Deleting pvc: pvc_2580
-INFO:ocs:Deleting pvc: pvc_7185
-INFO:ocs:Deleting pvc: pvc_5700
-INFO:ocs:Deleting pvc: pvc_3564
-INFO:ocs:Deleting pvc: pvc_5209
-INFO:ocs:Deleting pvc: pvc_6276
-INFO:ocs:Deleting storage class: storage_class_6543
+test_fixtures.py::TestCreatingPVCsFromTest::test_delete_some_shared_pvcs
+-------------------------------- live log call ---------------------------------
+11:30:55 - MainThread - test_fixtures - INFO - self.shared_pvcs are: ['pvc_2563', 'pvc_6782', 'pvc_7217', 'pvc_5011', 'pvc_2953', 'pvc_6950']
+11:30:55 - MainThread - test_fixtures - INFO - Deleting shared pvc with name: pvc_2563 from test
+11:30:55 - MainThread - ocs - INFO - Deleting pvc: pvc_2563
+11:30:55 - MainThread - test_fixtures - INFO - Deleting shared pvc with name: pvc_7217 from test
+11:30:55 - MainThread - ocs - INFO - Deleting pvc: pvc_7217
+11:30:55 - MainThread - test_fixtures - INFO - Deleting shared pvc with name: pvc_2953 from test
+11:30:55 - MainThread - ocs - INFO - Deleting pvc: pvc_2953
+11:30:55 - MainThread - test_fixtures - INFO - Deleted pvc ['pvc_2563', 'pvc_7217', 'pvc_2953'], shouldn't be deleted in finalizer!
+PASSED
+------------------------------ live log teardown -------------------------------
+11:30:55 - MainThread - conftest - INFO - In finalizer
+11:30:55 - MainThread - ocs - INFO - Deleting pvc: pvc_6782
+11:30:55 - MainThread - ocs - INFO - Deleting pvc: pvc_5011
+11:30:55 - MainThread - ocs - INFO - Deleting pvc: pvc_6950
+11:30:55 - MainThread - ocs - INFO - Deleting pvc: pvc_2552
+11:30:55 - MainThread - ocs - INFO - Deleting storage class: storage_class_9884
 
 test_fixtures.py::TestPVCsCreatedInSetup::test_need_3_pvc
-INFO:conftest:Creating storage class: storage_class_2964
-INFO:conftest:Setup of pvcs
-INFO:test_fixtures:Here you can use those 3 pvcs: ['pvc_2435', 'pvc_2764', 'pvc_4108']
-INFO:test_fixtures:Will delete PVC pvc_2764 as part of test
-INFO:ocs:Deleting pvc: pvc_2764
-INFO:test_fixtures:Test finished
-PASSEDINFO:conftest:In finalizer
-INFO:ocs:Deleting pvc: pvc_2435
-INFO:ocs:Deleting pvc: pvc_4108
-INFO:ocs:Deleting storage class: storage_class_2964
+-------------------------------- live log setup --------------------------------
+11:30:55 - MainThread - conftest - INFO - Creating storage class: storage_class_5475
+11:30:55 - MainThread - conftest - INFO - Setup of pvcs
+-------------------------------- live log call ---------------------------------
+11:30:55 - MainThread - test_fixtures - INFO - Here you can use those 3 pvcs: ['pvc_9453', 'pvc_2721', 'pvc_5792']
+11:30:55 - MainThread - test_fixtures - INFO - Will delete PVC pvc_2721 as part of test
+11:30:55 - MainThread - ocs - INFO - Deleting pvc: pvc_2721
+11:30:55 - MainThread - test_fixtures - INFO - Test finished, the rest of PVCs will be deleted in finalizer
+PASSED
+------------------------------ live log teardown -------------------------------
+11:30:55 - MainThread - conftest - INFO - In finalizer
+11:30:55 - MainThread - ocs - INFO - Deleting pvc: pvc_9453
+11:30:55 - MainThread - ocs - INFO - Deleting pvc: pvc_5792
+11:30:55 - MainThread - ocs - INFO - Deleting storage class: storage_class_5475
 
 test_fixtures.py::TestPVC::test_one_pvc
-INFO:conftest:Creating storage class: storage_class_1006
-INFO:conftest:Creating pvc: pvc_4810
-INFO:test_fixtures:This test is using one pvc: pvc_4810 created in fixturesetup
+-------------------------------- live log setup --------------------------------
+11:30:55 - MainThread - conftest - INFO - Creating storage class: storage_class_4084
+11:30:55 - MainThread - conftest - INFO - Creating pvc: pvc_5444
+-------------------------------- live log call ---------------------------------
+11:30:55 - MainThread - test_fixtures - INFO - This test is using one pvc: pvc_5444 created in fixture setup
 PASSED
 test_fixtures.py::TestPVC::test_use_same_one_pvc_plus_storage_class
-INFO:test_fixtures:This test is using same one pvc:  pvc_4810
-INFO:test_fixtures:Storage class used is storage_class_1006
-PASSEDINFO:ocs:Deleting pvc: pvc_4810
-INFO:ocs:Deleting storage class: storage_class_1006
-=========================== 7 passed in 0.02 seconds ==========================
+-------------------------------- live log call ---------------------------------
+11:30:55 - MainThread - test_fixtures - INFO - This test is using same one pvc:  pvc_5444
+11:30:55 - MainThread - test_fixtures - INFO - Storage class in class level scope is: storage_class_4084
+11:30:55 - MainThread - test_fixtures - INFO - Storage class in cls_pvc should be the same: storage_class_4084
+PASSED
+------------------------------ live log teardown -------------------------------
+11:30:55 - MainThread - ocs - INFO - Deleting pvc: pvc_5444
+11:30:55 - MainThread - ocs - INFO - Deleting storage class: storage_class_4084
+
+
+=========================== 7 passed in 0.05 seconds ===========================
 ```

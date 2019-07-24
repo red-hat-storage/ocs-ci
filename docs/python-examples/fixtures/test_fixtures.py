@@ -16,57 +16,69 @@ def alter_pvc(pvc):
 
 
 @pytest.fixture(scope='class')
-def three_pvcs(create_pvcs_factory, storage_class):
+def three_pvcs(pvc_factory, storage_class):
     """
     This is fixture related just to one specific test in this module so no
-    need to have it defined in conftest
+    need to have it defined in conftest. This returns you three objects of PVC
+    which are created in setup phase.
+
     """
-    return create_pvcs_factory(3, storage_class)
+    return [pvc_factory(storage_class) for x in range(3)]
 
 
 class TestCreatingPVCsFromTest:
     # If the test suite needs to share some resources it's possible to do it
     # via class member like below, when you fill resources from test case.
     # We just need to document that test suite needs run like whole cause if
-    # some test case depends on resources created by other test case in the 
+    # some test case depends on resources created by other test case in the
     # same test suite (class) it's not possible to run just last test case.
     shared_pvcs = []
 
     @pytest.mark.parametrize("pvcs_number", (2, 4))
-    def test_create_pvcs(self, pvcs_number, create_pvcs_factory, storage_class):
+    def test_create_pvcs(self, pvcs_number, pvc_factory, storage_class):
         """
         You can access all needed resources via fixtures as parameters in
-        method definition like in example above (create_pvcs_factory or
-        storage_class).
+        method definition like in example above (pvc_factory or storage_class).
         """
-        pvcs_created = create_pvcs_factory(pvcs_number, storage_class)
+        logger.info(
+            f"Here you can do something with storage class: "
+            f"{storage_class.name}, it should be the same class level scope SC"
+            f" which will be used in pvc_factory function as well"
+        )
+        pvcs_created = [
+            pvc_factory(some_parameter="Created from test_create_pvcs") for x
+            in range(pvcs_number)
+        ]
+        self.shared_pvcs.extend(pvcs_created)
         assert len(pvcs_created) == pvcs_number
-        logger.info([p.name for p in pvcs_created])
+        logger.info(f"Created pvcs: {[p.name for p in pvcs_created]}")
 
-    def test_share_pvcs(self, create_pvcs_factory, storage_class):
-        my_shared_pvcs = create_pvcs_factory(2, storage_class)
-        logger.info(f"Shared pvcs usage: {[p.name for p in my_shared_pvcs]}")
+    def test_alter_shared_pvcs(self, pvc_factory):
+        # create one additional pvc and not put it to shared one.
+        not_shared_pvc = pvc_factory(some_parameter="Not shared")
+        logger.info(f"Not shared pvc has name {not_shared_pvc.name}")
+        for i, pvc in enumerate(self.shared_pvcs):
+            if i % 2 == 0:
+                logger.info(f"Mark PVC: {pvc.name} for delete in next test.")
+                pvc.some_parameter = "DELETE"
 
-        # If you need to share the resources in test suite created by test, you
-        # can do it like below.
-        self.shared_pvcs.extend(my_shared_pvcs)
+        logger.info(f"Shared pvcs: {[p.name for p in self.shared_pvcs]}")
 
-    def test_use_shared_pvcs(self):
+    def test_delete_some_shared_pvcs(self):
         logger.info(
             f"self.shared_pvcs are: {[p.name for p in self.shared_pvcs]}"
         )
-        pv_to_delete = self.shared_pvcs[0]
-        logger.info(f"Deleting shared pvc: {pv_to_delete.name} from test")
-        pv_to_delete.delete()
+        deleted_pvcs = []
+        for pvc in [
+            pvc for pvc in self.shared_pvcs if pvc.some_parameter == "DELETE"
+        ]:
+            logger.info(f"Deleting shared pvc with name: {pvc.name} from test")
+            pvc.delete()
+            deleted_pvcs.append(pvc)
         logger.info(
-            f"Deleted pvc {pv_to_delete.name} from test, shouldn't be deleted "
-            f"in finalizer!"
+            f"Deleted pvc {[p.name for p in deleted_pvcs]}, shouldn't be "
+            f"deleted in finalizer!"
         )
-
-        # If you need to do something with pvc outside class you need to just
-        # send whatever as reference like in example bellow:
-        pvc_to_alter = self.shared_pvcs[1]
-        alter_pvc(pvc_to_alter)
 
 
 class TestPVCsCreatedInSetup:
@@ -85,7 +97,9 @@ class TestPVCsCreatedInSetup:
         pvc = three_pvcs[1]
         logger.info(f"Will delete PVC {pvc.name} as part of test")
         pvc.delete()
-        logger.info("Test finished")
+        logger.info(
+            "Test finished, the rest of PVCs will be deleted in finalizer"
+        )
 
 
 class TestPVC:
@@ -110,4 +124,11 @@ class TestPVC:
         in cls_pvc fixture.
         """
         logger.info(f"This test is using same one pvc:  {cls_pvc.name}")
-        logger.info(f"Storage class used is {storage_class}")
+        logger.info(
+            f"Storage class in class level scope is: {storage_class.name}"
+        )
+        logger.info(
+            f"Storage class in cls_pvc should be the same: "
+            f"{cls_pvc.storage_class.name}"
+        )
+        assert storage_class.name == storage_class.name
