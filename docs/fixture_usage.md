@@ -41,7 +41,7 @@ Here is the list of things we should avoid in our fixtures:
 * Using references to `request.node.cls` for set, altering or reading class
   attributes.
 * Using globals for sharing data.
-* Using finalizer after yield.
+* Using yield.
 * Using `@pytest.mark.usefixtures`.
 * Using more than one assert in the teardown when another teardown action is
   between them. (This will lead that the rest of resources won't be cleaned
