@@ -170,7 +170,7 @@ def rbd_storageclass_factory(
                 block_pool and secret.
         """
         if custom_data:
-            sc_obj = helpers.crate_resource(**custom_data)
+            sc_obj = helpers.create_resource(**custom_data, wait=False)
         else:
             block_pool = block_pool or ceph_block_pool_factory()
             secret = secret or rbd_secret_factory()
@@ -226,7 +226,7 @@ def cephfs_storageclass_factory(request, cephfs_secret_factory):
             object: helpers.create_storage_class instance with link to secret.
         """
         if custom_data:
-            sc_obj = helpers.crate_resource(**custom_data)
+            sc_obj = helpers.create_resource(**custom_data, wait=False)
         else:
             secret = secret or cephfs_secret_factory()
 
@@ -330,7 +330,7 @@ def pvc_factory(request, rbd_storageclass_factory, project_factory):
             object: helpers.create_pvc instance.
         """
         if custom_data:
-            pvc_obj = helpers.crate_resource(**custom_data)
+            pvc_obj = helpers.create_resource(**custom_data, wait=False)
         else:
             project = project or project_factory()
             storageclass = storageclass or rbd_storageclass_factory()
@@ -444,14 +444,23 @@ def pod_factory(request, project_factory):
             object: helpers.create_pvc instance.
         """
         if custom_data:
-            pod_obj = helpers.crate_resource(**custom_data)
+            pod_obj = helpers.create_resource(**custom_data, wait=False)
         else:
             project = project or project_factory()
+
+            if pvc.storageclass.data[
+                'provisioner'
+            ] == defaults.RBD_PROVISIONER:
+                interface_type=constants.CEPHBLOCKPOOL
+            elif pvc.storageclass.data[
+                'provisioner'
+            ] == defaults.CEPHFS_PROVISIONER:
+                interface_type=constants.CEPHFILESYSTEM
 
             pod_obj = helpers.create_pod(
                 pvc_name=pvc.name,
                 namespace=project.namespace,
-                **kwargs
+                interface_type=interface_type
             )
             assert pod_obj, "Failed to create PVC"
         pod_obj.project = project
@@ -496,7 +505,6 @@ def rbd_pod_factory(pod_factory, rbd_pvc_factory):
         """
         pvc = pvc or rbd_pvc_factory()
         return pod_factory(
-            interface_type=constants.CEPHBLOCKPOOL,
             pvc=pvc,
             project=project,
             custom_data=custom_data
@@ -525,7 +533,6 @@ def cephfs_pod_factory(pod_factory, cephfs_pvc_factory):
         """
         pvc = pvc or cephfs_pvc_factory()
         return pod_factory(
-            interface_type=constants.CEPHFILESYSTEM,
             pvc=pvc,
             project=project,
             custom_data=custom_data
