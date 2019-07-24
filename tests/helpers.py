@@ -402,7 +402,7 @@ def validate_cephfilesystem(fs_name):
         fs_name (str): The name of the Ceph FileSystem
 
      Returns:
-         bool: True if cephfilesystem is created at CEPH and OCP side else
+         bool: True if CephFileSystem is created at Ceph and OCP side else
             will return False with valid msg i.e Failure cause
     """
     cfs = ocp.OCP(
