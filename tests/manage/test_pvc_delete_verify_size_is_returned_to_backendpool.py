@@ -128,7 +128,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         used_before_creating_pvc = check_ceph_used_space()
         logger.info(f"Used before creating pvc {used_before_creating_pvc}")
         pvc_obj = create_pvc_and_verify_pvc_exists(
-            rbd_storageclass.name, rbd_storageclass.blockpool.name
+            rbd_storageclass.name, rbd_storageclass.block_pool.name
         )
         pod_obj = helpers.create_pod(interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvc_obj.name)
         used_percentage = pod.run_io_and_verify_mount_point(pod_obj)
@@ -140,7 +140,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         pvc_obj.delete()
         verify_pv_not_exists(
             pvc_obj.backed_pv,
-            rbd_storageclass.blockpool.name
+            rbd_storageclass.block_pool.name
         )
         used_after_deleting_pvc = check_ceph_used_space()
         logger.info(f"Used after deleting pvc {used_after_deleting_pvc}")
