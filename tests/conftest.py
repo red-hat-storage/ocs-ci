@@ -213,7 +213,7 @@ def cephfs_storageclass_factory(request, cephfs_secret_factory):
         Returns:
             object: helpers.create_storage_class instance with link to secret.
         """
-        secret = secret or rbd_secret_factory()
+        secret = secret or cephfs_secret_factory()
 
         sc_obj = helpers.create_storage_class(
             interface_type=constants.CEPHFILESYSTEM,
@@ -250,26 +250,27 @@ def project_factory(request):
     """
     instances = []
 
-    def factory(namespace=None, **kwargs):
+    def factory(**kwargs):
         """
-        Args:
-            namespace (str): Namespace name.
 
         Returns:
-            object: ocp.OCP instance of 'Project' kind.
+            object: ocs_ci.ocs.resources.ocs instance of 'Project' kind.
         """
-        if not namespace:
+        if not 'metadata' in kwargs or not kwargs.get('metadata').get('namespace'):
             namespace = helpers.create_unique_resource_name(
                 'test',
                 'namespace'
             )
+            kwargs['metadata'] = kwargs.get('metadata') or {}
+            kwargs['metadata']['namespace'] = namespace
 
-        proj_obj = ocp.OCP(
+        metadata = kwargs.get('metadata') or {}
+        metadata = {}
+        proj_obj = OCS(
             kind='Project',
-            namespace=namespace,
             **kwargs
         )
-        assert proj_obj.new_project(namespace), (
+        assert proj_obj.ocp.new_project(namespace), (
             f'Failed to create new project {namespace}'
         )
 
@@ -302,8 +303,10 @@ def pvc_factory(request, rbd_storageclass_factory, project_factory):
     def factory(project=None, storageclass=None, **kwargs):
         """
         Args:
-            project (object): ocp.OCP instance of 'Project' kind.
-            storageclass (object): ocp.OCP instance of 'StorageClass' kind.
+            project (object): ocs_ci.ocs.resources.ocs.OCS instance
+                of 'Project' kind.
+            storageclass (object): ocs_ci.ocs.resources.ocs.OCS instance
+                of 'StorageClass' kind.
 
         Returns:
             object: helpers.create_pvc instance.
@@ -348,8 +351,10 @@ def rbd_pvc_factory(request, pvc_factory, rbd_storageclass_factory):
     def factory(project=None, storageclass=None, **kwargs):
         """
         Args:
-            project (object): ocp.OCP instance of 'Project' kind.
-            storageclass (object): ocp.OCP instance of 'StorageClass' kind.
+            project (object): ocs_ci.ocs.resources.ocs.OCS instance
+                of 'Project' kind.
+            storageclass (object): ocs_ci.ocs.resources.ocs.OCS instance
+                of 'StorageClass' kind.
 
         Returns:
             object: helpers.create_pvc instance.
@@ -373,8 +378,10 @@ def cephfs_pvc_factory(request, pvc_factory, cephfs_storageclass_factory):
     def factory(project=None, storageclass=None, **kwargs):
         """
         Args:
-            project (object): ocp.OCP instance of 'Project' kind.
-            storageclass (object): ocp.OCP instance of 'StorageClass' kind.
+            project (object): ocs_ci.ocs.resources.ocs.OCS instance
+                of 'Project' kind.
+            storageclass (object): ocs_ci.ocs.resources.ocs.OCS instance
+                of 'StorageClass' kind.
 
         Returns:
             object: helpers.create_pvc instance.
@@ -399,8 +406,9 @@ def pod_factory(request, project_factory):
     def factory(project=None, pvc=None, **kwargs):
         """
         Args:
-            project (object): ocp.OCP instance of 'Project' kind.
-            pvc (object): ocp.OCP instance of 'PVC' kind.
+            project (object): ocs_ci.ocs.resources.ocs.OCS instance
+                of 'Project' kind.
+            pvc (object): ocs_ci.ocs.resources.ocs.OCS instance of 'PVC' kind.
 
         Returns:
             object: helpers.create_pvc instance.
@@ -443,8 +451,9 @@ def rbd_pod_factory(pod_factory, rbd_pvc_factory):
     def factory(project=None, pvc=None, **kwargs):
         """
         Args:
-            project (object): ocp.OCP instance of 'Project' kind.
-            pvc (object): ocp.OCP instance of 'PVC' kind.
+            project (object): ocs_ci.ocs.resources.ocs.OCS instance
+                of 'Project' kind.
+            pvc (object): ocs_ci.ocs.resources.ocs.OCS instance of 'PVC' kind.
 
         Returns:
             object: helpers.create_pvc instance.
@@ -468,8 +477,9 @@ def cephfs_pod_factory(pod_factory, cephfs_pvc_factory):
     def factory(project=None, pvc=None, **kwargs):
         """
         Args:
-            project (object): ocp.OCP instance of 'Project' kind.
-            pvc (object): ocp.OCP instance of 'PVC' kind.
+            project (object): ocs_ci.ocs.resources.ocs.OCS instance
+                of 'Project' kind.
+            pvc (object): ocs_ci.ocs.resources.ocs.OCS instance of 'PVC' kind.
 
         Returns:
             object: helpers.create_pvc instance.
