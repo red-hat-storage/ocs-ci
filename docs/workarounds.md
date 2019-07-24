@@ -22,7 +22,7 @@ way:
 
 - When you create a pull request with a workaround, state clearly which
   bug/issue is the root cause and why.
-- Make minimal chances so that the workaround is placed in dedicated pull
+- Make minimal changes so that the workaround is placed in dedicated pull
   request with a single commit and could be later reverted without affecting
   anything else.
 - The person who creates a pull request with a workaround is also responsible
