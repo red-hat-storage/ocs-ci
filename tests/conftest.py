@@ -328,7 +328,7 @@ def pvc_factory(request, rbd_storageclass_factory, project_factory):
             pvc_obj = helpers.create_pvc(
                 sc_name=storageclass.name,
                 namespace=project.namespace,
-                **kwargs
+                wait=False
             )
             assert pvc_obj, "Failed to create PVC"
         pvc_obj.storageclass = storageclass
@@ -450,7 +450,8 @@ def pod_factory(request, project_factory):
             pod_obj = helpers.create_pod(
                 pvc_name=pvc.name,
                 namespace=project.namespace,
-                interface_type=interface_type
+                interface_type=interface_type,
+                wait=False
             )
             assert pod_obj, "Failed to create PVC"
         pod_obj.project = project
