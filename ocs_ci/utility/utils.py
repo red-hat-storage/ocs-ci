@@ -929,7 +929,24 @@ def create_directory_path(path):
     """
     Creates directory if path doesn't exists
     """
+    path = os.path.expanduser(path)
     if not os.path.exists(path):
         os.makedirs(path)
     else:
         log.debug(f"{path} already exists")
+
+
+def ocsci_log_path():
+    """
+    Construct the full path for the log directory.
+
+    Returns:
+        str: full path for ocs-ci log directory
+
+    """
+    return os.path.expanduser(
+        os.path.join(
+            config.RUN['log_dir'],
+            f"ocs-ci-logs-{config.RUN['run_id']}"
+        )
+    )
