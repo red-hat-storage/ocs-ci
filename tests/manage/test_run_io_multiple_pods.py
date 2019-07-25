@@ -59,6 +59,7 @@ class BaseRunIOMultiplePods(ManageTest):
 
 
 @tier2
+@pytest.mark.polarion_id("OCS-692")
 @pytest.mark.usefixtures(
     create_rbd_secret.__name__,
     create_ceph_block_pool.__name__,
@@ -75,11 +76,13 @@ class TestRunIOMultiplePodsRBD(BaseRunIOMultiplePods):
 
     def test_run_io_multiple_pods_rbd(self):
         """
+        Run IO on multiple pods in parallel - RBD
         """
         self.run_io_multiple_pods()
 
 
 @tier2
+@pytest.mark.polarion_id("OCS-693")
 @pytest.mark.usefixtures(
     create_cephfs_secret.__name__,
     create_cephfs_storageclass.__name__,
@@ -95,5 +98,6 @@ class TestRunIOMultiplePodsFS(BaseRunIOMultiplePods):
 
     def test_run_io_multiple_pods_fs(self):
         """
+        Run IO on multiple pods in parallel - CephFS
         """
         self.run_io_multiple_pods()
