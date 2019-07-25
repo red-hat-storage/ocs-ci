@@ -126,13 +126,15 @@ def get_all_pvcs(namespace=None):
 
 
 def verify_pv_exists_in_backend(
-        pv_name, pool_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    pv_name, pool_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE
 ):
     """
     Verifies given pv exists in ceph backend
 
     Args:
-        pvc_name (str): Name of the pvc
+        pv_name (str): Name of the pv
+        pool_name (str): Name of the rbd-pool
+        namespace (str): Name of namespace
     Returns:
          bool: True if pv exists on backend, False otherwise
     """
@@ -144,13 +146,10 @@ def verify_pv_exists_in_backend(
     cmd = f"rbd info -p {pool_name} csi-vol-{image_uuid}"
     ct_pod = pod.get_ceph_tools_pod()
     try:
-        pv_info = ct_pod.exec_ceph_cmd(
+        ct_pod.exec_ceph_cmd(
             ceph_cmd=cmd, format='json'
         )
     except CommandFailed as ecf:
-        assert f"Error is rbd: error opening image csi-vol-{image_uuid}" in str(ecf), (
-               f"Failed to run the command {cmd}"
-        )
+        log.error(f"PV is not found on ceph backend: str{ecf}")
         return False
-    assert pv_info is not None, "Failed to get the pv information from ceph backend"
     return True
