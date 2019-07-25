@@ -3,10 +3,13 @@ General PVC object
 """
 import logging
 
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.framework import config
+from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.utility.utils import run_cmd
+from ocs_ci.ocs.resources import pod
 
 log = logging.getLogger(__name__)
 
@@ -120,3 +123,35 @@ def get_all_pvcs(namespace=None):
     )
     out = ocp_pvc_obj.get()
     return out
+
+
+def verify_pv_exists_in_backend(
+        pv_name, pool_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+):
+    """
+    Verifies given pv exists in ceph backend
+
+    Args:
+        pvc_name (str): Name of the pvc
+    Returns:
+         bool: True if pv exists on backend, False otherwise
+    """
+    spec_volhandle = "'{.spec.csi.volumeHandle}'"
+    cmd = f"oc get pv/{pv_name} -o jsonpath={spec_volhandle} -n {namespace}"
+    out = run_cmd(cmd=cmd)
+    image_uuid = "-"
+    image_uuid = image_uuid.join(out.split('-')[5:10])
+    cmd = f"rbd info -p {pool_name} csi-vol-{image_uuid}"
+    ct_pod = pod.get_ceph_tools_pod()
+    try:
+        pv_info = ct_pod.exec_ceph_cmd(
+            ceph_cmd=cmd, format='json'
+        )
+    except CommandFailed as ecf:
+        assert (
+            f"Error is rbd: error opening image csi-vol-{image_uuid}" in str(ecf),
+            f"Failed to run the command {cmd}"
+        )
+        return False
+    assert pv_info is not None, "Failed to get the pv information from ceph backend"
+    return True

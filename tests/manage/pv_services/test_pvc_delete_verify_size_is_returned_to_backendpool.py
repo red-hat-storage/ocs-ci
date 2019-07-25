@@ -56,11 +56,8 @@ def verify_pv_not_exists(pv_name, cbp_name):
 
     # Validate on ceph side
     logger.info(f"Verifying pv {pv_name} exists on backend")
-    ct_pod = pod.get_ceph_tools_pod()
-    pvc_list = ct_pod.exec_ceph_cmd(
-        ceph_cmd=f"rbd ls -p {cbp_name}", format='json'
-    )
-    _rc = pv_name in pvc_list
+
+    _rc = pvc.verify_pv_exists_in_backend(pv_name, cbp_name)
 
     if _rc:
         raise UnexpectedBehaviour(f"pv {pv_name} exists on backend")
@@ -81,41 +78,16 @@ def verify_pv_not_exists(pv_name, cbp_name):
     )
 
 
-def create_pvc_and_verify_pvc_exists(
-    sc_name, cbp_name, desired_status=constants.STATUS_BOUND, wait=True
-):
+def create_pvc_and_verify_pvc_exists(sc_name, cbp_name):
     """
     Create pvc, verify pvc is bound in state and
     pvc exists on ceph side
     """
+    pvc_obj = helpers.create_pvc(sc_name=sc_name, size='10Gi')
 
-    pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
-    pvc_data['metadata']['name'] = helpers.create_unique_resource_name(
-        'test', 'pvc'
-    )
-    pvc_data['spec']['storageClassName'] = sc_name
-    pvc_data['spec']['resources']['requests']['storage'] = "10Gi"
-    pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    pvc_obj = pvc.PVC(**pvc_data)
-    pvc_obj.create()
-    if wait:
-        assert pvc_obj.ocp.wait_for_resource(
-            condition=desired_status, resource_name=pvc_obj.name
-        ), f"{pvc_obj.kind} {pvc_obj.name} failed to reach"
-        f"status {desired_status}"
-    pvc_obj.reload()
-
-    # ToDo: Add validation to check pv exists on backend
-    # Commenting the below code: https://bugzilla.redhat.com/show_bug.cgi?id=1723656
     # Validate pv is created on ceph
-    # logger.info(f"Verifying pv exists on backend")
-    # ct_pod = pod.get_ceph_tools_pod()
-    # pv_list = ct_pod.exec_ceph_cmd(
-    #     ceph_cmd=f"rbd ls -p {cbp_name}", format='json'
-    # )
-    # _rc = pvc_obj.backed_pv in pv_list
-    # assert _rc, f"pv doesn't exist on backend"
-    # logger.info(f"pv {pvc_obj.backed_pv} exists on backend")
+    logger.info(f"Verifying pv exists on backend")
+    pvc.verify_pv_exists_in_backend(pvc_obj.backed_pv, cbp_name)
     return pvc_obj
 
 
@@ -124,6 +96,7 @@ def create_pvc_and_verify_pvc_exists(
     create_ceph_block_pool.__name__,
     create_rbd_storageclass.__name__
 )
+@pytest.mark.polarion_id("OCS-372")
 class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
     """
     Testing after pvc deletion the size is returned to backendpool
@@ -152,4 +125,5 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         logger.info(f"Used after deleting pvc {used_after_deleting_pvc}")
         assert used_after_deleting_pvc < used_after_creating_pvc
         assert (abs(
-            used_after_deleting_pvc - used_before_creating_pvc) < 0.2)
+            used_after_deleting_pvc - used_before_creating_pvc) < 0.2
+        )
