@@ -79,9 +79,16 @@ class BaseDynamicPvc(ManageTest):
 
     def cleanup(self):
         """
-        Removes resources created in dynamic_pvc_base() and verifies
+        Removes resources created during test execution and verifies
         the reclaim policy is honored
         """
+
+        pod_objs = pod.get_all_pods(namespace=self.namespace)
+        if len(pod_objs) > 0:
+            for pod_obj in pod_objs:
+                pod_obj.delete()
+                pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
+
         if hasattr(self, 'pvc_obj'):
             pv_obj = self.pvc_obj.backed_pv_obj
             self.pvc_obj.delete()
@@ -161,6 +168,9 @@ class TestRWODynamicPvc(BaseDynamicPvc):
         self.dynamic_pvc_base(interface_type, reclaim_policy)
 
     def test_rwo_dynamic_pvc(self, setup_base):
+        """
+        RWO Dynamic PVC creation tests with Reclaim policy set to Delete/Retain
+        """
         logger.info(f"Creating two pods using same PVC {self.pvc_obj.name}")
         logger.info(f"Creating first pod on node: {self.worker_nodes_list[0]}")
         pod_obj1 = helpers.create_pod(
@@ -231,7 +241,7 @@ class TestRWODynamicPvc(BaseDynamicPvc):
         )
 
         pod_obj2.delete()
-        pod_obj1.ocp.wait_for_delete(resource_name=pod_obj2.name)
+        pod_obj2.ocp.wait_for_delete(resource_name=pod_obj2.name)
 
 
 @tier1
