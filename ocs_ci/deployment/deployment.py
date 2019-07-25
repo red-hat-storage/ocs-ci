@@ -15,7 +15,7 @@ from ocs_ci.framework import config
 from ocs_ci.utility import templating, system
 from ocs_ci.ocs.utils import create_oc_resource, apply_oc_resource
 from ocs_ci.utility.utils import (
-    run_cmd, ceph_health_check, is_cluster_running
+    run_cmd, ceph_health_check,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs import constants, ocp, defaults
@@ -62,14 +62,7 @@ class Deployment(object):
         This method performs all the basic steps necessary before invoking the
         installer
         """
-        # Test cluster access and if exist just skip the deployment.
-        if is_cluster_running(self.cluster_path):
-            logger.warning(
-                "The OCP installation is skipped because the cluster is "
-                "running"
-            )
-            return False
-        elif self.teardown and not self.deploy:
+        if self.teardown and not self.deploy:
             logger.info(
                 f"Attempting teardown of non-accessible cluster: "
                 f"{self.cluster_path}"
@@ -134,11 +127,11 @@ class Deployment(object):
         """
         _templating = templating.Templating()
 
-        CEPHCLUSTER = ocp.OCP(
+        ceph_cluster = ocp.OCP(
             kind='CephCluster', namespace=config.ENV_DATA['cluster_namespace']
         )
         try:
-            CEPHCLUSTER.get().get('items')[0]
+            ceph_cluster.get().get('items')[0]
             logger.warning("OCS cluster already exists")
             return
         except (IndexError, CommandFailed):
@@ -212,10 +205,10 @@ class Deployment(object):
             'cluster.yaml', self.cluster_path, _templating, config.ENV_DATA
         )
 
-        POD = ocp.OCP(
+        pod = ocp.OCP(
             kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
         )
-        CFS = ocp.OCP(
+        cfs = ocp.OCP(
             kind=constants.CEPHFILESYSTEM,
             namespace=config.ENV_DATA['cluster_namespace']
         )
@@ -227,15 +220,15 @@ class Deployment(object):
             f"-n {config.ENV_DATA['cluster_namespace']} "
             f"--timeout=120s"
         )
-        assert POD.wait_for_resource(
+        assert pod.wait_for_resource(
             condition='Running', selector='app=rook-ceph-mon',
             resource_count=3, timeout=600
         )
-        assert POD.wait_for_resource(
+        assert pod.wait_for_resource(
             condition='Running', selector='app=rook-ceph-mgr',
             timeout=600
         )
-        assert POD.wait_for_resource(
+        assert pod.wait_for_resource(
             condition='Running', selector='app=rook-ceph-osd',
             resource_count=3, timeout=600
         )
@@ -266,13 +259,13 @@ class Deployment(object):
 
         ceph_obj = OCS(**fs_data)
         ceph_obj.create()
-        assert POD.wait_for_resource(
+        assert pod.wait_for_resource(
             condition=constants.STATUS_RUNNING, selector='app=rook-ceph-mds',
             resource_count=2, timeout=600
         )
 
         # Check for CephFilesystem creation in ocp
-        cfs_data = CFS.get()
+        cfs_data = cfs.get()
         cfs_name = cfs_data['items'][0]['metadata']['name']
 
         if helpers.validate_cephfilesystem(cfs_name):
