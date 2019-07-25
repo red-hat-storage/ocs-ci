@@ -148,9 +148,8 @@ def verify_pv_exists_in_backend(
             ceph_cmd=cmd, format='json'
         )
     except CommandFailed as ecf:
-        assert (
-            f"Error is rbd: error opening image csi-vol-{image_uuid}" in str(ecf),
-            f"Failed to run the command {cmd}"
+        assert f"Error is rbd: error opening image csi-vol-{image_uuid}" in str(ecf), (
+               f"Failed to run the command {cmd}"
         )
         return False
     assert pv_info is not None, "Failed to get the pv information from ceph backend"
