@@ -26,7 +26,6 @@ class GoogleSpreadSheetAPI(object):
             google_api, scope
         )
         client = gspread.authorize(creds)
-
         self.sheet = client.open(sheet_name).get_worksheet(sheet_index)
 
     def update_sheet(self, row, col, value):
