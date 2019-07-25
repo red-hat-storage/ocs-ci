@@ -20,6 +20,7 @@ tier_marks = [tier1, tier2, tier3, tier4]
 e2e = pytest.mark.e2e
 ecosystem = pytest.mark.ecosystem
 manage = pytest.mark.manage
+libtest = pytest.mark.libtest
 
 team_marks = [manage, ecosystem, e2e]
 
