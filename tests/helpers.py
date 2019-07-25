@@ -7,13 +7,11 @@ import logging
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility import templating
-from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.utility.utils import TimeoutSampler
-
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -400,168 +398,126 @@ def get_cephfs_data_pool_name():
 
 def validate_cephfilesystem(fs_name):
     """
-     Verify CephFileSystem exists at ceph and k8s
+     Verify CephFileSystem exists at Ceph and OCP
 
      Args:
         fs_name (str): The name of the Ceph FileSystem
 
      Returns:
-         bool: True if CephFileSystem is created at ceph and k8s side else
+         bool: True if CephFileSystem is created at Ceph and OCP side else
             will return False with valid msg i.e Failure cause
     """
-    CFS = ocp.OCP(
+    cfs = ocp.OCP(
         kind=constants.CEPHFILESYSTEM,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
     ct_pod = pod.get_ceph_tools_pod()
     ceph_validate = False
-    k8s_validate = False
-    cmd = "ceph fs ls"
-    logger.info(fs_name)
-    out = ct_pod.exec_ceph_cmd(ceph_cmd=cmd)
-    if out:
-        out = out[0]['name']
-        logger.info(out)
-        if out == fs_name:
-            logger.info("FileSystem got created from Ceph Side")
-            ceph_validate = True
-        else:
-            logger.error("FileSystem was not present at Ceph Side")
-            return False
-    result = CFS.get(resource_name=fs_name)
-    if result['metadata']['name']:
-        logger.info(f"Filesystem got created from kubernetes Side")
-        k8s_validate = True
+    ocp_validate = False
+
+    result = cfs.get(resource_name=fs_name)
+    if result.get('metadata').get('name'):
+        logger.info("Filesystem %s got created from Openshift Side", fs_name)
+        ocp_validate = True
     else:
-        logger.error("Filesystem was not create at Kubernetes Side")
+        logger.info(
+            "Filesystem %s was not create at Openshift Side", fs_name
+        )
         return False
-    return True if (ceph_validate and k8s_validate) else False
+
+    try:
+        for pools in TimeoutSampler(
+            60, 3, ct_pod.exec_ceph_cmd, 'ceph fs ls'
+        ):
+            for out in pools:
+                result = out.get('name')
+                if result == fs_name:
+                    logger.info("FileSystem %s got created from Ceph Side", fs_name)
+                    ceph_validate = True
+                    break
+                else:
+                    logger.error("FileSystem %s was not present at Ceph Side", fs_name)
+                    ceph_validate = False
+            if ceph_validate:
+                break
+    except TimeoutExpiredError:
+        pass
+
+    return True if (ceph_validate and ocp_validate) else False
 
 
-def get_all_storageclass_name():
+def get_all_storageclass_names():
     """
     Function for getting all storageclass
 
     Returns:
          list: list of storageclass name
     """
-    SC = ocp.OCP(
+    sc_obj = ocp.OCP(
         kind=constants.STORAGECLASS,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
-    sc_obj = SC.get()
-    sample = sc_obj['items']
+    result = sc_obj.get()
+    sample = result['items']
 
     storageclass = [
         item.get('metadata').get('name') for item in sample if (
-            item.get('metadata').get('name') not in constants.IGNORE_SC
+            (item.get('metadata').get('name') not in constants.IGNORE_SC_GP2)
+            and (item.get('metadata').get('name') not in constants.IGNORE_SC_FLEX)
         )
     ]
     return storageclass
 
 
-def delete_all_storageclass():
+def delete_storageclasses(sc_objs):
     """"
-    Function for Deleting all storageclass
+    Function for Deleting storageclasses
+
+    Args:
+        sc_objs (list): List of SC objects for deletion
 
     Returns:
         bool: True if deletion is successful
     """
 
-    SC = ocp.OCP(
-        kind=constants.STORAGECLASS,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
-    )
-    storageclass_list = get_all_storageclass_name()
-    for item in storageclass_list:
-        logger.info(f"Deleting StorageClass with name {item}")
-        assert SC.delete(resource_name=item)
+    for sc in sc_objs:
+        logger.info("Deleting StorageClass with name %s", sc.name)
+        sc.delete()
     return True
 
 
-def get_cephblockpool_name():
+def get_cephblockpool_names():
     """
     Function for getting all CephBlockPool
 
     Returns:
          list: list of cephblockpool name
     """
-    POOL = ocp.OCP(
+    pool_obj = ocp.OCP(
         kind=constants.CEPHBLOCKPOOL,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
-    sc_obj = POOL.get()
-    sample = sc_obj['items']
+    result = pool_obj.get()
+    sample = result['items']
     pool_list = [
         item.get('metadata').get('name') for item in sample
     ]
     return pool_list
 
 
-def delete_cephblockpool(pool_name=None):
+def delete_cephblockpools(cbp_objs):
     """
     Function for deleting CephBlockPool
+
+    Args:
+        cbp_objs (list): List of CBP objects for deletion
 
     Returns:
         bool: True if deletion of CephBlockPool is successful
     """
-    POOL = ocp.OCP(
-        kind=constants.CEPHBLOCKPOOL,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
-    )
-    pool_list = get_cephblockpool_name()
-    if pool_name:
-        assert POOL.delete(resource_name=pool_name)
-    else:
-        for item in pool_list:
-            logger.info(f"Deleting CephBlockPool with name {item}")
-            assert POOL.delete(resource_name=item)
-    return True
-
-
-def create_cephfilesystem():
-    """
-    Function for deploying CephFileSystem (MDS)
-
-    Returns:
-        bool: True if CephFileSystem creates successful
-    """
-    fs_data = templating.load_yaml_to_dict(constants.CEPHFILESYSTEM_YAML)
-    fs_data['metadata']['name'] = create_unique_resource_name(
-        'test', 'cephfs'
-    )
-    fs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
-    global CEPHFS_OBJ
-    CEPHFS_OBJ = OCS(**fs_data)
-    CEPHFS_OBJ.create()
-    POD = pod.get_all_pods(
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
-    )
-    assert POD[0].ocp.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.MDS_APP_LABEL,
-        timeout=120
-    )
-
-    assert validate_cephfilesystem(fs_name=fs_data['metadata']['name'])
-    return True
-
-
-def delete_all_cephfilesystem():
-    """
-    Function to Delete CephFileSysem
-
-    Returns:
-        bool: True if deletion of CephFileSystem is successful
-    """
-    CFS = ocp.OCP(
-        kind=constants.CEPHFILESYSTEM,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
-    )
-    result = CFS.get()
-    cephfs_dict = result['items']
-    for item in cephfs_dict:
-        assert CFS.delete(resource_name=item.get('metadata').get('name'))
+    for cbp in cbp_objs:
+        logger.info("Deleting CephBlockPool with name %s", cbp.name)
+        cbp.delete()
     return True
 
 
@@ -571,11 +527,11 @@ def get_cephfs_name():
     Returns:
         str: Name of CFS
     """
-    CFS = ocp.OCP(
+    cfs_obj = ocp.OCP(
         kind=constants.CEPHFILESYSTEM,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
-    result = CFS.get()
+    result = cfs_obj.get()
     return result['items'][0].get('metadata').get('name')
 
 
@@ -603,7 +559,6 @@ def run_io_with_rados_bench(**kw):
     ceph_pods = kw.get('ceph_pods')  # list of pod objects of ceph cluster
     config = kw.get('config')
 
-    clients = []
     role = config.get('role', 'client')
     clients = [cpod for cpod in ceph_pods if role in cpod.roles]
 
@@ -613,7 +568,6 @@ def run_io_with_rados_bench(**kw):
     cleanup = ['--no-cleanup', '--cleanup'][config.get('cleanup', True)]
     pool = config.get('pool')
 
-    pool = create_ceph_block_pool(pool)
     block = str(config.get('size', 4 << 20))
     time = config.get('time', 120)
     time = str(time)
@@ -621,7 +575,7 @@ def run_io_with_rados_bench(**kw):
     rados_bench = (
         f"rados --no-log-to-stderr "
         f"-b {block} "
-        f"-p {pool.name} "
+        f"-p {pool} "
         f"bench "
         f"{time} "
         f"{op} "
