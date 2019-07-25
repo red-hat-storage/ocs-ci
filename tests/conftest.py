@@ -459,14 +459,10 @@ def run_io_in_background(request):
 
             if pod_obj:
                 pod_obj.delete()
-                pod_obj.ocp.wait_for_delete(
-                    resource_name=pod_obj.name
-                )
+                pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
             if pvc_obj:
                 pvc_obj.delete()
-                pvc_obj.ocp.wait_for_delete(
-                    resource_name=pvc_obj.name
-                )
+                pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
             if sc_obj:
                 sc_obj.delete()
             if cbp_obj:
@@ -485,12 +481,9 @@ def run_io_in_background(request):
             interface_name=cbp_obj.name,
             secret_name=secret_obj.name
         )
-        pvc_obj = helpers.create_pvc(
-            sc_name=sc_obj.name, size='2Gi',
-        )
+        pvc_obj = helpers.create_pvc(sc_name=sc_obj.name, size='2Gi')
         pod_obj = helpers.create_pod(
-            interface_type=constants.CEPHBLOCKPOOL,
-            pvc_name=pvc_obj.name
+            interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvc_obj.name
         )
 
         def run_io_in_bg():
