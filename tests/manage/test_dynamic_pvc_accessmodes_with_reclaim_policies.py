@@ -150,11 +150,12 @@ class TestRWODynamicPvc(BaseDynamicPvc):
             rbd_secret_factory,
             cephfs_secret_factory,
             ceph_block_pool_factory,
+            project_factory
     ):
         self.rbd_secret_obj = rbd_secret_factory()
         self.cephfs_secret_obj = cephfs_secret_factory()
         self.cbp_obj = ceph_block_pool_factory()
-
+        self.namespace = project_factory().namespace
 
         def finalizer():
             self.cleanup()

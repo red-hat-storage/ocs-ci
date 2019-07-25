@@ -259,7 +259,9 @@ def project_factory(request):
         Returns:
             object: ocs_ci.ocs.resources.ocs instance of 'Project' kind.
         """
-        if not 'metadata' in kwargs or not kwargs.get('metadata').get('namespace'):
+        if 'metadata' not in kwargs or 'namespace' not in kwargs.get(
+            'metadata'
+        ):
             namespace = helpers.create_unique_resource_name(
                 'test',
                 'namespace'
@@ -437,11 +439,11 @@ def pod_factory(request, project_factory):
             if pvc.storageclass.data[
                 'provisioner'
             ] == defaults.RBD_PROVISIONER:
-                interface_type=constants.CEPHBLOCKPOOL
+                interface_type = constants.CEPHBLOCKPOOL
             elif pvc.storageclass.data[
                 'provisioner'
             ] == defaults.CEPHFS_PROVISIONER:
-                interface_type=constants.CEPHFILESYSTEM
+                interface_type = constants.CEPHFILESYSTEM
 
             pod_obj = helpers.create_pod(
                 pvc_name=pvc.name,
