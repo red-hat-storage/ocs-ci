@@ -171,8 +171,7 @@ def rbd_storageclass_factory(
             sc_obj = helpers.create_storage_class(
                 interface_type=constants.CEPHBLOCKPOOL,
                 interface_name=block_pool.name,
-                secret_name=secret.name,
-                **kwargs
+                secret_name=secret.name
             )
             assert sc_obj, "Failed to create storage class"
         sc_obj.block_pool = block_pool
@@ -223,8 +222,7 @@ def cephfs_storageclass_factory(request, cephfs_secret_factory):
             sc_obj = helpers.create_storage_class(
                 interface_type=constants.CEPHFILESYSTEM,
                 interface_name=helpers.get_cephfs_data_pool_name(),
-                secret_name=secret.name,
-                **kwargs
+                secret_name=secret.name
             )
             assert sc_obj, "Failed to create storage class"
         sc_obj.secret = secret
@@ -269,8 +267,6 @@ def project_factory(request):
             kwargs['metadata'] = kwargs.get('metadata') or {}
             kwargs['metadata']['namespace'] = namespace
 
-        metadata = kwargs.get('metadata') or {}
-        metadata = {}
         proj_obj = OCS(
             kind='Project',
             **kwargs
