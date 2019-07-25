@@ -7,10 +7,6 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
 from tests import helpers
-from tests.fixtures import (
-    create_ceph_block_pool, create_rbd_secret, create_cephfs_secret,
-    create_project
-)
 
 logger = logging.getLogger(__name__)
 
@@ -107,12 +103,6 @@ class BaseDynamicPvc(ManageTest):
 
 
 @tier1
-@pytest.mark.usefixtures(
-    create_ceph_block_pool.__name__,
-    create_rbd_secret.__name__,
-    create_cephfs_secret.__name__,
-    create_project.__name__
-)
 @pytest.mark.parametrize(
     argnames=["interface_type", "reclaim_policy"],
     argvalues=[
@@ -152,7 +142,19 @@ class TestRWODynamicPvc(BaseDynamicPvc):
     expected_pod_failure = 'Multi-Attach error for volume'
 
     @pytest.fixture()
-    def setup_base(self, request, interface_type, reclaim_policy):
+    def setup_base(
+            self,
+            request,
+            interface_type,
+            reclaim_policy,
+            rbd_secret_factory,
+            cephfs_secret_factory,
+            ceph_block_pool_factory,
+    ):
+        self.rbd_secret_obj = rbd_secret_factory()
+        self.cephfs_secret_obj = cephfs_secret_factory()
+        self.cbp_obj = ceph_block_pool_factory()
+
 
         def finalizer():
             self.cleanup()
@@ -235,12 +237,6 @@ class TestRWODynamicPvc(BaseDynamicPvc):
 
 
 @tier1
-@pytest.mark.usefixtures(
-    create_ceph_block_pool.__name__,
-    create_rbd_secret.__name__,
-    create_cephfs_secret.__name__,
-    create_project.__name__
-)
 @pytest.mark.parametrize(
     argnames=["interface_type", "reclaim_policy"],
     argvalues=[
