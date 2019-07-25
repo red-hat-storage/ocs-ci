@@ -138,8 +138,11 @@ def create_project(request):
         """
         Delete the project
         """
-        class_instance.project_obj.delete(resource_name=class_instance.namespace)
+        class_instance.project_obj.delete(
+            resource_name=class_instance.namespace
+        )
         class_instance.project_obj.wait_for_delete(class_instance.namespace)
+        ocp.switch_to_default_rook_cluster_project()
 
     request.addfinalizer(finalizer)
 
