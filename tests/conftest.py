@@ -411,6 +411,8 @@ def run_io_in_background(request):
     """
     if config.RUN['cli_params'].get('io_in_bg'):
         log.info(f"Tests will be running while IO is in the background")
+
+        g_sheet = None
         if config.RUN['google_api_secret']:
             g_sheet = GoogleSpreadSheetAPI("IO BG results", 0)
         else:
