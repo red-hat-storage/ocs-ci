@@ -235,10 +235,10 @@ def create_storage_class(
             constants.CSI_RBD_STORAGECLASS_YAML
         )
         sc_data['parameters'][
-            'csi.storage.k8s.io/node-publish-secret-name'
+            'csi.storage.k8s.io/node-stage-secret-name'
         ] = secret_name
         sc_data['parameters'][
-            'csi.storage.k8s.io/node-publish-secret-namespace'
+            'csi.storage.k8s.io/node-stage-secret-namespace'
         ] = defaults.ROOK_CLUSTER_NAMESPACE
         interface = constants.RBD_INTERFACE
         sc_data['provisioner'] = (
