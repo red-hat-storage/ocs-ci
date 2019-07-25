@@ -3,20 +3,11 @@ import logging
 from tests import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import ManageTest, tier3
-from tests.fixtures import (
-    create_ceph_block_pool,
-    create_rbd_secret, create_cephfs_secret,
-)
 
 log = logging.getLogger(__name__)
 
 
 @tier3
-@pytest.mark.usefixtures(
-    create_rbd_secret.__name__,
-    create_cephfs_secret.__name__,
-    create_ceph_block_pool.__name__,
-)
 class TestCreateStorageClassWithWrongProvisioner(ManageTest):
     """
     Create Storage Class with wrong provisioner
@@ -32,7 +23,13 @@ class TestCreateStorageClassWithWrongProvisioner(ManageTest):
             )
         ]
     )
-    def test_create_storage_class_with_wrong_provisioner(self, interface):
+    def test_create_storage_class_with_wrong_provisioner(
+            self,
+            interface,
+            rbd_secret_factory,
+            cephfs_secret_factory,
+            ceph_block_pool_factory
+    ):
         """
         Test function which creates Storage Class with
         wrong provisioner and verifies PVC status
@@ -40,11 +37,11 @@ class TestCreateStorageClassWithWrongProvisioner(ManageTest):
         log.info(f"Creating a {interface} storage class")
         if interface == "RBD":
             interface_type = constants.CEPHBLOCKPOOL
-            secret = self.rbd_secret_obj.name
-            interface_name = self.cbp_obj.name
+            secret = rbd_secret_factory().name
+            interface_name = ceph_block_pool_factory().name
         else:
             interface_type = constants.CEPHFILESYSTEM
-            secret = self.cephfs_secret_obj.name
+            secret = cephfs_secret_factory().name
             interface_name = helpers.get_cephfs_data_pool_name()
         sc_obj = helpers.create_storage_class(
             interface_type=interface_type,
