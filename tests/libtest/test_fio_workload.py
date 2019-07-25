@@ -3,7 +3,7 @@ import logging
 
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs import workload
-from ocs_ci.framework.testlib import ManageTest
+from ocs_ci.framework.testlib import ManageTest, libtest
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import templating
 
@@ -16,6 +16,7 @@ from tests.fixtures import (
 logger = logging.getLogger(__name__)
 
 
+@libtest
 @pytest.mark.usefixtures(
     create_rbd_secret.__name__,
     create_ceph_block_pool.__name__,
