@@ -48,4 +48,4 @@ ENV_DATA:
   # cause we don't need to update it each time new 14.x version is released
   # but only once when move to new version like v15.
   ceph_image: 'ceph/daemon-base:latest-nautilus-devel'
-  rook_image: 'rook/ceph:master'
+  rook_image: 'rook/ceph:v0.9.0-519.g111610e'
