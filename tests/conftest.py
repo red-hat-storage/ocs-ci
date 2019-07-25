@@ -194,6 +194,20 @@ def cluster(request, log_cli_level):
         template_dir="ocs-deployment/csi/rbd/"
     )
     apply_oc_resource(
+        'csi-node-plugin-psp_rbd.yaml',
+        cluster_path,
+        _templating,
+        config.ENV_DATA,
+        template_dir="ocs-deployment/csi/rbd/"
+    )
+    apply_oc_resource(
+        'csi-provisioner-psp_rbd.yaml',
+        cluster_path,
+        _templating,
+        config.ENV_DATA,
+        template_dir="ocs-deployment/csi/rbd/"
+    )
+    apply_oc_resource(
         'csi-nodeplugin-rbac_cephfs.yaml',
         cluster_path,
         _templating,
@@ -202,6 +216,20 @@ def cluster(request, log_cli_level):
     )
     apply_oc_resource(
         'csi-provisioner-rbac_cephfs.yaml',
+        cluster_path,
+        _templating,
+        config.ENV_DATA,
+        template_dir="ocs-deployment/csi/cephfs/"
+    )
+    apply_oc_resource(
+        'csi-node-plugin-psp_cephfs.yaml',
+        cluster_path,
+        _templating,
+        config.ENV_DATA,
+        template_dir="ocs-deployment/csi/cephfs/"
+    )
+    apply_oc_resource(
+        'csi-provisioner-psp_cephfs.yaml',
         cluster_path,
         _templating,
         config.ENV_DATA,
