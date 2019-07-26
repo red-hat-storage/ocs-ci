@@ -140,7 +140,9 @@ def create_pod(
         f"Failed to create resource {pod_name}"
     )
     if wait:
-        assert wait_for_resource_state(pod_obj, desired_status, 120)
+        assert wait_for_resource_state(
+            resource=pod_obj, state=desired_status, timeout=120
+        )
 
     return pod_obj
 
