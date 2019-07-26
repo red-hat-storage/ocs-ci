@@ -47,5 +47,5 @@ ENV_DATA:
   # Do not change to specific version like v14.2.1-20190430 if not needed
   # cause we don't need to update it each time new 14.x version is released
   # but only once when move to new version like v15.
-  ceph_image: 'ceph/daemon-base:latest-nautilus-devel'
+  ceph_image: 'ceph/ceph:v14.2.2-20190722'
   rook_image: 'rook/ceph:master'
