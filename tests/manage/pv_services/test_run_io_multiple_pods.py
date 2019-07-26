@@ -35,6 +35,7 @@ class BaseRunIOMultiplePods(ManageTest):
     """
     Run IO on multiple pods in parallel
     """
+    validate_pv_deleted = True
     num_of_pvcs = 10
     pvc_size_int = 5
     interface = None

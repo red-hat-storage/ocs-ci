@@ -74,6 +74,28 @@ class PVC(OCS):
         pv_obj.reload()
         return pv_obj
 
+    def delete(self, wait=True, force=False, validate_pv_deleted=False):
+        """
+        Delete the PVC
+
+        Args:
+            wait (bool): True for wait for PVC deletion, False otherwise
+            force (bool): True for force deletion with --grace-period=0,
+                False otherwise
+            validate_pv_deleted (bool): True for respective PV deletion
+                validation, False otherwise
+
+        Returns:
+            str: The result of PVC deletion
+        """
+        backed_pv = None
+        if validate_pv_deleted:
+            backed_pv = self.backed_pv_obj
+        result = super().delete(wait=wait, force=force)
+        if validate_pv_deleted:
+            backed_pv.ocp.wait_for_delete(resource_name=self.backed_pv)
+        return result
+
     def resize_pvc(self, new_size, verify=False):
         """
         Returns the PVC size pvc_name in namespace

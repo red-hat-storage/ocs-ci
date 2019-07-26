@@ -228,9 +228,10 @@ def create_pvcs(request):
         """
         Delete multiple PVCs
         """
+        validate_pv_deleted = getattr(class_instance, 'validate_pv_deleted', False)
         if hasattr(class_instance, 'pvc_objs'):
             for pvc_obj in class_instance.pvc_objs:
-                pvc_obj.delete()
+                pvc_obj.delete(validate_pv_deleted=validate_pv_deleted)
             for pvc_obj in class_instance.pvc_objs:
                 pvc_obj.ocp.wait_for_delete(pvc_obj.name)
 
