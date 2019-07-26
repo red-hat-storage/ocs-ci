@@ -242,6 +242,9 @@ class Pod(OCS):
         if fio_filename:
             self.io_params['filename'] = fio_filename
         self.io_params['iodepth'] = depth
+        if depth > 1:
+            self.io_params['ioengine'] = 'libaio'
+            self.io_params['direct'] = 1
         self.fio_thread = wl.run(**self.io_params)
 
 
