@@ -43,8 +43,6 @@ def do_io_actions(io_type, io_info):
     create_pvc.__name__,
     create_rbd_pod.__name__,
 )
-
-
 @pytest.mark.polarion_id("OCS-685")
 class TestMinimalLimit(ManageTest):
 
