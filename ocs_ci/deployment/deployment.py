@@ -63,11 +63,9 @@ class Deployment(object):
         installer
         """
         if self.teardown and not self.deploy:
-            logger.info(
-                f"Attempting teardown of non-accessible cluster: "
-                f"{self.cluster_path}"
-            )
-            return False
+            msg = f"Attempting teardown of non-accessible cluster: "
+            msg += f"{self.cluster_path}"
+            pytest.fail(msg)
         elif not self.deploy and not self.teardown:
             msg = "The given cluster can not be connected to: {}. ".format(
                 self.cluster_path)
@@ -117,8 +115,6 @@ class Deployment(object):
         install_config = os.path.join(self.cluster_path, "install-config.yaml")
         with open(install_config, "w") as f:
             f.write(install_config_str)
-
-        return True
 
     def deploy_ocs(self):
         """

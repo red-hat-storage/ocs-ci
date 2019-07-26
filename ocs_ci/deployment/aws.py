@@ -104,10 +104,9 @@ class AWSIPI(AWSBase):
                 logger.warning(
                     "OCP cluster is already running, skipping installation"
                 )
-            elif self.deploy_ocp_prereq():
-                self.deploy_ocp(log_cli_level)
             else:
-                return
+                self.deploy_ocp_prereq()
+                self.deploy_ocp(log_cli_level)
 
         if not config.ENV_DATA['skip_ocs_deployment']:
             self.deploy_ocs()
