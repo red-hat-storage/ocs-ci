@@ -111,6 +111,7 @@ class BaseRunIOMultiplePods(ManageTest):
 
 
 @tier2
+@pytest.mark.polarion_id("OCS-692")
 @pytest.mark.usefixtures(
     create_pvcs.__name__,
     create_pods.__name__
@@ -124,12 +125,14 @@ class TestRunIOMultiplePodsRBD(BaseRunIOMultiplePods):
 
     def test_run_io_multiple_pods_rbd(self, rbd_storageclass_factory):
         """
+        Run IO on multiple pods in parallel - RBD
         """
         self.sc_obj = rbd_storageclass_factory(project=self.project)
         self.run_io_multiple_pods()
 
 
 @tier2
+@pytest.mark.polarion_id("OCS-693")
 @pytest.mark.usefixtures(
     create_pvcs.__name__,
     create_pods.__name__
@@ -143,6 +146,7 @@ class TestRunIOMultiplePodsFS(BaseRunIOMultiplePods):
 
     def test_run_io_multiple_pods_fs(self, cephs_storageclass_factory):
         """
+        Run IO on multiple pods in parallel - CephFS
         """
         self.sc_obj = cephs_storageclass_factory(project=self.project)
         self.run_io_multiple_pods()

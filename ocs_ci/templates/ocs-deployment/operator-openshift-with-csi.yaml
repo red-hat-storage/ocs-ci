@@ -110,7 +110,7 @@ spec:
       serviceAccountName: rook-ceph-system
       containers:
       - name: rook-ceph-operator
-        image: {{ rook_image | default('rook/ceph:v1.0.0-256.g01ba50e') }}
+        image: {{ rook_image | default('rook/ceph:master') }}
         args: ["ceph", "operator"]
         volumeMounts:
         - mountPath: /var/lib/rook
@@ -124,17 +124,17 @@ spec:
         - name: ROOK_CSI_ENABLE_CEPHFS
           value: "true"
         - name: ROOK_CSI_CEPH_IMAGE
-          value: "quay.io/cephcsi/cephcsi:canary"
+          value: "{{ ceph_csi_image | default('quay.io/cephcsi/cephcsi:canary') }}"
         - name: ROOK_CSI_ENABLE_RBD
           value: "true"
         - name: ROOK_CSI_REGISTRAR_IMAGE
-          value: "quay.io/k8scsi/csi-node-driver-registrar:v1.1.0"
+          value: "{{ rook_csi_registrar_image | default('quay.io/k8scsi/csi-node-driver-registrar:v1.1.0') }}"
         - name: ROOK_CSI_PROVISIONER_IMAGE
-          value: "quay.io/k8scsi/csi-provisioner:v1.2.0"
+          value: "{{ rook_csi_provisioner_image | default('quay.io/k8scsi/csi-provisioner:v1.2.0') }}"
         - name: ROOK_CSI_SNAPSHOTTER_IMAGE
-          value: "quay.io/k8scsi/csi-snapshotter:v1.1.0"
+          value: "{{ rook_csi_snapshotter_image | default('quay.io/k8scsi/csi-snapshotter:v1.1.0') }}"
         - name: ROOK_CSI_ATTACHER_IMAGE
-          value: "quay.io/k8scsi/csi-attacher:v1.1.1"
+          value: "{{ rook_csi_attacher_image | default('quay.io/k8scsi/csi-attacher:v1.1.1') }}"
         - name: ROOK_HOSTPATH_REQUIRES_PRIVILEGED
           value: "true"
         - name: FLEXVOLUME_DIR_PATH

@@ -7,10 +7,9 @@ import random
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.framework.testlib import ManageTest, tier2
 from ocs_ci.ocs.resources import pvc
 from tests import helpers
-
 log = logging.getLogger(__name__)
 
 
@@ -34,9 +33,6 @@ def setup():
     global CEPHFS_SECRET_OBJ
     CEPHFS_SECRET_OBJ = helpers.create_secret(constants.CEPHFILESYSTEM)
 
-    log.info("Creating CEPH FileSystem")
-    assert helpers.create_cephfilesystem()
-
     log.info("Creating RBD Storageclass")
     assert create_multiple_rbd_storageclasses(count=5)
 
@@ -52,15 +48,15 @@ def teardown():
     log.info("Deleting PVC")
     assert pvc.delete_pvcs(PVC_OBJS)
     log.info("Deleting CEPH BLOCK POOL")
-    assert helpers.delete_cephblockpool()
+    assert helpers.delete_cephblockpools(POOL_OBJS)
     log.info("Deleting RBD Secret")
     RBD_SECRET_OBJ.delete()
     log.info("Deleting CEPHFS Secret")
     CEPHFS_SECRET_OBJ.delete()
-    log.info("Deleting CEPH FILESYSTEM")
-    assert helpers.delete_all_cephfilesystem()
-    log.info("Deleting Storageclass")
-    assert helpers.delete_all_storageclass()
+    log.info("Deleting RBD Storageclass")
+    assert helpers.delete_storageclasses(SC_RBD_OBJS)
+    log.info("Deleting CephFS Storageclass")
+    assert helpers.delete_storageclasses([SC_CEPHFS_OBJ])
 
 
 def create_multiple_rbd_storageclasses(count=1):
@@ -73,12 +69,15 @@ def create_multiple_rbd_storageclasses(count=1):
          count (int): count specify no of storageclass want to create by
             default count is set to one i.e it will create one sc
     """
+    global POOL_OBJS, SC_RBD_OBJS
+    POOL_OBJS = [0] * count
+    SC_RBD_OBJS = [0] * count
     for sc_count in range(count):
         log.info("Creating CephBlockPool")
-        pool_obj = helpers.create_ceph_block_pool()
-        helpers.create_storage_class(
+        POOL_OBJS[sc_count] = helpers.create_ceph_block_pool()
+        SC_RBD_OBJS[sc_count] = helpers.create_storage_class(
             constants.CEPHBLOCKPOOL,
-            interface_name=pool_obj.name,
+            interface_name=POOL_OBJS[sc_count].name,
             secret_name=RBD_SECRET_OBJ.name
         )
 
@@ -94,12 +93,11 @@ def create_pvc(storageclass_list, count=1):
         count (int): count specify no of pvc want's to create
     """
     global PVC_OBJS
-    PVC_OBJS = []
+    PVC_OBJS = [0] * count
     for i in range(count):
         sc_name = random.choice(storageclass_list)
-        pvc_objs = helpers.create_pvc(sc_name)
-        PVC_OBJS.append(pvc_objs)
-        log.info(f"{pvc_objs.name} got created and got Bounded")
+        PVC_OBJS[i] = helpers.create_pvc(sc_name)
+        log.info(f"{PVC_OBJS[i].name} got created and got Bounded")
     return True
 
 
@@ -107,7 +105,8 @@ def create_storageclass_cephfs():
     """
     Function for creating CephFs storageclass
     """
-    helpers.create_storage_class(
+    global SC_CEPHFS_OBJ
+    SC_CEPHFS_OBJ = helpers.create_storage_class(
         constants.CEPHFILESYSTEM,
         helpers.get_cephfs_data_pool_name(),
         CEPHFS_SECRET_OBJ.name
@@ -116,7 +115,7 @@ def create_storageclass_cephfs():
     return True
 
 
-@tier1
+@tier2
 @pytest.mark.usefixtures(
     ocs288_fixture.__name__,
 )
@@ -127,9 +126,8 @@ class TestCreatePVCRandomStorageClass(ManageTest):
     """
 
     def test_create_pvc_with_random_sc(self):
-        storageclass_list = helpers.get_all_storageclass_name()
+        storageclass_list = helpers.get_all_storageclass_names()
         if len(storageclass_list):
             assert create_pvc(storageclass_list, count=20)
         else:
             log.error("No Storageclass Found")
-            return False

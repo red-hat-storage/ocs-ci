@@ -16,7 +16,7 @@ class TestConfig(object):
             assert section == framework.config.get_defaults()[section_name]
 
     def test_defaults_specific(self):
-        assert framework.config.ENV_DATA['rook_image'] == 'rook/ceph:v1.0.0-256.g01ba50e'
+        assert framework.config.ENV_DATA['rook_image'] == 'rook/ceph:master'
         assert framework.config.REPORTING['email']['address'] == 'ocs-ci@redhat.com'
         assert framework.config.RUN['bin_dir'] == './bin'
 

@@ -2,13 +2,14 @@ import logging
 
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs import workload
-from ocs_ci.framework.testlib import ManageTest
+from ocs_ci.framework.testlib import ManageTest, libtest
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import templating
 
 logger = logging.getLogger(__name__)
 
 
+@libtest
 class TestFIOWorkload(ManageTest):
 
     def test_fio_with_block_storage(self, rbd_pod_factory):

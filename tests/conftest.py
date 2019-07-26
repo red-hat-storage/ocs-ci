@@ -2,9 +2,15 @@ import json
 import logging
 import os
 import time
-
+import tempfile
 import pytest
 import yaml
+import threading
+from datetime import datetime
+
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -286,9 +292,10 @@ def project_factory(request):
         """
         for instance in instances:
             if not instance.is_deleted:
-                instance.delete()
+                instance.ocp.switch_to_default_rook_cluster_project()
+                instance.delete(resource_name=instance.namespace)
                 instance.ocp.wait_for_delete(
-                    instance.name
+                    instance.namespace
                 )
 
     request.addfinalizer(finalizer)
@@ -669,6 +676,20 @@ def cluster(request, log_cli_level):
         template_dir="ocs-deployment/csi/rbd/"
     )
     apply_oc_resource(
+        'csi-node-plugin-psp_rbd.yaml',
+        cluster_path,
+        _templating,
+        config.ENV_DATA,
+        template_dir="ocs-deployment/csi/rbd/"
+    )
+    apply_oc_resource(
+        'csi-provisioner-psp_rbd.yaml',
+        cluster_path,
+        _templating,
+        config.ENV_DATA,
+        template_dir="ocs-deployment/csi/rbd/"
+    )
+    apply_oc_resource(
         'csi-nodeplugin-rbac_cephfs.yaml',
         cluster_path,
         _templating,
@@ -677,6 +698,20 @@ def cluster(request, log_cli_level):
     )
     apply_oc_resource(
         'csi-provisioner-rbac_cephfs.yaml',
+        cluster_path,
+        _templating,
+        config.ENV_DATA,
+        template_dir="ocs-deployment/csi/cephfs/"
+    )
+    apply_oc_resource(
+        'csi-node-plugin-psp_cephfs.yaml',
+        cluster_path,
+        _templating,
+        config.ENV_DATA,
+        template_dir="ocs-deployment/csi/cephfs/"
+    )
+    apply_oc_resource(
+        'csi-provisioner-psp_cephfs.yaml',
         cluster_path,
         _templating,
         config.ENV_DATA,
@@ -867,3 +902,117 @@ def log_cli_level(pytestconfig):
 
     """
     return pytestconfig.getini('log_cli_level') or 'DEBUG'
+
+
+@pytest.fixture(scope="session")
+def run_io_in_background(request):
+    """
+    Run IO during the test execution
+    """
+    if config.RUN['cli_params'].get('io_in_bg'):
+        log.info(f"Tests will be running while IO is in the background")
+
+        g_sheet = None
+        if config.RUN['google_api_secret']:
+            g_sheet = GoogleSpreadSheetAPI("IO BG results", 0)
+        else:
+            log.warning(
+                "Google API secret was not found. IO won't be reported to "
+                "a Google spreadsheet"
+            )
+        results = list()
+        temp_file = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='test_status', delete=False
+        )
+
+        def get_test_status():
+            with open(temp_file.name, 'r') as t_file:
+                return t_file.readline()
+
+        def set_test_status(status):
+            with open(temp_file.name, 'w') as t_file:
+                t_file.writelines(status)
+
+        set_test_status('running')
+
+        def finalizer():
+            """
+            Delete the resources created during setup, used for
+            running IO in the test background
+            """
+            set_test_status('finished')
+            try:
+                for status in TimeoutSampler(90, 3, get_test_status):
+                    if status == 'terminated':
+                        break
+            except TimeoutExpiredError:
+                log.warning(
+                    "Background IO was still in progress before IO "
+                    "thread termination"
+                )
+            if thread:
+                thread.join()
+
+            log.info(f"Background IO has stopped")
+            for result in results:
+                log.info(f"IOPs after FIO for pod {pod_obj.name}:")
+                log.info(f"Read: {result[0]}")
+                log.info(f"Write: {result[1]}")
+
+            if pod_obj:
+                pod_obj.delete()
+                pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
+            if pvc_obj:
+                pvc_obj.delete()
+                pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
+            if sc_obj:
+                sc_obj.delete()
+            if cbp_obj:
+                cbp_obj.delete()
+            if secret_obj:
+                secret_obj.delete()
+
+        request.addfinalizer(finalizer)
+
+        secret_obj = helpers.create_secret(
+            interface_type=constants.CEPHBLOCKPOOL
+        )
+        cbp_obj = helpers.create_ceph_block_pool()
+        sc_obj = helpers.create_storage_class(
+            interface_type=constants.CEPHBLOCKPOOL,
+            interface_name=cbp_obj.name,
+            secret_name=secret_obj.name
+        )
+        pvc_obj = helpers.create_pvc(sc_name=sc_obj.name, size='2Gi')
+        pod_obj = helpers.create_pod(
+            interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvc_obj.name
+        )
+
+        def run_io_in_bg():
+            """
+            Run IO by executing FIO and deleting the file created for FIO on
+            the pod, in a while true loop. Will be running as long as
+            the test is running.
+            """
+            while get_test_status() == 'running':
+                pod_obj.run_io('fs', '1G')
+                result = pod_obj.get_fio_results()
+                reads = result.get('jobs')[0].get('read').get('iops')
+                writes = result.get('jobs')[0].get('write').get('iops')
+                if g_sheet:
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    g_sheet.insert_row([now, reads, writes])
+
+                results.append((reads, writes))
+
+                file_path = os.path.join(
+                    pod_obj.get_mount_path(),
+                    pod_obj.io_params['filename']
+                )
+                pod_obj.exec_cmd_on_pod(f'rm -rf {file_path}')
+            set_test_status('terminated')
+
+        log.info(f"Start running IO in the test background")
+
+        thread = threading.Thread(target=run_io_in_bg)
+        thread.start()

@@ -12,7 +12,7 @@ from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.testlib import tier4, ManageTest
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
-from tests.helpers import run_io_with_rados_bench, delete_cephblockpool
+from tests.helpers import run_io_with_rados_bench, delete_cephblockpools, create_ceph_block_pool
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CephHealthException
@@ -39,7 +39,7 @@ def verify_mon_pod_up(ceph_cluster, pods):
     return ret
 
 
-def run_io_on_pool():
+def run_io_on_pool(pool_obj):
     """
     Runs the I/O on the pool and delete the pool
 
@@ -50,15 +50,17 @@ def run_io_on_pool():
 
     return run_io_with_rados_bench(
         ceph_pods=[tools_pod],
-        config={'time': 45, 'cleanup': False,
-                'pool': 'test-pool'
-                }
+        config={
+            'time': 45, 'cleanup': False,
+            'pool': pool_obj.name
+        }
     )
 
 
 @tier4
 @pytest.mark.polarion_id("OCS-355")
 class TestRemoveMonFromCluster(ManageTest):
+    pool_obj = ""
 
     def test_remove_mon_pod_from_cluster(self):
         """
@@ -76,8 +78,9 @@ class TestRemoveMonFromCluster(ManageTest):
         assert len(list_mons) > 1, pytest.skip(
             "INVALID: Mon count should be more than one to delete."
         )
-        assert run_io_on_pool(), 'Failed to run I/O on the pool'
-        assert delete_cephblockpool('test-pool'), 'Failed to delete pool'
+        self.pool_obj = create_ceph_block_pool()
+        assert run_io_on_pool(self.pool_obj), 'Failed to run I/O on the pool'
+        assert delete_cephblockpools([self.pool_obj]), 'Failed to delete pool'
         ceph_cluster.cluster_health_check(timeout=0)
         ceph_cluster.remove_mon_from_cluster()
         assert verify_mon_pod_up(ceph_cluster, pods), f"Mon pods are not up and running state"
