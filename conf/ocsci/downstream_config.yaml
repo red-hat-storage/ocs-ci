@@ -10,4 +10,4 @@ ENV_DATA:
   # rook_csi_provisioner_image:
   # rook_csi_snapshotter_image:
   # rook_csi_attacher_image:
-  cluster_namespace: 'rook-ceph'
+  cluster_namespace: 'openshift-storage'
