@@ -396,7 +396,7 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
 @pytest.mark.usefixtures(
     create_ceph_block_pool.__name__,
     create_rbd_secret.__name__,
-    )
+)
 @pytest.mark.parametrize(
     argnames=["interface_type", "reclaim_policy"],
     argvalues=[
