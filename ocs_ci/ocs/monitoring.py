@@ -131,4 +131,4 @@ def check_pvcdata_collected_on_prometheus(pvc_name):
             f"On prometheus pod for created pvc {pvc_name} related data is not found"
         )
     logger.info(f"Created pvc {pvc_name} data {pvc_list} is collected on prometheus pod")
-    return True
+    return Truee
