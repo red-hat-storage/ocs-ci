@@ -8,11 +8,13 @@ import os
 import re
 import yaml
 import tempfile
+import time, calendar
 from time import sleep
 from threading import Thread
 import base64
 
 from ocs_ci.ocs.ocp import OCP
+from tests import helpers
 from ocs_ci.ocs import workload
 from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.framework import config
@@ -303,13 +305,16 @@ class Pod(OCS):
 def get_all_pods(namespace=None, selector=None):
     """
     Get all pods in a namespace.
+
     Args:
         namespace (str): Name of the namespace
             If namespace is None - get all pods
         selector (list) : List of the resource selector to search with.
             Example: ['alertmanager','prometheus']
+
     Returns:
         list: List of Pod objects
+
     """
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     pods = ocp_pod_obj.get()['items']
@@ -785,6 +790,35 @@ def delete_pods(pod_objs):
     """
     for pod in pod_objs:
         pod.delete()
+
+
+def validate_pods_are_respinned_and_running_state(pod_objs_list):
+    """
+    Verifies the list of the pods are respinned and in running state
+
+    Args:
+        pod_objs_list (list): List of the pods obj
+
+    Returns:
+         True if the pods are respinned and running, False otherwise
+    """
+    for pod in pod_objs_list:
+        _rc = helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING)
+        if not _rc:
+            logger.error(f"failed to reach pod {pod.name} desired status {constants.STATUS_RUNNING}")
+            return False
+
+    for pod in pod_objs_list:
+        pod_obj = pod.get()
+        start_time = pod_obj['status']['startTime']
+        ts = time.strptime(start_time, '%Y-%m-%dT%H:%M:%SZ')
+        ts = calendar.timegm(ts)
+        current_time_utc = time.time()
+        sec = current_time_utc - ts
+        if (sec / constants.SECONDS) >= 1:
+            logger.error(f'Pod {pod.name} is not respinned, the age of the pod is {start_time}')
+            return False
+
     return True
 
 
