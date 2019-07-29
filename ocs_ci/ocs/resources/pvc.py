@@ -87,6 +87,7 @@ class PVC(OCS):
 
         Returns:
             str: The result of PVC deletion
+
         """
         backed_pv = None
         if validate_pv_deleted:
