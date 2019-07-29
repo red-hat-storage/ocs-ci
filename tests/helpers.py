@@ -82,7 +82,9 @@ def wait_for_resource_state(resource, state, timeout=60):
             condition=state, resource_name=resource.name, timeout=timeout
         )
     except TimeoutExpiredError:
-        logger.info(f"{resource.kind} {resource.name} failed to reach {state}")
+        logger.error(f"{resource.kind} {resource.name} failed to reach {state}")
+        resource.reload()
+        logging.error(f"\n{resource.describe()}")
         return False
     logger.info(f"{resource.kind} {resource.name} reached state {state}")
     return True
@@ -140,7 +142,9 @@ def create_pod(
         f"Failed to create resource {pod_name}"
     )
     if wait:
-        assert wait_for_resource_state(pod_obj, desired_status)
+        assert wait_for_resource_state(
+            resource=pod_obj, state=desired_status, timeout=120
+        )
 
     return pod_obj
 
