@@ -145,7 +145,10 @@ def ceph_block_pool_factory(request):
 
 @pytest.fixture()
 def rbd_storageclass_factory(
-        request, ceph_block_pool_factory, rbd_secret_factory):
+    request,
+    ceph_block_pool_factory,
+    rbd_secret_factory
+):
     """
     Create an RBD storage class factory.
     Calling this fixture creates new storage class instance using RBD.

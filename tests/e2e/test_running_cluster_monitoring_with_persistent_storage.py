@@ -51,7 +51,8 @@ class TestRunningClusterMonitoringWithPersistentStorage(E2ETest):
 
     @tier1
     def test_running_cluster_mointoring_with_persistent_storage(
-            self, rbd_storageclass_factory):
+        self, rbd_storageclass_factory
+    ):
         """
         A test case to configure the persistent volume on monitoring pods
         """

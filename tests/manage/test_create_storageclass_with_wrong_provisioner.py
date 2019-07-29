@@ -24,11 +24,11 @@ class TestCreateStorageClassWithWrongProvisioner(ManageTest):
         ]
     )
     def test_create_storage_class_with_wrong_provisioner(
-            self,
-            interface,
-            rbd_secret_factory,
-            cephfs_secret_factory,
-            ceph_block_pool_factory
+        self,
+        interface,
+        rbd_secret_factory,
+        cephfs_secret_factory,
+        ceph_block_pool_factory
     ):
         """
         Test function which creates Storage Class with

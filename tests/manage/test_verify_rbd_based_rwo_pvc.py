@@ -67,12 +67,12 @@ class TestRbdBasedRwoPvc(ManageTest):
         ]
     )
     def test_rbd_based_rwo_pvc(
-            self,
-            reclaim_policy,
-            ceph_block_pool_factory,
-            rbd_secret_factory,
-            rbd_pvc_factory,
-            rbd_pod_factory
+        self,
+        reclaim_policy,
+        ceph_block_pool_factory,
+        rbd_secret_factory,
+        rbd_pvc_factory,
+        rbd_pod_factory
     ):
         """
         Verifies RBD Based RWO Dynamic PVC creation with Reclaim policy set to
