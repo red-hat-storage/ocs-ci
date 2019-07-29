@@ -46,7 +46,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
     """
     Test to verify concurrent creation and deletion of multiple PVCs
     """
-    num_of_pvcs = 10
+    num_of_pvcs = 100
     pvc_size = '3Gi'
 
     def test_multiple_pvc_concurrent_creation_deletion(self):
