@@ -8,8 +8,8 @@ import os
 import re
 import yaml
 import tempfile
-import time, calendar
-from time import sleep
+import time
+import calendar
 from threading import Thread
 import base64
 
@@ -542,7 +542,7 @@ def run_io_in_bg(pod_obj, expect_to_fail=False):
 
     thread = Thread(target=exec_run_io_cmd, args=(pod_obj, expect_to_fail,))
     thread.start()
-    sleep(2)
+    time.sleep(2)
 
     # Checking file existence
     test_file = TEST_FILE + "1"
