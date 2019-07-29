@@ -11,3 +11,6 @@ ENV_DATA:
   # rook_csi_snapshotter_image:
   # rook_csi_attacher_image:
   cluster_namespace: 'rook-ceph'
+REPORTING:
+  # Upstream: 'US' or Downstream: 'DS'
+  us_ds: 'DS'

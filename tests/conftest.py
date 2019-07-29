@@ -30,7 +30,7 @@ from ocs_ci.utility.environment_check import (
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     destroy_cluster, run_cmd, get_openshift_installer, get_openshift_client,
-    is_cluster_running, ocsci_log_path
+    is_cluster_running, ocsci_log_path, get_testrun_id,
 )
 from tests import helpers
 
@@ -55,7 +55,7 @@ def pytest_logger_config(logger_config):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def polarion_testsuite_properties(record_testsuite_property):
+def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
     """
     Configures polarion testsuite properties for junit xml
     """
@@ -66,6 +66,21 @@ def polarion_testsuite_properties(record_testsuite_property):
         record_testsuite_property(
             'polarion-custom-description', jenkins_build_url
         )
+    polarion_testrun_id = get_testrun_id()
+    polarion_custom_plannedin = config.REPORTING['ocs_version'].translate(
+        str.maketrans(
+            {key: '-' for key in ''' \\/.:*"<>|~!@#$?%^&'*(){}+`,=\t'''}
+        )
+    )
+    record_testsuite_property(
+        'polarion-testrun-id', polarion_testrun_id
+    )
+    record_testsuite_property(
+        'polarion-custom-plannedin', polarion_custom_plannedin
+    )
+    record_testsuite_property(
+        'polarion-testrun-status-id', 'inprogress'
+    )
 
 
 def cluster_teardown(log_level="DEBUG"):

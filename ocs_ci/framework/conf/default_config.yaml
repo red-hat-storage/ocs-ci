@@ -36,6 +36,9 @@ REPORTING:
     address: "ocs-ci@redhat.com"
   polarion:
     project_id: "OpenShiftContainerStorage"
+  ocs_version: '4.2'
+  # Upstream: 'US' or Downstream: 'DS'
+  us_ds: 'US'
 
 # This is the default information about environment. Will be overwritten with
 # --cluster-conf file.yaml data you will pass to the pytest.

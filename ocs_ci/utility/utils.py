@@ -807,7 +807,7 @@ def email_reports():
     [recipients.append(mailid) for mailid in mailids.split(",")]
     sender = "ocs-ci@redhat.com"
     msg = MIMEMultipart('alternative')
-    msg['Subject'] = f"ocs-ci results for RUN ID: {config.RUN['run_id']}"
+    msg['Subject'] = f"ocs-ci results for {get_testrun_id()} (RUN ID: {config.RUN['run_id']})"
     msg['From'] = sender
     msg['To'] = ", ".join(recipients)
 
@@ -950,3 +950,31 @@ def ocsci_log_path():
             f"ocs-ci-logs-{config.RUN['run_id']}"
         )
     )
+
+
+def get_testrun_id():
+    """
+    Prepare testrun ID for Polarion (and other reports).
+
+    Return config.REPORTING["polarion"]["testrun_id"], if configured.
+    Otherwise prepare testrun ID based on Upstream/Downstream information,
+    OCS version and used markers.
+
+    Returns:
+        str: String containing testrun ID
+    """
+    markers = config.RUN['cli_params'].get('-m', '').replace(" ", "-")
+    us_ds = config.REPORTING.get("us_ds")
+    if config.REPORTING["polarion"].get("testrun_id"):
+        testrun_id = config.REPORTING["polarion"]["testrun_id"]
+    elif markers:
+        testrun_id = f"OCS_{us_ds}_{config.REPORTING['ocs_version']}_{markers}"
+    else:
+        testrun_id = f"OCS_{us_ds}_{config.REPORTING['ocs_version']}_CUSTOM"
+    # replace invalid character(s) by '-'
+    testrun_id = testrun_id.translate(
+        str.maketrans(
+            {key: '-' for key in ''' \\/.:*"<>|~!@#$?%^&'*(){}+`,=\t'''}
+        )
+    )
+    return testrun_id
