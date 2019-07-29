@@ -8,7 +8,6 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import ManageTest, tier2
-from ocs_ci.ocs.resources import pvc
 from tests import helpers
 log = logging.getLogger(__name__)
 
@@ -46,7 +45,7 @@ def teardown():
     """
     global RBD_SECRET_OBJ, CEPHFS_SECRET_OBJ
     log.info("Deleting PVC")
-    assert pvc.delete_pvcs(PVC_OBJS)
+    assert helpers.delete_pvcs(PVC_OBJS)
     log.info("Deleting CEPH BLOCK POOL")
     assert helpers.delete_cephblockpools(POOL_OBJS)
     log.info("Deleting RBD Secret")

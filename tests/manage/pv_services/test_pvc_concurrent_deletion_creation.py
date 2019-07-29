@@ -8,11 +8,12 @@ from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.utility.utils import run_async
 from ocs_ci.framework.testlib import tier1, ManageTest
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
-from ocs_ci.ocs.resources.pvc import delete_pvcs
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool, create_rbd_secret
 )
-from tests.helpers import create_unique_resource_name, create_multiple_pvcs
+from tests.helpers import (
+    create_unique_resource_name, create_multiple_pvcs, delete_pvcs
+)
 
 log = logging.getLogger(__name__)
 

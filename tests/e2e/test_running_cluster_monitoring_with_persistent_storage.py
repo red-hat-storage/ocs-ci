@@ -4,7 +4,6 @@ import pytest
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework.testlib import tier1, E2ETest
-from ocs_ci.ocs.resources.pvc import delete_pvcs
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
@@ -12,6 +11,7 @@ from ocs_ci.ocs.monitoring import (
     validate_monitoring_pods_are_respinned_and_running_state,
     get_list_pvc_objs_created_on_monitoring_pods
 )
+from tests import helpers
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool,
     create_rbd_secret
@@ -26,20 +26,18 @@ def test_fixture(request):
     """
     Setup and teardown
     """
-    self = request.node.cls
-
     def finalizer():
-        teardown(self)
+        teardown()
     request.addfinalizer(finalizer)
 
 
-def teardown(self):
+def teardown():
     """
     Delete pvc and config map created
     """
     assert ocp.delete(resource_name='cluster-monitoring-config')
     pvc_obj_list = get_list_pvc_objs_created_on_monitoring_pods()
-    assert delete_pvcs(pvc_obj_list)
+    assert helpers.delete_pvcs(pvc_obj_list)
 
 
 @pytest.mark.usefixtures(

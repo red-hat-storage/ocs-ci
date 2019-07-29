@@ -609,7 +609,28 @@ def get_all_pvs():
     return ocp_pv_obj.get()
 
 
-@retry(AssertionError, tries=10, delay=5, backoff=1)
+def delete_pvcs(pvc_objs, wait=True):
+    """
+    Deletes list of the pvc objects
+
+    Args:
+        pvc_objs (list): List of the pvc objects to be deleted
+        wait (bool): True if need to wait for PVCs deletion
+
+    Returns:
+        bool: True if deletion is successful
+    """
+    status = pvc.delete_pvcs(pvc_objs)
+    if wait:
+        for pvc_obj in pvc_objs:
+            if pvc_obj.backed_pv_obj().get('spec').get(
+                'persistentVolumeReclaimPolicy'
+            ) == 'Delete':
+                validate_pv_delete(pvc_obj.name)
+    return status
+
+
+@retry(AssertionError, tries=10, delay=3, backoff=1)
 def validate_pv_delete(pv_name):
     """
     validates if pv is deleted after pvc deletion
@@ -628,7 +649,7 @@ def validate_pv_delete(pv_name):
 
     try:
         if ocp_pv_obj.get(resource_name=pv_name):
-            raise AssertionError
+            raise AssertionError(f"PV {pv_name} failed to delete")
 
     except CommandFailed:
         return True
