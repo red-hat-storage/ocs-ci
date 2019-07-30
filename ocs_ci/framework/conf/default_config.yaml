@@ -36,8 +36,7 @@ REPORTING:
     address: "ocs-ci@redhat.com"
   polarion:
     project_id: "OpenShiftContainerStorage"
-  ocs_version: '4.2'
-  # Upstream: 'US' or Downstream: 'DS'
+  # Upstream: 'US' or Downstream: 'DS' - used only for reporting (Test Run ID)
   us_ds: 'US'
 
 # This is the default information about environment. Will be overwritten with

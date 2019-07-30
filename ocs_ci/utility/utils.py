@@ -968,9 +968,9 @@ def get_testrun_id():
     if config.REPORTING["polarion"].get("testrun_id"):
         testrun_id = config.REPORTING["polarion"]["testrun_id"]
     elif markers:
-        testrun_id = f"OCS_{us_ds}_{config.REPORTING['ocs_version']}_{markers}"
+        testrun_id = f"OCS_{us_ds}_{config.REPORTING.get('testrun_id_part', '')}_{markers}"
     else:
-        testrun_id = f"OCS_{us_ds}_{config.REPORTING['ocs_version']}_CUSTOM"
+        testrun_id = f"OCS_{us_ds}_{config.REPORTING.get('testrun_id_part', '')}"
     # replace invalid character(s) by '-'
     testrun_id = testrun_id.translate(
         str.maketrans(
