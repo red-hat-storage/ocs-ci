@@ -61,8 +61,8 @@ class BaseDynamicPvc(ManageTest):
         )
 
         logger.info(
-                    f"Creating first pod on node: {self.worker_nodes_list[0]}"
-                    f" with pvc {self.pvc_obj.name}"
+            f"Creating first pod on node: {self.worker_nodes_list[0]}"
+            f" with pvc {self.pvc_obj.name}"
         )
         self.pod_obj1 = helpers.create_pod(
             interface_type=self.interface_type, pvc_name=self.pvc_obj.name,
