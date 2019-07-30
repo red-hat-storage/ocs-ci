@@ -67,16 +67,8 @@ def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
             'polarion-custom-description', jenkins_build_url
         )
     polarion_testrun_id = get_testrun_id()
-    polarion_custom_plannedin = config.REPORTING['ocs_version'].translate(
-        str.maketrans(
-            {key: '-' for key in ''' \\/.:*"<>|~!@#$?%^&'*(){}+`,=\t'''}
-        )
-    )
     record_testsuite_property(
         'polarion-testrun-id', polarion_testrun_id
-    )
-    record_testsuite_property(
-        'polarion-custom-plannedin', polarion_custom_plannedin
     )
     record_testsuite_property(
         'polarion-testrun-status-id', 'inprogress'
