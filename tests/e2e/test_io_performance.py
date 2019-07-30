@@ -38,11 +38,19 @@ class TestIOPerformance(ManageTest):
         ]
     )
     def test_run_io(
-        self, size, io_direction, jobs, runtime, depth, sheet_index
+        self,
+        size,
+        io_direction,
+        jobs,
+        runtime,
+        depth,
+        sheet_index,
+        rbd_pod_factory
     ):
         """
         Test IO
         """
+        self.pod_obj = rbd_pod_factory()
         logging.info(
             f"Running FIO with:\nsize: {size}\njobs: {jobs}\n"
             f"runtime: {runtime}\nIO depth: {depth}\n"
