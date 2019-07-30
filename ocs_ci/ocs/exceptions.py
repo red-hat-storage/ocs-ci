@@ -38,3 +38,7 @@ class MonCountException(Exception):
 
 class MDSCountException(Exception):
     pass
+
+
+class DeploymentPlatformNotSupported(Exception):
+    pass
