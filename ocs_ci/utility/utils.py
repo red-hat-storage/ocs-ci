@@ -13,6 +13,7 @@ import yaml
 import re
 import smtplib
 
+from ocs_ci.ocs.exceptions import CephHealthException
 from ocs_ci.ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
 )
@@ -21,6 +22,7 @@ from ocs_ci.utility.aws import AWS
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from ocs_ci.ocs import constants
+from ocs_ci.utility.retry import retry
 from bs4 import BeautifulSoup
 
 log = logging.getLogger(__name__)
@@ -978,3 +980,41 @@ def get_testrun_id():
         )
     )
     return testrun_id
+
+
+@retry((CephHealthException, CommandFailed), tries=20, delay=30, backoff=1)
+def ceph_health_check(namespace=None):
+    """
+    Exec `ceph health` cmd on tools pod to determine health of cluster.
+
+    Args:
+        namespace (str): Namespace of OCS
+            (default: config.ENV_DATA['cluster_namespace'])
+
+    Raises:
+        CephHealthException: If the ceph health returned is not HEALTH_OK
+        CommandFailed: If the command to retrieve the tools pod name or the
+            command to get ceph health returns a non-zero exit code
+    Returns:
+        boolean: True if HEALTH_OK
+
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    run_cmd(
+        f"oc wait --for condition=ready pod "
+        f"-l app=rook-ceph-tools "
+        f"-n {namespace} "
+        f"--timeout=120s"
+    )
+    tools_pod = run_cmd(
+        f"oc -n {namespace} get pod -l 'app=rook-ceph-tools' "
+        f"-o jsonpath='{{.items[0].metadata.name}}'"
+    )
+    health = run_cmd(f"oc -n {namespace} exec {tools_pod} ceph health")
+    if health.strip() == "HEALTH_OK":
+        log.info("HEALTH_OK, install successful.")
+        return True
+    else:
+        raise CephHealthException(
+            f"Ceph cluster health is not OK. Health: {health}"
+        )

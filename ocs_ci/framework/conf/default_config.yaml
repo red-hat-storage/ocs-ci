@@ -45,7 +45,10 @@ ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
   cluster_namespace: 'rook-ceph'
   platform: 'AWS'
+  deployment_type: 'ipi'
   region: 'us-east-2'
+  skip_ocp_deployment: false
+  skip_ocs_deployment: false
   # Do not change to specific version like v14.2.1-20190430 if not needed
   # cause we don't need to update it each time new 14.x version is released
   # but only once when move to new version like v15.
