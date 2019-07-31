@@ -16,7 +16,9 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.utility.environment_check import (
     get_status_before_execution, get_status_after_execution
 )
-from ocs_ci.utility.utils import get_openshift_client, ocsci_log_path
+from ocs_ci.utility.utils import (
+    get_openshift_client, ocsci_log_path, get_testrun_name
+)
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
 from ocs_ci.ocs import constants
@@ -43,7 +45,7 @@ def pytest_logger_config(logger_config):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def polarion_testsuite_properties(record_testsuite_property):
+def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
     """
     Configures polarion testsuite properties for junit xml
     """
@@ -54,6 +56,13 @@ def polarion_testsuite_properties(record_testsuite_property):
         record_testsuite_property(
             'polarion-custom-description', jenkins_build_url
         )
+    polarion_testrun_name = get_testrun_name()
+    record_testsuite_property(
+        'polarion-testrun-id', polarion_testrun_name
+    )
+    record_testsuite_property(
+        'polarion-testrun-status-id', 'inprogress'
+    )
 
 
 @pytest.fixture(scope="session", autouse=True)
