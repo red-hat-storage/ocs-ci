@@ -12,5 +12,5 @@ ENV_DATA:
   # rook_csi_attacher_image:
   cluster_namespace: 'rook-ceph'
 REPORTING:
-  # Upstream: 'US' or Downstream: 'DS' - used only for reporting (Test Run ID)
+  # Upstream: 'US' or Downstream: 'DS', used only for reporting (Test Run Name)
   us_ds: 'DS'

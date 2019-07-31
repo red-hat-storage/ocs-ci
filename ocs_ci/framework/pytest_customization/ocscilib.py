@@ -118,7 +118,7 @@ def pytest_configure(config):
         del config._metadata['Plugins']
         del config._metadata['Platform']
 
-        config._metadata['Test Run ID'] = get_testrun_name()
+        config._metadata['Test Run Name'] = get_testrun_name()
 
         try:
             # add cluster version
