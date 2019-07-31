@@ -77,6 +77,34 @@ class PVC(OCS):
         pv_obj.reload()
         return pv_obj
 
+    def verify_pv_exists_in_backend(
+            self, pool_name
+    ):
+        """
+        Verifies given pv exists in ceph backend
+
+        Args:
+            pool_name (str): Name of the rbd-pool
+
+        Returns:
+             bool: True if pv exists on backend, False otherwise
+
+        """
+        spec_volhandle = "'{.spec.csi.volumeHandle}'"
+        cmd = f"oc get pv/{self.backed_pv} -o jsonpath={spec_volhandle} -n {self.namespace}"
+        out = run_cmd(cmd=cmd)
+        image_uuid = "-".join(out.split('-')[5:10])
+        cmd = f"rbd info -p {pool_name} csi-vol-{image_uuid}"
+        ct_pod = pod.get_ceph_tools_pod()
+        try:
+            ct_pod.exec_ceph_cmd(
+                ceph_cmd=cmd, format='json'
+            )
+        except CommandFailed as ecf:
+            log.error(f"PV is not found on ceph backend: str{ecf}")
+            return False
+        return True
+
     def resize_pvc(self, new_size, verify=False):
         """
         Returns the PVC size pvc_name in namespace
@@ -123,33 +151,3 @@ def get_all_pvcs(namespace=None):
     )
     out = ocp_pvc_obj.get()
     return out
-
-
-def verify_pv_exists_in_backend(
-    pv_name, pool_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE
-):
-    """
-    Verifies given pv exists in ceph backend
-
-    Args:
-        pv_name (str): Name of the pv
-        pool_name (str): Name of the rbd-pool
-        namespace (str): Name of namespace
-    Returns:
-         bool: True if pv exists on backend, False otherwise
-    """
-    spec_volhandle = "'{.spec.csi.volumeHandle}'"
-    cmd = f"oc get pv/{pv_name} -o jsonpath={spec_volhandle} -n {namespace}"
-    out = run_cmd(cmd=cmd)
-    image_uuid = "-"
-    image_uuid = image_uuid.join(out.split('-')[5:10])
-    cmd = f"rbd info -p {pool_name} csi-vol-{image_uuid}"
-    ct_pod = pod.get_ceph_tools_pod()
-    try:
-        ct_pod.exec_ceph_cmd(
-            ceph_cmd=cmd, format='json'
-        )
-    except CommandFailed as ecf:
-        log.error(f"PV is not found on ceph backend: str{ecf}")
-        return False
-    return True

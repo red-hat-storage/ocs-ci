@@ -49,28 +49,28 @@ def check_ceph_used_space():
 
 
 @retry(UnexpectedBehaviour, tries=5, delay=3, backoff=1)
-def verify_pv_not_exists(pv_name, cbp_name):
+def verify_pv_not_exists(pvc_obj, cbp_name):
     """
     Ensure that pv does not exists
     """
 
     # Validate on ceph side
-    logger.info(f"Verifying pv {pv_name} exists on backend")
+    logger.info(f"Verifying pv {pvc_obj.backed_pv} exists on backend")
 
-    _rc = pvc.verify_pv_exists_in_backend(pv_name, cbp_name)
+    _rc = pvc_obj.verify_pv_exists_in_backend(cbp_name)
 
     if _rc:
-        raise UnexpectedBehaviour(f"pv {pv_name} exists on backend")
+        raise UnexpectedBehaviour(f"pv {pvc_obj.backed_pv} exists on backend")
     logger.info(
-        f"Expected: pv {pv_name} doesn't exist on backend after deleting pvc"
+        f"Expected: pv {pvc_obj.backed_pv} doesn't exist on backend after deleting pvc"
     )
 
     # Validate on oc side
     try:
-        PV.get(pv_name)
+        PV.get(pvc_obj.backed_pv)
     except CommandFailed as ecf:
         assert "not found" in str(ecf), (
-            f"Unexpected: pv {pv_name} still exists"
+            f"Unexpected: pv {pvc_obj.backed_pv} still exists"
         )
     logger.info(
         f"Expected: pv should not be found "
@@ -87,7 +87,7 @@ def create_pvc_and_verify_pvc_exists(sc_name, cbp_name):
 
     # Validate pv is created on ceph
     logger.info(f"Verifying pv exists on backend")
-    pvc.verify_pv_exists_in_backend(pvc_obj.backed_pv, cbp_name)
+    pvc_obj.verify_pv_exists_in_backend(cbp_name)
     return pvc_obj
 
 
@@ -120,7 +120,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         assert used_before_creating_pvc < used_after_creating_pvc
         pod_obj.delete()
         pvc_obj.delete()
-        verify_pv_not_exists(pvc_obj.backed_pv, self.cbp_obj.name)
+        verify_pv_not_exists(pvc_obj, self.cbp_obj.name)
         used_after_deleting_pvc = check_ceph_used_space()
         logger.info(f"Used after deleting pvc {used_after_deleting_pvc}")
         assert used_after_deleting_pvc < used_after_creating_pvc
