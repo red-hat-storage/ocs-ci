@@ -4,10 +4,8 @@ leftovers
 """
 import copy
 import logging
-
 import yaml
 from gevent.threadpool import ThreadPoolExecutor
-
 from ocs_ci.ocs import ocp, constants, exceptions
 
 log = logging.getLogger(__name__)
@@ -46,7 +44,7 @@ def compare_dicts(before, after):
         after (dict): Dictionary after execution
 
     Returns:
-        list: List of 2 dicts - [added items, removed items]
+        list: List of 2 lists - ('added' and 'removed' are lists)
     """
     added = []
     removed = []
