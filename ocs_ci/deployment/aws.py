@@ -17,7 +17,7 @@ from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.utility import utils
 
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 # As of now only IPI
