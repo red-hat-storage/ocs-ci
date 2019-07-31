@@ -1,4 +1,3 @@
-import pytest
 import logging
 
 from ocs_ci.framework.testlib import ManageTest, tier1

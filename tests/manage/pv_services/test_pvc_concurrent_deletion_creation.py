@@ -39,9 +39,9 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
     """
 
     def test_multiple_pvc_concurrent_creation_deletion(
-            self,
-            rbd_pvc_factory
-        ):
+        self,
+        rbd_pvc_factory
+    ):
         """
         To exercise resource creation and deletion
         """

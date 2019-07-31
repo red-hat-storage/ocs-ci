@@ -298,10 +298,6 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
         self.dynamic_pvc_base(interface_type, reclaim_policy)
 
     @tier1
-    @pytest.mark.usefixtures(
-        create_cephfs_secret.__name__,
-        create_project.__name__
-    )
     @pytest.mark.parametrize(
         argnames=["interface_type", "reclaim_policy"],
         argvalues=[
@@ -315,7 +311,12 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
             )
         ]
     )
-    def test_rwx_dynamic_pvc(self, setup_base):
+    def test_rwx_dynamic_pvc(
+        self,
+        setup_base,
+        cephfs_pvc_factory,
+        project_factory
+    ):
         """
         RWX Dynamic PVC creation tests with Reclaim policy set to Delete/Retain
         """
@@ -324,6 +325,8 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
             f"Creating second pod on node: {self.worker_nodes_list[1]} "
             f"with pvc {self.pvc_obj.name}"
         )
+        self.namespace=project_factory().namespace
+        self.pvc_obj = cephfs_pvc_factory()
 
         pod_obj2 = helpers.create_pod(
             interface_type=self.interface_type, pvc_name=self.pvc_obj.name,

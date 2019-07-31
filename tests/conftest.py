@@ -19,7 +19,8 @@ from ocs_ci.utility.environment_check import (
 from ocs_ci.utility.utils import get_openshift_client, ocsci_log_path
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs.resources.ocs import OCS
 
 
 log = logging.getLogger(__name__)
