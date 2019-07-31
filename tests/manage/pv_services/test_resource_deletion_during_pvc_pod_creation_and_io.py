@@ -243,7 +243,8 @@ class TestForRBD(OperationsBase):
 @pytest.mark.usefixtures(
     create_cephfs_secret.__name__,
     create_cephfs_storageclass.__name__,
-    create_pvcs.__name__
+    create_pvcs.__name__,
+    test_fixture.__name__
 )
 class TestForCephFS(OperationsBase):
     """
