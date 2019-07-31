@@ -268,7 +268,19 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
     storage_type = 'fs'
 
     @pytest.fixture()
-    def setup_base(self, request, interface_type, reclaim_policy):
+    def setup_base(
+        self,
+        request,
+        interface_type,
+        reclaim_policy,
+        cephfs_secret_factory,
+        project_factory,
+        cephfs_pvc_factory
+    ):
+        self.cephfs_secret_obj = cephfs_secret_factory()
+        self.project = project_factory()
+        self.namespace = self.project.namespace
+        self.pvc_obj = cephfs_pvc_factory(project = self.project)
 
         def finalizer():
             self.cleanup()
@@ -304,8 +316,6 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
             f"Creating second pod on node: {self.worker_nodes_list[1]} "
             f"with pvc {self.pvc_obj.name}"
         )
-        self.namespace = project_factory().namespace
-        self.pvc_obj = cephfs_pvc_factory()
 
         pod_obj2 = helpers.create_pod(
             interface_type=self.interface_type, pvc_name=self.pvc_obj.name,
