@@ -958,28 +958,29 @@ def get_testrun_name():
     """
     Prepare testrun ID for Polarion (and other reports).
 
-    Return config.REPORTING["polarion"]["testrun_id"], if configured.
+    Return config.REPORTING["polarion"]["testrun_name"], if configured.
     Otherwise prepare testrun ID based on Upstream/Downstream information,
     OCS version and used markers.
 
     Returns:
         str: String containing testrun ID
+
     """
     markers = config.RUN['cli_params'].get('-m', '').replace(" ", "-")
     us_ds = config.REPORTING.get("us_ds")
-    if config.REPORTING["polarion"].get("testrun_id"):
-        testrun_id = config.REPORTING["polarion"]["testrun_id"]
+    if config.REPORTING["polarion"].get("testrun_name"):
+        testrun_name = config.REPORTING["polarion"]["testrun_name"]
     elif markers:
-        testrun_id = f"OCS_{us_ds}_{config.REPORTING.get('testrun_id_part', '')}_{markers}"
+        testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}_{markers}"
     else:
-        testrun_id = f"OCS_{us_ds}_{config.REPORTING.get('testrun_id_part', '')}"
+        testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}"
     # replace invalid character(s) by '-'
-    testrun_id = testrun_id.translate(
+    testrun_name = testrun_name.translate(
         str.maketrans(
             {key: '-' for key in ''' \\/.:*"<>|~!@#$?%^&'*(){}+`,=\t'''}
         )
     )
-    return testrun_id
+    return testrun_name
 
 
 @retry((CephHealthException, CommandFailed), tries=20, delay=30, backoff=1)

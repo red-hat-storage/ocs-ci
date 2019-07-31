@@ -56,9 +56,9 @@ def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
         record_testsuite_property(
             'polarion-custom-description', jenkins_build_url
         )
-    polarion_testrun_id = get_testrun_name()
+    polarion_testrun_name = get_testrun_name()
     record_testsuite_property(
-        'polarion-testrun-id', polarion_testrun_id
+        'polarion-testrun-id', polarion_testrun_name
     )
     record_testsuite_property(
         'polarion-testrun-status-id', 'inprogress'
