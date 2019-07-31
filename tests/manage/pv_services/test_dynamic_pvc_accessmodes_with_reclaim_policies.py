@@ -251,27 +251,6 @@ class TestRWODynamicPvc(BaseDynamicPvc):
 
 
 @tier1
-@pytest.mark.parametrize(
-    argnames=["interface_type", "reclaim_policy"],
-    argvalues=[
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, constants.RECLAIM_POLICY_RETAIN],
-            marks=pytest.mark.polarion_id("OCS-547")
-        ),
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, constants.RECLAIM_POLICY_DELETE],
-            marks=pytest.mark.polarion_id("OCS-538")
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_RETAIN],
-            marks=pytest.mark.polarion_id("OCS-542")
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_DELETE],
-            marks=pytest.mark.polarion_id("OCS-529")
-        )
-    ]
-)
 class TestRWXDynamicPvc(BaseDynamicPvc):
     """
     Automates the following test cases
