@@ -20,7 +20,7 @@ from ocs_ci.utility.utils import (
     get_ceph_version,
     get_rook_version,
     get_csi_versions,
-    get_testrun_id,
+    get_testrun_name,
 )
 from ocs_ci.ocs.utils import collect_ocs_logs
 
@@ -118,7 +118,7 @@ def pytest_configure(config):
         del config._metadata['Plugins']
         del config._metadata['Platform']
 
-        config._metadata['Test Run ID'] = get_testrun_id()
+        config._metadata['Test Run ID'] = get_testrun_name()
 
         try:
             # add cluster version

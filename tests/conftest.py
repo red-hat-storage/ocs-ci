@@ -17,7 +17,7 @@ from ocs_ci.utility.environment_check import (
     get_status_before_execution, get_status_after_execution
 )
 from ocs_ci.utility.utils import (
-    get_openshift_client, ocsci_log_path, get_testrun_id
+    get_openshift_client, ocsci_log_path, get_testrun_name
 )
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
@@ -56,7 +56,7 @@ def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
         record_testsuite_property(
             'polarion-custom-description', jenkins_build_url
         )
-    polarion_testrun_id = get_testrun_id()
+    polarion_testrun_id = get_testrun_name()
     record_testsuite_property(
         'polarion-testrun-id', polarion_testrun_id
     )
