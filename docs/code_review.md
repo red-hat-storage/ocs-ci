@@ -26,6 +26,9 @@
     approved  from github by at least 2 project maintainers before merge.
 * All comments should be addressed or responded and once comment is considered
     as closed we should Resolve conversation to close the comment.
+* If there are new review comments for a PR that is older than 4 days, the
+    author can take it up as follow on PR after the issue is filed in github
+    to address new review comments.
 * If some fixes required from the comment, please do not do
     `git commit --amend` and `git push --force` as we lose the history of
     changes and it's hard for reviewer to see what was really changed from the
