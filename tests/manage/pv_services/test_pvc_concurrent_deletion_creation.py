@@ -8,7 +8,7 @@ import pytest
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.framework.testlib import tier1, ManageTest, bugzilla
 from ocs_ci.ocs.resources.pvc import delete_pvcs
-from tests.helpers import create_multiple_pvcs, wait_for_resource_state
+from tests.helpers import wait_for_resource_state
 
 log = logging.getLogger(__name__)
 

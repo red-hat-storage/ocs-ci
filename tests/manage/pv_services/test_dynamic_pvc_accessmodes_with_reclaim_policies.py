@@ -325,7 +325,7 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
             f"Creating second pod on node: {self.worker_nodes_list[1]} "
             f"with pvc {self.pvc_obj.name}"
         )
-        self.namespace=project_factory().namespace
+        self.namespace = project_factory().namespace
         self.pvc_obj = cephfs_pvc_factory()
 
         pod_obj2 = helpers.create_pod(
