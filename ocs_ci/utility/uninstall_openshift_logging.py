@@ -73,4 +73,3 @@ def uninstall_cluster_logging():
         for resource in resources_to_delete:
             assert project_obj.delete(resource_name=resource)
             logger.info(f"The resource {resource} is deleted")
-
