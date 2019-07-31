@@ -67,7 +67,8 @@ class AWSBase(Deployment):
         Args:
             size (int): Size of volume in GB (default: 100)
         """
-        with open(os.path.join(self.cluster_path, "terraform.tfvars")) as f:
+        tfvars_file = "terraform.tfvars.json"
+        with open(os.path.join(self.cluster_path, tfvars_file)) as f:
             tfvars = json.load(f)
 
         cluster_id = tfvars['cluster_id']

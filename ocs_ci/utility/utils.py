@@ -563,7 +563,7 @@ def get_openshift_mirror_url(file_name, version):
     else:
         raise UnsupportedOSType
     url = (
-        f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
+        f"https://openshift-release-artifacts.svc.ci.openshift.org/"
         f"{version}/{file_name}-{os_type}-{version}.tar.gz"
     )
     return url
