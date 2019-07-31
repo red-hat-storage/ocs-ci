@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier1, tier3
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import pod
@@ -58,6 +58,17 @@ class BaseDynamicPvc(ManageTest):
         self.pvc_obj = helpers.create_pvc(
             sc_name=self.sc_obj.name, namespace=self.namespace,
             size=self.pvc_size, wait=True, access_mode=self.access_mode
+        )
+
+        logger.info(
+            f"Creating first pod on node: {self.worker_nodes_list[0]}"
+            f" with pvc {self.pvc_obj.name}"
+        )
+        self.pod_obj1 = helpers.create_pod(
+            interface_type=self.interface_type, pvc_name=self.pvc_obj.name,
+            desired_status=constants.STATUS_RUNNING, wait=True,
+            namespace=self.namespace, node_name=self.worker_nodes_list[0],
+            pod_dict_path=constants.NGINX_POD_YAML
         )
 
     @retry(UnexpectedBehaviour, tries=10, delay=5, backoff=1)
@@ -171,15 +182,6 @@ class TestRWODynamicPvc(BaseDynamicPvc):
         """
         RWO Dynamic PVC creation tests with Reclaim policy set to Delete/Retain
         """
-        logger.info(f"Creating two pods using same PVC {self.pvc_obj.name}")
-        logger.info(f"Creating first pod on node: {self.worker_nodes_list[0]}")
-        pod_obj1 = helpers.create_pod(
-            interface_type=self.interface_type, pvc_name=self.pvc_obj.name,
-            desired_status=constants.STATUS_RUNNING, wait=True,
-            namespace=self.namespace, node_name=self.worker_nodes_list[0],
-            pod_dict_path=constants.NGINX_POD_YAML
-        )
-        node_pod1 = pod_obj1.get().get('spec').get('nodeName')
 
         logger.info(
             f"Creating second pod on node: {self.worker_nodes_list[1]}"
@@ -191,19 +193,20 @@ class TestRWODynamicPvc(BaseDynamicPvc):
             node_name=self.worker_nodes_list[1],
             pod_dict_path=constants.NGINX_POD_YAML
         )
+        node_pod1 = self.pod_obj1.get().get('spec').get('nodeName')
         node_pod2 = pod_obj2.get().get('spec').get('nodeName')
 
         assert node_pod1 != node_pod2, 'Both pods are on the same node'
 
-        logger.info(f"Running IO on pod {pod_obj1.name}")
-        file_name = pod_obj1.name
-        pod_obj1.run_io(
+        logger.info(f"Running IO on pod {self.pod_obj1.name}")
+        file_name = self.pod_obj1.name
+        self.pod_obj1.run_io(
             storage_type=self.storage_type, size=self.io_size, runtime=30,
             fio_filename=file_name
         )
-        pod.get_fio_rw_iops(pod_obj1)
+        pod.get_fio_rw_iops(self.pod_obj1)
         md5sum_pod1_data = pod.cal_md5sum(
-            pod_obj=pod_obj1, file_name=file_name
+            pod_obj=self.pod_obj1, file_name=file_name
         )
 
         # Verify that second pod is still in Pending state and not able to
@@ -214,9 +217,12 @@ class TestRWODynamicPvc(BaseDynamicPvc):
         self.verify_expected_failure_event(
             ocs_obj=pod_obj2, failure_str=self.expected_pod_failure
         )
-
-        pod_obj1.delete()
-        pod_obj1.ocp.wait_for_delete(resource_name=pod_obj1.name)
+        logger.info(
+            f"Deleting first pod so that second pod can attach"
+            f" {self.pvc_obj.name}"
+        )
+        self.pod_obj1.delete()
+        self.pod_obj1.ocp.wait_for_delete(resource_name=self.pod_obj1.name)
 
         # Wait for second pod to be in Running state
         assert helpers.wait_for_resource_state(
@@ -240,51 +246,22 @@ class TestRWODynamicPvc(BaseDynamicPvc):
             original_md5sum=md5sum_pod1_data
         )
 
-        pod_obj2.delete()
-        pod_obj2.ocp.wait_for_delete(resource_name=pod_obj2.name)
 
-
-@tier1
-@pytest.mark.usefixtures(
-    create_ceph_block_pool.__name__,
-    create_rbd_secret.__name__,
-    create_cephfs_secret.__name__,
-    create_project.__name__
-)
-@pytest.mark.parametrize(
-    argnames=["interface_type", "reclaim_policy"],
-    argvalues=[
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, constants.RECLAIM_POLICY_RETAIN],
-            marks=pytest.mark.polarion_id("OCS-547")
-        ),
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, constants.RECLAIM_POLICY_DELETE],
-            marks=pytest.mark.polarion_id("OCS-538")
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_RETAIN],
-            marks=pytest.mark.polarion_id("OCS-542")
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_DELETE],
-            marks=pytest.mark.polarion_id("OCS-529")
-        )
-    ]
-)
 class TestRWXDynamicPvc(BaseDynamicPvc):
     """
     Automates the following test cases
-    OCS-547 - RBD Based RWX Dynamic PVC creation with Reclaim policy set
-    to Retain
-    OCS-538 - RBD Based RWX Dynamic PVC creation with Reclaim policy set
-    to Delete
     OCS-542 - CephFS Based RWX Dynamic PVC creation with Reclaim policy set
     to Retain
     OCS-529 - CephFS Based RWX Dynamic PVC creation with Reclaim policy set
     to Delete
+    OCS-547 - RBD Based RWX Dynamic PVC creation with Reclaim policy set
+    to Retain
+    OCS-538 - RBD Based RWX Dynamic PVC creation with Reclaim policy set
+    to Delete
     """
+
     access_mode = constants.ACCESS_MODE_RWX
+    storage_type = 'fs'
 
     @pytest.fixture()
     def setup_base(self, request, interface_type, reclaim_policy):
@@ -295,10 +272,137 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
 
         self.dynamic_pvc_base(interface_type, reclaim_policy)
 
-    def rwx_dynamic_pvc(self, setup_base):
-        logger.info('RWX Test')
-        # TODO
+    @tier1
+    @pytest.mark.usefixtures(
+        create_cephfs_secret.__name__,
+        create_project.__name__
+    )
+    @pytest.mark.parametrize(
+        argnames=["interface_type", "reclaim_policy"],
+        argvalues=[
+            pytest.param(
+                *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_RETAIN],
+                marks=pytest.mark.polarion_id("OCS-542")
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_DELETE],
+                marks=pytest.mark.polarion_id("OCS-529")
+            )
+        ]
+    )
+    def test_rwx_dynamic_pvc(self, setup_base):
+        """
+        RWX Dynamic PVC creation tests with Reclaim policy set to Delete/Retain
+        """
+        logger.info(f"CephFS RWX test")
+        logger.info(
+            f"Creating second pod on node: {self.worker_nodes_list[1]} "
+            f"with pvc {self.pvc_obj.name}"
+        )
 
+        pod_obj2 = helpers.create_pod(
+            interface_type=self.interface_type, pvc_name=self.pvc_obj.name,
+            desired_status=constants.STATUS_RUNNING, wait=True,
+            namespace=self.namespace, node_name=self.worker_nodes_list[1],
+            pod_dict_path=constants.NGINX_POD_YAML
+        )
+        node_pod1 = self.pod_obj1.get().get('spec').get('nodeName')
+        node_pod2 = pod_obj2.get().get('spec').get('nodeName')
+
+        assert node_pod1 != node_pod2, 'Both pods are on the same node'
+
+        # Run IO on both the pods
+        logger.info(f"Running IO on pod {self.pod_obj1.name}")
+        file_name1 = self.pod_obj1.name
+        logger.info(file_name1)
+        self.pod_obj1.run_io(
+            storage_type=self.storage_type, size=self.io_size, runtime=30,
+            fio_filename=file_name1
+        )
+
+        logger.info(f"Running IO on pod {pod_obj2.name}")
+        file_name2 = pod_obj2.name
+        pod_obj2.run_io(
+            storage_type=self.storage_type, size=self.io_size, runtime=30,
+            fio_filename=file_name2
+        )
+
+        # Check IO and calculate md5sum of files
+        pod.get_fio_rw_iops(self.pod_obj1)
+        md5sum_pod1_data = pod.cal_md5sum(
+            pod_obj=self.pod_obj1, file_name=file_name1
+        )
+
+        pod.get_fio_rw_iops(pod_obj2)
+        md5sum_pod2_data = pod.cal_md5sum(
+            pod_obj=pod_obj2, file_name=file_name2
+        )
+
+        logger.info(f"verify data from alternate pods")
+
+        assert pod.verify_data_integrity(
+            pod_obj=pod_obj2, file_name=file_name1,
+            original_md5sum=md5sum_pod1_data
+        )
+
+        assert pod.verify_data_integrity(
+            pod_obj=self.pod_obj1, file_name=file_name2,
+            original_md5sum=md5sum_pod2_data
+        )
+
+        # Verify that data is mutable from any pod
+
+        logger.info(f"Perform modification of files from alternate pod")
+        # Access and rename file written by pod-2 from pod-1
+        file_path2 = pod.get_file_path(pod_obj2, file_name2)
+        logger.info(file_path2)
+        self.pod_obj1.exec_cmd_on_pod(
+            command=f"bash -c \"mv {file_path2} {file_path2}-renamed\"",
+            out_yaml_format=False
+        )
+
+        # Access and rename file written by pod-1 from pod-2
+        file_path1 = pod.get_file_path(self.pod_obj1, file_name1)
+        logger.info(file_path1)
+        pod_obj2.exec_cmd_on_pod(
+            command=f"bash -c \"mv {file_path1} {file_path1}-renamed\"",
+            out_yaml_format=False
+        )
+
+        logger.info(f"Verify presence of renamed files from both pods")
+        file_names = [f"{file_path1}-renamed", f"{file_path2}-renamed"]
+        for file in file_names:
+            assert pod.check_file_existence(self.pod_obj1, file), (
+                f"File {file} doesn't exist"
+            )
+            logger.info(f"File {file} exists in {self.pod_obj1.name} ")
+            assert pod.check_file_existence(pod_obj2, file), (
+                f"File {file} doesn't exist"
+            )
+            logger.info(f"File {file} exists in {pod_obj2.name}")
+
+    @tier3
+    @pytest.mark.usefixtures(
+        create_ceph_block_pool.__name__,
+        create_rbd_secret.__name__,
+    )
+    @pytest.mark.parametrize(
+        argnames=["interface_type", "reclaim_policy"],
+        argvalues=[
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL, constants.RECLAIM_POLICY_RETAIN],
+                marks=pytest.mark.polarion_id("OCS-547")
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL, constants.RECLAIM_POLICY_DELETE],
+                marks=pytest.mark.polarion_id("OCS-538")
+            )
+
+        ]
+    )
+    def rwx_dynamic_pvc_rbd(self, setup_base):
+        logger.info('RWX RBD Test')
+        # TODO
 
 # ROX Dynamic PVC creation tests not supported in 4.2
 # BZ 1727004
