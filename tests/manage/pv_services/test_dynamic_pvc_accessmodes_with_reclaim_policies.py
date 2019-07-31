@@ -280,7 +280,7 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
         self.cephfs_secret_obj = cephfs_secret_factory()
         self.project = project_factory()
         self.namespace = self.project.namespace
-        self.pvc_obj = cephfs_pvc_factory(project = self.project)
+        self.pvc_obj = cephfs_pvc_factory(project=self.project)
 
         def finalizer():
             self.cleanup()
