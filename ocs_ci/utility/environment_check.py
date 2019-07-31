@@ -40,9 +40,11 @@ ENV_STATUS_POST = copy.deepcopy(ENV_STATUS_DICT)
 def compare_dicts(before, after):
     """
     Comparing 2 dicts and providing diff list of [added items, removed items]
+
     Args:
         before (dict): Dictionary before execution
         after (dict): Dictionary after execution
+
     Returns:
         list: List of 2 dicts - [added items, removed items]
     """
