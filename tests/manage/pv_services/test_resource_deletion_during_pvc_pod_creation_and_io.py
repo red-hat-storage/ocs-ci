@@ -43,10 +43,10 @@ class OperationsBase(ManageTest):
     """
     Base class for PVC related disruption tests
     """
-    num_of_pvcs = 8
+    num_of_pvcs = 10
     pvc_size = '3Gi'
     pvc_size_int = 3
-    pvc_num_for_io_pods = 3
+    pvc_num_for_io_pods = 5
     num_of_new_pvcs = 5
 
     def operations_base(self, resource_to_delete):
@@ -106,7 +106,7 @@ class OperationsBase(ManageTest):
         bulk_pvc_create = executor.submit(
             helpers.create_multiple_pvcs, sc_name=self.sc_obj.name,
             namespace=self.namespace, number_of_pvc=self.num_of_new_pvcs,
-            size=self.pvc_size
+            size=self.pvc_size, wait=False
         )
 
         # Start IO on each pod
@@ -124,7 +124,14 @@ class OperationsBase(ManageTest):
         # Updating self.pvc_objs_new for the purpose of teardown
         self.pvc_objs_new.extend(pvc_objs_new)
 
-        # Verification of PVC status is done in 'create_multiple_pvcs' function
+        # Verify PVCs are Bound
+        for pvc_obj in pvc_objs_new:
+            assert pvc_obj.ocp.wait_for_resource(
+                condition=constants.STATUS_BOUND, resource_name=pvc_obj.name,
+                timeout=240, sleep=10
+            ), (
+                f"Wait timeout: PVC {pvc_obj.name} is not in 'Bound' status"
+            )
         log.info("Verified: New PVCs are Bound.")
 
         # Getting result of pods creation as list of Pod objects
@@ -137,7 +144,7 @@ class OperationsBase(ManageTest):
         for pod_obj in pod_objs_new:
             assert pod_obj.ocp.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
-                resource_name=pod_obj.name, timeout=120
+                resource_name=pod_obj.name, timeout=240, sleep=10
             ), (
                 f"Wait timeout: Pod {pod_obj.name} is not in 'Running' "
                 f"state even after 120 seconds."
