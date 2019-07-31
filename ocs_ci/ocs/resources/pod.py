@@ -66,6 +66,9 @@ class Pod(OCS):
         self.fio_thread = None
         # TODO: get backend config !!
 
+        self.wl_obj = None
+        self.wl_setup_done = False
+
     @property
     def name(self):
         return self._name
@@ -192,6 +195,25 @@ class Pod(OCS):
             ).get('containers')[0].get('volumeMounts')[0].get('mountPath')
         )
 
+    def workload_setup(self, storage_type, jobs=1):
+        """
+        Do setup on pod for running FIO
+
+        Args:
+            storage_type (str): 'fs' or 'block'
+            jobs (int): Number of jobs to execute FIO
+        """
+        name = 'test_workload'
+        path = self.get_mount_path()
+        work_load = 'fio'
+        # few io parameters for Fio
+
+        self.wl_obj = workload.WorkLoad(
+            name, path, work_load, storage_type, self, jobs
+        )
+        assert self.wl_obj.setup(), f"Setup for FIO failed on pod {self.name}"
+        self.wl_setup_done = True
+
     def run_io(
         self, storage_type, size, io_direction='rw', rw_ratio=75,
         jobs=1, runtime=60, depth=4, fio_filename=None
@@ -219,15 +241,9 @@ class Pod(OCS):
             depth (int): IO depth
             fio_filename(str): Name of fio file created on app pod's mount point
         """
-        name = 'test_workload'
-        path = self.get_mount_path()
-        work_load = 'fio'
-        # few io parameters for Fio
+        if not self.wl_setup_done:
+            self.workload_setup(storage_type=storage_type, jobs=jobs)
 
-        wl = workload.WorkLoad(
-            name, path, work_load, storage_type, self, jobs
-        )
-        assert wl.setup(), "Setup up for FIO failed"
         if io_direction == 'rw':
             self.io_params = templating.load_yaml_to_dict(
                 constants.FIO_IO_RW_PARAMS_YAML
@@ -242,7 +258,7 @@ class Pod(OCS):
         if fio_filename:
             self.io_params['filename'] = fio_filename
         self.io_params['iodepth'] = depth
-        self.fio_thread = wl.run(**self.io_params)
+        self.fio_thread = self.wl_obj.run(**self.io_params)
 
     def run_git_clone(self):
         """
