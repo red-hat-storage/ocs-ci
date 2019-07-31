@@ -296,7 +296,9 @@ def project_factory(request):
         for instance in instances:
             if not instance.is_deleted:
                 ocp.switch_to_default_rook_cluster_project()
-                instance.delete()
+                instance.ocp.delete(
+                    resource_name=instance.namespace
+                )
                 instance.ocp.wait_for_delete(
                     instance.namespace
                 )
