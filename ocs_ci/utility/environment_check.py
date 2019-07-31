@@ -6,6 +6,7 @@ import copy
 import logging
 import yaml
 from gevent.threadpool import ThreadPoolExecutor
+from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants, exceptions
 
 log = logging.getLogger(__name__)
@@ -17,7 +18,9 @@ CEPHFILESYSTEM = ocp.OCP(kind=constants.CEPHFILESYSTEM)
 CEPHBLOCKPOOL = ocp.OCP(kind=constants.CEPHBLOCKPOOL)
 PV = ocp.OCP(kind=constants.PV)
 PVC = ocp.OCP(kind=constants.PVC)
-SECRET = ocp.OCP(kind=constants.SECRET)
+SECRET = ocp.OCP(
+    kind=constants.SECRET, namespace=config.ENV_DATA['cluster_namespace']
+)
 NS = ocp.OCP(kind=constants.NAMESPACE)
 
 KINDS = [POD, SC, CEPHFILESYSTEM, CEPHBLOCKPOOL, PV, PVC, SECRET, NS]
