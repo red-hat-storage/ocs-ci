@@ -20,7 +20,7 @@ def test_fixture(request, project_factory, rbd_pvc_factory):
     """
     cls_ref = request.node.cls
     cls_ref.pvc_objs_new = []
-    cls_ref.num_of_pvcs = 3
+    cls_ref.num_of_pvcs = 100
 
     cls_ref.project = project_factory()
     cls_ref.pvc_objs = [
