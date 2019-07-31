@@ -1,0 +1,10 @@
+---
+apiVersion: "operators.coreos.com/v1"
+kind: "CatalogSourceConfig"
+metadata:
+  name: "elasticsearch"
+  namespace: "openshift-marketplace"
+spec:
+  targetNamespace: "openshift-operators-redhat"
+  packages: "elasticsearch-operator"
+

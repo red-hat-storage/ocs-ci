@@ -26,6 +26,15 @@ TEMPLATE_FIO_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fio")
 TEMPLATE_CONFIGURE_PVC_MONITORING_POD = os.path.join(
     TEMPLATE_DIR, "openshift-infra/monitoring/"
 )
+TEMPLATE_DEPLOYMENT_LOGGING = os.path.join(
+    TEMPLATE_DIR, "openshift-infra/logging-deployment"
+)
+TEMPLATE_DEPLOYMENT_EO = os.path.join(
+    TEMPLATE_DEPLOYMENT_LOGGING, "elasticsearch_operator"
+)
+TEMPLATE_DEPLOYMENT_CLO = os.path.join(
+    TEMPLATE_DEPLOYMENT_LOGGING, "clusterlogging_operator"
+)
 
 # Statuses
 STATUS_PENDING = 'Pending'
@@ -47,6 +56,13 @@ NODE = "Node"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
+ROLE = 'Role'
+ROLEBINDING = "Rolebinding"
+SUBSCRIPTION = "Subscription"
+NAMESPACES = "Namespaces"
+CLUSTER_LOGGING = "ClusterLogging"
+OPERATOR_GROUP = "OperatorGroup"
+CATALOG_SOURCE_CONFIG = "catsrc"
 
 # Other
 SECRET = "Secret"
@@ -128,6 +144,41 @@ CONFIGURE_PVC_ON_MONITORING_POD = os.path.join(
 
 NGINX_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "nginx.yaml"
+)
+
+# Openshift-logging elasticsearch operator deployment yamls
+EO_NAMESPACE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_EO, "eo-project.yaml"
+)
+
+EO_OG_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_EO, "eo-og.yaml"
+)
+EO_CSC_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_EO, "eo-csc.yaml"
+)
+EO_RBAC_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_EO, "eo-rbac.yaml"
+)
+EO_SUB_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_EO, "eo-sub.yaml"
+)
+
+# Openshift-logging clusterlogging operator deployment yamls
+CL_NAMESPACE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_CLO, "cl-namespace.yaml"
+)
+CL_OG_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_CLO, "cl-og.yaml"
+)
+CL_CSC_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_CLO, "cl-csc.yaml"
+)
+CL_SUB_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_CLO, "cl-sub.yaml"
+)
+CL_INSTANCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_CLO, "instance.yaml"
 )
 
 # Workload-io yamls
