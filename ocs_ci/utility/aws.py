@@ -257,26 +257,6 @@ class AWS(object):
             delete_response
         )
 
-    def wait_for_instance_status(self, instance_id, status, timeout=TIMEOUT):
-        """
-
-        Args:
-            instance_id (str): ID of the instance to stop
-            status (int): The status code to wait for
-            timeout (int): The number in seconds to wait for the instance
-                reach the status
-
-        Returns:
-            bool: True in case the instance reached the status, False otherwise
-
-        """
-        for sample in utils.TimeoutSampler(
-            timeout, SLEEP, self.get_instances_status_by_id, instance_id
-        ):
-            if sample == status:
-                return True
-        return False
-
     def stop_ec2_instance(self, instance_id, wait=False):
         """
         Stopping an instance
@@ -293,9 +273,7 @@ class AWS(object):
             InstanceIds=[instance_id], Force=True
         )
         if wait:
-            self.wait_for_instance_status(
-                instance_id=instance_id, status=constants.INSTANCE_STOPPED
-            )
+            self.ec2_client.wait_until_stopped()
         state = res.get('StoppingInstances')[0].get('CurrentState').get('Code')
         return state == constants.INSTANCE_STOPPING
 
@@ -313,9 +291,7 @@ class AWS(object):
         """
         res = self.ec2_client.start_instances(InstanceIds=[instance_id])
         if wait:
-            self.wait_for_instance_status(
-                instance_id=instance_id, status=constants.INSTANCE_RUNNING
-            )
+            self.ec2_client.wait_until_running()
         state = res.get('StartingInstances')[0].get('CurrentState').get('Code')
         return state == constants.INSTANCE_PENDING
 
@@ -359,9 +335,7 @@ def stop_instances(instances):
 
     for instance_id, instance_name in zip(instance_ids, instance_names):
         logger.info(f"Waiting for instance {instance_name} to reach status stopped")
-        aws.wait_for_instance_status(
-            instance_id, status=constants.INSTANCE_STOPPED, timeout=120
-        )
+        aws.ec2_client.wait_until_stopped()
 
 
 def start_instances(instances):
@@ -383,6 +357,4 @@ def start_instances(instances):
 
     for instance_id, instance_name in zip(instance_ids, instance_names):
         logger.info(f"Waiting for instance {instance_name} to reach status running")
-        aws.wait_for_instance_status(
-            instance_id, status=constants.INSTANCE_RUNNING, timeout=120
-        )
+        aws.ec2_client.wait_until_running()
