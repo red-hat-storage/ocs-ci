@@ -4,7 +4,6 @@ import time
 import boto3
 
 from ocs_ci.framework import config
-from ocs_ci.utility import utils
 from ocs_ci.ocs import constants
 
 logger = logging.getLogger(name=__file__)
