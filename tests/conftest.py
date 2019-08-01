@@ -417,23 +417,20 @@ def cephfs_pvc_factory(request, pvc_factory, cephfs_storageclass_factory):
 
 
 @pytest.fixture()
-def pod_factory(request, project_factory):
+def pod_factory(request):
     """
     Create a Pod factory. Calling this fixture creates new Pod.
     For custom Pods provide 'pvc' parameter.
     """
     instances = []
-    active_project = None
 
-    def factory(project=None, pvc=None, custom_data=None):
+    def factory(pvc=None, custom_data=None):
         """
         Args:
-            project (object): ocs_ci.ocs.resources.ocs.OCS instance
-                of 'Project' kind.
             pvc (object): ocs_ci.ocs.resources.ocs.OCS instance of 'PVC' kind.
             custom_data (dict): If provided then Pod object is created
-                by using these data. Parameters `project` and `pvc`
-                are not used but reference is set if provided.
+                by using these data. Parameter `pvc` is not used but reference
+                is set if provided.
 
         Returns:
             object: helpers.create_pvc instance.
@@ -441,10 +438,6 @@ def pod_factory(request, project_factory):
         if custom_data:
             pod_obj = helpers.create_resource(**custom_data, wait=False)
         else:
-            nonlocal active_project
-            project = project or active_project or project_factory()
-            active_project = project
-
             if pvc.storageclass.data[
                 'provisioner'
             ] == defaults.RBD_PROVISIONER:
@@ -456,12 +449,11 @@ def pod_factory(request, project_factory):
 
             pod_obj = helpers.create_pod(
                 pvc_name=pvc.name,
-                namespace=project.namespace,
+                namespace=pvc.namespace,
                 interface_type=interface_type,
                 wait=False
             )
             assert pod_obj, "Failed to create PVC"
-        pod_obj.project = project
         pod_obj.pvc = pvc
 
         instances.append(pod_obj)
@@ -488,23 +480,21 @@ def rbd_pod_factory(pod_factory, rbd_pvc_factory):
     Create a RBD based Pod factory. Calling this fixture creates new RBD Pod.
     For custom Pods provide 'pvc' parameter.
     """
-    def factory(project=None, pvc=None, custom_data=None):
+    def factory(pvc=None, custom_data=None):
         """
         Args:
-            project (object): ocs_ci.ocs.resources.ocs.OCS instance
-                of 'Project' kind.
             pvc (object): ocs_ci.ocs.resources.ocs.OCS instance of 'PVC' kind.
             custom_data (dict): If provided then Pod object is created
-                by using these data. Parameters `project` and `pvc`
-                are not used but reference is set if provided.
+                by using these data. Parameter `pvc` is not used but reference
+                is set if provided.
 
         Returns:
             object: helpers.create_pvc instance.
         """
         pvc = pvc or rbd_pvc_factory()
+        helpers.wait_for_resource_state(pvc, constants.STATUS_BOUND)
         return pod_factory(
             pvc=pvc,
-            project=project,
             custom_data=custom_data
         )
     return factory
@@ -516,23 +506,21 @@ def cephfs_pod_factory(pod_factory, cephfs_pvc_factory):
     Create a CephFS based Pod factory. Calling this fixture creates new Pod.
     For custom Pods provide 'pvc' parameter.
     """
-    def factory(project=None, pvc=None, custom_data=None):
+    def factory(pvc=None, custom_data=None):
         """
         Args:
-            project (object): ocs_ci.ocs.resources.ocs.OCS instance
-                of 'Project' kind.
             pvc (object): ocs_ci.ocs.resources.ocs.OCS instance of 'PVC' kind.
             custom_data (dict): If provided then Pod object is created
-                by using these data. Parameters `project` and `pvc`
-                are not used but reference is set if provided.
+                by using these data. Parameter `pvc` is not used but reference
+                is set if provided.
 
         Returns:
             object: helpers.create_pvc instance.
         """
         pvc = pvc or cephfs_pvc_factory()
+        helpers.wait_for_resource_state(pvc, constants.STATUS_BOUND)
         return pod_factory(
             pvc=pvc,
-            project=project,
             custom_data=custom_data
         )
     return factory
