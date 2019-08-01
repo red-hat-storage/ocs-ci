@@ -49,9 +49,9 @@ class OperationsBase(ManageTest):
 
     def operations_base(self, resource_to_delete):
         """
-        Delete resource 'resource_to_delete' while PVCc creation, Pods
+        Delete resource 'resource_to_delete' while PVCs creation, Pods
         creation and IO operation are progressing.
-        Verifies PVCs can be re used by creating new pods.
+        Verifies PVCs can be re-used by creating new pods.
 
         Steps:
         1. Create pods for running IO and verify they are Running.
@@ -208,7 +208,7 @@ class OperationsBase(ManageTest):
     create_pvcs.__name__,
     test_fixture.__name__
 )
-class TestForRBD(OperationsBase):
+class TestResourceDeletionMultiOperationsRBD(OperationsBase):
     """
     Test class for RBD
     """
@@ -249,7 +249,7 @@ class TestForRBD(OperationsBase):
     create_pvcs.__name__,
     test_fixture.__name__
 )
-class TestForCephFS(OperationsBase):
+class TestResourceDeletionMultiOperationsCephFS(OperationsBase):
     """
     Test class for CephFS
     """

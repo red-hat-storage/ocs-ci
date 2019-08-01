@@ -340,9 +340,11 @@ def create_multiple_pvcs(
         namespace (str): The namespace for the PVCs creation
         desired_status (str): The status of the PVC to wait for
         wait (bool): True for waiting for PVC to reach the desired status,
-            False otherwise
+            False otherwise. Status of each PVC will be checked after creating
+            all PVCs
         wait_each (bool): True for waiting for each PVC to reach the desired
-            status before creating next pod, False otherwise
+            status before creating next PVC, False otherwise. This will take
+            precedence over 'wait'
 
     Returns:
          list: List of PVC objects

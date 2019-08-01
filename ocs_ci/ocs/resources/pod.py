@@ -203,9 +203,9 @@ class Pod(OCS):
             storage_type (str): 'fs' or 'block'
             jobs (int): Number of jobs to execute FIO
         """
-        name = 'test_workload'
-        path = self.get_mount_path()
         work_load = 'fio'
+        name = f'test_workload_{work_load}'
+        path = self.get_mount_path()
         # few io parameters for Fio
 
         self.wl_obj = workload.WorkLoad(
