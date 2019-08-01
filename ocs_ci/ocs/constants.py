@@ -97,7 +97,6 @@ DEFAULT_BLOCKPOOL = 'rbd'
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
 GB = 1024 ** 3
-SECONDS = 3600
 
 # Reclaim Policy
 RECLAIM_POLICY_RETAIN = 'Retain'

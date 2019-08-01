@@ -801,6 +801,7 @@ def validate_pods_are_respinned_and_running_state(pod_objs_list):
 
     Returns:
          True if the pods are respinned and running, False otherwise
+
     """
     for pod in pod_objs_list:
         _rc = helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING)
@@ -815,7 +816,7 @@ def validate_pods_are_respinned_and_running_state(pod_objs_list):
         ts = calendar.timegm(ts)
         current_time_utc = time.time()
         sec = current_time_utc - ts
-        if (sec / constants.SECONDS) >= 1:
+        if (sec / 3600) >= 1:
             logger.error(f'Pod {pod.name} is not respinned, the age of the pod is {start_time}')
             return False
 

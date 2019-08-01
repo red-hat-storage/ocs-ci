@@ -18,6 +18,15 @@ from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.csv import CSV
 from tests import helpers
+from ocs_ci.ocs.monitoring import (
+    create_configmap_cluster_monitoring_pod,
+    validate_pvc_created_and_bound_on_monitoring_pods,
+    validate_pvc_are_mounted_on_monitoring_pods
+)
+from ocs_ci.ocs.resources.pod import (
+    get_all_pods,
+    validate_pods_are_respinned_and_running_state
+)
 
 
 logger = logging.getLogger(__name__)
@@ -322,6 +331,38 @@ class Deployment(object):
             logger.error(
                 f"MDS deployment Failed! Please check logs!"
             )
+
+        if config.RUN['cli_params']['monitoring']:
+            # Create a storage class and secrets
+            secret_obj = helpers.create_secret(interface_type=constants.CEPHBLOCKPOOL)
+            sc_obj = helpers.create_storage_class(
+                interface_type=constants.CEPHBLOCKPOOL,
+                interface_name=constants.DEFAULT_BLOCKPOOL,
+                secret_name=secret_obj.name
+            )
+
+            # Get the list of monitoring pods
+            pods_list = get_all_pods(
+                namespace=defaults.OCS_MONITORING_NAMESPACE,
+                selector=['prometheus', 'alertmanager']
+            )
+
+            # Create configmap cluster-monitoring-config
+            create_configmap_cluster_monitoring_pod(sc_obj.name)
+
+            logger.info(f"Waiting {wait_time} seconds...")
+            time.sleep(wait_time)
+
+            # Validate the pods are respinned and in running state
+            assert validate_pods_are_respinned_and_running_state(
+                pods_list
+            )
+
+            # Validate the pvc is created on monitoring pods
+            validate_pvc_created_and_bound_on_monitoring_pods()
+
+            # Validate the pvc are mounted on pods
+            validate_pvc_are_mounted_on_monitoring_pods(pods_list)
 
         # Verify health of ceph cluster
         # TODO: move destroy cluster logic to new CLI usage pattern?
