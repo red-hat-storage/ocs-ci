@@ -56,6 +56,10 @@ and place in the `data` directory at the root level of the project.
 If there is no `data` directory, create one.
 The name of the file should be `pull-secret`.
 
+In addition you will need to add a registry auth to your pull-secret to
+support deploying CI / Nightly builds. Please follow the instructions
+[here](https://mojo.redhat.com/docs/DOC-1204026) to do so.
+
 ## Tests
 
 ### AWS and CentralCI Authentication files
