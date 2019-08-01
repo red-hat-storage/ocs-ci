@@ -15,8 +15,6 @@ from tests.fixtures import (
 
 log = logging.getLogger(__name__)
 
-DISRUPTION_OPS = disruption_helpers.Disruptions()
-
 
 @pytest.fixture()
 def test_fixture(request):
@@ -75,7 +73,8 @@ class OperationsBase(ManageTest):
 
         executor = ThreadPoolExecutor(max_workers=2)
 
-        DISRUPTION_OPS.set_resource(resource=resource_to_delete)
+        disruption = disruption_helpers.Disruptions()
+        disruption.set_resource(resource=resource_to_delete)
 
         # Create pods for running IO
         io_pods = helpers.create_pods(
@@ -116,7 +115,7 @@ class OperationsBase(ManageTest):
         log.info("IO started on all pods.")
 
         # Delete the resource
-        DISRUPTION_OPS.delete_resource()
+        disruption.delete_resource()
 
         # Getting result of PVC creation as list of PVC objects
         pvc_objs_new = bulk_pvc_create.result()
@@ -167,7 +166,11 @@ class OperationsBase(ManageTest):
         # Delete pods
         all_pod_objs = io_pods + pod_objs_new
         for pod_obj in all_pod_objs:
-            pod_obj.delete(wait=True)
+            pod_obj.delete(wait=False)
+
+        # Verify pods are deleted
+        for pod_obj in all_pod_objs:
+            pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
 
         # Updating self.pod_objs for the purpose of teardown
         self.pod_objs.clear()
