@@ -3,7 +3,9 @@ Helper functions file for OCS QE
 """
 import datetime
 import logging
+import json
 
+from ocs_ci.ocs.ocp import OCP, switch_to_project
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility import templating
@@ -551,6 +553,24 @@ def get_cephfs_name():
     )
     result = cfs_obj.get()
     return result['items'][0].get('metadata').get('name')
+
+
+def get_noobaa_information():
+    """
+    Function for retrieving the NooBaa authentication information
+    :return: (NooBaa endpoint, access key, secret key)
+    """
+    cmd = "get noobaa -o json"
+    occli = OCP()
+    switch_to_project('noobaa')
+    results = occli.exec_oc_cmd(cmd)
+    endpoint = results['items'][0]['status']['services']['serviceMgmt']['externalDNS'][0]
+    creds_secret_name = results['items'][0]['status']['accounts']['admin']['secretRef']['name']
+    cmd2 = f'get secret {creds_secret_name} -o json'
+    results2 = occli.exec_oc_cmd(cmd2)
+    noobaa_access_key = results2['data']['AWS_ACCESS_KEY_ID']
+    noobaa_secret_key = results2['data']['AWS_SECRET_ACCESS_KEY']
+    return endpoint, noobaa_access_key, noobaa_secret_key
 
 
 def run_io_with_rados_bench(**kw):
