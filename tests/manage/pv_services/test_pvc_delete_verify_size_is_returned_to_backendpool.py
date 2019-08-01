@@ -10,7 +10,7 @@ from tests import helpers
 from ocs_ci.framework.testlib import tier1, ManageTest
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.resources import pod, pvc
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import ocp
 
 logger = logging.getLogger(__name__)
@@ -43,31 +43,28 @@ def check_ceph_used_space():
 
 
 @retry(UnexpectedBehaviour, tries=5, delay=3, backoff=1)
-def verify_pv_not_exists(pv_name, cbp_name):
+def verify_pv_not_exists(pvc_obj, cbp_name):
     """
     Ensure that pv does not exists
     """
 
     # Validate on ceph side
-    logger.info(f"Verifying pv {pv_name} exists on backend")
-    ct_pod = pod.get_ceph_tools_pod()
-    pvc_list = ct_pod.exec_ceph_cmd(
-        ceph_cmd=f"rbd ls -p {cbp_name}", format='json'
-    )
-    _rc = pv_name in pvc_list
+    logger.info(f"Verifying pv {pvc_obj.backed_pv} exists on backend")
+
+    _rc = pvc_obj.verify_pv_exists_in_backend(cbp_name)
 
     if _rc:
-        raise UnexpectedBehaviour(f"pv {pv_name} exists on backend")
+        raise UnexpectedBehaviour(f"pv {pvc_obj.backed_pv} exists on backend")
     logger.info(
-        f"Expected: pv {pv_name} doesn't exist on backend after deleting pvc"
+        f"Expected: pv {pvc_obj.backed_pv} doesn't exist on backend after deleting pvc"
     )
 
     # Validate on oc side
     try:
-        PV.get(pv_name)
+        PV.get(pvc_obj.backed_pv)
     except CommandFailed as ecf:
         assert "not found" in str(ecf), (
-            f"Unexpected: pv {pv_name} still exists"
+            f"Unexpected: pv {pvc_obj.backed_pv} still exists"
         )
     logger.info(
         f"Expected: pv should not be found "
@@ -75,44 +72,20 @@ def verify_pv_not_exists(pv_name, cbp_name):
     )
 
 
-def create_pvc_and_verify_pvc_exists(
-    sc_name, cbp_name, desired_status=constants.STATUS_BOUND, wait=True
-):
+def create_pvc_and_verify_pvc_exists(sc_name, cbp_name):
     """
     Create pvc, verify pvc is bound in state and
     pvc exists on ceph side
     """
+    pvc_obj = helpers.create_pvc(sc_name=sc_name, size='10Gi')
 
-    pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
-    pvc_data['metadata']['name'] = helpers.create_unique_resource_name(
-        'test', 'pvc'
-    )
-    pvc_data['spec']['storageClassName'] = sc_name
-    pvc_data['spec']['resources']['requests']['storage'] = "10Gi"
-    pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    pvc_obj = pvc.PVC(**pvc_data)
-    pvc_obj.create()
-    if wait:
-        assert pvc_obj.ocp.wait_for_resource(
-            condition=desired_status, resource_name=pvc_obj.name
-        ), f"{pvc_obj.kind} {pvc_obj.name} failed to reach"
-        f"status {desired_status}"
-    pvc_obj.reload()
-
-    # ToDo: Add validation to check pv exists on backend
-    # Commenting the below code: https://bugzilla.redhat.com/show_bug.cgi?id=1723656
     # Validate pv is created on ceph
-    # logger.info(f"Verifying pv exists on backend")
-    # ct_pod = pod.get_ceph_tools_pod()
-    # pv_list = ct_pod.exec_ceph_cmd(
-    #     ceph_cmd=f"rbd ls -p {cbp_name}", format='json'
-    # )
-    # _rc = pvc_obj.backed_pv in pv_list
-    # assert _rc, f"pv doesn't exist on backend"
-    # logger.info(f"pv {pvc_obj.backed_pv} exists on backend")
+    logger.info(f"Verifying pv exists on backend")
+    pvc_obj.verify_pv_exists_in_backend(cbp_name)
     return pvc_obj
 
 
+@pytest.mark.polarion_id("OCS-372")
 class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
     """
     Testing after pvc deletion the size is returned to backendpool
@@ -140,12 +113,10 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         assert used_before_creating_pvc < used_after_creating_pvc
         pod_obj.delete()
         pvc_obj.delete()
-        verify_pv_not_exists(
-            pvc_obj.backed_pv,
-            rbd_storageclass.block_pool.name
-        )
+        verify_pv_not_exists(pvc_obj, rbd_storageclass.block_pool.name)
         used_after_deleting_pvc = check_ceph_used_space()
         logger.info(f"Used after deleting pvc {used_after_deleting_pvc}")
         assert used_after_deleting_pvc < used_after_creating_pvc
         assert (abs(
-            used_after_deleting_pvc - used_before_creating_pvc) < 0.2)
+            used_after_deleting_pvc - used_before_creating_pvc) < 0.2
+        )

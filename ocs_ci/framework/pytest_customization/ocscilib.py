@@ -19,7 +19,8 @@ from ocs_ci.utility.utils import (
     get_cluster_version,
     get_ceph_version,
     get_rook_version,
-    get_csi_versions
+    get_csi_versions,
+    get_testrun_name,
 )
 from ocs_ci.ocs.utils import collect_ocs_logs
 
@@ -117,6 +118,8 @@ def pytest_configure(config):
         del config._metadata['Plugins']
         del config._metadata['Platform']
 
+        config._metadata['Test Run Name'] = get_testrun_name()
+
         try:
             # add cluster version
             clusterversion = get_cluster_version()
@@ -189,6 +192,7 @@ def process_cluster_cli_params(config):
     get_cli_param(config, 'collect-logs')
     if get_cli_param(config, 'email') and not get_cli_param(config, '--html'):
         pytest.exit("--html option must be provided to send email reports")
+    get_cli_param(config, '-m')
 
 
 def pytest_collection_modifyitems(session, config, items):

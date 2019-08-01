@@ -4,11 +4,8 @@ leftovers
 """
 import copy
 import logging
-
-from deepdiff import DeepDiff
-import pprint
+import yaml
 from gevent.threadpool import ThreadPoolExecutor
-
 from ocs_ci.ocs import ocp, constants, exceptions
 
 log = logging.getLogger(__name__)
@@ -38,11 +35,47 @@ ENV_STATUS_PRE = copy.deepcopy(ENV_STATUS_DICT)
 ENV_STATUS_POST = copy.deepcopy(ENV_STATUS_DICT)
 
 
-ADDED_RESOURCE = 'iterable_item_added'
-REMOVED_RESOURCE = 'iterable_item_removed'
+def compare_dicts(before, after):
+    """
+    Comparing 2 dicts and providing diff list of [added items, removed items]
+
+    Args:
+        before (dict): Dictionary before execution
+        after (dict): Dictionary after execution
+
+    Returns:
+        list: List of 2 lists - ('added' and 'removed' are lists)
+    """
+    added = []
+    removed = []
+    uid_before = [
+        uid.get('metadata').get(
+            'generateName', uid.get('metadata').get('name')
+        ) for uid in before
+    ]
+    uid_after = [
+        uid.get('metadata').get(
+            'generateName', uid.get('metadata').get('name')
+        ) for uid in after
+    ]
+    diff_added = [val for val in uid_after if val not in uid_before]
+    diff_removed = [val for val in uid_before if val not in uid_after]
+    if diff_added:
+        added = [
+            val for val in after if val.get('metadata').get(
+                'generateName', val.get('metadata').get('name')
+            ) in [v for v in diff_added]
+        ]
+    if diff_removed:
+        removed = [
+            val for val in before if val.get('metadata').get(
+                'generateName', val.get('metadata').get('name')
+            ) in [v for v in diff_removed]
+        ]
+    return [added, removed]
 
 
-def assign_get_values(env_status_dict, key, kind):
+def assign_get_values(env_status_dict, key, kind=None):
     """
     Assigning kind status into env_status_dict
 
@@ -85,73 +118,58 @@ def get_status_after_execution():
     """
     get_environment_status(ENV_STATUS_POST)
 
-    pod_diff = DeepDiff(
+    pod_diff = compare_dicts(
         ENV_STATUS_PRE['pod'], ENV_STATUS_POST['pod']
     )
-    sc_diff = DeepDiff(
+    sc_diff = compare_dicts(
         ENV_STATUS_PRE['sc'], ENV_STATUS_POST['sc']
     )
-    cephfs_diff = DeepDiff(
+    cephfs_diff = compare_dicts(
         ENV_STATUS_PRE['cephfs'], ENV_STATUS_POST['cephfs']
     )
-    cephbp_diff = DeepDiff(
+    cephbp_diff = compare_dicts(
         ENV_STATUS_PRE['cephbp'], ENV_STATUS_POST['cephbp']
     )
-    pv_diff = DeepDiff(
+    pv_diff = compare_dicts(
         ENV_STATUS_PRE['pv'], ENV_STATUS_POST['pv']
     )
-    pvc_diff = DeepDiff(
+    pvc_diff = compare_dicts(
         ENV_STATUS_PRE['pvc'], ENV_STATUS_POST['pvc']
     )
-    secret_diff = DeepDiff(
+    secret_diff = compare_dicts(
         ENV_STATUS_PRE['secret'], ENV_STATUS_POST['secret']
     )
-    namespace_diff = DeepDiff(
+    namespace_diff = compare_dicts(
         ENV_STATUS_PRE['namespace'], ENV_STATUS_POST['namespace']
     )
     diffs_dict = {
         'pods': pod_diff,
-        'sc': sc_diff,
+        'storageClasses': sc_diff,
         'cephfs': cephfs_diff,
         'cephbp': cephbp_diff,
         'pvs': pv_diff,
         'pvcs': pvc_diff,
-        'secret': secret_diff,
-        'ns': namespace_diff,
+        'secrets': secret_diff,
+        'namespaces': namespace_diff,
     }
     leftover_detected = False
 
     leftovers = {'Leftovers added': [], 'Leftovers removed': []}
     for kind, kind_diff in diffs_dict.items():
-        if ADDED_RESOURCE in kind_diff:
-            try:
-                leftovers['Leftovers added'].append({
-                    kind: kind_diff[ADDED_RESOURCE][
-                        ''.join(kind_diff[ADDED_RESOURCE])
-                    ]
-                })
-            except KeyError:
-                leftovers['Leftovers added'].append({
-                    kind: kind_diff[ADDED_RESOURCE]
-                })
+        if kind_diff[0]:
+            leftovers[
+                'Leftovers added'
+            ].append({f"***{kind}***": kind_diff[0]})
             leftover_detected = True
-        if REMOVED_RESOURCE in kind_diff:
-            try:
-                leftovers['Leftovers removed'].append({
-                    kind: kind_diff[REMOVED_RESOURCE][
-                        ''.join(kind_diff[REMOVED_RESOURCE])
-                    ]
-                })
-            except KeyError:
-                leftovers['Leftovers removed'].append({
-                    kind: kind_diff[REMOVED_RESOURCE]
-                })
+        if kind_diff[1]:
+            leftovers[
+                'Leftovers removed'
+            ].append({f"***{kind}***": kind_diff[1]})
             leftover_detected = True
-    pp = pprint.PrettyPrinter(indent=2)
     if leftover_detected:
         raise exceptions.ResourceLeftoversException(
             f"\nThere are leftovers in the environment after test case:"
-            f"\nResources added:\n{pp.pformat(leftovers['Leftovers added'])}"
+            f"\nResources added:\n{yaml.dump(leftovers['Leftovers added'])}"
             f"\nResources "
-            f"removed:\n {pp.pformat(leftovers['Leftovers removed'])}"
+            f"removed:\n {yaml.dump(leftovers['Leftovers removed'])}"
         )
