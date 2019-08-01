@@ -4,7 +4,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import exceptions
 from .aws import AWSIPI
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 class DeploymentFactory(object):
