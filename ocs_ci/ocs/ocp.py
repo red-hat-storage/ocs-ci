@@ -6,7 +6,7 @@ import logging
 import time
 import yaml
 
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs import defaults
@@ -376,3 +376,41 @@ def switch_to_default_rook_cluster_project():
         bool: True on success, False otherwise
     """
     return switch_to_project(defaults.ROOK_CLUSTER_NAMESPACE)
+
+
+def get_all_nodes():
+    """
+    Get all cluster nodes
+
+    Returns:
+        list: Cluster node dictionaries
+
+    """
+    nodes_obj = OCP(kind='node')
+    return nodes_obj.get()['items']
+
+
+def wait_for_nodes_ready(num_of_nodes):
+    """
+    Wait until all nodes are in Ready status
+
+    Args:
+        num_of_nodes (int): The number of nodes to wait for
+
+    Returns:
+        bool: True if all nodes reached status Ready
+
+    """
+    try:
+        for sample in TimeoutSampler(timeout=120, sleep=3, func=get_all_nodes):
+            if len(sample) == num_of_nodes:
+                ready_nodes = 0
+                for node in sample:
+                    for con in node.get('status').get('conditions'):
+                        if 'True' in con.get('status'):
+                            if con.get('type') == 'Ready':
+                                ready_nodes += 1
+                    if ready_nodes == num_of_nodes:
+                        return True
+    except TimeoutExpiredError:
+        return False

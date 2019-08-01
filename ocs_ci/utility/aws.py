@@ -5,17 +5,12 @@ import boto3
 
 from ocs_ci.framework import config
 from ocs_ci.utility import utils
+from ocs_ci.ocs import constants
 
 logger = logging.getLogger(name=__file__)
 
-TIMEOUT = 60
+TIMEOUT = 90
 SLEEP = 3
-
-# Instance statuses
-PENDING = 0
-STOPPING = 64
-STOPPED = 80
-RUNNING = 16
 
 
 class AWSTimeoutException(Exception):
@@ -262,6 +257,26 @@ class AWS(object):
             delete_response
         )
 
+    def wait_for_instance_status(self, instance_id, status, timeout=TIMEOUT):
+        """
+
+        Args:
+            instance_id (str): ID of the instance to stop
+            status (int): The status code to wait for
+            timeout (int): The number in seconds to wait for the instance
+                reach the status
+
+        Returns:
+            bool: True in case the instance reached the status, False otherwise
+
+        """
+        for sample in utils.TimeoutSampler(
+            timeout, SLEEP, self.get_instances_status_by_id, instance_id
+        ):
+            if sample == status:
+                return True
+        return False
+
     def stop_ec2_instance(self, instance_id, wait=False):
         """
         Stopping an instance
@@ -278,14 +293,11 @@ class AWS(object):
             InstanceIds=[instance_id], Force=True
         )
         if wait:
-            for sample in utils.TimeoutSampler(
-                TIMEOUT, SLEEP, self.get_instances_status_by_id, instance_id
-            ):
-                if sample == STOPPED:
-                    return True
-            return False
+            self.wait_for_instance_status(
+                instance_id=instance_id, status=constants.INSTANCE_STOPPED
+            )
         state = res.get('StoppingInstances')[0].get('CurrentState').get('Code')
-        return state == STOPPING
+        return state == constants.INSTANCE_STOPPING
 
     def start_ec2_instance(self, instance_id, wait=False):
         """
@@ -301,11 +313,76 @@ class AWS(object):
         """
         res = self.ec2_client.start_instances(InstanceIds=[instance_id])
         if wait:
-            for sample in utils.TimeoutSampler(
-                TIMEOUT, SLEEP, self.get_instances_status_by_id, instance_id
-            ):
-                if sample == RUNNING:
-                    return True
-            return False
+            self.wait_for_instance_status(
+                instance_id=instance_id, status=constants.INSTANCE_RUNNING
+            )
         state = res.get('StartingInstances')[0].get('CurrentState').get('Code')
-        return state == PENDING
+        return state == constants.INSTANCE_PENDING
+
+
+def get_instances_ids_and_names(instances):
+    """
+    Get the instances IDs and names according to nodes dictionary
+
+    Args:
+        instances (list): Nodes dictionaries, returned by 'oc get node -o yaml'
+
+    Returns:
+        tuple: lists of node IDs and names
+
+    """
+    instance_names = [node.get('metadata').get('name') for node in instances]
+    instance_ids = [
+        'i-' + node.get('spec').get(
+            'providerID'
+        ).partition('i-')[-1] for node in instances
+    ]
+    return instance_ids, instance_names
+
+
+def stop_instances(instances):
+    """
+    Stop instances
+
+    Args:
+        instances (list): Dictionaries of instances (nodes returned
+            by 'oc get node -o yaml') to stop
+
+    """
+    aws = AWS()
+    instance_ids, instance_names = get_instances_ids_and_names(instances)
+
+    for instance_id, instance_name in zip(instance_ids, instance_names):
+        if aws.get_instances_status_by_id(instance_id) == constants.INSTANCE_RUNNING:
+            logger.info(f"Stopping instance {instance_name}")
+            aws.stop_ec2_instance(instance_id)
+
+    for instance_id, instance_name in zip(instance_ids, instance_names):
+        logger.info(f"Waiting for instance {instance_name} to reach status stopped")
+        aws.wait_for_instance_status(
+            instance_id, status=constants.INSTANCE_STOPPED, timeout=120
+        )
+
+
+def start_instances(instances):
+    """
+    Start instances
+
+    Args:
+        instances (list): Dictionaries of instances (nodes returned
+            by 'oc get node -o yaml') to start
+
+    """
+    aws = AWS()
+    instance_ids, instance_names = get_instances_ids_and_names(instances)
+
+    for instance_id, instance_name in zip(instance_ids, instance_names):
+        if aws.get_instances_status_by_id(instance_id) == constants.INSTANCE_STOPPED:
+            logger.info(f"Starting instance {instance_name}")
+            aws.start_ec2_instance(instance_id)
+
+    for instance_id, instance_name in zip(instance_ids, instance_names):
+        logger.info(f"Waiting for instance {instance_name} to reach status running")
+        aws.wait_for_instance_status(
+            instance_id, status=constants.INSTANCE_RUNNING, timeout=120
+        )
