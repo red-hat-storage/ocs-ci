@@ -327,8 +327,8 @@ def create_pvc(
 
 
 def create_multiple_pvcs(
-        sc_name, namespace, number_of_pvc=1, size=None,
-        desired_status=constants.STATUS_BOUND, wait=True, wait_each=False
+    sc_name, namespace, number_of_pvc=1, size=None,
+    desired_status=constants.STATUS_BOUND, wait=True, wait_each=False
 ):
     """
     Create one or more PVC
@@ -338,7 +338,7 @@ def create_multiple_pvcs(
         number_of_pvc (int): Number of PVCs to be created
         size (str): The size of the PVCs to create
         namespace (str): The namespace for the PVCs creation
-        desired_status (str): The status of the pod to wait for
+        desired_status (str): The status of the PVC to wait for
         wait (bool): True for waiting for PVC to reach the desired status,
             False otherwise
         wait_each (bool): True for waiting for each PVC to reach the desired
