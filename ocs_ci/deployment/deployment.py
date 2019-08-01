@@ -278,6 +278,14 @@ class Deployment(object):
         assert ceph_health_check(
             namespace=config.ENV_DATA['cluster_namespace']
         )
+        # patch gp2 (EBS) storage class as 'non-default'
+        logger.info("Patch gp2 storageclass as non-default")
+        patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
+        run_cmd(
+            f"oc patch storageclass gp2 "
+            f"-p {patch} "
+            f"--request-timeout=120s"
+        )
 
     def destroy_cluster(self):
         """
