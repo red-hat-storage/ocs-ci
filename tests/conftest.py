@@ -305,6 +305,7 @@ def pvc_factory(request, rbd_storageclass_factory, project_factory):
     PVC. For custom PVC provide 'storageclass' parameter.
     """
     instances = []
+    active_project = None
 
     def factory(project=None, storageclass=None, custom_data=None):
         """
@@ -323,7 +324,9 @@ def pvc_factory(request, rbd_storageclass_factory, project_factory):
         if custom_data:
             pvc_obj = helpers.create_resource(**custom_data, wait=False)
         else:
-            project = project or project_factory()
+            nonlocal active_project
+            project = project or active_project or project_factory()
+            active_project = project
             storageclass = storageclass or rbd_storageclass_factory()
 
             pvc_obj = helpers.create_pvc(
@@ -420,6 +423,7 @@ def pod_factory(request, project_factory):
     For custom Pods provide 'pvc' parameter.
     """
     instances = []
+    active_project = None
 
     def factory(project=None, pvc=None, custom_data=None):
         """
@@ -437,7 +441,9 @@ def pod_factory(request, project_factory):
         if custom_data:
             pod_obj = helpers.create_resource(**custom_data, wait=False)
         else:
-            project = project or project_factory()
+            nonlocal active_project
+            project = project or active_project or project_factory()
+            active_project = project
 
             if pvc.storageclass.data[
                 'provisioner'
