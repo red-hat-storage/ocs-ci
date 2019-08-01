@@ -153,14 +153,7 @@ class OperationsBase(ManageTest):
         # Verify IO
         log.info("Fetching IO results.")
         for pod_obj in io_pods:
-            fio_result = pod_obj.get_fio_results()
-            log.info(f"IOPs after IO on pod {pod_obj.name}:")
-            log.info(
-                f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
-            )
-            log.info(
-                f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
-            )
+            get_fio_rw_iops(pod_obj)
         log.info("Verified IO result on pods.")
 
         # Delete pods
