@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.utility import templating
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError, CommandFailed, UnexpectedBehaviour
@@ -188,7 +189,7 @@ class TestRbdBasedRwoPvc(ManageTest):
         # Wait for second pod to be in Running state
         try:
             pod_obj2.ocp.wait_for_resource(
-                condition='Running', resource_name=pod_obj2.name, timeout=90
+                condition='Running', resource_name=pod_obj2.name, timeout=180
             )
         except TimeoutExpiredError as exp:
             raise TimeoutExpiredError(
