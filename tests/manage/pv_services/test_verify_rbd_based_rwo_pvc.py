@@ -6,6 +6,7 @@ from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.utility import templating
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError, CommandFailed, UnexpectedBehaviour
@@ -200,7 +201,7 @@ class TestRbdBasedRwoPvc(ManageTest):
         # Wait for second pod to be in Running state
         try:
             pod_obj2.ocp.wait_for_resource(
-                condition='Running', resource_name=pod_obj2.name, timeout=90
+                condition='Running', resource_name=pod_obj2.name, timeout=180
             )
         except TimeoutExpiredError as exp:
             raise TimeoutExpiredError(
@@ -274,10 +275,14 @@ class TestRbdBasedRwoPvc(ManageTest):
 
         if reclaim_policy == "Delete":
             # Verify PV is deleted
-            pv_info = pv_obj.get(out_yaml_format=False)
-            if pv_info:
-                assert not (pv_name in pv_info), (
-                    f"PV {pv_name} exists after deleting PVC {pvc_obj.name}"
+            for pv_info in TimeoutSampler(
+                    30, 2, pv_obj.get, out_yaml_format=False
+            ):
+                if pv_name not in pv_info:
+                    break
+                log.warning(
+                    f"PV {pv_name} exists after deleting PVC {pvc_obj.name}. "
+                    f"Checking again."
                 )
 
             # TODO: Verify PV using ceph toolbox. PV should be deleted.
