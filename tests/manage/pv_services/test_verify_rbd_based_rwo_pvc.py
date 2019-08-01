@@ -262,10 +262,14 @@ class TestRbdBasedRwoPvc(ManageTest):
 
         if reclaim_policy == "Delete":
             # Verify PV is deleted
-            pv_info = pv_obj.get(out_yaml_format=False)
-            if pv_info:
-                assert not (pv_name in pv_info), (
-                    f"PV {pv_name} exists after deleting PVC {pvc_obj.name}"
+            for pv_info in TimeoutSampler(
+                30, 2, pv_obj.get, out_yaml_format=False
+            ):
+                if pv_name not in pv_info:
+                    break
+                log.warning(
+                    f"PV {pv_name} exists after deleting PVC {pvc_obj.name}. "
+                    f"Checking again."
                 )
 
             # TODO: Verify PV using ceph toolbox. PV should be deleted.

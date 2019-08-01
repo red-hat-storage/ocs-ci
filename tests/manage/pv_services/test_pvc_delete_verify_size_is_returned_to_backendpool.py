@@ -4,6 +4,8 @@ size is returned to backend pool
 """
 import logging
 
+import pytest
+
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from tests import helpers
