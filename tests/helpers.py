@@ -695,4 +695,3 @@ def get_worker_nodes():
     nodes = ocp_node_obj.get(selector=label).get('items')
     worker_nodes_list = [node.get('metadata').get('name') for node in nodes]
     return worker_nodes_list
-
