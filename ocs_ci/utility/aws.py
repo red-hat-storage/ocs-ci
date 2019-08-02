@@ -62,6 +62,18 @@ class AWS(object):
             )
         return self._ec2_resource
 
+    def get_ec2_instance(self, instance_id):
+        """
+
+        Args:
+            instance_id (str): The ID of the instance to get
+
+        Returns:
+            boto3.Instance instance of ec2 instance resource
+
+        """
+        return self.ec2_resource.Instance(instance_id)
+
     def get_instances_by_name_pattern(self, pattern):
         """ Get instances by Name tag pattern
 
@@ -272,7 +284,8 @@ class AWS(object):
             InstanceIds=[instance_id], Force=True
         )
         if wait:
-            self.ec2_client.wait_until_stopped()
+            instance = self.get_ec2_instance(instance_id)
+            instance.wait_until_stopped()
         state = res.get('StoppingInstances')[0].get('CurrentState').get('Code')
         return state == constants.INSTANCE_STOPPING
 
@@ -290,7 +303,8 @@ class AWS(object):
         """
         res = self.ec2_client.start_instances(InstanceIds=[instance_id])
         if wait:
-            self.ec2_client.wait_until_running()
+            instance = self.get_ec2_instance(instance_id)
+            instance.wait_until_running()
         state = res.get('StartingInstances')[0].get('CurrentState').get('Code')
         return state == constants.INSTANCE_PENDING
 
@@ -334,7 +348,8 @@ def stop_instances(instances):
 
     for instance_id, instance_name in zip(instance_ids, instance_names):
         logger.info(f"Waiting for instance {instance_name} to reach status stopped")
-        aws.ec2_client.wait_until_stopped()
+        instance = aws.get_ec2_instance(instance_id)
+        instance.wait_until_stopped()
 
 
 def start_instances(instances):
@@ -356,4 +371,5 @@ def start_instances(instances):
 
     for instance_id, instance_name in zip(instance_ids, instance_names):
         logger.info(f"Waiting for instance {instance_name} to reach status running")
-        aws.ec2_client.wait_until_running()
+        instance = aws.get_ec2_instance(instance_id)
+        instance.wait_until_running()
