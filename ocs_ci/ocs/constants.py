@@ -95,6 +95,7 @@ MGR_APP_LABEL = "app=rook-ceph-mgr"
 OSD_APP_LABEL = "app=rook-ceph-osd"
 CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = "app=csi-cephfsplugin-provisioner"
 CSI_RBDPLUGIN_PROVISIONER_LABEL = "app=csi-rbdplugin-provisioner"
+OCS4_TEST_LABEL = "ocs42testobj=ocs-test-obj"
 
 # YAML paths
 TOOL_POD_YAML = os.path.join(
