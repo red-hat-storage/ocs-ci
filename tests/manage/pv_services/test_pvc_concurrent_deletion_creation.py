@@ -5,7 +5,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
-from ocs_ci.ocs import constants, exceptions
+from ocs_ci.ocs import exceptions
 from ocs_ci.framework.testlib import tier1, ManageTest, bugzilla
 from ocs_ci.ocs.resources.pvc import delete_pvcs
 
