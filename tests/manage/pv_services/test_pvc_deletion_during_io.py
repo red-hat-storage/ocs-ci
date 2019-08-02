@@ -4,7 +4,6 @@ import logging
 from ocs_ci.ocs import exceptions, constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import ManageTest, tier1
-from tests import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,6 @@ class TestDeletePVCWhileRunningIO(ManageTest):
         Delete PVC while IO is in progress
         """
         rbd_pod = rbd_pod_factory()
-        helpers.wait_for_resource_state(rbd_pod, constants.STATUS_RUNNING)
         thread = pod.run_io_in_bg(rbd_pod, expect_to_fail=True)
         rbd_pod.pvc.delete(wait=False)
 

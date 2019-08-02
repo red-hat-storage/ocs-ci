@@ -117,7 +117,6 @@ class TestRbdBasedRwoPvc(ManageTest):
         # Create first pod
         log.info(f"Creating two pods which use PVC {pvc_obj.name}")
         pod_obj = rbd_pod_factory(pvc=pvc_obj)
-        assert helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
 
         node_pod1 = pod_obj.get()['spec']['nodeName']
 
@@ -125,7 +124,6 @@ class TestRbdBasedRwoPvc(ManageTest):
         # Try creating pod until it is on a different node than first pod
         for retry in range(1, 6):
             pod_obj2 = rbd_pod_factory(pvc=pvc_obj)
-            assert helpers.wait_for_resource_state(pod_obj2, constants.STATUS_PENDING)
 
             node_pod2 = pod_obj2.get()['spec']['nodeName']
             if node_pod1 != node_pod2:

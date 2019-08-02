@@ -8,7 +8,6 @@ import pytest
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.framework.testlib import tier1, ManageTest, bugzilla
 from ocs_ci.ocs.resources.pvc import delete_pvcs
-from tests.helpers import wait_for_resource_state
 
 log = logging.getLogger(__name__)
 
@@ -60,10 +59,6 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
             rbd_pvc_factory(project=self.project) for x in range(1, self.num_of_pvcs)
         ]
 
-        for pvc_obj in new_pvc_objs:
-            assert wait_for_resource_state(pvc_obj, constants.STATUS_BOUND), (
-                f"PVC {pvc_obj.name} failed to reach {constants.STATUS_BOUND} status"
-            )
         log.info(f'Newly created {self.num_of_pvcs} PVCs are in Bound state.')
         self.pvc_objs_new.extend(new_pvc_objs)
 
