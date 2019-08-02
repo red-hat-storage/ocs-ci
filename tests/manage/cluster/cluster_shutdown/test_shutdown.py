@@ -4,7 +4,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs import ocp, constants
-from ocs_ci.framework.testlib import tier4, ManageTest
+from ocs_ci.framework.testlib import tier4, ignore_leftovers, ManageTest
 from ocs_ci.utility import aws
 from ocs_ci.ocs.cluster import CephCluster
 from tests import helpers
@@ -168,6 +168,7 @@ class BaseClusterShutdown(ManageTest):
 
 
 @tier4
+@ignore_leftovers
 class TestUngracefulNodesRestart(BaseClusterShutdown):
     """
     Test ungraceful cluster shutdown
