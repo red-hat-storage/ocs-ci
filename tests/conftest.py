@@ -366,7 +366,7 @@ def pvc_factory(request, rbd_storageclass_factory, project_factory):
 
 
 @pytest.fixture()
-def rbd_pvc_factory(request, pvc_factory, rbd_storageclass_factory):
+def rbd_pvc_factory(rbd_storageclass_factory, pvc_factory):
     """
     Create a persistent Volume Claim factory. Calling this fixture creates new
     RBD based PVC. For custom PVC provide 'storageclass' parameter.
@@ -404,7 +404,7 @@ def rbd_pvc_factory(request, pvc_factory, rbd_storageclass_factory):
 
 
 @pytest.fixture()
-def cephfs_pvc_factory(request, pvc_factory, cephfs_storageclass_factory):
+def cephfs_pvc_factory(cephfs_storageclass_factory, pvc_factory):
     """
     Create a persistent Volume Claim factory. Calling this fixture creates new
     CephFS based PVC. For custom PVC provide 'storageclass' parameter.
@@ -504,7 +504,7 @@ def pod_factory(request):
 
 
 @pytest.fixture()
-def rbd_pod_factory(pod_factory, rbd_pvc_factory):
+def rbd_pod_factory(rbd_pvc_factory, pod_factory):
     """
     Create a RBD based Pod factory. Calling this fixture creates new RBD Pod.
     For custom Pods provide 'pvc' parameter.
@@ -533,7 +533,7 @@ def rbd_pod_factory(pod_factory, rbd_pvc_factory):
 
 
 @pytest.fixture()
-def cephfs_pod_factory(pod_factory, cephfs_pvc_factory):
+def cephfs_pod_factory(cephfs_pvc_factory, pod_factory):
     """
     Create a CephFS based Pod factory. Calling this fixture creates new Pod.
     For custom Pods provide 'pvc' parameter.
