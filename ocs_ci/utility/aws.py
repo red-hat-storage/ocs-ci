@@ -64,6 +64,7 @@ class AWS(object):
 
     def get_ec2_instance(self, instance_id):
         """
+        Get instance of ec2 Instance
 
         Args:
             instance_id (str): The ID of the instance to get
