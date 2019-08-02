@@ -39,7 +39,7 @@ def resources(request):
     Delete the resources created during the test
 
     Returns:
-        dict: empty lists of resources
+        tuple: empty lists of resources
 
     """
     projects = list()
