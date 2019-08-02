@@ -335,8 +335,11 @@ class OCP(object):
             try:
                 self.get(resource_name=resource_name)
             except CommandFailed as ex:
-                logging.info(ex)
-                return True
+                if "NotFound" in str(ex):
+                    log.info(f"{self.kind} {resource_name} got deleted successfully")
+                    return True
+                else:
+                    raise ex
 
             if timeout < (time.time() - start_time):
                 raise TimeoutError(f"Timeout when waiting for {resource_name} to delete")
