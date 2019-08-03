@@ -21,7 +21,7 @@ def instances(request):
     Get cluster instances
 
     Returns:
-        list: The cluster instances dictionaries
+        dict: The ID keys and the name values of the instances
     """
     def finalizer():
         """

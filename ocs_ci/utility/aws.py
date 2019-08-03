@@ -309,19 +309,20 @@ class AWS(object):
                 self.get_instances_status_by_id(key) == constants.INSTANCE_STOPPED
             )
         }
-        instance_ids = [key for key in instances.keys()]
-        instance_names = [val for val in instances.values()]
-        logger.info(f"Starting instances {instance_names}")
-        assert self.ec2_client.start_instances(InstanceIds=instance_ids), (
-            f"Failed to start ec2 instances {instance_names}"
-        )
-        if wait:
-            for instance_id, instance_name in instances.items():
-                logger.info(
-                    f"Waiting for instance {instance_name} to reach status running"
-                )
-                instance = self.get_ec2_instance(instance_id)
-                instance.wait_until_running()
+        if instances:
+            instance_ids = [key for key in instances.keys()]
+            instance_names = [val for val in instances.values()]
+            logger.info(f"Starting instances {instance_names}")
+            assert self.ec2_client.start_instances(InstanceIds=instance_ids), (
+                f"Failed to start ec2 instances {instance_names}"
+            )
+            if wait:
+                for instance_id, instance_name in instances.items():
+                    logger.info(
+                        f"Waiting for instance {instance_name} to reach status running"
+                    )
+                    instance = self.get_ec2_instance(instance_id)
+                    instance.wait_until_running()
 
 
 def get_instances_ids_and_names(instances):
