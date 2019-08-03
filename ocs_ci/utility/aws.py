@@ -70,7 +70,7 @@ class AWS(object):
             instance_id (str): The ID of the instance to get
 
         Returns:
-            boto3.Instance instance of ec2 instance resource
+            boto3.Instance: instance of ec2 instance resource
 
         """
         return self.ec2_resource.Instance(instance_id)
@@ -318,16 +318,14 @@ def get_instances_ids_and_names(instances):
         instances (list): Nodes dictionaries, returned by 'oc get node -o yaml'
 
     Returns:
-        tuple: lists of node IDs and names
+        dict: The ID keys and the name values of the instances
 
     """
-    instance_names = [node.get('metadata').get('name') for node in instances]
-    instance_ids = [
-        'i-' + node.get('spec').get(
-            'providerID'
-        ).partition('i-')[-1] for node in instances
-    ]
-    return instance_ids, instance_names
+    return {
+        'i-' + instance.get('spec').get('providerID').partition('i-')[
+            -1
+        ]: instance.get('metadata').get('name') for instance in instances
+    }
 
 
 def stop_instances(instances):
@@ -340,14 +338,14 @@ def stop_instances(instances):
 
     """
     aws = AWS()
-    instance_ids, instance_names = get_instances_ids_and_names(instances)
+    instances_dict = get_instances_ids_and_names(instances)
 
-    for instance_id, instance_name in zip(instance_ids, instance_names):
+    for instance_id, instance_name in instances_dict.items():
         if aws.get_instances_status_by_id(instance_id) == constants.INSTANCE_RUNNING:
             logger.info(f"Stopping instance {instance_name}")
             aws.stop_ec2_instance(instance_id)
 
-    for instance_id, instance_name in zip(instance_ids, instance_names):
+    for instance_id, instance_name in instances_dict.items():
         logger.info(f"Waiting for instance {instance_name} to reach status stopped")
         instance = aws.get_ec2_instance(instance_id)
         instance.wait_until_stopped()
@@ -363,14 +361,14 @@ def start_instances(instances):
 
     """
     aws = AWS()
-    instance_ids, instance_names = get_instances_ids_and_names(instances)
+    instances_dict = get_instances_ids_and_names(instances)
 
-    for instance_id, instance_name in zip(instance_ids, instance_names):
+    for instance_id, instance_name in instances_dict.items():
         if aws.get_instances_status_by_id(instance_id) == constants.INSTANCE_STOPPED:
             logger.info(f"Starting instance {instance_name}")
             aws.start_ec2_instance(instance_id)
 
-    for instance_id, instance_name in zip(instance_ids, instance_names):
+    for instance_id, instance_name in instances_dict.items():
         logger.info(f"Waiting for instance {instance_name} to reach status running")
         instance = aws.get_ec2_instance(instance_id)
         instance.wait_until_running()
