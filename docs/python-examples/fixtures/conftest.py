@@ -17,7 +17,6 @@ def storage_class(request):
         StorageClass: object of storage class
     """
     def fin():
-        if not sc.is_deleted:
             sc.delete()
 
     request.addfinalizer(fin)
@@ -37,7 +36,6 @@ def cls_pvc(request, storage_class):
         PVC: object of PVC class
     """
     def fin():
-        if not pvc.is_deleted:
             pvc.delete()
 
     request.addfinalizer(fin)
@@ -55,20 +53,16 @@ def pvc_factory(request, storage_class):
     a part of test and cares about teardown of created PVCs.
 
     Usage of this fixture is for use cases when:
-    * you need to create PVC resources as part of test and the teardown is
-      done automatically by its teardown
-    * you need to create PVC resources as part of test and you can also delete
-      as part of test, thanks to is_deleted flag the teardown is skipped for
-      already deleted PVCs
-    * if you need to prepare those resources as part of setup fixture, please
-      create wrapper for this factory fixture like will be showed in another
-      example.
+    * you need to create/delete PVC (or any OCS) resources as part of test setup
+      and teardown is done automatically by its teardown
+    * The factory returns a closure function which keeps track of objects
+      it has created and call's the objects delete method to cleanup resources.
 
     Returns:
-        function wrapper wrapper_crate_pvcs for ocs.create_pvcs function.
+        function wrapper wrapper_create_pvcs for ocs.create_pvcs function.
     """
-    # this is list of pvcs where we will append all created pvcs by helper
-    # function for creating PVC and will be used in finalizer as well.
+    # create pvcs as list - where we will append all created pvcs inside
+    # wrapper function ()
     pvcs = []
 
     def fin():
@@ -81,16 +75,10 @@ def pvc_factory(request, storage_class):
 
     logger.info("Setup of pvcs")
 
-    # There is possibility to define helper function inside this factory like
-    # in example:
-    # https://docs.pytest.org/en/latest/fixture.html#factories-as-fixtures
-    # But then we will use capability of reusability of the code. So this
-    # doesn't work for us.
-    def wrapper_crate_pvc(some_parameter="default_value"):
+    def wrapper_create_pvc(some_parameter="default_value"):
         """
-        Function wrapper for ocs.create_pvcs. This wrapper append created PVCs
-        into pvcs list referenced from create_pvcs factroy which allows to do
-        proper teardown of created objects.
+        This wrapper appends created PVCs into pvcs list
+        and the list will iterated to teardown the created objects.
 
         Args:
             some_parameter (str): you can have some parameter here used below
@@ -99,4 +87,4 @@ def pvc_factory(request, storage_class):
         pvcs.append(pvc)
         return pvc
 
-    return wrapper_crate_pvc
+    return wrapper_create_pvc
