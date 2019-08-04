@@ -5,7 +5,9 @@ import pytest
 from ocs_ci.framework.testlib import ManageTest, tier4
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import delete_pvcs
-from ocs_ci.ocs.resources.pod import get_fio_rw_iops
+from ocs_ci.ocs.resources.pod import (
+    get_fio_rw_iops, get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods
+)
 from tests import helpers, disruption_helpers
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool,
@@ -63,18 +65,27 @@ class OperationsBase(ManageTest):
         7. Verify that pods created in Step 2 are Running.
         8. Verify IO results.
         9. Delete pods created in Steps 1 and 2.
-        10. Use all PVCs to create new pods. One PVC for one pod.
-        11. Start IO on all pods created in Step 10.
-        12. Verify IO results.
+        10. Verify the total number of 'resource_to_delete' pods
+        11. Use all PVCs to create new pods. One PVC for one pod.
+        12. Start IO on all pods created in Step 10.
+        13. Verify IO results.
         """
         # Separate the available PVCs
         pvc_objs_for_io_pods = self.pvc_objs[0:self.pvc_num_for_io_pods]
         pvc_objs_new_pods = self.pvc_objs[self.pvc_num_for_io_pods:]
 
+        pod_functions = {
+            'mds': get_mds_pods, 'mon': get_mon_pods, 'mgr': get_mgr_pods,
+            'osd': get_osd_pods
+        }
+
         executor = ThreadPoolExecutor(max_workers=2)
 
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=resource_to_delete)
+
+        # Get number of pods
+        initial_pods_num = len(pod_functions[resource_to_delete]())
 
         # Create pods for running IO
         io_pods = helpers.create_pods(
@@ -167,6 +178,15 @@ class OperationsBase(ManageTest):
 
         # Updating self.pod_objs for the purpose of teardown
         self.pod_objs.clear()
+
+        # Verify number of pods
+        final_pods_num = len(pod_functions[resource_to_delete]())
+        assert final_pods_num == initial_pods_num, (
+            f"Total number of {resource_to_delete} pods is not matching with "
+            f"initial value. Total number of pods before deleting a pod: "
+            f"{initial_pods_num}. Total number of pods present now: "
+            f"{final_pods_num}"
+        )
 
         # Verify that PVCs are reusable by creating new pods
         all_pvc_objs = self.pvc_objs + pvc_objs_new
