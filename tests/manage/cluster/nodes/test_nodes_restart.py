@@ -12,28 +12,54 @@ from tests import helpers
 
 logger = logging.getLogger(__name__)
 
-AWS = aws.AWS()
+
+@pytest.fixture()
+def aws_obj():
+    """
+    Returns:
+        AWS: An instance of AWS class
+
+    """
+    aws_obj = aws.AWS()
+    return aws_obj
 
 
 @pytest.fixture()
-def instances(request):
+def instances(request, aws_obj):
     """
     Get cluster instances
 
     Returns:
         dict: The ID keys and the name values of the instances
+
     """
+    nodes = ocp.get_all_nodes()
+    ec2_instances = aws.get_instances_ids_and_names(nodes)
+
     def finalizer():
         """
         Make sure all instances are running
         """
-        AWS.start_ec2_instances(instances=instances, wait=True)
+        stopping_instances = {
+            key: val for key, val in ec2_instances.items() if (
+                aws_obj.get_instances_status_by_id(key) == constants.INSTANCE_STOPPING
+            )
+        }
+        if stopping_instances:
+            for stopping_instance in stopping_instances:
+                instance = aws_obj.get_ec2_instance(stopping_instance.key())
+                instance.wait_until_stopped()
+        stopped_instances = {
+            key: val for key, val in ec2_instances.items() if (
+                aws_obj.get_instances_status_by_id(key) == constants.INSTANCE_STOPPED
+            )
+        }
+        if stopped_instances:
+            aws_obj.start_ec2_instances(instances=stopped_instances, wait=True)
 
     request.addfinalizer(finalizer)
 
-    nodes = ocp.get_all_nodes()
-    instances = aws.get_instances_ids_and_names(nodes)
-    return instances
+    return ec2_instances
 
 
 @pytest.fixture()
@@ -168,12 +194,12 @@ class TestNodesRestart(BaseNodesRestart):
             pytest.param(*[False], marks=pytest.mark.polarion_id("OCS-895"))
         ]
     )
-    def test_ungraceful_shutdown_aws(self, resources, instances, force):
+    def test_ungraceful_shutdown_aws(self, resources, instances, aws_obj, force):
         """
         Test ungraceful cluster shutdown - AWS
         """
-        AWS.stop_ec2_instances(instances=instances, wait=True, force=force)
-        AWS.start_ec2_instances(instances=instances, wait=True)
+        aws_obj.stop_ec2_instances(instances=instances, wait=True, force=force)
+        aws_obj.start_ec2_instances(instances=instances, wait=True)
         self.validate_cluster(resources, instances)
 
 # TODO: Add a test class for graceful shutdown

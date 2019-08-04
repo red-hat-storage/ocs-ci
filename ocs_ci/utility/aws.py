@@ -309,39 +309,24 @@ class AWS(object):
                 False otherwise
 
         """
-        stopping_instances = {
-            key: val for key, val in instances.items() if (
-                self.get_instances_status_by_id(key) == constants.INSTANCE_STOPPING
+        instance_ids, instance_names = zip(*instances.items())
+        logger.info(f"Starting instances {instance_names}")
+        ret = self.ec2_client.start_instances(InstanceIds=instance_ids)
+        starting_instances = ret.get('StartingInstances')
+        for instance in starting_instances:
+            assert instance.get('CurrentState').get('Code') in [
+                constants.INSTANCE_RUNNING, constants.INSTANCE_PENDING
+            ], (
+                f"Instance {instance.get('InstanceId')} status "
+                f"is {instance.get('CurrentState').get('Code')}"
             )
-        }
-        if stopping_instances:
-            for instance_dict in stopping_instances:
-                instance = self.get_ec2_instance(instance_dict.key())
-                instance.wait_until_stopped()
-        instances = {
-            key: val for key, val in instances.items() if (
-                self.get_instances_status_by_id(key) == constants.INSTANCE_STOPPED
-            )
-        }
-        if instances:
-            instance_ids, instance_names = zip(*instances.items())
-            logger.info(f"Starting instances {instance_names}")
-            ret = self.ec2_client.start_instances(InstanceIds=instance_ids)
-            starting_instances = ret.get('StartingInstances')
-            for instance in starting_instances:
-                assert instance.get('CurrentState').get('Code') in [
-                    constants.INSTANCE_RUNNING, constants.INSTANCE_PENDING
-                ], (
-                    f"Instance {instance.get('InstanceId')} status "
-                    f"is {instance.get('CurrentState').get('Code')}"
+        if wait:
+            for instance_id, instance_name in instances.items():
+                logger.info(
+                    f"Waiting for instance {instance_name} to reach status running"
                 )
-            if wait:
-                for instance_id, instance_name in instances.items():
-                    logger.info(
-                        f"Waiting for instance {instance_name} to reach status running"
-                    )
-                    instance = self.get_ec2_instance(instance_id)
-                    instance.wait_until_running()
+                instance = self.get_ec2_instance(instance_id)
+                instance.wait_until_running()
 
 
 def get_instances_ids_and_names(instances):

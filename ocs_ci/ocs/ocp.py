@@ -413,4 +413,5 @@ def wait_for_nodes_ready(num_of_nodes):
                     if ready_nodes == num_of_nodes:
                         return True
     except TimeoutExpiredError:
+        log.error("Not all nodes reached status Ready")
         return False
