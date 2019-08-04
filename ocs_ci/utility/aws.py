@@ -1,6 +1,5 @@
 import logging
 import time
-
 import boto3
 
 from ocs_ci.framework import config
@@ -280,12 +279,18 @@ class AWS(object):
             force (bool): True for force instance stop, False otherwise
 
         """
-        instance_ids = [key for key in instances.keys()]
-        instance_names = [val for val in instances.values()]
+        instance_ids, instance_names = zip(*instances.items())
         logger.info(f"Stopping instances {instance_names} with Force={force}")
-        assert self.ec2_client.stop_instances(
-            InstanceIds=instance_ids, Force=force
-        ), f"Failed to stop ec2 instances {instance_names}"
+        ret = self.ec2_client.stop_instances(InstanceIds=instance_ids, Force=force)
+        stopping_instances = ret.get('StoppingInstances')
+        for instance in stopping_instances:
+            assert instance.get('CurrentState').get('Code') in [
+                constants.INSTANCE_STOPPED, constants.INSTANCE_STOPPING,
+                constants.INSTANCE_SHUTTING_DOWN
+            ], (
+                f"Instance {instance.get('InstanceId')} status "
+                f"is {instance.get('CurrentState').get('Code')}"
+            )
         if wait:
             for instance_id, instance_name in instances.items():
                 logger.info(
@@ -304,18 +309,32 @@ class AWS(object):
                 False otherwise
 
         """
+        stopping_instances = {
+            key: val for key, val in instances.items() if (
+                self.get_instances_status_by_id(key) == constants.INSTANCE_STOPPING
+            )
+        }
+        if stopping_instances:
+            for instance_dict in stopping_instances:
+                instance = self.get_ec2_instance(instance_dict.key())
+                instance.wait_until_stopped()
         instances = {
             key: val for key, val in instances.items() if (
                 self.get_instances_status_by_id(key) == constants.INSTANCE_STOPPED
             )
         }
         if instances:
-            instance_ids = [key for key in instances.keys()]
-            instance_names = [val for val in instances.values()]
+            instance_ids, instance_names = zip(*instances.items())
             logger.info(f"Starting instances {instance_names}")
-            assert self.ec2_client.start_instances(InstanceIds=instance_ids), (
-                f"Failed to start ec2 instances {instance_names}"
-            )
+            ret = self.ec2_client.start_instances(InstanceIds=instance_ids)
+            starting_instances = ret.get('StartingInstances')
+            for instance in starting_instances:
+                assert instance.get('CurrentState').get('Code') in [
+                    constants.INSTANCE_RUNNING, constants.INSTANCE_PENDING
+                ], (
+                    f"Instance {instance.get('InstanceId')} status "
+                    f"is {instance.get('CurrentState').get('Code')}"
+                )
             if wait:
                 for instance_id, instance_name in instances.items():
                     logger.info(
@@ -337,7 +356,6 @@ def get_instances_ids_and_names(instances):
 
     """
     return {
-        'i-' + instance.get('spec').get('providerID').partition('i-')[
-            -1
-        ]: instance.get('metadata').get('name') for instance in instances
+        'i-' + instance.get('spec').get('providerID').partition('i-')[-1]:
+        instance.get('metadata').get('name') for instance in instances
     }

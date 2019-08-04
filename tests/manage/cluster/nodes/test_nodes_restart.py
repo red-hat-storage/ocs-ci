@@ -45,35 +45,19 @@ def resources(request):
         tuple: empty lists of resources
 
     """
-    projects = list()
-    secrets = list()
-    pools = list()
-    storageclasses = list()
-    pvcs = list()
-    pods = list()
+    projects, secrets, pools, storageclasses, pvcs, pods = ([] for i in range(6))
 
     def finalizer():
         """
         Delete the resources created during the test
         """
-        if pods:
-            for pod in pods:
-                pod.delete()
-                pod.ocp.wait_for_delete(pod.name)
-        if pvcs:
-            for pvc in pvcs:
-                pvc.delete()
-                pvc.ocp.wait_for_delete(pvc.name)
-        if storageclasses:
-            for sc in storageclasses:
-                sc.delete()
-                sc.ocp.wait_for_delete(sc.name)
+        for resource_type in pods, pvcs, storageclasses, secrets:
+            for resource in resource_type:
+                resource.delete()
+                resource.ocp.wait_for_delete(resource.name)
         if pools:
             # Delete only the RBD pool
             pools[0].delete()
-        if secrets:
-            for secret in secrets:
-                secret.delete()
         if projects:
             for project in projects:
                 project.delete(resource_name=project.namespace)
@@ -100,12 +84,8 @@ class BaseNodesRestart(ManageTest):
         ceph_cluster.cluster_health_check(timeout=60)
 
         # Create resources and run IO for both FS and RBD
-        projects = resources[0]
-        secrets = resources[1]
-        pools = resources[2]
-        storageclasses = resources[3]
-        pvcs = resources[4]
-        pods = resources[5]
+        # Unpack resources
+        projects, secrets, pools, storageclasses, pvcs, pods = resources[:6]
 
         # Project
         projects.append(helpers.create_project())
