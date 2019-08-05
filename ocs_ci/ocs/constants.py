@@ -23,6 +23,8 @@ TEMPLATE_PV_PVC_DIR = os.path.join(TEMPLATE_DIR, "pv_pvc")
 TEMPLATE_APP_POD_DIR = os.path.join(TEMPLATE_DIR, "app-pods")
 TEMPLATE_WORKLOAD_DIR = os.path.join(TEMPLATE_DIR, "workloads")
 TEMPLATE_FIO_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fio")
+TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
+TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
 TEMPLATE_CONFIGURE_PVC_MONITORING_POD = os.path.join(
     TEMPLATE_DIR, "openshift-infra/monitoring/"
 )
@@ -126,6 +128,17 @@ CONFIGURE_PVC_ON_MONITORING_POD = os.path.join(
     TEMPLATE_CONFIGURE_PVC_MONITORING_POD, "configuring_pvc.yaml"
 )
 
+PGSQL_SERVICE_YAML = os.path.join(
+    TEMPLATE_PGSQL_SERVER_DIR, "Service.yaml"
+)
+
+PGSQL_CONFIGMAP_YAML = os.path.join(
+    TEMPLATE_PGSQL_SERVER_DIR, "ConfigMap.yaml"
+)
+
+PGSQL_STATEFULSET_YAML = os.path.join(
+    TEMPLATE_PGSQL_SERVER_DIR, "StatefulSet.yaml"
+)
 NGINX_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "nginx.yaml"
 )
