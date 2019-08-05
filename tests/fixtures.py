@@ -146,16 +146,8 @@ def create_project(request):
 
     request.addfinalizer(finalizer)
 
-    class_instance.namespace = helpers.create_unique_resource_name(
-        'test', 'namespace'
-    )
-    class_instance.project_obj = ocp.OCP(
-        kind='Project', namespace=class_instance.namespace
-    )
-
-    assert class_instance.project_obj.new_project(class_instance.namespace), (
-        f'Failed to create new project {class_instance.namespace}'
-    )
+    class_instance.project_obj = helpers.create_project()
+    class_instance.namespace = class_instance.project_obj.namespace
 
 
 @pytest.fixture()

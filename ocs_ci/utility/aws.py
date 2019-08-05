@@ -1,21 +1,14 @@
 import logging
 import time
-
 import boto3
 
 from ocs_ci.framework import config
-from ocs_ci.utility import utils
+from ocs_ci.ocs import constants
 
 logger = logging.getLogger(name=__file__)
 
-TIMEOUT = 60
+TIMEOUT = 90
 SLEEP = 3
-
-# Instance statuses
-PENDING = 0
-STOPPING = 64
-STOPPED = 80
-RUNNING = 16
 
 
 class AWSTimeoutException(Exception):
@@ -67,6 +60,19 @@ class AWS(object):
                 region_name=self._region_name,
             )
         return self._ec2_resource
+
+    def get_ec2_instance(self, instance_id):
+        """
+        Get instance of ec2 Instance
+
+        Args:
+            instance_id (str): The ID of the instance to get
+
+        Returns:
+            boto3.Instance: instance of ec2 instance resource
+
+        """
+        return self.ec2_resource.Instance(instance_id)
 
     def get_instances_by_name_pattern(self, pattern):
         """ Get instances by Name tag pattern
@@ -262,50 +268,79 @@ class AWS(object):
             delete_response
         )
 
-    def stop_ec2_instance(self, instance_id, wait=False):
+    def stop_ec2_instances(self, instances, wait=False, force=True):
         """
         Stopping an instance
 
         Args:
-            instance_id (str): ID of the instance to stop
+            instances (dict): A dictionary of instance IDs and names to stop
             wait (bool): True in case wait for status is needed,
                 False otherwise
+            force (bool): True for force instance stop, False otherwise
 
-        Returns:
-            bool: True in case operation succeeded, False otherwise
         """
-        res = self.ec2_client.stop_instances(
-            InstanceIds=[instance_id], Force=True
-        )
+        instance_ids, instance_names = zip(*instances.items())
+        logger.info(f"Stopping instances {instance_names} with Force={force}")
+        ret = self.ec2_client.stop_instances(InstanceIds=instance_ids, Force=force)
+        stopping_instances = ret.get('StoppingInstances')
+        for instance in stopping_instances:
+            assert instance.get('CurrentState').get('Code') in [
+                constants.INSTANCE_STOPPED, constants.INSTANCE_STOPPING,
+                constants.INSTANCE_SHUTTING_DOWN
+            ], (
+                f"Instance {instance.get('InstanceId')} status "
+                f"is {instance.get('CurrentState').get('Code')}"
+            )
         if wait:
-            for sample in utils.TimeoutSampler(
-                TIMEOUT, SLEEP, self.get_instances_status_by_id, instance_id
-            ):
-                if sample == STOPPED:
-                    return True
-            return False
-        state = res.get('StoppingInstances')[0].get('CurrentState').get('Code')
-        return state == STOPPING
+            for instance_id, instance_name in instances.items():
+                logger.info(
+                    f"Waiting for instance {instance_name} to reach status stopped"
+                )
+                instance = self.get_ec2_instance(instance_id)
+                instance.wait_until_stopped()
 
-    def start_ec2_instance(self, instance_id, wait=False):
+    def start_ec2_instances(self, instances, wait=False):
         """
         Starting an instance
 
         Args:
-            instance_id (str): ID of the instance to start
+            instances (dict): A dictionary of instance IDs and names to start
             wait (bool): True in case wait for status is needed,
                 False otherwise
 
-        Returns:
-            bool: True in case operation succeeded, False otherwise
         """
-        res = self.ec2_client.start_instances(InstanceIds=[instance_id])
+        instance_ids, instance_names = zip(*instances.items())
+        logger.info(f"Starting instances {instance_names}")
+        ret = self.ec2_client.start_instances(InstanceIds=instance_ids)
+        starting_instances = ret.get('StartingInstances')
+        for instance in starting_instances:
+            assert instance.get('CurrentState').get('Code') in [
+                constants.INSTANCE_RUNNING, constants.INSTANCE_PENDING
+            ], (
+                f"Instance {instance.get('InstanceId')} status "
+                f"is {instance.get('CurrentState').get('Code')}"
+            )
         if wait:
-            for sample in utils.TimeoutSampler(
-                TIMEOUT, SLEEP, self.get_instances_status_by_id, instance_id
-            ):
-                if sample == RUNNING:
-                    return True
-            return False
-        state = res.get('StartingInstances')[0].get('CurrentState').get('Code')
-        return state == PENDING
+            for instance_id, instance_name in instances.items():
+                logger.info(
+                    f"Waiting for instance {instance_name} to reach status running"
+                )
+                instance = self.get_ec2_instance(instance_id)
+                instance.wait_until_running()
+
+
+def get_instances_ids_and_names(instances):
+    """
+    Get the instances IDs and names according to nodes dictionary
+
+    Args:
+        instances (list): Nodes dictionaries, returned by 'oc get node -o yaml'
+
+    Returns:
+        dict: The ID keys and the name values of the instances
+
+    """
+    return {
+        'i-' + instance.get('spec').get('providerID').partition('i-')[-1]:
+        instance.get('metadata').get('name') for instance in instances
+    }
