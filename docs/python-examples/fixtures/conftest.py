@@ -1,8 +1,6 @@
 import logging
-
 import pytest
-
-import ocs
+from ocs_ci.ocs.resources.ocs import OCS
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -17,13 +15,14 @@ def storage_class(request):
         StorageClass: object of storage class
     """
     def fin():
-            sc.delete()
+        sc.delete()
 
     request.addfinalizer(fin)
 
-    sc_name = ocs.get_random_name('storage_class')
-    logger.info(f"Creating storage class: {sc_name}")
-    sc = ocs.StorageClass(sc_name)
+    logger.info("Creating storage class")
+    data = {'api_version': 'v1', 'kind': 'namespace'}
+    # data is ususally loaded from yaml template
+    sc = OCS(**data)
     return sc
 
 
@@ -36,12 +35,12 @@ def cls_pvc(request, storage_class):
         PVC: object of PVC class
     """
     def fin():
-            pvc.delete()
+        pvc.delete()
 
     request.addfinalizer(fin)
-    pvc_name = ocs.get_random_name('pvc')
-    logger.info(f"Creating pvc: {pvc_name}")
-    pvc = ocs.PVC(pvc_name, storage_class, some_parameter="Default value")
+    data = {'api_version': 'v1', 'kind': 'namespace'}
+    # data is ususally loaded from yaml template
+    pvc = OCS(**data)
     return pvc
 
 
@@ -68,14 +67,13 @@ def pvc_factory(request, storage_class):
     def fin():
         logger.info("In finalizer")
         for pvc in pvcs:
-            if not pvc.is_deleted:
-                pvc.delete()
+            pvc.delete()
 
     request.addfinalizer(fin)
 
     logger.info("Setup of pvcs")
 
-    def wrapper_create_pvc(some_parameter="default_value"):
+    def wrapper_create_pvc(data):
         """
         This wrapper appends created PVCs into pvcs list
         and the list will iterated to teardown the created objects.
@@ -83,8 +81,18 @@ def pvc_factory(request, storage_class):
         Args:
             some_parameter (str): you can have some parameter here used below
         """
-        pvc = ocs.create_pvc(storage_class, some_parameter)
+        pvc = OCS(**data)
         pvcs.append(pvc)
         return pvc
 
     return wrapper_create_pvc
+
+
+@pytest.fixture(scope='class')
+def precreate_pvcs(pvc_factory, storage_class):
+    """
+    This fixture returns the precreated PVC
+    objects using pvc_factory
+    Same concept can be applied to other similar objects (aka OCS's)
+    """
+    return [pvc_factory(storage_class) for x in range('some_number')]

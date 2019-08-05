@@ -12,7 +12,7 @@ defined in fixtures.
 All the fixtures should be documented - documenting the return value is
 mandatory.
 
-Fixture is compose of its setup part, the code which is done for prepare
+Fixture is composed of its setup part, the code which is done for prepare
 resource and teardown part which is after yield of added via
 `request.addfinalizer` method. It's strictly forced to use `addfinalizer`
 method cause it can happen that what is after yield won't be proceed when
@@ -38,14 +38,14 @@ Something like:
 
 Here is the list of things we should avoid in our fixtures:
 
-* Using references to `request.node.cls` for set, altering or reading class
+* Using references to `request.node.cls` for setting, altering or reading class
   attributes.
 * Using globals for sharing data.
 * Using yield.
 * Using `@pytest.mark.usefixtures`.
 * Using more than one assert in the teardown when another teardown action is
-  between them. (This will lead that the rest of resources won't be cleaned
-  once assertion exception raised).
+  between them. (This will lead to a situation where the rest of resources
+  aren't cleaned.
 
 ## Examples of fixtures and tests
 
