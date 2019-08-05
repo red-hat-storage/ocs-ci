@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 @pytest.fixture()
 def aws_obj():
     """
+    Initialize AWS instance
+
     Returns:
         AWS: An instance of AWS class
 
@@ -33,7 +35,7 @@ def instances(request, aws_obj):
         dict: The ID keys and the name values of the instances
 
     """
-    nodes = ocp.get_all_nodes()
+    nodes = ocp.get_node_objs()
     ec2_instances = aws.get_instances_ids_and_names(nodes)
 
     def finalizer():
@@ -99,7 +101,12 @@ class BaseNodesRestart(ManageTest):
     Base class for nodes restart related tests
     """
     def validate_cluster(self, resources, instances):
-        assert ocp.wait_for_nodes_ready(len(instances)), (
+        """
+        Perform cluster validation - nodes readiness, Ceph cluster health
+        check and functional resources tests
+        """
+        instances_names = list(instances.values())
+        assert ocp.wait_for_nodes_ready(instances_names), (
             "Not all nodes reached status Ready"
         )
 
