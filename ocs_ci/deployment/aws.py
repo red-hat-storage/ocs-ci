@@ -89,7 +89,8 @@ class AWSIPI(AWSBase):
         self.name = self.__class__.__name__
         super(AWSIPI, self).__init__()
         self.installer = utils.get_openshift_installer(
-            config.DEPLOYMENT['installer_version']
+            config.DEPLOYMENT['installer_version'],
+            force_download=config.DEPLOYMENT['force_download_installer'],
         )
 
     def deploy_cluster(self, log_cli_level='DEBUG'):
