@@ -5,7 +5,7 @@ import pytest
 from time import sleep
 
 from ocs_ci.ocs import constants, ocp, defaults
-from ocs_ci.framework.testlib import tier4 , E2ETest
+from ocs_ci.framework.testlib import tier4, E2ETest
 from ocs_ci.ocs.resources import pvc, pod
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool,
@@ -120,6 +120,7 @@ def get_the_collected_metrics_for_pvcs_when_node_down():
     create_rbd_storageclass.__name__,
     test_fixture.__name__
 )
+@pytest.mark.polarion_id("OCS-606")
 class TestWhenOneOfThePrometheusNodeDown(E2ETest):
     """
     When the nodes are down, there should not be any functional impact
@@ -150,12 +151,6 @@ class TestWhenOneOfThePrometheusNodeDown(E2ETest):
         aws_obj.stop_ec2_instances(instances=instance_dict, wait=True)
 
         # Check for the created pvc metrics
-        # # when node is down where the prometheus pod is hosted
-        # # will not be able to get the collected metrics
-        # assert get_the_collected_metrics_for_pvcs_when_node_down(), (
-        #     f"Unexpected: Successfully got the pvc related data on prometheus"
-        #     f" pod even when node {prometheus_node} is down"
-        # )
         for pvc_obj in self.pvc_objs:
             assert collected_metrics_for_created_pvc(pvc_obj.name), (
                 f"On prometheus pod for created pvc {pvc_obj.name} related data is not collected"
