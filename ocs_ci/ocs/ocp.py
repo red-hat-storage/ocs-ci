@@ -406,9 +406,9 @@ def wait_for_nodes_ready(num_of_nodes):
             if len(sample) == num_of_nodes:
                 ready_nodes = 0
                 for node in sample:
-                    for con in node.get('status').get('conditions'):
-                        if 'True' in con.get('status'):
-                            if con.get('type') == 'Ready':
+                    for status_condition in node.get('status').get('conditions'):
+                        if 'True' in status_condition.get('status'):
+                            if status_condition.get('type') == 'Ready':
                                 ready_nodes += 1
                     if ready_nodes == num_of_nodes:
                         return True
