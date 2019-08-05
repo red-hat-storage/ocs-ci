@@ -120,8 +120,12 @@ class RipSaw(object):
         self.pgsql_is_setup = True
 
     def cleanup(self):
-        run_cmd(f'cd {self.dir.name} ; oc delete -f {self.crd}')
-        run_cmd(f'cd {self.dir.name} ; oc delete -f {self.operator}')
-        run_cmd(f'cd {self.dir.name} ; oc delete -f deploy')
+        run(f'oc delete -f {self.crd}', shell=True, cwd=self.dir)
+        run(f'oc delete -f {self.operator}', shell=True, cwd=self.dir)
+        run(f'oc delete -f deploy', shell=True, cwd=self.dir)
         run_cmd(f'oc delete project {self.namespace}')
+        if self.pgsql_is_setup:
+            self.pgsql_sset.delete()
+            self.pgsql_cmap.delete()
+            self.pgsql_service.delete()
         self.ns_obj.wait_for_delete(resource_name=self.namespace)
