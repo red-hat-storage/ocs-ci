@@ -729,3 +729,19 @@ def get_pod_node(pod_obj):
     """
     node_name = pod_obj.get().get('spec').get('nodeName')
     return node.get_node_objs(node_names=node_name)[0]
+
+
+def delete_pods(pod_objs):
+    """
+    Deletes list of the pod objects
+
+    Args:
+        pod_objs (list): List of the pod objects to be deleted
+
+    Returns:
+        bool: True if deletion is successful
+
+    """
+    for pod in pod_objs:
+        pod.delete()
+    return True
