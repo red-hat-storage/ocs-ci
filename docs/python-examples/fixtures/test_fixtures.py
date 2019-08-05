@@ -46,18 +46,6 @@ class TestPVC:
         # use the pvc
         # perform rest of the test
 
-    def test_pre_create_n_pvc(self, pvc_factory, storage_class):
-        """
-        If the test wants to pre - create N PVC's, they can use
-        the following method.
-        """
-        # call pvc_factory that creates pvc
-        pvc_1 = pvc_factory()
-        pvc_2 = pvc_factory()
-        # and so on - or use a loop
-        # use the pvc
-        # perform rest of the test
-
 
 class TestPVCsCreatedInSetup:
     """
