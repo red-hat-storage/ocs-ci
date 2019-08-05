@@ -1,8 +1,10 @@
 import pytest
 from tests import helpers
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.resources.ocs import OCS
 
 
+# Secret section
 @pytest.fixture()
 def create_rbd_secret(request):
     """
@@ -54,6 +56,46 @@ def create_cephfs_secret(request):
 
 
 @pytest.fixture()
+def create_interface_based_secret(request):
+    """
+    Create a CephFS or RBD secret
+    """
+    class_instance = request.node.cls
+    interface = class_instance.interface
+
+    def finalizer():
+        """
+        Delete the FS secret
+        """
+        if interface == constants.CEPHBLOCKPOOL:
+            if hasattr(class_instance, 'rbd_secret_obj'):
+                class_instance.rbd_secret_obj.delete()
+                class_instance.rbd_secret_obj.ocp.wait_for_delete(
+                    class_instance.rbd_secret_obj.name
+                )
+        elif interface == constants.CEPHFILESYSTEM:
+            if hasattr(class_instance, 'cephfs_secret_obj'):
+                class_instance.cephfs_secret_obj.delete()
+                class_instance.cephfs_secret_obj.ocp.wait_for_delete(
+                    class_instance.cephfs_secret_obj.name
+                )
+
+    request.addfinalizer(finalizer)
+
+    if interface == constants.CEPHBLOCKPOOL:
+        class_instance.rbd_secret_obj = helpers.create_secret(
+            interface_type=constants.CEPHBLOCKPOOL
+        )
+        assert class_instance.rbd_secret_obj, "Failed to create secret"
+    elif interface == constants.CEPHFILESYSTEM:
+        class_instance.cephfs_secret_obj = helpers.create_secret(
+            interface_type=constants.CEPHFILESYSTEM
+        )
+        assert class_instance.cephfs_secret_obj, f"Failed to create secret"
+
+
+# Interface section
+@pytest.fixture()
 def create_ceph_block_pool(request):
     """
     Create a Ceph block pool
@@ -73,6 +115,50 @@ def create_ceph_block_pool(request):
     assert class_instance.cbp_obj, "Failed to create block pool"
 
 
+@pytest.fixture()
+def create_ceph_file_system(request):
+    """
+    Create a Ceph file system
+    """
+    class_instance = request.node.cls
+
+    def finalizer():
+        """
+        Delete the Ceph block pool
+        """
+        if hasattr(class_instance, 'cfs_obj'):
+            class_instance.cfs_obj.delete()
+
+    request.addfinalizer(finalizer)
+
+    class_instance.cfs_obj = helpers.create_ceph_file_system()
+    assert class_instance.cfs_obj, "Failed to create ceph file system"
+
+
+@pytest.fixture()
+def create_interface_based_ceph_backend(request):
+    """
+    Create a Ceph File System or Ceph Block Pool backend
+    """
+    class_instance = request.node.cls
+    interface = class_instance.interface
+
+    def finalizer():
+        """
+        Delete the Ceph block pool
+        """
+        if interface == constants.CEPHBLOCKPOOL:
+            if hasattr(class_instance, 'cbp_obj'):
+                class_instance.cbp_obj.delete()
+
+    request.addfinalizer(finalizer)
+
+    if interface == constants.CEPHBLOCKPOOL:
+        class_instance.cbp_obj = helpers.create_ceph_block_pool()
+        assert class_instance.cbp_obj, "Failed to create block pool"
+
+
+# Storage class section
 @pytest.fixture()
 def create_rbd_storageclass(request):
     """
@@ -125,6 +211,41 @@ def create_cephfs_storageclass(request):
         secret_name=class_instance.cephfs_secret_obj.name
     )
     assert class_instance.sc_obj, f"Failed to create storage class"
+
+
+@pytest.fixture()
+def create_interface_based_storageclass(request):
+    """
+    Create a CephFS or RBD secret
+    """
+    class_instance = request.node.cls
+    interface = class_instance.interface
+
+    def finalizer():
+        """
+        Delete the CephFS storage class
+        """
+        if class_instance.sc_obj.get():
+            class_instance.sc_obj.delete()
+            class_instance.sc_obj.ocp.wait_for_delete(
+                class_instance.sc_obj.name
+            )
+
+    request.addfinalizer(finalizer)
+    if interface == constants.CEPHBLOCKPOOL:
+        class_instance.sc_obj = helpers.create_storage_class(
+            interface_type=constants.CEPHBLOCKPOOL,
+            interface_name=class_instance.cbp_obj.name,
+            secret_name=class_instance.rbd_secret_obj.name,
+        )
+        assert class_instance.sc_obj, "Failed to create storage class"
+    elif interface == constants.CEPHFILESYSTEM:
+        class_instance.sc_obj = helpers.create_storage_class(
+            interface_type=constants.CEPHFILESYSTEM,
+            interface_name=helpers.get_cephfs_data_pool_name(),
+            secret_name=class_instance.cephfs_secret_obj.name
+        )
+        assert class_instance.sc_obj, f"Failed to create storage class"
 
 
 @pytest.fixture()
@@ -261,3 +382,35 @@ def create_pods(request):
         assert helpers.wait_for_resource_state(
             pod, constants.STATUS_RUNNING
         ), f"Pod {pod} failed to reach {constants.STATUS_RUNNING}"
+
+
+@pytest.fixture()
+def create_pod(request, delete_pod):
+    """
+    Create multiple pods
+    """
+    class_instance = request.node.cls
+    interface = class_instance.interface
+
+    class_instance = request.node.cls
+    class_instance.pod_obj = helpers.create_pod(
+        interface_type=interface,
+        pvc_name=class_instance.pvc_obj.name,
+        namespace=class_instance.namespace
+    )
+
+
+@pytest.fixture(
+    params=[
+        pytest.param({'interface': constants.CEPHBLOCKPOOL}),
+        pytest.param({'interface': constants.CEPHFILESYSTEM})
+    ],
+    ids=["RBD", "CephFS"]
+)
+def interface_iterate(request):
+    """
+    Iterate over interfaces
+    This fixture should be the first fixture that is being called
+    """
+    class_instance = request.node.cls
+    class_instance.interface = request.param['interface']

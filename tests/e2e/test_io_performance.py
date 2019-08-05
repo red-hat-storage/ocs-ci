@@ -4,23 +4,24 @@ Module to perform IOs with several weights
 import pytest
 import logging
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-
 from ocs_ci.framework.testlib import ManageTest, tier1, google_api_required
 from tests.fixtures import (
-    create_rbd_storageclass, create_rbd_pod, create_pvc, create_ceph_block_pool,
-    create_rbd_secret, create_project
+    create_interface_based_storageclass, create_pod, create_pvc,
+    create_interface_based_ceph_backend, delete_pod,
+    create_interface_based_secret, create_project, interface_iterate
 )
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.mark.usefixtures(
-    create_rbd_secret.__name__,
-    create_ceph_block_pool.__name__,
-    create_rbd_storageclass.__name__,
+    interface_iterate.__name__,
+    create_interface_based_secret.__name__,
+    create_interface_based_ceph_backend.__name__,
+    create_interface_based_storageclass.__name__,
     create_project.__name__,
     create_pvc.__name__,
-    create_rbd_pod.__name__,
+    create_pod.__name__,
 )
 @google_api_required
 @tier1
@@ -31,8 +32,8 @@ class TestIOPerformance(ManageTest):
 
     @pytest.mark.parametrize(
         argnames=[
-            "size", "io_direction", "jobs", "runtime", "depth",
-            "sheet_index"
+            "size", "io_direction", "jobs",
+            "runtime", "depth", "sheet_index"
         ],
         argvalues=[
             pytest.param(
@@ -71,4 +72,4 @@ class TestIOPerformance(ManageTest):
         logging.info(f"Read: {reads}")
         logging.info(f"Write: {writes}")
         g_sheet = GoogleSpreadSheetAPI("OCS FIO", sheet_index)
-        g_sheet.insert_row([reads, writes], 2)
+        g_sheet.insert_row([self.interface, reads, writes], 2)

@@ -225,6 +225,32 @@ def create_ceph_block_pool(pool_name=None):
     return cbp_obj
 
 
+def create_ceph_file_system(pool_name=None):
+    """
+    Create a Ceph file system
+
+    Args:
+        pool_name (str): The pool name to create
+
+    Returns:
+        OCS: An OCS instance for the Ceph file system
+    """
+    cfs_data = templating.load_yaml_to_dict(constants.CEPHFILESYSTEM_YAML)
+    cfs_data['metadata']['name'] = (
+        pool_name if pool_name else create_unique_resource_name(
+            'test', 'cfs'
+        )
+    )
+    cfs_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    cfs_data = create_resource(**cfs_data, wait=False)
+    cfs_data.reload()
+
+    assert validate_cephfilesystem(cfs_data.name), (
+        f"File system {cfs_data.name} does not exist"
+    )
+    return cfs_data
+
+
 def create_storage_class(
     interface_type, interface_name, secret_name,
     reclaim_policy=constants.RECLAIM_POLICY_DELETE, sc_name=None,
