@@ -68,6 +68,9 @@ your test might need. These are designed to be homes for widely used variables
 that need to be consistent across a test execution. You can learn more from
 viewing the existing constants and defaults in their respective modules.
 
+## Fixture usage
+
+It's documented [here](./fixture_usage.md).
 
 ## Other notes
 
