@@ -173,19 +173,23 @@ class Deployment(object):
         )
         logger.info(f"Waiting {wait_time} seconds...")
         time.sleep(wait_time)
-        # HACK: skip creation of rook-ceph-mgr service monitor when monitoring
-        # is enabled (if this were not skipped, the step would fail because
-        # rook would create the service monitor at this point already)
-        # HACK: This should be dropped when OCS is managed by OLM
+        # HACK: This should be dropped (including service-monitor.yaml and
+        # prometheus-rules.yaml files) when OCS is managed by OLM
         if config.ENV_DATA.get('monitoring_enabled') not in ("true", "True", True):
+            # HACK: skip creation of rook-ceph-mgr service monitor when monitoring
+            # is enabled (if this were not skipped, the step would fail because
+            # rook would create the service monitor at this point already)
             create_oc_resource(
                 "service-monitor.yaml", self.cluster_path, _templating,
                 config.ENV_DATA
             )
-        create_oc_resource(
-            "prometheus-rules.yaml", self.cluster_path, _templating,
-            config.ENV_DATA
-        )
+            # HACK: skip creation of prometheus-rules, rook-ceph is concerned
+            # with it's setup now, based on clarification from Umanga
+            # Chapagain
+            create_oc_resource(
+                "prometheus-rules.yaml", self.cluster_path, _templating,
+                config.ENV_DATA
+            )
         logger.info(f"Waiting {wait_time} seconds...")
         time.sleep(wait_time)
 
