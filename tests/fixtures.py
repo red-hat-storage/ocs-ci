@@ -1,7 +1,6 @@
 import pytest
 from tests import helpers
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.resources.ocs import OCS
 
 
 # Secret section

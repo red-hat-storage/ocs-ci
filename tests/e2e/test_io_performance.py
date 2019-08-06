@@ -5,7 +5,7 @@ import pytest
 import logging
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.framework.testlib import ManageTest, tier1, google_api_required
-from tests.fixtures import (
+from tests.fixtures import (  # noqa: F401
     create_interface_based_storageclass, create_pod, create_pvc,
     create_interface_based_ceph_backend, delete_pod,
     create_interface_based_secret, create_project, interface_iterate
