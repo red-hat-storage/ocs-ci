@@ -5,7 +5,7 @@ import datetime
 import logging
 import json
 
-from ocs_ci.ocs.ocp import OCP, switch_to_project
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility import templating
@@ -560,9 +560,8 @@ def get_noobaa_information():
     Function for retrieving the NooBaa authentication information
     :return: (NooBaa endpoint, access key, secret key)
     """
-    cmd = "get noobaa -o json"
+    cmd = "get noobaa -o json --all-namespaces"
     occli = OCP()
-    switch_to_project('noobaa')
     results = occli.exec_oc_cmd(cmd)
     endpoint = results['items'][0]['status']['services']['serviceMgmt']['externalDNS'][0]
     creds_secret_name = results['items'][0]['status']['accounts']['admin']['secretRef']['name']
