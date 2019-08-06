@@ -378,40 +378,54 @@ def switch_to_default_rook_cluster_project():
     return switch_to_project(defaults.ROOK_CLUSTER_NAMESPACE)
 
 
-def get_all_nodes():
+def get_node_objs(node_names=None):
     """
-    Get all cluster nodes
+    Get node objects by node names
+
+    Args:
+        node_names (list): The node names to get their objects for.
+            If None, will return all cluster nodes
 
     Returns:
-        list: Cluster node dictionaries
+        list: Cluster node OCP objects
 
     """
     nodes_obj = OCP(kind='node')
-    return nodes_obj.get()['items']
+    node_objs = nodes_obj.get()['items']
+    if not node_names:
+        return node_objs
+    else:
+        return [
+            node_obj for node_obj in node_objs if (
+                node_obj.get('metadata').get('name') in node_names
+            )
+        ]
 
 
-def wait_for_nodes_ready(num_of_nodes):
+def wait_for_nodes_ready(node_names):
     """
     Wait until all nodes are in Ready status
 
     Args:
-        num_of_nodes (int): The number of nodes to wait for
+        node_names (list): The node names to wait for to be in Ready state
 
     Returns:
-        bool: True if all nodes reached status Ready
+        bool: True if all nodes reached status Ready, False otherwise
 
     """
     try:
-        for sample in TimeoutSampler(timeout=120, sleep=3, func=get_all_nodes):
-            if len(sample) == num_of_nodes:
-                ready_nodes = 0
-                for node in sample:
-                    for status_condition in node.get('status').get('conditions'):
-                        if 'True' in status_condition.get('status'):
-                            if status_condition.get('type') == 'Ready':
-                                ready_nodes += 1
-                    if ready_nodes == num_of_nodes:
-                        return True
+        for sample in TimeoutSampler(120, 3, get_node_objs, node_names):
+            for node in sample:
+                if not node_names:
+                    return True
+                for status_condition in node.get('status').get('conditions'):
+                    if 'True' in status_condition.get('status'):
+                        log.info(
+                            f"The following nodes are still not "
+                            f"in Ready status: {node_names}"
+                        )
+                        if status_condition.get('type') == 'Ready':
+                            node_names.remove(node.get('metadata').get('name'))
     except TimeoutExpiredError:
-        log.error("Not all nodes reached status Ready")
+        log.error(f"The following nodes haven't reached status Ready: {node_names}")
         return False
