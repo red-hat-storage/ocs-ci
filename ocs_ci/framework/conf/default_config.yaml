@@ -19,14 +19,14 @@ RUN:
   run_id: null  # this will be redefined in the execution
   kubeconfig_location: 'auth/kubeconfig' # relative from cluster_dir
   cli_params: {}  # this will be filled with CLI parameters data
-  client_version: '4.2.0-0.nightly-2019-07-30-073644'
+  client_version: '4.2.0-0.nightly-2019-08-06-195545'
   bin_dir: './bin'
   google_api_secret: '~/.ocs-ci/google_api_secret.json'
 
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
 DEPLOYMENT:
-  installer_version: "4.2.0-0.nightly-2019-07-30-073644"
+  installer_version: "4.2.0-0.nightly-2019-08-06-195545"
   force_download_installer: True
   force_download_client: True
 
