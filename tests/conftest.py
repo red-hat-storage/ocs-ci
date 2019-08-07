@@ -23,6 +23,7 @@ from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.pvc import PVC
 
 
 log = logging.getLogger(__name__)
@@ -329,7 +330,8 @@ def pvc_factory(request, rbd_storageclass_factory, project_factory):
             object: helpers.create_pvc instance.
         """
         if custom_data:
-            pvc_obj = helpers.create_resource(**custom_data, wait=False)
+            pvc_obj = PVC(**custom_data)
+            pvc_obj.create(do_reload=False)
         else:
             nonlocal active_project
             project = project or active_project or project_factory()

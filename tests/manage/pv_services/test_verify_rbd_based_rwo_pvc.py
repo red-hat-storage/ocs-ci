@@ -46,6 +46,8 @@ def teardown(self):
     Delete project
     """
     self.project_obj.delete(resource_name=self.namespace)
+    # Delete Storage Class
+    self.sc_obj.delete()
 
 
 @tier1
@@ -97,7 +99,7 @@ class TestRbdBasedRwoPvc(ManageTest):
 
         # Create Storage Class with reclaimPolicy: Delete
         cbp_obj = ceph_block_pool_factory()
-        sc_obj = helpers.create_storage_class(
+        self.sc_obj = helpers.create_storage_class(
             interface_type=constants.CEPHBLOCKPOOL,
             interface_name=cbp_obj.name,
             secret_name=rbd_secret_factory().name,
@@ -110,9 +112,9 @@ class TestRbdBasedRwoPvc(ManageTest):
             'test', 'pvc'
         )
         pvc_data['metadata']['namespace'] = self.namespace
-        pvc_data['spec']['storageClassName'] = sc_obj.name
+        pvc_data['spec']['storageClassName'] = self.sc_obj.name
         pvc_data['spec']['accessModes'] = ['ReadWriteOnce']
-        pvc_obj = rbd_pvc_factory(storageclass=sc_obj, custom_data=pvc_data)
+        pvc_obj = rbd_pvc_factory(storageclass=self.sc_obj, custom_data=pvc_data)
 
         # Create first pod
         log.info(f"Creating two pods which use PVC {pvc_obj.name}")
@@ -284,8 +286,3 @@ class TestRbdBasedRwoPvc(ManageTest):
             # TODO: Delete PV from backend and verify
             # Blocked by bz 1723656
             pv_obj.delete(resource_name=pv_name)
-
-        # Delete Storage Class
-        sc_obj.delete()
-        # Delete Block pool
-        cbp_obj.delete()
