@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 @pytest.fixture()
 def noobaa_obj():
     """
+    Returns a NooBaa resource that's connected to the S3 endpoint
     Returns:
         s3_res: A NooBaa resource
     """
@@ -57,4 +58,5 @@ class TestBucketCreation:
         """
 
         bucketname = create_unique_resource_name(self.__class__.__name__.lower(), 's3-bucket')
+        logger.info(f'Creating new bucket - {bucketname}')
         buckets.append(noobaa_obj.s3_create_bucket(bucketname=bucketname))
