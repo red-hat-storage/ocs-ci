@@ -4,7 +4,7 @@ import pytest
 from tests.helpers import create_unique_resource_name
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import tier1
-from ocs_ci.utility import noobaa
+from ocs_ci.ocs.resources import noobaa
 
 
 logger = logging.getLogger(__name__)
