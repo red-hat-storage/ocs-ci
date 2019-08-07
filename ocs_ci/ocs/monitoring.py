@@ -19,10 +19,8 @@ def create_configmap_cluster_monitoring_pod(sc_name):
     """
     Create a configmap named cluster-monitoring-config
     and configure pvc on monitoring pod
-
     Args:
         sc_name (str): Name of the storage class
-
     """
     logger.info("Creating configmap cluster-monitoring-config")
     config_map = templating.load_yaml(
@@ -43,7 +41,6 @@ def validate_pvc_created_and_bound_on_monitoring_pods():
     """
     Validate pvc's created and bound in state
     on monitoring pods
-
     """
     logger.info("Verify pvc are created")
     pvc_list = get_all_pvcs(namespace=defaults.OCS_MONITORING_NAMESPACE)
@@ -60,10 +57,8 @@ def validate_pvc_created_and_bound_on_monitoring_pods():
 def validate_pvc_are_mounted_on_monitoring_pods(pod_list):
     """
     Validate created pvc are mounted on monitoring pods
-
     Args:
         pod_list (list): List of the pods where pvc are mounted
-
     """
     for pod in pod_list:
         pod_obj = get_pod_obj(
@@ -77,10 +72,8 @@ def validate_pvc_are_mounted_on_monitoring_pods(pod_list):
 def get_list_pvc_objs_created_on_monitoring_pods():
     """
     Returns list of pvc objects created on monitoring pods
-
     Returns:
         list: List of pvc objs
-
     """
     pvc_list = get_all_pvcs(namespace=defaults.OCS_MONITORING_NAMESPACE)
     ocp_pvc_obj = OCP(
@@ -97,10 +90,8 @@ def get_list_pvc_objs_created_on_monitoring_pods():
 def get_metrics_persistentvolumeclaims_info():
     """
     Returns the created pvc information on prometheus pod
-
     Returns:
         response.content (dict): The pvc metrics collected on prometheus pod
-
     """
     prometheus = ocs_ci.utility.prometheus.PrometheusAPI()
     response = prometheus.get(
@@ -113,13 +104,10 @@ def get_metrics_persistentvolumeclaims_info():
 def check_pvcdata_collected_on_prometheus(pvc_name):
     """
     Checks whether initially pvc related data is collected on pod
-
     Args:
         pvc_name (str): Name of the pvc
-
     Returns:
         True on success, raises UnexpectedBehaviour on failures
-
     """
     logger.info(
         f"Verify for created pvc {pvc_name} related data is collected on prometheus pod"
@@ -138,13 +126,10 @@ def check_pvcdata_collected_on_prometheus(pvc_name):
 def check_ceph_health_status_metrics_on_prometheus(mgr_pod):
     """
     Check ceph health status metric is collected on prometheus pod
-
     Args:
         mgr_pod (str): Name of the mgr pod
-
     Returns:
         bool: True on success, false otherwise
-
     """
     prometheus = ocs_ci.utility.prometheus.PrometheusAPI()
     response = prometheus.get(

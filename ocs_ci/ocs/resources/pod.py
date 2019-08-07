@@ -739,6 +739,7 @@ def get_pod_obj(name, namespace=None):
 
     Returns:
         obj : A pod object
+
     """
     ocp_obj = OCP(api_version='v1', kind=constants.POD, namespace=namespace)
     ocp_dict = ocp_obj.get(resource_name=name)
@@ -791,6 +792,7 @@ def delete_pods(pod_objs):
         bool: True if deletion is successful
 
     """
+
     for pod in pod_objs:
         pod.delete()
 
