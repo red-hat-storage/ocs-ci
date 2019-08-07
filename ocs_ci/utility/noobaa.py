@@ -60,16 +60,33 @@ class NooBaa(object):
         bucket.delete()
 
     def s3_list_all_bucket_names(self):
+        """
+        Returns:
+            A list of all bucket names
+        """
         return [bucket.name for bucket in self._s3_resource.buckets.all()]
 
     def s3_get_all_bucket_objects(self):
+        """
+        Returns:
+            A list of all  s3.Bucket objects
+        """
         return [bucket for bucket in self._s3_resource.buckets.all()]
 
     def oc_create_bucket(self, bucketname):
+        """
+        Todo: Design and implement
+        """
         return None
 
     def oc_delete_bucket(self, bucketname):
+        """
+        Todo: Design and implement
+        """
         return None
 
     def oc_list_all_buckets(self):
-        return self._ocp_resource.exec_oc_cmd("get buckets")
+        """
+        Todo: Design and implement
+        """
+        return None
