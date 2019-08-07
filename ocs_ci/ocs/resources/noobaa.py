@@ -33,9 +33,11 @@ class NooBaa(object):
         results2 = secret_ocp_obj.get(creds_secret_name)
 
         noobaa_access_key = base64.b64decode(
-            results2.get('data').get('AWS_ACCESS_KEY_ID')).decode('utf-8')
+            results2.get('data').get('AWS_ACCESS_KEY_ID')
+        ).decode('utf-8')
         noobaa_secret_key = base64.b64decode(
-            results2.get('data').get('AWS_SECRET_ACCESS_KEY')).decode('utf-8')
+            results2.get('data').get('AWS_SECRET_ACCESS_KEY')
+        ).decode('utf-8')
 
         self._ocp_resource = ocp_obj
         self._s3_resource = boto3.resource(
