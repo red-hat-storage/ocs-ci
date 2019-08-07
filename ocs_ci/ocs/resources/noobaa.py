@@ -9,7 +9,7 @@ logger = logging.getLogger(name=__file__)
 
 class NooBaa(object):
     """
-    Wrapper class for NooBaa's NooBaa service
+    Wrapper class for NooBaa's S3 service
     """
 
     _s3_resource = None
@@ -81,16 +81,16 @@ class NooBaa(object):
         """
         Todo: Design and implement
         """
-        return None
+        raise NotImplementedError()
 
     def oc_delete_bucket(self, bucketname):
         """
         Todo: Design and implement
         """
-        return None
+        raise NotImplementedError()
 
     def oc_list_all_buckets(self):
         """
         Todo: Design and implement
         """
-        return None
+        raise NotImplementedError()
