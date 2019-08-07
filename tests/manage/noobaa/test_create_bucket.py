@@ -51,9 +51,9 @@ class TestBucketCreation:
         condition=config.ENV_DATA['platform'] != 'AWS',
         reason="Tests are not running on AWS deployed cluster"
     )
-    def test_s3_bucket_creation(self, noobaa_obj, buckets):
+    def test_s3_bucket_creation(self,  _obj, buckets):
         """
-        Test bucket creation using the NooBaa SDK
+        Test bucket creation using the S3 SDK
         """
 
         bucketname = create_unique_resource_name(self.__class__.__name__.lower(), 's3-bucket')
