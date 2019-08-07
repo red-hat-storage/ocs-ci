@@ -8,7 +8,10 @@ from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool,
     create_rbd_secret
 )
-from tests.helpers import create_pvc, create_pod, create_unique_resource_name
+from tests.helpers import (
+    create_pvc, create_pod,
+    create_project
+)
 from ocs_ci.ocs.monitoring import collected_metrics_for_created_pvc
 from ocs_ci.ocs.resources import pvc, pod
 from tests import disruption_helpers
@@ -57,8 +60,7 @@ def teardown(self):
 
     # Delete projects created
     for prj in self.namespace_list:
-        prj_obj = ocp.OCP(kind='Project', namespace=prj)
-        prj_obj.delete(resource_name=prj)
+        self.prj_obj.delete(resource_name=prj)
 
 
 def create_multiple_project_and_pvc_and_check_metrics_are_collected(self):
@@ -67,23 +69,20 @@ def create_multiple_project_and_pvc_and_check_metrics_are_collected(self):
     """
     for i in range(5):
         # Create new project
-        self.namespace = create_unique_resource_name('test', 'namespace')
-        self.project_obj = ocp.OCP(kind='Project', namespace=self.namespace)
-        assert self.project_obj.new_project(self.namespace), (
-            f'Failed to create new project {self.namespace}'
-        )
+        self.prj_obj = create_project()
+
         # Create PVCs
         self.pvc_obj = create_pvc(
-            sc_name=self.sc_obj.name, namespace=self.namespace
+            sc_name=self.sc_obj.name, namespace=self.prj_obj.namespace
         )
 
         # Create pod
         self.pod_obj = create_pod(
             interface_type=constants.CEPHBLOCKPOOL,
-            pvc_name=self.pvc_obj.name, namespace=self.namespace
+            pvc_name=self.pvc_obj.name, namespace=self.prj_obj.namespace
         )
 
-        self.namespace_list.append(self.namespace)
+        self.namespace_list.append(self.prj_obj.namespace)
         self.pvc_objs.append(self.pvc_obj)
         self.pod_objs.append(self.pod_obj)
 

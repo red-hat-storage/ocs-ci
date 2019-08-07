@@ -113,8 +113,8 @@ def collected_metrics_for_created_pvc(pvc_name):
         f"Verify for created pvc {pvc_name} related data is collected on prometheus pod"
     )
     pvcs_data = get_kube_pod_spec_volumes_persistentvolumeclaims_info_metric()
-    list_pvcs_data = pvcs_data['data']['result']
-    pvc_list = [pvc for pvc in list_pvcs_data if pvc_name == pvc['metric']['persistentvolumeclaim']]
+    list_pvcs_data = pvcs_data.get('data').get('result')
+    pvc_list = [pvc for pvc in list_pvcs_data if pvc_name == pvc.get('metric').get('persistentvolumeclaim')]
     if not pvc_list:
         raise UnexpectedBehaviour(
             f"On prometheus pod for created pvc {pvc_name} related data is not found"
