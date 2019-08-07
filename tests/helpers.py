@@ -3,9 +3,7 @@ Helper functions file for OCS QE
 """
 import datetime
 import logging
-import base64
 
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility import templating
