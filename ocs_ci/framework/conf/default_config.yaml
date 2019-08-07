@@ -27,7 +27,7 @@ RUN:
 # the environment related data as those are defined in ENV_DATA section.
 DEPLOYMENT:
   installer_version: "4.2.0-0.nightly-2019-07-30-073644"
-  force_download_installer: True
+  force_download_installer: False
   force_download_client: False
 
 # Section for reporting configuration
