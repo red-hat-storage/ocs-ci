@@ -17,7 +17,7 @@ from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.utility import utils
 
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 # As of now only IPI
@@ -67,7 +67,8 @@ class AWSBase(Deployment):
         Args:
             size (int): Size of volume in GB (default: 100)
         """
-        with open(os.path.join(self.cluster_path, "terraform.tfvars")) as f:
+        tfvars_file = "terraform.tfvars.json"
+        with open(os.path.join(self.cluster_path, tfvars_file)) as f:
             tfvars = json.load(f)
 
         cluster_id = tfvars['cluster_id']
@@ -87,8 +88,13 @@ class AWSIPI(AWSBase):
     def __init__(self):
         self.name = self.__class__.__name__
         super(AWSIPI, self).__init__()
+        force_download = (
+            config.RUN['cli_params'].get('deploy')
+            and config.DEPLOYMENT['force_download_installer']
+        )
         self.installer = utils.get_openshift_installer(
-            config.DEPLOYMENT['installer_version']
+            config.DEPLOYMENT['installer_version'],
+            force_download=force_download
         )
 
     def deploy_cluster(self, log_cli_level='DEBUG'):

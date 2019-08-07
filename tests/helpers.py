@@ -149,6 +149,20 @@ def create_pod(
     return pod_obj
 
 
+def create_project():
+    """
+    Create a project
+
+    Returns:
+        OCP: Project object
+
+    """
+    namespace = create_unique_resource_name('test', 'namespace')
+    project_obj = ocp.OCP(kind='Project', namespace=namespace)
+    assert project_obj.new_project(namespace), f"Failed to create namespace {namespace}"
+    return project_obj
+
+
 def create_secret(interface_type):
     """
     Create a secret

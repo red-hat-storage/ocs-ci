@@ -23,7 +23,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from tests import helpers
 
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 class Deployment(object):

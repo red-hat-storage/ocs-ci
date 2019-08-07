@@ -605,7 +605,11 @@ def cluster(request, log_cli_level):
         log.info("Will teardown cluster because --teardown was provided")
 
     # Download client
-    get_openshift_client()
+    force_download = (
+        config.RUN['cli_params'].get('deploy')
+        and config.DEPLOYMENT['force_download_client']
+    )
+    get_openshift_client(force_download=force_download)
 
     # Deploy cluster
     deployer.deploy_cluster(log_cli_level)
