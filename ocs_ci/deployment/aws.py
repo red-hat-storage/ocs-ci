@@ -4,17 +4,15 @@ on AWS platform
 """
 import os
 import logging
-import pytest
 import json
 import traceback
 
 from .deployment import Deployment
-from ocs_ci.utility.utils import run_cmd, is_cluster_running
-from ocs_ci.ocs.openshift_ops import OCP
+from ocs_ci.deployment.ocp import OcpDeployment as BaseOcpDeployment
+from ocs_ci.utility.utils import run_cmd
 from ocs_ci.framework import config
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.utility.aws import AWS as AWSUtil
-from ocs_ci.utility import utils
 
 
 logger = logging.getLogger(__name__)
@@ -88,36 +86,29 @@ class AWSIPI(AWSBase):
     def __init__(self):
         self.name = self.__class__.__name__
         super(AWSIPI, self).__init__()
-        force_download = (
-            config.RUN['cli_params'].get('deploy')
-            and config.DEPLOYMENT['force_download_installer']
-        )
-        self.installer = utils.get_openshift_installer(
-            config.DEPLOYMENT['installer_version'],
-            force_download=force_download
-        )
 
-    def deploy_cluster(self, log_cli_level='DEBUG'):
-        """
-        Deployment method specific to AWS IPI
-        We are handling both OCP and OCS deployment here based on flags
+    class OcpDeployment(BaseOcpDeployment):
+        def __init__(self):
+            super(AWSIPI.OcpDeployment, self).__init__()
 
-        Args:
-            log_cli_level (str): log level for installer (default: DEBUG)
-        """
-        if not config.ENV_DATA['skip_ocp_deployment']:
-            if is_cluster_running(self.cluster_path):
-                logger.warning(
-                    "OCP cluster is already running, skipping installation"
-                )
-            else:
-                self.deploy_ocp_prereq()
-                self.deploy_ocp(log_cli_level)
+        def deploy(self, log_cli_level='DEBUG'):
+            """
+            Deployment specific to OCP cluster on this platform
 
-        if not config.ENV_DATA['skip_ocs_deployment']:
-            self.deploy_ocs()
-        else:
-            logger.warning("OCS deployment will be skipped")
+            Args:
+                log_cli_level (str): openshift installer's log level
+                    (default: "DEBUG")
+            """
+            logger.info("Deploying OCP cluster")
+            logger.info(
+                f"Openshift-installer will be using loglevel:{log_cli_level}"
+            )
+            run_cmd(
+                f"{self.installer} create cluster "
+                f"--dir {self.cluster_path} "
+                f"--log-level {log_cli_level}"
+            )
+            self.test_cluster()
 
     def deploy_ocp(self, log_cli_level='DEBUG'):
         """
@@ -127,23 +118,7 @@ class AWSIPI(AWSBase):
             log_cli_level (str): openshift installer's log level
                 (default: "DEBUG")
         """
-        logger.info("Deploying OCP cluster")
-        logger.info(
-            f"Openshift-installer will be using loglevel:{log_cli_level}"
-        )
-        run_cmd(
-            f"{self.installer} create cluster "
-            f"--dir {self.cluster_path} "
-            f"--log-level {log_cli_level}"
-        )
-        # Test cluster access
-        if not OCP.set_kubeconfig(
-            os.path.join(
-                self.cluster_path, config.RUN.get('kubeconfig_location'),
-            )
-        ):
-            pytest.fail("Cluster is not available!")
-
+        super(AWSIPI, self).deploy_ocp(log_cli_level)
         volume_size = config.ENV_DATA.get('DEFAULT_EBS_VOLUME_SIZE', 100)
         self.add_volume(volume_size)
 
@@ -154,27 +129,11 @@ class AWSIPI(AWSBase):
         Args:
             log_level (str): log level openshift-installer (default: DEBUG)
         """
-
-        logger.info("Destroying the cluster")
-
-        destroy_cmd = (
-            f"{self.installer} destroy cluster "
-            f"--dir {self.cluster_path} "
-            f"--log-level {log_level}"
-        )
+        super(AWSIPI, self).destroy_cluster(log_level)
 
         try:
-
             # Retrieve cluster name and AWS region from metadata
-            metadata_file = os.path.join(self.cluster_path, "metadata.json")
-            with open(metadata_file) as f:
-                metadata = json.loads(f.read())
-            cluster_name = metadata.get("clusterName")
-
-            # Execute destroy cluster using OpenShift installer
-            logger.info(f"Destroying cluster defined in {self.cluster_path}")
-            run_cmd(destroy_cmd)
-
+            cluster_name = self.ocp_deployment.metadata.get("clusterName")
             # Find and delete volumes
             volume_pattern = f"{cluster_name}*"
             logger.debug(f"Finding volumes with pattern: {volume_pattern}")
@@ -182,9 +141,5 @@ class AWSIPI(AWSBase):
             logger.debug(f"Found volumes: \n {volumes}")
             for volume in volumes:
                 self.aws.detach_and_delete_volume(volume)
-
-            # Remove installer
-            utils.delete_file(self.installer)
-
         except Exception:
             logger.error(traceback.format_exc())

@@ -420,6 +420,7 @@ def cluster(request, log_cli_level):
     log.info(f"All logs located at {ocsci_log_path()}")
 
     teardown = config.RUN['cli_params']['teardown']
+    deploy = config.RUN['cli_params']['deploy']
     factory = dep_factory.DeploymentFactory()
     deployer = factory.get_deployment()
 
@@ -437,8 +438,9 @@ def cluster(request, log_cli_level):
     )
     get_openshift_client(force_download=force_download)
 
-    # Deploy cluster
-    deployer.deploy_cluster(log_cli_level)
+    if deploy:
+        # Deploy cluster
+        deployer.deploy_cluster(log_cli_level)
 
 
 @pytest.fixture(scope='class')

@@ -2,20 +2,15 @@
 This module provides base class for different deployment
 platforms like AWS, VMWare, Baremetal etc.
 """
-
-import os
 import logging
 import time
-import json
 
-import pytest
-import yaml
-
+from ocs_ci.deployment.ocp import OcpDeployment as BaseOcpDeployment
 from ocs_ci.framework import config
-from ocs_ci.utility import templating, system
 from ocs_ci.ocs.utils import create_oc_resource
+from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
-    run_cmd, ceph_health_check,
+    run_cmd, ceph_health_check, is_cluster_running
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs import constants, ocp, defaults
@@ -34,8 +29,13 @@ class Deployment(object):
         self.platform = config.ENV_DATA['platform']
         self.ocp_deployment_type = config.ENV_DATA['deployment_type']
         self.cluster_path = config.ENV_DATA['cluster_path']
-        self.deploy = config.RUN['cli_params']['deploy']
-        self.teardown = config.RUN['cli_params']['teardown']
+
+    class OcpDeployment(BaseOcpDeployment):
+        """
+        This class has to be implemented in child class and should overload
+        methods for platform specific config.
+        """
+        pass
 
     def add_volume(self):
         """
@@ -44,77 +44,34 @@ class Deployment(object):
         """
         raise NotImplementedError("add_volume functionality not implemented")
 
-    def deploy_cluster(self):
+    def deploy_cluster(self, log_cli_level='DEBUG'):
         """
-        Implement deploy in child class
-        """
-        raise NotImplementedError("deploy functionality not implemented")
+        We are handling both OCP and OCS deployment here based on flags
 
-    def deploy_ocp(self):
+        Args:
+            log_cli_level (str): log level for installer (default: DEBUG)
         """
-        Implement ocp deploy in specific child class
-        """
-        raise NotImplementedError("deploy_ocp functionality not implemented")
+        if not config.ENV_DATA['skip_ocp_deployment']:
+            if is_cluster_running(self.cluster_path):
+                logger.warning(
+                    "OCP cluster is already running, skipping installation"
+                )
+            else:
+                self.deploy_ocp(log_cli_level)
 
-    def deploy_ocp_prereq(self):
-        """
-        Perform generic prereq before calling openshift-installer
-        This method performs all the basic steps necessary before invoking the
-        installer
-        """
-        if self.teardown and not self.deploy:
-            msg = f"Attempting teardown of non-accessible cluster: "
-            msg += f"{self.cluster_path}"
-            pytest.fail(msg)
-        elif not self.deploy and not self.teardown:
-            msg = "The given cluster can not be connected to: {}. ".format(
-                self.cluster_path)
-            msg += (
-                f"Provide a valid --cluster-path or use --deploy to "
-                f"deploy a new cluster"
-            )
-            pytest.fail(msg)
-        elif not system.is_path_empty(self.cluster_path) and self.deploy:
-            msg = "The given cluster path is not empty: {}. ".format(
-                self.cluster_path)
-            msg += (
-                f"Provide an empty --cluster-path and --deploy to deploy "
-                f"a new cluster"
-            )
-            pytest.fail(msg)
+        if not config.ENV_DATA['skip_ocs_deployment']:
+            self.deploy_ocs()
         else:
-            logger.info(
-                f"A testing cluster will be deployed and cluster information "
-                f"stored at: %s",
-                self.cluster_path
-            )
+            logger.warning("OCS deployment will be skipped")
 
-        # Generate install-config from template
-        logger.info("Generating install-config")
-        pull_secret_path = os.path.join(
-            constants.TOP_DIR,
-            "data",
-            "pull-secret"
-        )
-
-        _templating = templating.Templating()
-        install_config_str = _templating.render_template(
-            "install-config.yaml.j2", config.ENV_DATA
-        )
-        # Log the install config *before* adding the pull secret,
-        # so we don't leak sensitive data.
-        logger.info(f"Install config: \n{install_config_str}")
-        # Parse the rendered YAML so that we can manipulate the object directly
-        install_config_obj = yaml.safe_load(install_config_str)
-        with open(pull_secret_path, "r") as f:
-            # Parse, then unparse, the JSON file.
-            # We do this for two reasons: to ensure it is well-formatted, and
-            # also to ensure it ends up as a single line.
-            install_config_obj['pullSecret'] = json.dumps(json.loads(f.read()))
-        install_config_str = yaml.safe_dump(install_config_obj)
-        install_config = os.path.join(self.cluster_path, "install-config.yaml")
-        with open(install_config, "w") as f:
-            f.write(install_config_str)
+    def deploy_ocp(self, log_cli_level='DEBUG'):
+        """
+        Base deployment steps, the rest should be implemented in the child
+        class.
+        """
+        self.ocp_deployment = self.OcpDeployment()
+        self.ocp_deployment.deploy_prereq()
+        self.ocp_deployment.deploy(log_cli_level)
 
     def deploy_ocs(self):
         """
@@ -249,11 +206,13 @@ class Deployment(object):
             f"--request-timeout=120s"
         )
 
-    def destroy_cluster(self):
+    def destroy_cluster(self, log_level="DEBUG"):
         """
-        Implement platform specific destroy method in child class
+        Base destroy cluster method, for more platform specific stuff overload
+        this method in child class.
         """
-        raise NotImplementedError("destroy functionality not implemented")
+        self.ocp_deployment = self.OcpDeployment()
+        self.ocp_deployment.destroy(log_level)
 
     def add_node(self):
         """
