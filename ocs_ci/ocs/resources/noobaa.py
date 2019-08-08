@@ -53,6 +53,7 @@ class NooBaa(object):
 
         Returns:
             s3.Bucket object
+
         """
         return self._s3_resource.create_bucket(Bucket=bucketname)
 
@@ -60,6 +61,7 @@ class NooBaa(object):
         """
         Args:
             bucket: The bucket object to be deleted
+
         """
         bucket.delete()
 
@@ -67,6 +69,7 @@ class NooBaa(object):
         """
         Returns:
             A list of all bucket names
+
         """
         return [bucket.name for bucket in self._s3_resource.buckets.all()]
 
@@ -74,6 +77,7 @@ class NooBaa(object):
         """
         Returns:
             A list of all  s3.Bucket objects
+            
         """
         return [bucket for bucket in self._s3_resource.buckets.all()]
 
