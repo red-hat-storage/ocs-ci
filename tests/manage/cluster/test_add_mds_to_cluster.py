@@ -7,7 +7,7 @@ import pytest
 
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.framework.testlib import tier1, ManageTest, bugzilla
 from ocs_ci.ocs.resources.ocs import OCS
 
 log = logging.getLogger(__name__)
@@ -69,6 +69,7 @@ def verify_fs_exist(pod_count):
     return False
 
 
+@bugzilla('1738833')
 @tier1
 @pytest.mark.usefixtures(
     test_fixture.__name__,
