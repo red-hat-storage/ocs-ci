@@ -21,7 +21,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
-from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 
@@ -54,7 +54,7 @@ def secret_factory(request):
     """
     instances = []
 
-    def factory(interface):
+    def factory(interface=constants.CEPHBLOCKPOOL):
         """
         Args:
             interface (str): CephBlockPool or CephFileSystem. This decides
@@ -84,7 +84,7 @@ def secret_factory(request):
 
 
 @pytest.fixture()
-def ceph_block_pool_factory(request):
+def block_pool_factory(request):
     """
     Create a Ceph block pool factory.
     Calling this fixture creates new block pool instance.
@@ -115,7 +115,7 @@ def ceph_block_pool_factory(request):
 @pytest.fixture()
 def storageclass_factory(
     request,
-    ceph_block_pool_factory,
+    block_pool_factory,
     secret_factory
 ):
     """
@@ -124,7 +124,12 @@ def storageclass_factory(
     """
     instances = []
 
-    def factory(block_pool=None, secret=None, custom_data=None):
+    def factory(
+        interface=constants.CEPHBLOCKPOOL,
+        block_pool=None,
+        secret=None,
+        custom_data=None
+    ):
         """
         Args:
             interface (str): CephBlockPool or CephFileSystem. This decides
@@ -147,7 +152,7 @@ def storageclass_factory(
             secret = secret or secret_factory(interface=interface)
 
             if interface == constants.CEPHBLOCKPOOL:
-                block_pool = block_pool or ceph_block_pool_factory()
+                block_pool = block_pool or block_pool_factory()
                 interface_name = block_pool.name,
 
             elif interface == constants.CEPHFILESYSTEM:
