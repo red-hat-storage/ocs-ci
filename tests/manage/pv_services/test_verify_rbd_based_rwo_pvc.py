@@ -12,50 +12,18 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError, CommandFailed, UnexpectedBehaviour
 )
 from tests import helpers
-from tests.fixtures import create_ceph_block_pool, create_rbd_secret
+from tests.fixtures import (create_ceph_block_pool, create_rbd_secret,
+                            create_project
+                            )
 
 log = logging.getLogger(__name__)
-
-
-@pytest.fixture()
-def test_fixture(request):
-    """
-    Setup and teardown
-    """
-    self = request.node.cls
-
-    def finalizer():
-        teardown(self)
-    request.addfinalizer(finalizer)
-    setup(self)
-
-
-def setup(self):
-    """
-    Create new project
-    """
-    self.namespace = helpers.create_unique_resource_name(
-        'test', 'namespace'
-    )
-    self.project_obj = OCP(kind='Project', namespace=self.namespace)
-
-    assert self.project_obj.new_project(self.namespace), (
-        f'Failed to create new project {self.namespace}'
-    )
-
-
-def teardown(self):
-    """
-    Delete project
-    """
-    self.project_obj.delete(resource_name=self.namespace)
 
 
 @tier1
 @pytest.mark.usefixtures(
     create_rbd_secret.__name__,
     create_ceph_block_pool.__name__,
-    test_fixture.__name__
+    create_project.__name__
 )
 class TestRbdBasedRwoPvc(ManageTest):
     """
