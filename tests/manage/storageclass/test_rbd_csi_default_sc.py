@@ -8,53 +8,17 @@ import pytest
 from ocs_ci.framework.testlib import tier1, ManageTest
 from tests import helpers
 from ocs_ci.ocs import constants
+from tests.fixtures import (
+    create_ceph_block_pool, create_rbd_secret,
+)
 
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='class')
-def test_fixture(request):
-    """
-    This is a test fixture
-    """
-    def finalizer():
-        teardown()
-    request.addfinalizer(finalizer)
-    setup()
-
-
-def setup():
-    """
-    Setting up the environment - Creating Secret
-    """
-    global SECRET, POOL
-    log.info("Creating RBD Pool")
-    POOL = helpers.create_ceph_block_pool()
-
-    log.info("Creating RBD Secret")
-    SECRET = helpers.create_secret(constants.CEPHBLOCKPOOL)
-
-
-def teardown():
-    """
-    Tearing down the environment
-    """
-    log.info("Deleting PVC")
-    PVC.delete()
-
-    log.info("Deleting StorageClass")
-    STORAGE_CLASS.delete()
-
-    log.info("Deleting Secret")
-    SECRET.delete()
-
-    log.info("Delete RBD Pool")
-    POOL.delete()
-
-
 @tier1
 @pytest.mark.usefixtures(
-    test_fixture.__name__,
+    create_ceph_block_pool.__name__,
+    create_rbd_secret.__name__,
 )
 @pytest.mark.polarion_id("OCS-347")
 class TestBasicPVCOperations(ManageTest):
@@ -64,11 +28,35 @@ class TestBasicPVCOperations(ManageTest):
     """
 
     def test_ocs_347(self):
-        global PVC, STORAGE_CLASS
         log.info("Creating RBD StorageClass")
-        STORAGE_CLASS = helpers.create_storage_class(
-            constants.CEPHBLOCKPOOL, POOL.name, SECRET.name
+        sc_obj = helpers.create_storage_class(
+            interface_type=constants.CEPHBLOCKPOOL,
+            interface_name=self.cbp_obj.name,
+            secret_name=self.rbd_secret_obj.name,
         )
 
         log.info("Creating a PVC")
-        PVC = helpers.create_pvc(sc_name=STORAGE_CLASS.name)
+        pvc_obj = helpers.create_pvc(
+            sc_name=sc_obj.name, wait=True,
+        )
+
+        log.info(
+            f"Creating a pod on with pvc {pvc_obj.name}"
+        )
+        pod_obj = helpers.create_pod(
+            interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvc_obj.name,
+            desired_status=constants.STATUS_RUNNING, wait=True,
+            pod_dict_path=constants.NGINX_POD_YAML
+        )
+
+        log.info("Deleting Pod")
+        pod_obj.delete()
+
+        log.info("Deleting PVC")
+        pvc_obj.delete()
+
+        log.info("Checking whether PV is deleted")
+        assert helpers.validate_pv_delete(pvc_obj.backed_pv)
+
+        log.info(f"Deleting RBD StorageClass {sc_obj.name}")
+        sc_obj.delete()
