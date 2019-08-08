@@ -153,7 +153,7 @@ def storageclass_factory(
 
             if interface == constants.CEPHBLOCKPOOL:
                 block_pool = block_pool or block_pool_factory()
-                interface_name = block_pool.name,
+                interface_name = block_pool.name
 
             elif interface == constants.CEPHFILESYSTEM:
                 interface_name = helpers.get_cephfs_data_pool_name()
