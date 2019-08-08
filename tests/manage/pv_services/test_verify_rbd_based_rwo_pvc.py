@@ -12,9 +12,10 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError, CommandFailed, UnexpectedBehaviour
 )
 from tests import helpers
-from tests.fixtures import (create_ceph_block_pool, create_rbd_secret,
-                            create_project
-                            )
+from tests.fixtures import (
+    create_ceph_block_pool, create_rbd_secret,
+    create_project
+)
 
 log = logging.getLogger(__name__)
 
