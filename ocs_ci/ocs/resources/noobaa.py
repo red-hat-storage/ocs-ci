@@ -77,7 +77,7 @@ class NooBaa(object):
         """
         Returns:
             A list of all  s3.Bucket objects
-            
+
         """
         return [bucket for bucket in self._s3_resource.buckets.all()]
 
