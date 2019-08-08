@@ -300,15 +300,22 @@ def project_factory(request):
 
 
 @pytest.fixture()
-def pvc_factory(request, rbd_storageclass_factory, project_factory):
+def pvc_factory(
+    request,
+    storageclass_factory,
+    project_factory
+):
     """
     Create a persistent Volume Claim factory. Calling this fixture creates new
     PVC. For custom PVC provide 'storageclass' parameter.
     """
     instances = []
     active_project = None
+    active_rbd_storageclass = None
+    active_cephfs_storageclass = None
 
     def factory(
+        interface=constants.CEPHBLOCKPOOL,
         project=None,
         storageclass=None,
         custom_data=None,
@@ -316,6 +323,9 @@ def pvc_factory(request, rbd_storageclass_factory, project_factory):
     ):
         """
         Args:
+            interface (str): CephBlockPool or CephFileSystem. This decides
+                whether a RBD based or CephFS resource is created.
+                RBD is default.
             project (object): ocs_ci.ocs.resources.ocs.OCS instance
                 of 'Project' kind.
             storageclass (object): ocs_ci.ocs.resources.ocs.OCS instance
@@ -334,9 +344,19 @@ def pvc_factory(request, rbd_storageclass_factory, project_factory):
             pvc_obj.create(do_reload=False)
         else:
             nonlocal active_project
+            nonlocal active_rbd_storageclass
+            nonlocal active_cephfs_storageclass
+
             project = project or active_project or project_factory()
             active_project = project
-            storageclass = storageclass or rbd_storageclass_factory()
+            if interface == constants.CEPHBLOCKPOOL:
+                storageclass = storageclass or active_rbd_storageclass \
+                    or storageclass_factory(interface)
+                active_rbd_storageclass = storageclass
+            elif interface == constants.CEPHFILESYSTEM:
+                storageclass = storageclass or active_cephfs_storageclass \
+                    or storageclass_factory(interface)
+                active_cephfs_storageclass = storageclass
 
             pvc_obj = helpers.create_pvc(
                 sc_name=storageclass.name,
