@@ -53,4 +53,4 @@ Here are few simple examples of how to use fixtures.
 
 * [conftest.py](./python-examples/fixtures/conftest.py) - Example of fixture
   definitions in conftest.py file for fixtures meant to be shared between tests.
-* [test_fixtures.py](./python-examples/fixtures/conftest.py) - Examples of tests.
+* [test_fixtures.py](./python-examples/fixtures/test_fixtures.py) - Examples of tests.
