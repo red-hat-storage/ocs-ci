@@ -42,6 +42,7 @@ def buckets(request, noobaa_obj):
     return created_buckets
 
 
+@pytest.mark.skipif(condition=True, reason="NooBaa is not deployed")
 @pytest.mark.filterwarnings('ignore::urllib3.exceptions.InsecureRequestWarning')
 @tier1
 class TestBucketCreation:
