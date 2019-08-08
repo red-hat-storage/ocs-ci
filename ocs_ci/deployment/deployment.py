@@ -350,8 +350,10 @@ class Deployment(object):
             # Create configmap cluster-monitoring-config
             create_configmap_cluster_monitoring_pod(sc_obj.name)
 
-            logger.info(f"Waiting {wait_time} seconds...")
-            time.sleep(wait_time)
+            # Take some time to respin the pod
+            waiting_time = 30
+            logger.info(f"Waiting {waiting_time} seconds...")
+            time.sleep(waiting_time)
 
             # Validate the pods are respinned and in running state
             assert validate_pods_are_respinned_and_running_state(

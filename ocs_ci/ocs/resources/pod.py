@@ -309,7 +309,7 @@ def get_all_pods(namespace=None, selector=None):
     Args:
         namespace (str): Name of the namespace
             If namespace is None - get all pods
-        selector (list) : List of the resource selector to search with.
+        selector (list) : List of the resource selector to search with
             Example: ['alertmanager','prometheus']
 
     Returns:
