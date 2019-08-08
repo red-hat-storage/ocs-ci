@@ -146,41 +146,14 @@ class Deployment(object):
             f"system:serviceaccount:openshift-monitoring:prometheus-k8s "
             f"-n {config.ENV_DATA['cluster_namespace']}"
         )
-        apply_oc_resource(
-            'csi-nodeplugin-rbac_rbd.yaml',
-            self.cluster_path,
-            _templating,
-            config.ENV_DATA,
-            template_dir="ocs-deployment/csi/rbd/"
-        )
-        apply_oc_resource(
-            'csi-provisioner-rbac_rbd.yaml',
-            self.cluster_path,
-            _templating,
-            config.ENV_DATA,
-            template_dir="ocs-deployment/csi/rbd/"
-        )
-        apply_oc_resource(
-            'csi-nodeplugin-rbac_cephfs.yaml',
-            self.cluster_path,
-            _templating,
-            config.ENV_DATA,
-            template_dir="ocs-deployment/csi/cephfs/"
-        )
-        apply_oc_resource(
-            'csi-provisioner-rbac_cephfs.yaml',
-            self.cluster_path,
-            _templating,
-            config.ENV_DATA,
-            template_dir="ocs-deployment/csi/cephfs/"
-        )
+
         # Increased to 15 seconds as 10 is not enough
         # TODO: do the sampler function and check if resource exist
         wait_time = 15
         logger.info(f"Waiting {wait_time} seconds...")
         time.sleep(wait_time)
         create_oc_resource(
-            'operator-openshift-with-csi.yaml', self.cluster_path,
+            'operator-openshift.yaml', self.cluster_path,
             _templating, config.ENV_DATA
         )
         logger.info(f"Waiting {wait_time} seconds...")
@@ -208,14 +181,7 @@ class Deployment(object):
             kind=constants.CEPHFILESYSTEM,
             namespace=config.ENV_DATA['cluster_namespace']
         )
-
-        # Check for the Running status of Ceph Pods
-        run_cmd(
-            f"oc wait --for condition=ready pod "
-            f"-l app=rook-ceph-agent "
-            f"-n {config.ENV_DATA['cluster_namespace']} "
-            f"--timeout=120s"
-        )
+        # Check for Ceph pods
         assert pod.wait_for_resource(
             condition='Running', selector='app=rook-ceph-mon',
             resource_count=3, timeout=600
@@ -234,10 +200,6 @@ class Deployment(object):
         )
         logger.info(f"Waiting {wait_time} seconds...")
         time.sleep(wait_time)
-        create_oc_resource(
-            'storage-manifest.yaml', self.cluster_path, _templating,
-            config.ENV_DATA
-        )
         create_oc_resource(
             "service-monitor.yaml", self.cluster_path, _templating,
             config.ENV_DATA
