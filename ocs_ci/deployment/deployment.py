@@ -13,7 +13,7 @@ import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.utility import templating, system
-from ocs_ci.ocs.utils import create_oc_resource, apply_oc_resource
+from ocs_ci.ocs.utils import create_oc_resource
 from ocs_ci.utility.utils import (
     run_cmd, ceph_health_check,
 )
