@@ -14,6 +14,7 @@ from tests.fixtures import (
     create_cephfs_storageclass, create_rbd_secret, create_cephfs_secret,
     create_project, create_pvcs
 )
+from ocs_ci.utility.utils import run_cmd
 
 log = logging.getLogger(__name__)
 
@@ -65,10 +66,11 @@ class OperationsBase(ManageTest):
         7. Verify that pods created in Step 2 are Running.
         8. Verify IO results.
         9. Delete pods created in Steps 1 and 2.
-        10. Verify the total number of 'resource_to_delete' pods
-        11. Use all PVCs to create new pods. One PVC for one pod.
-        12. Start IO on all pods created in Step 10.
-        13. Verify IO results.
+        10. Verify the total number of 'resource_to_delete' pods.
+        11. Verify volumes are unmapped from nodes after deleting pods.
+        12. Use all PVCs to create new pods. One PVC for one pod.
+        13. Start IO on all pods created in Step 10.
+        14. Verify IO results.
         """
         # Separate the available PVCs
         pvc_objs_for_io_pods = self.pvc_objs[0:self.pvc_num_for_io_pods]
@@ -167,8 +169,25 @@ class OperationsBase(ManageTest):
             get_fio_rw_iops(pod_obj)
         log.info("Verified IO result on pods.")
 
-        # Delete pods
         all_pod_objs = io_pods + pod_objs_new
+
+        # Fetch volume details from pods for the purpose of verification
+        node_pv_dict = {}
+        for pod in all_pod_objs:
+            pod_info = pod.get()
+            node = pod_info['spec']['nodeName']
+            pvc = pod_info['spec']['volumes'][0]['persistentVolumeClaim']['claimName']
+            for pvc_obj in self.pvc_objs:
+                if pvc_obj.name == pvc:
+                    pvc_obj.reload()
+                    pv = pvc_obj.backed_pv
+                    break
+            if node in node_pv_dict:
+                node_pv_dict[node].append(pv)
+            else:
+                node_pv_dict[node] = [pv]
+
+        # Delete pods
         for pod_obj in all_pod_objs:
             pod_obj.delete(wait=False)
 
@@ -179,7 +198,7 @@ class OperationsBase(ManageTest):
         # Updating self.pod_objs for the purpose of teardown
         self.pod_objs.clear()
 
-        # Verify number of pods
+        # Verify number of 'resource_to_delete' type pods
         final_pods_num = len(pod_functions[resource_to_delete]())
         assert final_pods_num == initial_pods_num, (
             f"Total number of {resource_to_delete} pods is not matching with "
@@ -187,6 +206,16 @@ class OperationsBase(ManageTest):
             f"{initial_pods_num}. Total number of pods present now: "
             f"{final_pods_num}"
         )
+
+        # Verify volumes are unmapped from nodes after deleting the pods
+        for node, pvs in node_pv_dict.items():
+            cmd = f'oc debug nodes/{node} -- df'
+            df_on_node = run_cmd(cmd)
+            for pv in pvs:
+                assert pv not in df_on_node, (
+                    f"{pv} is still present on node {node} after "
+                    f"deleting the pods."
+                )
 
         # Verify that PVCs are reusable by creating new pods
         all_pvc_objs = self.pvc_objs + pvc_objs_new
