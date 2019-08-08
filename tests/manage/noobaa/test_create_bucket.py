@@ -41,6 +41,8 @@ def buckets(request, noobaa_obj):
 
     return created_buckets
 
+# TODO: enable this test once NooBaa is deployed automatically
+
 
 @pytest.mark.filterwarnings('ignore::urllib3.exceptions.InsecureRequestWarning')
 @tier1
@@ -53,7 +55,7 @@ class TestBucketCreation:
         condition=config.ENV_DATA['platform'] != 'AWS',
         reason="Tests are not running on AWS deployed cluster"
     )
-    def test_s3_bucket_creation(self, noobaa_obj, buckets):
+    def s3_bucket_creation(self, noobaa_obj, buckets):
         """
         Test bucket creation using the S3 SDK
         """
