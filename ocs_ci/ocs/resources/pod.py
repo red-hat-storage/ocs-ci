@@ -786,9 +786,6 @@ def verify_pod_exists(namespace=None, pod_name=None):
         otherwise
 
     """
-    pod_obj = OCP(
-        kind=constants.POD, namespace=namespace
-    )
     pod_list = get_all_pods(namespace=namespace)
     for pod in pod_list:
         if pod.name == pod_name:

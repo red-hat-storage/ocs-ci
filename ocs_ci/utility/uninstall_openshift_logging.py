@@ -27,7 +27,7 @@ def uninstall_cluster_logging():
         kind='ClusterLogging', namespace='openshift-logging'
     )
     assert clusterlogging_obj.delete(resource_name='instance')
- 
+
     # Verifying the pods if exists after deleting instance
     pod_list = [
         pod for pod in pod_list if not pod.name.startswith('cluster-logging-operator')
