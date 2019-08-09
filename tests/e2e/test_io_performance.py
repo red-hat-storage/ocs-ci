@@ -17,7 +17,7 @@ class TestIOPerformance(ManageTest):
     Test IO performance
     """
     @pytest.fixture()
-    def setup(self, request, interface_iterate, pod_factory):
+    def base_setup(self, request, interface_iterate, pod_factory):
         self.interface = interface_iterate
         self.pod_obj = pod_factory(self.interface)
 
