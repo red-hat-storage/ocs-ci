@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.ocs import ocp, constants
+from ocs_ci.ocs import constants, node
 from ocs_ci.framework.testlib import tier4, ignore_leftovers, ManageTest
 from ocs_ci.utility import aws
 from ocs_ci.ocs.cluster import CephCluster
@@ -35,7 +35,7 @@ def instances(request, aws_obj):
         dict: The ID keys and the name values of the instances
 
     """
-    nodes = ocp.get_node_objs()
+    nodes = node.get_node_objs()
     ec2_instances = aws.get_instances_ids_and_names(nodes)
 
     def finalizer():
@@ -106,7 +106,7 @@ class BaseNodesRestart(ManageTest):
         check and functional resources tests
         """
         instances_names = list(instances.values())
-        assert ocp.wait_for_nodes_ready(instances_names), (
+        assert node.wait_for_nodes_status(instances_names), (
             "Not all nodes reached status Ready"
         )
 
