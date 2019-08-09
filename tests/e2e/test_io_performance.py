@@ -41,7 +41,7 @@ class TestIOPerformance(ManageTest):
             ),
         ]
     )
-    @pytest.mark.usefixtures(setup.__name__)
+    @pytest.mark.usefixtures(base_setup.__name__)
     def test_run_io(
         self, size, io_direction, jobs, runtime, depth, sheet_index
     ):

@@ -237,9 +237,6 @@ def pvc_factory(
     PVC. For custom PVC provide 'storageclass' parameter.
     """
     instances = []
-    # active_project = None
-    # active_rbd_storageclass = None
-    # active_cephfs_storageclass = None
 
     def factory(
         interface=constants.CEPHBLOCKPOOL,
@@ -571,12 +568,7 @@ def run_io_in_background(request):
 )
 def interface_iterate(request):
     """
-    Iterate over interfaces
-    This fixture should be the first fixture that is being called
+    Iterate over interfaces - CephBlockPool and CephFileSystem
 
-    Modifies:
-        str: interface
     """
-    # class_instance = request.node.cls
-    # class_instance.interface = request.param['interface']
     return request.param['interface']
