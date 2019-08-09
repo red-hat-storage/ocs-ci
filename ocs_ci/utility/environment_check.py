@@ -17,10 +17,9 @@ CEPHFILESYSTEM = ocp.OCP(kind=constants.CEPHFILESYSTEM)
 CEPHBLOCKPOOL = ocp.OCP(kind=constants.CEPHBLOCKPOOL)
 PV = ocp.OCP(kind=constants.PV)
 PVC = ocp.OCP(kind=constants.PVC)
-SECRET = ocp.OCP(kind=constants.SECRET)
 NS = ocp.OCP(kind=constants.NAMESPACE)
 
-KINDS = [POD, SC, CEPHFILESYSTEM, CEPHBLOCKPOOL, PV, PVC, SECRET, NS]
+KINDS = [POD, SC, CEPHFILESYSTEM, CEPHBLOCKPOOL, PV, PVC, NS]
 ENV_STATUS_DICT = {
     'pod': None,
     'sc': None,
@@ -28,7 +27,6 @@ ENV_STATUS_DICT = {
     'cephbp': None,
     'pv': None,
     'pvc': None,
-    'secret': None,
     'namespace': None,
 }
 ENV_STATUS_PRE = copy.deepcopy(ENV_STATUS_DICT)
@@ -136,9 +134,6 @@ def get_status_after_execution():
     pvc_diff = compare_dicts(
         ENV_STATUS_PRE['pvc'], ENV_STATUS_POST['pvc']
     )
-    secret_diff = compare_dicts(
-        ENV_STATUS_PRE['secret'], ENV_STATUS_POST['secret']
-    )
     namespace_diff = compare_dicts(
         ENV_STATUS_PRE['namespace'], ENV_STATUS_POST['namespace']
     )
@@ -149,7 +144,6 @@ def get_status_after_execution():
         'cephbp': cephbp_diff,
         'pvs': pv_diff,
         'pvcs': pvc_diff,
-        'secrets': secret_diff,
         'namespaces': namespace_diff,
     }
     leftover_detected = False
