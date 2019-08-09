@@ -34,12 +34,13 @@ def get_node_objs(node_names=None):
         ]
 
 
-def wait_for_nodes_status(node_names, status=constants.NODE_READY):
+def wait_for_nodes_status(node_names=None, status=constants.NODE_READY):
     """
     Wait until all nodes are in Ready status
 
     Args:
-        node_names (list): The node names to wait for to reached the desire state
+        node_names (list): The node names to wait for to reached the desired state
+            If None, will return all cluster nodes
         status (str): The node status to wait for
             (e.g. 'Ready', 'NotReady', 'SchedulingDisabled')
 
@@ -47,6 +48,8 @@ def wait_for_nodes_status(node_names, status=constants.NODE_READY):
         bool: True if all nodes reached the status, False otherwise
 
     """
+    if not node_names:
+        node_names = [node.get('metadata').get('name') for node in get_node_objs()]
     try:
         for sample in TimeoutSampler(120, 3, get_node_objs, node_names):
             for node in sample:
