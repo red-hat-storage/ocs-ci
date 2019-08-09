@@ -40,7 +40,7 @@ def wait_for_nodes_status(node_names=None, status=constants.NODE_READY):
 
     Args:
         node_names (list): The node names to wait for to reached the desired state
-            If None, will return all cluster nodes
+            If None, will wait for all cluster nodes
         status (str): The node status to wait for
             (e.g. 'Ready', 'NotReady', 'SchedulingDisabled')
 
