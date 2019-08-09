@@ -133,30 +133,31 @@ class AWS(object):
             InstanceIds=[instance_id],
         ).get('Reservations')[0].get('Instances')[0].get('State').get('Code')
 
-    def create_volume_and_attach(
+    def create_volume(
         self,
         availability_zone,
-        instance_id,
         name,
-        device='/dev/sdx',
         encrypted=False,
         size=100,
         timeout=20,
-        volume_type='gp2',
+        volume_type='gp2'
     ):
-        """ Create volume and attach to instance
+        """
+        Create volume
 
         Args:
             availability_zone (str): availability zone e.g.: us-west-1b
-            instance_id (str): id of instance where to attach the volume
             name (str): name of volume
-            device (str): name of device where to attach (default: /dev/sdx)
             encrypted (boolean): True if encrypted False otherwise
                 (default: False)
             size (int): size in GB (default: 100)
             timeout (int): timeout in seconds for volume creation (default: 20)
             volume_type (str): 'standard'|'io1'|'gp2'|'sc1'|'st1'
                 (default: gp2)
+
+        Returns:
+            Volume: AWS Resource instance of the newly created volume
+
         """
         volume_response = self.ec2_client.create_volume(
             AvailabilityZone=availability_zone,
@@ -191,11 +192,56 @@ class AWS(object):
                     f"{volume.volume_id}"
                 )
             time.sleep(1)
+        return volume
+
+    def attach_volume(self, volume, instance_id, device='/dev/sdx'):
+        """
+        Attach volume to an ec2 instance
+
+        Args:
+            volume (Volume): Volume instance
+            instance_id (str): id of instance where to attach the volume
+            device (str): name of device where to attach (default: /dev/sdx)
+
+        """
+        logger.info(f"Attaching volume: {volume.volume_id} Instance: {instance_id}")
         attach_response = volume.attach_to_instance(
             Device=device,
             InstanceId=instance_id,
         )
         logger.debug("Response of attaching volume: %s", attach_response)
+
+    def create_volume_and_attach(
+        self,
+        availability_zone,
+        instance_id,
+        name,
+        device='/dev/sdx',
+        encrypted=False,
+        size=100,
+        timeout=20,
+        volume_type='gp2',
+    ):
+        """
+        Create volume and attach to instance
+
+        Args:
+            availability_zone (str): availability zone e.g.: us-west-1b
+            instance_id (str): id of instance where to attach the volume
+            name (str): name of volume
+            device (str): name of device where to attach (default: /dev/sdx)
+            encrypted (boolean): True if encrypted False otherwise
+                (default: False)
+            size (int): size in GB (default: 100)
+            timeout (int): timeout in seconds for volume creation (default: 20)
+            volume_type (str): 'standard'|'io1'|'gp2'|'sc1'|'st1'
+                (default: gp2)
+
+        """
+        volume = self.create_volume(
+            availability_zone, name, encrypted, size, timeout, volume_type
+        )
+        self.attach_volume(volume, instance_id, device)
 
     def get_volumes_by_name_pattern(self, pattern):
         """
@@ -225,48 +271,72 @@ class AWS(object):
             )
         return volumes
 
-    def detach_and_delete_volume(self, volume, timeout=120):
+    def detach_volume(self, volume, timeout=120):
         """
-        Detach volume if attached and then delete it from AWS
+        Detach volume if attached
 
         Args:
-            volume (dict): Dict of volume details
+            volume (Volume): The volume to delete
             timeout (int): Timeout in seconds for API calls
+
+        Returns:
+            Volume: ec2 Volume instance
+
         """
-        ec2_volume = self.ec2_resource.Volume(volume['id'])
-        if volume['attachments']:
-            attachment = volume['attachments'][0]
+        if volume.attachments:
+            attachment = volume.attachments[0]
             logger.info(
-                "Detaching volume: %s Instance: %s", volume['id'],
-                attachment['InstanceId']
+                "Detaching volume: %s Instance: %s", volume.volume_id,
+                attachment.get('InstanceId')
             )
-            response_detach = ec2_volume.detach_from_instance(
+            response_detach = volume.detach_from_instance(
                 Device=attachment['Device'],
                 InstanceId=attachment['InstanceId'],
                 Force=True,
             )
             logger.debug("Detach response: %s", response_detach)
         for x in range(timeout):
-            ec2_volume.reload()
+            volume.reload()
             logger.debug(
-                "Volume id: %s has status: %s", ec2_volume.volume_id,
-                ec2_volume.state
+                "Volume id: %s has status: %s", volume.volume_id,
+                volume.state
             )
-            if ec2_volume.state == 'available':
+            if volume.state == 'available':
                 break
             if x == timeout - 1:
                 raise AWSTimeoutException(
                     f"Reached timeout {timeout}s for volume detach/delete for "
-                    f"volume ID: {volume['id']}, Volume state: "
-                    f"{ec2_volume.state}"
+                    f"volume ID: {volume.volume_id}, Volume state: "
+                    f"{volume.state}"
                 )
             time.sleep(1)
-        logger.info("Deleting volume: %s", ec2_volume.volume_id)
-        delete_response = ec2_volume.delete()
+
+    def delete_volume(self, volume):
+        """
+        Delete an ec2 volume from AWS
+
+        Args:
+            volume (Volume): The volume to delete
+
+        """
+        logger.info("Deleting volume: %s", volume.volume_id)
+        delete_response = volume.delete()
         logger.debug(
-            "Delete response for volume: %s is: %s", ec2_volume.volume_id,
+            "Delete response for volume: %s is: %s", volume.volume_id,
             delete_response
         )
+
+    def detach_and_delete_volume(self, volume, timeout=120):
+        """
+        Detach volume if attached and then delete it from AWS
+
+        Args:
+            volume (Volume): The volume to delete
+            timeout (int): Timeout in seconds for API calls
+
+        """
+        self.detach_volume(volume, timeout)
+        self.delete_volume(volume)
 
     def stop_ec2_instances(self, instances, wait=False, force=True):
         """
@@ -328,6 +398,35 @@ class AWS(object):
                 instance = self.get_ec2_instance(instance_id)
                 instance.wait_until_running()
 
+    def restart_ec2_instances(self, instances, wait=False, force=True):
+        """
+        Stop and start ec2 instances
+
+        Args:
+            instances (dict): A dictionary of instance IDs and names to restart
+            wait (bool): True in case wait for status is needed,
+                False otherwise
+            force (bool): True for force instance stop, False otherwise
+
+        """
+        self.stop_ec2_instances(instances=instances, wait=wait, force=force)
+        self.start_ec2_instances(instances=instances, wait=wait)
+
+    def get_ec2_instance_volumes(self, instance_id):
+        """
+        Get all volumes attached to an ec2 instance
+
+        Args:
+            instance_id (str): The ec2 instance ID
+
+        Returns:
+            list: ec2 Volume instances
+
+        """
+        instance = self.get_ec2_instance(instance_id)
+        volumes = instance.volumes.all()
+        return [vol for vol in volumes]
+
 
 def get_instances_ids_and_names(instances):
     """
@@ -344,3 +443,24 @@ def get_instances_ids_and_names(instances):
         'i-' + instance.get('spec').get('providerID').partition('i-')[-1]:
         instance.get('metadata').get('name') for instance in instances
     }
+
+
+def get_data_volumes(instance_id):
+    """
+    Get the instance data volumes (which doesn't include root FS)
+
+    Args:
+        instance_id (str): The ID of the instance
+
+    Returns:
+        list: ec2 Volume instances
+
+    """
+    aws = AWS()
+    volumes = aws.get_ec2_instance_volumes(instance_id)
+
+    # Get the data volume according to DeleteOnTermination
+    return [
+        vol for vol in volumes if vol.attachments[0]
+        .get('DeleteOnTermination') is False
+    ]

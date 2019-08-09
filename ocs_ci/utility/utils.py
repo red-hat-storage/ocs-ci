@@ -441,7 +441,7 @@ def destroy_cluster(cluster_path, log_level="DEBUG"):
         volumes = aws.get_volumes_by_name_pattern(volume_pattern)
         log.debug(f"Found volumes: \n {volumes}")
         for volume in volumes:
-            aws.detach_and_delete_volume(volume)
+            aws.detach_and_delete_volume(aws.ec2_resource.Volume(volume['id']))
 
         # Remove installer
         delete_file(installer)

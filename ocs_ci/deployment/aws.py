@@ -140,6 +140,8 @@ class AWSIPI(AWSBase):
             volumes = self.aws.get_volumes_by_name_pattern(volume_pattern)
             logger.debug(f"Found volumes: \n {volumes}")
             for volume in volumes:
-                self.aws.detach_and_delete_volume(volume)
+                self.aws.detach_and_delete_volume(
+                    self.aws.ec2_resource.Volume(volume['id'])
+                )
         except Exception:
             logger.error(traceback.format_exc())
