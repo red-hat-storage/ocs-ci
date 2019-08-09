@@ -5,28 +5,21 @@ import pytest
 import logging
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.framework.testlib import ManageTest, tier1, google_api_required
-from tests.fixtures import (  # noqa: F401
-    create_interface_based_storageclass, create_pod, create_pvc,
-    create_interface_based_ceph_pool, delete_pod,
-    create_interface_based_secret, create_project, interface_iterate
-)
+
 
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.usefixtures(
-    interface_iterate.__name__,
-    create_interface_based_storageclass.__name__,
-    create_project.__name__,
-    create_pvc.__name__,
-    create_pod.__name__,
-)
 @google_api_required
 @tier1
 class TestIOPerformance(ManageTest):
     """
     Test IO performance
     """
+    @pytest.fixture()
+    def setup(self, request, interface_iterate, pod_factory):
+        self.interface = interface_iterate
+        self.pod_obj = pod_factory(self.interface)
 
     @pytest.mark.parametrize(
         argnames=[
@@ -48,6 +41,7 @@ class TestIOPerformance(ManageTest):
             ),
         ]
     )
+    @pytest.mark.usefixtures(setup.__name__)
     def test_run_io(
         self, size, io_direction, jobs, runtime, depth, sheet_index
     ):

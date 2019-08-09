@@ -21,7 +21,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 
@@ -84,18 +84,24 @@ def secret_factory(request):
 
 
 @pytest.fixture()
-def block_pool_factory(request):
+def ceph_pool_factory(request):
     """
     Create a Ceph block pool factory.
     Calling this fixture creates new block pool instance.
     """
     instances = []
 
-    def factory():
-        cbp_obj = helpers.create_ceph_block_pool()
-        assert cbp_obj, "Failed to create block pool"
-        instances.append(cbp_obj)
-        return cbp_obj
+    def factory(interface=constants.CEPHBLOCKPOOL):
+        if interface == constants.CEPHBLOCKPOOL:
+            ceph_pool_obj = helpers.create_ceph_block_pool()
+        elif interface == constants.CEPHFILESYSTEM:
+            cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM).get(
+                defaults.CEPHFILESYSTEM_NAME
+            )
+            ceph_pool_obj = OCS(**cfs)
+        assert ceph_pool_obj, f"Failed to create {interface} pool"
+        instances.append(ceph_pool_obj)
+        return ceph_pool_obj
 
     def finalizer():
         """
@@ -115,7 +121,7 @@ def block_pool_factory(request):
 @pytest.fixture()
 def storageclass_factory(
     request,
-    block_pool_factory,
+    ceph_pool_factory,
     secret_factory
 ):
     """
@@ -152,7 +158,7 @@ def storageclass_factory(
             secret = secret or secret_factory(interface=interface)
 
             if interface == constants.CEPHBLOCKPOOL:
-                block_pool = block_pool or block_pool_factory()
+                block_pool = block_pool or ceph_pool_factory()
                 interface_name = block_pool.name
 
             elif interface == constants.CEPHFILESYSTEM:
@@ -163,7 +169,7 @@ def storageclass_factory(
                 interface_name=interface_name,
                 secret_name=secret.name
             )
-            assert sc_obj, "Failed to create storage class"
+            assert sc_obj, f"Failed to create {interface} storage class"
         sc_obj.block_pool = block_pool
         sc_obj.secret = secret
 
@@ -193,30 +199,13 @@ def project_factory(request):
     """
     instances = []
 
-    def factory(**kwargs):
+    def factory():
         """
 
         Returns:
             object: ocs_ci.ocs.resources.ocs instance of 'Project' kind.
         """
-        if 'metadata' not in kwargs or 'namespace' not in kwargs.get(
-            'metadata'
-        ):
-            namespace = helpers.create_unique_resource_name(
-                'test',
-                'namespace'
-            )
-            kwargs['metadata'] = kwargs.get('metadata') or {}
-            kwargs['metadata']['namespace'] = namespace
-
-        proj_obj = OCS(
-            kind='Project',
-            **kwargs
-        )
-        assert proj_obj.ocp.new_project(namespace), (
-            f'Failed to create new project {namespace}'
-        )
-
+        proj_obj = helpers.create_project()
         instances.append(proj_obj)
         return proj_obj
 
@@ -225,14 +214,13 @@ def project_factory(request):
         Delete the Ceph block pool
         """
         for instance in instances:
-            if not instance.is_deleted:
-                ocp.switch_to_default_rook_cluster_project()
-                instance.ocp.delete(
-                    resource_name=instance.namespace
-                )
-                instance.ocp.wait_for_delete(
-                    instance.namespace
-                )
+            ocp.switch_to_default_rook_cluster_project()
+            instance.delete(
+                resource_name=instance.namespace
+            )
+            instance.wait_for_delete(
+                instance.namespace
+            )
 
     request.addfinalizer(finalizer)
     return factory
@@ -249,16 +237,17 @@ def pvc_factory(
     PVC. For custom PVC provide 'storageclass' parameter.
     """
     instances = []
-    active_project = None
-    active_rbd_storageclass = None
-    active_cephfs_storageclass = None
+    # active_project = None
+    # active_rbd_storageclass = None
+    # active_cephfs_storageclass = None
 
     def factory(
         interface=constants.CEPHBLOCKPOOL,
         project=None,
         storageclass=None,
+        size=None,
         custom_data=None,
-        status=constants.STATUS_BOUND
+        status=constants.STATUS_BOUND,
     ):
         """
         Args:
@@ -269,6 +258,7 @@ def pvc_factory(
                 of 'Project' kind.
             storageclass (object): ocs_ci.ocs.resources.ocs.OCS instance
                 of 'StorageClass' kind.
+            size (int): The requested size for the PVC
             custom_data (dict): If provided then PVC object is created
                 by using these data. Parameters `project` and `storageclass`
                 are not used but reference is set if provided.
@@ -282,24 +272,14 @@ def pvc_factory(
             pvc_obj = PVC(**custom_data)
             pvc_obj.create(do_reload=False)
         else:
-            nonlocal active_project
-            nonlocal active_rbd_storageclass
-            nonlocal active_cephfs_storageclass
-
-            project = project or active_project or project_factory()
-            active_project = project
-            if interface == constants.CEPHBLOCKPOOL:
-                storageclass = storageclass or active_rbd_storageclass \
-                    or storageclass_factory(interface)
-                active_rbd_storageclass = storageclass
-            elif interface == constants.CEPHFILESYSTEM:
-                storageclass = storageclass or active_cephfs_storageclass \
-                    or storageclass_factory(interface)
-                active_cephfs_storageclass = storageclass
+            project = project or project_factory()
+            storageclass = storageclass or storageclass_factory(interface)
+            pvc_size = f"{size}Gi" if size else None
 
             pvc_obj = helpers.create_pvc(
                 sc_name=storageclass.name,
                 namespace=project.namespace,
+                size=pvc_size,
                 wait=False
             )
             assert pvc_obj, "Failed to create PVC"
@@ -338,14 +318,15 @@ def pod_factory(request, pvc_factory):
         interface=constants.CEPHBLOCKPOOL,
         pvc=None,
         custom_data=None,
-        status=constants.STATUS_RUNNING
+        status=constants.STATUS_RUNNING,
     ):
         """
         Args:
             interface (str): CephBlockPool or CephFileSystem. This decides
                 whether a RBD based or CephFS resource is created.
                 RBD is default.
-            pvc (object): ocs_ci.ocs.resources.ocs.OCS instance of 'PVC' kind.
+            pvc (PVC object): ocs_ci.ocs.resources.pvc.PVC instance
+            kind.
             custom_data (dict): If provided then Pod object is created
                 by using these data. Parameter `pvc` is not used but reference
                 is set if provided.
@@ -364,7 +345,6 @@ def pod_factory(request, pvc_factory):
                 pvc_name=pvc.name,
                 namespace=pvc.namespace,
                 interface_type=interface,
-                wait=False
             )
             assert pod_obj, "Failed to create PVC"
         if status:
@@ -580,3 +560,23 @@ def run_io_in_background(request):
 
         thread = threading.Thread(target=run_io_in_bg)
         thread.start()
+
+
+@pytest.fixture(
+    params=[
+        pytest.param({'interface': constants.CEPHBLOCKPOOL}),
+        pytest.param({'interface': constants.CEPHFILESYSTEM})
+    ],
+    ids=["RBD", "CephFS"]
+)
+def interface_iterate(request):
+    """
+    Iterate over interfaces
+    This fixture should be the first fixture that is being called
+
+    Modifies:
+        str: interface
+    """
+    # class_instance = request.node.cls
+    # class_instance.interface = request.param['interface']
+    return request.param['interface']
