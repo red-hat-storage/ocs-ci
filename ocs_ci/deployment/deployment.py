@@ -5,7 +5,7 @@ platforms like AWS, VMWare, Baremetal etc.
 import logging
 import time
 
-from ocs_ci.deployment.ocp import OcpDeployment as BaseOcpDeployment
+from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs.utils import create_oc_resource
 from ocs_ci.utility import templating
@@ -30,7 +30,7 @@ class Deployment(object):
         self.ocp_deployment_type = config.ENV_DATA['deployment_type']
         self.cluster_path = config.ENV_DATA['cluster_path']
 
-    class OcpDeployment(BaseOcpDeployment):
+    class OCPDeployment(BaseOCPDeployment):
         """
         This class has to be implemented in child class and should overload
         methods for platform specific config.
@@ -68,8 +68,11 @@ class Deployment(object):
         """
         Base deployment steps, the rest should be implemented in the child
         class.
+
+        Args:
+            log_cli_level (str): log level for installer (default: DEBUG)
         """
-        self.ocp_deployment = self.OcpDeployment()
+        self.ocp_deployment = self.OCPDeployment()
         self.ocp_deployment.deploy_prereq()
         self.ocp_deployment.deploy(log_cli_level)
 
@@ -208,10 +211,13 @@ class Deployment(object):
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
-        Base destroy cluster method, for more platform specific stuff overload
-        this method in child class.
+        Base destroy cluster method, for more platform specific stuff please
+        overload this method in child class.
+
+        Args:
+            log_level (str): log level for installer (default: DEBUG)
         """
-        self.ocp_deployment = self.OcpDeployment()
+        self.ocp_deployment = self.OCPDeployment()
         self.ocp_deployment.destroy(log_level)
 
     def add_node(self):

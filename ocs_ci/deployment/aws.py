@@ -8,7 +8,7 @@ import json
 import traceback
 
 from .deployment import Deployment
-from ocs_ci.deployment.ocp import OcpDeployment as BaseOcpDeployment
+from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.framework import config
 from ocs_ci.ocs.parallel import parallel
@@ -87,9 +87,9 @@ class AWSIPI(AWSBase):
         self.name = self.__class__.__name__
         super(AWSIPI, self).__init__()
 
-    class OcpDeployment(BaseOcpDeployment):
+    class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
-            super(AWSIPI.OcpDeployment, self).__init__()
+            super(AWSIPI.OCPDeployment, self).__init__()
 
         def deploy(self, log_cli_level='DEBUG'):
             """

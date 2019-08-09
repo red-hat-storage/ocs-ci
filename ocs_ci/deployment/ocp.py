@@ -19,10 +19,10 @@ from ocs_ci.utility.utils import run_cmd
 logger = logging.getLogger(__name__)
 
 
-class OcpDeployment:
+class OCPDeployment:
     def __init__(self):
         """
-        Constructor for OcpDeployment class
+        Constructor for OCPDeployment class
         """
         self.pull_secret = {}
         self.metadata = {}
@@ -163,8 +163,7 @@ class OcpDeployment:
         )
 
         try:
-
-            # Retrieve cluster name and AWS region from metadata
+            # Retrieve cluster metadata
             metadata_file = os.path.join(self.cluster_path, "metadata.json")
             with open(metadata_file) as f:
                 self.metadata = json.loads(f.read())
