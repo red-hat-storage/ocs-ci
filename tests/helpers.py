@@ -340,7 +340,10 @@ def create_pvc(
     return ocs_obj
 
 
-def create_multiple_pvcs(sc_name, namespace, number_of_pvc=1, size=None):
+def create_multiple_pvcs(
+    sc_name, namespace, number_of_pvc=1, size=None,
+    desired_status=constants.STATUS_BOUND, wait=True, wait_each=False
+):
     """
     Create one or more PVC
 
@@ -349,6 +352,13 @@ def create_multiple_pvcs(sc_name, namespace, number_of_pvc=1, size=None):
         number_of_pvc (int): Number of PVCs to be created
         size (str): The size of the PVCs to create
         namespace (str): The namespace for the PVCs creation
+        desired_status (str): The status of the PVC to wait for
+        wait (bool): True for waiting for PVC to reach the desired status,
+            False otherwise. Status of each PVC will be checked after creating
+            all PVCs
+        wait_each (bool): True for waiting for each PVC to reach the desired
+            status before creating next PVC, False otherwise. This will take
+            precedence over 'wait'
 
     Returns:
          list: List of PVC objects
@@ -356,13 +366,14 @@ def create_multiple_pvcs(sc_name, namespace, number_of_pvc=1, size=None):
 
     pvc_objs = [
         create_pvc(
-            sc_name=sc_name, size=size, namespace=namespace, wait=False
+            sc_name=sc_name, size=size, namespace=namespace, wait=wait_each
         ) for _ in range(number_of_pvc)
     ]
-    for pvc_obj in pvc_objs:
-        assert wait_for_resource_state(pvc_obj, constants.STATUS_BOUND), (
-            f"PVC {pvc_obj.name} failed to reach {constants.STATUS_BOUND} status"
-        )
+    if wait and not wait_each:
+        for pvc_obj in pvc_objs:
+            assert wait_for_resource_state(pvc_obj, desired_status), (
+                f"PVC {pvc_obj.name} failed to reach {desired_status} status"
+            )
     return pvc_objs
 
 
