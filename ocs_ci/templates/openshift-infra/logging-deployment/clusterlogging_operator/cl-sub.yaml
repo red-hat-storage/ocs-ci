@@ -7,6 +7,5 @@ spec:
   channel: preview
   installPlanApproval: Automatic
   name: cluster-logging
-  source: cluster-logging-operator
-  sourceNamespace: openshift-logging
-  #startingCSV: clusterlogging.v4.1.0
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
