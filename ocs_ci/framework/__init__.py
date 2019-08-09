@@ -53,6 +53,8 @@ class Config:
                 raise ValueError(
                     f"{k} is not a valid config section. "
                     f"Valid sections: {field_names}")
+            if v is None:
+                continue
             section = getattr(self, k)
             merge_dict(section, v)
 
