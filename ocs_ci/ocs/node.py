@@ -1,5 +1,3 @@
-from __future__ import print_function
-
 import logging
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
@@ -58,15 +56,17 @@ def get_typed_nodes(node_type='worker', num_of_nodes=None):
     return typed_nodes
 
 
-def wait_for_nodes_status(node_names=None, status=constants.NODE_READY):
+def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=120):
     """
-    Wait until all nodes are in Ready status
+    Wait until all nodes are in the given status
 
     Args:
         node_names (list): The node names to wait for to reached the desired state
             If None, will wait for all cluster nodes
         status (str): The node status to wait for
             (e.g. 'Ready', 'NotReady', 'SchedulingDisabled')
+        timeout (int): The number in seconds to wait for the nodes to reach
+            the status
 
     Returns:
         bool: True if all nodes reached the status, False otherwise
@@ -74,21 +74,31 @@ def wait_for_nodes_status(node_names=None, status=constants.NODE_READY):
     """
     if not node_names:
         node_names = [node.get('metadata').get('name') for node in get_node_objs()]
+
+    log.info(f"Waiting for nodes {node_names} to reach status {status}")
+
     try:
-        for sample in TimeoutSampler(120, 3, get_node_objs, node_names):
+        for sample in TimeoutSampler(timeout, 3, get_node_objs, node_names):
             for node in sample:
                 if not node_names:
                     return True
                 for status_condition in node.get('status').get('conditions'):
-                    if 'True' in status_condition.get('status'):
-                        log.info(
-                            f"The following nodes are still not "
-                            f"in Ready status: {node_names}"
-                        )
-                        if status_condition.get('type') == status:
+                    if status == constants.NODE_NOT_READY:
+                        message = 'Kubelet stopped posting node status'
+                        if message in status_condition.get('message'):
                             node_names.remove(node.get('metadata').get('name'))
+                            break
+                    else:
+                        if 'True' in status_condition.get('status'):
+                            log.info(
+                                f"The following nodes are still not "
+                                f"in {status} status: {node_names}"
+                            )
+                            if status_condition.get('type') == status:
+                                node_names.remove(node.get('metadata').get('name'))
+                                break
     except TimeoutExpiredError:
-        log.error(f"The following nodes haven't reached status Ready: {node_names}")
+        log.error(f"The following nodes haven't reached status {status}: {node_names}")
         return False
 
 
@@ -102,7 +112,9 @@ def unschedule_nodes(nodes):
     """
     for node in nodes:
         node.exec_oc_cmd(f"adm cordon {node.get('metadata').get('name')}")
-    wait_for_nodes_status(nodes, status='SchedulingDisabled')
+    assert wait_for_nodes_status(nodes, status=constants.NODE_SCHEDULING_DISABLED), (
+        f"Not all nodes reached status {constants.NODE_SCHEDULING_DISABLED}"
+    )
 
 
 def schedule_nodes(nodes):
@@ -115,7 +127,7 @@ def schedule_nodes(nodes):
     """
     for node in nodes:
         node.exec_oc_cmd(f"adm uncordon {node.get('metadata').get('name')}")
-    wait_for_nodes_status(nodes)
+    assert wait_for_nodes_status(nodes), f"Not all nodes reached status {constants.NODE_READY}"
 
 
 def drain_nodes(node_names):
@@ -127,7 +139,7 @@ def drain_nodes(node_names):
 
     """
     ocp = OCP(kind='node')
-    node_names = print(*node_names, sep=' ')
+    node_names = ' '.join(node_names)
     ocp.exec_oc_cmd(f"adm drain {node_names}")
 
 
