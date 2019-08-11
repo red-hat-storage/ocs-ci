@@ -35,18 +35,25 @@ def resources(request):
 
 
 @tier2
-@pytest.mark.polarion_id("OCS-324")
 class TestDeleteCreatePVCSameName(ManageTest):
     """
-    Automates the testcase OCS-324
-    OCS-324 - FT-OCP-PVCDeleteAndCreate-SameName: Delete PVC and create a new
-    PVC with same name
+    Automates the following test cases:
+    OCS-324 - RBD: FT-OCP-PVCDeleteAndCreate-SameName: Delete PVC and create a
+        new PVC with same name
+    OCS-1137 - CEPHFS: FT-OCP-PVCDeleteAndCreate-SameName: Delete PVC and
+        create a new PVC with same name
     """
     @pytest.mark.parametrize(
         argnames="interface",
         argvalues=[
-            pytest.param(*[constants.CEPHBLOCKPOOL]),
-            pytest.param(*[constants.CEPHFILESYSTEM])
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                marks=pytest.mark.polarion_id("OCS-324")
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM],
+                marks=pytest.mark.polarion_id("OCS-1137")
+            )
         ]
     )
     def test_delete_create_pvc_same_name(
