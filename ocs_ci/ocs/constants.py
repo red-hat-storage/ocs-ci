@@ -46,6 +46,7 @@ STATUS_RUNNING = 'Running'
 STATUS_TERMINATING = 'Terminating'
 STATUS_BOUND = 'Bound'
 STATUS_RELEASED = 'Released'
+STATUS_SUCCEEDED = 'Succeeded'
 
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
@@ -56,7 +57,7 @@ PVC = "PersistentVolumeClaim"
 POD = "Pod"
 ROUTE = "Route"
 NODE = "Node"
-
+DEPLOYMENTCONFIG = "deploymentconfig"
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
 ROLE = 'Role'
@@ -165,6 +166,14 @@ PGSQL_BENCHMARK_YAML = os.path.join(
 
 NGINX_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "nginx.yaml"
+)
+
+SERVICE_ACCOUNT_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "service_account.yaml"
+)
+
+FEDORA_DC_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "fedora_dc.yaml"
 )
 
 # Openshift-logging elasticsearch operator deployment yamls
