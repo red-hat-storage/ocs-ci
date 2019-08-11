@@ -18,6 +18,15 @@ class TestIOPerformance(ManageTest):
     """
     @pytest.fixture()
     def base_setup(self, request, interface_iterate, pod_factory):
+        """
+        A setup phase for the test
+
+        Args:
+            interface_iterate: will iterate over RBD and CephFS interfaces
+                to parametrize the test
+            pod_factory: A fixture to create everything needed for a running
+                pod
+        """
         self.interface = interface_iterate
         self.pod_obj = pod_factory(self.interface)
 

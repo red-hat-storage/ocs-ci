@@ -95,9 +95,10 @@ def ceph_pool_factory(request):
         if interface == constants.CEPHBLOCKPOOL:
             ceph_pool_obj = helpers.create_ceph_block_pool()
         elif interface == constants.CEPHFILESYSTEM:
-            cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM).get(
-                defaults.CEPHFILESYSTEM_NAME
-            )
+            cfs = ocp.OCP(
+                kind=constants.CEPHFILESYSTEM,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            ).get(defaults.CEPHFILESYSTEM_NAME)
             ceph_pool_obj = OCS(**cfs)
         assert ceph_pool_obj, f"Failed to create {interface} pool"
         instances.append(ceph_pool_obj)
@@ -215,12 +216,8 @@ def project_factory(request):
         """
         for instance in instances:
             ocp.switch_to_default_rook_cluster_project()
-            instance.delete(
-                resource_name=instance.namespace
-            )
-            instance.wait_for_delete(
-                instance.namespace
-            )
+            instance.delete(resource_name=instance.namespace)
+            instance.wait_for_delete(instance.namespace)
 
     request.addfinalizer(finalizer)
     return factory
@@ -322,8 +319,7 @@ def pod_factory(request, pvc_factory):
             interface (str): CephBlockPool or CephFileSystem. This decides
                 whether a RBD based or CephFS resource is created.
                 RBD is default.
-            pvc (PVC object): ocs_ci.ocs.resources.pvc.PVC instance
-            kind.
+            pvc (PVC object): ocs_ci.ocs.resources.pvc.PVC instance kind.
             custom_data (dict): If provided then Pod object is created
                 by using these data. Parameter `pvc` is not used but reference
                 is set if provided.
