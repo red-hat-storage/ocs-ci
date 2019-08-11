@@ -34,6 +34,30 @@ def get_node_objs(node_names=None):
         ]
 
 
+def get_typed_nodes(node_type='worker', num_of_nodes=None):
+    """
+    Get cluster nodes according to the node type (e.g. worker, master) and the
+    number of requested nodes from that type
+
+    Args:
+        node_type (str): The node type (e.g. worker, master)
+        num_of_nodes (int): The number of nodes to be returned
+
+    Returns:
+        list: The nodes OCP instances
+
+    """
+    nodes = get_node_objs()
+
+    typed_nodes = [
+        n for n in nodes if node_type in n.get('metadata')
+        .get('annotations').get('machine.openshift.io/machine')
+    ]
+    if num_of_nodes:
+        typed_nodes = typed_nodes[:num_of_nodes]
+    return typed_nodes
+
+
 def wait_for_nodes_status(node_names=None, status=constants.NODE_READY):
     """
     Wait until all nodes are in Ready status
