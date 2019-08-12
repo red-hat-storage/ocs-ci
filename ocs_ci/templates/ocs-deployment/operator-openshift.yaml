@@ -216,7 +216,11 @@ spec:
         - name: ROOK_CSI_ENABLE_RBD
           value: "{{ rook_csi_enable_rbd | default('true') }}"
 
-# CSI sidecar image definition for https://jira.coreos.com/browse/RHSTOR-150
+# CSI images definition for https://jira.coreos.com/browse/RHSTOR-150
+{% if ceph_csi_image %}
+        - name: ROOK_CSI_CEPH_IMAGE
+          value: "{{ ceph_csi_image }}"
+{% endif %}
 {% if rook_csi_registrar_image %}
         - name: ROOK_CSI_REGISTRAR_IMAGE
           value: "{{ rook_csi_registrar_image }}"
