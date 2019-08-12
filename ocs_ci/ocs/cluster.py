@@ -372,8 +372,10 @@ class CephCluster(object):
         Returns:
             remove_mon(bool): True if removal of mon is successful, False otherwise
         """
-
         mons = self.get_mons_from_cluster()
-        remove_mon = self.DEP.delete(resource_name=random.choice(mons))
-        logging.info(f"Removed the mon {mons} from the cluster")
+        after_delete_mon_count = len(mons)-1
+        random_mon = random.choice(mons)
+        remove_mon = self.DEP.delete(resource_name=random_mon)
+        assert self.POD.wait_for_resource(condition=constant.STATUS_RUNNING, resource_count=after_delete_mon_count, selector='app=rook-ceph-mon')
+        logging.info(f"Removed the mon {random_mon} from the cluster")
         return remove_mon
