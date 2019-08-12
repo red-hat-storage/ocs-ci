@@ -86,8 +86,8 @@ def secret_factory(request):
 @pytest.fixture()
 def ceph_pool_factory(request):
     """
-    Create a Ceph block pool factory.
-    Calling this fixture creates new block pool instance.
+    Create a Ceph pool factory.
+    Calling this fixture creates new Ceph pool instance.
     """
     instances = []
 
@@ -133,7 +133,6 @@ def storageclass_factory(
 
     def factory(
         interface=constants.CEPHBLOCKPOOL,
-        block_pool=None,
         secret=None,
         custom_data=None
     ):
@@ -142,8 +141,6 @@ def storageclass_factory(
             interface (str): CephBlockPool or CephFileSystem. This decides
                 whether a RBD based or CephFS resource is created.
                 RBD is default.
-            block_pool (object): An OCS instance for the block pool.
-                This is used only for RBD based storageclass.
             secret (object): An OCS instance for the secret.
             custom_data (dict): If provided then storageclass object is created
                 by using these data. Parameters `block_pool` and `secret`
@@ -157,13 +154,8 @@ def storageclass_factory(
             sc_obj = helpers.create_resource(**custom_data, wait=False)
         else:
             secret = secret or secret_factory(interface=interface)
-
-            if interface == constants.CEPHBLOCKPOOL:
-                block_pool = block_pool or ceph_pool_factory()
-                interface_name = block_pool.name
-
-            elif interface == constants.CEPHFILESYSTEM:
-                interface_name = helpers.get_cephfs_data_pool_name()
+            ceph_pool = ceph_pool_factory(interface)
+            interface_name = ceph_pool.name
 
             sc_obj = helpers.create_storage_class(
                 interface_type=interface,
@@ -171,8 +163,8 @@ def storageclass_factory(
                 secret_name=secret.name
             )
             assert sc_obj, f"Failed to create {interface} storage class"
-        sc_obj.block_pool = block_pool
-        sc_obj.secret = secret
+            sc_obj.ceph_pool = ceph_pool
+            sc_obj.secret = secret
 
         instances.append(sc_obj)
         return sc_obj
