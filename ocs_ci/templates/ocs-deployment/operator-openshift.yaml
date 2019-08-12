@@ -216,6 +216,25 @@ spec:
         - name: ROOK_CSI_ENABLE_RBD
           value: "{{ rook_csi_enable_rbd | default('true') }}"
 
+# CSI sidecar image definition for https://jira.coreos.com/browse/RHSTOR-150
+{% if rook_csi_registrar_image %}
+        - name: ROOK_CSI_REGISTRAR_IMAGE
+          value: "{{ rook_csi_registrar_image }}"
+{% endif %}
+{% if rook_csi_provisioner_image %}
+        - name: ROOK_CSI_PROVISIONER_IMAGE
+          value: "{{ rook_csi_provisioner_image }}"
+{% endif %}
+{% if rook_csi_snapshotter_image %}
+        - name: ROOK_CSI_SNAPSHOTTER_IMAGE
+          value: "{{ rook_csi_snapshotter_image }}"
+{% endif %}
+{% if rook_csi_attacher_image  %}
+        - name: ROOK_CSI_ATTACHER_IMAGE
+          value: "{{ rook_csi_attacher_image }}"
+{% endif %}
+# End of CSI sidecars definition
+
         - name: ROOK_HOSTPATH_REQUIRES_PRIVILEGED
           value: "{{ rook_hostpath_requires_privileged | default('true') }}"
         # The name of the node to pass with the downward API
