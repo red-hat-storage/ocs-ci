@@ -1,0 +1,16 @@
+# https://EditorConfig.org
+
+# This is the top-level editorconfig for the project
+root = true
+
+[*]
+charset = utf-8
+
+[*.py]
+indent_style = space
+indent_size = 4
+
+[Jenkinsfile]
+indent_style = space
+indent_size = 2
+
