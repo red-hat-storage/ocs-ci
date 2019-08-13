@@ -9,20 +9,17 @@ Polarion-ID- OCS-355
 import logging
 import pytest
 from ocs_ci.ocs import ocp, constants
-from ocs_ci.framework.testlib import tier4, ManageTest
+from ocs_ci.framework.testlib import tier4, ManageTest, ignore_leftovers
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
 from tests.helpers import run_io_with_rados_bench, delete_cephblockpools, create_ceph_block_pool
 from ocs_ci.ocs.cluster import CephCluster
-from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import CephHealthException
 
 
 log = logging.getLogger(__name__)
 
 
-@retry(CephHealthException, 8, 3, 1)
-def verify_mon_pod_up(ceph_cluster, pods):
+def verify_mon_pod_up(pods):
     """
     Verify mon pods are in Running state.
 
@@ -31,7 +28,6 @@ def verify_mon_pod_up(ceph_cluster, pods):
 
     """
     log.info(f"Verifying all mons pods are up and Running")
-    ceph_cluster.cluster_health_check(timeout=3)
     ret = pods.wait_for_resource(
         condition=constants.STATUS_RUNNING, selector='app=rook-ceph-mon',
         resource_count=3, timeout=700)
@@ -58,6 +54,7 @@ def run_io_on_pool(pool_obj):
 
 
 @tier4
+@ignore_leftovers
 @pytest.mark.polarion_id("OCS-355")
 class TestRemoveMonFromCluster(ManageTest):
     pool_obj = ""
@@ -83,5 +80,5 @@ class TestRemoveMonFromCluster(ManageTest):
         assert delete_cephblockpools([self.pool_obj]), 'Failed to delete pool'
         ceph_cluster.cluster_health_check(timeout=0)
         ceph_cluster.remove_mon_from_cluster()
-        assert verify_mon_pod_up(ceph_cluster, pods), f"Mon pods are not up and running state"
+        assert verify_mon_pod_up(pods), f"Mon pods are not up and running state"
         ceph_cluster.cluster_health_check(timeout=60)
