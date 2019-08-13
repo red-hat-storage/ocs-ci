@@ -13,7 +13,7 @@
 //   ROOK_IMAGE
 //   CEPH_IMAGE
 pipeline {
-  agent { node { label "rhel-8-large" }}
+  agent { node { label "ocs-ci" }}
   environment {
     AWS_SHARED_CREDENTIALS_FILE = "${env.WORKSPACE}/.aws/credentials"
     AWS_CONFIG_FILE = "${env.WORKSPACE}/.aws/config"
