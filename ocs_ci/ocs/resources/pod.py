@@ -308,6 +308,42 @@ def get_ceph_tools_pod():
     return ceph_pod
 
 
+def get_rbd_provisioner_pod():
+    """
+    Get the RBD provisioner pod
+
+    Returns:
+        Pod object: The RBD provisioner pod object
+    """
+    ocp_pod_obj = OCP(
+        kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
+    )
+    rbd_provision_pod_items = ocp_pod_obj.get(
+        selector='app=csi-rbdplugin-provisioner'
+    )['items']
+    assert rbd_provision_pod_items, "No RBD provisioner pod found"
+    ceph_pod = Pod(**rbd_provision_pod_items[0])
+    return ceph_pod
+
+
+def get_cephfs_provisioner_pod():
+    """
+    Get the cephfs provisioner pod
+
+    Returns:
+        Pod object: The cephfs provisioner pod object
+    """
+    ocp_pod_obj = OCP(
+        kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
+    )
+    cephfs_provision_pod_items = ocp_pod_obj.get(
+        selector='app=csi-cephfsplugin-provisioner'
+    )['items']
+    assert cephfs_provision_pod_items, "No cephfs provisioner pod found"
+    ceph_pod = Pod(**cephfs_provision_pod_items[0])
+    return ceph_pod
+
+
 def list_ceph_images(pool_name='rbd'):
     """
     Args:
@@ -613,3 +649,22 @@ def get_pod_obj(name, namespace=None):
     ocp_dict = ocp_obj.get(resource_name=name)
     pod_obj = Pod(**ocp_dict)
     return pod_obj
+
+
+def get_pod_logs(pod_name, container=None):
+    """
+    Get logs from a given pod
+
+    pod_name (str): Name of the pod
+    container (str): Name of the container
+
+    Returns:
+        str: Output from 'oc get logs <pod_name> command
+    """
+    pod = OCP(
+        kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    cmd = f"logs {pod_name}"
+    if container:
+        cmd += f" -c {container}"
+    return pod.exec_oc_cmd(cmd, out_yaml_format=False)

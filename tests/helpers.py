@@ -3,8 +3,7 @@ Helper functions file for OCS QE
 """
 import datetime
 import logging
-import time
-
+import re
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility import templating
@@ -303,8 +302,7 @@ def create_storage_class(
 
 def create_pvc(
     sc_name, pvc_name=None, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-    size=None, wait=True, access_mode=constants.ACCESS_MODE_RWO,
-    measure_time=False
+    size=None, wait=True, access_mode=constants.ACCESS_MODE_RWO
 ):
     """
     Create a PVC
@@ -317,8 +315,6 @@ def create_pvc(
         size(str): Size of pvc to create
         wait (bool): True for wait for the PVC operation to complete, False otherwise
         access_mode (str): The access mode to be used for the PVC
-        measure_time (bool): Measure the creation time for a PVC.
-            The requirement is 1 second for a PVC nad hence the assertion
 
     Returns:
         PVC: PVC instance
@@ -335,23 +331,10 @@ def create_pvc(
     if size:
         pvc_data['spec']['resources']['requests']['storage'] = size
     ocs_obj = pvc.PVC(**pvc_data)
-    if measure_time:
-        time_before = time.time()
     created_pvc = ocs_obj.create(do_reload=wait)
-    if measure_time:
-        time_after = time.time()
-        t_time = time_after - time_before
-        # 1 second for PVC creation is a requirement:
-        # https://jira.coreos.com/browse/KNIP-627
-        assert t_time < 1, (
-            f"Creation time for PVC took longer than 1 second:\n"
-            f"Creation time: {t_time}"
-        )
     assert created_pvc, f"Failed to create resource {pvc_name}"
     if wait:
-        assert wait_for_resource_state(
-            ocs_obj, constants.STATUS_BOUND
-        )
+        assert wait_for_resource_state(ocs_obj, constants.STATUS_BOUND)
         ocs_obj.reload()
 
     return ocs_obj
@@ -723,3 +706,41 @@ def get_worker_nodes():
     nodes = ocp_node_obj.get(selector=label).get('items')
     worker_nodes_list = [node.get('metadata').get('name') for node in nodes]
     return worker_nodes_list
+
+
+def measure_pvc_creation_time(interface, pvc_name):
+    """
+    Measure PVC creation time based on logs
+
+    Args:
+        interface (str): The interface backed the PVC
+        pvc_name (str): Name of the PVC for creation time measurement
+
+    Returns:
+        float: Creation time for the PVC
+
+    """
+    format = '%H:%M:%S.%f'
+    # Get the correct provisioner pod based on the interface
+    if interface == constants.CEPHBLOCKPOOL:
+        pod_name = pod.get_rbd_provisioner_pod().name
+    else:
+        pod_name = pod.get_cephfs_provisioner_pod().name
+
+    # get the logs from the csi-provisioner container
+    logs = pod.get_pod_logs(pod_name, 'csi-provisioner')
+    logs = logs.split("\n")
+    # Extract the starting time for the PVC provisioning
+    start = [
+        i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)
+    ][0].split(' ')[1]
+    # Extract the end time for the PVC provisioning
+    end = [
+        i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)
+    ][0].split(' ')[1]
+    total = (
+        datetime.datetime.strptime(end, format) - datetime.datetime.strptime(
+            start, format
+        )
+    )
+    return total.total_seconds()
