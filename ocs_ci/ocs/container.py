@@ -1,5 +1,6 @@
 
 import logging
+import concurrent.futures
 
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.utility import templating
@@ -24,6 +25,7 @@ class ResourceStor(object):
         reclaim_policy (str): pvc recliam policy (retain/delete)
         sc_name (str): Storage class metadata name
         pvc_name (str): PVC metadata name
+        num_pvc (int): Number of PVCs to create
         access_mode (str): Access mode for PVC - RWO/RWX/ROX
         namespace (str): namespace for the PVC
         wait (bool): whether to wait for PVC to be in BOUND state
@@ -49,6 +51,7 @@ class ResourceStor(object):
         self.pool_name = block_pool_name
         self.sc_name = sc_name
         self.pvc_name = pvc_name
+        self.num_pvc = num_pvc
         self.access_mode = access_mode
         self.reclaim_policy = reclaim_policy
         self.namespace = namespace
@@ -187,7 +190,10 @@ class ResourceStor(object):
         self.rbd_secret_obj = self._create_ocs(self.secret_data)
         self.ceph_block_pool_obj = self._create_ocs(self.block_data)
         self.rbd_sc_obj = self._create_ocs(self.sc_data)
-        self.pvc_obj = self._create_ocs(self.pvc_data, constants.STATUS_BOUND)
+        if self.num_pvc == 1:
+            self.pvc_obj = self._create_ocs(self.pvc_data, constants.STATUS_BOUND)
+        else:
+            self._create_n_pvc()
 
     def _create_fs_pvc(self):
         """
@@ -195,13 +201,38 @@ class ResourceStor(object):
         """
         self.cephfs_secret_obj = self._create_ocs(self.secret_data)
         self.fs_sc_obj = self._create_ocs(self.sc_data)
-        self.pvc_obj = self._create_ocs(self.pvc_data, constants.STATUS_BOUND)
+        if self.num_pvc == 1:
+            self.pvc_obj = self._create_ocs(self.pvc_data, constants.STATUS_BOUND)
+        else:
+            self._create_n_pvc()
+
+    def _create_n_pvc(self):
+        with concurrent.futures.ThreadPoolExecutor() as exec:
+            pvc_to_num = {exec.submit(self._create_base_pvc): pvc for pvc in range(self.num_pvc)}
+            for future in concurrent.futures.as_completed(pvc_to_num):
+                try:
+                    future.result()
+                except Exception as exc:
+                    raise exc
+
+    def _create_base_pvc(self):
+        self.pvc_objs = []
+        self.pvc_time_taken = []
+        # when creating N pvc's always use unique names
+        self.pvc_name = create_unique_resource_name('test', 'pvc')
+        self.pvc_data['metadata']['name'] = self.pvc_name
+        pvc_obj = self._create_ocs(self.pvc_data, constants.STATUS_BOUND)
+        self.pvc_objs.append(pvc_obj)
 
     def _delete_rbd_pvc(self):
         """
          delete rbd pvc
         """
-        self._delete_ocs(self.pvc_obj)
+        if self.num_pvc == 1:
+            self._delete_ocs(self.pvc_obj)
+        else:
+            for pvc_obj in self.pvc_objs:
+                self._delete_ocs(pvc_obj)
         self._delete_ocs(self.rbd_sc_obj)
         self._delete_ocs(self.ceph_block_pool_obj)
         self._delete_ocs(self.rbd_secret_obj)
@@ -210,7 +241,11 @@ class ResourceStor(object):
         """
          Delete fs pvc
         """
-        self._delete_ocs(self.pvc_obj)
+        if self.num_pvc == 1:
+            self._delete_ocs(self.pvc_obj)
+        else:
+            for pvc_obj in self.pvc_objs:
+                self._delete_ocs(pvc_obj)
         self._delete_ocs(self.fs_sc_obj)
         self._delete_ocs(self.cephfs_secret_obj)
 
