@@ -423,7 +423,7 @@ def get_url_content(url):
 
 def expose_nightly_ocp_version(version):
     """
-    This helper function exposing latest nightly version of OCP when the
+    This helper function exposes latest nightly version of OCP. When the
     version string ends with .nightly (e.g. 4.2.0-0.nightly) it will expose
     the version to latest accepted OCP build
     (e.g. 4.2.0-0.nightly-2019-08-08-103722)
@@ -433,6 +433,7 @@ def expose_nightly_ocp_version(version):
 
     Returns:
         str: Version of OCP exposed to full version if latest nighly passed
+
     """
     if not version.endswith(".nightly"):
         return version
