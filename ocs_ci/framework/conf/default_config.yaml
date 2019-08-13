@@ -19,14 +19,19 @@ RUN:
   run_id: null  # this will be redefined in the execution
   kubeconfig_location: 'auth/kubeconfig' # relative from cluster_dir
   cli_params: {}  # this will be filled with CLI parameters data
-  client_version: '4.2.0-0.nightly-2019-08-06-195545'
+  # If the client version ends with .nightly, the version will be exposed
+  # to the latest accepted OCP nightly build version
+  client_version: '4.2.0-0.nightly'
   bin_dir: './bin'
   google_api_secret: '~/.ocs-ci/google_api_secret.json'
 
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
 DEPLOYMENT:
-  installer_version: "4.2.0-0.nightly-2019-08-06-195545"
+  # if the installer version ends with .nightly, the version will be exposed
+  # to the latest accepted OCP nightly build version. You can also use the
+  # specific build version like: "4.2.0-0.nightly-2019-08-06-195545"
+  installer_version: "4.2.0-0.nightly"
   force_download_installer: True
   force_download_client: True
 

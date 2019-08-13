@@ -402,6 +402,51 @@ def download_file(url, filename):
     assert r.ok
 
 
+def get_url_content(url):
+    """
+    Return URL content
+
+    Args:
+        url (str): URL address to return
+    Returns:
+        str: Content of URL
+
+    Raises:
+        AssertionError: When couldn't load URL
+
+    """
+    log.debug(f"Download '{url}' content.")
+    r = requests.get(url)
+    assert r.ok, f"Couldn't load URL: {url} content!"
+    return r.content
+
+
+def expose_nightly_ocp_version(version):
+    """
+    This helper function exposes latest nightly version of OCP. When the
+    version string ends with .nightly (e.g. 4.2.0-0.nightly) it will expose
+    the version to latest accepted OCP build
+    (e.g. 4.2.0-0.nightly-2019-08-08-103722)
+
+    Args:
+        version (str): Verison of OCP
+
+    Returns:
+        str: Version of OCP exposed to full version if latest nighly passed
+
+    """
+    if not version.endswith(".nightly"):
+        return version
+    else:
+        latest_nightly_url = (
+            f"https://openshift-release.svc.ci.openshift.org/api/v1/"
+            f"releasestream/{version}/latest"
+        )
+        version_url_content = get_url_content(latest_nightly_url)
+        version_json = json.loads(version_url_content)
+        return version_json['name']
+
+
 def destroy_cluster(cluster_path, log_level="DEBUG"):
     """
     Destroy existing cluster resources in AWS.
@@ -469,6 +514,7 @@ def get_openshift_installer(
 
     """
     version = version or config.DEPLOYMENT['installer_version']
+    version = expose_nightly_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
@@ -517,6 +563,7 @@ def get_openshift_client(
 
     """
     version = version or config.RUN['client_version']
+    version = expose_nightly_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     client_binary_path = os.path.join(bin_dir, 'oc')
     if os.path.isfile(client_binary_path) and force_download:
