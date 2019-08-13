@@ -228,9 +228,12 @@ def create_pvcs(request):
         """
         if hasattr(class_instance, 'pvc_objs'):
             for pvc_obj in class_instance.pvc_objs:
+                pvc_obj.reload()
+                backed_pv_name = pvc_obj.backed_pv
                 pvc_obj.delete()
             for pvc_obj in class_instance.pvc_objs:
                 pvc_obj.ocp.wait_for_delete(pvc_obj.name)
+                helpers.validate_pv_delete(backed_pv_name)
 
     request.addfinalizer(finalizer)
 
@@ -273,3 +276,55 @@ def create_pods(request):
         helpers.wait_for_resource_state(
             pod, constants.STATUS_RUNNING
         )
+        ), f"Pod {pod} failed to reach {constants.STATUS_RUNNING}"
+
+
+@pytest.fixture()
+def create_dc_pods(request):
+    """
+    Create multiple deploymentconfig pods
+    """
+    class_instance = request.node.cls
+
+    def finalizer():
+        """
+        Delete multiple dc pods
+        """
+        if hasattr(class_instance, 'dc_pod_objs'):
+            for pod in class_instance.dc_pod_objs:
+                helpers.delete_deploymentconfig(pod_obj=pod)
+
+    request.addfinalizer(finalizer)
+
+    class_instance.dc_pod_objs = [
+        helpers.create_pod(
+            interface_type=class_instance.interface, pvc_name=pvc_obj.name,
+            namespace=class_instance.namespace, sa_name=class_instance.sa_obj.name, dc_deployment=True
+        ) for pvc_obj in class_instance.pvc_objs
+    ]
+
+    for pod in class_instance.dc_pod_objs:
+        assert helpers.wait_for_resource_state(
+            pod, "Running", timeout=180
+        ), f"Pod {pod} failed to reach {constants.STATUS_RUNNING}"
+
+
+@pytest.fixture()
+def create_serviceaccount(request):
+    """
+    Create a service account
+    """
+    class_instance = request.node.cls
+
+    def finalizer():
+        """
+        Delete the service account
+        """
+        helpers.remove_scc_policy(sa_name=class_instance.sa_obj.name, namespace=class_instance.project_obj.namespace)
+        class_instance.sa_obj.delete()
+
+    request.addfinalizer(finalizer)
+
+    class_instance.sa_obj = helpers.create_serviceaccount(
+        namespace=class_instance.project_obj.namespace,
+    )

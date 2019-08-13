@@ -35,6 +35,25 @@ def init_pvc_size(request):
 class BaseRunIOMultipleDcPods(ManageTest):
     """
     Run IO on multiple dc pods in parallel
+
+    Steps:
+        1:- Create project
+        2:- Create serviceaccount
+        3:- Add serviceaccount user to privilaged policy
+        4:- Create storageclass
+        5:- Create PVC
+        6:- Create pod with kind deploymentconfig
+        7:- Add serviceaccount in yaml
+        8:- Add privilaged as True under securityContext
+        9:- Deploy yaml using oc create -f yaml_name
+        10:- oc get pods -n namespace
+        11:- 2 pods will be Running for 1 deploymentconfig first will be deploy pod which actual deploys dc
+            and second pod will be actual deployed pod
+        12:- For Deletion
+        13:- oc get deploymentconfig -n namespace
+        14:- get dc name and delete using oc delete deploymentconfig <dc_name> -n namespace
+
+        Note:- Step 1,2,3,7 are not required if we deploy dc in openshift-storage namespace
     """
     num_of_pvcs = 10
     pvc_size_int = 5
@@ -88,7 +107,7 @@ class TestRunIOMultipleDcPodsRBD(BaseRunIOMultipleDcPods):
     create_pvcs.__name__,
     create_dc_pods.__name__
 )
-class TestRunIOMultipleDcPodsFS(BaseRunIOMultipleDcPods):
+class TestRunIOMultipleDcPodsCephFS(BaseRunIOMultipleDcPods):
     """
     Run IO on multiple dc pods in parallel - CephFS
     """
