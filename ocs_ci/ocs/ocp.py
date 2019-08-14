@@ -315,6 +315,45 @@ class OCP(object):
 
         return False
 
+    # This implementation is temporary as a workaround for bug 1715627
+    def temp_wait_for_resource(
+        self, condition, resource_name='', selector=None,
+        resource_count=0, timeout=60, sleep=3
+    ):
+        """
+        Wait for a resource to reach to a desired condition
+        ***'resource_count' is mandatory in case selector is passed***
+
+        Args:
+            condition (str): The desired state the resource should be at
+                This refers to the status as reported by 'oc get' without -o yaml
+            resource_name (str): The name of the resource to wait
+                for (e.g.my-pv1)
+            selector (str): The resource selector to search with.
+                Example: 'app=rook-ceph-mds'
+            resource_count (int): How many resources expected to be
+            timeout (int): Time in seconds to wait
+            sleep (int): Sampling time in seconds
+
+        Returns:
+            bool: True in case all resources reached desired condition,
+                False otherwise
+
+        """
+        for sample in TimeoutSampler(
+            timeout, sleep, self.get, resource_name, False, selector
+        ):
+            # Only 1 resource expected to be returned
+            if resource_name and condition in sample:
+                return True
+            # More than 1 resources returned
+            elif selector:
+                # Returning True in case the number of the condition string
+                # occurrences in sample equals to the resource count
+                return resource_count == sample.count(condition)
+
+        return False
+
     def wait_for_delete(self, resource_name='', timeout=60, sleep=3):
         """
         Wait for a resource to be deleted
