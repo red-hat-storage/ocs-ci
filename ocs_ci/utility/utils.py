@@ -980,14 +980,14 @@ def parse_pgsql_logs(data):
     the data in list format
 
     Args:
-      data (str): log data from pgsql bench run
+        data (str): log data from pgsql bench run
 
     Returns:
-      list_data (list): data digestable by scripts with below
+        list_data (list): data digestable by scripts with below
                         format
-        eg: (one of the item from list)
-        {'num_clients': '2', 'num_threads': '7', 'latency_avg': '7',
-        'lat_stddev': '0', 'tps_incl': '234', 'tps_excl': '243'
+            eg: ( with only one item in the list)
+            [{'num_clients': '2', 'num_threads': '7', 'latency_avg': '7',
+             'lat_stddev': '0', 'tps_incl': '234', 'tps_excl': '243'}]
     """
 
     match = re.findall(
