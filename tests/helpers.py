@@ -903,3 +903,44 @@ def delete_deploymentconfig(pod_obj):
     """
     dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG)
     dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
+<<<<<<< HEAD
+=======
+
+
+def measure_pvc_creation_time(interface, pvc_name):
+    """
+    Measure PVC creation time based on logs
+
+    Args:
+        interface (str): The interface backed the PVC
+        pvc_name (str): Name of the PVC for creation time measurement
+
+    Returns:
+        float: Creation time for the PVC
+
+    """
+    format = '%H:%M:%S.%f'
+    # Get the correct provisioner pod based on the interface
+    if interface == constants.CEPHBLOCKPOOL:
+        pod_name = pod.get_rbd_provisioner_pod().name
+    else:
+        pod_name = pod.get_cephfs_provisioner_pod().name
+
+    # get the logs from the csi-provisioner container
+    logs = pod.get_pod_logs(pod_name, 'csi-provisioner')
+    logs = logs.split("\n")
+    # Extract the starting time for the PVC provisioning
+    start = [
+        i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)
+    ][0].split(' ')[1]
+    # Extract the end time for the PVC provisioning
+    end = [
+        i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)
+    ][0].split(' ')[1]
+    total = (
+        datetime.datetime.strptime(end, format) - datetime.datetime.strptime(
+            start, format
+        )
+    )
+    return total.total_seconds()
+>>>>>>> fixed travis failure
