@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import tier1, E2ETest, polarion_id, bugzilla
 from tests import helpers
 from ocs_ci.ocs import defaults, constants
 
+
 log = logging.getLogger(__name__)
 
 
@@ -46,6 +47,8 @@ class TestPVCCreationPerformance(E2ETest):
         pvc_obj = helpers.create_pvc(
             sc_name=self.sc_obj.name, size=self.pvc_size
         )
+        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+        pvc_obj.reload()
         teardown_factory(pvc_obj)
         create_time = helpers.measure_pvc_creation_time(
             self.interface, pvc_obj.name
@@ -73,12 +76,12 @@ class TestPVCCreationPerformance(E2ETest):
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             number_of_pvc=number_of_pvcs,
             size=self.pvc_size,
-            wait=False
         )
         for pvc_obj in pvc_objs:
             teardown_factory(pvc_obj)
         for pvc_obj in pvc_objs:
             helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+            pvc_obj.reload()
         start_time = helpers.get_start_creation_time(
             self.interface, pvc_objs[0].name
         )

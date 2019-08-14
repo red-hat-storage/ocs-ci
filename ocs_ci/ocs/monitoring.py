@@ -28,7 +28,7 @@ def create_configmap_cluster_monitoring_pod(sc_name):
     config['alertmanagerMain']['volumeClaimTemplate']['spec']['storageClassName'] = sc_name
     config = yaml.dump(config)
     config_map['data']['config.yaml'] = config
-    assert helpers.create_resource(**config_map, wait=False)
+    assert helpers.create_resource(**config_map)
     ocp = OCP('v1', 'ConfigMap', 'openshift-monitoring')
     assert ocp.get(resource_name='cluster-monitoring-config')
     logger.info("Successfully created configmap cluster-monitoring-config")

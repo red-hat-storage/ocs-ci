@@ -50,3 +50,13 @@ class UnavailableBuildException(Exception):
 
 class PerformanceException(Exception):
     pass
+
+
+class ResourceWrongStatusException(Exception):
+
+    def __init__(self, resource_name, describe_out):
+        self.resource_name = resource_name
+        self.describe_out = describe_out
+
+    def __str__(self):
+        return f"Resource {self.resource_name} describe output: {self.describe_out}"

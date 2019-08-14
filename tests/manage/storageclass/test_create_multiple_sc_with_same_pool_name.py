@@ -114,10 +114,9 @@ class TestCreateMultipleScWithSamePoolName(ManageTest):
             pvcs.append(
                 helpers.create_pvc(storageclasses[i].name)
             )
-            log.info(
-                f"PVC: {pvcs[i].name} created successfully using "
-                f"{storageclasses[i].name}"
-            )
+        for pvc in pvcs:
+            helpers.wait_for_resource_state(pvc, constants.STATUS_BOUND)
+            pvc.reload()
 
         # Create app pod and mount each PVC
         for i in range(3):
@@ -125,10 +124,12 @@ class TestCreateMultipleScWithSamePoolName(ManageTest):
             pods.append(
                 helpers.create_pod(
                     interface_type=interface_type, pvc_name=pvcs[i].name,
-                    desired_status=constants.STATUS_RUNNING,
-                    wait=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                    namespace=defaults.ROOK_CLUSTER_NAMESPACE
                 )
             )
+            for pod in pods:
+                helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING)
+                pod.reload()
             log.info(
                 f"{pods[i].name} created successfully and "
                 f"mounted {pvcs[i].name}"

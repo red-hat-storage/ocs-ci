@@ -57,8 +57,10 @@ class BaseDynamicPvc(ManageTest):
         logger.info(f"Creating PVC with accessModes: {self.access_mode}")
         self.pvc_obj = helpers.create_pvc(
             sc_name=self.sc_obj.name, namespace=self.namespace,
-            size=self.pvc_size, wait=True, access_mode=self.access_mode
+            size=self.pvc_size, access_mode=self.access_mode
         )
+        helpers.wait_for_resource_state(self.pvc_obj, constants.STATUS_BOUND)
+        self.pvc_obj.reload()
 
         logger.info(
             f"Creating first pod on node: {self.worker_nodes_list[0]}"
@@ -66,10 +68,11 @@ class BaseDynamicPvc(ManageTest):
         )
         self.pod_obj1 = helpers.create_pod(
             interface_type=self.interface_type, pvc_name=self.pvc_obj.name,
-            desired_status=constants.STATUS_RUNNING, wait=True,
             namespace=self.namespace, node_name=self.worker_nodes_list[0],
             pod_dict_path=constants.NGINX_POD_YAML
         )
+        helpers.wait_for_resource_state(self.pod_obj1, constants.STATUS_RUNNING)
+        self.pod_obj1.reload()
 
     @retry(UnexpectedBehaviour, tries=10, delay=5, backoff=1)
     def verify_expected_failure_event(self, ocs_obj, failure_str):
@@ -109,7 +112,7 @@ class BaseDynamicPvc(ManageTest):
 
             except AssertionError:
                 if self.reclaim_policy == constants.RECLAIM_POLICY_RETAIN:
-                    assert helpers.wait_for_resource_state(
+                    helpers.wait_for_resource_state(
                         pv_obj, constants.STATUS_RELEASED
                     )
                     # TODO: deletion of ceph rbd image, blocked by BZ#1723656
@@ -189,7 +192,7 @@ class TestRWODynamicPvc(BaseDynamicPvc):
 
         pod_obj2 = helpers.create_pod(
             interface_type=self.interface_type, pvc_name=self.pvc_obj.name,
-            wait=False, namespace=self.namespace,
+            do_reload=False, namespace=self.namespace,
             node_name=self.worker_nodes_list[1],
             pod_dict_path=constants.NGINX_POD_YAML
         )
@@ -208,11 +211,10 @@ class TestRWODynamicPvc(BaseDynamicPvc):
         md5sum_pod1_data = pod.cal_md5sum(
             pod_obj=self.pod_obj1, file_name=file_name
         )
-
-        # Verify that second pod is still in Pending state and not able to
+        # Verify that second pod is still in ContainerCreating state and not able to
         # attain Running state due to expected failure
-        assert helpers.wait_for_resource_state(
-            resource=pod_obj2, state=constants.STATUS_PENDING
+        helpers.wait_for_resource_state(
+            resource=pod_obj2, state=constants.STATUS_CONTAINER_CREATING
         )
         self.verify_expected_failure_event(
             ocs_obj=pod_obj2, failure_str=self.expected_pod_failure
@@ -225,7 +227,7 @@ class TestRWODynamicPvc(BaseDynamicPvc):
         self.pod_obj1.ocp.wait_for_delete(resource_name=self.pod_obj1.name)
 
         # Wait for second pod to be in Running state
-        assert helpers.wait_for_resource_state(
+        helpers.wait_for_resource_state(
             resource=pod_obj2, state=constants.STATUS_RUNNING, timeout=240
         )
 
@@ -302,10 +304,11 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
 
         pod_obj2 = helpers.create_pod(
             interface_type=self.interface_type, pvc_name=self.pvc_obj.name,
-            desired_status=constants.STATUS_RUNNING, wait=True,
             namespace=self.namespace, node_name=self.worker_nodes_list[1],
             pod_dict_path=constants.NGINX_POD_YAML
         )
+        helpers.wait_for_resource_state(pod_obj2, constants.STATUS_RUNNING)
+        pod_obj2.reload()
         node_pod1 = self.pod_obj1.get().get('spec').get('nodeName')
         node_pod2 = pod_obj2.get().get('spec').get('nodeName')
 

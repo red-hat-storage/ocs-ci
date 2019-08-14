@@ -74,18 +74,17 @@ class TestBasicPVCOperations(ManageTest):
             )
         )
         log.info("Creating a PVC")
-        pvc.append(
-            helpers.create_pvc(
-                sc_name=storageclass[0].name, wait=True,
-            )
-        )
+        pvc.append(helpers.create_pvc(sc_name=storageclass[0].name))
+        for pvc_obj in pvc:
+            helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+            pvc_obj.reload()
         log.info(
             f"Creating a pod on with pvc {pvc[0].name}"
         )
-        pod.append(
-            helpers.create_pod(
-                interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvc[0].name,
-                desired_status=constants.STATUS_RUNNING, wait=True,
-                pod_dict_path=constants.NGINX_POD_YAML
-            )
+        pod_obj = helpers.create_pod(
+            interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvc[0].name,
+            pod_dict_path=constants.NGINX_POD_YAML
         )
+        pod.append(pod_obj)
+        helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
+        pod_obj.reload()

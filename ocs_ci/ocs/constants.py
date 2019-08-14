@@ -40,6 +40,7 @@ TEMPLATE_DEPLOYMENT_CLO = os.path.join(
 
 # Statuses
 STATUS_PENDING = 'Pending'
+STATUS_CONTAINER_CREATING = 'ContainerCreating'
 STATUS_AVAILABLE = 'Available'
 STATUS_RUNNING = 'Running'
 STATUS_TERMINATING = 'Terminating'

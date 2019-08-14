@@ -150,7 +150,7 @@ def storageclass_factory(
                 block_pool and secret.
         """
         if custom_data:
-            sc_obj = helpers.create_resource(**custom_data, wait=False)
+            sc_obj = helpers.create_resource(**custom_data)
         else:
             secret = secret or secret_factory(interface=interface)
             ceph_pool = ceph_pool_factory(interface)
@@ -264,9 +264,10 @@ def pvc_factory(
                 sc_name=storageclass.name,
                 namespace=project.namespace,
                 size=pvc_size,
-                wait=False
+                do_reload=False
             )
             assert pvc_obj, "Failed to create PVC"
+
         if status:
             helpers.wait_for_resource_state(pvc_obj, status)
         pvc_obj.storageclass = storageclass
@@ -319,7 +320,7 @@ def pod_factory(request, pvc_factory):
             object: helpers.create_pvc instance.
         """
         if custom_data:
-            pod_obj = helpers.create_resource(**custom_data, wait=False)
+            pod_obj = helpers.create_resource(**custom_data)
         else:
             pvc = pvc or pvc_factory(interface=interface)
 
@@ -329,6 +330,8 @@ def pod_factory(request, pvc_factory):
                 interface_type=interface,
             )
             assert pod_obj, "Failed to create PVC"
+            helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
+            pod_obj.reload()
         if status:
             helpers.wait_for_resource_state(pod_obj, status)
         pod_obj.pvc = pvc
@@ -546,9 +549,13 @@ def run_io_in_background(request):
             secret_name=secret_obj.name
         )
         pvc_obj = helpers.create_pvc(sc_name=sc_obj.name, size='2Gi')
+        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+        pvc_obj.reload()
         pod_obj = helpers.create_pod(
             interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvc_obj.name
         )
+        helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
+        pod_obj.reload()
 
         def run_io_in_bg():
             """

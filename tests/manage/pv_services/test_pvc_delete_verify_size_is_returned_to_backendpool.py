@@ -84,6 +84,8 @@ def create_pvc_and_verify_pvc_exists(sc_name, cbp_name):
     pvc exists on ceph side
     """
     pvc_obj = helpers.create_pvc(sc_name=sc_name, size='10Gi')
+    helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+    pvc_obj.reload()
 
     # Validate pv is created on ceph
     logger.info(f"Verifying pv exists on backend")
@@ -112,7 +114,11 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         pvc_obj = create_pvc_and_verify_pvc_exists(
             self.sc_obj.name, self.cbp_obj.name
         )
-        pod_obj = helpers.create_pod(interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvc_obj.name)
+        pod_obj = helpers.create_pod(
+            interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvc_obj.name
+        )
+        helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
+        pod_obj.reload()
         used_percentage = pod.run_io_and_verify_mount_point(pod_obj)
         assert used_percentage > '90%', "I/O's didn't run completely"
         used_after_creating_pvc = check_ceph_used_space()
