@@ -47,6 +47,7 @@ STATUS_RELEASED = 'Released'
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
+DEPLOYMENT = "Deployment"
 STORAGECLASS = "StorageClass"
 PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
