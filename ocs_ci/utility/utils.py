@@ -988,6 +988,7 @@ def parse_pgsql_logs(data):
             eg: ( with only one item in the list)
             [{'num_clients': '2', 'num_threads': '7', 'latency_avg': '7',
              'lat_stddev': '0', 'tps_incl': '234', 'tps_excl': '243'}]
+
     """
 
     match = re.findall(
