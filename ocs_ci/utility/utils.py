@@ -974,6 +974,54 @@ def get_csi_versions():
     return csi_versions
 
 
+def parse_pgsql_logs(data):
+    """
+    Parse the pgsql benchmark data from ripsaw and return
+    the data in list format
+
+    Args:
+        data (str): log data from pgsql bench run
+
+    Returns:
+        list_data (list): data digestable by scripts with below
+                        format
+            eg: ( with only one item in the list)
+            [{'num_clients': '2', 'num_threads': '7', 'latency_avg': '7',
+             'lat_stddev': '0', 'tps_incl': '234', 'tps_excl': '243'}]
+
+    """
+
+    match = re.findall(
+        r'\[\{\'number_.*?\'number_of_transactions_per_client\':\s+\w+}\]',
+        data
+    )
+
+    list_data = []
+    for log in match:
+        pgsql_data = dict()
+        clients = re.search(r"number_of_clients\':\s+(\d+),", log)
+        if clients and clients.group(1):
+            pgsql_data['num_clients'] = clients.group(1)
+        threads = re.search(r"number of threads\':\s+(\d+)", log)
+        if threads and threads.group(1):
+            pgsql_data['num_threads'] = threads.group(1)
+        lat_avg = re.search(r"latency_average_ms\':\s+(\d+)", log)
+        if lat_avg and lat_avg.group(1):
+            pgsql_data['latency_avg'] = lat_avg.group(1)
+        lat_stddev = re.search(r"latency_stddev_ms\':\s+(\d+)", log)
+        if lat_stddev and lat_stddev.group(1):
+            pgsql_data['lat_stddev'] = lat_stddev.group(1)
+        tps_incl = re.search(r"tps_incl_con_est\':\s+(\w+)", log)
+        if tps_incl and tps_incl.group(1):
+            pgsql_data['tps_incl'] = tps_incl.group(1)
+        tps_excl = re.search(r"tps_excl_con_est\':\s+(\w+)", log)
+        if tps_excl and tps_excl.group(1):
+            pgsql_data['tps_excl'] = tps_excl.group(1)
+        list_data.append(pgsql_data)
+
+    return list_data
+
+
 def create_directory_path(path):
     """
     Creates directory if path doesn't exists
