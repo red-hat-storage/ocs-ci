@@ -14,7 +14,7 @@ import base64
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import workload
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.ocs import OCS
@@ -635,6 +635,52 @@ def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
     return osd_pods
 
 
+def get_cephfsplugin_provisioner_pods(
+    cephfsplugin_provisioner_label=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+    namespace=None
+):
+    """
+    Fetches info about CSI Cephfs plugin provisioner pods in the cluster
+
+    Args:
+        cephfsplugin_provisioner_label (str): label associated with cephfs
+            provisioner pods
+            (default: defaults.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list : csi-cephfsplugin-provisioner Pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    pods = get_pods_having_label(cephfsplugin_provisioner_label, namespace)
+    fs_plugin_pods = [Pod(**pod) for pod in pods]
+    return fs_plugin_pods
+
+
+def get_rbdfsplugin_provisioner_pods(
+    rbdplugin_provisioner_label=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+    namespace=None
+):
+    """
+    Fetches info about CSI Cephfs plugin provisioner pods in the cluster
+
+    Args:
+        rbdplugin_provisioner_label (str): label associated with RBD
+            provisioner pods
+            (default: defaults.CSI_RBDPLUGIN_PROVISIONER_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list : csi-rbdplugin-provisioner Pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    pods = get_pods_having_label(rbdplugin_provisioner_label, namespace)
+    ebd_plugin_pods = [Pod(**pod) for pod in pods]
+    return ebd_plugin_pods
+
+
 def get_pod_obj(name, namespace=None):
     """
     Returns the pod obj for the given pod
@@ -668,3 +714,18 @@ def get_pod_logs(pod_name, container=None):
     if container:
         cmd += f" -c {container}"
     return pod.exec_oc_cmd(cmd, out_yaml_format=False)
+
+
+def get_pod_node(pod_obj):
+    """
+    Get the node that the pod is running on
+
+    Args:
+        pod_obj (OCS): The pod object
+
+    Returns:
+        OCP: The node object
+
+    """
+    node_name = pod_obj.get().get('spec').get('nodeName')
+    return node.get_node_objs(node_names=node_name)[0]

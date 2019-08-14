@@ -146,12 +146,12 @@ class AWS(object):
         Create volume
 
         Args:
-            availability_zone (str): availability zone e.g.: us-west-1b
-            name (str): name of volume
-            encrypted (boolean): True if encrypted False otherwise
+            availability_zone (str): The availability zone e.g.: us-west-1b
+            name (str): The name of the volume
+            encrypted (boolean): True if encrypted, False otherwise
                 (default: False)
-            size (int): size in GB (default: 100)
-            timeout (int): timeout in seconds for volume creation (default: 20)
+            size (int): The size in GB (default: 100)
+            timeout (int): The timeout in seconds for volume creation (default: 20)
             volume_type (str): 'standard'|'io1'|'gp2'|'sc1'|'st1'
                 (default: gp2)
 
@@ -201,7 +201,7 @@ class AWS(object):
         Args:
             volume (Volume): Volume instance
             instance_id (str): id of instance where to attach the volume
-            device (str): name of device where to attach (default: /dev/sdx)
+            device (str): The name of the device where to attach (default: /dev/sdx)
 
         """
         logger.info(f"Attaching volume: {volume.volume_id} Instance: {instance_id}")
@@ -226,14 +226,14 @@ class AWS(object):
         Create volume and attach to instance
 
         Args:
-            availability_zone (str): availability zone e.g.: us-west-1b
-            instance_id (str): id of instance where to attach the volume
-            name (str): name of volume
-            device (str): name of device where to attach (default: /dev/sdx)
-            encrypted (boolean): True if encrypted False otherwise
+            availability_zone (str): The availability zone e.g.: us-west-1b
+            instance_id (str): The id of the instance where to attach the volume
+            name (str): The name of volume
+            device (str): The name of device where to attach (default: /dev/sdx)
+            encrypted (boolean): True if encrypted, False otherwise
                 (default: False)
-            size (int): size in GB (default: 100)
-            timeout (int): timeout in seconds for volume creation (default: 20)
+            size (int): The size in GB (default: 100)
+            timeout (int): The timeout in seconds for volume creation (default: 20)
             volume_type (str): 'standard'|'io1'|'gp2'|'sc1'|'st1'
                 (default: gp2)
 
