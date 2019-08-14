@@ -994,9 +994,10 @@ def parse_pgsql_logs(data):
         r'\[\{\'number_.*?\'number_of_transactions_per_client\':\s+\w+}\]',
         data
     )
-    pgsql_data = dict()
+
     list_data = []
     for log in match:
+        pgsql_data = dict()
         clients = re.search(r"number_of_clients\':\s+(\d+),", log)
         if clients and clients.group(1):
             pgsql_data['num_clients'] = clients.group(1)
