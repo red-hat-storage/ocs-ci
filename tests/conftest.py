@@ -101,7 +101,8 @@ def ceph_pool_factory(request):
             ).get(defaults.CEPHFILESYSTEM_NAME)
             ceph_pool_obj = OCS(**cfs)
         assert ceph_pool_obj, f"Failed to create {interface} pool"
-        instances.append(ceph_pool_obj)
+        if interface == constants.CEPHBLOCKPOOL:
+            instances.append(ceph_pool_obj)
         return ceph_pool_obj
 
     def finalizer():
@@ -257,6 +258,7 @@ def pvc_factory(
         if custom_data:
             pvc_obj = PVC(**custom_data)
             pvc_obj.create(do_reload=False)
+            instances.append(pvc_obj)
         else:
             project = project or project_factory()
             storageclass = storageclass or storageclass_factory(interface)
@@ -269,12 +271,12 @@ def pvc_factory(
                 wait=False
             )
             assert pvc_obj, "Failed to create PVC"
+            instances.append(pvc_obj)
+            pvc_obj.storageclass = storageclass
+            pvc_obj.project = project
         if status:
             helpers.wait_for_resource_state(pvc_obj, status)
-        pvc_obj.storageclass = storageclass
-        pvc_obj.project = project
 
-        instances.append(pvc_obj)
         return pvc_obj
 
     def finalizer():
@@ -338,6 +340,36 @@ def pod_factory(request, pvc_factory):
 
         instances.append(pod_obj)
         return pod_obj
+
+    def finalizer():
+        """
+        Delete the Pod
+        """
+        for instance in instances:
+            if not instance.is_deleted:
+                instance.delete()
+                instance.ocp.wait_for_delete(
+                    instance.name
+                )
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def teardown_factory(request):
+    """
+    Tearing down a resource that was created during the test
+    """
+    instances = []
+
+    def factory(resource_obj):
+        """
+        Args:
+            resource_obj (OCS object): Object to teardown after the test
+
+        """
+        instances.append(resource_obj)
 
     def finalizer():
         """
