@@ -257,7 +257,6 @@ def pvc_factory(
         if custom_data:
             pvc_obj = PVC(**custom_data)
             pvc_obj.create(do_reload=False)
-            instances.append(pvc_obj)
         else:
             project = project or project_factory()
             storageclass = storageclass or storageclass_factory(interface)
@@ -270,11 +269,11 @@ def pvc_factory(
                 wait=False
             )
             assert pvc_obj, "Failed to create PVC"
-            instances.append(pvc_obj)
-            pvc_obj.storageclass = storageclass
-            pvc_obj.project = project
         if status:
             helpers.wait_for_resource_state(pvc_obj, status)
+        pvc_obj.storageclass = storageclass
+        pvc_obj.project = project
+        instances.append(pvc_obj)
 
         return pvc_obj
 
