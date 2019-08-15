@@ -1,11 +1,14 @@
-import pytest
 import logging
+import pytest
+import threading
 import time
 
 from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.utility.prometheus import PrometheusAPI
 
 
 logger = logging.getLogger(__name__)
+
 
 def measure_operation(
         operation, minimal_time=None, metadata=None, measure_after=False):
@@ -29,22 +32,66 @@ def measure_operation(
         dict: contains information about `start` and `stop` time of given
             function and its `result` and provided `metadata`.
     """
+    def prometheus_log(info, alert_list):
+        """
+        Log all alerts from Prometheus API every 10 seconds.
+
+        Args:
+            run (bool): When this var turns into False the thread stops.
+            alert_list (list): List to be populated with alerts
+        """
+        prometheus = PrometheusAPI()
+        while info['run']:
+            alerts_response = prometheus.get(
+                'alerts',
+                payload={
+                    'silenced': False,
+                    'inhibited': False
+                }
+            )
+            assert alerts_response.ok is True
+            for alert in alerts_response.json()['data']['alerts']:
+                if alert not in alert_list:
+                    logger.info(f"Adding {alert} to alert list")
+                    alert_list.append(alert)
+            time.sleep(10)
+
     if not measure_after:
         start_time = time.time()
-    result = operation()
-    if measure_after:
-        start_time = time.time()
-    passed_time = time.time() - start_time
-    if minimal_time:
-        additional_time = minimal_time - passed_time
-        if additional_time > 0:
-            time.sleep(additional_time)
-    stop_time = time.time()
+
+    # init logging thread
+    # based on https://docs.python.org/3/howto/logging-cookbook.html#logging-from-multiple-threads
+    info = {'run': True}
+    alert_list = []
+
+    logging_thread = threading.Thread(
+        target=prometheus_log,
+        args=(info, alert_list)
+    )
+    logging_thread.start()
+
+    try:
+        result = operation()
+        if measure_after:
+            start_time = time.time()
+        passed_time = time.time() - start_time
+        if minimal_time:
+            additional_time = minimal_time - passed_time
+            if additional_time > 0:
+                time.sleep(additional_time)
+        stop_time = time.time()
+    except KeyboardInterrupt:
+        # Thread should be correctly terminated on next few lines
+        pass
+    info['run'] = False
+    logging_thread.join()
+    logger.info(f"Alerts found during measurement: {alert_list}")
     return {
-        "start": start_time,
-        "stop": stop_time,
-        "result": result,
-        "metadata": metadata
+        'start': start_time,
+        'stop': stop_time,
+        'result': result,
+        'metadata': metadata,
+        'prometheus_alerts': alert_list
     }
 
 
@@ -63,10 +110,12 @@ def workload_stop_ceph_mgr():
 
     def stop_mgr():
         """
-        Downscale Ceph Manager deployment for 11 minutes.
+        Downscale Ceph Manager deployment for 6 minutes. First 5 minutes
+        the alert should be in 'Pending'.
+        After 5 minutes it should be 'Firing'.
         """
         # run_time of operation
-        run_time = 60 * 2
+        run_time = 60 * 6
         nonlocal oc
         nonlocal mgr
         logger.info(f"Downscaling deployment {mgr} to 0")
