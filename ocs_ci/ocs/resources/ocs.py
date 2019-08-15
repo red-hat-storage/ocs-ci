@@ -97,11 +97,12 @@ class OCS(object):
         return status
 
     def delete(self, wait=True, force=False):
-        result = self.ocp.delete(
-            resource_name=self.name, wait=wait, force=force
-        )
-        self._is_deleted = True
-        return result
+        if not self.is_deleted:
+            result = self.ocp.delete(
+                resource_name=self.name, wait=wait, force=force
+            )
+            self._is_deleted = True
+            return result
 
     def apply(self, **data):
         with open(self.temp_yaml.name, 'w') as yaml_file:

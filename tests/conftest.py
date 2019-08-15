@@ -73,11 +73,10 @@ def secret_factory(request):
         Delete the RBD secrets
         """
         for instance in instances:
-            if not instance.is_deleted:
-                instance.delete()
-                instance.ocp.wait_for_delete(
-                    instance.name
-                )
+            instance.delete()
+            instance.ocp.wait_for_delete(
+                instance.name
+            )
 
     request.addfinalizer(finalizer)
     return factory
@@ -110,11 +109,10 @@ def ceph_pool_factory(request):
         Delete the Ceph block pool
         """
         for instance in instances:
-            if not instance.is_deleted:
-                instance.delete()
-                instance.ocp.wait_for_delete(
-                    instance.name
-                )
+            instance.delete()
+            instance.ocp.wait_for_delete(
+                instance.name
+            )
 
     request.addfinalizer(finalizer)
     return factory
@@ -175,11 +173,10 @@ def storageclass_factory(
         Delete the Ceph block pool
         """
         for instance in instances:
-            if not instance.is_deleted:
-                instance.delete()
-                instance.ocp.wait_for_delete(
-                    instance.name
-                )
+            instance.delete()
+            instance.ocp.wait_for_delete(
+                instance.name
+            )
 
     request.addfinalizer(finalizer)
     return factory
@@ -283,11 +280,10 @@ def pvc_factory(
         Delete the PVC
         """
         for instance in instances:
-            if not instance.is_deleted:
-                instance.delete()
-                instance.ocp.wait_for_delete(
-                    instance.name
-                )
+            instance.delete()
+            instance.ocp.wait_for_delete(
+                instance.name
+            )
 
     request.addfinalizer(finalizer)
     return factory
@@ -345,11 +341,10 @@ def pod_factory(request, pvc_factory):
         Delete the Pod
         """
         for instance in instances:
-            if not instance.is_deleted:
-                instance.delete()
-                instance.ocp.wait_for_delete(
-                    instance.name
-                )
+            instance.delete()
+            instance.ocp.wait_for_delete(
+                instance.name
+            )
 
     request.addfinalizer(finalizer)
     return factory
