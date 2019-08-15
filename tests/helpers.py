@@ -734,13 +734,20 @@ def get_worker_nodes():
     return worker_nodes_list
 
 
-def measure_pvc_creation_time(interface, pvc_name):
+def measure_pvc_creation_time(
+    interface, pvc_name, return_start_time=False, return_end_time=False
+):
     """
     Measure PVC creation time based on logs
 
     Args:
         interface (str): The interface backed the PVC
         pvc_name (str): Name of the PVC for creation time measurement
+        *** The defaults below should be used only from dedicated functions ***
+        *** to get the start time and end time of PVC creation ***
+        return_start_time (bool): True if creation start time should be
+            returned
+        return_end_time (bool): True if creation end time should be returned
 
     Returns:
         float: Creation time for the PVC
@@ -760,10 +767,14 @@ def measure_pvc_creation_time(interface, pvc_name):
     start = [
         i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)
     ][0].split(' ')[1]
+    if return_start_time:
+        return datetime.datetime.strptime(start, format)
     # Extract the end time for the PVC provisioning
     end = [
         i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)
     ][0].split(' ')[1]
+    if return_end_time:
+        return datetime.datetime.strptime(end, format)
     total = (
         datetime.datetime.strptime(end, format) - datetime.datetime.strptime(
             start, format
