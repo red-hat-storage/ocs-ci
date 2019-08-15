@@ -96,10 +96,10 @@ class PrometheusAPI(object):
         pattern = f"/api/v1/{resource}"
         headers = {'Authorization': f"Bearer {self._token}"}
 
-        logger.info(f"GET {self._endpoint + pattern}")
-        logger.info(f"headers={headers}")
-        logger.info(f"verify={self._cacert}")
-        logger.info(f"params={payload}")
+        logger.debug(f"GET {self._endpoint + pattern}")
+        logger.debug(f"headers={headers}")
+        logger.debug(f"verify={self._cacert}")
+        logger.debug(f"params={payload}")
 
         response = requests.get(
             self._endpoint + pattern,
