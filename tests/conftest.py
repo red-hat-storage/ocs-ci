@@ -101,8 +101,7 @@ def ceph_pool_factory(request):
             ).get(defaults.CEPHFILESYSTEM_NAME)
             ceph_pool_obj = OCS(**cfs)
         assert ceph_pool_obj, f"Failed to create {interface} pool"
-        if interface == constants.CEPHBLOCKPOOL:
-            instances.append(ceph_pool_obj)
+        instances.append(ceph_pool_obj)
         return ceph_pool_obj
 
     def finalizer():
@@ -360,6 +359,13 @@ def pod_factory(request, pvc_factory):
 def teardown_factory(request):
     """
     Tearing down a resource that was created during the test
+    To use this factory, you'll need to pass 'teardown_factory' to you test
+    function and call it in you test when a new resource was created and you
+    want it to be removed in teardown phase:
+    def test_example(self, teardown_factory):
+        pvc_obj = create_pvc()
+        teardown_factory(pvc_obj)
+
     """
     instances = []
 
@@ -373,7 +379,7 @@ def teardown_factory(request):
 
     def finalizer():
         """
-        Delete the Pod
+        Delete the resources created in the test
         """
         for instance in instances:
             if not instance.is_deleted:
