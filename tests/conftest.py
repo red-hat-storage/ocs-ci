@@ -101,7 +101,7 @@ def ceph_pool_factory(request):
             ).get(defaults.CEPHFILESYSTEM_NAME)
             ceph_pool_obj = OCS(**cfs)
         assert ceph_pool_obj, f"Failed to create {interface} pool"
-        if interface == constants.CEPHBLOCKPOOL:
+        if interface != constants.CEPHFILESYSTEM:
             instances.append(ceph_pool_obj)
         return ceph_pool_obj
 
