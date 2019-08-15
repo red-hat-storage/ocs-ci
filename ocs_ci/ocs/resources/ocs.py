@@ -97,6 +97,18 @@ class OCS(object):
         return status
 
     def delete(self, wait=True, force=False):
+        """
+        Delete the OCS object if its not already deleted
+        (using the internal is_deleted flag)
+
+        Args:
+            wait (bool): Wait for object to be deleted
+            force (bool): Force delete object
+
+        Returns:
+            bool: True if deleted, False otherwise
+
+        """
         if self._is_deleted:
             log.info(
                 f"Attempt to remove resource: {self.name} which is"
