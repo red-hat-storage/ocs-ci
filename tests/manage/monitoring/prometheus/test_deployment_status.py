@@ -15,52 +15,41 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
     """
     prometheus = ocs_ci.utility.prometheus.PrometheusAPI()
 
-    alerts_response = prometheus.get(
-        'alerts',
-        payload={
-            'silenced': False,
-            'inhibited': False,
-            'start': int(workload_stop_ceph_mgr['start']),
-            'stop': int(workload_stop_ceph_mgr['stop']),
-        }
-    )
-    assert alerts_response.ok is True
-    alerts = alerts_response.json()['data']['alerts']
-    log.info('Getting Prometheus alerts to check if alert is present.')
-    log.info(f"Prometheus Alerts: {alerts}")
+    alerts = workload_stop_ceph_mgr['prometheus_alerts']
     target_label = 'CephMgrIsAbsent'
-    target_alerts = [alert for alert in alerts if alert['labels']['alertname'] == target_label]
-    assert len(target_alerts) == 1, f"Incorrect number of {target_label} alerts"
+    target_alerts = [
+        alert for alert in alerts if alert[
+            'labels']['alertname'] == target_label
+    ]
+    assert len(
+        target_alerts) == 2, f"Incorrect number of {target_label} alerts"
+    assert target_alerts[0]['annotations']['severity_level'] == 'warning'
+    assert target_alerts[0]['state'] == 'pending'
+    assert target_alerts[1]['annotations']['severity_level'] == 'warning'
+    assert target_alerts[1]['state'] == 'firing'
 
-    # seconds to wait before alert is cleared
-    wait_clear = 20
-    time.sleep(wait_clear+5)
+    # seconds to wait before alert is cleared after measurement is finished
+    time_min = 20
+
+    time_actual = int(time.time())
+    time_sleep = (workload_stop_ceph_mgr['stop'] + time_min) - time_actual
+    if time_sleep > 0:
+        log.info(f"Waiting {time_sleep} seconds "
+                 f"({time_min} seconds since measurement end)")
+        time.sleep(time_sleep)
     alerts_response = prometheus.get(
         'alerts',
         payload={
             'silenced': False,
             'inhibited': False,
-            'start': int(workload_stop_ceph_mgr['stop'])+wait_clear,
-            'stop': int(workload_stop_ceph_mgr['stop'])+wait_clear+5,
         }
     )
     assert alerts_response.ok is True
     log.info('Getting Prometheus alerts to check if alert is cleared.')
     alerts = alerts_response.json()['data']['alerts']
     log.info(f"Prometheus Alerts: {alerts}")
-    target_alerts = [alert for alert in alerts if alert['labels']['alertname'] == target_label]
+    target_alerts = [
+        alert for alert in alerts if alert[
+            'labels']['alertname'] == target_label
+    ]
     assert len(target_alerts) == 0, f"Too many {target_label} alerts"
-
-    alerts_response = prometheus.get(
-        'alerts',
-        payload={
-            'silenced': False,
-            'inhibited': False,
-            'start': int(workload_stop_ceph_mgr['start']),
-            'stop': int(workload_stop_ceph_mgr['stop']),
-        }
-    )
-    assert alerts_response.ok is True
-    alerts = alerts_response.json()['data']['alerts']
-    log.info('Getting Prometheus alerts to check if alert is present.')
-    log.info(f"Prometheus Alerts: {alerts}")
