@@ -29,10 +29,12 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
     assert target_alerts[1]['state'] == 'firing'
 
     # seconds to wait before alert is cleared after measurement is finished
-    time_min = 20
+    time_min = 30
 
-    time_actual = int(time.time())
-    time_sleep = (workload_stop_ceph_mgr['stop'] + time_min) - time_actual
+    time_actual = time.time()
+    time_sleep = int(
+        (workload_stop_ceph_mgr['stop'] + time_min) - time_actual
+    )
     if time_sleep > 0:
         log.info(f"Waiting {time_sleep} seconds "
                  f"({time_min} seconds since measurement end)")
