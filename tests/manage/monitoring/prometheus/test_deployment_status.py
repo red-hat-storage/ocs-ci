@@ -1,12 +1,15 @@
 import logging
 import time
 
+from ocs_ci.framework.testlib import tier4
 import ocs_ci.utility.prometheus
 
 
 log = logging.getLogger(__name__)
 
 
+@tier4
+@pytest.mark.polarion_id("OCS-1052")
 def test_ceph_manager_stopped(workload_stop_ceph_mgr):
     """
     Test that there is appropriate alert when ceph manager
