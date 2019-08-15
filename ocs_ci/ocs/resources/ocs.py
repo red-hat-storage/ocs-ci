@@ -97,12 +97,18 @@ class OCS(object):
         return status
 
     def delete(self, wait=True, force=False):
-        if not self.is_deleted:
+        if self._is_deleted:
+            log.info(
+                f"Attempt to remove resource: {self.name} which is"
+                f"already deleted! Skipping delete of this resource!"
+            )
+            result = True
+        else:
             result = self.ocp.delete(
                 resource_name=self.name, wait=wait, force=force
             )
             self._is_deleted = True
-            return result
+        return result
 
     def apply(self, **data):
         with open(self.temp_yaml.name, 'w') as yaml_file:
