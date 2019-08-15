@@ -5,6 +5,7 @@ import os
 import logging
 import time
 import yaml
+import shlex
 
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import TimeoutSampler
@@ -273,10 +274,8 @@ class OCP(object):
         Wait for a resource to reach to a desired condition
 
         Args:
-            condition (str): The desired state the resource should be at
-                This is referring to: status.phase presented in the resource
-                yaml file
-                (e.g. status.phase == Available)
+            condition (str): The desired state the resource that is sampled
+                from 'oc get <kind> <resource_name>' command
             resource_name (str): The name of the resource to wait
                 for (e.g.my-pv1)
             selector (str): The resource selector to search with.
@@ -296,14 +295,16 @@ class OCP(object):
 
             # Only 1 resource expected to be returned
             if resource_name:
-                if sample.get('status').get('phase') == condition:
+                if self.get_resource_status(resource_name) == condition:
                     return True
             # More than 1 resources returned
             elif sample.get('kind') == 'List':
                 in_condition = []
                 sample = sample['items']
                 for item in sample:
-                    if item.get('status').get('phase') == condition:
+                    if self.get_resource_status(
+                        item.get('metadata').get('name')
+                    ) == condition:
                         in_condition.append(item)
                     if resource_count:
                         if len(in_condition) == resource_count and (
@@ -312,45 +313,6 @@ class OCP(object):
                             return True
                     elif len(sample) == len(in_condition):
                         return True
-
-        return False
-
-    # This implementation is temporary as a workaround for bug 1715627
-    def temp_wait_for_resource(
-        self, condition, resource_name='', selector=None,
-        resource_count=0, timeout=60, sleep=3
-    ):
-        """
-        Wait for a resource to reach to a desired condition
-        ***'resource_count' is mandatory in case selector is passed***
-
-        Args:
-            condition (str): The desired state the resource should be at
-                This refers to the status as reported by 'oc get' without -o yaml
-            resource_name (str): The name of the resource to wait
-                for (e.g.my-pv1)
-            selector (str): The resource selector to search with.
-                Example: 'app=rook-ceph-mds'
-            resource_count (int): How many resources expected to be
-            timeout (int): Time in seconds to wait
-            sleep (int): Sampling time in seconds
-
-        Returns:
-            bool: True in case all resources reached desired condition,
-                False otherwise
-
-        """
-        for sample in TimeoutSampler(
-            timeout, sleep, self.get, resource_name, False, selector
-        ):
-            # Only 1 resource expected to be returned
-            if resource_name and condition in sample:
-                return True
-            # More than 1 resources returned
-            elif selector:
-                # Returning True in case the number of the condition string
-                # occurrences in sample equals to the resource count
-                return resource_count == sample.count(condition)
 
         return False
 
@@ -383,6 +345,30 @@ class OCP(object):
             if timeout < (time.time() - start_time):
                 raise TimeoutError(f"Timeout when waiting for {resource_name} to delete")
             time.sleep(sleep)
+
+    def get_resource_status(self, resource_name):
+        """
+        Get the resource status based on:
+        'oc get <resource_kind> <resource_name>' command
+
+        Args:
+            resource_name (str): The name of the resource to get its status
+
+        Returns:
+            str: The status returned by 'oc get' command not in the 'yaml'
+                format
+        """
+        status_index = None
+        resource = self.get(resource_name=resource_name, out_yaml_format=False)
+        resource = shlex.split(resource)
+        for idx, i in enumerate(resource):
+            if i.isupper() and i == 'STATUS':
+                status_index = idx
+            if not i.isupper():
+                break
+        resource_info = [i for i in resource if not i.isupper()]
+
+        return resource_info[status_index]
 
 
 def switch_to_project(project_name):
