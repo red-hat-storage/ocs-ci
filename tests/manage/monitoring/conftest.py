@@ -49,7 +49,7 @@ def measure_operation(
                     'inhibited': False
                 }
             )
-            assert alerts_response.ok is True
+            assert alerts_response.ok is True, 'Prometheus API request failed'
             for alert in alerts_response.json()['data']['alerts']:
                 if alert not in alert_list:
                     logger.info(f"Adding {alert} to alert list")

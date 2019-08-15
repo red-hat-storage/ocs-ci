@@ -3,7 +3,7 @@ import pytest
 import time
 
 from ocs_ci.framework.testlib import tier4
-import ocs_ci.utility.prometheus
+from ocs_ci.utility.prometheus import PrometheusAPI
 
 
 log = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
     is unavailable and that this alert is cleared when the manager
     is back online.
     """
-    prometheus = ocs_ci.utility.prometheus.PrometheusAPI()
+    prometheus = PrometheusAPI()
 
     alerts = workload_stop_ceph_mgr['prometheus_alerts']
     target_label = 'CephMgrIsAbsent'
@@ -27,10 +27,18 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
     ]
     assert len(
         target_alerts) == 2, f"Incorrect number of {target_label} alerts"
-    assert target_alerts[0]['annotations']['severity_level'] == 'warning'
-    assert target_alerts[0]['state'] == 'pending'
-    assert target_alerts[1]['annotations']['severity_level'] == 'warning'
-    assert target_alerts[1]['state'] == 'firing'
+    assert target_alerts[0]['annotations'][
+        'severity_level'
+    ] == 'warning', 'First alert doesn\'t have warning severity'
+    assert target_alerts[0][
+        'state'
+    ] == 'pending', 'First alert is not in pending state'
+    assert target_alerts[1]['annotations'][
+        'severity_level'
+    ] == 'warning', 'Second alert doesn\'t have warning severity'
+    assert target_alerts[1][
+        'state'
+    ] == 'firing', 'First alert is not in firing state'
 
     # seconds to wait before alert is cleared after measurement is finished
     time_min = 30
