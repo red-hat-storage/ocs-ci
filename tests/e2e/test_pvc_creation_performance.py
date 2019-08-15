@@ -25,6 +25,7 @@ class TestPVCCreationPerformance(E2ETest):
         A setup phase for the test
 
         Args:
+            interface_iterate: A fixture to iterate over ceph interfaces
             storageclass_factory: A fixture to create everything needed for a
                 storageclass
         """
