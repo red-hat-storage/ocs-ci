@@ -274,8 +274,8 @@ def pvc_factory(
             helpers.wait_for_resource_state(pvc_obj, status)
         pvc_obj.storageclass = storageclass
         pvc_obj.project = project
-
         instances.append(pvc_obj)
+
         return pvc_obj
 
     def finalizer():
@@ -343,6 +343,43 @@ def pod_factory(request, pvc_factory):
     def finalizer():
         """
         Delete the Pod
+        """
+        for instance in instances:
+            if not instance.is_deleted:
+                instance.delete()
+                instance.ocp.wait_for_delete(
+                    instance.name
+                )
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def teardown_factory(request):
+    """
+    Tearing down a resource that was created during the test
+    To use this factory, you'll need to pass 'teardown_factory' to your test
+    function and call it in your test when a new resource was created and you
+    want it to be removed in teardown phase:
+    def test_example(self, teardown_factory):
+        pvc_obj = create_pvc()
+        teardown_factory(pvc_obj)
+
+    """
+    instances = []
+
+    def factory(resource_obj):
+        """
+        Args:
+            resource_obj (OCS object): Object to teardown after the test
+
+        """
+        instances.append(resource_obj)
+
+    def finalizer():
+        """
+        Delete the resources created in the test
         """
         for instance in instances:
             if not instance.is_deleted:
