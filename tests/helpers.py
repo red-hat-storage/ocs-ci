@@ -143,7 +143,7 @@ def create_pod(
         logger.info(ocs_obj.name)
         assert (ocp.OCP(kind='pod', namespace=namespace)).wait_for_resource(
             condition=constants.STATUS_SUCCEEDED,
-            resource_name=pod_name + '-1-deploy ',
+            resource_name=pod_name + '-1-deploy',
             resource_count=0, timeout=180, sleep=3
         )
         dpod_list = pod.get_all_pods(namespace=namespace)
@@ -860,7 +860,7 @@ def create_serviceaccount(namespace):
 
 def add_scc_policy(sa_name, namespace):
     """
-    Adding ServiceAccount to scc privilaged
+    Adding ServiceAccount to scc privileged
 
     Args:
         sa_name (str): ServiceAccount name
@@ -878,7 +878,7 @@ def add_scc_policy(sa_name, namespace):
 
 def remove_scc_policy(sa_name, namespace):
     """
-     Removing ServiceAccount from scc privilaged
+     Removing ServiceAccount from scc privileged
 
     Args:
         sa_name (str): ServiceAccount name
@@ -903,8 +903,6 @@ def delete_deploymentconfig(pod_obj):
     """
     dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG)
     dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
-<<<<<<< HEAD
-=======
 
 
 def measure_pvc_creation_time(interface, pvc_name):
@@ -943,4 +941,3 @@ def measure_pvc_creation_time(interface, pvc_name):
         )
     )
     return total.total_seconds()
->>>>>>> fixed travis failure

@@ -39,12 +39,12 @@ class BaseRunIOMultipleDcPods(ManageTest):
     Steps:
         1:- Create project
         2:- Create serviceaccount
-        3:- Add serviceaccount user to privilaged policy
+        3:- Add serviceaccount user to privileged policy
         4:- Create storageclass
         5:- Create PVC
         6:- Create pod with kind deploymentconfig
         7:- Add serviceaccount in yaml
-        8:- Add privilaged as True under securityContext
+        8:- Add privileged as True under securityContext
         9:- Deploy yaml using oc create -f yaml_name
         10:- oc get pods -n namespace
         11:- 2 pods will be Running for 1 deploymentconfig first will be deploy pod which actual deploys dc
