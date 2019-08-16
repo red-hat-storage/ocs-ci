@@ -16,6 +16,7 @@ import smtplib
 from ocs_ci.ocs.exceptions import CephHealthException
 from ocs_ci.ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
+    UnavailableBuildException,
 )
 from ocs_ci.framework import config
 from ocs_ci.utility.aws import AWS
@@ -398,8 +399,10 @@ def download_file(url, filename):
     log.debug(f"Download '{url}' to '{filename}'.")
     with open(filename, "wb") as f:
         r = requests.get(url)
+        assert r.ok, (
+            f"The URL {url} is not available! Status: {r.status_code}."
+        )
         f.write(r.content)
-    assert r.ok
 
 
 def get_url_content(url):
@@ -417,7 +420,7 @@ def get_url_content(url):
     """
     log.debug(f"Download '{url}' content.")
     r = requests.get(url)
-    assert r.ok, f"Couldn't load URL: {url} content!"
+    assert r.ok, f"Couldn't load URL: {url} content! Status: {r.status_code}."
     return r.content
 
 
@@ -591,6 +594,15 @@ def get_openshift_client(
     return client_binary_path
 
 
+def ensure_nightly_build_availability(build_url):
+    base_build_url = build_url.rsplit('/', 1)[0]
+    r = requests.get(base_build_url)
+    extracting_condition = b"Extracting" in r.content
+    if extracting_condition:
+        log.info("Build is extracting now, may take up to a minute.")
+    return r.ok and not extracting_condition
+
+
 def get_openshift_mirror_url(file_name, version):
     """
     Format url to OpenShift mirror (for client and installer download).
@@ -602,6 +614,9 @@ def get_openshift_mirror_url(file_name, version):
     Returns:
         str: Url of the desired file (installer or client)
 
+    Raises:
+        UnsupportedOSType: In case the OS type is not supported
+        UnavailableBuildException: In case the build url is not reachable
     """
     if platform.system() == "Darwin":
         os_type = "mac"
@@ -613,6 +628,14 @@ def get_openshift_mirror_url(file_name, version):
         f"https://openshift-release-artifacts.svc.ci.openshift.org/"
         f"{version}/{file_name}-{os_type}-{version}.tar.gz"
     )
+    sample = TimeoutSampler(
+        timeout=60, sleep=5, func=ensure_nightly_build_availability,
+        build_url=url,
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise UnavailableBuildException(
+            f"The build url {url} is not reachable"
+        )
     return url
 
 
@@ -719,7 +742,7 @@ class TimeoutSampler(object):
                 timeout=60, sleep=1, func=some_func, func_arg1="1",
                 func_arg2="2"
             )
-            if not sample.waitForFuncStatus(result=True):
+            if not sample.wait_for_func_status(result=True):
                 raise Exception
         """
         try:
