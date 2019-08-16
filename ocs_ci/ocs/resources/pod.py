@@ -205,7 +205,12 @@ class Pod(OCS):
         """
         work_load = 'fio'
         name = f'test_workload_{work_load}'
-        path = self.get_mount_path()
+        if storage_type == 'block':
+            path = self.pod_data.get('spec').get('containers')[0].get(
+                'volumeDevices')[0].get('devicePath')
+
+        else:
+            path = self.get_mount_path()
         # few io parameters for Fio
 
         self.wl_obj = workload.WorkLoad(
@@ -636,9 +641,8 @@ def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
 
 
 def get_cephfsplugin_provisioner_pods(
-    cephfsplugin_provisioner_label=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-    namespace=None
-):
+        cephfsplugin_provisioner_label=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+        namespace=None):
     """
     Fetches info about CSI Cephfs plugin provisioner pods in the cluster
 
