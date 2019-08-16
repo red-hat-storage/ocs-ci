@@ -60,7 +60,8 @@ def measure_operation(
     if not measure_after:
         start_time = time.time()
 
-    # init logging thread
+    # init logging thread that checks for Prometheus alerts
+    # while workload is running
     # based on https://docs.python.org/3/howto/logging-cookbook.html#logging-from-multiple-threads
     info = {'run': True}
     alert_list = []
@@ -83,6 +84,8 @@ def measure_operation(
         stop_time = time.time()
     except KeyboardInterrupt:
         # Thread should be correctly terminated on next few lines
+        # this is done in case of user interuption to make sure that thread
+        # is terminated correctly
         pass
     info['run'] = False
     logging_thread.join()
@@ -126,6 +129,6 @@ def workload_stop_ceph_mgr():
         return oc.get(mgr)
 
     measured_op = measure_operation(stop_mgr)
-    logger.info(f"Upscaling deployment {mgr} to 1")
+    logger.info(f"Upscaling deployment {mgr} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
     return measured_op
