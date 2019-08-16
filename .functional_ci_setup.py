@@ -89,7 +89,16 @@ def get_ocsci_conf():
         ),
     )
     # Apply image configuration if present
-    for image_type in ['rook', 'ceph']:
+    image_types = [
+        'rook',
+        'ceph',
+        'ceph_csi',
+        'rook_csi_registrar',
+        'rook_csi_provisioner',
+        'rook_csi_snapshotter',
+        'rook_csi_attacher',
+    ]
+    for image_type in image_types:
         image_key = f"{image_type}_image"
         image_value = env.get(image_key.upper())
         if image_value is not None:
