@@ -734,16 +734,16 @@ def get_worker_nodes():
     return worker_nodes_list
 
 
-def measure_pvc_creation_time(interface, pvc_name):
+def get_start_creation_time(interface, pvc_name):
     """
-    Measure PVC creation time based on logs
+    Get the starting creation time of a PVC based on provisioner logs
 
     Args:
         interface (str): The interface backed the PVC
         pvc_name (str): Name of the PVC for creation time measurement
 
     Returns:
-        float: Creation time for the PVC
+        datetime object: Start time of PVC creation
 
     """
     format = '%H:%M:%S.%f'
@@ -760,13 +760,51 @@ def measure_pvc_creation_time(interface, pvc_name):
     start = [
         i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)
     ][0].split(' ')[1]
-    # Extract the end time for the PVC provisioning
+    return datetime.datetime.strptime(start, format)
+
+
+def get_end_creation_time(interface, pvc_name):
+    """
+    Get the ending creation time of a PVC based on provisioner logs
+
+    Args:
+        interface (str): The interface backed the PVC
+        pvc_name (str): Name of the PVC for creation time measurement
+
+    Returns:
+        datetime object: End time of PVC creation
+
+    """
+    format = '%H:%M:%S.%f'
+    # Get the correct provisioner pod based on the interface
+    if interface == constants.CEPHBLOCKPOOL:
+        pod_name = pod.get_rbd_provisioner_pod().name
+    else:
+        pod_name = pod.get_cephfs_provisioner_pod().name
+
+    # get the logs from the csi-provisioner container
+    logs = pod.get_pod_logs(pod_name, 'csi-provisioner')
+    logs = logs.split("\n")
+    # Extract the starting time for the PVC provisioning
     end = [
         i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)
     ][0].split(' ')[1]
-    total = (
-        datetime.datetime.strptime(end, format) - datetime.datetime.strptime(
-            start, format
-        )
-    )
+    return datetime.datetime.strptime(end, format)
+
+
+def measure_pvc_creation_time(interface, pvc_name):
+    """
+    Measure PVC creation time based on logs
+
+    Args:
+        interface (str): The interface backed the PVC
+        pvc_name (str): Name of the PVC for creation time measurement
+
+    Returns:
+        float: Creation time for the PVC
+
+    """
+    start = get_start_creation_time(interface=interface, pvc_name=pvc_name)
+    end = get_end_creation_time(interface=interface, pvc_name=pvc_name)
+    total = end - start
     return total.total_seconds()
