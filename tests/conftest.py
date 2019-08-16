@@ -230,6 +230,7 @@ def pvc_factory(
         project=None,
         storageclass=None,
         size=None,
+        access_mode=constants.ACCESS_MODE_RWO,
         custom_data=None,
         status=constants.STATUS_BOUND,
     ):
@@ -243,6 +244,9 @@ def pvc_factory(
             storageclass (object): ocs_ci.ocs.resources.ocs.OCS instance
                 of 'StorageClass' kind.
             size (int): The requested size for the PVC
+            access_mode (str): ReadWriteOnce, ReadOnlyMany or ReadWriteMany.
+                This decides the access mode to be used for the PVC.
+                ReadWriteOnce is default.
             custom_data (dict): If provided then PVC object is created
                 by using these data. Parameters `project` and `storageclass`
                 are not used but reference is set if provided.
@@ -264,7 +268,8 @@ def pvc_factory(
                 sc_name=storageclass.name,
                 namespace=project.namespace,
                 size=pvc_size,
-                do_reload=False
+                do_reload=False,
+                access_mode=access_mode
             )
             assert pvc_obj, "Failed to create PVC"
 
