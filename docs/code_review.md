@@ -3,6 +3,11 @@
 **Lets use the following guidelines for Code Reviews and contribution:**
 
 * Create own fork of the repository and submit PR from your fork.
+* If a github issue describing the changes you are making does not exist be sure to
+    create one before creating a pull request. This is a *requirement* for all
+    bugs, feature requests, and enhancements to the framework or our tests that
+    involve more than a few lines of code changes. If the PR is extremely small,
+    still be sure to include a purpose for the change in the description.
 * Please follow rules we have set in [coding guidelines](./coding_guidelines.md)
     and read it properly before submitting your first PR.
 * Run couple of real tests before submitting for library changes.
@@ -16,6 +21,10 @@
     installed this [application WIP](https://github.com/marketplace/wip). This
     magic word will prevent us to merge this change which contains WIP in the
     name. Once you finish with patch you can remove it from the PR name.
+* Include `Fixes: #issue_id` in the description of your pull request in order
+    to have github automatically close the issue when the pull request is
+    merged. This also helps maintain a reference to the issue for merge commits
+    in our git log.
 * Request review from a few of project maintainers or related folks.
     Currently we are using the CODEOWNERS file which should auto assign
     [top level reviewers](https://github.com/orgs/red-hat-storage/teams/top-level-reviewers/members).
