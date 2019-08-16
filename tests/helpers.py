@@ -328,7 +328,8 @@ def create_storage_class(
 
 def create_pvc(
     sc_name, pvc_name=None, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-    size=None, wait=True, access_mode=constants.ACCESS_MODE_RWO
+    size=None, wait=True, access_mode=constants.ACCESS_MODE_RWO,
+    volume_mode=None
 ):
     """
     Create a PVC
@@ -341,7 +342,7 @@ def create_pvc(
         size(str): Size of pvc to create
         wait (bool): True for wait for the PVC operation to complete, False otherwise
         access_mode (str): The access mode to be used for the PVC
-
+        volume_mode(str): The volume mode for pvc
     Returns:
         PVC: PVC instance
     """
@@ -356,6 +357,8 @@ def create_pvc(
     pvc_data['spec']['storageClassName'] = sc_name
     if size:
         pvc_data['spec']['resources']['requests']['storage'] = size
+    if volume_mode:
+        pvc_data['spec']['volumeMode'] = volume_mode
     ocs_obj = pvc.PVC(**pvc_data)
     created_pvc = ocs_obj.create(do_reload=wait)
     assert created_pvc, f"Failed to create resource {pvc_name}"
@@ -649,10 +652,10 @@ def run_io_with_rados_bench(**kw):
 
 def get_all_pvs():
     """
-    Gets all pv in openshift-storage namespace
+    Gets all pv in rook-ceph namespace
 
     Returns:
-         dict: Dict of all pv in openshift-storage namespace
+         dict: Dict of all pv in rook-ceph namespace
     """
     ocp_pv_obj = ocp.OCP(
         kind=constants.PV, namespace=defaults.ROOK_CLUSTER_NAMESPACE
@@ -660,7 +663,7 @@ def get_all_pvs():
     return ocp_pv_obj.get()
 
 
-@retry(AssertionError, tries=10, delay=5, backoff=1)
+@retry(AssertionError, tries=20, delay=10, backoff=1)
 def validate_pv_delete(pv_name):
     """
     validates if pv is deleted after pvc deletion
@@ -734,16 +737,16 @@ def get_worker_nodes():
     return worker_nodes_list
 
 
-def get_start_creation_time(interface, pvc_name):
+def measure_pvc_creation_time(interface, pvc_name):
     """
-    Get the starting creation time of a PVC based on provisioner logs
+    Measure PVC creation time based on logs
 
     Args:
         interface (str): The interface backed the PVC
         pvc_name (str): Name of the PVC for creation time measurement
 
     Returns:
-        datetime object: Start time of PVC creation
+        float: Creation time for the PVC
 
     """
     format = '%H:%M:%S.%f'
@@ -760,51 +763,13 @@ def get_start_creation_time(interface, pvc_name):
     start = [
         i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)
     ][0].split(' ')[1]
-    return datetime.datetime.strptime(start, format)
-
-
-def get_end_creation_time(interface, pvc_name):
-    """
-    Get the ending creation time of a PVC based on provisioner logs
-
-    Args:
-        interface (str): The interface backed the PVC
-        pvc_name (str): Name of the PVC for creation time measurement
-
-    Returns:
-        datetime object: End time of PVC creation
-
-    """
-    format = '%H:%M:%S.%f'
-    # Get the correct provisioner pod based on the interface
-    if interface == constants.CEPHBLOCKPOOL:
-        pod_name = pod.get_rbd_provisioner_pod().name
-    else:
-        pod_name = pod.get_cephfs_provisioner_pod().name
-
-    # get the logs from the csi-provisioner container
-    logs = pod.get_pod_logs(pod_name, 'csi-provisioner')
-    logs = logs.split("\n")
-    # Extract the starting time for the PVC provisioning
+    # Extract the end time for the PVC provisioning
     end = [
         i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)
     ][0].split(' ')[1]
-    return datetime.datetime.strptime(end, format)
-
-
-def measure_pvc_creation_time(interface, pvc_name):
-    """
-    Measure PVC creation time based on logs
-
-    Args:
-        interface (str): The interface backed the PVC
-        pvc_name (str): Name of the PVC for creation time measurement
-
-    Returns:
-        float: Creation time for the PVC
-
-    """
-    start = get_start_creation_time(interface=interface, pvc_name=pvc_name)
-    end = get_end_creation_time(interface=interface, pvc_name=pvc_name)
-    total = end - start
+    total = (
+        datetime.datetime.strptime(end, format) - datetime.datetime.strptime(
+            start, format
+        )
+    )
     return total.total_seconds()
