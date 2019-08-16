@@ -42,3 +42,7 @@ class MDSCountException(Exception):
 
 class DeploymentPlatformNotSupported(Exception):
     pass
+
+
+class UnavailableBuildException(Exception):
+    pass
