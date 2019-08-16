@@ -19,11 +19,13 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
     """
     prometheus = PrometheusAPI()
 
-    alerts = workload_stop_ceph_mgr['prometheus_alerts']
+    alerts = workload_stop_ceph_mgr.get('prometheus_alerts')
     target_label = 'CephMgrIsAbsent'
     target_alerts = [
-        alert for alert in alerts if alert[
-            'labels']['alertname'] == target_label
+        alert
+        for alert
+        in alerts
+        if alert.get('labels').get('alertname') == target_label
     ]
     msg = f"Incorrect number of {target_label} alerts"
     assert len(target_alerts) == 2, msg
@@ -45,7 +47,7 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
 
     time_actual = time.time()
     time_sleep = int(
-        (workload_stop_ceph_mgr['stop'] + time_min) - time_actual
+        (workload_stop_ceph_mgr.get('stop') + time_min) - time_actual
     )
     if time_sleep > 0:
         log.info(f"Waiting for approximately {time_sleep} seconds for alerts "
@@ -59,10 +61,12 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
                     'inhibited': False,
                 }
             )
-            assert alerts_response.ok is True, 'Prometheus API request failed'
+            assert alerts_response.ok, 'Prometheus API request failed'
             target_alerts = [
-                alert for alert in alerts if alert[
-                    'labels']['alertname'] == target_label
+                alert
+                for alert
+                in alerts
+                if alert.get('labels').get('alertname') == target_label
             ]
             log.info(f"Checking for {target_label} alerts... "
                      f"{len(target_alerts)} found")
@@ -79,12 +83,14 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
                 'inhibited': False,
             }
         )
-    assert alerts_response.ok is True, 'Prometheus API request failed'
+    assert alerts_response.ok, 'Prometheus API request failed'
     log.info('Getting Prometheus alerts to check if alert is cleared.')
-    alerts = alerts_response.json()['data']['alerts']
+    alerts = alerts_response.json().get('data').get('alerts')
     log.info(f"Prometheus Alerts: {alerts}")
     target_alerts = [
-        alert for alert in alerts if alert[
-            'labels']['alertname'] == target_label
+        alert
+        for alert
+        in alerts
+        if alert.get('labels').get('alertname') == target_label
     ]
     assert len(target_alerts) == 0, f"Too many {target_label} alerts"

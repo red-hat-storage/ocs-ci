@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 def measure_operation(
-        operation, minimal_time=None, metadata=None, measure_after=False):
+    operation, minimal_time=None, metadata=None, measure_after=False
+):
     """
     Get dictionary with keys 'start', 'stop', 'metadata' and 'result' that
     contain information about start and stop time of given function and its
@@ -41,7 +42,7 @@ def measure_operation(
             alert_list (list): List to be populated with alerts
         """
         prometheus = PrometheusAPI()
-        while info['run']:
+        while info.get('run'):
             alerts_response = prometheus.get(
                 'alerts',
                 payload={
@@ -49,8 +50,8 @@ def measure_operation(
                     'inhibited': False
                 }
             )
-            assert alerts_response.ok is True, 'Prometheus API request failed'
-            for alert in alerts_response.json()['data']['alerts']:
+            assert alerts_response.ok, 'Prometheus API request failed'
+            for alert in alerts_response.json().get('data').get('alerts'):
                 if alert not in alert_list:
                     logger.info(f"Adding {alert} to alert list")
                     alert_list.append(alert)
