@@ -1,9 +1,11 @@
 """
 Helper functions file for OCS QE
 """
-import datetime
 import logging
 import re
+import datetime
+
+from uuid import uuid4
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility import templating
@@ -18,8 +20,8 @@ logger = logging.getLogger(__name__)
 
 def create_unique_resource_name(resource_description, resource_type):
     """
-    Creates a unique object name by using the object_description
-    and object_type, as well as the current date/time string.
+    Creates a unique object name by using the object_description,
+    object_type and a random uuid(in hex) as suffix
 
     Args:
         resource_description (str): The user provided object description
@@ -29,10 +31,7 @@ def create_unique_resource_name(resource_description, resource_type):
     Returns:
         str: A unique name
     """
-    current_date_time = (
-        datetime.datetime.now().strftime("%d%H%M%S%f")
-    )
-    return f"{resource_type}-{resource_description[:23]}-{current_date_time[:10]}"
+    return f"{resource_type}-{resource_description[:23]}-{uuid4().hex}"
 
 
 def create_resource(
