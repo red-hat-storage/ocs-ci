@@ -19,6 +19,7 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
     """
     prometheus = PrometheusAPI()
 
+    # get alerts from time when manager deployment was scaled down
     alerts = workload_stop_ceph_mgr.get('prometheus_alerts')
     target_label = 'CephMgrIsAbsent'
     target_alerts = [
@@ -27,6 +28,7 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
         in alerts
         if alert.get('labels').get('alertname') == target_label
     ]
+    log.info(f"Checking properties of found {target_label} alerts")
     msg = f"Incorrect number of {target_label} alerts"
     assert len(target_alerts) == 2, msg
 
@@ -94,3 +96,4 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
         if alert.get('labels').get('alertname') == target_label
     ]
     assert len(target_alerts) == 0, f"Too many {target_label} alerts"
+    log.info(f"{target_label} alerts were cleared")
