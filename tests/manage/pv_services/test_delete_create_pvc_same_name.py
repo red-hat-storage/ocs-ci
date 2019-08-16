@@ -23,11 +23,10 @@ def resources(request):
 
     def finalizer():
         for instance in pvcs:
-            if not instance.is_deleted:
-                instance.delete()
-                instance.ocp.wait_for_delete(
-                    instance.name
-                )
+            instance.delete()
+            instance.ocp.wait_for_delete(
+                instance.name
+            )
             assert helpers.validate_pv_delete(instance.backed_pv)
 
     request.addfinalizer(finalizer)
