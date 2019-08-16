@@ -701,11 +701,6 @@ def get_pod_obj(name, namespace=None):
     return pod_obj
 
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-<<<<<<< HEAD
->>>>>>> Incorporating comments
 def get_pod_logs(pod_name, container=None):
     """
     Get logs from a given pod
@@ -740,7 +735,6 @@ def get_pod_node(pod_obj):
     return node.get_node_objs(node_names=node_name)[0]
 
 
-<<<<<<< HEAD
 def delete_pods(pod_objs):
     """
     Deletes list of the pod objects
