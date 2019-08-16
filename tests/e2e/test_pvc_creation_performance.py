@@ -3,11 +3,10 @@ Test to verify PVC creation performance
 """
 import logging
 import pytest
+import ocs_ci.ocs.exceptions as ex
 
 from ocs_ci.framework.testlib import tier1, E2ETest, polarion_id, bugzilla
-from tests.helpers import (
-    create_pvc, measure_pvc_creation_time, create_multiple_pvcs,
-    wait_for_resource_state)
+from tests import helpers
 from ocs_ci.ocs import defaults, constants
 
 log = logging.getLogger(__name__)
@@ -44,11 +43,15 @@ class TestPVCCreationPerformance(E2ETest):
         """
         log.info('Start creating new PVC')
 
-        pvc_obj = create_pvc(sc_name=self.sc_obj.name, size=self.pvc_size)
+        pvc_obj = helpers.create_pvc(
+            sc_name=self.sc_obj.name, size=self.pvc_size
+        )
         teardown_factory(pvc_obj)
-        create_time = measure_pvc_creation_time(self.interface, pvc_obj.name)
+        create_time = helpers.measure_pvc_creation_time(
+            self.interface, pvc_obj.name
+        )
         if create_time > 1:
-            raise AssertionError(
+            raise ex.PerformanceException(
                 f"PVC creation time is {create_time} and greater than 1 second"
             )
         logging.info("PVC creation took less than a 1 second")
@@ -65,7 +68,7 @@ class TestPVCCreationPerformance(E2ETest):
         number_of_pvcs = 120
         log.info('Start creating new 120 PVCs')
 
-        pvc_objs = create_multiple_pvcs(
+        pvc_objs = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj.name,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
             number_of_pvc=number_of_pvcs,
@@ -75,18 +78,17 @@ class TestPVCCreationPerformance(E2ETest):
         for pvc_obj in pvc_objs:
             teardown_factory(pvc_obj)
         for pvc_obj in pvc_objs:
-            wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
-        start_time = measure_pvc_creation_time(
-            self.interface, pvc_objs[0].name, return_start_time=True
+            helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+        start_time = helpers.get_start_creation_time(
+            self.interface, pvc_objs[0].name
         )
-        end_time = measure_pvc_creation_time(
+        end_time = helpers.get_end_creation_time(
             self.interface, pvc_objs[number_of_pvcs - 1].name,
-            return_end_time=True
         )
         total = end_time - start_time
         total_time = total.total_seconds()
         if total_time > 60:
-            raise AssertionError(
+            raise ex.PerformanceException(
                 f"{number_of_pvcs} PVCs creation time is {total_time} and "
                 f"greater than 60 seconds"
             )
