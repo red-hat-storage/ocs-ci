@@ -12,8 +12,9 @@
 // defaults:
 //   ROOK_IMAGE
 //   CEPH_IMAGE
+//   EMAIL
 pipeline {
-  agent { node { label "rhel-8-large" }}
+  agent { node { label "ocs-ci" }}
   environment {
     AWS_SHARED_CREDENTIALS_FILE = "${env.WORKSPACE}/.aws/credentials"
     AWS_CONFIG_FILE = "${env.WORKSPACE}/.aws/config"
@@ -22,6 +23,10 @@ pipeline {
     stage("Setup") {
       steps {
         sh """
+          if [ ! -z '${env.EMAIL}' ]; then
+            sudo yum install -y /usr/sbin/postfix
+            sudo systemctl start postfix
+          fi
           python3 -V
           pip3 install --user virtualenv
           python3 -m virtualenv venv
@@ -76,10 +81,16 @@ pipeline {
       }
     }
     stage("Tier 1") {
+      environment {
+        EMAIL_ARG = """${sh(
+          returnStdout: true,
+          script: "if [ ! -z '${env.EMAIL}' ]; then echo -n '--email=${env.EMAIL}'; fi"
+        )}"""
+      }
       steps {
         sh """
         source ./venv/bin/activate
-        run-ci -m tier1 --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --self-contained-html --html=${env.WORKSPACE}/logs/report.html --junit-xml=${env.WORKSPACE}/logs/junit.xml --collect-logs
+        run-ci -m tier1 --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --self-contained-html --html=${env.WORKSPACE}/logs/report.html --junit-xml=${env.WORKSPACE}/logs/junit.xml --collect-logs ${env.EMAIL_ARG}
         """
       }
     }
