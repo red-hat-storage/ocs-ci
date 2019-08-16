@@ -12,10 +12,8 @@ logger = logging.getLogger(__name__)
 def uninstall_cluster_logging():
     """
     Function to uninstall cluster-logging from the cluster
-    1. Deletes the project "openshift-logging"
+    * Deletes the project "openshift-logging"
         & "openshift-operators-redhat"
-    2. Deletes the CSC resource "cluster-logging-operator"
-        & "elasticsearch"
     """
     # Validating the pods before deleting the instance
     pod_list = get_all_pods(namespace='openshift-logging')
@@ -33,6 +31,7 @@ def uninstall_cluster_logging():
         pod for pod in pod_list if not pod.name.startswith('cluster-logging-operator')
     ]
     for pod in pod_list:
+        ocp.OCP.wait_for_delete(resource_name=pod, timeout=10, sleep=3)
         verify_pod_exists(
             namespace='openshift-logging', pod_name=pod.name
         )
@@ -45,9 +44,11 @@ def uninstall_cluster_logging():
         kind=constants.NAMESPACES, namespace='openshift-operators-redhat'
     )
 
-    if openshift_logging_namespace.get() or openshift_operators_redhat_namespace.get():
+    if openshift_logging_namespace.get():
         assert openshift_logging_namespace.delete(resource_name='openshift-logging')
+        logger.info(f"The namespace openshift-logging got deleted successfully")
+    if openshift_operators_redhat_namespace.get():
         assert openshift_operators_redhat_namespace.delete(resource_name='openshift-operators-redhat')
-        logger.info("The projects got deleted successfully")
+        logger.info(f"The project openshift-opertors-redhat got deleted successfully")
     else:
         logger.error("The project does not exists")
