@@ -381,7 +381,7 @@ def teardown_factory(request):
         """
         Delete the resources created in the test
         """
-        for instance in instances:
+        for instance in instances[::-1]:
             if not instance.is_deleted:
                 instance.delete()
                 instance.ocp.wait_for_delete(
