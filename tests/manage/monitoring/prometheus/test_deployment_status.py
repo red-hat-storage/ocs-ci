@@ -25,20 +25,20 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
         alert for alert in alerts if alert[
             'labels']['alertname'] == target_label
     ]
-    assert len(
-        target_alerts) == 2, f"Incorrect number of {target_label} alerts"
-    assert target_alerts[0]['annotations'][
-        'severity_level'
-    ] == 'warning', 'First alert doesn\'t have warning severity'
-    assert target_alerts[0][
-        'state'
-    ] == 'pending', 'First alert is not in pending state'
-    assert target_alerts[1]['annotations'][
-        'severity_level'
-    ] == 'warning', 'Second alert doesn\'t have warning severity'
-    assert target_alerts[1][
-        'state'
-    ] == 'firing', 'First alert is not in firing state'
+    msg = f"Incorrect number of {target_label} alerts"
+    assert len(target_alerts) == 2, msg
+
+    msg = 'First alert doesn\'t have warning severity'
+    assert target_alerts[0]['annotations']['severity_level'] == 'warning', msg
+
+    msg = 'First alert is not in pending state'
+    assert target_alerts[0]['state'] == 'pending', msg
+
+    msg = 'Second alert doesn\'t have warning severity'
+    assert target_alerts[1]['annotations']['severity_level'] == 'warning', msg
+
+    msg = 'First alert is not in firing state'
+    assert target_alerts[1]['state'] == 'firing', msg
 
     # seconds to wait before alert is cleared after measurement is finished
     time_min = 30
