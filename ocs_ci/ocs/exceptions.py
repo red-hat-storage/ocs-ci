@@ -46,3 +46,7 @@ class DeploymentPlatformNotSupported(Exception):
 
 class UnavailableBuildException(Exception):
     pass
+
+
+class PerformanceException(Exception):
+    pass
