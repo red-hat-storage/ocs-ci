@@ -160,6 +160,8 @@ def create_pvc(request):
     class_instance.pvc_obj = helpers.create_pvc(
         sc_name=class_instance.sc_obj.name, namespace=class_instance.namespace
     )
+    helpers.wait_for_resource_state(class_instance.pvc_obj, constants.STATUS_BOUND)
+    class_instance.pvc_obj.reload()
 
 
 @pytest.fixture()
@@ -190,6 +192,10 @@ def create_rbd_pod(request):
         pvc_name=class_instance.pvc_obj.name,
         namespace=class_instance.namespace
     )
+    helpers.wait_for_resource_state(
+        class_instance.pod_obj, constants.STATUS_RUNNING
+    )
+    class_instance.pod_obj.reload()
 
 
 @pytest.fixture()
@@ -232,6 +238,9 @@ def create_pvcs(request):
         sc_name=class_instance.sc_obj.name, number_of_pvc=class_instance.num_of_pvcs,
         size=class_instance.pvc_size, namespace=class_instance.namespace
     )
+    for pvc_obj in class_instance.pvc_objs:
+        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+        pvc_obj.reload()
 
 
 @pytest.fixture()
@@ -251,13 +260,9 @@ def create_pods(request):
 
     request.addfinalizer(finalizer)
 
-    class_instance.pod_objs = [
-        helpers.create_pod(
-            interface_type=class_instance.interface, pvc_name=pvc_obj.name,
-            wait=False, namespace=class_instance.namespace
-        ) for pvc_obj in class_instance.pvc_objs
-    ]
+    class_instance.pod_objs = helpers.create_pods(pvc_objs_list=class_instance.pvc_objs)
+
     for pod in class_instance.pod_objs:
-        assert helpers.wait_for_resource_state(
+        helpers.wait_for_resource_state(
             pod, constants.STATUS_RUNNING
-        ), f"Pod {pod} failed to reach {constants.STATUS_RUNNING}"
+        )

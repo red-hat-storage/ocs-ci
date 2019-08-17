@@ -102,11 +102,15 @@ class TestOSCBasics(ManageTest):
         RBD_PVC_OBJ = helpers.create_pvc(
             sc_name=RBD_SC_OBJ.name, pvc_name=pvc_name
         )
+        helpers.wait_for_resource_state(RBD_PVC_OBJ, constants.STATUS_BOUND)
+        RBD_PVC_OBJ.reload()
         if RBD_PVC_OBJ.backed_pv is None:
             RBD_PVC_OBJ.reload()
         RBD_POD_OBJ = helpers.create_pod(
             interface_type=constants.CEPHBLOCKPOOL, pvc_name=RBD_PVC_OBJ.name
         )
+        helpers.wait_for_resource_state(RBD_POD_OBJ, constants.STATUS_RUNNING)
+        RBD_POD_OBJ.reload()
 
     @pytest.mark.polarion_id("OCS-346")
     def test_basics_cephfs(self, test_fixture_cephfs):
@@ -122,7 +126,11 @@ class TestOSCBasics(ManageTest):
         CEPHFS_PVC_OBJ = helpers.create_pvc(
             sc_name=CEPHFS_SC_OBJ.name, pvc_name=pvc_name
         )
+        helpers.wait_for_resource_state(CEPHFS_PVC_OBJ, constants.STATUS_BOUND)
+        CEPHFS_PVC_OBJ.reload()
         log.info('creating cephfs pod')
         CEPHFS_POD_OBJ = helpers.create_pod(
             interface_type=constants.CEPHFILESYSTEM, pvc_name=CEPHFS_PVC_OBJ.name
         )
+        helpers.wait_for_resource_state(CEPHFS_POD_OBJ, constants.STATUS_RUNNING)
+        CEPHFS_POD_OBJ.reload()
