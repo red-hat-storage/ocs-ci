@@ -5,14 +5,14 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
-from ocs_ci.ocs import exceptions
+from ocs_ci.ocs import exceptions, constants
 from ocs_ci.framework.testlib import tier1, ManageTest, bugzilla
 from ocs_ci.ocs.resources.pvc import delete_pvcs
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool, create_rbd_secret,
     create_project, create_pvcs
 )
-from tests.helpers import create_multiple_pvcs
+from tests.helpers import create_multiple_pvcs, wait_for_resource_state
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +68,9 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
             sc_name=self.sc_obj.name, namespace=self.namespace,
             number_of_pvc=self.num_of_pvcs
         )
+        for pvc_obj in new_pvc_objs:
+            wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+            pvc_obj.reload()
         log.info(f'Newly created {self.num_of_pvcs} PVCs are in Bound state.')
         self.pvc_objs_new.extend(new_pvc_objs)
 

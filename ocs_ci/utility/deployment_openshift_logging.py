@@ -308,7 +308,7 @@ def create_instance_in_clusterlogging(sc_name=None):
     inst_data = templating.load_yaml_to_dict(constants.CL_INSTANCE_YAML)
     inst_data['spec']['logStore']['elasticsearch']['storage']['storageClassName'] = sc_name
     inst_data['spec']['logStore']['elasticsearch']['storage']['size'] = "200Gi"
-    helpers.create_resource(wait=False, **inst_data)
+    helpers.create_resource(**inst_data)
     oc = ocp.OCP('v1', 'ClusterLogging', 'openshift-logging')
     logging_instance = oc.get(resource_name='instance', out_yaml_format='True')
     if logging_instance:

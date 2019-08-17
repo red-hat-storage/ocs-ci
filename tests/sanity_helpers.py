@@ -73,6 +73,9 @@ def create_resources(resources, run_io=True):
     pvcs.append(helpers.create_pvc(
         sc_name=storageclasses[1].name, namespace=projects[0].namespace)
     )
+    for pvc in pvcs:
+        helpers.wait_for_resource_state(pvc, constants.STATUS_BOUND)
+        pvc.reload()
 
     # Pods
     pods.append(
@@ -87,6 +90,10 @@ def create_resources(resources, run_io=True):
             namespace=projects[0].namespace
         )
     )
+    for pod in pods:
+        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING)
+        pod.reload()
+
     if run_io:
         # Run IO
         for pod in pods:

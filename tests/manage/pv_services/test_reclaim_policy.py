@@ -69,7 +69,10 @@ class TestReclaimPolicy(ManageTest):
         pvc_count = len(list_ceph_images())
         pvc_obj = helpers.create_pvc(
             sc_name=self.sc_obj_retain.name,
-            pvc_name=helpers.create_unique_resource_name('retain', 'pvc'))
+            pvc_name=helpers.create_unique_resource_name('retain', 'pvc')
+        )
+        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+        pvc_obj.reload()
         pv_name = pvc_obj.get()['spec']['volumeName']
         pv_namespace = pvc_obj.get()['metadata']['namespace']
         pv_obj = ocp.OCP(kind='PersistentVolume', namespace=pv_namespace)
@@ -90,7 +93,10 @@ class TestReclaimPolicy(ManageTest):
         """
         pvc_obj = helpers.create_pvc(
             sc_name=self.sc_obj_delete.name,
-            pvc_name=helpers.create_unique_resource_name('delete', 'pvc'))
+            pvc_name=helpers.create_unique_resource_name('delete', 'pvc')
+        )
+        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+        pvc_obj.reload()
         pv_name = pvc_obj.get()['spec']['volumeName']
         pv_namespace = pvc_obj.get()['metadata']['namespace']
         pv_obj = ocp.OCP(kind='PersistentVolume', namespace=pv_namespace)

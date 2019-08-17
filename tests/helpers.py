@@ -11,7 +11,7 @@ from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -34,16 +34,13 @@ def create_unique_resource_name(resource_description, resource_type):
     return f"{resource_type}-{resource_description[:23]}-{uuid4().hex}"
 
 
-def create_resource(
-    desired_status=constants.STATUS_AVAILABLE, wait=True, **kwargs
-):
+def create_resource(do_reload=True, **kwargs):
     """
     Create a resource
 
     Args:
-        desired_status (str): The status of the resource to wait for
-        wait (bool): True for waiting for the resource to reach the desired
-            status, False otherwise
+        do_reload (bool): True for reloading the resource following its creation,
+            False otherwise
         kwargs (dict): Dictionary of the OCS resource
 
     Returns:
@@ -54,13 +51,10 @@ def create_resource(
     """
     ocs_obj = OCS(**kwargs)
     resource_name = kwargs.get('metadata').get('name')
-    created_resource = ocs_obj.create(do_reload=wait)
+    created_resource = ocs_obj.create(do_reload=do_reload)
     assert created_resource, (
         f"Failed to create resource {resource_name}"
     )
-    if wait:
-        assert wait_for_resource_state(
-            resource=resource_name, state=desired_status)
     return ocs_obj
 
 
@@ -83,16 +77,14 @@ def wait_for_resource_state(resource, state, timeout=60):
     except TimeoutExpiredError:
         logger.error(f"{resource.kind} {resource.name} failed to reach {state}")
         resource.reload()
-        logging.error(f"\n{resource.describe()}")
-        return False
+        raise ResourceWrongStatusException(resource.name, resource.describe())
     logger.info(f"{resource.kind} {resource.name} reached state {state}")
-    return True
 
 
 def create_pod(
-    interface_type=None, pvc_name=None, desired_status=constants.STATUS_RUNNING,
-    wait=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE, node_name=None,
-    pod_dict_path=None
+    interface_type=None, pvc_name=None,
+    do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+    node_name=None, pod_dict_path=None
 ):
     """
     Create a pod
@@ -100,9 +92,7 @@ def create_pod(
     Args:
         interface_type (str): The interface type (CephFS, RBD, etc.)
         pvc_name (str): The PVC that should be attached to the newly created pod
-        desired_status (str): The status of the pod to wait for
-        wait (bool): True for waiting for the pod to reach the desired
-            status, False otherwise
+        do_reload (bool): True for reloading the object after creation, False otherwise
         namespace (str): The namespace for the new resource creation
         node_name (str): The name of specific node to schedule the pod
         pod_dict_path (str): YAML path for the pod
@@ -136,14 +126,10 @@ def create_pod(
 
     pod_obj = pod.Pod(**pod_data)
     pod_name = pod_data.get('metadata').get('name')
-    created_resource = pod_obj.create(do_reload=wait)
+    created_resource = pod_obj.create(do_reload=do_reload)
     assert created_resource, (
         f"Failed to create resource {pod_name}"
     )
-    if wait:
-        assert wait_for_resource_state(
-            resource=pod_obj, state=desired_status, timeout=120
-        )
 
     return pod_obj
 
@@ -195,7 +181,7 @@ def create_secret(interface_type):
     )
     secret_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
 
-    return create_resource(**secret_data, wait=False)
+    return create_resource(**secret_data)
 
 
 def create_ceph_block_pool(pool_name=None):
@@ -215,7 +201,7 @@ def create_ceph_block_pool(pool_name=None):
         )
     )
     cbp_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    cbp_obj = create_resource(**cbp_data, wait=False)
+    cbp_obj = create_resource(**cbp_data)
     cbp_obj.reload()
 
     assert verify_block_pool_exists(cbp_obj.name), (
@@ -241,7 +227,7 @@ def create_ceph_file_system(pool_name=None):
         )
     )
     cfs_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    cfs_data = create_resource(**cfs_data, wait=False)
+    cfs_data = create_resource(**cfs_data)
     cfs_data.reload()
 
     assert validate_cephfilesystem(cfs_data.name), (
@@ -322,12 +308,12 @@ def create_storage_class(
         del sc_data['parameters']['userid']
     except KeyError:
         pass
-    return create_resource(**sc_data, wait=False)
+    return create_resource(**sc_data)
 
 
 def create_pvc(
     sc_name, pvc_name=None, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-    size=None, wait=True, access_mode=constants.ACCESS_MODE_RWO
+    size=None, do_reload=True, access_mode=constants.ACCESS_MODE_RWO
 ):
     """
     Create a PVC
@@ -338,7 +324,7 @@ def create_pvc(
         pvc_name (str): The name of the PVC to create
         namespace (str): The namespace for the PVC creation
         size(str): Size of pvc to create
-        wait (bool): True for wait for the PVC operation to complete, False otherwise
+        do_reload (bool): True for wait for reloading PVC after its creation, False otherwise
         access_mode (str): The access mode to be used for the PVC
 
     Returns:
@@ -356,19 +342,12 @@ def create_pvc(
     if size:
         pvc_data['spec']['resources']['requests']['storage'] = size
     ocs_obj = pvc.PVC(**pvc_data)
-    created_pvc = ocs_obj.create(do_reload=wait)
+    created_pvc = ocs_obj.create(do_reload=do_reload)
     assert created_pvc, f"Failed to create resource {pvc_name}"
-    if wait:
-        assert wait_for_resource_state(ocs_obj, constants.STATUS_BOUND)
-        ocs_obj.reload()
-
     return ocs_obj
 
 
-def create_multiple_pvcs(
-    sc_name, namespace, number_of_pvc=1, size=None,
-    desired_status=constants.STATUS_BOUND, wait=True, wait_each=False
-):
+def create_multiple_pvcs(sc_name, namespace, number_of_pvc=1, size=None):
     """
     Create one or more PVC
 
@@ -377,29 +356,15 @@ def create_multiple_pvcs(
         number_of_pvc (int): Number of PVCs to be created
         size (str): The size of the PVCs to create
         namespace (str): The namespace for the PVCs creation
-        desired_status (str): The status of the PVC to wait for
-        wait (bool): True for waiting for PVC to reach the desired status,
-            False otherwise. Status of each PVC will be checked after creating
-            all PVCs
-        wait_each (bool): True for waiting for each PVC to reach the desired
-            status before creating next PVC, False otherwise. This will take
-            precedence over 'wait'
 
     Returns:
          list: List of PVC objects
     """
-
-    pvc_objs = [
+    return [
         create_pvc(
-            sc_name=sc_name, size=size, namespace=namespace, wait=wait_each
+            sc_name=sc_name, size=size, namespace=namespace
         ) for _ in range(number_of_pvc)
     ]
-    if wait and not wait_each:
-        for pvc_obj in pvc_objs:
-            assert wait_for_resource_state(pvc_obj, desired_status), (
-                f"PVC {pvc_obj.name} failed to reach {desired_status} status"
-            )
-    return pvc_objs
 
 
 def verify_block_pool_exists(pool_name):
@@ -684,38 +649,27 @@ def validate_pv_delete(pv_name):
         return True
 
 
-def create_pods(
-    pvc_objs_list, interface_type=None,
-    desired_status=constants.STATUS_RUNNING, wait=True, wait_each=False,
-    namespace=None
-):
+def create_pods(pvc_objs_list, interface_type=None, namespace=None):
     """
     Create Pods.
     A pod will be created for each PVC in 'pvc_objs_list'.
+
     Args:
         pvc_objs_list (list): List of PVC objects
         interface_type (str): The interface type (CephFS, Cephblockpool, etc.)
-        desired_status (str): The status of the pod to wait for
-        wait (bool): True for waiting for pod to reach the desired
-            status, False otherwise
-        wait_each (bool): True for waiting for each pod to reach the desired
-            status before creating next pod, False otherwise
         namespace(str): Name of the namespace
+
     Returns:
         list: List of Pod objects
-    """
-    pod_objs = []
-    for pvc_obj in pvc_objs_list:
-        pod_obj = create_pod(
-            interface_type=interface_type, pvc_name=pvc_obj.name,
-            desired_status=desired_status, wait=wait_each, namespace=namespace
-        )
-        pod_objs.append(pod_obj)
 
-    if wait and not wait_each:
-        for pod_obj in pod_objs:
-            assert wait_for_resource_state(pod_obj, desired_status)
-        logging.info(f"Verified: All pods are in '{desired_status}' state.")
+    """
+    pod_objs = [
+        create_pod(
+            interface_type=interface_type, pvc_name=pvc_obj.name,
+            do_reload=False, namespace=namespace
+        ) for pvc_obj in pvc_objs_list
+    ]
+
     return pod_objs
 
 

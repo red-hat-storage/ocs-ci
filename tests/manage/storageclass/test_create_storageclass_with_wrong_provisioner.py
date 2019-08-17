@@ -57,7 +57,7 @@ class TestCreateStorageClassWithWrongProvisioner(ManageTest):
         )
 
         # Create PVC
-        pvc_obj = helpers.create_pvc(sc_name=sc_obj.name, wait=False)
+        pvc_obj = helpers.create_pvc(sc_name=sc_obj.name, do_reload=False)
 
         # Check PVC status
         pvc_output = pvc_obj.get()
