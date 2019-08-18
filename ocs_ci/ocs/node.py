@@ -35,7 +35,7 @@ def get_node_objs(node_names=None):
 
 def get_typed_nodes(node_type='worker', num_of_nodes=None):
     """
-    Get cluster nodes according to the node type (e.g. worker, master) and the
+    Get cluster's nodes according to the node type (e.g. worker, master) and the
     number of requested nodes from that type
 
     Args:
@@ -144,6 +144,5 @@ def maintenance_nodes(node_names):
 
     """
     unschedule_nodes(node_names)
-    from ipdb import set_trace; set_trace()
     log.info(f'Moving nodes {node_names} to maintenance')
     drain_nodes(node_names)

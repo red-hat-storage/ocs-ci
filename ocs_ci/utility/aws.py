@@ -440,8 +440,8 @@ def get_instances_ids_and_names(instances):
 
     """
     return {
-        'i-' + instance.get('spec').get('providerID').partition('i-')[-1]:
-        instance.get('metadata').get('name') for instance in instances
+        'i-' + instance.get().get('spec').get('providerID').partition('i-')[-1]:
+        instance.get().get('metadata').get('name') for instance in instances
     }
 
 
