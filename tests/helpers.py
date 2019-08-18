@@ -395,22 +395,28 @@ def create_pvc(
     return ocs_obj
 
 
-def create_multiple_pvcs(sc_name, namespace, number_of_pvc=1, size=None):
+def create_multiple_pvcs(
+    sc_name, namespace, number_of_pvc=1, size=None, do_reload=False
+):
     """
     Create one or more PVC
 
     Args:
         sc_name (str): The name of the storage class to provision the PVCs from
+        namespace (str): The namespace for the PVCs creation
         number_of_pvc (int): Number of PVCs to be created
         size (str): The size of the PVCs to create
-        namespace (str): The namespace for the PVCs creation
+        do_reload (bool): True for wait for reloading PVC after its creation,
+            False otherwise
+
 
     Returns:
          list: List of PVC objects
     """
     return [
         create_pvc(
-            sc_name=sc_name, size=size, namespace=namespace
+            sc_name=sc_name, size=size, namespace=namespace,
+            do_reload=do_reload
         ) for _ in range(number_of_pvc)
     ]
 
@@ -760,7 +766,8 @@ def get_start_creation_time(interface, pvc_name):
     # Extract the starting time for the PVC provisioning
     start = [
         i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)
-    ][0].split(' ')[1]
+    ]
+    start = start[0].split(' ')[1]
     return datetime.datetime.strptime(start, format)
 
 
@@ -789,7 +796,8 @@ def get_end_creation_time(interface, pvc_name):
     # Extract the starting time for the PVC provisioning
     end = [
         i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)
-    ][0].split(' ')[1]
+    ]
+    end = end[0].split(' ')[1]
     return datetime.datetime.strptime(end, format)
 
 
