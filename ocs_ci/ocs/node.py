@@ -69,6 +69,10 @@ def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=
         timeout (int): The number in seconds to wait for the nodes to reach
             the status
 
+    Raises:
+        ResourceWrongStatusException: In case one or more nodes haven't
+            reached the desired state
+
     """
     if not node_names:
         node_names = [node.name for node in get_node_objs()]
