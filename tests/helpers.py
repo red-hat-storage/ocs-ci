@@ -67,8 +67,10 @@ def wait_for_resource_state(resource, state, timeout=60):
         state (str): The status to wait for
         timeout (int): Time in seconds to wait
 
-    Returns:
-        bool: True if resource reached the desired state, False otherwise
+    Raises:
+        ResourceWrongStatusException: In case the resource hasn't
+            reached the desired state
+
     """
     try:
         resource.ocp.wait_for_resource(
