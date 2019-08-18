@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants, node
-from ocs_ci.framework.testlib import tier1, ManageTest, bugzilla
+from ocs_ci.framework.testlib import tier1, tier2, ManageTest, bugzilla
 
 from tests import sanity_helpers
 
@@ -27,7 +27,6 @@ def schedule_nodes(request):
     request.addfinalizer(finalizer)
 
 
-@tier1
 @bugzilla('1734162')
 class TestNodesMaintenance(ManageTest):
     """
@@ -35,19 +34,26 @@ class TestNodesMaintenance(ManageTest):
     followed by cluster functionality and health checks
 
     """
-    @pytest.mark.polarion_id("OCS-1269")
-    def test_worker_maintenance(self, resources, schedule_nodes):
+    @tier1
+    @pytest.mark.parametrize(
+        argnames=["node_type"],
+        argvalues=[
+            pytest.param(*['worker'], marks=pytest.mark.polarion_id("OCS-1269")),
+            pytest.param(*['master'], marks=pytest.mark.polarion_id("OCS-1272"))
+        ]
+    )
+    def test_node_maintenance(self, resources, schedule_nodes, node_type):
         """
-        Maintenance and activate 1 worker node and check
+        Maintenance and activate 1 worker/master node and check
         cluster functionality and health
 
         """
-        # Get 1 worker node
-        worker_nodes = node.get_typed_nodes(node_type='worker', num_of_nodes=1)
-        worker_node_name = worker_nodes[0].name
+        # Get 1 node
+        typed_nodes = node.get_typed_nodes(node_type=node_type, num_of_nodes=1)
+        typed_node_name = typed_nodes[0].name
 
-        # Maintenance the worker node (unschedule and drain)
-        node.maintenance_nodes([worker_node_name])
+        # Maintenance the node (unschedule and drain)
+        node.maintenance_nodes([typed_node_name])
 
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
@@ -55,8 +61,41 @@ class TestNodesMaintenance(ManageTest):
         sanity_helpers.create_resources(resources)
         sanity_helpers.delete_resources(resources)
 
-        # Mark the worker node back to schedulable
-        node.schedule_nodes([worker_node_name])
+        # Mark the node back to schedulable
+        node.schedule_nodes([typed_node_name])
 
         # Perform cluster and Ceph health checks
-        sanity_helpers.health_check([worker_node_name])
+        sanity_helpers.health_check([typed_node_name])
+
+    @tier2
+    @pytest.mark.parametrize(
+        argnames=["nodes_type"],
+        argvalues=[
+            pytest.param(*['worker'], marks=pytest.mark.polarion_id("OCS-1273")),
+            pytest.param(*['master'], marks=pytest.mark.polarion_id("OCS-1271"))
+        ]
+    )
+    def test_2_nodes_maintenance(self, resources, schedule_nodes, nodes_type):
+        """
+        Maintenance and activate 2 worker/master nodes and check
+        cluster functionality and health
+
+        """
+        # Get 2 nodes
+        typed_nodes = node.get_typed_nodes(node_type=nodes_type, num_of_nodes=2)
+        typed_node_names = [typed_node.name for typed_node in typed_nodes]
+
+        # Maintenance the nodes (unschedule and drain)
+        node.maintenance_nodes(typed_node_names)
+
+        # Mark the nodes back to schedulable
+        node.schedule_nodes(typed_node_names)
+
+        # Perform cluster and Ceph health checks
+        sanity_helpers.health_check(typed_node_names)
+
+        # Check basic cluster functionality by creating resources
+        # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
+        # run IO and delete the resources
+        sanity_helpers.create_resources(resources)
+        sanity_helpers.delete_resources(resources)

@@ -57,7 +57,7 @@ def get_typed_nodes(node_type='worker', num_of_nodes=None):
     return typed_nodes
 
 
-def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=120):
+def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=180):
     """
     Wait until all nodes are in the given status
 
