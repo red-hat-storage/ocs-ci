@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 @pytest.fixture()
 def schedule_nodes(request):
     """
-    Make sure that all cluster's nodes are in Ready state and if not,
+    Make sure that all cluster's nodes are in 'Ready' state and if not,
     change them back to 'Ready' state by marking them as scheduble
 
     """
