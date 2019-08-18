@@ -22,6 +22,7 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
     # get alerts from time when manager deployment was scaled down
     alerts = workload_stop_ceph_mgr.get('prometheus_alerts')
     target_label = 'CephMgrIsAbsent'
+    target_msg = 'Storage metrics collector service not available anymore.'
     target_alerts = [
         alert
         for alert
@@ -32,11 +33,17 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
     msg = f"Incorrect number of {target_label} alerts"
     assert len(target_alerts) == 2, msg
 
+    msg = 'Alert message is not correct'
+    assert target_alerts[0]['annotations'] == target_msg, msg
+
     msg = 'First alert doesn\'t have warning severity'
     assert target_alerts[0]['annotations']['severity_level'] == 'warning', msg
 
     msg = 'First alert is not in pending state'
     assert target_alerts[0]['state'] == 'pending', msg
+
+    msg = 'Alert message is not correct'
+    assert target_alerts[1]['annotations'] == target_msg, msg
 
     msg = 'Second alert doesn\'t have warning severity'
     assert target_alerts[1]['annotations']['severity_level'] == 'warning', msg
