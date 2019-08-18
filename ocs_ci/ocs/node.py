@@ -2,7 +2,7 @@ import logging
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, exceptions
 from ocs_ci.utility.utils import TimeoutSampler
 
 
@@ -69,26 +69,24 @@ def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=
         timeout (int): The number in seconds to wait for the nodes to reach
             the status
 
-    Returns:
-        bool: True if all nodes reached the status, False otherwise
-
     """
     if not node_names:
         node_names = [node.name for node in get_node_objs()]
 
     log.info(f"Waiting for nodes {node_names} to reach status {status}")
-
     try:
         for sample in TimeoutSampler(timeout, 3, get_node_objs, node_names):
             for node in sample:
-                if not node_names:
-                    return True
                 if node.ocp.get_resource_status(node.name) == status:
                     node_names.remove(node.name)
-                    break
+            if not node_names:
+                break
+
     except TimeoutExpiredError:
         log.error(f"The following nodes haven't reached status {status}: {node_names}")
-        return False
+        raise exceptions.ResourceWrongStatusException(
+            node_names, [n.describe() for n in get_node_objs(node_names)]
+        )
 
 
 def unschedule_nodes(node_names):
@@ -102,9 +100,10 @@ def unschedule_nodes(node_names):
     ocp = OCP(kind='node')
     for node_name in node_names:
         ocp.exec_oc_cmd(f"adm cordon {node_name}")
-    assert wait_for_nodes_status(
+
+    wait_for_nodes_status(
         node_names, status=constants.NODE_READY_SCHEDULING_DISABLED
-    ), f"Not all nodes reached status {constants.NODE_READY_SCHEDULING_DISABLED}"
+    )
 
 
 def schedule_nodes(node_names):
@@ -119,9 +118,7 @@ def schedule_nodes(node_names):
     for node_name in node_names:
         ocp.exec_oc_cmd(f"adm uncordon {node_name}")
         log.info(f"Scheduling node {node_name}")
-    assert wait_for_nodes_status(node_names), (
-        f"Not all nodes reached status {constants.NODE_READY}"
-    )
+    wait_for_nodes_status(node_names)
 
 
 def drain_nodes(node_names):
@@ -147,5 +144,6 @@ def maintenance_nodes(node_names):
 
     """
     unschedule_nodes(node_names)
+    from ipdb import set_trace; set_trace()
     log.info(f'Moving nodes {node_names} to maintenance')
     drain_nodes(node_names)
