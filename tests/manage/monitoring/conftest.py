@@ -3,7 +3,8 @@ import pytest
 import threading
 import time
 
-from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility.prometheus import PrometheusAPI
 
 
@@ -102,8 +103,8 @@ def measure_operation(
 @pytest.fixture(scope="session")
 def workload_stop_ceph_mgr():
     """
-    Downscales Ceph Manager deployment, measures the time when it was downscaled
-    and monitors alerts that were triggered during this event.
+    Downscales Ceph Manager deployment, measures the time when it was
+    downscaled and monitors alerts that were triggered during this event.
 
     Returns:
         dict: Contains information about `start` and `stop` time for stopping
@@ -111,7 +112,7 @@ def workload_stop_ceph_mgr():
     """
     oc = ocp.OCP(
         kind=constants.DEPLOYMENT,
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        namespace=config.ENV_DATA['cluster_namespace']
     )
     mgr_deployments = oc.get(selector=constants.MGR_APP_LABEL)['items']
     mgr = mgr_deployments[0]['metadata']['name']
