@@ -66,10 +66,10 @@ class TestRespinCephPodsAndInteractionWithPrometheus(E2ETest):
     """
 
     @tier4
-    def test_respinning_ceph_pods_and_interaction_with_prometheus_pod(self, test_fixture):
+    def test_monitoring_after_respinning_ceph_pods(self, test_fixture):
         """
         Test case to validate respinning the ceph pods and
-        the interaction with prometheus pod
+        its interaction with prometheus pod
         """
         namespace_list, pvc_objs, pod_objs, sc = test_fixture
 
