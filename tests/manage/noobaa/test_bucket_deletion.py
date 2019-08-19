@@ -38,7 +38,7 @@ def create_buckets(request, noobaa_obj):
     return created_buckets
 
 
-#@pytest.mark.skipif(condition=True, reason="NooBaa is not deployed")
+@pytest.mark.skipif(condition=True, reason="NooBaa is not deployed")
 @pytest.mark.filterwarnings(
     'ignore::urllib3.exceptions.InsecureRequestWarning'
 )
