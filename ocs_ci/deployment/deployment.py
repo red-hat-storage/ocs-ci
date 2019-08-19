@@ -386,14 +386,23 @@ class Deployment(object):
         assert ceph_health_check(
             namespace=self.namespace
         )
-        # patch gp2 (EBS) storage class as 'non-default'
-        logger.info("Patch gp2 storageclass as non-default")
-        patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
-        run_cmd(
-            f"oc patch storageclass gp2 "
-            f"-p {patch} "
-            f"--request-timeout=120s"
-        )
+        # patch gp2/thin storage class as 'non-default'
+        sc_to_patch = None
+        platform = config.ENV_DATA.get('platform')
+        if platform == 'aws':
+            sc_to_patch = "gp2"
+        elif platform == "vsphere":
+            sc_to_patch = "thin"
+        else:
+            logger.info("Unsupported platform {platform} to patch")
+        if sc_to_patch:
+            logger.info(f"Patch {sc_to_patch} storageclass as non-default")
+            patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
+            run_cmd(
+                f"oc patch storageclass {sc_to_patch} "
+                f"-p {patch} "
+                f"--request-timeout=120s"
+            )
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
