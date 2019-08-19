@@ -3,6 +3,7 @@ import logging
 import os
 import requests
 import tempfile
+import time
 import yaml
 
 from ocs_ci.framework import config
@@ -108,3 +109,55 @@ class PrometheusAPI(object):
             params=payload
         )
         return response
+
+    def wait_for_alert(self, name, state='pending', timeout=1200, sleep=5):
+        """
+        Search for alerts that have requested name and state.
+
+        Args:
+            name (str): Alert name.
+            state (str): Alert state. If provided then there are searched
+                alerts with provided state. If not provided then alerts are
+                searched for absence of the alert.
+            timeout (int): Number of seconds for how long the alert should
+                be searched.
+            sleep (int): Number of seconds to sleep in between alert search.
+
+        Returns:
+            list: List of alert records.
+        """
+        while timeout > 0:
+            alerts_response = self.get(
+                'alerts',
+                payload={
+                    'silenced': False,
+                    'inhibited': False,
+                }
+            )
+            assert alerts_response.ok, 'Prometheus API request failed'
+            if state:
+                alerts = [
+                    alert
+                    for alert
+                    in alerts_response.json().get('data').get('alerts')
+                    if alert.get('labels').get('alertname') == name
+                    and alert.get('state') == state
+                ]
+                logger.info(f"Checking for {name} alerts with state {state}... "
+                            f"{len(alerts)} found")
+                if len(alerts) > 0:
+                    break
+            else:
+                alerts = [
+                    alert
+                    for alert
+                    in alerts_response.json().get('data').get('alerts')
+                    if alert.get('labels').get('alertname') == name
+                ]
+                logger.info(f"Checking for {name} alerts. There should be no alerts ... "
+                            f"{len(alerts)} found")
+                if len(alerts) == 0:
+                    break
+            time.sleep(sleep)
+            timeout -= sleep
+        return alerts
