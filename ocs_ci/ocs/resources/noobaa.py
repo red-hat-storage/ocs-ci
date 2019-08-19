@@ -81,6 +81,17 @@ class NooBaa(object):
         """
         return [bucket for bucket in self._s3_resource.buckets.all()]
 
+    def s3_verify_bucket_exists(self, bucket):
+        """
+        Args:
+            bucket: The bucket object to be verified
+
+        """
+        if bucket in self._s3_resource.buckets.all():
+            logger.info(f"{bucket.name} exits")
+        else:
+            logger.info(f"{bucket.name} does not exist")
+
     def oc_create_bucket(self, bucketname):
         """
         Todo: Design and implement
