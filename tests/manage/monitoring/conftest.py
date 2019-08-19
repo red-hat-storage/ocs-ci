@@ -113,7 +113,8 @@ def workload_stop_ceph_mgr():
         kind=constants.DEPLOYMENT,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE
     )
-    mgr = 'rook-ceph-mgr-a'
+    mgr_deployments = oc.get(selector=constants.MGR_APP_LABEL)['items']
+    mgr = mgr_deployments[0]['metadata']['name']
 
     def stop_mgr():
         """
