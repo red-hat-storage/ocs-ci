@@ -258,6 +258,7 @@ class Pod(OCS):
                 constants.FIO_IO_PARAMS_YAML
             )
         self.io_params['runtime'] = runtime
+        size = size if isinstance(size, str) else f"{size}G"
         self.io_params['size'] = size
         if fio_filename:
             self.io_params['filename'] = fio_filename
