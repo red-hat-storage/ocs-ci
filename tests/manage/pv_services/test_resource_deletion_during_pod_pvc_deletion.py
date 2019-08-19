@@ -45,7 +45,7 @@ class DisruptionBase(ManageTest):
         """
         try:
             for sample in TimeoutSampler(
-                    10, 0.01, func_to_use, self.namespace
+                10, 0.01, func_to_use, self.namespace
             ):
                 if func_to_use == get_all_pvcs:
                     current_num = len(sample['items'])

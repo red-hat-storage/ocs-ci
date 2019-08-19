@@ -799,7 +799,11 @@ def verify_volume_deleted_in_backend(interface, image_uuid, pool_name=None):
         return False
     except CommandFailed as ecf:
         assert valid_error in str(ecf), (
-            f"Failed to verify absence of volume in backend. ImageUUID: "
-            f"{image_uuid}. Interface type: {interface}"
+            f"Error occurred while verifying volume is deleted in backend: "
+            f"{str(ecf)} ImageUUID: {image_uuid}. Interface type: {interface}"
         )
+    logger.info(
+        f"Verified: Volume corresponding to uuid {image_uuid} is deleted "
+        f"in backend"
+    )
     return True
