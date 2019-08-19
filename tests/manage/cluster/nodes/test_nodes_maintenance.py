@@ -30,8 +30,8 @@ def schedule_nodes(request):
 @bugzilla('1734162')
 class TestNodesMaintenance(ManageTest):
     """
-    Test basic flow of maintenance and activate operations,
-    followed by cluster functionality and health checks
+    Test basic flows of maintenance (unschedule and drain) and
+    activate operations, followed by cluster functionality and health checks
 
     """
     @tier1
@@ -47,7 +47,7 @@ class TestNodesMaintenance(ManageTest):
         OCS-1269/OCS-1272:
         - Maintenance (mark as unscheduable and drain) 1 worker/master node
         - Check cluster functionality by creating resources
-        (pools, storageclasses, PVCs, pods - both CephFS and RBD)
+          (pools, storageclasses, PVCs, pods - both CephFS and RBD)
         - Mark the node as scheduable
         - Check cluster and Ceph health
 
@@ -84,9 +84,9 @@ class TestNodesMaintenance(ManageTest):
         OCS-1273/OCs-1271:
         - Maintenance (mark as unscheduable and drain) 2 worker/master nodes
         - Mark the nodes as scheduable
-        (pools, storageclasses, PVCs, pods - both CephFS and RBD)
         - Check cluster and Ceph health
         - Check cluster functionality by creating resources
+          (pools, storageclasses, PVCs, pods - both CephFS and RBD)
 
         """
         # Get 2 nodes
@@ -109,19 +109,14 @@ class TestNodesMaintenance(ManageTest):
         sanity_helpers.delete_resources(resources)
 
     @tier2
-    @pytest.mark.parametrize(
-        argnames=["node_type"],
-        argvalues=[
-            pytest.param(*[['worker', 'master']], marks=pytest.mark.polarion_id("OCS-1274")),
-        ]
-    )
-    def test_2_nodes_different_types(self, resources, schedule_nodes, node_types):
+    @pytest.mark.polarion_id("OCS-1274")
+    def test_2_nodes_different_types(self, resources, schedule_nodes):
         """
         OCS-1274:
         - Maintenance (mark as unscheduable and drain) 1 worker node and 1
-        master node
+          master node
         - Check cluster functionality by creating resources
-        (pools, storageclasses, PVCs, pods - both CephFS and RBD)
+          (pools, storageclasses, PVCs, pods - both CephFS and RBD)
         - Mark the nodes as scheduable
         - Check cluster and Ceph health
 
@@ -130,7 +125,7 @@ class TestNodesMaintenance(ManageTest):
         nodes = [
             node.get_typed_nodes(
                 node_type=node_type, num_of_nodes=1
-            )[0] for node_type in node_types
+            )[0] for node_type in ['worker', 'master']
         ]
 
         node_names = [typed_node.name for typed_node in nodes]
