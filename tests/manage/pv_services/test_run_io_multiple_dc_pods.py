@@ -79,6 +79,7 @@ class BaseRunIOMultipleDcPods(ManageTest):
 
 
 @tier2
+@pytest.mark.polarion_id("OCS-1284")
 @pytest.mark.usefixtures(
     create_rbd_secret.__name__,
     create_ceph_block_pool.__name__,
@@ -101,6 +102,7 @@ class TestRunIOMultipleDcPodsRBD(BaseRunIOMultipleDcPods):
 
 
 @tier2
+@pytest.mark.polarion_id("OCS-1285")
 @pytest.mark.usefixtures(
     create_cephfs_secret.__name__,
     create_cephfs_storageclass.__name__,
