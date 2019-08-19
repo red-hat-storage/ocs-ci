@@ -389,12 +389,12 @@ class Deployment(object):
         # patch gp2/thin storage class as 'non-default'
         sc_to_patch = None
         platform = config.ENV_DATA.get('platform')
-        if platform == 'aws':
+        if platform in ('aws', 'AWS'):
             sc_to_patch = "gp2"
         elif platform == "vsphere":
             sc_to_patch = "thin"
         else:
-            logger.info("Unsupported platform {platform} to patch")
+            logger.info(f"Unsupported platform {platform} to patch")
         if sc_to_patch:
             logger.info(f"Patch {sc_to_patch} storageclass as non-default")
             patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
