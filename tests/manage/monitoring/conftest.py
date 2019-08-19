@@ -102,9 +102,12 @@ def measure_operation(
 @pytest.fixture(scope="session")
 def workload_stop_ceph_mgr():
     """
+    Downscales Ceph Manager deployment, measures the time when it was downscaled
+    and monitors alerts that were triggered during this event.
+
     Returns:
         dict: Contains information about `start` and `stop` time for stopping
-            Ceph manager node.
+            Ceph Manager pod.
     """
     oc = ocp.OCP(
         kind=constants.DEPLOYMENT,
@@ -117,6 +120,9 @@ def workload_stop_ceph_mgr():
         Downscale Ceph Manager deployment for 6 minutes. First 5 minutes
         the alert should be in 'Pending'.
         After 5 minutes it should be 'Firing'.
+
+        Returns:
+            str: Name of downscaled deployment.
         """
         # run_time of operation
         run_time = 60 * 6
