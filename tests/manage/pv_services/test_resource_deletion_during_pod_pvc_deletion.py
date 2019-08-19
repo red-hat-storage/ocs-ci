@@ -12,6 +12,7 @@ from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check, run_cmd
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods
 )
+from tests.helpers import verify_volume_deleted_in_backend
 from tests import disruption_helpers
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool,
@@ -121,7 +122,7 @@ class DisruptionBase(ManageTest):
         log.info("IO started on all pods.")
 
         # Start deleting pods
-        pod_bulk_delete = executor.submit(self.delete_pods, self.pod_objs)
+        pod_bulk_delete = executor.submit(self.delete_pods)
 
         if operation_to_disrupt == 'delete_pods':
             ret = self.verify_resource_deletion(
@@ -155,6 +156,11 @@ class DisruptionBase(ManageTest):
                     f"deleting the pods."
                 )
 
+        # Fetch image uuid associated with PVCs
+        pvc_uuid_map = {}
+        for pvc_obj in self.pvc_objs:
+            pvc_uuid_map[pvc_obj.name] = pvc_obj.image_uuid
+
         # Start deleting PVCs
         pvc_bulk_delete = executor.submit(delete_pvcs, self.pvc_objs)
 
@@ -187,8 +193,21 @@ class DisruptionBase(ManageTest):
             )
         logging.info("Verified: PVs are deleted.")
 
-        # TODO: Verify PV using ceph toolbox. PV should be deleted.
-        # Blocked by bz 1723656
+        # Verify PV using ceph toolbox. Image/Subvolume should be deleted.
+        for pvc_name, uuid in pvc_uuid_map.items():
+            if self.interface == constants.CEPHBLOCKPOOL:
+                ret = verify_volume_deleted_in_backend(
+                    interface=self.interface, image_uuid=uuid,
+                    pool_name=self.cbp_obj.name
+                )
+            if self.interface == constants.CEPHFILESYSTEM:
+                ret = verify_volume_deleted_in_backend(
+                    interface=self.interface, image_uuid=uuid
+                )
+            assert ret, (
+                f"Volume associated with PVC {pvc_name} still exists "
+                f"in backend"
+            )
 
         # Verify number of pods of type 'resource_to_delete'
         final_num_resource_to_delete = len(pod_functions[resource_to_delete]())
@@ -255,7 +274,6 @@ class TestDeleteResourceRBD(DisruptionBase):
         """
         Delete ceph/rook pod while deletion of PVCs/pods is progressing-RBD
         """
-
         self.disruptive_base(operation_to_disrupt, resource_to_delete)
 
 
