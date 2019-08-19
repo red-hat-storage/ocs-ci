@@ -2,6 +2,7 @@ import logging
 import pytest
 import random
 
+from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
@@ -74,16 +75,17 @@ class TestPvcAssignPodNode(ManageTest):
         )
 
         pod_obj = helpers.create_pod(
-            interface_type=interface, pvc_name=pvc_obj.name, wait=False,
+            interface_type=interface, pvc_name=pvc_obj.name,
             namespace=pvc_obj.namespace, node_name=selected_node,
             pod_dict_path=constants.NGINX_POD_YAML
         )
         teardown_factory(pod_obj)
 
         # Confirm that the pod is running on the selected_node
-        assert helpers.wait_for_resource_state(
+        helpers.wait_for_resource_state(
             resource=pod_obj, state=constants.STATUS_RUNNING, timeout=120
         )
+        pod_obj.reload()
         assert verify_pod_node(pod_obj, selected_node), (
             'Pod is running on a different node than the selected node'
         )
@@ -125,7 +127,7 @@ class TestPvcAssignPodNode(ManageTest):
             f"with pvc {pvc_obj.name}"
         )
         pod_obj1 = helpers.create_pod(
-            interface_type=interface, pvc_name=pvc_obj.name, wait=False,
+            interface_type=interface, pvc_name=pvc_obj.name,
             namespace=pvc_obj.namespace, node_name=selected_nodes[0],
             pod_dict_path=constants.NGINX_POD_YAML
         )
@@ -136,32 +138,39 @@ class TestPvcAssignPodNode(ManageTest):
             f"with pvc {pvc_obj.name}"
         )
         pod_obj2 = helpers.create_pod(
-            interface_type=interface, pvc_name=pvc_obj.name, wait=False,
+            interface_type=interface, pvc_name=pvc_obj.name,
             namespace=pvc_obj.namespace, node_name=selected_nodes[1],
             pod_dict_path=constants.NGINX_POD_YAML
         )
         teardown_factory(pod_obj2)
 
         # Confirm that both pods are running on the selected_nodes
-        assert helpers.wait_for_resource_state(
+        helpers.wait_for_resource_state(
             resource=pod_obj1, state=constants.STATUS_RUNNING, timeout=120
         )
+        pod_obj1.reload()
         assert verify_pod_node(pod_obj1, selected_nodes[0]), (
             'First Pod is running on a different node than the selected node'
         )
 
-        assert helpers.wait_for_resource_state(
+        helpers.wait_for_resource_state(
             resource=pod_obj2, state=constants.STATUS_RUNNING, timeout=120
         )
+        pod_obj2.reload()
         assert verify_pod_node(pod_obj2, selected_nodes[1]), (
             'Second Pod is running on a different node than the selected node'
         )
 
         # Run IOs
-        logger.info(f"Running IO on first pod {pod_obj1.name}")
-        pod_obj1.run_io(storage_type='fs', size='512M', runtime=30)
-        logger.info(f"Running IO on second pod {pod_obj2.name}")
-        pod_obj2.run_io(storage_type='fs', size='512M', runtime=30)
+        with ThreadPoolExecutor() as p:
+            logger.info(f"Running IO on first pod {pod_obj1.name}")
+            p.submit(
+                pod_obj1.run_io, storage_type='fs', size='512M', runtime=30
+            )
+            logger.info(f"Running IO on second pod {pod_obj2.name}")
+            p.submit(
+                pod_obj2.run_io, storage_type='fs', size='512M', runtime=30
+            )
 
         pod.get_fio_rw_iops(pod_obj1)
         pod.get_fio_rw_iops(pod_obj2)
