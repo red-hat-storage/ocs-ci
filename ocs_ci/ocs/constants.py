@@ -46,7 +46,7 @@ STATUS_RUNNING = 'Running'
 STATUS_TERMINATING = 'Terminating'
 STATUS_BOUND = 'Bound'
 STATUS_RELEASED = 'Released'
-STATUS_SUCCEEDED = 'Succeeded'
+STATUS_COMPLETED = 'Completed'
 
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"

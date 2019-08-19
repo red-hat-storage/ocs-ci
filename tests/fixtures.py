@@ -276,7 +276,6 @@ def create_pods(request):
         helpers.wait_for_resource_state(
             pod, constants.STATUS_RUNNING
         )
-        ), f"Pod {pod} failed to reach {constants.STATUS_RUNNING}"
 
 
 @pytest.fixture()
@@ -298,15 +297,15 @@ def create_dc_pods(request):
 
     class_instance.dc_pod_objs = [
         helpers.create_pod(
-            interface_type=class_instance.interface, pvc_name=pvc_obj.name,
+            interface_type=class_instance.interface, pvc_name=pvc_obj.name, do_reload=False,
             namespace=class_instance.namespace, sa_name=class_instance.sa_obj.name, dc_deployment=True
         ) for pvc_obj in class_instance.pvc_objs
     ]
 
     for pod in class_instance.dc_pod_objs:
-        assert helpers.wait_for_resource_state(
-            pod, "Running", timeout=180
-        ), f"Pod {pod} failed to reach {constants.STATUS_RUNNING}"
+        helpers.wait_for_resource_state(
+            pod, constants.STATUS_RUNNING, timeout=180
+        )
 
 
 @pytest.fixture()
@@ -320,7 +319,10 @@ def create_serviceaccount(request):
         """
         Delete the service account
         """
-        helpers.remove_scc_policy(sa_name=class_instance.sa_obj.name, namespace=class_instance.project_obj.namespace)
+        helpers.remove_scc_policy(
+            sa_name=class_instance.sa_obj.name,
+            namespace=class_instance.project_obj.namespace
+        )
         class_instance.sa_obj.delete()
 
     request.addfinalizer(finalizer)
@@ -328,3 +330,5 @@ def create_serviceaccount(request):
     class_instance.sa_obj = helpers.create_serviceaccount(
         namespace=class_instance.project_obj.namespace,
     )
+    helpers.add_scc_policy(sa_name=class_instance.sa_obj.name, namespace=class_instance.project_obj.namespace)
+    assert class_instance.sa_obj, "Failed to create serviceaccount"

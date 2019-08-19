@@ -100,6 +100,8 @@ def create_pod(
         namespace (str): The namespace for the new resource creation
         node_name (str): The name of specific node to schedule the pod
         pod_dict_path (str): YAML path for the pod
+        sa_name (str): Serviceaccount name
+        dc_deployment (bool): True if creating pod as deploymentconfig
 
     Returns:
         Pod: A Pod instance
@@ -127,7 +129,8 @@ def create_pod(
 
     if pvc_name:
         if dc_deployment:
-            pod_data['spec']['template']['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
+            pod_data['spec']['template']['spec']['volumes'][0][
+                'persistentVolumeClaim']['claimName'] = pvc_name
         else:
             pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
 
@@ -139,10 +142,10 @@ def create_pod(
     if sa_name and dc_deployment:
         pod_data['spec']['template']['spec']['serviceAccountName'] = sa_name
     if dc_deployment:
-        ocs_obj = create_resource(wait=False, **pod_data)
+        ocs_obj = create_resource(**pod_data)
         logger.info(ocs_obj.name)
         assert (ocp.OCP(kind='pod', namespace=namespace)).wait_for_resource(
-            condition=constants.STATUS_SUCCEEDED,
+            condition=constants.STATUS_COMPLETED,
             resource_name=pod_name + '-1-deploy',
             resource_count=0, timeout=180, sleep=3
         )
@@ -158,7 +161,6 @@ def create_pod(
         assert created_resource, (
             f"Failed to create resource {pod_name}"
         )
-
 
         return pod_obj
 
@@ -855,7 +857,7 @@ def create_serviceaccount(namespace):
     )
     service_account_data['metadata']['namespace'] = namespace
 
-    return create_resource(**service_account_data, wait=False)
+    return create_resource(**service_account_data)
 
 
 def add_scc_policy(sa_name, namespace):
@@ -903,41 +905,3 @@ def delete_deploymentconfig(pod_obj):
     """
     dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG)
     dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
-
-
-def measure_pvc_creation_time(interface, pvc_name):
-    """
-    Measure PVC creation time based on logs
-
-    Args:
-        interface (str): The interface backed the PVC
-        pvc_name (str): Name of the PVC for creation time measurement
-
-    Returns:
-        float: Creation time for the PVC
-
-    """
-    format = '%H:%M:%S.%f'
-    # Get the correct provisioner pod based on the interface
-    if interface == constants.CEPHBLOCKPOOL:
-        pod_name = pod.get_rbd_provisioner_pod().name
-    else:
-        pod_name = pod.get_cephfs_provisioner_pod().name
-
-    # get the logs from the csi-provisioner container
-    logs = pod.get_pod_logs(pod_name, 'csi-provisioner')
-    logs = logs.split("\n")
-    # Extract the starting time for the PVC provisioning
-    start = [
-        i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)
-    ][0].split(' ')[1]
-    # Extract the end time for the PVC provisioning
-    end = [
-        i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)
-    ][0].split(' ')[1]
-    total = (
-        datetime.datetime.strptime(end, format) - datetime.datetime.strptime(
-            start, format
-        )
-    )
-    return total.total_seconds()
