@@ -1,105 +1,63 @@
 import logging
-
 import pytest
 
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.testlib import tier4, E2ETest
-from tests.fixtures import (
-    create_rbd_storageclass, create_ceph_block_pool,
-    create_rbd_secret
-)
-from tests.helpers import (
-    create_pvc, create_pod,
-    create_project
-)
-from ocs_ci.ocs.monitoring import collected_metrics_for_created_pvc
 from ocs_ci.ocs.resources import pvc, pod
-from tests import disruption_helpers
+from tests import disruption_helpers, helpers
+from ocs_ci.ocs.monitoring import check_pvcdata_collected_on_prometheus
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.fixture()
-def test_fixture(request):
+def test_fixture(request, storageclass_factory):
     """
     Setup and teardown
     """
-    self = request.node.cls
 
-    def finalizer():
-        teardown(self)
-    request.addfinalizer(finalizer)
-    setup(self)
+    def teardown():
 
+        # Delete created app pods and pvcs
+        assert pod.delete_pods(pod_objs)
+        assert pvc.delete_pvcs(pvc_objs)
 
-def setup(self):
-    """
-    Create multiple projects, pvcs and app pods
-    """
+        # Switch to default project
+        ret = ocp.switch_to_default_rook_cluster_project()
+        assert ret, 'Failed to switch to default rook cluster project'
 
-    # Initializing
-    self.namespace_list = []
-    self.pvc_objs = []
-    self.pod_objs = []
+        # Delete created projects
+        for prj in namespace_list:
+            prj.delete(resource_name=prj.namespace)
 
-    assert create_multiple_project_and_pvc_and_check_metrics_are_collected(self)
+    request.addfinalizer(teardown)
 
+    # Create a storage class
+    sc = storageclass_factory()
 
-def teardown(self):
-    """
-    Delete app pods and PVCs
-    Delete project
-    """
-    # Delete created app pods and PVCs
-    assert pod.delete_pods(self.pod_objs)
-    assert pvc.delete_pvcs(self.pvc_objs)
+    # Create projects
+    namespace_list = helpers.create_multilpe_projects(number_of_project=5)
 
-    # Switch to default project
-    ret = ocp.switch_to_default_rook_cluster_project()
-    assert ret, 'Failed to switch to default rook cluster project'
+    # Create pvcs
+    pvc_objs = [helpers.create_pvc(
+        sc_name=sc.name, namespace=each_namespace.namespace
+    ) for each_namespace in namespace_list]
 
-    # Delete projects created
-    for prj in self.namespace_list:
-        self.prj_obj.delete(resource_name=prj)
+    # Create app pods
+    pod_objs = [helpers.create_pod(
+        interface_type=constants.CEPHBLOCKPOOL,
+        pvc_name=each_pvc.name, namespace=each_pvc.namespace
+    ) for each_pvc in pvc_objs]
 
-
-def create_multiple_project_and_pvc_and_check_metrics_are_collected(self):
-    """
-    Creates projects, pvcs and app pods
-    """
-    for i in range(5):
-        # Create new project
-        self.prj_obj = create_project()
-
-        # Create PVCs
-        self.pvc_obj = create_pvc(
-            sc_name=self.sc_obj.name, namespace=self.prj_obj.namespace
-        )
-
-        # Create pod
-        self.pod_obj = create_pod(
-            interface_type=constants.CEPHBLOCKPOOL,
-            pvc_name=self.pvc_obj.name, namespace=self.prj_obj.namespace
-        )
-
-        self.namespace_list.append(self.prj_obj.namespace)
-        self.pvc_objs.append(self.pvc_obj)
-        self.pod_objs.append(self.pod_obj)
-
-    # Check for the created pvc metrics is collected
-    for pvc_obj in self.pvc_objs:
-        assert collected_metrics_for_created_pvc(pvc_obj.name), (
+    # Check for the created pvc metrics on prometheus pod
+    for pvc_obj in pvc_objs:
+        assert check_pvcdata_collected_on_prometheus(pvc_obj.name), (
             f"On prometheus pod for created pvc {pvc_obj.name} related data is not collected"
         )
-    return True
+
+    return namespace_list, pvc_objs, pod_objs, sc
 
 
-@pytest.mark.usefixtures(
-    create_rbd_secret.__name__,
-    create_ceph_block_pool.__name__,
-    create_rbd_storageclass.__name__,
-    test_fixture.__name__
-)
 @pytest.mark.polarion_id("OCS-580")
 class TestRespinCephPodsAndInteractionWithPrometheus(E2ETest):
     """
@@ -108,11 +66,12 @@ class TestRespinCephPodsAndInteractionWithPrometheus(E2ETest):
     """
 
     @tier4
-    def test_respinning_ceph_pods_and_interaction_with_prometheus_pod(self):
+    def test_respinning_ceph_pods_and_interaction_with_prometheus_pod(self, test_fixture):
         """
         Test case to validate respinning the ceph pods and
         the interaction with prometheus pod
         """
+        namespace_list, pvc_objs, pod_objs, sc = test_fixture
 
         # Re-spin the ceph pods(i.e mgr, mon, osd, mds) one by one
         resource_to_delete = ['mgr', 'mon', 'osd']
@@ -122,4 +81,29 @@ class TestRespinCephPodsAndInteractionWithPrometheus(E2ETest):
             disruption.delete_resource()
 
         # Check for the created pvc metrics after respinning ceph pods
-        assert create_multiple_project_and_pvc_and_check_metrics_are_collected(self)
+        for pvc_obj in pvc_objs:
+            assert check_pvcdata_collected_on_prometheus(pvc_obj.name), (
+                f"On prometheus pod for created pvc {pvc_obj.name} related data is not collected"
+            )
+
+        # Create projects after the respinning ceph pods
+        namespaces = helpers.create_multilpe_projects(number_of_project=2)
+        namespace_list.extend(namespaces)
+
+        # Create pvcs after the respinning ceph pods
+        pvcs = [helpers.create_pvc(
+            sc_name=sc.name, namespace=each_namespace.namespace
+        ) for each_namespace in namespaces]
+        pvc_objs.extend(pvcs)
+
+        # Create app pods after the respinning ceph pods
+        pod_objs.extend(helpers.create_pod(
+            interface_type=constants.CEPHBLOCKPOOL,
+            pvc_name=each_pvc.name, namespace=each_pvc.namespace
+        ) for each_pvc in pvcs)
+
+        # Check for the created pvc metrics on prometheus pod
+        for pvc_obj in pvcs:
+            assert check_pvcdata_collected_on_prometheus(pvc_obj.name), (
+                f"On prometheus pod for created pvc {pvc_obj.name} related data is not collected"
+            )

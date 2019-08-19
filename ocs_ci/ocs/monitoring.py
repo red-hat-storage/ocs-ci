@@ -19,6 +19,7 @@ def create_configmap_cluster_monitoring_pod(sc_name):
     """
     Create a configmap named cluster-monitoring-config
     and configure pvc on monitoring pod
+
     Args:
         sc_name (str): Name of the storage class
 
@@ -58,6 +59,7 @@ def validate_pvc_created_and_bound_on_monitoring_pods():
 def validate_pvc_are_mounted_on_monitoring_pods(pod_list):
     """
     Validate created pvc are mounted on monitoring pods
+
     Args:
         pod_list (list): List of the pods where pvc are mounted
 
@@ -73,7 +75,10 @@ def validate_pvc_are_mounted_on_monitoring_pods(pod_list):
 
 def get_list_pvc_objs_created_on_monitoring_pods():
     """
-    Returns list of pvc objects
+    Returns list of pvc objects created on monitoring pods
+
+    Returns:
+        list: List of pvc objs
 
     """
     pvc_list = get_all_pvcs(namespace=defaults.OCS_MONITORING_NAMESPACE)
@@ -88,9 +93,12 @@ def get_list_pvc_objs_created_on_monitoring_pods():
     return pvc_obj_list
 
 
-def get_kube_pod_spec_volumes_persistentvolumeclaims_info_metric():
+def get_metrics_persistentvolumeclaims_info():
     """
-    Returns the created pvc information
+    Returns the created pvc information on prometheus pod
+
+    Returns:
+        response.content (dict): The pvc metrics collected on prometheus pod
 
     """
     prometheus = ocs_ci.utility.prometheus.PrometheusAPI()
@@ -101,18 +109,21 @@ def get_kube_pod_spec_volumes_persistentvolumeclaims_info_metric():
 
 
 @retry(UnexpectedBehaviour, tries=10, delay=3, backoff=1)
-def collected_metrics_for_created_pvc(pvc_name):
+def check_pvcdata_collected_on_prometheus(pvc_name):
     """
     Checks whether initially pvc related data is collected on pod
 
     Args:
         pvc_name (str): Name of the pvc
 
+    Returns:
+        True on success, raise exception on failures
+
     """
     logger.info(
         f"Verify for created pvc {pvc_name} related data is collected on prometheus pod"
     )
-    pvcs_data = get_kube_pod_spec_volumes_persistentvolumeclaims_info_metric()
+    pvcs_data = get_metrics_persistentvolumeclaims_info()
     list_pvcs_data = pvcs_data.get('data').get('result')
     pvc_list = [pvc for pvc in list_pvcs_data if pvc_name == pvc.get('metric').get('persistentvolumeclaim')]
     if not pvc_list:
