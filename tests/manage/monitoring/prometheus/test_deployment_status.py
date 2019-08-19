@@ -34,7 +34,7 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
     assert len(target_alerts) == 2, msg
 
     msg = 'Alert message is not correct'
-    assert target_alerts[0]['annotations'] == target_msg, msg
+    assert target_alerts[0]['annotations']['message'] == target_msg, msg
 
     msg = 'First alert doesn\'t have warning severity'
     assert target_alerts[0]['annotations']['severity_level'] == 'warning', msg
@@ -43,7 +43,7 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
     assert target_alerts[0]['state'] == 'pending', msg
 
     msg = 'Alert message is not correct'
-    assert target_alerts[1]['annotations'] == target_msg, msg
+    assert target_alerts[1]['annotations']['message'] == target_msg, msg
 
     msg = 'Second alert doesn\'t have warning severity'
     assert target_alerts[1]['annotations']['severity_level'] == 'warning', msg
@@ -55,52 +55,19 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
     time_min = 30
 
     time_actual = time.time()
-    time_sleep = int(
+    time_wait = int(
         (workload_stop_ceph_mgr.get('stop') + time_min) - time_actual
     )
-    if time_sleep > 0:
-        log.info(f"Waiting for approximately {time_sleep} seconds for alerts "
+    if time_wait > 0:
+        log.info(f"Waiting for approximately {time_wait} seconds for alerts "
                  f"to be cleared ({time_min} seconds since measurement end)")
-        # search every 5 seconds if alerts are already cleared
-        while time_sleep > 0:
-            alerts_response = prometheus.get(
-                'alerts',
-                payload={
-                    'silenced': False,
-                    'inhibited': False,
-                }
-            )
-            assert alerts_response.ok, 'Prometheus API request failed'
-            target_alerts = [
-                alert
-                for alert
-                in alerts
-                if alert.get('labels').get('alertname') == target_label
-            ]
-            log.info(f"Checking for {target_label} alerts... "
-                     f"{len(target_alerts)} found")
-            if len(target_alerts) == 0:
-                log.info('Alerts already cleared, continuing...')
-                break
-            time.sleep(5)
-            time_sleep -= 5
     else:
-        alerts_response = prometheus.get(
-            'alerts',
-            payload={
-                'silenced': False,
-                'inhibited': False,
-            }
-        )
-    assert alerts_response.ok, 'Prometheus API request failed'
-    log.info('Getting Prometheus alerts to check if alert is cleared.')
-    alerts = alerts_response.json().get('data').get('alerts')
-    log.info(f"Prometheus Alerts: {alerts}")
-    target_alerts = [
-        alert
-        for alert
-        in alerts
-        if alert.get('labels').get('alertname') == target_label
-    ]
-    assert len(target_alerts) == 0, f"Too many {target_label} alerts"
+        time_wait = 1
+    cleared_alerts = prometheus.wait_for_alert(
+        name=target_label,
+        state=None,
+        timeout=time_wait
+    )
+    log.info(f"Cleared alerts: {cleared_alerts}")
+    assert len(cleared_alerts) == 0, f"{target_label} alerts were not cleared"
     log.info(f"{target_label} alerts were cleared")
