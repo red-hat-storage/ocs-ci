@@ -51,6 +51,8 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
     msg = 'First alert is not in firing state'
     assert target_alerts[1]['state'] == 'firing', msg
 
+    log.info(f"Alerts were triggered correctly during utilization")
+
     # seconds to wait before alert is cleared after measurement is finished
     time_min = 30
 
