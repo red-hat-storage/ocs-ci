@@ -118,8 +118,8 @@ class TestPVCCreationPerformance(E2ETest):
         """
         initial_number_of_pvcs = 120
         number_of_pvcs = math.ceil(initial_number_of_pvcs * 0.75)
-        log.info('Start creating new 120 PVCs')
 
+        log.info('Start creating new 120 PVCs')
         pvc_objs = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj.name,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
@@ -136,10 +136,11 @@ class TestPVCCreationPerformance(E2ETest):
                 )
 
                 executor.submit(pvc_obj.reload)
-
+        log.info('Deleting 75% of the PVCs - 90 PVCs')
         assert pvc.delete_pvcs(pvc_objs[:number_of_pvcs], True), (
             "Deletion of 75% of PVCs failed"
         )
+        log.info('Re-creating the 90 PVCs')
         pvc_objs = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj.name,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
@@ -162,4 +163,3 @@ class TestPVCCreationPerformance(E2ETest):
         logging.info(
             f"{number_of_pvcs} PVCs creation time took less than a 45 seconds"
         )
-
