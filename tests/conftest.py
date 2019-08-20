@@ -154,7 +154,10 @@ def storageclass_factory(
         else:
             secret = secret or secret_factory(interface=interface)
             ceph_pool = ceph_pool_factory(interface)
-            interface_name = ceph_pool.name
+            if interface == constants.CEPHBLOCKPOOL:
+                interface_name = ceph_pool.name
+            elif interface == constants.CEPHFILESYSTEM:
+                interface_name = helpers.get_cephfs_data_pool_name()
 
             sc_obj = helpers.create_storage_class(
                 interface_type=interface,
