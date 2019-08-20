@@ -36,10 +36,11 @@ def measure_operation(
     """
     def prometheus_log(info, alert_list):
         """
-        Log all alerts from Prometheus API every 10 seconds.
+        Log all alerts from Prometheus API every 3 seconds.
 
         Args:
-            run (bool): When this var turns into False the thread stops.
+            info (dict): Contains run key attribute that controls thread.
+                If `info['run'] == False` then thread will stop
             alert_list (list): List to be populated with alerts
         """
         prometheus = PrometheusAPI()
@@ -56,7 +57,7 @@ def measure_operation(
                 if alert not in alert_list:
                     logger.info(f"Adding {alert} to alert list")
                     alert_list.append(alert)
-            time.sleep(10)
+            time.sleep(3)
 
     if not measure_after:
         start_time = time.time()
