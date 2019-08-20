@@ -74,21 +74,15 @@ def measure_operation(
     )
     logging_thread.start()
 
-    try:
-        result = operation()
-        if measure_after:
-            start_time = time.time()
-        passed_time = time.time() - start_time
-        if minimal_time:
-            additional_time = minimal_time - passed_time
-            if additional_time > 0:
-                time.sleep(additional_time)
-        stop_time = time.time()
-    except KeyboardInterrupt:
-        # Thread should be correctly terminated on next few lines
-        # this is done in case of user interuption to make sure that thread
-        # is terminated correctly
-        pass
+    result = operation()
+    if measure_after:
+        start_time = time.time()
+    passed_time = time.time() - start_time
+    if minimal_time:
+        additional_time = minimal_time - passed_time
+        if additional_time > 0:
+            time.sleep(additional_time)
+    stop_time = time.time()
     info['run'] = False
     logging_thread.join()
     logger.info(f"Alerts found during measurement: {alert_list}")
