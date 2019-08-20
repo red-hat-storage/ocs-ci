@@ -162,6 +162,10 @@ NGINX_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "nginx.yaml"
 )
 
+AWSCLI_POD_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "awscli.yaml"
+)
+
 # Openshift-logging elasticsearch operator deployment yamls
 EO_NAMESPACE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_EO, "eo-project.yaml"
