@@ -260,7 +260,14 @@ def create_pods(request):
 
     request.addfinalizer(finalizer)
 
-    class_instance.pod_objs = helpers.create_pods(pvc_objs_list=class_instance.pvc_objs)
+    class_instance.pod_objs = list()
+    for pvc_obj in class_instance.pvc_objs:
+        class_instance.pod_objs.append(
+            helpers.create_pod(
+                interface_type=class_instance.interface, pvc_name=pvc_obj.name,
+                do_reload=False, namespace=class_instance.namespace
+            )
+        )
 
     for pod in class_instance.pod_objs:
         helpers.wait_for_resource_state(
