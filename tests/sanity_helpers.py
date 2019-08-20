@@ -15,9 +15,7 @@ def health_check(nodes):
     """
     Perform Ceph and cluster health checks
     """
-    assert node.wait_for_nodes_status(nodes), (
-        f"Not all nodes reached status {constants.NODE_READY}"
-    )
+    node.wait_for_nodes_status(nodes)
     ceph_cluster = CephCluster()
     assert ceph_health_check(
         namespace=config.ENV_DATA['cluster_namespace']
