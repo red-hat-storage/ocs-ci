@@ -101,7 +101,7 @@ class BaseDisruption(ManageTest):
         # Start creating pods
         bulk_pod_create = executor.submit(
             helpers.create_pods, pvc_objs_list=pvc_objs,
-            interface_type=self.interface, wait=False,
+            interface_type=self.interface,
             namespace=self.namespace
         )
 
@@ -159,7 +159,7 @@ class BaseDisruption(ManageTest):
         # Verify that PVCs are reusable by creating new pods
         create_pods = executor.submit(
             helpers.create_pods, pvc_objs_list=pvc_objs,
-            interface_type=self.interface, wait=False, namespace=self.namespace
+            interface_type=self.interface, namespace=self.namespace
         )
         pod_objs = create_pods.result()
 
