@@ -1,7 +1,8 @@
 import logging
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs import constants, exceptions
 from ocs_ci.utility.utils import TimeoutSampler
 
 
@@ -21,12 +22,12 @@ def get_node_objs(node_names=None):
 
     """
     nodes_obj = OCP(kind='node')
-    node_objs = nodes_obj.get()['items']
+    node_dicts = nodes_obj.get()['items']
     if not node_names:
-        return node_objs
+        return [OCS(**node_obj) for node_obj in node_dicts]
     else:
         return [
-            node_obj for node_obj in node_objs if (
+            OCS(**node_obj) for node_obj in node_dicts if (
                 node_obj.get('metadata').get('name') in node_names
             )
         ]
@@ -34,7 +35,7 @@ def get_node_objs(node_names=None):
 
 def get_typed_nodes(node_type='worker', num_of_nodes=None):
     """
-    Get cluster nodes according to the node type (e.g. worker, master) and the
+    Get cluster's nodes according to the node type (e.g. worker, master) and the
     number of requested nodes from that type
 
     Args:
@@ -48,7 +49,7 @@ def get_typed_nodes(node_type='worker', num_of_nodes=None):
     nodes = get_node_objs()
 
     typed_nodes = [
-        n for n in nodes if node_type in n.get('metadata')
+        n for n in nodes if node_type in n.get().get('metadata')
         .get('annotations').get('machine.openshift.io/machine')
     ]
     if num_of_nodes:
@@ -56,7 +57,7 @@ def get_typed_nodes(node_type='worker', num_of_nodes=None):
     return typed_nodes
 
 
-def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=120):
+def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=180):
     """
     Wait until all nodes are in the given status
 
@@ -68,66 +69,60 @@ def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=
         timeout (int): The number in seconds to wait for the nodes to reach
             the status
 
-    Returns:
-        bool: True if all nodes reached the status, False otherwise
+    Raises:
+        ResourceWrongStatusException: In case one or more nodes haven't
+            reached the desired state
 
     """
     if not node_names:
-        node_names = [node.get('metadata').get('name') for node in get_node_objs()]
+        node_names = [node.name for node in get_node_objs()]
 
     log.info(f"Waiting for nodes {node_names} to reach status {status}")
-
     try:
         for sample in TimeoutSampler(timeout, 3, get_node_objs, node_names):
             for node in sample:
-                if not node_names:
-                    return True
-                for status_condition in node.get('status').get('conditions'):
-                    if status == constants.NODE_NOT_READY:
-                        message = 'Kubelet stopped posting node status'
-                        if message in status_condition.get('message'):
-                            node_names.remove(node.get('metadata').get('name'))
-                            break
-                    else:
-                        if 'True' in status_condition.get('status'):
-                            log.info(
-                                f"The following nodes are still not "
-                                f"in {status} status: {node_names}"
-                            )
-                            if status_condition.get('type') == status:
-                                node_names.remove(node.get('metadata').get('name'))
-                                break
+                if node.ocp.get_resource_status(node.name) == status:
+                    node_names.remove(node.name)
+            if not node_names:
+                break
+
     except TimeoutExpiredError:
         log.error(f"The following nodes haven't reached status {status}: {node_names}")
-        return False
+        raise exceptions.ResourceWrongStatusException(
+            node_names, [n.describe() for n in get_node_objs(node_names)]
+        )
 
 
-def unschedule_nodes(nodes):
+def unschedule_nodes(node_names):
     """
     Change nodes to be unscheduled
 
     Args:
-        nodes (list): The OCP objects of the nodes
+        node_names (list): The names of the nodes
 
     """
-    for node in nodes:
-        node.exec_oc_cmd(f"adm cordon {node.get('metadata').get('name')}")
-    assert wait_for_nodes_status(nodes, status=constants.NODE_SCHEDULING_DISABLED), (
-        f"Not all nodes reached status {constants.NODE_SCHEDULING_DISABLED}"
+    ocp = OCP(kind='node')
+    for node_name in node_names:
+        ocp.exec_oc_cmd(f"adm cordon {node_name}")
+
+    wait_for_nodes_status(
+        node_names, status=constants.NODE_READY_SCHEDULING_DISABLED
     )
 
 
-def schedule_nodes(nodes):
+def schedule_nodes(node_names):
     """
     Change nodes to be scheduled
 
     Args:
-        nodes (list): The OCP objects of the nodes
+        node_names (list): The names of the nodes
 
     """
-    for node in nodes:
-        node.exec_oc_cmd(f"adm uncordon {node.get('metadata').get('name')}")
-    assert wait_for_nodes_status(nodes), f"Not all nodes reached status {constants.NODE_READY}"
+    ocp = OCP(kind='node')
+    for node_name in node_names:
+        ocp.exec_oc_cmd(f"adm uncordon {node_name}")
+        log.info(f"Scheduling node {node_name}")
+    wait_for_nodes_status(node_names)
 
 
 def drain_nodes(node_names):
@@ -140,17 +135,18 @@ def drain_nodes(node_names):
     """
     ocp = OCP(kind='node')
     node_names = ' '.join(node_names)
+    log.info(f'Draining nodes {node_names}')
     ocp.exec_oc_cmd(f"adm drain {node_names}")
 
 
-def maintenance_nodes(nodes):
+def maintenance_nodes(node_names):
     """
     Move nodes to maintenance
 
     Args:
-        nodes (list): The OCP objects of the nodes to move to maintenance
+        node_names (list): The names of the nodes
 
     """
-    unschedule_nodes(nodes)
-    node_names = [node.get('metadata').get('name') for node in nodes]
+    unschedule_nodes(node_names)
+    log.info(f'Moving nodes {node_names} to maintenance')
     drain_nodes(node_names)

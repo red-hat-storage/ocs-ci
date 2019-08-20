@@ -219,4 +219,4 @@ INSTANCE_SHUTTING_DOWN = 32
 # Node statuses
 NODE_READY = 'Ready'
 NODE_NOT_READY = 'NotReady'
-NODE_SCHEDULING_DISABLED = 'SchedulingDisabled'
+NODE_READY_SCHEDULING_DISABLED = 'Ready,SchedulingDisabled'
