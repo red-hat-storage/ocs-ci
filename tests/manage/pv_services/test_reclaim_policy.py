@@ -5,11 +5,15 @@ from tests import helpers
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.resources.pod import list_ceph_images
 from ocs_ci.ocs.exceptions import CommandFailed
+from tests.fixtures import (
+    create_ceph_block_pool, create_rbd_secret
+)
+
 
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='class')
+@pytest.fixture()
 def test_fixture(request):
     """
     This is a test fixture
@@ -25,35 +29,37 @@ def test_fixture(request):
 
 def setup(self):
     """
-    Setting up a secret and storage class
+    Setting up storage class
     """
 
-    self.secret_obj = helpers.create_secret(constants.CEPHBLOCKPOOL)
     self.sc_obj_retain = helpers.create_storage_class(
         interface_type=constants.CEPHBLOCKPOOL,
-        interface_name=constants.DEFAULT_BLOCKPOOL,
-        secret_name=self.secret_obj.name,
+        interface_name=self.cbp_obj.name,
+        secret_name=self.rbd_secret_obj.name,
         reclaim_policy=constants.RECLAIM_POLICY_RETAIN
     )
     self.sc_obj_delete = helpers.create_storage_class(
         interface_type=constants.CEPHBLOCKPOOL,
-        interface_name=constants.DEFAULT_BLOCKPOOL,
-        secret_name=self.secret_obj.name,
+        interface_name=self.cbp_obj.name,
+        secret_name=self.rbd_secret_obj.name,
         reclaim_policy=constants.RECLAIM_POLICY_DELETE
     )
 
 
 def teardown(self):
     """
-    Deleting secret
+    Deleting storage classes
     """
     assert self.sc_obj_retain.delete()
     assert self.sc_obj_delete.delete()
-    assert self.secret_obj.delete()
 
 
 @tier1
-@pytest.mark.usefixtures(test_fixture.__name__)
+@pytest.mark.usefixtures(
+    create_ceph_block_pool.__name__,
+    create_rbd_secret.__name__,
+    test_fixture.__name__,
+)
 class TestReclaimPolicy(ManageTest):
     """
     Automates the following test cases
@@ -66,7 +72,7 @@ class TestReclaimPolicy(ManageTest):
         """
         Calling functions for pvc invalid name and size
         """
-        pvc_count = len(list_ceph_images())
+        pvc_count = len(list_ceph_images(pool_name=self.cbp_obj.name))
         pvc_obj = helpers.create_pvc(
             sc_name=self.sc_obj_retain.name,
             pvc_name=helpers.create_unique_resource_name('retain', 'pvc')
@@ -82,7 +88,7 @@ class TestReclaimPolicy(ManageTest):
             f"Status of PV {pv_obj.get(pv_name)} is not 'Released'"
         )
         log.info("Status of PV is Released")
-        assert pvc_count + 1 == len(list_ceph_images())
+        assert pvc_count + 1 == len(list_ceph_images(pool_name=self.cbp_obj.name))
         assert pv_obj.delete(resource_name=pv_name)
         # TODO: deletion of ceph rbd image, blocked by BZ#1723656
 
