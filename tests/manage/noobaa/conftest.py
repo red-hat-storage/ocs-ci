@@ -17,6 +17,7 @@ def noobaa_obj():
         noobaa_obj: A NooBaa resource
 
     """
+
     noobaa_obj = noobaa.NooBaa()
     return noobaa_obj
 
@@ -47,9 +48,7 @@ def uploaded_objects(request, noobaa_obj, awscli_pod):
             awscli_pod.exec_cmd_on_pod(
                 command=base_command+"rm "+uploaded_filename+"\""
             )
-
     request.addfinalizer(object_cleanup)
-
     return uploaded_objects
 
 
@@ -59,9 +58,10 @@ def created_buckets(request, noobaa_obj):
     Deletes all buckets that were created as part of the test
 
     Returns:
-        Empty list of buckets
+        An empty list of buckets
 
     """
+
     created_buckets = []
 
     def bucket_cleanup():
@@ -69,20 +69,17 @@ def created_buckets(request, noobaa_obj):
             logger.info(f'Deleting bucket {bucket.name}')
             bucket.object_versions.delete()
             noobaa_obj.s3_delete_bucket(bucket)
-
     request.addfinalizer(bucket_cleanup)
-
     return created_buckets
 
 
 @pytest.fixture()
 def created_pods(request):
     """
-
-    Args:
-        request:
+    Deletes all pods that were created as part of the test
 
     Returns:
+        An empty list of pods
 
     """
 
@@ -92,22 +89,21 @@ def created_pods(request):
         for pod in created_pods:
             logger.info(f'Deleting pod {pod.name}')
             pod.delete()
-
     request.addfinalizer(pod_cleanup)
-
     return created_pods
 
 
 @pytest.fixture()
 def awscli_pod(noobaa_obj, created_pods):
     """
-    Returns a pod running AWS CLI
+    Creates a new AWSCLI pod for relaying commands
+
     Returns:
+        A Pod() running the AWS CLI
     """
+
     awscli_pod = helpers.create_pod(namespace='noobaa',
                                     pod_dict_path=constants.AWSCLI_POD_YAML)
     helpers.wait_for_resource_state(awscli_pod, constants.STATUS_RUNNING)
-
     created_pods.append(awscli_pod)
-
     return awscli_pod

@@ -23,10 +23,9 @@ class TestBucketIO:
     )
     def test_write_file_to_bucket(self, noobaa_obj, awscli_pod, created_buckets, uploaded_objects):
         """
-        TODO
+        Test object IO using the S3 SDK
         """
 
-        # logger.info(f'Creating new bucket - {bucketname}')
         base_command = f"sh -c \"AWS_ACCESS_KEY_ID={noobaa_obj.access_key_id} " \
             f"AWS_SECRET_ACCESS_KEY={noobaa_obj.access_key} " \
             f"AWS_DEFAULT_REGION=us-east-1 " \
@@ -40,16 +39,16 @@ class TestBucketIO:
         for obj in public_s3.Bucket(constants.TEST_FILES_BUCKET).objects.all():
             # Download test object(s)
             logger.info('Downloading test files')
-            test_assert = awscli_pod.exec_cmd_on_pod(
+            awscli_pod.exec_cmd_on_pod(
                 command=f'wget https://{constants.TEST_FILES_BUCKET}.s3.us-east-2.amazonaws.com/{obj.key}'
             )
             downloaded_files.append(obj.key)
 
         bucketname = create_unique_resource_name(self.__class__.__name__.lower(), 's3-bucket')
-        logger.info('Creating the test bucket')
+        logger.info(f'Creating the test bucket - {bucketname}')
         created_buckets.append(noobaa_obj.s3_create_bucket(bucketname=bucketname))
 
-        # Write objects to new bucket
+        # Write all downloaded objects to the new bucket
         for obj_name in downloaded_files:
             copycommand = f"cp {obj_name} s3://{bucketname}/{obj_name}"
             logger.info('Writing objects to bucket')
