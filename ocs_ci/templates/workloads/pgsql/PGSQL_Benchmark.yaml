@@ -1,0 +1,23 @@
+apiVersion: ripsaw.cloudbulldozer.io/v1alpha1
+kind: Benchmark
+metadata:
+  name: pgbench-benchmark
+  namespace: my-ripsaw
+spec:
+  workload:
+    name: "pgbench"
+    args:
+      timeout: 5
+      clients:
+        - 20
+      threads: 2
+      transactions: 100
+      cmd_flags: ''
+      init_cmd_flags: ''
+      scaling_factor: 2
+      samples: 5
+      databases:
+        - host: postgres-0.postgres # assuming that postgres was deployed in same namespace as ripsaw i.e. my-ripsaw
+          user: test # Following the values from the configmap
+          password: test
+          db_name: testdb
