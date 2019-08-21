@@ -1,14 +1,12 @@
 import logging
+
+import boto3
 import pytest
 
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.ocp import OCP
-from tests import helpers
-from tests.helpers import create_unique_resource_name
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import tier1
-from ocs_ci.ocs.resources import noobaa
-
+from ocs_ci.ocs import constants
+from tests.helpers import create_unique_resource_name
 
 logger = logging.getLogger(__name__)
 
@@ -36,20 +34,24 @@ class TestBucketIO:
             f"--endpoint={noobaa_obj.endpoint} "
         string_wrapper = "\""
 
-        bucketname = create_unique_resource_name(self.__class__.__name__.lower(), 's3-bucket')
-        filename = 'kubectl'
-        copycommand = f"cp {filename} s3://{bucketname}/{filename}"
+        # Retrieve a list of all objects on the test-objects bucket and downloads them to the pod
+        downloaded_files = []
+        public_s3 = boto3.resource('s3', region_name='us-east-2')
+        for obj in public_s3.Bucket(constants.TEST_FILES_BUCKET).objects.all():
+            # Download test object(s)
+            logger.info('Downloading test files')
+            test_assert = awscli_pod.exec_cmd_on_pod(
+                command=f'wget https://{constants.TEST_FILES_BUCKET}.s3.us-east-2.amazonaws.com/{obj.key}'
+            )
+            downloaded_files.append(obj.key)
 
-        # Download test file(s)
-        logger.info('Downloading test files')
-        awscli_pod.exec_cmd_on_pod(
-            command=f'wget https://belimele-bucket.s3.us-east-2.amazonaws.com/{filename}'
-        )
-        # Create bucket
+        bucketname = create_unique_resource_name(self.__class__.__name__.lower(), 's3-bucket')
         logger.info('Creating the test bucket')
         created_buckets.append(noobaa_obj.s3_create_bucket(bucketname=bucketname))
 
-        # Write to pod
-        logger.info('Writing objects to bucket')
-        awscli_pod.exec_cmd_on_pod(command=base_command+copycommand+string_wrapper, out_yaml_format=False)
-        uploaded_objects.append(f's3://{bucketname}/{filename}')
+        # Write objects to new bucket
+        for obj_name in downloaded_files:
+            copycommand = f"cp {obj_name} s3://{bucketname}/{obj_name}"
+            logger.info('Writing objects to bucket')
+            assert 'Completed' in awscli_pod.exec_cmd_on_pod(command=base_command+copycommand+string_wrapper, out_yaml_format=False)
+            uploaded_objects.append(f's3://{bucketname}/{obj_name}')

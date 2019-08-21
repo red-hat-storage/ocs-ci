@@ -72,6 +72,7 @@ SECRET = "Secret"
 NAMESPACE = 'Namespace'
 IGNORE_SC_GP2 = "gp2"
 IGNORE_SC_FLEX = "rook-ceph-block"
+TEST_FILES_BUCKET = "ocsci-test-files"
 
 
 DEFAULT_BLOCKPOOL = 'rbd'
