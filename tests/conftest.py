@@ -357,13 +357,11 @@ def pod_factory(request, pvc_factory):
                 interface_type=interface,
             )
             assert pod_obj, "Failed to create PVC"
-            helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
-            pod_obj.reload()
+        instances.append(pod_obj)
         if status:
             helpers.wait_for_resource_state(pod_obj, status)
         pod_obj.pvc = pvc
 
-        instances.append(pod_obj)
         return pod_obj
 
     def finalizer():
