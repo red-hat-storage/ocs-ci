@@ -1,5 +1,6 @@
 import base64
 import logging
+
 import boto3
 
 from ocs_ci.ocs.ocp import OCP

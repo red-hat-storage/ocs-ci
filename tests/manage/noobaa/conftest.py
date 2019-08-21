@@ -1,12 +1,10 @@
 import logging
+
 import pytest
 
 from ocs_ci.ocs import constants
-from tests import helpers
-from tests.helpers import create_unique_resource_name
-from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier1
 from ocs_ci.ocs.resources import noobaa
+from tests import helpers
 
 logger = logging.getLogger(__name__)
 
