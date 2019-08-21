@@ -7,9 +7,9 @@ from ocs_ci.ocs import constants
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture()
+@pytest.fixture(params=[constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM])
 def pod(request, pod_factory):
-    pod = pod_factory()
+    pod = pod_factory(interface=request.param)
     return pod
 
 
