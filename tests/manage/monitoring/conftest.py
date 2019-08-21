@@ -121,6 +121,9 @@ def workload_stop_ceph_mgr():
         Downscale Ceph Manager deployment for 6 minutes. First 5 minutes
         the alert should be in 'Pending'.
         After 5 minutes it should be 'Firing'.
+        This configuration of monitoring can be observed in ceph-mixins which
+        are used in the project:
+            https://github.com/ceph/ceph-mixins/blob/d22afe8c0da34490cb77e52a202eefcf4f62a869/config.libsonnet#L25
 
         Returns:
             str: Name of downscaled deployment.
