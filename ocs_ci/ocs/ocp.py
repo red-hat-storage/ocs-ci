@@ -106,7 +106,7 @@ class OCP(object):
             command += f"--selector={selector}"
         if out_yaml_format:
             command += " -o yaml"
-        return self.exec_oc_cmd(command)
+        return self.exec_oc_cmd(command, out_yaml_format)
 
     def describe(self, resource_name='', selector=None, all_namespaces=False):
         """
