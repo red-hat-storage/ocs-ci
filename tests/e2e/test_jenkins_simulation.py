@@ -2,7 +2,6 @@ import pytest
 import logging
 
 from ocs_ci.framework.testlib import ManageTest, tier1
-from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 
