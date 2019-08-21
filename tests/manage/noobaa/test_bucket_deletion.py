@@ -31,7 +31,7 @@ def create_buckets(request, noobaa_obj):
         for bucket in created_buckets:
             logger.info(f"Verifying whether bucket: {bucket.name} exists"
                         f" after deletion")
-            noobaa_obj.s3_verify_bucket_exists(bucket)
+            assert noobaa_obj.s3_verify_bucket_exists(bucket) is False
 
     request.addfinalizer(verify_bucket)
 
