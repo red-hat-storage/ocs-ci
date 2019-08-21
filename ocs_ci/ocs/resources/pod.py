@@ -124,7 +124,7 @@ class Pod(OCS):
             logger.exception(f"Found Exception: {ex}")
             raise
 
-    def exec_cmd_on_pod(self, command, out_yaml_format=True):
+    def exec_cmd_on_pod(self, command, out_yaml_format=True, **kwargs):
         """
         Execute a command on a pod (e.g. oc rsh)
 
@@ -138,7 +138,7 @@ class Pod(OCS):
         """
         rsh_cmd = f"rsh {self.name} "
         rsh_cmd += command
-        return self.ocp.exec_oc_cmd(rsh_cmd, out_yaml_format)
+        return self.ocp.exec_oc_cmd(rsh_cmd, out_yaml_format, **kwargs)
 
     def get_labels(self):
         """

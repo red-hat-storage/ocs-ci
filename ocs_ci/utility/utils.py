@@ -366,7 +366,9 @@ def run_cmd(cmd, **kwargs):
         (str) Decoded stdout of command
 
     """
-    log.info(f"Executing command: {cmd}")
+    silence_logs = kwargs.pop('silent', False)
+    if not silence_logs:
+        log.info(f"Executing command: {cmd}")
     if isinstance(cmd, str):
         cmd = shlex.split(cmd)
     r = subprocess.run(
@@ -380,10 +382,17 @@ def run_cmd(cmd, **kwargs):
     if r.stderr and not r.returncode:
         log.warning(f"Command warning:: {r.stderr.decode()}")
     if r.returncode:
-        raise CommandFailed(
-            f"Error during execution of command: {cmd}."
-            f"\nError is {r.stderr.decode()}"
-        )
+        if not silence_logs:
+            raise CommandFailed(
+                f"Error during execution of a silent command - "
+                f"\nError: {r.stderr.decode()}"
+            )
+        else:
+            raise CommandFailed(
+                f"Error during execution of command: {cmd}."
+                f"\nError is {r.stderr.decode()}"
+            )
+
     return r.stdout.decode()
 
 

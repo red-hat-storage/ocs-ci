@@ -46,7 +46,7 @@ class OCP(object):
     def namespace(self):
         return self._namespace
 
-    def exec_oc_cmd(self, command, out_yaml_format=True):
+    def exec_oc_cmd(self, command, out_yaml_format=True, **kwargs):
         """
         Executing 'oc' command
 
@@ -69,7 +69,7 @@ class OCP(object):
             oc_cmd += f"--kubeconfig {kubeconfig} "
 
         oc_cmd += command
-        out = run_cmd(cmd=oc_cmd)
+        out = run_cmd(cmd=oc_cmd, **kwargs)
 
         try:
             if out.startswith('hints = '):
