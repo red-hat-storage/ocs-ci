@@ -227,6 +227,9 @@ def pvc_factory(
     PVC. For custom PVC provide 'storageclass' parameter.
     """
     instances = []
+    active_project = None
+    active_rbd_storageclass = None
+    active_cephfs_storageclass = None
 
     def factory(
         interface=constants.CEPHBLOCKPOOL,
@@ -263,8 +266,24 @@ def pvc_factory(
             pvc_obj = PVC(**custom_data)
             pvc_obj.create(do_reload=False)
         else:
-            project = project or project_factory()
-            storageclass = storageclass or storageclass_factory(interface)
+            nonlocal active_project
+            nonlocal active_rbd_storageclass
+            nonlocal active_cephfs_storageclass
+
+            project = project or active_project or project_factory()
+            active_project = project
+            if interface == constants.CEPHBLOCKPOOL:
+                storageclass = (
+                    storageclass or active_rbd_storageclass
+                    or storageclass_factory(interface)
+                )
+                active_rbd_storageclass = storageclass
+            elif interface == constants.CEPHFILESYSTEM:
+                storageclass = (
+                    storageclass or active_cephfs_storageclass
+                    or storageclass_factory(interface)
+                )
+                active_cephfs_storageclass = storageclass
             pvc_size = f"{size}Gi" if size else None
 
             pvc_obj = helpers.create_pvc(
