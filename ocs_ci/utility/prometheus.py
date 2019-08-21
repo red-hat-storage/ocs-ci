@@ -110,7 +110,7 @@ class PrometheusAPI(object):
         )
         return response
 
-    def wait_for_alert(self, name, state='pending', timeout=1200, sleep=5):
+    def wait_for_alert(self, name, state=None, timeout=1200, sleep=5):
         """
         Search for alerts that have requested name and state.
 
@@ -118,7 +118,10 @@ class PrometheusAPI(object):
             name (str): Alert name.
             state (str): Alert state. If provided then there are searched
                 alerts with provided state. If not provided then alerts are
-                searched for absence of the alert.
+                searched for absence of the alert. Loop that looks for alerts
+                is broke when there are no alerts returned from API. This
+                is done because API is not returning any alerts that are not
+                in pending or firing state.
             timeout (int): Number of seconds for how long the alert should
                 be searched.
             sleep (int): Number of seconds to sleep in between alert search.
@@ -148,6 +151,8 @@ class PrometheusAPI(object):
                 if len(alerts) > 0:
                     break
             else:
+                # search for missing alerts, search is completed when
+                # there are no alerts with given name
                 alerts = [
                     alert
                     for alert
