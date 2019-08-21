@@ -52,5 +52,7 @@ class TestBucketIO:
         for obj_name in downloaded_files:
             copycommand = f"cp {obj_name} s3://{bucketname}/{obj_name}"
             logger.info('Writing objects to bucket')
-            assert 'Completed' in awscli_pod.exec_cmd_on_pod(command=base_command+copycommand+string_wrapper, out_yaml_format=False)
+            assert 'Completed' in awscli_pod.exec_cmd_on_pod(
+                command=base_command + copycommand + string_wrapper, out_yaml_format=False
+            )
             uploaded_objects.append(f's3://{bucketname}/{obj_name}')

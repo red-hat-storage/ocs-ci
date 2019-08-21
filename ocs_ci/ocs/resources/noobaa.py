@@ -13,7 +13,7 @@ class NooBaa(object):
     Wrapper class for NooBaa's S3 service
     """
 
-    s3_resource, ocp_resource, endpoint, access_key_id, access_key = (None,)*5
+    s3_resource, ocp_resource, endpoint, access_key_id, access_key = (None,) * 5
 
     def __init__(self):
         """
