@@ -11,16 +11,18 @@ from tests.helpers import create_unique_resource_name
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.skipif(condition=True, reason="NooBaa is not deployed")
+@pytest.mark.skipif(
+        condition=config.ENV_DATA['platform'] != 'AWS',
+        reason="Tests are not running on AWS deployed cluster"
+    )
 @tier1
 class TestBucketIO:
     """
     Test IO of a bucket
     """
 
-    @pytest.mark.skipif(
-        condition=config.ENV_DATA['platform'] != 'AWS',
-        reason="Tests are not running on AWS deployed cluster"
-    )
+
     def test_write_file_to_bucket(self, noobaa_obj, awscli_pod, created_buckets, uploaded_objects):
         """
         Test object IO using the S3 SDK
