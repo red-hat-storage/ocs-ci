@@ -277,8 +277,6 @@ class DisruptionBase(ManageTest):
             *[constants.CEPHFILESYSTEM, 'delete_pods', 'mds'],
             marks=pytest.mark.polarion_id("OCS-921")
         )
-
-
     ]
 )
 class TestDeleteResourceDuringPodPvcDeletion(DisruptionBase):
