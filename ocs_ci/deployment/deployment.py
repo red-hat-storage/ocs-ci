@@ -387,22 +387,7 @@ class Deployment(object):
             namespace=self.namespace
         )
         # patch gp2/thin storage class as 'non-default'
-        sc_to_patch = None
-        platform = config.ENV_DATA.get('platform')
-        if platform in ('aws', 'AWS'):
-            sc_to_patch = "gp2"
-        elif platform == "vsphere":
-            sc_to_patch = "thin"
-        else:
-            logger.info(f"Unsupported platform {platform} to patch")
-        if sc_to_patch:
-            logger.info(f"Patch {sc_to_patch} storageclass as non-default")
-            patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
-            run_cmd(
-                f"oc patch storageclass {sc_to_patch} "
-                f"-p {patch} "
-                f"--request-timeout=120s"
-            )
+        self.patch_default_sc_to_non_default()
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -420,3 +405,24 @@ class Deployment(object):
         Implement platform specif add_node in child class
         """
         raise NotImplementedError("add node functionality node implemented")
+
+    def patch_default_sc_to_non_default(self):
+        """
+        Patch storage class which comes as default with installation to non-default
+        """
+        sc_to_patch = None
+        platform = config.ENV_DATA.get('platform')
+        if platform in constants.AWS_PLATFORM:
+            sc_to_patch = constants.DEFAULT_SC_AWS
+        elif platform in constants.VSPHERE_PLATFORM:
+            sc_to_patch = constants.DEFAULT_SC_VSPHERE
+        else:
+            logger.info(f"Unsupported platform {platform} to patch")
+        if sc_to_patch:
+            logger.info(f"Patch {sc_to_patch} storageclass as non-default")
+            patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
+            run_cmd(
+                f"oc patch storageclass {sc_to_patch} "
+                f"-p {patch} "
+                f"--request-timeout=120s"
+            )
