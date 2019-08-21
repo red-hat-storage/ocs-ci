@@ -274,14 +274,14 @@ def pvc_factory(
             active_project = project
             if interface == constants.CEPHBLOCKPOOL:
                 storageclass = (
-                    storageclass or active_rbd_storageclass or
-                    storageclass_factory(interface)
+                    storageclass or active_rbd_storageclass
+                    or storageclass_factory(interface)
                 )
                 active_rbd_storageclass = storageclass
             elif interface == constants.CEPHFILESYSTEM:
                 storageclass = (
-                    storageclass or active_cephfs_storageclass or
-                    storageclass_factory(interface)
+                    storageclass or active_cephfs_storageclass
+                    or storageclass_factory(interface)
                 )
                 active_cephfs_storageclass = storageclass
             pvc_size = f"{size}Gi" if size else None
