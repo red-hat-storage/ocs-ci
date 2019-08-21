@@ -219,68 +219,68 @@ class DisruptionBase(ManageTest):
 
 @tier4
 @pytest.mark.parametrize(
-        argnames=['interface', 'operation_to_disrupt', 'resource_to_delete'],
-        argvalues=[
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL, 'delete_pvcs', 'mgr'],
-                marks=pytest.mark.polarion_id("OCS-922")
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL, 'delete_pods', 'mgr'],
-                marks=pytest.mark.polarion_id("OCS-923")
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL, 'delete_pvcs', 'mon'],
-                marks=pytest.mark.polarion_id("OCS-914")
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL, 'delete_pods', 'mon'],
-                marks=pytest.mark.polarion_id("OCS-911")
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL, 'delete_pvcs', 'osd'],
-                marks=pytest.mark.polarion_id("OCS-912")
-            ),
-            pytest.param(
-                *[constants.CEPHBLOCKPOOL, 'delete_pods', 'osd'],
-                marks=pytest.mark.polarion_id("OCS-913")
-            ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'mgr'],
-                marks=pytest.mark.polarion_id("OCS-920")
-            ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEM, 'delete_pods', 'mgr'],
-                marks=pytest.mark.polarion_id("OCS-915")
-            ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'mon'],
-                marks=pytest.mark.polarion_id("OCS-918")
-            ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEM, 'delete_pods', 'mon'],
-                marks=pytest.mark.polarion_id("OCS-919")
-            ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'osd'],
-                marks=pytest.mark.polarion_id("OCS-924")
-            ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEM, 'delete_pods', 'osd'],
-                marks=pytest.mark.polarion_id("OCS-917")
-            ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'mds'],
-                marks=pytest.mark.polarion_id("OCS-916")
-            ),
-            pytest.param(
-                *[constants.CEPHFILESYSTEM, 'delete_pods', 'mds'],
-                marks=pytest.mark.polarion_id("OCS-921")
-            )
+    argnames=['interface', 'operation_to_disrupt', 'resource_to_delete'],
+    argvalues=[
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'delete_pvcs', 'mgr'],
+            marks=pytest.mark.polarion_id("OCS-922")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'delete_pods', 'mgr'],
+            marks=pytest.mark.polarion_id("OCS-923")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'delete_pvcs', 'mon'],
+            marks=pytest.mark.polarion_id("OCS-914")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'delete_pods', 'mon'],
+            marks=pytest.mark.polarion_id("OCS-911")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'delete_pvcs', 'osd'],
+            marks=pytest.mark.polarion_id("OCS-912")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'delete_pods', 'osd'],
+            marks=pytest.mark.polarion_id("OCS-913")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'mgr'],
+            marks=pytest.mark.polarion_id("OCS-920")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'delete_pods', 'mgr'],
+            marks=pytest.mark.polarion_id("OCS-915")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'mon'],
+            marks=pytest.mark.polarion_id("OCS-918")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'delete_pods', 'mon'],
+            marks=pytest.mark.polarion_id("OCS-919")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'osd'],
+            marks=pytest.mark.polarion_id("OCS-924")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'delete_pods', 'osd'],
+            marks=pytest.mark.polarion_id("OCS-917")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'mds'],
+            marks=pytest.mark.polarion_id("OCS-916")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'delete_pods', 'mds'],
+            marks=pytest.mark.polarion_id("OCS-921")
+        )
 
 
-        ]
-    )
+    ]
+)
 class TestDeleteResourceDuringPodPvcDeletion(DisruptionBase):
     """
     Delete ceph/rook pod while deletion of PVCs/pods is progressing
