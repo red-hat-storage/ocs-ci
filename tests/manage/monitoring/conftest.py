@@ -21,8 +21,10 @@ def measure_operation(
 
     Args:
         operation (function): Function to be performed.
-        minimal_time (int): Minimal number of seconds to run, it can be more
-            based on given operation.
+        minimal_time (int): Minimal number of seconds to monitor a system.
+            If provided then monitoring of system continues even when
+            operation is finshed. If not specified then measurement is finished
+            when operation is complete.
         metadata (dict): This can contain dictionary object with information
             relevant to test (e.g. volume name, operating host, ...).
         measure_after (bool): Determine if time measurement is done before or
@@ -44,6 +46,7 @@ def measure_operation(
             alert_list (list): List to be populated with alerts
         """
         prometheus = PrometheusAPI()
+        logger.info('Logging of all prometheus alerts started')
         while info.get('run'):
             alerts_response = prometheus.get(
                 'alerts',
@@ -58,6 +61,7 @@ def measure_operation(
                     logger.info(f"Adding {alert} to alert list")
                     alert_list.append(alert)
             time.sleep(3)
+        logger.info('Logging of all prometheus alerts stopped')
 
     if not measure_after:
         start_time = time.time()
