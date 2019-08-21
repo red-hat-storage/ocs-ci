@@ -137,7 +137,8 @@ class PrometheusAPI(object):
                     'inhibited': False,
                 }
             )
-            assert alerts_response.ok, 'Prometheus API request failed'
+            msg = f"Request {alerts_response.request.url} failed"
+            assert alerts_response.ok, msg
             if state:
                 alerts = [
                     alert

@@ -55,7 +55,8 @@ def measure_operation(
                     'inhibited': False
                 }
             )
-            assert alerts_response.ok, 'Prometheus API request failed'
+            msg = f"Request {alerts_response.request.url} failed"
+            assert alerts_response.ok, msg
             for alert in alerts_response.json().get('data').get('alerts'):
                 if alert not in alert_list:
                     logger.info(f"Adding {alert} to alert list")
