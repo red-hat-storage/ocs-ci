@@ -24,6 +24,38 @@ def noobaa_obj():
 
 
 @pytest.fixture()
+def uploaded_objects(request, noobaa_obj, awscli_pod):
+
+    """
+    Deletes all objects that were created as part of the test
+
+    Returns:
+        An empty list of objects
+
+    """
+
+    uploaded_objects = []
+
+    base_command = f"sh -c \"AWS_ACCESS_KEY_ID={noobaa_obj.access_key_id} " \
+        f"AWS_SECRET_ACCESS_KEY={noobaa_obj.access_key} " \
+        f"AWS_DEFAULT_REGION=us-east-1 " \
+        f"aws s3 " \
+        f"--endpoint={noobaa_obj.endpoint} "
+
+    def object_cleanup():
+        for uploaded_filename in uploaded_objects:
+            # TODO: Add assert
+            logger.info(f'Deleting object {uploaded_filename}')
+            awscli_pod.exec_cmd_on_pod(
+                command=base_command+"rm "+uploaded_filename+"\""
+            )
+
+    request.addfinalizer(object_cleanup)
+
+    return uploaded_objects
+
+
+@pytest.fixture()
 def created_buckets(request, noobaa_obj):
     """
     Deletes all buckets that were created as part of the test
@@ -37,6 +69,7 @@ def created_buckets(request, noobaa_obj):
     def bucket_cleanup():
         for bucket in created_buckets:
             logger.info(f'Deleting bucket {bucket.name}')
+            bucket.object_versions.delete()
             noobaa_obj.s3_delete_bucket(bucket)
 
     request.addfinalizer(bucket_cleanup)
@@ -45,23 +78,30 @@ def created_buckets(request, noobaa_obj):
 
 
 @pytest.fixture()
-def uploaded_files(request, noobaa_obj, awscli_pod):
-    base_command = f"sh -c \"AWS_ACCESS_KEY_ID={noobaa_obj.access_key_id} " \
-        f"AWS_SECRET_ACCESS_KEY={noobaa_obj.access_key} " \
-        f"AWS_DEFAULT_REGION=us-east-1 " \
-        f"aws s3 " \
-        f"--endpoint={noobaa_obj.endpoint} "
+def created_pods(request):
+    """
 
-    for uploaded_filename in uploaded_files:
-        # TODO: Add assert
-        awscli_pod.exec_cmd_on_pod(
-            command=base_command+"rm "+uploaded_filename
-        )
+    Args:
+        request:
 
+    Returns:
+
+    """
+
+    created_pods = []
+
+    def pod_cleanup():
+        for pod in created_pods:
+            logger.info(f'Deleting pod {pod.name}')
+            pod.delete()
+
+    request.addfinalizer(pod_cleanup)
+
+    return created_pods
 
 
 @pytest.fixture()
-def awscli_pod(noobaa_obj):
+def awscli_pod(noobaa_obj, created_pods):
     """
     Returns a pod running AWS CLI
     Returns:
@@ -69,5 +109,7 @@ def awscli_pod(noobaa_obj):
     awscli_pod = helpers.create_pod(namespace='noobaa',
                                     pod_dict_path=constants.AWSCLI_POD_YAML)
     helpers.wait_for_resource_state(awscli_pod, constants.STATUS_RUNNING)
+
+    created_pods.append(awscli_pod)
 
     return awscli_pod
