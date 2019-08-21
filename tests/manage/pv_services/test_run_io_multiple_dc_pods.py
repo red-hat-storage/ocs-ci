@@ -4,6 +4,7 @@ import random
 from ocs_ci.ocs import constants
 
 from ocs_ci.framework.testlib import ManageTest, tier2
+from ocs_ci.ocs.resources import pod
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool,
     create_rbd_secret, create_pvcs, create_project,
@@ -64,11 +65,11 @@ class BaseRunIOMultipleDcPods(ManageTest):
         Run IO on multiple dc pods in parallel
         """
 
-        for pod in self.dc_pod_objs:
-            pod.run_io('fs', f'{self.pvc_size_int - 1}G')
+        for dc_pod_obj in self.dc_pod_objs:
+            dc_pod_obj.run_io('fs', f'{self.pvc_size_int - 1}G')
 
-        for pod in self.dc_pod_objs:
-            pod.get_fio_rw_iops(pod)
+        for dc_pod_obj in self.dc_pod_objs:
+            pod.get_fio_rw_iops(dc_pod_obj)
 
 
 @tier2
