@@ -112,13 +112,24 @@ class TestPVCDisruption(ManageTest):
     """
     @pytest.fixture()
     def storageclass(self, storageclass_factory, interface):
-        """"""
+        """
+        Create StorageClass for the test
+
+        Returns:
+            OCS: An OCS instance of the storage class
+        """
         sc_obj = storageclass_factory(interface=interface)
         return sc_obj
 
     @pytest.fixture()
     def namespace(self, project_factory):
-        """"""
+        """
+        Create a project for the test
+
+        Returns:
+            str: The newly created namespace
+
+        """
         proj_obj = project_factory()
         return proj_obj.namespace
 
