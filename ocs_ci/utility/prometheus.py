@@ -119,7 +119,7 @@ class PrometheusAPI(object):
             state (str): Alert state. If provided then there are searched
                 alerts with provided state. If not provided then alerts are
                 searched for absence of the alert. Loop that looks for alerts
-                is broke when there are no alerts returned from API. This
+                is broken when there are no alerts returned from API. This
                 is done because API is not returning any alerts that are not
                 in pending or firing state.
             timeout (int): Number of seconds for how long the alert should
