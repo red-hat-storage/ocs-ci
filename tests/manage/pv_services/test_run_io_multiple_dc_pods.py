@@ -68,14 +68,7 @@ class BaseRunIOMultipleDcPods(ManageTest):
             pod.run_io('fs', f'{self.pvc_size_int - 1}G')
 
         for pod in self.dc_pod_objs:
-            fio_result = pod.get_fio_results()
-            logger.info(f"IOPs after FIO for pod {pod.name}:")
-            logger.info(
-                f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
-            )
-            logger.info(
-                f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
-            )
+            pod.get_fio_rw_iops(pod)
 
 
 @tier2
