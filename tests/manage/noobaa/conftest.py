@@ -14,7 +14,7 @@ def noobaa_obj():
     """
     Returns a NooBaa resource that's connected to the S3 endpoint
     Returns:
-        noobaa_obj: A NooBaa resource
+        NooBaa: A NooBaa resource
 
     """
 
@@ -28,17 +28,19 @@ def uploaded_objects(request, noobaa_obj, awscli_pod):
     Deletes all objects that were created as part of the test
 
     Returns:
-        An empty list of objects
+        list: An empty list of objects
 
     """
 
     uploaded_objects = []
 
-    base_command = f"sh -c \"AWS_ACCESS_KEY_ID={noobaa_obj.access_key_id} " \
-        f"AWS_SECRET_ACCESS_KEY={noobaa_obj.access_key} " \
-        f"AWS_DEFAULT_REGION={noobaa_obj.region} " \
-        f"aws s3 " \
+    base_command = (
+        f"sh -c \"AWS_ACCESS_KEY_ID={noobaa_obj.access_key_id} "
+        f"AWS_SECRET_ACCESS_KEY={noobaa_obj.access_key} "
+        f"AWS_DEFAULT_REGION={noobaa_obj.region} "
+        f"aws s3 "
         f"--endpoint={noobaa_obj.endpoint} "
+    )
 
     def object_cleanup():
         for uploaded_filename in uploaded_objects:
@@ -58,7 +60,7 @@ def created_buckets(request, noobaa_obj):
     Deletes all buckets that were created as part of the test
 
     Returns:
-        An empty list of buckets
+        list: An empty list of buckets
 
     """
 
@@ -79,7 +81,7 @@ def created_pods(request):
     Deletes all pods that were created as part of the test
 
     Returns:
-        An empty list of pods
+        list: An empty list of pods
 
     """
 
@@ -99,7 +101,7 @@ def awscli_pod(noobaa_obj, created_pods):
     Creates a new AWSCLI pod for relaying commands
 
     Returns:
-        A Pod() running the AWS CLI
+        pod: A pod running the AWS CLI
     """
 
     awscli_pod = helpers.create_pod(namespace='noobaa',

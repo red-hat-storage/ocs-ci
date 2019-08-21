@@ -69,7 +69,7 @@ class NooBaa(object):
     def s3_list_all_bucket_names(self):
         """
         Returns:
-            A list of all bucket names
+            list: A list of all bucket names
 
         """
         return [bucket.name for bucket in self.s3_resource.buckets.all()]
@@ -77,14 +77,14 @@ class NooBaa(object):
     def s3_list_all_objects_in_bucket(self, bucketname):
         """
         Returns:
-            A list of all bucket objects
+            list: A list of all bucket objects
         """
         return [obj for obj in self.s3_resource.Bucket(bucketname).objects.all()]
 
     def s3_get_all_buckets(self):
         """
         Returns:
-            A list of all s3.Bucket objects
+            list: A list of all s3.Bucket objects
 
         """
         return [bucket for bucket in self.s3_resource.buckets.all()]

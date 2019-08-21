@@ -26,11 +26,13 @@ class TestBucketIO:
         Test object IO using the S3 SDK
         """
 
-        base_command = f"sh -c \"AWS_ACCESS_KEY_ID={noobaa_obj.access_key_id} " \
-            f"AWS_SECRET_ACCESS_KEY={noobaa_obj.access_key} " \
-            f"AWS_DEFAULT_REGION={noobaa_obj.region} " \
-            f"aws s3 " \
+        base_command = (
+            f"sh -c \"AWS_ACCESS_KEY_ID={noobaa_obj.access_key_id} "
+            f"AWS_SECRET_ACCESS_KEY={noobaa_obj.access_key} "
+            f"AWS_DEFAULT_REGION={noobaa_obj.region} "
+            f"aws s3 "
             f"--endpoint={noobaa_obj.endpoint} "
+        )
         string_wrapper = "\""
 
         # Retrieve a list of all objects on the test-objects bucket and downloads them to the pod
