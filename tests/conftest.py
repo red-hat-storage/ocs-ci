@@ -348,7 +348,6 @@ def pod_factory(request, pvc_factory):
         """
         if custom_data:
             pod_obj = helpers.create_resource(**custom_data)
-            instances.append(pod_obj)
         else:
             pvc = pvc or pvc_factory(interface=interface)
 
@@ -358,7 +357,7 @@ def pod_factory(request, pvc_factory):
                 interface_type=interface,
             )
             assert pod_obj, "Failed to create PVC"
-            instances.append(pod_obj)
+        instances.append(pod_obj)
         if status:
             helpers.wait_for_resource_state(pod_obj, status)
         pod_obj.pvc = pvc
