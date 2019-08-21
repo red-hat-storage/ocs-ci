@@ -13,7 +13,7 @@ class NooBaa(object):
     Wrapper class for NooBaa's S3 service
     """
 
-    s3_resource, ocp_resource, endpoint, access_key_id, access_key = (None,) * 5
+    s3_resource, ocp_resource, endpoint, region, access_key_id, access_key = (None,) * 6
 
     def __init__(self):
         """
@@ -25,6 +25,7 @@ class NooBaa(object):
             results.get('items')[0].get('status').get('services')
             .get('serviceS3').get('externalDNS')[0].split(':')[1]
         )
+        self.region = self.endpoint.split('.')[1]
         creds_secret_name = (
             results.get('items')[0].get('status').get('accounts')
             .get('admin').get('secretRef').get('name')

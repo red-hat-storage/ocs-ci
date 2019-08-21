@@ -24,7 +24,6 @@ def noobaa_obj():
 
 @pytest.fixture()
 def uploaded_objects(request, noobaa_obj, awscli_pod):
-
     """
     Deletes all objects that were created as part of the test
 
@@ -37,7 +36,7 @@ def uploaded_objects(request, noobaa_obj, awscli_pod):
 
     base_command = f"sh -c \"AWS_ACCESS_KEY_ID={noobaa_obj.access_key_id} " \
         f"AWS_SECRET_ACCESS_KEY={noobaa_obj.access_key} " \
-        f"AWS_DEFAULT_REGION=us-east-1 " \
+        f"AWS_DEFAULT_REGION={noobaa_obj.region} " \
         f"aws s3 " \
         f"--endpoint={noobaa_obj.endpoint} "
 

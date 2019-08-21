@@ -28,19 +28,19 @@ class TestBucketIO:
 
         base_command = f"sh -c \"AWS_ACCESS_KEY_ID={noobaa_obj.access_key_id} " \
             f"AWS_SECRET_ACCESS_KEY={noobaa_obj.access_key} " \
-            f"AWS_DEFAULT_REGION=us-east-1 " \
+            f"AWS_DEFAULT_REGION={noobaa_obj.region} " \
             f"aws s3 " \
             f"--endpoint={noobaa_obj.endpoint} "
         string_wrapper = "\""
 
         # Retrieve a list of all objects on the test-objects bucket and downloads them to the pod
         downloaded_files = []
-        public_s3 = boto3.resource('s3', region_name='us-east-2')
+        public_s3 = boto3.resource('s3', region_name=noobaa_obj.region)
         for obj in public_s3.Bucket(constants.TEST_FILES_BUCKET).objects.all():
             # Download test object(s)
             logger.info('Downloading test files')
             awscli_pod.exec_cmd_on_pod(
-                command=f'wget https://{constants.TEST_FILES_BUCKET}.s3.us-east-2.amazonaws.com/{obj.key}'
+                command=f'wget https://{constants.TEST_FILES_BUCKET}.s3.{noobaa_obj.region}.amazonaws.com/{obj.key}'
             )
             downloaded_files.append(obj.key)
 
