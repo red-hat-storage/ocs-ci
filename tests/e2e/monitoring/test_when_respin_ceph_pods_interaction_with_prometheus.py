@@ -42,12 +42,18 @@ def test_fixture(request, storageclass_factory):
     pvc_objs = [helpers.create_pvc(
         sc_name=sc.name, namespace=each_namespace.namespace
     ) for each_namespace in namespace_list]
+    for pvc_obj in pvc_objs:
+        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+        pvc_obj.reload()
 
     # Create app pods
     pod_objs = [helpers.create_pod(
         interface_type=constants.CEPHBLOCKPOOL,
         pvc_name=each_pvc.name, namespace=each_pvc.namespace
     ) for each_pvc in pvc_objs]
+    for pod_obj in pod_objs:
+        helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
+        pod_obj.reload()
 
     # Check for the created pvc metrics on prometheus pod
     for pvc_obj in pvc_objs:
@@ -94,13 +100,20 @@ class TestRespinCephPodsAndInteractionWithPrometheus(E2ETest):
         pvcs = [helpers.create_pvc(
             sc_name=sc.name, namespace=each_namespace.namespace
         ) for each_namespace in namespaces]
+        for pvc_obj in pvcs:
+            helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+            pvc_obj.reload()
         pvc_objs.extend(pvcs)
 
         # Create app pods after the respinning ceph pods
-        pod_objs.extend(helpers.create_pod(
+        pods = [helpers.create_pod(
             interface_type=constants.CEPHBLOCKPOOL,
             pvc_name=each_pvc.name, namespace=each_pvc.namespace
-        ) for each_pvc in pvcs)
+        ) for each_pvc in pvcs]
+        for pod_obj in pods:
+            helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
+            pod_obj.reload()
+        pod_objs.extend(pods)
 
         # Check for the created pvc metrics on prometheus pod
         for pvc_obj in pvcs:

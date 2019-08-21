@@ -117,7 +117,7 @@ def check_pvcdata_collected_on_prometheus(pvc_name):
         pvc_name (str): Name of the pvc
 
     Returns:
-        True on success, raise exception on failures
+        True on success, raises UnexpectedBehaviour on failures
 
     """
     logger.info(
