@@ -13,15 +13,14 @@ logger = logging.getLogger(__name__)
 
 @pytest.mark.skipif(condition=True, reason="NooBaa is not deployed")
 @pytest.mark.skipif(
-        condition=config.ENV_DATA['platform'] != 'AWS',
-        reason="Tests are not running on AWS deployed cluster"
+    condition=config.ENV_DATA['platform'] != 'AWS',
+    reason="Tests are not running on AWS deployed cluster"
     )
 @tier1
 class TestBucketIO:
     """
     Test IO of a bucket
     """
-
 
     def test_write_file_to_bucket(self, noobaa_obj, awscli_pod, created_buckets, uploaded_objects):
         """
