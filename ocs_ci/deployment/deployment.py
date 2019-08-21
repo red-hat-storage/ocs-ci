@@ -411,13 +411,12 @@ class Deployment(object):
         Patch storage class which comes as default with installation to non-default
         """
         sc_to_patch = None
-        platform = config.ENV_DATA.get('platform')
-        if platform in constants.AWS_PLATFORM:
+        if self.platform.lower() == constants.AWS_PLATFORM:
             sc_to_patch = constants.DEFAULT_SC_AWS
-        elif platform in constants.VSPHERE_PLATFORM:
+        elif self.platform.lower() == constants.VSPHERE_PLATFORM:
             sc_to_patch = constants.DEFAULT_SC_VSPHERE
         else:
-            logger.info(f"Unsupported platform {platform} to patch")
+            logger.info(f"Unsupported platform {self.platform} to patch")
         if sc_to_patch:
             logger.info(f"Patch {sc_to_patch} storageclass as non-default")
             patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
