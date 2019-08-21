@@ -333,11 +333,12 @@ class Deployment(object):
             )
 
         if config.RUN['cli_params']['monitoring']:
-            # Create a storage class and secrets
+            # Create a pool, secrets and sc
             secret_obj = helpers.create_secret(interface_type=constants.CEPHBLOCKPOOL)
+            cbj_obj = helpers.create_ceph_block_pool()
             sc_obj = helpers.create_storage_class(
                 interface_type=constants.CEPHBLOCKPOOL,
-                interface_name=constants.DEFAULT_BLOCKPOOL,
+                interface_name=cbj_obj.name,
                 secret_name=secret_obj.name
             )
 
@@ -356,7 +357,7 @@ class Deployment(object):
             time.sleep(waiting_time)
 
             # Validate the pods are respinned and in running state
-            assert validate_pods_are_respinned_and_running_state(
+            validate_pods_are_respinned_and_running_state(
                 pods_list
             )
 

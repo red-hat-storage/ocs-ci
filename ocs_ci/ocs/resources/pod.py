@@ -804,10 +804,7 @@ def validate_pods_are_respinned_and_running_state(pod_objs_list):
 
     """
     for pod in pod_objs_list:
-        _rc = helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING)
-        if not _rc:
-            logger.error(f"failed to reach pod {pod.name} desired status {constants.STATUS_RUNNING}")
-            return False
+        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING)
 
     for pod in pod_objs_list:
         pod_obj = pod.get()
