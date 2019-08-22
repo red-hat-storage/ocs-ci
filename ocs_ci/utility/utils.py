@@ -373,33 +373,27 @@ def run_cmd(cmd, **kwargs):
         (str) Decoded stdout of command
 
     """
-    try:
-        quiet_state = quiet_logs(quiet=kwargs.pop('quiet', False))
-        log.info(f"Executing command: {cmd}")
-        if isinstance(cmd, str):
-            cmd = shlex.split(cmd)
-        r = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            stdin=subprocess.PIPE,
-            **kwargs
+    quiet_state = quiet_logs(quiet=kwargs.pop('quiet', False))
+    log.info(f"Executing command: {cmd}")
+    if isinstance(cmd, str):
+        cmd = shlex.split(cmd)
+    r = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.PIPE,
+        **kwargs
+    )
+    log.debug(f"Command output: {r.stdout.decode()}")
+    if r.stderr and not r.returncode:
+        log.warning(f"Command warning:: {r.stderr.decode()}")
+    logging.disable(logging.NOTSET)
+    if r.returncode:
+        raise CommandFailed(
+            f"Error during execution of command: {'quiet command' if quiet_state else cmd}."
+            f"\nError is {r.stderr.decode()}"
         )
-        log.debug(f"Command output: {r.stdout.decode()}")
-        if r.stderr and not r.returncode:
-            log.warning(f"Command warning:: {r.stderr.decode()}")
-        logging.disable(logging.NOTSET)
-        if r.returncode:
-            raise CommandFailed(
-                f"Error during execution of command: {'quiet command' if quiet_state else cmd}."
-                f"\nError is {r.stderr.decode()}"
-            )
-        return r.stdout.decode()
-    except Exception as e:
-        logging.disable(logging.NOTSET)
-        log.error(f"Exception while executing command - {e}")
-    finally:
-        logging.disable(logging.NOTSET)
+    return r.stdout.decode()
 
 
 def download_file(url, filename):
