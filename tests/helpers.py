@@ -5,6 +5,8 @@ import logging
 import re
 import datetime
 
+from ocs_ci.ocs.ocp import OCP
+
 from uuid import uuid4
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs import constants, defaults, ocp
@@ -86,7 +88,7 @@ def wait_for_resource_state(resource, state, timeout=60):
 def create_pod(
     interface_type=None, pvc_name=None,
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-    node_name=None, pod_dict_path=None
+    node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False
 ):
     """
     Create a pod
@@ -98,6 +100,8 @@ def create_pod(
         namespace (str): The namespace for the new resource creation
         node_name (str): The name of specific node to schedule the pod
         pod_dict_path (str): YAML path for the pod
+        sa_name (str): Serviceaccount name
+        dc_deployment (bool): True if creating pod as deploymentconfig
 
     Returns:
         Pod: A Pod instance
@@ -111,29 +115,55 @@ def create_pod(
     else:
         pod_dict = pod_dict_path if pod_dict_path else constants.CSI_CEPHFS_POD_YAML
         interface = constants.CEPHFS_INTERFACE
-
+    if dc_deployment:
+        pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
     pod_data = templating.load_yaml_to_dict(pod_dict)
-    pod_data['metadata']['name'] = create_unique_resource_name(
+    pod_name = create_unique_resource_name(
         f'test-{interface}', 'pod'
     )
+    pod_data['metadata']['name'] = pod_name
     pod_data['metadata']['namespace'] = namespace
+    if dc_deployment:
+        pod_data['metadata']['labels']['app'] = pod_name
+        pod_data['spec']['template']['metadata']['labels']['name'] = pod_name
+
     if pvc_name:
-        pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
+        if dc_deployment:
+            pod_data['spec']['template']['spec']['volumes'][0][
+                'persistentVolumeClaim'
+            ]['claimName'] = pvc_name
+        else:
+            pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
 
     if node_name:
         pod_data['spec']['nodeName'] = node_name
     else:
         if 'nodeName' in pod_data.get('spec'):
             del pod_data['spec']['nodeName']
+    if sa_name and dc_deployment:
+        pod_data['spec']['template']['spec']['serviceAccountName'] = sa_name
+    if dc_deployment:
+        ocs_obj = create_resource(**pod_data)
+        logger.info(ocs_obj.name)
+        assert (ocp.OCP(kind='pod', namespace=namespace)).wait_for_resource(
+            condition=constants.STATUS_COMPLETED,
+            resource_name=pod_name + '-1-deploy',
+            resource_count=0, timeout=180, sleep=3
+        )
+        dpod_list = pod.get_all_pods(namespace=namespace)
+        for dpod in dpod_list:
+            if '-1-deploy' not in dpod.name:
+                if pod_name in dpod.name:
+                    return dpod
+    else:
+        pod_obj = pod.Pod(**pod_data)
+        pod_name = pod_data.get('metadata').get('name')
+        created_resource = pod_obj.create(do_reload=do_reload)
+        assert created_resource, (
+            f"Failed to create resource {pod_name}"
+        )
 
-    pod_obj = pod.Pod(**pod_data)
-    pod_name = pod_data.get('metadata').get('name')
-    created_resource = pod_obj.create(do_reload=do_reload)
-    assert created_resource, (
-        f"Failed to create resource {pod_name}"
-    )
-
-    return pod_obj
+        return pod_obj
 
 
 def create_project():
@@ -823,3 +853,72 @@ def verify_volume_deleted_in_backend(interface, image_uuid, pool_name=None):
         f"in backend"
     )
     return True
+
+
+def create_serviceaccount(namespace):
+    """
+    Create a Serviceaccount
+
+    Args:
+        namespace (str): The namespace for the serviceaccount creation
+
+    Returns:
+        OCS: An OCS instance for the service_account
+    """
+
+    service_account_data = templating.load_yaml_to_dict(
+        constants.SERVICE_ACCOUNT_YAML
+    )
+    service_account_data['metadata']['name'] = create_unique_resource_name(
+        'sa', 'serviceaccount'
+    )
+    service_account_data['metadata']['namespace'] = namespace
+
+    return create_resource(**service_account_data)
+
+
+def add_scc_policy(sa_name, namespace):
+    """
+    Adding ServiceAccount to scc privileged
+
+    Args:
+        sa_name (str): ServiceAccount name
+        namespace (str): The namespace for the scc_policy creation
+
+    """
+    ocp = OCP()
+    out = ocp.exec_oc_cmd(
+        command=f"adm policy add-scc-to-user privileged system:serviceaccount:{namespace}:{sa_name}",
+        out_yaml_format=False
+    )
+
+    logger.info(out)
+
+
+def remove_scc_policy(sa_name, namespace):
+    """
+    Removing ServiceAccount from scc privileged
+
+    Args:
+        sa_name (str): ServiceAccount name
+        namespace (str): The namespace for the scc_policy deletion
+
+    """
+    ocp = OCP()
+    out = ocp.exec_oc_cmd(
+        command=f"adm policy remove-scc-from-user privileged system:serviceaccount:{namespace}:{sa_name}",
+        out_yaml_format=False
+    )
+
+    logger.info(out)
+
+
+def delete_deploymentconfig(pod_obj):
+    """
+    Delete deploymentconfig
+
+    Args:
+         pod_obj (object): Pod object
+    """
+    dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG)
+    dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
