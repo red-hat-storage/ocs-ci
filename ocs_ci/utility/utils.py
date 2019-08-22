@@ -362,9 +362,10 @@ def mask_secrets(cmd, secrets):
 
     Returns:
         cmd (str): The censored version of cmd
+
     """
     for secret in secrets:
-        cmd = cmd.replace(secret, '*'*len(secret))
+        cmd = cmd.replace(secret, '*'*5)
     return cmd
 
 
@@ -386,7 +387,8 @@ def run_cmd(cmd, **kwargs):
         (str) Decoded stdout of command
 
     """
-    masked_cmd = mask_secrets(cmd, kwargs.pop('secrets', []))
+    secrets = kwargs.pop('secrets', [])
+    masked_cmd = mask_secrets(cmd, secrets)
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str):
         cmd = shlex.split(cmd)
@@ -399,13 +401,13 @@ def run_cmd(cmd, **kwargs):
     )
     log.debug(f"Command output: {r.stdout.decode()}")
     if r.stderr and not r.returncode:
-        log.warning(f"Command warning:: {r.stderr.decode()}")
+        log.warning(f"Command warning:: {mask_secrets(r.stderr.decode(), secrets)}")
     if r.returncode:
         raise CommandFailed(
             f"Error during execution of command: {masked_cmd}."
-            f"\nError is {r.stderr.decode()}"
+            f"\nError is {mask_secrets(r.stderr.decode(), secrets}}"
         )
-    return r.stdout.decode()
+    return mask_secrets(r.stdout.decode(), secrets)
 
 
 def download_file(url, filename):
