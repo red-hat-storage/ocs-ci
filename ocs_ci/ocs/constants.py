@@ -35,6 +35,15 @@ TEMPLATE_DEPLOYMENT_EO = os.path.join(
 TEMPLATE_DEPLOYMENT_CLO = os.path.join(
     TEMPLATE_DEPLOYMENT_LOGGING, "clusterlogging_operator"
 )
+TEMPLATE_DEPLOYMENT_STREAM = os.path.join(
+    TEMPLATE_DIR, "openshift-infra/amq"
+)
+TEMPLATE_DEPLOYMENT_CS = os.path.join(
+    TEMPLATE_DEPLOYMENT_STREAM, "install/cluster-operator"
+)
+TEMPLATE_DEPLOYMENT_CP = os.path.join(
+    TEMPLATE_DEPLOYMENT_STREAM, "examples/templates/cluster-operator"
+)
 
 # Statuses
 STATUS_PENDING = 'Pending'
@@ -179,6 +188,16 @@ CL_SUB_YAML = os.path.join(
 )
 CL_INSTANCE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_CLO, "instance.yaml"
+)
+# AMQ streams cluster operator deployment yamls
+KAFKA_PER_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_STREAM, "kafka-persistent.yaml"
+)
+KAFCON_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_STREAM, "kafka-connect.yaml"
+)
+KAFBRI_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_STREAM, "kafka-bridge.yaml"
 )
 
 # Workload-io yamls
