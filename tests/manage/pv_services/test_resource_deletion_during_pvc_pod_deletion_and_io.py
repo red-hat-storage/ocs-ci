@@ -71,9 +71,9 @@ class DisruptionBase(ManageTest):
         num_of_pods = 10
         num_of_io_pods = 5
         pods_to_delete = self.pod_objs[:num_of_pods]
-        io_pods = self.pod_objs[num_of_pods:num_of_pods+num_of_io_pods]
-        pods_for_pvc = self.pod_objs[num_of_pods+num_of_io_pods:]
-        pvcs_to_delete = self.pvc_objs[num_of_pods+num_of_io_pods:]
+        io_pods = self.pod_objs[num_of_pods:num_of_pods + num_of_io_pods]
+        pods_for_pvc = self.pod_objs[num_of_pods + num_of_io_pods:]
+        pvcs_to_delete = self.pvc_objs[num_of_pods + num_of_io_pods:]
         pod_functions = {
             'mds': get_mds_pods, 'mon': get_mon_pods, 'mgr': get_mgr_pods,
             'osd': get_osd_pods
@@ -354,7 +354,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(DisruptionBase):
         setup_base
     ):
         """
-        Delete ceph/rook pod while PVCs deletion, pod deletion and IO are
+        Delete ceph/rook pod while PVCs deletion, pods deletion and IO are
         progressing
         """
         self.pvc_objs, self.pod_objs = setup_base
