@@ -625,3 +625,73 @@ def interface_iterate(request):
 
     """
     return request.param['interface']
+
+
+@pytest.fixture()
+def multi_pvc_factory(
+    storageclass_factory,
+    project_factory,
+    pvc_factory
+):
+    """
+    Create a Persistent Volume Claims factory. Calling this fixture creates a
+    set of new PVCs.
+    """
+    def factory(
+        interface=constants.CEPHBLOCKPOOL,
+        project=None,
+        storageclass=None,
+        size=None,
+        access_mode=constants.ACCESS_MODE_RWO,
+        status=constants.STATUS_BOUND,
+        num_of_pvc=1,
+        wait_each=False
+    ):
+        """
+        Args:
+            interface (str): CephBlockPool or CephFileSystem. This decides
+                whether a RBD based or CephFS resource is created.
+                RBD is default.
+            project (object): ocs_ci.ocs.resources.ocs.OCS instance
+                of 'Project' kind.
+            storageclass (object): ocs_ci.ocs.resources.ocs.OCS instance
+                of 'StorageClass' kind.
+            size (int): The requested size for the PVC
+            access_mode (str): ReadWriteOnce, ReadOnlyMany or ReadWriteMany.
+                This decides the access mode to be used for the PVC.
+                ReadWriteOnce is default.
+            status (str): If provided then factory waits for object to reach
+                desired state.
+            num_of_pvc(int): Number of PVCs to be created
+            wait_each(bool): True to wait for each PVC to be in status 'status'
+                before creating next PVC, False otherwise
+
+        Returns:
+            list: objects of PVC class.
+        """
+        pvc_list = []
+        if wait_each:
+            status_tmp = status
+        else:
+            status_tmp = ""
+
+        project = project or project_factory()
+        storageclass = storageclass or storageclass_factory(interface)
+
+        for _ in range(num_of_pvc):
+            pvc_obj = pvc_factory(
+                interface=interface,
+                project=project,
+                storageclass=storageclass,
+                size=size,
+                access_mode=access_mode,
+                status=status_tmp
+            )
+            pvc_list.append(pvc_obj)
+
+        if not wait_each:
+            for pvc_obj in pvc_list:
+                helpers.wait_for_resource_state(pvc_obj, status)
+        return pvc_list
+
+    return factory
