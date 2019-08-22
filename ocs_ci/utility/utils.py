@@ -377,7 +377,7 @@ def run_cmd(cmd, **kwargs):
         cmd (str): command to run
 
     Keyword Args:
-        secrets (list): The list of secrets to be masked with asterisk
+        secrets (list): The list of secrets to be masked with asterisks
             This kwarg is popped in order to not interfere with subprocess.run(**kwargs)
 
     Raises:
