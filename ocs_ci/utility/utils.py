@@ -397,7 +397,7 @@ def run_cmd(cmd, **kwargs):
         return r.stdout.decode()
     except Exception as e:
         logging.disable(logging.NOTSET)
-        log.error(f"Error executing command, exception is {e}")
+        log.error(f"Exception while executing command - {e}")
     finally:
         logging.disable(logging.NOTSET)
 
