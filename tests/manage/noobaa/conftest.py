@@ -32,7 +32,7 @@ def uploaded_objects(request, noobaa_obj, awscli_pod):
 
     """
 
-    uploaded_objects = []
+    uploaded_objects_paths = []
 
     base_command = (
         f"sh -c \"AWS_ACCESS_KEY_ID={noobaa_obj.access_key_id} "
@@ -43,7 +43,7 @@ def uploaded_objects(request, noobaa_obj, awscli_pod):
     )
 
     def object_cleanup():
-        for uploaded_filename in uploaded_objects:
+        for uploaded_filename in uploaded_objects_paths:
             # TODO: Add assert
             logger.info(f'Deleting object {uploaded_filename}')
             awscli_pod.exec_cmd_on_pod(
@@ -51,7 +51,7 @@ def uploaded_objects(request, noobaa_obj, awscli_pod):
                 secrets=[noobaa_obj.access_key_id, noobaa_obj.access_key, noobaa_obj.endpoint]
             )
     request.addfinalizer(object_cleanup)
-    return uploaded_objects
+    return uploaded_objects_paths
 
 
 @pytest.fixture()
@@ -64,15 +64,15 @@ def created_buckets(request, noobaa_obj):
 
     """
 
-    created_buckets = []
+    created_buckets_names = []
 
     def bucket_cleanup():
-        for bucket in created_buckets:
+        for bucket in created_buckets_names:
             logger.info(f'Deleting bucket {bucket.name}')
             bucket.object_versions.delete()
             noobaa_obj.s3_delete_bucket(bucket)
     request.addfinalizer(bucket_cleanup)
-    return created_buckets
+    return created_buckets_names
 
 
 @pytest.fixture()
@@ -85,14 +85,14 @@ def created_pods(request):
 
     """
 
-    created_pods = []
+    created_pods_objects = []
 
     def pod_cleanup():
-        for pod in created_pods:
+        for pod in created_pods_objects:
             logger.info(f'Deleting pod {pod.name}')
             pod.delete()
     request.addfinalizer(pod_cleanup)
-    return created_pods
+    return created_pods_objects
 
 
 @pytest.fixture()
@@ -104,8 +104,8 @@ def awscli_pod(noobaa_obj, created_pods):
         pod: A pod running the AWS CLI
     """
 
-    awscli_pod = helpers.create_pod(namespace='noobaa',
-                                    pod_dict_path=constants.AWSCLI_POD_YAML)
-    helpers.wait_for_resource_state(awscli_pod, constants.STATUS_RUNNING)
-    created_pods.append(awscli_pod)
-    return awscli_pod
+    awscli_pod_obj = helpers.create_pod(namespace='noobaa',
+                                        pod_dict_path=constants.AWSCLI_POD_YAML)
+    helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
+    created_pods.append(awscli_pod_obj)
+    return awscli_pod_obj
