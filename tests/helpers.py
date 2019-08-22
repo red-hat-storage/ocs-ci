@@ -92,7 +92,8 @@ def wait_for_resource_state(resource, state, timeout=60):
 def create_pod(
     interface_type=None, pvc_name=None,
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-    node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False
+    node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
+    raw_block_pv=False
 ):
     """
     Create a pod
@@ -106,7 +107,7 @@ def create_pod(
         pod_dict_path (str): YAML path for the pod
         sa_name (str): Serviceaccount name
         dc_deployment (bool): True if creating pod as deploymentconfig
-
+        raw_block_pv (bool): True for creating raw block pv based pod, False otherwise
     Returns:
         Pod: A Pod instance
 
@@ -138,6 +139,10 @@ def create_pod(
             ]['claimName'] = pvc_name
         else:
             pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
+
+    if interface_type == constants.CEPHBLOCKPOOL and raw_block_pv:
+        pod_data['spec']['containers'][0]['volumeDevices'][0]['devicePath'] = '/dev/block'
+        pod_data['spec']['containers'][0]['volumeDevices'][0]['name'] = pod_data['spec']['volumes'][0]['name']
 
     if node_name:
         pod_data['spec']['nodeName'] = node_name
@@ -380,8 +385,6 @@ def create_pvc(
         do_reload (bool): True for wait for reloading PVC after its creation, False otherwise
         access_mode (str): The access mode to be used for the PVC
         volume_mode (str): Volume mode for rbd RWX pvc i.e. 'Block'
-
-    Returns:
         PVC: PVC instance
     """
     pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
@@ -690,8 +693,15 @@ def get_all_pvs():
     )
     return ocp_pv_obj.get()
 
+# Todo
 
-@retry(AssertionError, tries=10, delay=5, backoff=1)
+
+'''
+To revert the counts of tries and delay after bz1726266
+'''
+
+
+@retry(AssertionError, tries=20, delay=10, backoff=1)
 def validate_pv_delete(pv_name):
     """
     validates if pv is deleted after pvc deletion
