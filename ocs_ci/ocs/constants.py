@@ -37,6 +37,14 @@ TEMPLATE_DEPLOYMENT_EO = os.path.join(
 TEMPLATE_DEPLOYMENT_CLO = os.path.join(
     TEMPLATE_DEPLOYMENT_LOGGING, "clusterlogging_operator"
 )
+DATA_DIR = os.path.join(TOP_DIR, 'data')
+ROOK_REPO_DIR = os.path.join(DATA_DIR, 'rook')
+ROOK_EXAMPLES_DIR = os.path.join(
+    ROOK_REPO_DIR, "cluster", "examples", "kubernetes", "ceph"
+)
+ROOK_CSI_RBD_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "rbd")
+ROOK_CSI_CEPHFS_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "cephfs")
+
 
 # Statuses
 STATUS_PENDING = 'Pending'
@@ -73,6 +81,7 @@ SECRET = "Secret"
 NAMESPACE = 'Namespace'
 IGNORE_SC_GP2 = "gp2"
 IGNORE_SC_FLEX = "rook-ceph-block"
+ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 
 
 DEFAULT_BLOCKPOOL = 'rbd'
@@ -114,8 +123,16 @@ CSI_RBD_STORAGECLASS_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "storageclass.yaml"
 )
 
+ROOK_CSI_RBD_STORAGECLASS_YAML = os.path.join(
+    ROOK_CSI_RBD_DIR, "storageclass.yaml"
+)
+
 CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(
     TEMPLATE_CSI_FS_DIR, "storageclass.yaml"
+)
+
+ROOK_CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(
+    ROOK_CSI_CEPHFS_DIR, "storageclass.yaml"
 )
 
 CSI_PVC_YAML = os.path.join(

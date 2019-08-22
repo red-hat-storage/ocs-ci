@@ -12,7 +12,7 @@ config.yaml
 .vscode
 *.bak
 openshift-install*
-data/pull-secret
 bin/
 dist
 .coverage
+data/*

@@ -1137,3 +1137,31 @@ def ceph_health_check(namespace=None):
         raise CephHealthException(
             f"Ceph cluster health is not OK. Health: {health}"
         )
+
+
+def get_rook_repo(branch='master', to_checkout=None):
+    """
+    Clone and checkout the rook repository to specific branch/commit.
+
+    Args:
+        branch (str): Branch name to checkout
+        to_checkout (str): Commit id or tag to checkout
+
+    """
+    cwd = constants.ROOK_REPO_DIR
+    if not os.path.isdir(cwd):
+        log.info(f"Cloning rook repository into {cwd}.")
+        run_cmd(f"git clone {constants.ROOK_REPOSITORY} {cwd}")
+    else:
+        log.info(
+            f"The rook directory {cwd} already exists, ocs-ci will skip the "
+            f"clone of rook repository."
+        )
+        log.info("Fetching latest changes from rook repository.")
+        run_cmd("git fetch --all", cwd=cwd)
+    log.info(f"Checkout rook repository to specific branch: {branch}")
+    run_cmd(f"git checkout {branch}", cwd=cwd)
+    log.info(f"Reset branch: {branch} with latet changes")
+    run_cmd(f"git reset --hard origin/{branch}", cwd=cwd)
+    if to_checkout:
+        run_cmd(f"git checkout {to_checkout}", cwd=cwd)
