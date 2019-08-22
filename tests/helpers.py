@@ -150,6 +150,21 @@ def create_project():
     return project_obj
 
 
+def create_multilpe_projects(number_of_project):
+    """
+    Create one or more projects
+
+    Args:
+        number_of_project (int): Number of projects to be created
+
+    Returns:
+         list: List of project objects
+
+    """
+    project_objs = [create_project() for _ in range(number_of_project)]
+    return project_objs
+
+
 def create_secret(interface_type):
     """
     Create a secret
@@ -258,6 +273,7 @@ def create_storage_class(
     Returns:
         OCS: An OCS instance for the storage class
     """
+
     sc_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
         sc_data = templating.load_yaml_to_dict(
