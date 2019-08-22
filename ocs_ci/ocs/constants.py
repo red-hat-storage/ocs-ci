@@ -158,6 +158,11 @@ PGSQL_CONFIGMAP_YAML = os.path.join(
 PGSQL_STATEFULSET_YAML = os.path.join(
     TEMPLATE_PGSQL_SERVER_DIR, "StatefulSet.yaml"
 )
+
+PGSQL_BENCHMARK_YAML = os.path.join(
+    TEMPLATE_PGSQL_DIR, "PGSQL_Benchmark.yaml"
+)
+
 NGINX_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "nginx.yaml"
 )
