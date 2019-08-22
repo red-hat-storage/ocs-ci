@@ -145,6 +145,7 @@ def storageclass_factory(
             custom_data (dict): If provided then storageclass object is created
                 by using these data. Parameters `block_pool` and `secret`
                 are not useds but references are set if provided.
+            sc_name (str): Name of the storage class
 
         Returns:
             object: helpers.create_storage_class instance with links to
