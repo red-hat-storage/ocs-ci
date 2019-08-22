@@ -130,7 +130,8 @@ def create_pod(
     if pvc_name:
         if dc_deployment:
             pod_data['spec']['template']['spec']['volumes'][0][
-                'persistentVolumeClaim']['claimName'] = pvc_name
+                'persistentVolumeClaim'
+            ]['claimName'] = pvc_name
         else:
             pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
 
