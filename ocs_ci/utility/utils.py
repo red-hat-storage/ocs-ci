@@ -361,7 +361,7 @@ def mask_secrets(plaintext, secrets):
         secrets (list): List of secret strings to replace in the plaintext
 
     Returns:
-        plaintext (str): The censored version of plaintext
+        (str): The censored version of plaintext
 
     """
     for secret in secrets:
@@ -377,8 +377,8 @@ def run_cmd(cmd, **kwargs):
         cmd (str): command to run
 
     Keyword Args:
-        secrets (list): Whether to log the current cmd execution.
-          This kwarg is popped in order to not interfere with subprocess.run(**kwargs)
+        secrets (list): The list of secrets to be masked with asterisk
+            This kwarg is popped in order to not interfere with subprocess.run(**kwargs)
 
     Raises:
         CommandFailed: In case the command execution fails
