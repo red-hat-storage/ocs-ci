@@ -6,7 +6,6 @@ import random
 import shlex
 import string
 import subprocess
-import sys
 import time
 import traceback
 import requests
