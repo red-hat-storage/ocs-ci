@@ -405,7 +405,7 @@ def run_cmd(cmd, **kwargs):
     if r.returncode:
         raise CommandFailed(
             f"Error during execution of command: {masked_cmd}."
-            f"\nError is {mask_secrets(r.stderr.decode(), secrets}}"
+            f"\nError is {mask_secrets(r.stderr.decode(), secrets)}"
         )
     return mask_secrets(r.stdout.decode(), secrets)
 
