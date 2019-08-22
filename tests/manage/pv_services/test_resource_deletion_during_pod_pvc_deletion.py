@@ -150,11 +150,16 @@ class DisruptionBase(ManageTest):
                     f"{pv} is still present on node {node} after "
                     f"deleting the pods."
                 )
+        log.info(
+            "Verified: mount points are removed from nodes after deleting "
+            "the pods"
+        )
 
         # Fetch image uuid associated with PVCs
         pvc_uuid_map = {}
         for pvc_obj in self.pvc_objs:
             pvc_uuid_map[pvc_obj.name] = pvc_obj.image_uuid
+        log.info("Fetched image uuid associated with each PVC")
 
         # Start deleting PVCs
         pvc_bulk_delete = executor.submit(delete_pvcs, self.pvc_objs)
