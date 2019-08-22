@@ -816,7 +816,7 @@ def change_default_storageclass(scname):
     ocp_obj.exec_oc_cmd(command=patch_cmd)
     return True
 
-  
+
 def verify_volume_deleted_in_backend(interface, image_uuid, pool_name=None):
     """
     Verify that Image/Subvolume is not present in the backend.
