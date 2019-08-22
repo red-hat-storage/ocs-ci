@@ -370,7 +370,7 @@ def run_cmd(cmd, **kwargs):
 
     """
     quiet_state = kwargs.pop('quiet', False)
-    if quiet_state:
+    if not quiet_state:
         log.info(f"Executing command: {cmd}")
     if isinstance(cmd, str):
         cmd = shlex.split(cmd)
