@@ -402,7 +402,7 @@ def run_cmd(cmd, **kwargs):
     )
     log.debug(f"Command output: {r.stdout.decode()}")
     if r.stderr and not r.returncode:
-        log.warning(f"Command warning:: {mask_secrets(r.stderr.decode(), secrets)}")
+        log.warning(f"Command warning: {mask_secrets(r.stderr.decode(), secrets)}")
     if r.returncode:
         raise CommandFailed(
             f"Error during execution of command: {masked_cmd}."
