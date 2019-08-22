@@ -134,9 +134,48 @@ def dump_to_temp_yaml(src_file, dst_file, **kwargs):
         yaml.dump(data, yaml_file)
 
 
-def load_yaml_to_dict(file):
+def load_yaml_to_dict(file, multi_document=False):
+    """
+    Load yaml file to the dictionary
+
+    Args:
+        file (str): Path to yaml file to load
+        multi_document (bool): True if yaml contains more documents
+
+    Returns:
+        dict: If multi_document == False, returns loaded data from yaml file
+            with one document.
+        generator: If multi_document == True, returns generator which each
+            iteration returns dict from one loaded document from a file.
+
+    """
     template = os.path.join(file)
-    return yaml.safe_load(open(template, 'r'))
+    if not multi_document:
+        return yaml.safe_load(open(template, 'r'))
+    else:
+        return yaml.safe_load_all(open(template, 'r'))
+
+
+def get_n_document_from_yaml(yaml_generator, index=0):
+    """
+    Returns n document from yaml generator loaded by load_yaml_to_dict with
+    multi_document = True.
+
+    Args:
+        yaml_generator (generator): Generator from yaml.safe_load_all
+        index (int): Index of document to return. (0 - 1st, 1 - 2nd document)
+
+    Returns:
+        dict: Data from n document from yaml file.
+
+    Raises:
+        IndexError: In case that yaml generator doesn't have such index.
+
+    """
+    for idx, document in enumerate(yaml_generator):
+        if index == idx:
+            return document
+    raise IndexError(f"Passed yaml generator doesn't have index {index}")
 
 
 def dump_dict_to_temp_yaml(data, temp_yaml):
