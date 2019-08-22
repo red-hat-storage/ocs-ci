@@ -1,15 +1,16 @@
 import pytest
 import logging
 from ocs_ci.ocs import ocp
+from tests import helpers
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier2
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from tests.fixtures import create_project
 
 log = logging.getLogger(__name__)
 
 
-@tier1
+@tier2
 @pytest.mark.usefixtures(
     create_project.__name__,
 )
@@ -43,8 +44,7 @@ class TestCreateStorageClassandMakeItAsDefault(ManageTest):
         Test function which verifies the above class
         """
         # Get default StorageClass
-        initial_default_sc = ocp.get_default_storage_class()
-        log.info(f"Current default StorageClass is:{initial_default_sc}")
+        initial_default_sc = helpers.get_default_storage_class()
 
         # Create a Storage Class
         sc_obj = storageclass_factory(interface=interface_type)
@@ -55,14 +55,16 @@ class TestCreateStorageClassandMakeItAsDefault(ManageTest):
 
         # Change the above created StorageClass to default
         log.info(
-            f"Changing the default StorageClass from {initial_default_sc}"
-            f" to {sc_obj.name}"
+            f"Changing the default StorageClass to {sc_obj.name}"
         )
-        ocp.change_default_storageclass(scname=sc_obj.name)
+        helpers.change_default_storageclass(scname=sc_obj.name)
         # Confirm that the default StorageClass is changed
-        tmp_default_sc = ocp.get_default_storage_class()
-        log.info(f"Current Default StorageClass is:{tmp_default_sc}")
-        assert tmp_default_sc == sc_obj.name, (
+        tmp_default_sc = helpers.get_default_storage_class()
+        assert len(
+            tmp_default_sc
+        ) == 1, "More than 1 default storage class exist"
+        log.info(f"Current Default StorageClass is:{tmp_default_sc[0]}")
+        assert tmp_default_sc[0] == sc_obj.name, (
             "Failed to change default StorageClass"
         )
         log.info(
@@ -95,23 +97,23 @@ class TestCreateStorageClassandMakeItAsDefault(ManageTest):
         # Currently we are not setting default SC after deployment
         # hence handling the initial_default_sc None case
         # This check can be removed once the default sc is set
-        if initial_default_sc is not None:
-            ocp.change_default_storageclass(initial_default_sc)
+        if len(initial_default_sc) != 0:
+            helpers.change_default_storageclass(initial_default_sc[0])
             # Confirm that the default StorageClass is changed
-            end_default_sc = ocp.get_default_storage_class()
-            log.info(f"Current Default StorageClass is:{tmp_default_sc}")
-            assert end_default_sc == initial_default_sc, (
+            end_default_sc = helpers.get_default_storage_class()
+            log.info(f"Current Default StorageClass is:{tmp_default_sc[0]}")
+            assert end_default_sc[0] == initial_default_sc[0], (
                 "Failed to change back to default StorageClass"
             )
             log.info(
                 f"Successfully changed back to default StorageClass "
-                f"{end_default_sc}"
+                f"{end_default_sc[0]}"
             )
         ocp_obj = ocp.OCP()
         patch = " '{\"metadata\": {\"annotations\":" \
                 "{\"storageclass.kubernetes.io/is-default-class\"" \
                 ":\"false\"}}}' "
-        patch_cmd = f"patch storageclass {tmp_default_sc} -p" + patch
+        patch_cmd = f"patch storageclass {tmp_default_sc[0]} -p" + patch
         ocp_obj.exec_oc_cmd(command=patch_cmd)
         log.info(
             "Initially there is no default StorageClass, hence "
