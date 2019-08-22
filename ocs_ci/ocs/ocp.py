@@ -6,6 +6,7 @@ import logging
 import time
 import yaml
 import shlex
+import re
 
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import TimeoutSampler
@@ -358,15 +359,21 @@ class OCP(object):
             str: The status returned by 'oc get' command not in the 'yaml'
                 format
         """
-        status_index = None
+        # Get the resource in str format
         resource = self.get(resource_name=resource_name, out_yaml_format=False)
+        # get the list of titles
+        titles = re.sub('\s{2,}', ',', resource)  # noqa: W605
+        titles = titles.split(',')
+        # Get the index of 'STATUS'
+        status_index = titles.index('STATUS')
         resource = shlex.split(resource)
-        for idx, i in enumerate(resource):
-            if i.isupper() and i == 'STATUS':
-                status_index = idx
-            if not i.isupper():
-                break
-        resource_info = [i for i in resource if not i.isupper()]
+        # Get the values from the output including access modes in capital
+        # letters
+        resource_info = [
+            i for i in resource if (
+                not i.isupper() or i in ('RWO', 'RWX', 'ROX')
+            )
+        ]
 
         return resource_info[status_index]
 

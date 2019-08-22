@@ -815,3 +815,47 @@ def change_default_storageclass(scname):
     patch_cmd = f"patch storageclass {scname} -p" + patch
     ocp_obj.exec_oc_cmd(command=patch_cmd)
     return True
+
+  
+def verify_volume_deleted_in_backend(interface, image_uuid, pool_name=None):
+    """
+    Verify that Image/Subvolume is not present in the backend.
+
+    Args:
+        interface (str): The interface backed the PVC
+        image_uuid (str): Part of VolID which represents
+            corresponding image/subvolume in backend
+            eg: oc get pv/<volumeName> -o jsonpath='{.spec.csi.volumeHandle}'
+                Output is the CSI generated VolID and looks like:
+                '0001-000c-rook-cluster-0000000000000001-
+                f301898c-a192-11e9-852a-1eeeb6975c91' where
+                image_uuid is 'f301898c-a192-11e9-852a-1eeeb6975c91'
+        pool_name (str): Name of the rbd-pool if interface is CephBlockPool
+
+    Returns:
+        bool: True if volume is not present. False if volume is present
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    if interface == constants.CEPHBLOCKPOOL:
+        valid_error = f"error opening image csi-vol-{image_uuid}"
+        cmd = f"rbd info -p {pool_name} csi-vol-{image_uuid}"
+    if interface == constants.CEPHFILESYSTEM:
+        valid_error = f"Subvolume 'csi-vol-{image_uuid}' not found"
+        cmd = (
+            f"ceph fs subvolume getpath {defaults.CEPHFILESYSTEM_NAME}"
+            f" csi-vol-{image_uuid} csi"
+        )
+
+    try:
+        ct_pod.exec_ceph_cmd(ceph_cmd=cmd, format='json')
+        return False
+    except CommandFailed as ecf:
+        assert valid_error in str(ecf), (
+            f"Error occurred while verifying volume is deleted in backend: "
+            f"{str(ecf)} ImageUUID: {image_uuid}. Interface type: {interface}"
+        )
+    logger.info(
+        f"Verified: Volume corresponding to uuid {image_uuid} is deleted "
+        f"in backend"
+    )
+    return True
