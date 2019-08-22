@@ -358,9 +358,10 @@ def run_cmd(cmd, **kwargs):
 
     Args:
         cmd (str): command to run
-        quiet (bool, optional, kw): Whether to log the current cmd execution
-                                    This kwarg is popped in order to not interfere
-                                    with subprocess.run(**kwargs)
+
+    Keyword Args:
+        quiet (bool): Whether to log the current cmd execution.
+          This kwarg is popped in order to not interfere with subprocess.run(**kwargs)
 
     Raises:
         CommandFailed: In case the command execution fails
