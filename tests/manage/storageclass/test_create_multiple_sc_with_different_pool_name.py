@@ -1,7 +1,6 @@
 import pytest
 import logging
 from tests import helpers
-from ocs_ci.ocs import defaults
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.testlib import ManageTest, tier1
@@ -82,7 +81,6 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
             pod_obj = helpers.create_pod(
                 interface_type=constants.CEPHBLOCKPOOL,
                 pvc_name=pvc_list[i].name,
-                namespace = defaults.ROOK_CLUSTER_NAMESPACE
             )
             log.info(
                 f"{pod_obj.name} created successfully and "
