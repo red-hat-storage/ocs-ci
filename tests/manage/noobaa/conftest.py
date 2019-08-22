@@ -7,6 +7,7 @@ from ocs_ci.ocs.resources import noobaa
 def noobaa_obj():
     """
     Returns a NooBaa resource that's connected to the S3 endpoint
+
     Returns:
         s3_res: A NooBaa resource
 

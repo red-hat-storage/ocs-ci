@@ -15,14 +15,6 @@ def create_buckets(request, noobaa_obj):
     """
     created_buckets = []
 
-    bucket_name = create_unique_resource_name(
-        resource_description='bucket', resource_type='s3'
-    )
-    logger.info(f'Creating bucket: {bucket_name}')
-    created_buckets.append(
-        noobaa_obj.s3_create_bucket(bucketname=bucket_name)
-    )
-
     def verify_bucket():
         """
         Verifies whether buckets exists after deletion
@@ -34,6 +26,14 @@ def create_buckets(request, noobaa_obj):
             assert noobaa_obj.s3_verify_bucket_exists(bucket) is False
 
     request.addfinalizer(verify_bucket)
+
+    bucket_name = create_unique_resource_name(
+        resource_description='bucket', resource_type='s3'
+    )
+    logger.info(f'Creating bucket: {bucket_name}')
+    created_buckets.append(
+        noobaa_obj.s3_create_bucket(bucketname=bucket_name)
+    )
 
     return created_buckets
 
