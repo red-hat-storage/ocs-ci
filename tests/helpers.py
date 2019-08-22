@@ -881,7 +881,7 @@ def add_scc_policy(sa_name, namespace):
 
 def remove_scc_policy(sa_name, namespace):
     """
-     Removing ServiceAccount from scc privileged
+    Removing ServiceAccount from scc privileged
 
     Args:
         sa_name (str): ServiceAccount name

@@ -23,11 +23,8 @@ def find_distro(io_pod):
     for distro, pkg_mgr in DISTROS.items():
         try:
             label_dict = io_pod.get_labels()
-            if label_dict:
-                if constants.DEPLOYMENTCONFIG in label_dict:
-                    io_pod.exec_cmd_on_pod(f"{pkg_mgr}", out_yaml_format=False)
-                else:
-                    io_pod.exec_cmd_on_pod(f"which {pkg_mgr}", out_yaml_format=False)
+            if label_dict and constants.DEPLOYMENTCONFIG in label_dict:
+                io_pod.exec_cmd_on_pod(f"{pkg_mgr}", out_yaml_format=False)
             else:
                 io_pod.exec_cmd_on_pod(f"which {pkg_mgr}", out_yaml_format=False)
         except exceptions.CommandFailed:
