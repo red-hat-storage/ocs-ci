@@ -352,6 +352,22 @@ def custom_ceph_config(suite_config, custom_config, custom_config_file):
     return full_custom_config
 
 
+def mask_secrets(cmd, secrets):
+    """
+    Replace secrets in plaintext with asterisks
+
+    Args:
+        cmd (str): The command/plaintext to remove the secrets from
+        secrets (list): List of secret strings to replace in the cmd
+
+    Returns:
+        cmd (str): The censored version of cmd
+    """
+    for secret in secrets:
+        cmd = cmd.replace(secret, '*'*len(secret))
+    return cmd
+
+
 def run_cmd(cmd, **kwargs):
     """
     Run an arbitrary command locally
@@ -360,7 +376,7 @@ def run_cmd(cmd, **kwargs):
         cmd (str): command to run
 
     Keyword Args:
-        quiet (bool): Whether to log the current cmd execution.
+        secrets (list): Whether to log the current cmd execution.
           This kwarg is popped in order to not interfere with subprocess.run(**kwargs)
 
     Raises:
@@ -370,9 +386,8 @@ def run_cmd(cmd, **kwargs):
         (str) Decoded stdout of command
 
     """
-    quiet_state = kwargs.pop('quiet', False)
-    if not quiet_state:
-        log.info(f"Executing command: {cmd}")
+    masked_cmd = mask_secrets(cmd, kwargs.pop('secrets', []))
+    log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str):
         cmd = shlex.split(cmd)
     r = subprocess.run(
@@ -387,7 +402,7 @@ def run_cmd(cmd, **kwargs):
         log.warning(f"Command warning:: {r.stderr.decode()}")
     if r.returncode:
         raise CommandFailed(
-            f"Error during execution of command: {'quiet command' if quiet_state else cmd}."
+            f"Error during execution of command: {masked_cmd}."
             f"\nError is {r.stderr.decode()}"
         )
     return r.stdout.decode()
