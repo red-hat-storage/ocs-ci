@@ -77,6 +77,20 @@ class PVC(OCS):
         pv_obj.reload()
         return pv_obj
 
+    @property
+    def image_uuid(self):
+        """
+        Fetch image uuid associated with PVC
+
+        Returns:
+            str: Image uuid associated with PVC
+        """
+        spec_volhandle = "'{.spec.csi.volumeHandle}'"
+        cmd = f"oc get pv/{self.backed_pv} -o jsonpath={spec_volhandle}"
+        out = run_cmd(cmd=cmd)
+        image_uuid = "-".join(out.split('-')[-5:])
+        return image_uuid
+
     def verify_pv_exists_in_backend(
             self, pool_name
     ):
