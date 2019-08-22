@@ -184,15 +184,20 @@ class Pod(OCS):
             return [item for item in out if item]
         return out
 
-    def get_mount_path(self):
+    def get_storage_path(self, storage_type):
         """
-        Get the pod volume mount path
+        Get the pod volume mount path or device path
 
         Returns:
-            str: The mount path of the volume on the pod (e.g. /var/lib/www/html/)
+            str: The mount path of the volume on the pod (e.g. /var/lib/www/html/) if storage_type is fs
+                 else device path of raw block pv
         """
         # TODO: Allow returning a path of a specified volume of a specified
         #  container
+        if storage_type == 'block':
+            return self.pod_data.get('spec').get('containers')[0].get(
+                'volumeDevices')[0].get('devicePath')
+
         return (
             self.pod_data.get(
                 'spec'
@@ -209,7 +214,7 @@ class Pod(OCS):
         """
         work_load = 'fio'
         name = f'test_workload_{work_load}'
-        path = self.get_mount_path()
+        path = self.get_storage_path(storage_type)
         # few io parameters for Fio
 
         self.wl_obj = workload.WorkLoad(

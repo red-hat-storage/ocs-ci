@@ -102,8 +102,36 @@ class PVC(OCS):
         """
         return self.data.get('spec').get('accessModes')[0]
 
+    def backed_sc(self):
+        """
+        Returns the storage class of pvc object in namespace
+
+        Returns:
+            str: Storage class name
+        """
+        return self.data.get('spec').get('storageClassName')
+
+    @property
+    def backed_reclaim_policy(self):
+        """
+        Returns the reclaim policy of pvc in namespace
+
+        Returns:
+            str: Reclaim policy Reclaim or Delete
+        """
+
+        data = dict()
+        data['api_version'] = self.api_version
+        data['kind'] = 'StorageClass'
+        data['metadata'] = {
+            'name': self.backed_sc, 'namespace': self.namespace
+        }
+        sc_obj = OCS(**data)
+        sc_obj.reload()
+        return sc_obj.get().get('reclaimPolicy')
+
     def verify_pv_exists_in_backend(
-            self, pool_name
+        self, pool_name
     ):
         """
         Verifies given pv exists in ceph backend

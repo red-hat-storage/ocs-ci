@@ -412,10 +412,13 @@ def teardown_factory(request):
     def factory(resource_obj):
         """
         Args:
-            resource_obj (OCS object): Object to teardown after the test
+            resource_obj (OCS object or list of OCS objects) : Object to teardown after the test
 
         """
-        instances.append(resource_obj)
+        if isinstance(resource_obj, list):
+            instances.extend(resource_obj)
+        else:
+            instances.append(resource_obj)
 
     def finalizer():
         """
@@ -427,7 +430,9 @@ def teardown_factory(request):
                 instance.ocp.wait_for_delete(
                     instance.name
                 )
-
+                if instance.kind == constants.PVC:
+                    if instance.backed_reclaim_policy == constants.RECLAIM_POLICY_DELETE:
+                        helpers.validate_pv_delete(instance.backed_pv)
     request.addfinalizer(finalizer)
     return factory
 
@@ -620,7 +625,7 @@ def run_io_in_background(request):
                 results.append((reads, writes))
 
                 file_path = os.path.join(
-                    pod_obj.get_mount_path(),
+                    pod_obj.get_storage_path(storage_type='fs'),
                     pod_obj.io_params['filename']
                 )
                 pod_obj.exec_cmd_on_pod(f'rm -rf {file_path}')
