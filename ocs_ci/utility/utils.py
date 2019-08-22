@@ -390,7 +390,7 @@ def run_cmd(cmd, **kwargs):
     logging.disable(logging.NOTSET)
     if r.returncode:
         raise CommandFailed(
-            f"Error during execution of command: {'quiet command' if quiet_state else cmd}."
+            f"Error during execution of command: {'quiet command.' if quiet_state else cmd}."
             f"\nError is {r.stderr.decode()}"
         )
     return r.stdout.decode()
