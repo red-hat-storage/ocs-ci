@@ -352,21 +352,21 @@ def custom_ceph_config(suite_config, custom_config, custom_config_file):
     return full_custom_config
 
 
-def mask_secrets(cmd, secrets):
+def mask_secrets(plaintext, secrets):
     """
     Replace secrets in plaintext with asterisks
 
     Args:
-        cmd (str): The command/plaintext to remove the secrets from
-        secrets (list): List of secret strings to replace in the cmd
+        plaintext (str): The plaintext to remove the secrets from
+        secrets (list): List of secret strings to replace in the plaintext
 
     Returns:
-        cmd (str): The censored version of cmd
+        plaintext (str): The censored version of plaintext
 
     """
     for secret in secrets:
-        cmd = cmd.replace(secret, '*'*5)
-    return cmd
+        plaintext = plaintext.replace(secret, '*' * 5)
+    return plaintext
 
 
 def run_cmd(cmd, **kwargs):
