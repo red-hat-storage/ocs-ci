@@ -59,9 +59,9 @@ class TestPgSQLWorkload(E2ETest):
         )
         ripsaw.setup_postgresql()
         run_cmd(
-            f'bin/oc wait --for condition=ready pod '
-            f'-l app=postgres '
-            f'--timeout=120s'
+            'bin/oc wait --for condition=ready pod '
+            '-l app=postgres '
+            '--timeout=120s'
         )
 
         # Create pgbench benchmark
@@ -79,19 +79,19 @@ class TestPgSQLWorkload(E2ETest):
         time.sleep(wait_time)
 
         pgbench_pod = run_cmd(
-            f'bin/oc get pods -l '
-            f'app=pgbench-client -o name'
+            'bin/oc get pods -l '
+            'app=pgbench-client -o name'
         )
         pgbench_pod = pgbench_pod.split('/')[1]
         run_cmd(
-            f'bin/oc wait --for condition=Initialized '
+            'bin/oc wait --for condition=Initialized '
             f'pods/{pgbench_pod} '
-            f'--timeout=60s'
+            '--timeout=60s'
         )
         run_cmd(
-            f'bin/oc wait --for condition=Complete jobs '
-            f'-l app=pgbench-client '
-            f'--timeout=300s'
+            'bin/oc wait --for condition=Complete jobs '
+            '-l app=pgbench-client '
+            '--timeout=300s'
         )
 
         # Running pgbench and parsing logs
