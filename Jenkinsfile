@@ -1,7 +1,6 @@
 // This Jenkinsfile is intended to be used with a companion jenkins-job-builder
 // definition. It requires the following parameters:
 //   AWS_DOMAIN
-//   AWS_PROFILE
 //   AWS_REGION
 //   CLUSTER_USER
 // It also requires credentials with these IDs to be present in the CI system:
@@ -18,6 +17,9 @@ pipeline {
   environment {
     AWS_SHARED_CREDENTIALS_FILE = "${env.WORKSPACE}/.aws/credentials"
     AWS_CONFIG_FILE = "${env.WORKSPACE}/.aws/config"
+    AWS_ACCESS_KEY_ID = credentials('openshift-dev-aws-access-key-id')
+    AWS_SECRET_ACCESS_KEY = credentials('openshift-dev-aws-secret-access-key')
+    PULL_SECRET = credentials('openshift-pull-secret')
   }
   stages {
     stage("Setup") {
@@ -27,6 +29,8 @@ pipeline {
             sudo yum install -y /usr/sbin/postfix
             sudo systemctl start postfix
           fi
+          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
+          sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
           python3 -V
           pip3 install --user virtualenv
           python3 -m virtualenv venv
@@ -34,18 +38,8 @@ pipeline {
           pip3 install tox
           pip3 install -r requirements.txt
           python3 setup.py develop
+          python3 ./.functional_ci_setup.py --skip-aws
           """
-        withCredentials(
-          [
-            string(credentialsId: 'openshift-dev-aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
-            string(credentialsId: 'openshift-dev-aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY'),
-            string(credentialsId: 'openshift-pull-secret', variable: 'PULL_SECRET')
-          ]) {
-            sh '''
-              source ./venv/bin/activate
-              python3 ./.functional_ci_setup.py
-            '''
-          }
       }
     }
     stage("Lint") {
