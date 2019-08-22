@@ -52,7 +52,7 @@ class TestPgSQLWorkload(E2ETest):
         This is a basic pgsql workload
         """
         # Deployment postgres
-        log.info(f"Deploying postgres database")
+        log.info("Deploying postgres database")
         ripsaw.apply_crd(
             'resources/crds/'
             'ripsaw_v1alpha1_ripsaw_crd.yaml'
@@ -65,13 +65,13 @@ class TestPgSQLWorkload(E2ETest):
         )
 
         # Create pgbench benchmark
-        log.info(f"Create resource file for pgbench workload")
+        log.info("Create resource file for pgbench workload")
         pg_data = templating.load_yaml_to_dict(constants.PGSQL_BENCHMARK_YAML)
         pg_obj = OCS(**pg_data)
         pg_obj.create()
         # Wait for pgbench pod to be created
         log.info(
-            f"waiting for pgbench benchmark to create, "
+            "waiting for pgbench benchmark to create, "
             f"PGbench pod name: {pg_obj.name} "
         )
         wait_time = 30
@@ -98,18 +98,18 @@ class TestPgSQLWorkload(E2ETest):
         output = run_cmd(f'bin/oc logs {pgbench_pod}')
         pg_output = utils.parse_pgsql_logs(output)
         log.info(
-            f"*******PGBench output log*********\n"
+            "*******PGBench output log*********\n"
             f"{pg_output}"
         )
-        for d in pg_output:
-            latency_avg = d['latency_avg']
+        for data in pg_output:
+            latency_avg = data['latency_avg']
             if not latency_avg:
                 raise UnexpectedBehaviour(
-                    f"PGBench failed to run, "
-                    f"no data found on latency_avg"
+                    "PGBench failed to run, "
+                    "no data found on latency_avg"
                 )
-        log.info(f"PGBench has completed successfully")
+        log.info("PGBench has completed successfully")
 
         # Clean up pgbench benchmark
-        log.info(f"Deleting PG bench benchmark:")
+        log.info("Deleting PG bench benchmark:")
         pg_obj.delete()
