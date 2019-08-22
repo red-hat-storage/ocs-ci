@@ -43,8 +43,7 @@ class TestBucketIO:
             # Download test object(s)
             logger.info(f'Downloading {obj.key}')
             awscli_pod.exec_cmd_on_pod(
-                command=f'wget https://{constants.TEST_FILES_BUCKET}.s3.{noobaa_obj.region}.amazonaws.com/{obj.key}',
-                quiet=True
+                command=f'wget https://{constants.TEST_FILES_BUCKET}.s3.{noobaa_obj.region}.amazonaws.com/{obj.key}'
             )
             downloaded_files.append(obj.key)
 
@@ -57,6 +56,7 @@ class TestBucketIO:
             copycommand = f"cp {obj_name} s3://{bucketname}/{obj_name}"
             logger.info(f'Writing {obj_name} to s3://{bucketname}/{obj_name}')
             assert 'Completed' in awscli_pod.exec_cmd_on_pod(
-                command=base_command + copycommand + string_wrapper, out_yaml_format=False, quiet=True
+                command=base_command + copycommand + string_wrapper, out_yaml_format=False,
+                secrets=[noobaa_obj.access_key_id, noobaa_obj.access_key, noobaa_obj.endpoint]
             )
             uploaded_objects.append(f's3://{bucketname}/{obj_name}')
