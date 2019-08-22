@@ -92,9 +92,11 @@ class OperationsBase(ManageTest):
         # Create pods for running IO
         io_pods = helpers.create_pods(
             pvc_objs_list=pvc_objs_for_io_pods, interface_type=self.interface,
-            desired_status=constants.STATUS_RUNNING, wait=True,
             namespace=self.namespace
         )
+        for pod in io_pods:
+            helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING)
+            pod.reload()
 
         # Updating self.pod_objs for the purpose of teardown
         self.pod_objs.extend(io_pods)
@@ -109,8 +111,7 @@ class OperationsBase(ManageTest):
         log.info("Start creating new pods.")
         bulk_pod_create = executor.submit(
             helpers.create_pods, pvc_objs_list=pvc_objs_new_pods,
-            interface_type=self.interface, wait=False,
-            namespace=self.namespace
+            interface_type=self.interface, namespace=self.namespace
         )
 
         # Start creation of new PVCs
@@ -118,7 +119,7 @@ class OperationsBase(ManageTest):
         bulk_pvc_create = executor.submit(
             helpers.create_multiple_pvcs, sc_name=self.sc_obj.name,
             namespace=self.namespace, number_of_pvc=self.num_of_new_pvcs,
-            size=self.pvc_size, wait=False
+            size=self.pvc_size
         )
 
         # Start IO on each pod
@@ -221,9 +222,12 @@ class OperationsBase(ManageTest):
         all_pvc_objs = self.pvc_objs + pvc_objs_new
         pod_objs_re = helpers.create_pods(
             pvc_objs_list=all_pvc_objs, interface_type=self.interface,
-            desired_status=constants.STATUS_RUNNING, wait=True,
             namespace=self.namespace
         )
+        for pod in pod_objs_re:
+            helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING)
+            pod.reload()
+
         log.info("Successfully created new pods using all PVCs.")
 
         # Updating self.pod_objs for the purpose of teardown
