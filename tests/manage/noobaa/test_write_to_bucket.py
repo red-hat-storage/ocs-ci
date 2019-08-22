@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.skipif(
     condition=config.ENV_DATA['platform'] != 'AWS',
     reason="Tests are not running on AWS deployed cluster"
-    )
+)
 @tier1
 class TestBucketIO:
     """
