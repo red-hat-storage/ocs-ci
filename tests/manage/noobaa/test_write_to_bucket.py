@@ -41,9 +41,10 @@ class TestBucketIO:
         public_s3 = boto3.resource('s3', region_name=noobaa_obj.region)
         for obj in public_s3.Bucket(constants.TEST_FILES_BUCKET).objects.all():
             # Download test object(s)
-            logger.info('Downloading test files')
+            logger.info(f'Downloading {obj.key}')
             awscli_pod.exec_cmd_on_pod(
-                command=f'wget https://{constants.TEST_FILES_BUCKET}.s3.{noobaa_obj.region}.amazonaws.com/{obj.key}'
+                command=f'wget https://{constants.TEST_FILES_BUCKET}.s3.{noobaa_obj.region}.amazonaws.com/{obj.key}',
+                quiet=True
             )
             downloaded_files.append(obj.key)
 
@@ -54,8 +55,8 @@ class TestBucketIO:
         # Write all downloaded objects to the new bucket
         for obj_name in downloaded_files:
             copycommand = f"cp {obj_name} s3://{bucketname}/{obj_name}"
-            logger.info('Writing objects to bucket')
+            logger.info(f'Writing {obj_name} to s3://{bucketname}/{obj_name}')
             assert 'Completed' in awscli_pod.exec_cmd_on_pod(
-                command=base_command + copycommand + string_wrapper, out_yaml_format=False, silent=True
+                command=base_command + copycommand + string_wrapper, out_yaml_format=False, quiet=True
             )
             uploaded_objects.append(f's3://{bucketname}/{obj_name}')
