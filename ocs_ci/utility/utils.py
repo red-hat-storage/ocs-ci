@@ -6,6 +6,7 @@ import random
 import shlex
 import string
 import subprocess
+import sys
 import time
 import traceback
 import requests
@@ -352,6 +353,12 @@ def custom_ceph_config(suite_config, custom_config, custom_config_file):
     return full_custom_config
 
 
+def quiet_logs(quiet):
+    if quiet:
+        logging.disable(sys.maxsize)
+    return quiet
+
+
 def run_cmd(cmd, **kwargs):
     """
     Run an arbitrary command locally
@@ -366,9 +373,8 @@ def run_cmd(cmd, **kwargs):
         (str) Decoded stdout of command
 
     """
-    silence_logs = kwargs.pop('silent', False)
-    if not silence_logs:
-        log.info(f"Executing command: {cmd}")
+    quiet_state = quiet_logs(quiet=kwargs.pop('quiet', False))
+    log.info(f"Executing command: {cmd}")
     if isinstance(cmd, str):
         cmd = shlex.split(cmd)
     r = subprocess.run(
@@ -381,18 +387,12 @@ def run_cmd(cmd, **kwargs):
     log.debug(f"Command output: {r.stdout.decode()}")
     if r.stderr and not r.returncode:
         log.warning(f"Command warning:: {r.stderr.decode()}")
+    logging.disable(logging.NOTSET)
     if r.returncode:
-        if not silence_logs:
-            raise CommandFailed(
-                f"Error during execution of a silent command - "
-                f"\nError: {r.stderr.decode()}"
-            )
-        else:
-            raise CommandFailed(
-                f"Error during execution of command: {cmd}."
-                f"\nError is {r.stderr.decode()}"
-            )
-
+        raise CommandFailed(
+            f"Error during execution of command: {'quiet command' if quiet_state else cmd}."
+            f"\nError is {r.stderr.decode()}"
+        )
     return r.stdout.decode()
 
 
