@@ -98,7 +98,7 @@ def pytest_configure(config):
         config (pytest.config): Pytest config object
 
     """
-    if not config.getoption("--help"):
+    if not (config.getoption("--help") or config.getoption("collectonly")):
         process_cluster_cli_params(config)
         # Add OCS related versions to the html report and remove extraneous metadata
         markers_arg = config.getoption('-m')
