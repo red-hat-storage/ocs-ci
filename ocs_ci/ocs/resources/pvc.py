@@ -147,7 +147,7 @@ def delete_pvcs(pvc_objs, concurrent=False):
         bool: True if deletion is successful
     """
     if concurrent:
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        with ThreadPoolExecutor() as executor:
             for pvc in pvc_objs:
                 executor.submit(pvc.delete)
     else:

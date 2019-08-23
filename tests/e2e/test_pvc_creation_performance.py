@@ -128,7 +128,7 @@ class TestPVCCreationPerformance(E2ETest):
         )
         for pvc_obj in pvc_objs:
             teardown_factory(pvc_obj)
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        with ThreadPoolExecutor() as executor:
             for pvc_obj in pvc_objs:
                 executor.submit(
                     helpers.wait_for_resource_state, pvc_obj,
