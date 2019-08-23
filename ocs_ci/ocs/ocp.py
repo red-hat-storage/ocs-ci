@@ -296,26 +296,42 @@ class OCP(object):
                 False otherwise
 
         """
+        log.info(
+            ("Waiting for a resource(s) of kind %s identified by name '%s'"
+            " and selector %s to reach desired condition %s"),
+            self._kind,
+            resource_name,
+            selector,
+            condition)
         for sample in TimeoutSampler(
             timeout, sleep, self.get, resource_name, True, selector
         ):
 
             # Only 1 resource expected to be returned
             if resource_name:
-                if self.get_resource_status(resource_name) == condition:
+                status = self.get_resource_status(resource_name)
+                if status == condition:
                     return True
+                log.info(
+                    "status of %s was %s, but we were waiting for %s",
+                    resource_name,
+                    status, condition)
+                actual_status = status
             # More than 1 resources returned
             elif sample.get('kind') == 'List':
                 in_condition = []
+                actual_status = []
                 sample = sample['items']
                 for item in sample:
                     try:
-                        _name = item.get('metadata').get('name')
-                        if self.get_resource_status(_name) == condition:
+                        item_name = item.get('metadata').get('name')
+                        status = self.get_resource_status(item_name)
+                        actual_status.append(status)
+                        if status == condition:
                             in_condition.append(item)
                     except CommandFailed as ex:
                         log.info(
-                            f"Failed to get status of resource: {_name}, "
+                            f"Failed to get status of resource: {item_name}, "
                             f"Error: {ex}"
                         )
                     if resource_count:
@@ -327,7 +343,19 @@ class OCP(object):
                             return True
                     elif len(sample) == len(in_condition):
                         return True
+                log.info(
+                    ("status of %s item(s) were %s, but we were waiting"
+                    " for all of them to be %s"),
+                    resource_name,
+                    actual_status,
+                    condition)
 
+        log.warning(
+            ("Wait for resource %s to reach desired condition %s failed, "
+            "last actual status was %s"),
+            resource_name,
+            condition,
+            str(actual_status))
         return False
 
     def wait_for_delete(self, resource_name='', timeout=60, sleep=3):
