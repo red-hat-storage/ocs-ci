@@ -352,8 +352,9 @@ class OCP(object):
         except TimeoutExpiredError as ex:
             log.error("timeout expired: %s", ex)
             log.error(
-                ("Wait for resource %s to reach desired condition %s failed,"
-                " last actual status was %s"),
+                ("Wait for %s resource %s to reach desired condition %s failed"
+                ", last actual status was %s"),
+                self._kind,
                 resource_name,
                 condition,
                 actual_status)
