@@ -20,20 +20,84 @@ from tests import disruption_helpers
 log = logging.getLogger(__name__)
 
 
-class DisruptionBase(ManageTest):
+@tier4
+@pytest.mark.parametrize(
+    argnames=['interface', 'resource_to_delete'],
+    argvalues=[
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'mgr'],
+            marks=pytest.mark.polarion_id("OCS-810")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'mon'],
+            marks=pytest.mark.polarion_id("OCS-811")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'osd'],
+            marks=pytest.mark.polarion_id("OCS-812")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'mgr'],
+            marks=pytest.mark.polarion_id("OCS-813")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'mon'],
+            marks=pytest.mark.polarion_id("OCS-814")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'osd'],
+            marks=pytest.mark.polarion_id("OCS-815")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'mds'],
+            marks=pytest.mark.polarion_id("OCS-816")
+        )
+    ]
+)
+class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
     """
-    Base class for disruptive operations
+    Delete ceph/rook pod while deletion of PVCs, pods and IO are progressing
     """
     num_of_pvcs = 25
     pvc_size = 3
 
-    def verify_resource_deletion(self, func_to_use, previous_num):
+    @pytest.fixture()
+    def setup_base(
+        self, interface, multi_pvc_factory, pod_factory
+    ):
+        """
+        Create PVCs and pods
+        """
+        pvc_objs = multi_pvc_factory(
+            interface=interface,
+            project=None,
+            storageclass=None,
+            size=self.pvc_size,
+            access_mode=constants.ACCESS_MODE_RWO,
+            status=constants.STATUS_BOUND,
+            num_of_pvc=self.num_of_pvcs,
+            wait_each=False
+        )
+
+        pod_objs = []
+        for pvc_obj in pvc_objs:
+            pod_obj = pod_factory(pvc=pvc_obj, status="")
+            pod_objs.append(pod_obj)
+        for pod_obj in pod_objs:
+            wait_for_resource_state(
+                resource=pod_obj, state=constants.STATUS_RUNNING
+            )
+
+        return pvc_objs, pod_objs
+
+    def verify_resource_deletion(self, func_to_use, previous_num, namespace):
         """
         Wait for resource deletion to start
 
         Args:
             func_to_use (function): Function to be used to fetch resource info
             previous_num (int): Previous number of resources
+            namespace (str): Name of the namespace
 
         Returns:
             bool: True if resource deletion has started.
@@ -41,7 +105,7 @@ class DisruptionBase(ManageTest):
         """
         try:
             for sample in TimeoutSampler(
-                30, 0.01, func_to_use, self.namespace
+                30, 0.01, func_to_use, namespace
             ):
                 if func_to_use == get_all_pvcs:
                     current_num = len(sample['items'])
@@ -60,20 +124,24 @@ class DisruptionBase(ManageTest):
             pod_obj.delete(wait=False)
         return True
 
-    def disruptive_base(
-        self, interface, resource_to_delete
+    def test_disruptive_during_pod_pvc_deletion_and_io(
+        self, interface, resource_to_delete,
+        setup_base
     ):
         """
-        Base function for disruptive tests.
-        Deletion of 'resource_to_delete' will be introduced while
-        'operation_to_disrupt' is progressing.
+        Delete ceph/rook pod while PVCs deletion, pods deletion and IO are
+        progressing
         """
-        num_of_pods = 10
+        pvc_objs, self.pod_objs = setup_base
+        sc_obj = pvc_objs[0].storageclass
+        namespace = pvc_objs[0].project.namespace
+
+        num_of_pods_to_delete = 10
         num_of_io_pods = 5
-        pods_to_delete = self.pod_objs[:num_of_pods]
-        io_pods = self.pod_objs[num_of_pods:num_of_pods + num_of_io_pods]
-        pods_for_pvc = self.pod_objs[num_of_pods + num_of_io_pods:]
-        pvcs_to_delete = self.pvc_objs[num_of_pods + num_of_io_pods:]
+        pods_to_delete = self.pod_objs[:num_of_pods_to_delete]
+        io_pods = self.pod_objs[num_of_pods_to_delete:num_of_pods_to_delete + num_of_io_pods]
+        pods_for_pvc = self.pod_objs[num_of_pods_to_delete + num_of_io_pods:]
+        pvcs_to_delete = pvc_objs[num_of_pods_to_delete + num_of_io_pods:]
         pod_functions = {
             'mds': get_mds_pods, 'mon': get_mon_pods, 'mgr': get_mgr_pods,
             'osd': get_osd_pods
@@ -86,9 +154,9 @@ class DisruptionBase(ManageTest):
         num_of_resource_to_delete = len(pod_functions[resource_to_delete]())
 
         # Fetch the number of Pods and PVCs
-        initial_num_of_pods = len(get_all_pods(namespace=self.namespace))
+        initial_num_of_pods = len(get_all_pods(namespace=namespace))
         initial_num_of_pvc = len(
-            get_all_pvcs(namespace=self.namespace)['items']
+            get_all_pvcs(namespace=namespace)['items']
         )
 
         # Fetch PV names to verify after deletion
@@ -103,7 +171,7 @@ class DisruptionBase(ManageTest):
             pod_info = pod_obj.get()
             node = pod_info['spec']['nodeName']
             pvc = pod_info['spec']['volumes'][0]['persistentVolumeClaim']['claimName']
-            for pvc_obj in self.pvc_objs:
+            for pvc_obj in pvc_objs:
                 if pvc_obj.name == pvc:
                     pvc_obj.reload()
                     pv = pvc_obj.backed_pv
@@ -179,12 +247,14 @@ class DisruptionBase(ManageTest):
 
         # Verify pvc deletion has started
         pvc_deleting = executor.submit(
-            self.verify_resource_deletion, get_all_pvcs, initial_num_of_pvc
+            self.verify_resource_deletion, get_all_pvcs, initial_num_of_pvc,
+            namespace
         )
 
         # Verify pod deletion has started
         pod_deleting = executor.submit(
-            self.verify_resource_deletion, get_all_pods, initial_num_of_pods
+            self.verify_resource_deletion, get_all_pods, initial_num_of_pods,
+            namespace
         )
 
         assert pvc_deleting.result(), (
@@ -252,7 +322,7 @@ class DisruptionBase(ManageTest):
             if interface == constants.CEPHBLOCKPOOL:
                 ret = verify_volume_deleted_in_backend(
                     interface=interface, image_uuid=uuid,
-                    pool_name=self.sc_obj.ceph_pool.name
+                    pool_name=sc_obj.ceph_pool.name
                 )
             if interface == constants.CEPHFILESYSTEM:
                 ret = verify_volume_deleted_in_backend(
@@ -280,86 +350,3 @@ class DisruptionBase(ManageTest):
         # Check ceph status
         ceph_health_check(namespace=config.ENV_DATA['cluster_namespace'])
         log.info("Ceph cluster health is OK")
-
-
-@tier4
-@pytest.mark.parametrize(
-    argnames=['interface', 'resource_to_delete'],
-    argvalues=[
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-810")
-        ),
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'mon'],
-            marks=pytest.mark.polarion_id("OCS-811")
-        ),
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'osd'],
-            marks=pytest.mark.polarion_id("OCS-812")
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-813")
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, 'mon'],
-            marks=pytest.mark.polarion_id("OCS-814")
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, 'osd'],
-            marks=pytest.mark.polarion_id("OCS-815")
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, 'mds'],
-            marks=pytest.mark.polarion_id("OCS-816")
-        )
-    ]
-)
-class TestResourceDeletionDuringMultipleDeleteOperations(DisruptionBase):
-    """
-    Delete ceph/rook pod while deletion of PVCs, pods and IO are progressing
-    """
-    @pytest.fixture()
-    def setup_base(
-        self, interface, multi_pvc_factory, pod_factory
-    ):
-        """
-        Create PVCs and pods
-        """
-        pvc_objs = multi_pvc_factory(
-            interface=interface,
-            project=None,
-            storageclass=None,
-            size=self.pvc_size,
-            access_mode=constants.ACCESS_MODE_RWO,
-            status=constants.STATUS_BOUND,
-            num_of_pvc=self.num_of_pvcs,
-            wait_each=False
-        )
-
-        pod_objs = []
-        for pvc_obj in pvc_objs:
-            pod_obj = pod_factory(pvc=pvc_obj, status="")
-            pod_objs.append(pod_obj)
-        for pod_obj in pod_objs:
-            wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING
-            )
-
-        return pvc_objs, pod_objs
-
-    def test_disruptive_during_pod_pvc_deletion_and_io(
-        self, interface, resource_to_delete,
-        setup_base
-    ):
-        """
-        Delete ceph/rook pod while PVCs deletion, pods deletion and IO are
-        progressing
-        """
-        self.pvc_objs, self.pod_objs = setup_base
-        self.sc_obj = self.pvc_objs[0].storageclass
-        self.namespace = self.pvc_objs[0].project.namespace
-        self.disruptive_base(
-            interface, resource_to_delete
-        )
