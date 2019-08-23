@@ -8,7 +8,7 @@ import yaml
 import shlex
 import re
 
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs import defaults
@@ -303,59 +303,61 @@ class OCP(object):
             resource_name,
             selector,
             condition)
-        for sample in TimeoutSampler(
-            timeout, sleep, self.get, resource_name, True, selector
-        ):
 
-            # Only 1 resource expected to be returned
-            if resource_name:
-                status = self.get_resource_status(resource_name)
-                if status == condition:
-                    return True
-                log.info(
-                    "status of %s was %s, but we were waiting for %s",
-                    resource_name,
-                    status, condition)
-                actual_status = status
-            # More than 1 resources returned
-            elif sample.get('kind') == 'List':
-                in_condition = []
-                actual_status = []
-                sample = sample['items']
-                for item in sample:
-                    try:
-                        item_name = item.get('metadata').get('name')
-                        status = self.get_resource_status(item_name)
-                        actual_status.append(status)
-                        if status == condition:
-                            in_condition.append(item)
-                    except CommandFailed as ex:
-                        log.info(
-                            f"Failed to get status of resource: {item_name}, "
-                            f"Error: {ex}"
-                        )
-                    if resource_count:
-                        items_in_condition = (
-                            [it.get('metadata').get('name') for it in in_condition]
-                        )
-                        log.info(f"In condition resources: {items_in_condition}")
-                        if len(in_condition) == resource_count:
-                            return True
-                    elif len(sample) == len(in_condition):
+        try:
+            for sample in TimeoutSampler(
+                timeout, sleep, self.get, resource_name, True, selector
+            ):
+
+                # Only 1 resource expected to be returned
+                if resource_name:
+                    status = self.get_resource_status(resource_name)
+                    if status == condition:
                         return True
-                log.info(
-                    ("status of %s item(s) were %s, but we were waiting"
-                    " for all of them to be %s"),
-                    resource_name,
-                    actual_status,
-                    condition)
+                    log.info(
+                        "status of %s was %s, but we were waiting for %s",
+                        resource_name,
+                        status, condition)
+                    actual_status = status
+                # More than 1 resources returned
+                elif sample.get('kind') == 'List':
+                    in_condition = []
+                    actual_status = []
+                    sample = sample['items']
+                    for item in sample:
+                        try:
+                            item_name = item.get('metadata').get('name')
+                            status = self.get_resource_status(item_name)
+                            actual_status.append(status)
+                            if status  == condition:
+                                in_condition.append(item)
+                        except CommandFailed as ex:
+                            log.info(
+                                f"Failed to get status of resource: {item_name}, "
+                                f"Error: {ex}"
+                            )
+                        if resource_count:
+                            if len(in_condition) == resource_count and (
+                                len(sample) == len(in_condition)
+                            ):
+                                return True
+                        elif len(sample) == len(in_condition):
+                            return True
+                    log.info(
+                        ("status of %s item(s) were %s, but we were waiting"
+                        " for all of them to be %s"),
+                        resource_name,
+                        actual_status,
+                        condition)
+        except TimeoutExpiredError as ex:
+            log.error("timeout expired: %s", ex)
+            log.error(
+                ("Wait for resource %s to reach desired condition %s failed,"
+                " last actual status was %s"),
+                resource_name,
+                condition,
+                actual_status)
 
-        log.warning(
-            ("Wait for resource %s to reach desired condition %s failed, "
-            "last actual status was %s"),
-            resource_name,
-            condition,
-            str(actual_status))
         return False
 
     def wait_for_delete(self, resource_name='', timeout=60, sleep=3):
