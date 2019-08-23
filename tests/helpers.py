@@ -385,6 +385,8 @@ def create_pvc(
         do_reload (bool): True for wait for reloading PVC after its creation, False otherwise
         access_mode (str): The access mode to be used for the PVC
         volume_mode (str): Volume mode for rbd RWX pvc i.e. 'Block'
+
+    Returns:
         PVC: PVC instance
     """
     pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
@@ -693,13 +695,8 @@ def get_all_pvs():
     )
     return ocp_pv_obj.get()
 
-# Todo
 
-
-'''
-To revert the counts of tries and delay after bz1726266
-'''
-
+# TODO: revert counts of tries and delay,BZ 1726266
 
 @retry(AssertionError, tries=20, delay=10, backoff=1)
 def validate_pv_delete(pv_name):
@@ -720,7 +717,7 @@ def validate_pv_delete(pv_name):
 
     try:
         if ocp_pv_obj.get(resource_name=pv_name):
-            raise AssertionError
+            raise AssertionError('PV exists after PVC deletion')
 
     except CommandFailed:
         return True
