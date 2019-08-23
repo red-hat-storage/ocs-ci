@@ -357,6 +357,7 @@ class OCP(object):
                 resource_name,
                 condition,
                 actual_status)
+            raise(ex)
 
         return False
 
