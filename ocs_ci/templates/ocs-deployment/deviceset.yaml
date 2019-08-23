@@ -1,0 +1,15 @@
+---
+name: example-deviceset
+count: 3
+resources: {}
+placement: {}
+dataPVCTemplate:
+  spec:
+    storageClassName: gp2
+    accessModes:
+    - ReadWriteOnce
+    volumeMode: Block
+    resources:
+      requests:
+        storage: 1Ti
+

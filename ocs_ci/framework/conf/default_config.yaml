@@ -38,6 +38,12 @@ DEPLOYMENT:
   installer_version: "4.2.0-0.nightly"
   force_download_installer: True
   force_download_client: True
+  # Change this variable to false to not deploy via OCS operator.
+  ocs_operator_deployment: True
+  # opened issue here about the version in the name of OLM
+  # https://github.com/openshift/ocs-operator/issues/50
+  ocs_csv_version: "v0.0.1"
+  ocs_operator_storage_cluster_cr: "https://raw.githubusercontent.com/openshift/ocs-operator/master/deploy/crds/ocs_v1alpha1_storagecluster_cr.yaml"
 
 # Section for reporting configuration
 REPORTING:
@@ -54,6 +60,9 @@ REPORTING:
 # --cluster-conf file.yaml data you will pass to the pytest.
 ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
+  storage_cluster_name: 'rook-ceph'
+  storage_device_sets_name: "storageDeviceSets"
+  device_size: '100Gi'
   cluster_namespace: 'openshift-storage'
   monitoring_enabled: true
   platform: 'AWS'

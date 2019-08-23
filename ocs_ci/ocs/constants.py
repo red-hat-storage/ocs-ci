@@ -223,6 +223,10 @@ EO_SUB_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_EO, "eo-sub.yaml"
 )
 
+DEVICESET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "deviceset.yaml"
+)
+
 # Openshift-logging clusterlogging operator deployment yamls
 CL_NAMESPACE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_CLO, "cl-namespace.yaml"
@@ -266,3 +270,9 @@ NODE_READY_SCHEDULING_DISABLED = 'Ready,SchedulingDisabled'
 ALERT_CLUSTERWARNINGSTATE = 'CephClusterWarningState'
 ALERT_MGRISABSENT = 'CephMgrIsAbsent'
 ALERT_MONQUORUMATRISK = 'CephMonQuorumAtRisk'
+
+# OCS Deployment related constants
+OPERATOR_REPOSITORY = (
+    'https://raw.githubusercontent.com/openshift/ocs-operator/master/deploy'
+)
+OPERATOR_OLM_MANIFEST = f'{OPERATOR_REPOSITORY}/deploy-with-olm.yaml'
