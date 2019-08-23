@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 
-from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.framework.testlib import tier1, ManageTest, bugzilla
 from ocs_ci.ocs import constants
 
 from tests.fixtures import (
@@ -57,7 +57,8 @@ class BaseRawBlockPV(ManageTest):
 
         for pvc in pvcs:
             helpers.wait_for_resource_state(
-                resource=pvc, state=constants.STATUS_BOUND)
+                resource=pvc, state=constants.STATUS_BOUND
+            )
 
         pvs = [pvc.backed_pv_obj for pvc in pvcs]
 
@@ -69,7 +70,9 @@ class BaseRawBlockPV(ManageTest):
             raw_block_pv=True,
             pod_dict_path=pod_dict,
             node_name=random.choice(
-                worker_nodes))) for _ in range(3)
+                worker_nodes)
+        )
+        ) for _ in range(3)
         ]
 
         pvc_gb_pods = [(helpers.create_pod(
@@ -79,7 +82,9 @@ class BaseRawBlockPV(ManageTest):
             raw_block_pv=True,
             pod_dict_path=pod_dict,
             node_name=random.choice(
-                worker_nodes))) for _ in range(3)
+                worker_nodes)
+        )
+        ) for _ in range(3)
         ]
 
         pvc_tb_pods = [(helpers.create_pod(
@@ -89,7 +94,10 @@ class BaseRawBlockPV(ManageTest):
             raw_block_pv=True,
             pod_dict_path=pod_dict,
             node_name=random.choice(
-                worker_nodes))) for _ in range(3)
+                worker_nodes
+            )
+        )
+        ) for _ in range(3)
         ]
 
         def flatten(l):
@@ -140,6 +148,7 @@ class TestRawBlockPVRetain(BaseRawBlockPV):
         teardown_factory(pods)
 
 
+@bugzilla('1726266')
 @tier1
 @pytest.mark.polarion_id("OCS-751")
 @pytest.mark.usefixtures(
