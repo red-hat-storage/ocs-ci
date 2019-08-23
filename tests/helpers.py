@@ -720,7 +720,8 @@ def validate_pv_delete(pv_name):
 
     try:
         if ocp_pv_obj.get(resource_name=pv_name):
-            raise AssertionError('PV exists after PVC deletion')
+            msg = f"{constants.PV} {pv_name} is not deleted after PVC deletion"
+            raise AssertionError(msg)
 
     except CommandFailed:
         return True
