@@ -5,11 +5,13 @@ import pytest
 from ocs_ci.framework.testlib import ManageTest, tier4
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
+from ocs_ci.ocs.resources.pvc import (
+    get_all_pvcs, delete_pvcs, wait_for_pvc_count_change
+)
 from ocs_ci.ocs.resources.pod import get_all_pods, get_fio_rw_iops
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.pod import (
-    get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods
+    get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods,
+    wait_for_pod_count_change
 )
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check, run_cmd
 from tests.helpers import (
@@ -89,32 +91,6 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
             )
 
         return pvc_objs, pod_objs
-
-    def verify_resource_deletion(self, func_to_use, previous_num, namespace):
-        """
-        Wait for resource deletion to start
-
-        Args:
-            func_to_use (function): Function to be used to fetch resource info
-            previous_num (int): Previous number of resources
-            namespace (str): Name of the namespace
-
-        Returns:
-            bool: True if resource deletion has started.
-                  False in case of timeout.
-        """
-        try:
-            for sample in TimeoutSampler(
-                30, 0.01, func_to_use, namespace
-            ):
-                if func_to_use == get_all_pvcs:
-                    current_num = len(sample['items'])
-                else:
-                    current_num = len(sample)
-                if current_num < previous_num:
-                    return True
-        except TimeoutExpiredError:
-            return False
 
     def delete_pods(self, pods_to_delete):
         """
@@ -247,14 +223,16 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         # Verify pvc deletion has started
         pvc_deleting = executor.submit(
-            self.verify_resource_deletion, get_all_pvcs, initial_num_of_pvc,
-            namespace
+            wait_for_pvc_count_change, previous_num=initial_num_of_pvc,
+            namespace=namespace, change_type='decrease', min_difference=1,
+            timeout=30, interval=0.01
         )
 
         # Verify pod deletion has started
         pod_deleting = executor.submit(
-            self.verify_resource_deletion, get_all_pods, initial_num_of_pods,
-            namespace
+            wait_for_pod_count_change, previous_num=initial_num_of_pods,
+            namespace=namespace, change_type='decrease', min_difference=1,
+            timeout=30, interval=0.01
         )
 
         assert pvc_deleting.result(), (

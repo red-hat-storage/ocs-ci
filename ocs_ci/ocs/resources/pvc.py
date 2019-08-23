@@ -8,8 +8,8 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.ocs.resources import pod
 
 log = logging.getLogger(__name__)
@@ -173,3 +173,38 @@ def get_all_pvcs(namespace=None):
     )
     out = ocp_pvc_obj.get()
     return out
+
+
+def wait_for_pvc_count_change(
+    previous_num, namespace, change_type='increase', min_difference=1,
+    timeout=20, interval=2
+):
+    """
+    Wait for a change in total count of PVC
+
+    Args:
+        previous_num (int): Previous number of PVCs to compare
+        namespace (str): Name of the namespace
+        change_type (str): Type of change to check. Accepted values are
+            'increase' and 'decrease'
+        min_difference (int): Minimum required difference in PVC count
+        timeout (int): Maximum wait time in seconds
+        interval (int): Time in seconds to wait between consecutive checks
+
+    Returns:
+        bool: True if difference in count is greater than or equal to
+            'min_difference'. False in case of timeout.
+    """
+    try:
+        for sample in TimeoutSampler(
+            timeout, interval, get_all_pvcs, namespace
+        ):
+            current_num = len(sample['items'])
+            if change_type == 'increase':
+                count_diff = current_num - previous_num
+            else:
+                count_diff = previous_num - current_num
+            if count_diff >= min_difference:
+                return True
+    except TimeoutExpiredError:
+        return False
