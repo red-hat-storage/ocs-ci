@@ -110,3 +110,4 @@ def kafka_bridge(yaml_file, resource_name):
         logger.error('The resource is not found')
         return False
     return True
+
