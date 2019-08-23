@@ -800,7 +800,7 @@ def validate_pods_are_respinned_and_running_state(pod_objs_list):
         pod_objs_list (list): List of the pods obj
 
     Returns:
-         True if the pods are respinned and running, False otherwise
+         bool : True if the pods are respinned and running, False otherwise
 
     """
     for pod in pod_objs_list:
