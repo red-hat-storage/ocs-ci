@@ -272,7 +272,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         # Verify that the mount point is removed from nodes after deleting pod
         node_pv_mounted = verify_pv_mounted_on_node(node_pv_dict)
         for node, pvs in node_pv_mounted.items():
-            assert pvs, (
+            assert not pvs, (
                 f"PVs {pvs} is still present on node {node} after "
                 f"deleting the pods."
             )
