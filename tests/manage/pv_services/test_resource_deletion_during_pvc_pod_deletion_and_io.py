@@ -5,17 +5,15 @@ import pytest
 from ocs_ci.framework.testlib import ManageTest, tier4
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pvc import (
-    get_all_pvcs, delete_pvcs, wait_for_pvc_count_change
-)
-from ocs_ci.ocs.resources.pod import get_all_pods, get_fio_rw_iops
+from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
 from ocs_ci.ocs.resources.pod import (
-    get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods,
-    wait_for_pod_count_change
+    get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods, get_all_pods,
+    get_fio_rw_iops
 )
-from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check, run_cmd
+from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from tests.helpers import (
-    verify_volume_deleted_in_backend, wait_for_resource_state
+    verify_volume_deleted_in_backend, wait_for_resource_state,
+    wait_for_resource_count_change, verify_pv_mounted_on_node
 )
 from tests import disruption_helpers
 
@@ -108,23 +106,32 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         Delete ceph/rook pod while PVCs deletion, pods deletion and IO are
         progressing
         """
-        pvc_objs, self.pod_objs = setup_base
+        pvc_objs, pod_objs = setup_base
         sc_obj = pvc_objs[0].storageclass
         namespace = pvc_objs[0].project.namespace
 
         num_of_pods_to_delete = 10
         num_of_io_pods = 5
-        pods_to_delete = self.pod_objs[:num_of_pods_to_delete]
-        io_pods = self.pod_objs[num_of_pods_to_delete:num_of_pods_to_delete + num_of_io_pods]
-        pods_for_pvc = self.pod_objs[num_of_pods_to_delete + num_of_io_pods:]
+
+        # Select pods to be deleted
+        pods_to_delete = pod_objs[:num_of_pods_to_delete]
+
+        # Select pods to run IO
+        io_pods = pod_objs[num_of_pods_to_delete:num_of_pods_to_delete + num_of_io_pods]
+
+        # Select pods which are having PVCs to delete
+        pods_for_pvc = pod_objs[num_of_pods_to_delete + num_of_io_pods:]
+
+        # Select PVCs to delete
         pvcs_to_delete = pvc_objs[num_of_pods_to_delete + num_of_io_pods:]
+
         pod_functions = {
             'mds': get_mds_pods, 'mon': get_mon_pods, 'mgr': get_mgr_pods,
             'osd': get_osd_pods
         }
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=resource_to_delete)
-        executor = ThreadPoolExecutor(max_workers=len(self.pod_objs))
+        executor = ThreadPoolExecutor(max_workers=len(pod_objs))
 
         # Get number of pods of type 'resource_to_delete'
         num_of_resource_to_delete = len(pod_functions[resource_to_delete]())
@@ -165,11 +172,11 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         # Do setup on pods for running IO
         log.info("Setting up pods for running IO.")
-        for pod_obj in self.pod_objs:
+        for pod_obj in pod_objs:
             executor.submit(pod_obj.workload_setup, storage_type='fs')
 
         # Wait for setup on pods to complete
-        for pod_obj in self.pod_objs:
+        for pod_obj in pod_objs:
             for sample in TimeoutSampler(
                 100, 2, getattr, pod_obj, 'wl_setup_done'
             ):
@@ -223,16 +230,16 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         # Verify pvc deletion has started
         pvc_deleting = executor.submit(
-            wait_for_pvc_count_change, previous_num=initial_num_of_pvc,
-            namespace=namespace, change_type='decrease', min_difference=1,
-            timeout=30, interval=0.01
+            wait_for_resource_count_change, func_to_use=get_all_pvcs,
+            previous_num=initial_num_of_pvc, namespace=namespace,
+            change_type='decrease', min_difference=1, timeout=30, interval=0.01
         )
 
         # Verify pod deletion has started
         pod_deleting = executor.submit(
-            wait_for_pod_count_change, previous_num=initial_num_of_pods,
-            namespace=namespace, change_type='decrease', min_difference=1,
-            timeout=30, interval=0.01
+            wait_for_resource_count_change, func_to_use=get_all_pods,
+            previous_num=initial_num_of_pods, namespace=namespace,
+            change_type='decrease', min_difference=1, timeout=30, interval=0.01
         )
 
         assert pvc_deleting.result(), (
@@ -263,12 +270,10 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         logging.info("Verified: Pods are deleted.")
 
         # Verify that the mount point is removed from nodes after deleting pod
-        for node, pvs in node_pv_dict.items():
-            cmd = f'oc debug nodes/{node} -- df'
-            df_on_node = run_cmd(cmd)
-            for pv in pvs:
-                assert pv not in df_on_node, (
-                    f"{pv} is still present on node {node} after "
+        node_pv_mounted = verify_pv_mounted_on_node(node_pv_dict)
+        for node, pvs in node_pv_mounted.items():
+            assert pvs, (
+                    f"PVs {pvs} is still present on node {node} after "
                     f"deleting the pods."
                 )
         log.info(

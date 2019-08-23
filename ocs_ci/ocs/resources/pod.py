@@ -16,7 +16,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import workload
 from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
@@ -749,38 +749,3 @@ def delete_pods(pod_objs):
     for pod in pod_objs:
         pod.delete()
     return True
-
-
-def wait_for_pod_count_change(
-    previous_num, namespace, change_type='increase', min_difference=1,
-    timeout=30, interval=2
-):
-    """
-    Wait for a change in total count of pod
-
-    Args:
-        previous_num (int): Previous number of pods to compare
-        namespace (str): Name of the namespace
-        change_type (str): Type of change to check. Accepted values are
-            'increase' and 'decrease'
-        min_difference (int): Minimum required difference in pod count
-        timeout (int): Maximum wait time in seconds
-        interval (int): Time in seconds to wait between consecutive checks
-
-    Returns:
-        bool: True if difference in count is greater than or equal to
-            'min_difference'. False in case of timeout.
-    """
-    try:
-        for sample in TimeoutSampler(
-            timeout, interval, get_all_pods, namespace
-        ):
-            current_num = len(sample)
-            if change_type == 'increase':
-                count_diff = current_num - previous_num
-            else:
-                count_diff = previous_num - current_num
-            if count_diff >= min_difference:
-                return True
-    except TimeoutExpiredError:
-        return False
