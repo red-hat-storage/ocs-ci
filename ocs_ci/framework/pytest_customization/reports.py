@@ -45,5 +45,5 @@ def pytest_sessionfinish(session, exitstatus):
     """
     send email report
     """
-    if ocsci_config.RUN['cli_params']['email']:
+    if ocsci_config.RUN['cli_params'].get('email'):
         email_reports()

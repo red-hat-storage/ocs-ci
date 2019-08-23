@@ -17,3 +17,7 @@ matrix:
       env: TOXENV=flake8
     - python: 3.7
       env: TOXENV=flake8
+    - python: 3.6
+      env: TOXENV=collectonly
+    - python: 3.7
+      env: TOXENV=collectonly
