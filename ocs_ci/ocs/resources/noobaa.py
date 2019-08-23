@@ -1,6 +1,7 @@
 import base64
 import logging
 import boto3
+from botocore.client import ClientError
 
 from ocs_ci.ocs.ocp import OCP
 
@@ -80,6 +81,24 @@ class NooBaa(object):
 
         """
         return [bucket for bucket in self._s3_resource.buckets.all()]
+
+    def s3_verify_bucket_exists(self, bucket):
+        """
+        Verifies whether the Bucket exists
+        Args:
+            bucket(S3 object) : The bucket object to be verified
+
+        Returns:
+              bool: True if bucket exists, False otherwise
+
+        """
+        try:
+            self._s3_resource.meta.client.head_bucket(Bucket=bucket.name)
+            logger.info(f"{bucket.name} exists")
+            return True
+        except ClientError:
+            logger.info(f"{bucket.name} does not exist")
+            return False
 
     def oc_create_bucket(self, bucketname):
         """
