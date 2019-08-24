@@ -11,28 +11,6 @@ from tests import helpers
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture()
-def resources(request):
-    """
-    Delete the pvc resources and validate pv deletion created during the test
-
-    Returns:
-        list: empty list of pvcs
-    """
-    pvcs = []
-
-    def finalizer():
-        for instance in pvcs:
-            instance.delete()
-            instance.ocp.wait_for_delete(
-                instance.name
-            )
-            assert helpers.validate_pv_delete(instance.backed_pv)
-
-    request.addfinalizer(finalizer)
-    return pvcs
-
-
 @tier2
 class TestDeleteCreatePVCSameName(ManageTest):
     """
@@ -56,28 +34,23 @@ class TestDeleteCreatePVCSameName(ManageTest):
         ]
     )
     def test_delete_create_pvc_same_name(
-        self, interface, pvc_factory, resources
+        self, interface, pvc_factory, teardown_factory
     ):
         """
         Delete PVC and create a new PVC with same name
         """
         # Create a PVC
-        pvcs = resources
         pvc_obj1 = pvc_factory(
-            interface=interface, status=constants.STATUS_BOUND
-        )
-        pvcs.append(pvc_obj1)
-
-        # Check PV is Bound
-        pv_obj1 = pvc_obj1.backed_pv_obj
-        helpers.wait_for_resource_state(
-            resource=pv_obj1, state=constants.STATUS_BOUND
+            interface=interface,
+            access_mode=constants.ACCESS_MODE_RWO,
+            status=constants.STATUS_BOUND
         )
 
         # Delete the PVC
         logger.info(f"Deleting PVC {pvc_obj1.name}")
         pvc_obj1.delete()
         pvc_obj1.ocp.wait_for_delete(pvc_obj1.name)
+        logger.info(f"Deleted PVC {pvc_obj1.name}")
 
         # Create a new PVC with same name
         logger.info(f"Creating new PVC with same name {pvc_obj1.name}")
@@ -87,8 +60,8 @@ class TestDeleteCreatePVCSameName(ManageTest):
             namespace=pvc_obj1.project.namespace,
             do_reload=False
         )
-        assert pvc_obj2, "Failed to create PVC"
-        pvcs.append(pvc_obj2)
+
+        teardown_factory(pvc_obj2)
 
         # Check the new PVC and PV are Bound
         helpers.wait_for_resource_state(
