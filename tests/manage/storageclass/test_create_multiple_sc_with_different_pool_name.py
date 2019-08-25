@@ -2,7 +2,6 @@ import pytest
 import logging
 from tests import helpers
 from ocs_ci.ocs import constants
-from ocs_ci.ocs import defaults
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework.testlib import ManageTest, tier1
 from tests.fixtures import (
@@ -72,6 +71,8 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
             )
             pvc_list.append(pvc_obj)
             teardown_factory(pvc_obj)
+            helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+            pvc_obj.reload()
 
         # Create app pod and mount each PVC
         pod_list = []
@@ -80,8 +81,6 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
             pod_obj = helpers.create_pod(
                 interface_type=constants.CEPHBLOCKPOOL,
                 pvc_name=pvc_list[i].name,
-                desired_status=constants.STATUS_RUNNING,
-                wait=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE
             )
             log.info(
                 f"{pod_obj.name} created successfully and "
@@ -89,6 +88,8 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
             )
             pod_list.append(pod_obj)
             teardown_factory(pod_obj)
+            helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
+            pod_obj.reload()
 
         # Run IO on each app pod for sometime
         for pod in pod_list:
