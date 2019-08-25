@@ -4,7 +4,7 @@ import boto3
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import constants
 from tests.helpers import create_unique_resource_name
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
     reason="Tests are not running on AWS deployed cluster"
 )
 @tier1
-class TestBucketIO:
+class TestBucketIO(ManageTest):
     """
     Test IO of a bucket
     """

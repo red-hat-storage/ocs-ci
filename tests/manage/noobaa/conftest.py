@@ -42,7 +42,6 @@ def uploaded_objects(request, noobaa_obj, awscli_pod):
 
     def object_cleanup():
         for uploaded_filename in uploaded_objects_paths:
-            # TODO: Add assert
             logger.info(f'Deleting object {uploaded_filename}')
             awscli_pod.exec_cmd_on_pod(
                 command=base_command + "rm " + uploaded_filename + "\"",
