@@ -5,7 +5,7 @@ import pytest
 import threading
 from datetime import datetime
 
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 
@@ -307,10 +307,21 @@ def pvc_factory(
         """
         Delete the PVC
         """
+        pv_objs = []
+
+        # Get PV form PVC instances and delete PVCs
         for instance in instances:
-            instance.delete()
-            instance.ocp.wait_for_delete(
-                instance.name
+            if not instance.is_deleted:
+                pv_objs.append(instance.backed_pv_obj)
+                instance.delete()
+                instance.ocp.wait_for_delete(
+                    instance.name
+                )
+
+        # Wait for PVs to delete
+        for pv_obj in pv_objs:
+            pv_obj.ocp.wait_for_delete(
+                resource_name=pv_obj.name, timeout=180
             )
 
     request.addfinalizer(finalizer)
@@ -695,3 +706,10 @@ def multi_pvc_factory(
         return pvc_list
 
     return factory
+
+
+@pytest.fixture(scope="session", autouse=True)
+def rook_repo(request):
+    get_rook_repo(
+        config.RUN['rook_branch'], config.RUN.get('rook_to_checkout')
+    )

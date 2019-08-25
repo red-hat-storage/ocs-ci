@@ -5,6 +5,8 @@ import logging
 import re
 import datetime
 
+from ocs_ci.ocs.ocp import OCP
+
 from uuid import uuid4
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs import constants, defaults, ocp
@@ -86,7 +88,7 @@ def wait_for_resource_state(resource, state, timeout=60):
 def create_pod(
     interface_type=None, pvc_name=None,
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-    node_name=None, pod_dict_path=None
+    node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False
 ):
     """
     Create a pod
@@ -98,6 +100,8 @@ def create_pod(
         namespace (str): The namespace for the new resource creation
         node_name (str): The name of specific node to schedule the pod
         pod_dict_path (str): YAML path for the pod
+        sa_name (str): Serviceaccount name
+        dc_deployment (bool): True if creating pod as deploymentconfig
 
     Returns:
         Pod: A Pod instance
@@ -111,29 +115,55 @@ def create_pod(
     else:
         pod_dict = pod_dict_path if pod_dict_path else constants.CSI_CEPHFS_POD_YAML
         interface = constants.CEPHFS_INTERFACE
-
+    if dc_deployment:
+        pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
     pod_data = templating.load_yaml_to_dict(pod_dict)
-    pod_data['metadata']['name'] = create_unique_resource_name(
+    pod_name = create_unique_resource_name(
         f'test-{interface}', 'pod'
     )
+    pod_data['metadata']['name'] = pod_name
     pod_data['metadata']['namespace'] = namespace
+    if dc_deployment:
+        pod_data['metadata']['labels']['app'] = pod_name
+        pod_data['spec']['template']['metadata']['labels']['name'] = pod_name
+
     if pvc_name:
-        pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
+        if dc_deployment:
+            pod_data['spec']['template']['spec']['volumes'][0][
+                'persistentVolumeClaim'
+            ]['claimName'] = pvc_name
+        else:
+            pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
 
     if node_name:
         pod_data['spec']['nodeName'] = node_name
     else:
         if 'nodeName' in pod_data.get('spec'):
             del pod_data['spec']['nodeName']
+    if sa_name and dc_deployment:
+        pod_data['spec']['template']['spec']['serviceAccountName'] = sa_name
+    if dc_deployment:
+        ocs_obj = create_resource(**pod_data)
+        logger.info(ocs_obj.name)
+        assert (ocp.OCP(kind='pod', namespace=namespace)).wait_for_resource(
+            condition=constants.STATUS_COMPLETED,
+            resource_name=pod_name + '-1-deploy',
+            resource_count=0, timeout=180, sleep=3
+        )
+        dpod_list = pod.get_all_pods(namespace=namespace)
+        for dpod in dpod_list:
+            if '-1-deploy' not in dpod.name:
+                if pod_name in dpod.name:
+                    return dpod
+    else:
+        pod_obj = pod.Pod(**pod_data)
+        pod_name = pod_data.get('metadata').get('name')
+        created_resource = pod_obj.create(do_reload=do_reload)
+        assert created_resource, (
+            f"Failed to create resource {pod_name}"
+        )
 
-    pod_obj = pod.Pod(**pod_data)
-    pod_name = pod_data.get('metadata').get('name')
-    created_resource = pod_obj.create(do_reload=do_reload)
-    assert created_resource, (
-        f"Failed to create resource {pod_name}"
-    )
-
-    return pod_obj
+        return pod_obj
 
 
 def create_project():
@@ -148,6 +178,21 @@ def create_project():
     project_obj = ocp.OCP(kind='Project', namespace=namespace)
     assert project_obj.new_project(namespace), f"Failed to create namespace {namespace}"
     return project_obj
+
+
+def create_multilpe_projects(number_of_project):
+    """
+    Create one or more projects
+
+    Args:
+        number_of_project (int): Number of projects to be created
+
+    Returns:
+         list: List of project objects
+
+    """
+    project_objs = [create_project() for _ in range(number_of_project)]
+    return project_objs
 
 
 def create_secret(interface_type):
@@ -258,6 +303,7 @@ def create_storage_class(
     Returns:
         OCS: An OCS instance for the storage class
     """
+
     sc_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
         sc_data = templating.load_yaml_to_dict(
@@ -349,22 +395,28 @@ def create_pvc(
     return ocs_obj
 
 
-def create_multiple_pvcs(sc_name, namespace, number_of_pvc=1, size=None):
+def create_multiple_pvcs(
+    sc_name, namespace, number_of_pvc=1, size=None, do_reload=False
+):
     """
     Create one or more PVC
 
     Args:
         sc_name (str): The name of the storage class to provision the PVCs from
+        namespace (str): The namespace for the PVCs creation
         number_of_pvc (int): Number of PVCs to be created
         size (str): The size of the PVCs to create
-        namespace (str): The namespace for the PVCs creation
+        do_reload (bool): True for wait for reloading PVC after its creation,
+            False otherwise
+
 
     Returns:
          list: List of PVC objects
     """
     return [
         create_pvc(
-            sc_name=sc_name, size=size, namespace=namespace
+            sc_name=sc_name, size=size, namespace=namespace,
+            do_reload=do_reload
         ) for _ in range(number_of_pvc)
     ]
 
@@ -714,7 +766,8 @@ def get_start_creation_time(interface, pvc_name):
     # Extract the starting time for the PVC provisioning
     start = [
         i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)
-    ][0].split(' ')[1]
+    ]
+    start = start[0].split(' ')[1]
     return datetime.datetime.strptime(start, format)
 
 
@@ -743,7 +796,8 @@ def get_end_creation_time(interface, pvc_name):
     # Extract the starting time for the PVC provisioning
     end = [
         i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)
-    ][0].split(' ')[1]
+    ]
+    end = end[0].split(' ')[1]
     return datetime.datetime.strptime(end, format)
 
 
@@ -763,6 +817,58 @@ def measure_pvc_creation_time(interface, pvc_name):
     end = get_end_creation_time(interface=interface, pvc_name=pvc_name)
     total = end - start
     return total.total_seconds()
+
+
+def get_default_storage_class():
+    """
+    Get the default StorageClass(es)
+
+    Returns:
+        list: default StorageClass(es) list
+
+    """
+    default_sc_obj = ocp.OCP(kind='StorageClass')
+    storage_classes = default_sc_obj.get().get('items')
+    storage_classes = [
+        sc for sc in storage_classes if 'annotations' in sc.get('metadata')
+    ]
+    return [
+        sc.get('metadata').get('name') for sc in storage_classes if sc.get(
+            'metadata'
+        ).get('annotations').get(
+            'storageclass.kubernetes.io/is-default-class'
+        ) == 'true'
+    ]
+
+
+def change_default_storageclass(scname):
+    """
+    Change the default StorageClass to the given SC name
+
+    Args:
+        scname (str): StorageClass name
+
+    Returns:
+        bool: True on success
+
+    """
+    default_sc = get_default_storage_class()
+    ocp_obj = ocp.OCP(kind='StorageClass')
+    if default_sc:
+        # Change the existing default Storageclass annotation to false
+        patch = " '{\"metadata\": {\"annotations\":" \
+                "{\"storageclass.kubernetes.io/is-default-class\"" \
+                ":\"false\"}}}' "
+        patch_cmd = f"patch storageclass {default_sc} -p" + patch
+        ocp_obj.exec_oc_cmd(command=patch_cmd)
+
+    # Change the new storageclass to default
+    patch = " '{\"metadata\": {\"annotations\":" \
+            "{\"storageclass.kubernetes.io/is-default-class\"" \
+            ":\"true\"}}}' "
+    patch_cmd = f"patch storageclass {scname} -p" + patch
+    ocp_obj.exec_oc_cmd(command=patch_cmd)
+    return True
 
 
 def verify_volume_deleted_in_backend(interface, image_uuid, pool_name=None):
@@ -807,3 +913,72 @@ def verify_volume_deleted_in_backend(interface, image_uuid, pool_name=None):
         f"in backend"
     )
     return True
+
+
+def create_serviceaccount(namespace):
+    """
+    Create a Serviceaccount
+
+    Args:
+        namespace (str): The namespace for the serviceaccount creation
+
+    Returns:
+        OCS: An OCS instance for the service_account
+    """
+
+    service_account_data = templating.load_yaml_to_dict(
+        constants.SERVICE_ACCOUNT_YAML
+    )
+    service_account_data['metadata']['name'] = create_unique_resource_name(
+        'sa', 'serviceaccount'
+    )
+    service_account_data['metadata']['namespace'] = namespace
+
+    return create_resource(**service_account_data)
+
+
+def add_scc_policy(sa_name, namespace):
+    """
+    Adding ServiceAccount to scc privileged
+
+    Args:
+        sa_name (str): ServiceAccount name
+        namespace (str): The namespace for the scc_policy creation
+
+    """
+    ocp = OCP()
+    out = ocp.exec_oc_cmd(
+        command=f"adm policy add-scc-to-user privileged system:serviceaccount:{namespace}:{sa_name}",
+        out_yaml_format=False
+    )
+
+    logger.info(out)
+
+
+def remove_scc_policy(sa_name, namespace):
+    """
+    Removing ServiceAccount from scc privileged
+
+    Args:
+        sa_name (str): ServiceAccount name
+        namespace (str): The namespace for the scc_policy deletion
+
+    """
+    ocp = OCP()
+    out = ocp.exec_oc_cmd(
+        command=f"adm policy remove-scc-from-user privileged system:serviceaccount:{namespace}:{sa_name}",
+        out_yaml_format=False
+    )
+
+    logger.info(out)
+
+
+def delete_deploymentconfig(pod_obj):
+    """
+    Delete deploymentconfig
+
+    Args:
+         pod_obj (object): Pod object
+    """
+    dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG)
+    dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))

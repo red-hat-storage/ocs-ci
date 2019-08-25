@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import argparse
 import base64
 import binascii
 import os
@@ -6,6 +7,26 @@ import yaml
 
 from os import environ as env
 from configparser import ConfigParser
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--skip-aws',
+        dest='aws',
+        action='store_false',
+    )
+    parser.add_argument(
+        '--skip-pull-secret',
+        dest='pull_secret',
+        action='store_false',
+    )
+    parser.add_argument(
+        '--skip-ocsci-conf',
+        dest='ocsci_conf',
+        action='store_false',
+    )
+    return parser.parse_args()
 
 
 def write_aws_creds():
@@ -68,7 +89,16 @@ def get_ocsci_conf():
         ),
     )
     # Apply image configuration if present
-    for image_type in ['rook', 'ceph']:
+    image_types = [
+        'rook',
+        'ceph',
+        'ceph_csi',
+        'rook_csi_registrar',
+        'rook_csi_provisioner',
+        'rook_csi_snapshotter',
+        'rook_csi_attacher',
+    ]
+    for image_type in image_types:
         image_key = f"{image_type}_image"
         image_value = env.get(image_key.upper())
         if image_value is not None:
@@ -91,6 +121,10 @@ def write_ocsci_conf():
 
 
 if __name__ == "__main__":
-    write_aws_creds()
-    write_pull_secret()
-    write_ocsci_conf()
+    args = parse_args()
+    if args.aws:
+        write_aws_creds()
+    if args.pull_secret:
+        write_pull_secret()
+    if args.ocsci_conf:
+        write_ocsci_conf()
