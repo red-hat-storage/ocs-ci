@@ -17,7 +17,6 @@ def noobaa_obj():
         NooBaa: A NooBaa resource
 
     """
-
     noobaa_obj = noobaa.NooBaa()
     return noobaa_obj
 
@@ -31,7 +30,6 @@ def uploaded_objects(request, noobaa_obj, awscli_pod):
         list: An empty list of objects
 
     """
-
     uploaded_objects_paths = []
 
     base_command = (
@@ -63,7 +61,6 @@ def created_buckets(request, noobaa_obj):
         list: An empty list of buckets
 
     """
-
     created_buckets_names = []
 
     def bucket_cleanup():
@@ -84,7 +81,6 @@ def created_pods(request):
         list: An empty list of pods
 
     """
-
     created_pods_objects = []
 
     def pod_cleanup():
@@ -103,7 +99,6 @@ def awscli_pod(noobaa_obj, created_pods):
     Returns:
         pod: A pod running the AWS CLI
     """
-
     awscli_pod_obj = helpers.create_pod(namespace='noobaa',
                                         pod_dict_path=constants.AWSCLI_POD_YAML)
     helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)

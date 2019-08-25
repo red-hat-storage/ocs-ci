@@ -26,7 +26,6 @@ class TestBucketIO:
         """
         Test object IO using the S3 SDK
         """
-
         base_command = (
             f"sh -c \"AWS_ACCESS_KEY_ID={noobaa_obj.access_key_id} "
             f"AWS_SECRET_ACCESS_KEY={noobaa_obj.access_key} "
