@@ -337,7 +337,6 @@ class OCP(object):
 
         Returns:
             bool: True in case resource deletion is successful
-                False otherwise
 
         """
         start_time = time.time()
