@@ -353,6 +353,10 @@ class OCP(object):
                     raise ex
 
             if timeout < (time.time() - start_time):
+                describe_out = self.describe(resource_name=resource_name)
+                log.info(
+                    f"Resource {resource_name} describe output: {describe_out}"
+                )
                 raise TimeoutError(
                     f"Timeout when waiting for {resource_name} to delete"
                 )
