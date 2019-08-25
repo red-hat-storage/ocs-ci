@@ -307,10 +307,21 @@ def pvc_factory(
         """
         Delete the PVC
         """
+        pv_objs = []
+
+        # Get PV form PVC instances and delete PVCs
         for instance in instances:
-            instance.delete()
-            instance.ocp.wait_for_delete(
-                instance.name
+            if not instance.is_deleted:
+                pv_objs.append(instance.backed_pv_obj)
+                instance.delete()
+                instance.ocp.wait_for_delete(
+                    instance.name
+                )
+
+        # Wait for PVs to delete
+        for pv_obj in pv_objs:
+            pv_obj.ocp.wait_for_delete(
+                resource_name=pv_obj.name, timeout=180
             )
 
     request.addfinalizer(finalizer)
