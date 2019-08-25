@@ -354,12 +354,11 @@ class OCP(object):
 
             if timeout < (time.time() - start_time):
                 describe_out = self.describe(resource_name=resource_name)
-                log.info(
-                    f"Resource {resource_name} describe output: {describe_out}"
+                msg = (
+                    f"Timeout when waiting for {resource_name} to delete. "
+                    f"Describe output: {describe_out}"
                 )
-                raise TimeoutError(
-                    f"Timeout when waiting for {resource_name} to delete"
-                )
+                raise TimeoutError(msg)
             time.sleep(sleep)
 
     def get_resource_status(self, resource_name):
