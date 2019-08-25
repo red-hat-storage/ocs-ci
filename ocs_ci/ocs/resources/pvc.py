@@ -2,6 +2,7 @@
 General PVC object
 """
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -77,6 +78,20 @@ class PVC(OCS):
         pv_obj.reload()
         return pv_obj
 
+    @property
+    def image_uuid(self):
+        """
+        Fetch image uuid associated with PVC
+
+        Returns:
+            str: Image uuid associated with PVC
+        """
+        spec_volhandle = "'{.spec.csi.volumeHandle}'"
+        cmd = f"oc get pv/{self.backed_pv} -o jsonpath={spec_volhandle}"
+        out = run_cmd(cmd=cmd)
+        image_uuid = "-".join(out.split('-')[-5:])
+        return image_uuid
+
     def verify_pv_exists_in_backend(
             self, pool_name
     ):
@@ -119,18 +134,25 @@ class PVC(OCS):
         return True
 
 
-def delete_pvcs(pvc_objs):
+def delete_pvcs(pvc_objs, concurrent=False):
     """
     Deletes list of the pvc objects
 
     Args:
         pvc_objs (list): List of the pvc objects to be deleted
+        concurrent (bool): Determines if the delete operation should be
+            executed with multiple thread in parallel
 
     Returns:
         bool: True if deletion is successful
     """
-    for pvc in pvc_objs:
-        pvc.delete()
+    if concurrent:
+        with ThreadPoolExecutor() as executor:
+            for pvc in pvc_objs:
+                executor.submit(pvc.delete)
+    else:
+        for pvc in pvc_objs:
+            pvc.delete()
     return True
 
 

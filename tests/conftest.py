@@ -5,7 +5,7 @@ import pytest
 import threading
 from datetime import datetime
 
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 
@@ -307,10 +307,21 @@ def pvc_factory(
         """
         Delete the PVC
         """
+        pv_objs = []
+
+        # Get PV form PVC instances and delete PVCs
         for instance in instances:
-            instance.delete()
-            instance.ocp.wait_for_delete(
-                instance.name
+            if not instance.is_deleted:
+                pv_objs.append(instance.backed_pv_obj)
+                instance.delete()
+                instance.ocp.wait_for_delete(
+                    instance.name
+                )
+
+        # Wait for PVs to delete
+        for pv_obj in pv_objs:
+            pv_obj.ocp.wait_for_delete(
+                resource_name=pv_obj.name, timeout=180
             )
 
     request.addfinalizer(finalizer)
@@ -357,13 +368,11 @@ def pod_factory(request, pvc_factory):
                 interface_type=interface,
             )
             assert pod_obj, "Failed to create PVC"
-            helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
-            pod_obj.reload()
+        instances.append(pod_obj)
         if status:
             helpers.wait_for_resource_state(pod_obj, status)
         pod_obj.pvc = pvc
 
-        instances.append(pod_obj)
         return pod_obj
 
     def finalizer():
@@ -406,7 +415,7 @@ def teardown_factory(request):
         """
         Delete the resources created in the test
         """
-        for instance in instances:
+        for instance in instances[::-1]:
             if not instance.is_deleted:
                 instance.delete()
                 instance.ocp.wait_for_delete(
@@ -627,3 +636,80 @@ def interface_iterate(request):
 
     """
     return request.param['interface']
+
+
+@pytest.fixture()
+def multi_pvc_factory(
+    storageclass_factory,
+    project_factory,
+    pvc_factory
+):
+    """
+    Create a Persistent Volume Claims factory. Calling this fixture creates a
+    set of new PVCs.
+    """
+    def factory(
+        interface=constants.CEPHBLOCKPOOL,
+        project=None,
+        storageclass=None,
+        size=None,
+        access_mode=constants.ACCESS_MODE_RWO,
+        status=constants.STATUS_BOUND,
+        num_of_pvc=1,
+        wait_each=False
+    ):
+        """
+        Args:
+            interface (str): CephBlockPool or CephFileSystem. This decides
+                whether a RBD based or CephFS resource is created.
+                RBD is default.
+            project (object): ocs_ci.ocs.resources.ocs.OCS instance
+                of 'Project' kind.
+            storageclass (object): ocs_ci.ocs.resources.ocs.OCS instance
+                of 'StorageClass' kind.
+            size (int): The requested size for the PVC
+            access_mode (str): ReadWriteOnce, ReadOnlyMany or ReadWriteMany.
+                This decides the access mode to be used for the PVC.
+                ReadWriteOnce is default.
+            status (str): If provided then factory waits for object to reach
+                desired state.
+            num_of_pvc(int): Number of PVCs to be created
+            wait_each(bool): True to wait for each PVC to be in status 'status'
+                before creating next PVC, False otherwise
+
+        Returns:
+            list: objects of PVC class.
+        """
+        pvc_list = []
+        if wait_each:
+            status_tmp = status
+        else:
+            status_tmp = ""
+
+        project = project or project_factory()
+        storageclass = storageclass or storageclass_factory(interface)
+
+        for _ in range(num_of_pvc):
+            pvc_obj = pvc_factory(
+                interface=interface,
+                project=project,
+                storageclass=storageclass,
+                size=size,
+                access_mode=access_mode,
+                status=status_tmp
+            )
+            pvc_list.append(pvc_obj)
+
+        if not wait_each:
+            for pvc_obj in pvc_list:
+                helpers.wait_for_resource_state(pvc_obj, status)
+        return pvc_list
+
+    return factory
+
+
+@pytest.fixture(scope="session", autouse=True)
+def rook_repo(request):
+    get_rook_repo(
+        config.RUN['rook_branch'], config.RUN.get('rook_to_checkout')
+    )

@@ -103,3 +103,4 @@ def awscli_pod(noobaa_obj, created_pods):
     helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
     created_pods.append(awscli_pod_obj)
     return awscli_pod_obj
+
