@@ -364,8 +364,9 @@ def mask_secrets(plaintext, secrets):
         str: The censored version of plaintext
 
     """
-    for secret in secrets:
-        plaintext = plaintext.replace(secret, '*' * 5)
+    if secrets:
+        for secret in secrets:
+            plaintext = plaintext.replace(secret, '*' * 5)
     return plaintext
 
 
