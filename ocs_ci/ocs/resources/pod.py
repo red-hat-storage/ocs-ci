@@ -124,7 +124,7 @@ class Pod(OCS):
             logger.exception(f"Found Exception: {ex}")
             raise
 
-    def exec_cmd_on_pod(self, command, out_yaml_format=True):
+    def exec_cmd_on_pod(self, command, out_yaml_format=True, secrets=None, **kwargs):
         """
         Execute a command on a pod (e.g. oc rsh)
 
@@ -133,12 +133,16 @@ class Pod(OCS):
             out_yaml_format (bool): whether to return yaml loaded python
                 object OR to return raw output
 
+            secrets (list): A list of secrets to be masked with asterisks
+                This kwarg is popped in order to not interfere with
+                subprocess.run(**kwargs)
+
         Returns:
             Munch Obj: This object represents a returned yaml file
         """
         rsh_cmd = f"rsh {self.name} "
         rsh_cmd += command
-        return self.ocp.exec_oc_cmd(rsh_cmd, out_yaml_format)
+        return self.ocp.exec_oc_cmd(rsh_cmd, out_yaml_format, secrets=secrets, **kwargs)
 
     def get_labels(self):
         """
