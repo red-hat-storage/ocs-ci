@@ -2,6 +2,7 @@
 General PVC object
 """
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -133,18 +134,25 @@ class PVC(OCS):
         return True
 
 
-def delete_pvcs(pvc_objs):
+def delete_pvcs(pvc_objs, concurrent=False):
     """
     Deletes list of the pvc objects
 
     Args:
         pvc_objs (list): List of the pvc objects to be deleted
+        concurrent (bool): Determines if the delete operation should be
+            executed with multiple thread in parallel
 
     Returns:
         bool: True if deletion is successful
     """
-    for pvc in pvc_objs:
-        pvc.delete()
+    if concurrent:
+        with ThreadPoolExecutor() as executor:
+            for pvc in pvc_objs:
+                executor.submit(pvc.delete)
+    else:
+        for pvc in pvc_objs:
+            pvc.delete()
     return True
 
 
