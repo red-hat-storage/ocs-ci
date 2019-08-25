@@ -46,7 +46,7 @@ class OCP(object):
     def namespace(self):
         return self._namespace
 
-    def exec_oc_cmd(self, command, out_yaml_format=True):
+    def exec_oc_cmd(self, command, out_yaml_format=True, secrets=None, **kwargs):
         """
         Executing 'oc' command
 
@@ -56,6 +56,10 @@ class OCP(object):
 
             out_yaml_format (bool): whether to return  yaml loaded python
                 object or raw output
+
+            secrets (list): A list of secrets to be masked with asterisks
+                This kwarg is popped in order to not interfere with
+                subprocess.run(**kwargs)
 
         Returns:
             dict: Dictionary represents a returned yaml file
@@ -69,7 +73,7 @@ class OCP(object):
             oc_cmd += f"--kubeconfig {kubeconfig} "
 
         oc_cmd += command
-        out = run_cmd(cmd=oc_cmd)
+        out = run_cmd(cmd=oc_cmd, secrets=secrets, **kwargs)
 
         try:
             if out.startswith('hints = '):

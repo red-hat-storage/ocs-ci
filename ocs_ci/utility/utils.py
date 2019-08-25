@@ -352,12 +352,34 @@ def custom_ceph_config(suite_config, custom_config, custom_config_file):
     return full_custom_config
 
 
-def run_cmd(cmd, **kwargs):
+def mask_secrets(plaintext, secrets):
+    """
+    Replace secrets in plaintext with asterisks
+
+    Args:
+        plaintext (str): The plaintext to remove the secrets from
+        secrets (list): List of secret strings to replace in the plaintext
+
+    Returns:
+        str: The censored version of plaintext
+
+    """
+    if secrets:
+        for secret in secrets:
+            plaintext = plaintext.replace(secret, '*' * 5)
+    return plaintext
+
+
+def run_cmd(cmd, secrets=None, **kwargs):
     """
     Run an arbitrary command locally
 
     Args:
         cmd (str): command to run
+
+        secrets (list): A list of secrets to be masked with asterisks
+            This kwarg is popped in order to not interfere with
+            subprocess.run(**kwargs)
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -366,7 +388,8 @@ def run_cmd(cmd, **kwargs):
         (str) Decoded stdout of command
 
     """
-    log.info(f"Executing command: {cmd}")
+    masked_cmd = mask_secrets(cmd, secrets)
+    log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str):
         cmd = shlex.split(cmd)
     r = subprocess.run(
@@ -378,13 +401,13 @@ def run_cmd(cmd, **kwargs):
     )
     log.debug(f"Command output: {r.stdout.decode()}")
     if r.stderr and not r.returncode:
-        log.warning(f"Command warning:: {r.stderr.decode()}")
+        log.warning(f"Command warning: {mask_secrets(r.stderr.decode(), secrets)}")
     if r.returncode:
         raise CommandFailed(
-            f"Error during execution of command: {cmd}."
-            f"\nError is {r.stderr.decode()}"
+            f"Error during execution of command: {masked_cmd}."
+            f"\nError is {mask_secrets(r.stderr.decode(), secrets)}"
         )
-    return r.stdout.decode()
+    return mask_secrets(r.stdout.decode(), secrets)
 
 
 def download_file(url, filename):
