@@ -13,16 +13,23 @@ log = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize(
-    argnames=["interface"],
+    argnames=["interface", "access_mode"],
     argvalues=[
         pytest.param(
-            *[constants.CEPHBLOCKPOOL],
+            *[constants.CEPHBLOCKPOOL, constants.ACCESS_MODE_RWO],
             marks=pytest.mark.polarion_id("OCS-852")
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM],
+            *[constants.CEPHFILESYSTEM, constants.ACCESS_MODE_RWO],
             marks=[
                 pytest.mark.polarion_id("OCS-853"),
+                pytest.mark.bugzilla("1745344")
+            ]
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, constants.ACCESS_MODE_RWX],
+            marks=[
+                pytest.mark.polarion_id("OCS-854"),
                 pytest.mark.bugzilla("1745344")
             ]
         )
@@ -36,12 +43,14 @@ class TestPVCFullWithIO(E2ETest):
     pvc_size_gb = 50
 
     @pytest.fixture()
-    def base_setup(self, request, interface, pvc_factory, pod_factory):
+    def base_setup(
+        self, request, interface, access_mode, pvc_factory, pod_factory
+    ):
         """
         A setup phase for the test
         """
         self.pvc_obj = pvc_factory(
-            interface=interface, size=self.pvc_size_gb
+            interface=interface, size=self.pvc_size_gb, access_mode=access_mode
         )
         self.pod_obj = pod_factory(interface=interface, pvc=self.pvc_obj)
 
@@ -50,11 +59,11 @@ class TestPVCFullWithIO(E2ETest):
         """
         Writing data to PVC to reach limit
         """
-        logging.info(f"Running FIO to fill PVC size: {self.pvc_size_gb}")
+        log.info(f"Running FIO to fill PVC size: {self.pvc_size_gb}")
         self.pod_obj.run_io(
             'fs', size=self.pvc_size_gb, io_direction='write', runtime=60
         )
-        logging.info("Waiting for results")
+        log.info("Waiting for IO results")
         try:
             self.pod_obj.get_fio_results()
         except ex.CommandFailed as cf:
