@@ -331,6 +331,10 @@ class OCP(object):
             timeout (int): Time in seconds to wait
             sleep (int): Sampling time in seconds
 
+        Raises:
+            CommandFailed: If failed to verify the resource deletion
+            TimeoutError: If resource is not deleted within specified timeout
+
         Returns:
             bool: True in case resource deletion is successful
                 False otherwise
@@ -342,13 +346,17 @@ class OCP(object):
                 self.get(resource_name=resource_name)
             except CommandFailed as ex:
                 if "NotFound" in str(ex):
-                    log.info(f"{self.kind} {resource_name} got deleted successfully")
+                    log.info(
+                        f"{self.kind} {resource_name} got deleted successfully"
+                    )
                     return True
                 else:
                     raise ex
 
             if timeout < (time.time() - start_time):
-                raise TimeoutError(f"Timeout when waiting for {resource_name} to delete")
+                raise TimeoutError(
+                    f"Timeout when waiting for {resource_name} to delete"
+                )
             time.sleep(sleep)
 
     def get_resource_status(self, resource_name):
