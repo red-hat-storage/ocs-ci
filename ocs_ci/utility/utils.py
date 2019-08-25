@@ -369,15 +369,14 @@ def mask_secrets(plaintext, secrets):
     return plaintext
 
 
-def run_cmd(cmd, **kwargs):
+def run_cmd(cmd, secrets=None, **kwargs):
     """
     Run an arbitrary command locally
 
     Args:
         cmd (str): command to run
 
-    Keyword Args:
-        secrets (list): The list of secrets to be masked with asterisks
+        secrets (list): A list of secrets to be masked with asterisks
             This kwarg is popped in order to not interfere with
             subprocess.run(**kwargs)
 
@@ -388,7 +387,6 @@ def run_cmd(cmd, **kwargs):
         (str) Decoded stdout of command
 
     """
-    secrets = kwargs.pop('secrets', [])
     masked_cmd = mask_secrets(cmd, secrets)
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str):
