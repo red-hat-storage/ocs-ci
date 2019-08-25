@@ -802,3 +802,21 @@ def get_pvc_name(pod_obj):
     return pod_obj.get().get(
         'spec'
     ).get('volumes')[0].get('persistentVolumeClaim').get('claimName')
+
+
+def get_used_space_on_mount_point(pod_obj):
+    """
+    Get the used space on a mount point
+
+    Args:
+        pod_obj (POD): The pod object
+
+    Returns:
+        int: Percentage represent the used space on the mount point
+
+    """
+    # Verify data's are written to mount-point
+    mount_point = pod_obj.exec_cmd_on_pod(command="df -kh")
+    mount_point = mount_point.split()
+    used_percentage = mount_point[mount_point.index('/var/lib/www/html') - 1]
+    return used_percentage
