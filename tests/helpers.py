@@ -819,6 +819,58 @@ def measure_pvc_creation_time(interface, pvc_name):
     return total.total_seconds()
 
 
+def get_default_storage_class():
+    """
+    Get the default StorageClass(es)
+
+    Returns:
+        list: default StorageClass(es) list
+
+    """
+    default_sc_obj = ocp.OCP(kind='StorageClass')
+    storage_classes = default_sc_obj.get().get('items')
+    storage_classes = [
+        sc for sc in storage_classes if 'annotations' in sc.get('metadata')
+    ]
+    return [
+        sc.get('metadata').get('name') for sc in storage_classes if sc.get(
+            'metadata'
+        ).get('annotations').get(
+            'storageclass.kubernetes.io/is-default-class'
+        ) == 'true'
+    ]
+
+
+def change_default_storageclass(scname):
+    """
+    Change the default StorageClass to the given SC name
+
+    Args:
+        scname (str): StorageClass name
+
+    Returns:
+        bool: True on success
+
+    """
+    default_sc = get_default_storage_class()
+    ocp_obj = ocp.OCP(kind='StorageClass')
+    if default_sc:
+        # Change the existing default Storageclass annotation to false
+        patch = " '{\"metadata\": {\"annotations\":" \
+                "{\"storageclass.kubernetes.io/is-default-class\"" \
+                ":\"false\"}}}' "
+        patch_cmd = f"patch storageclass {default_sc} -p" + patch
+        ocp_obj.exec_oc_cmd(command=patch_cmd)
+
+    # Change the new storageclass to default
+    patch = " '{\"metadata\": {\"annotations\":" \
+            "{\"storageclass.kubernetes.io/is-default-class\"" \
+            ":\"true\"}}}' "
+    patch_cmd = f"patch storageclass {scname} -p" + patch
+    ocp_obj.exec_oc_cmd(command=patch_cmd)
+    return True
+
+
 def verify_volume_deleted_in_backend(interface, image_uuid, pool_name=None):
     """
     Verify that Image/Subvolume is not present in the backend.
