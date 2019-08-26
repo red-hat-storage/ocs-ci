@@ -133,7 +133,8 @@ def storageclass_factory(
     def factory(
         interface=constants.CEPHBLOCKPOOL,
         secret=None,
-        custom_data=None
+        custom_data=None,
+        sc_name=None
     ):
         """
         Args:
@@ -144,6 +145,7 @@ def storageclass_factory(
             custom_data (dict): If provided then storageclass object is created
                 by using these data. Parameters `block_pool` and `secret`
                 are not useds but references are set if provided.
+            sc_name (str): Name of the storage class
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -162,7 +164,8 @@ def storageclass_factory(
             sc_obj = helpers.create_storage_class(
                 interface_type=interface,
                 interface_name=interface_name,
-                secret_name=secret.name
+                secret_name=secret.name,
+                sc_name=sc_name
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.ceph_pool = ceph_pool
