@@ -1,5 +1,6 @@
 import base64
 import logging
+
 import boto3
 from botocore.client import ClientError
 
@@ -13,8 +14,7 @@ class NooBaa(object):
     Wrapper class for NooBaa's S3 service
     """
 
-    _s3_resource = None
-    _ocp_resource = None
+    s3_resource, ocp_resource, endpoint, region, access_key_id, access_key = (None,) * 6
 
     def __init__(self):
         """
@@ -22,10 +22,11 @@ class NooBaa(object):
         """
         ocp_obj = OCP(kind='noobaa', namespace='noobaa')
         results = ocp_obj.get()
-        endpoint = (
+        self.endpoint = 'http:' + (
             results.get('items')[0].get('status').get('services')
-            .get('serviceS3').get('externalDNS')[0]
+            .get('serviceS3').get('externalDNS')[0].split(':')[1]
         )
+        self.region = self.endpoint.split('.')[1]
         creds_secret_name = (
             results.get('items')[0].get('status').get('accounts')
             .get('admin').get('secretRef').get('name')
@@ -33,18 +34,18 @@ class NooBaa(object):
         secret_ocp_obj = OCP(kind='secret', namespace='noobaa')
         results2 = secret_ocp_obj.get(creds_secret_name)
 
-        noobaa_access_key = base64.b64decode(
+        self.access_key_id = base64.b64decode(
             results2.get('data').get('AWS_ACCESS_KEY_ID')
         ).decode('utf-8')
-        noobaa_secret_key = base64.b64decode(
+        self.access_key = base64.b64decode(
             results2.get('data').get('AWS_SECRET_ACCESS_KEY')
         ).decode('utf-8')
 
         self._ocp_resource = ocp_obj
-        self._s3_resource = boto3.resource(
-            's3', verify=False, endpoint_url=endpoint,
-            aws_access_key_id=noobaa_access_key,
-            aws_secret_access_key=noobaa_secret_key
+        self.s3_resource = boto3.resource(
+            's3', verify=False, endpoint_url=self.endpoint,
+            aws_access_key_id=self.access_key_id,
+            aws_secret_access_key=self.access_key
         )
 
     def s3_create_bucket(self, bucketname):
@@ -56,7 +57,7 @@ class NooBaa(object):
             s3.Bucket object
 
         """
-        return self._s3_resource.create_bucket(Bucket=bucketname)
+        return self.s3_resource.create_bucket(Bucket=bucketname)
 
     def s3_delete_bucket(self, bucket):
         """
@@ -69,18 +70,25 @@ class NooBaa(object):
     def s3_list_all_bucket_names(self):
         """
         Returns:
-            A list of all bucket names
+            list: A list of all bucket names
 
         """
-        return [bucket.name for bucket in self._s3_resource.buckets.all()]
+        return [bucket.name for bucket in self.s3_resource.buckets.all()]
 
-    def s3_get_all_bucket_objects(self):
+    def s3_list_all_objects_in_bucket(self, bucketname):
         """
         Returns:
-            A list of all  s3.Bucket objects
+            list: A list of all bucket objects
+        """
+        return [obj for obj in self.s3_resource.Bucket(bucketname).objects.all()]
+
+    def s3_get_all_buckets(self):
+        """
+        Returns:
+            list: A list of all s3.Bucket objects
 
         """
-        return [bucket for bucket in self._s3_resource.buckets.all()]
+        return [bucket for bucket in self.s3_resource.buckets.all()]
 
     def s3_verify_bucket_exists(self, bucket):
         """
