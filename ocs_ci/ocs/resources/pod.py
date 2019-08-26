@@ -184,7 +184,7 @@ class Pod(OCS):
             return [item for item in out if item]
         return out
 
-    def get_storage_path(self, storage_type):
+    def get_storage_path(self, storage_type='fs'):
         """
         Get the pod volume mount path or device path
 
