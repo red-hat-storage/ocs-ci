@@ -52,6 +52,7 @@ class TestBucketDeletion:
         condition=config.ENV_DATA['platform'] != 'AWS',
         reason="Tests are not running on AWS deployed cluster"
     )
+    @pytest.mark.polarion_id("OCS-1299")
     def test_s3_bucket_delete(self, noobaa_obj, create_buckets):
         """
         Test deletion of bucket using the S3 SDK

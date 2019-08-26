@@ -20,6 +20,7 @@ class TestBucketCreation:
         condition=config.ENV_DATA['platform'] != 'AWS',
         reason="Tests are not running on AWS deployed cluster"
     )
+    @pytest.mark.polarion_id("OCS-1298")
     def test_s3_bucket_creation(self, noobaa_obj, created_buckets):
         """
         Test bucket creation using the S3 SDK
