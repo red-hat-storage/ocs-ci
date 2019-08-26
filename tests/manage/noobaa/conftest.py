@@ -5,6 +5,7 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import noobaa
 from tests import helpers
+from tests.helpers import craft_s3_command
 
 logger = logging.getLogger(__name__)
 
@@ -32,19 +33,11 @@ def uploaded_objects(request, noobaa_obj, awscli_pod):
     """
     uploaded_objects_paths = []
 
-    base_command = (
-        f"sh -c \"AWS_ACCESS_KEY_ID={noobaa_obj.access_key_id} "
-        f"AWS_SECRET_ACCESS_KEY={noobaa_obj.access_key} "
-        f"AWS_DEFAULT_REGION={noobaa_obj.region} "
-        f"aws s3 "
-        f"--endpoint={noobaa_obj.endpoint} "
-    )
-
     def object_cleanup():
         for uploaded_filename in uploaded_objects_paths:
             logger.info(f'Deleting object {uploaded_filename}')
             awscli_pod.exec_cmd_on_pod(
-                command=base_command + "rm " + uploaded_filename + "\"",
+                command=craft_s3_command(noobaa_obj, "rm " + uploaded_filename),
                 secrets=[noobaa_obj.access_key_id, noobaa_obj.access_key, noobaa_obj.endpoint]
             )
     request.addfinalizer(object_cleanup)
