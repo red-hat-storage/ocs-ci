@@ -21,10 +21,11 @@ class TestBucketIO(ManageTest):
     """
     Test IO of a bucket
     """
-
+    @pytest.mark.polarion_id("OCS-472")
     def test_write_file_to_bucket(self, noobaa_obj, awscli_pod, created_buckets, uploaded_objects):
         """
         Test object IO using the S3 SDK
+        
         """
         base_command = (
             f"sh -c \"AWS_ACCESS_KEY_ID={noobaa_obj.access_key_id} "
