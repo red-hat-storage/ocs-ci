@@ -247,6 +247,7 @@ FIO_IO_RW_PARAMS_YAML = os.path.join(
 # constants
 RBD_INTERFACE = 'rbd'
 CEPHFS_INTERFACE = 'cephfs'
+RAW_BLOCK_DEVICE = '/dev/block'
 
 # EC2 instance statuses
 INSTANCE_PENDING = 0

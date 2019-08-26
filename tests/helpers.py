@@ -93,7 +93,7 @@ def create_pod(
     interface_type=None, pvc_name=None,
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
-    raw_block_pv=False
+    raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE
 ):
     """
     Create a pod
@@ -108,6 +108,7 @@ def create_pod(
         sa_name (str): Serviceaccount name
         dc_deployment (bool): True if creating pod as deploymentconfig
         raw_block_pv (bool): True for creating raw block pv based pod, False otherwise
+        raw_block_device (str): raw block device for the pod
     Returns:
         Pod: A Pod instance
 
@@ -141,8 +142,9 @@ def create_pod(
             pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
 
     if interface_type == constants.CEPHBLOCKPOOL and raw_block_pv:
-        pod_data['spec']['containers'][0]['volumeDevices'][0]['devicePath'] = '/dev/block'
-        pod_data['spec']['containers'][0]['volumeDevices'][0]['name'] = pod_data['spec']['volumes'][0]['name']
+        pod_data['spec']['containers'][0]['volumeDevices'][0]['devicePath'] = raw_block_device
+        pod_data['spec']['containers'][0]['volumeDevices'][0]['name'] = pod_data.get('spec').get('volumes')[
+            0].get('name')
 
     if node_name:
         pod_data['spec']['nodeName'] = node_name
