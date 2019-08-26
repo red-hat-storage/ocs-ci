@@ -17,23 +17,15 @@ class TestRWXMountPoint(ManageTest):
         delete one pod. Confirm second pod is still able to write
     """
 
+    @pytest.mark.polarion_id("OCS-965")
     @tier1
-    @pytest.mark.parametrize(
-        argnames=["interface"],
-        argvalues=[
-            pytest.param(
-                *[constants.CEPHFILESYSTEM],
-                marks=pytest.mark.polarion_id("OCS-965")
-            )
-        ]
-    )
     def test_pvc_rwx_writeable_after_pod_deletions(
-        self, interface, pvc_factory, teardown_factory
+        self, pvc_factory, teardown_factory
     ):
         """
         Test assign nodeName to a pod using RWX pvc
 
-        1. Create a new project 	A new project is created.
+        1. Create a new project.
         2. Create a RWX CEPHFS based PVC
         3. Attach the same PVC to multiple PODs and start IO on all the PODs
         4. Delete all but one pod.
@@ -46,7 +38,7 @@ class TestRWXMountPoint(ManageTest):
 
         # Create a RWX PVC
         pvc_obj = pvc_factory(
-            interface=interface, access_mode=constants.ACCESS_MODE_RWX,
+            interface=constants.CEPHFILESYSTEM, access_mode=constants.ACCESS_MODE_RWX,
             size=10, status=constants.STATUS_BOUND
         )
         logger.info(
@@ -58,7 +50,7 @@ class TestRWXMountPoint(ManageTest):
 
         for each_node in worker_nodes_list:
             pod_obj = helpers.create_pod(
-                interface_type=interface, pvc_name=pvc_obj.name,
+                interface_type=constants.CEPHFILESYSTEM, pvc_name=pvc_obj.name,
                 namespace=pvc_obj.namespace, node_name=each_node,
                 pod_dict_path=constants.NGINX_POD_YAML
             )
