@@ -986,11 +986,15 @@ def delete_deploymentconfig(pod_obj):
 
 def craft_s3_command(noobaa_obj, cmd):
     """
+    Crafts the AWS CLI S3 command including the
+    login credentials and command to be ran
 
     Args:
-        noobaa_obj:
+        noobaa_obj: A NooBaa object containing the NooBaa S3 connection credentials
+        cmd: The AWSCLI command to run
 
     Returns:
+        (str): The crafted command, ready to be executed on the pod
 
     """
     base_command = (
