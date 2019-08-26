@@ -89,8 +89,8 @@ def pytest_addoption(parser):
         help="Run IO in the background",
     )
     parser.addoption(
-        '--monitoring',
-        dest='monitoring',
+        '--persistent-monitoring',
+        dest='persistent-monitoring',
         action="store_true",
         default=False,
         help="Running openshift-monitoring pods with persistent storage",
@@ -200,7 +200,7 @@ def process_cluster_cli_params(config):
     if get_cli_param(config, 'email') and not get_cli_param(config, '--html'):
         pytest.exit("--html option must be provided to send email reports")
     get_cli_param(config, '-m')
-    get_cli_param(config, "monitoring", default=False)
+    get_cli_param(config, "--persistent-monitoring", default=False)
 
 
 def pytest_collection_modifyitems(session, config, items):
