@@ -59,6 +59,7 @@ STATUS_COMPLETED = 'Completed'
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
+DEPLOYMENT = "Deployment"
 STORAGECLASS = "StorageClass"
 PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
