@@ -749,3 +749,24 @@ def delete_pods(pod_objs):
     for pod in pod_objs:
         pod.delete()
     return True
+
+
+def verify_node_name(pod_obj, node_name):
+    """
+    Verifies that the pod is running on a particular node
+
+    Args:
+        pod_obj (Pod): The pod object
+        node_name (str): The name of node to check
+
+    Returns:
+        bool: True if the pod is running on a particular node, False otherwise
+    """
+
+    logger.info(f"Checking whether the pod is running on node: {node_name}")
+    actual_node = pod_obj.get().get('spec').get('nodeName')
+    logger.info(f"The pod is running on node: {actual_node}")
+    if actual_node == node_name:
+        return True
+    else:
+        return False
