@@ -994,7 +994,7 @@ def craft_s3_command(noobaa_obj, cmd):
         cmd: The AWSCLI command to run
 
     Returns:
-        (str): The crafted command, ready to be executed on the pod
+        str: The crafted command, ready to be executed on the pod
 
     """
     base_command = (

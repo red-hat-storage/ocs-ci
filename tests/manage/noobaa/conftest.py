@@ -28,8 +28,8 @@ def uploaded_objects(request, noobaa_obj, awscli_pod):
     Deletes all objects that were created as part of the test
 
     Args:
-        noobaa_obj: A NooBaa object containing the NooBaa S3 connection credentials
-        awscli_pod: A pod running the AWSCLI tools
+        noobaa_obj (NooBaa): A NooBaa object containing the NooBaa S3 connection credentials
+        awscli_pod (Pod): A pod running the AWSCLI tools
 
     Returns:
         list: An empty list of objects
@@ -54,7 +54,7 @@ def created_buckets(request, noobaa_obj):
     Deletes all buckets that were created as part of the test
 
     Args:
-    noobaa_obj: A NooBaa object containing the NooBaa S3 connection credentials
+        noobaa_obj (NooBaa): A NooBaa object containing the NooBaa S3 connection credentials
 
     Returns:
         list: An empty list of buckets
@@ -95,8 +95,9 @@ def awscli_pod(noobaa_obj, created_pods):
     """
     Creates a new AWSCLI pod for relaying commands
 
-    created_pods: A fixture used to keep track of created pods
-    and clean them up in the teardown
+    Args:
+        created_pods (Fixture/list): A fixture used to keep track of created pods
+        and clean them up in the teardown
 
     Returns:
         pod: A pod running the AWS CLI
