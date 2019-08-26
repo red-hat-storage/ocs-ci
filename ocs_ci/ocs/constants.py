@@ -81,6 +81,7 @@ SECRET = "Secret"
 NAMESPACE = 'Namespace'
 IGNORE_SC_GP2 = "gp2"
 IGNORE_SC_FLEX = "rook-ceph-block"
+TEST_FILES_BUCKET = "ocsci-test-files"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 
 
@@ -183,6 +184,10 @@ PGSQL_BENCHMARK_YAML = os.path.join(
 
 NGINX_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "nginx.yaml"
+)
+
+AWSCLI_POD_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "awscli.yaml"
 )
 
 SERVICE_ACCOUNT_YAML = os.path.join(
