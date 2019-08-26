@@ -204,10 +204,8 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
             "Couldn't delete pods which are having PVCs to delete."
         )
         for pod_obj in pods_for_pvc:
-            assert pod_obj.ocp.wait_for_delete(pod_obj.name), (
-                f"Pod {pod_obj.name} is not deleted"
-            )
-        logging.info("Verified: Deleted pods which are having PVCs to delete.")
+            pod_obj.ocp.wait_for_delete(pod_obj.name)
+        log.info("Verified: Deleted pods which are having PVCs to delete.")
 
         # Start IO on pods to be deleted
         log.info("Starting IO on pods to be deleted.")
@@ -245,16 +243,12 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         assert pvc_deleting.result(), (
             "Wait timeout: PVCs are not being deleted."
         )
-        logging.info(
-            f"PVCs deletion has started."
-        )
+        log.info("PVCs deletion has started.")
 
         assert pod_deleting.result(), (
             "Wait timeout: Pods are not being deleted."
         )
-        logging.info(
-            f"Pods deletion has started."
-        )
+        log.info("Pods deletion has started.")
 
         # Delete pod of type 'resource_to_delete'
         disruption.delete_resource()
@@ -264,10 +258,8 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         # Verify pods are deleted
         for pod_obj in pods_to_delete:
-            assert pod_obj.ocp.wait_for_delete(pod_obj.name), (
-                f"Pod {pod_obj.name} is not deleted"
-            )
-        logging.info("Verified: Pods are deleted.")
+            pod_obj.ocp.wait_for_delete(pod_obj.name)
+        log.info("Verified: Pods are deleted.")
 
         # Verify that the mount point is removed from nodes after deleting pod
         node_pv_mounted = verify_pv_mounted_on_node(node_pv_dict)
@@ -286,18 +278,12 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         # Verify PVCs are deleted
         for pvc_obj in pvcs_to_delete:
-            assert pvc_obj.ocp.wait_for_delete(pvc_obj.name), (
-                f"PVC {pvc_obj.name} is not deleted"
-            )
+            pvc_obj.ocp.wait_for_delete(pvc_obj.name)
         logging.info("Verified: PVCs are deleted.")
 
         # Verify PVs are deleted
         for pv_obj in pv_objs:
-            assert pv_obj.ocp.wait_for_delete(
-                resource_name=pv_obj.name, timeout=300
-            ), (
-                f"PV {pv_obj.name} is not deleted"
-            )
+            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=300)
         logging.info("Verified: PVs are deleted.")
 
         # Verify PV using ceph toolbox. Image/Subvolume should be deleted.
