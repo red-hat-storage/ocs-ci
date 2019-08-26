@@ -634,17 +634,22 @@ def collect_ocs_logs(dir_name):
 
     Args:
         dir_name (str): directory name to store OCS logs. Logs will be stored
-        in dir_name suffix with _ocs_logs.
+            in dir_name suffix with _ocs_logs.
 
     """
     log_dir_path = os.path.join(
         os.path.expanduser(ocsci_config.RUN['log_dir']),
         f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}"
     )
+    must_gather_img = ocsci_config.REPORTING['must_gather_image']
+    log.info(f"Must gather image: {must_gather_img} will be used.")
     create_directory_path(log_dir_path)
     dir_name = f"{dir_name}_ocs_logs"
     dump_dir = os.path.join(log_dir_path, dir_name)
-    cmd = f"adm must-gather --image=ashishranjan738/ocs-must-gather --dest-dir={dump_dir}"
-    log.info(f"OCS logs are placed in location {dump_dir}")
+    cmd = f"adm must-gather --image={must_gather_img} --dest-dir={dump_dir}"
+    log.info(f"OCS logs will be placed in location {dump_dir}")
     occli = OCP()
-    occli.exec_oc_cmd(cmd, out_yaml_format=False)
+    try:
+        occli.exec_oc_cmd(cmd, out_yaml_format=False)
+    except CommandFailed as ex:
+        log.error(f"Failed during must gather logs! Error: {ex}")

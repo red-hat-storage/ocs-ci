@@ -47,6 +47,7 @@ REPORTING:
     project_id: "OpenShiftContainerStorage"
   # Upstream: 'US' or Downstream: 'DS', used only for reporting (Test Run Name)
   us_ds: 'US'
+  must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
 
 # This is the default information about environment. Will be overwritten with
 # --cluster-conf file.yaml data you will pass to the pytest.
