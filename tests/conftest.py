@@ -431,7 +431,7 @@ def teardown_factory(request):
                     instance.name
                 )
                 if instance.kind == constants.PVC:
-                    if instance.backed_reclaim_policy == constants.RECLAIM_POLICY_DELETE:
+                    if instance.reclaim_policy == constants.RECLAIM_POLICY_DELETE:
                         helpers.validate_pv_delete(instance.backed_pv)
     request.addfinalizer(finalizer)
     return factory

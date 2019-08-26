@@ -112,7 +112,7 @@ class PVC(OCS):
         return self.data.get('spec').get('storageClassName')
 
     @property
-    def backed_reclaim_policy(self):
+    def reclaim_policy(self):
         """
         Returns the reclaim policy of pvc in namespace
 
