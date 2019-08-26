@@ -304,7 +304,11 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         log.info("Fetching IO results from the pods.")
         for pod_obj in io_pods:
-            get_fio_rw_iops(pod_obj)
+            fio_result = pod_obj.get_fio_results()
+            err_count = fio_result.get('jobs')[0].get('error')
+            assert err_count == 0, (
+                f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
+            )
         log.info("Verified IO result on pods.")
 
         # Verify number of pods of type 'resource_to_delete'
