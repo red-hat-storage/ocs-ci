@@ -5,7 +5,7 @@ import logging
 import pytest
 import ocs_ci.ocs.exceptions as ex
 
-from ocs_ci.framework.testlib import tier1, E2ETest
+from ocs_ci.framework.testlib import tier1, ManageTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
 
@@ -29,15 +29,15 @@ log = logging.getLogger(__name__)
     ]
 )
 @tier1
-class TestPVCFullWithIORWO(E2ETest):
+class TestPVCFullWithIORWO(ManageTest):
     """
     Test to verify PVC behavior when full with data
     """
-    pvc_size_gb = 50
+    pvc_size_gb = 5
 
     @pytest.fixture()
     def base_setup(
-        self, request, interface, access_mode, pvc_factory, pod_factory
+        self, request, interface, pvc_factory, pod_factory
     ):
         """
         A setup phase for the test
@@ -45,12 +45,10 @@ class TestPVCFullWithIORWO(E2ETest):
         self.interface = interface
         self.pvc_obj = pvc_factory(
             interface=self.interface, size=self.pvc_size_gb,
-            access_mode=access_mode
         )
         self.pod_obj = pod_factory(interface=self.interface, pvc=self.pvc_obj)
 
-    @pytest.mark.usefixtures(base_setup.__name__)
-    def test_pvc_no_space_left(self, pod_factory):
+    def test_pvc_no_space_left(self, base_setup, pod_factory):
         """
         Writing data to PVC to reach limit
         """
@@ -73,6 +71,7 @@ class TestPVCFullWithIORWO(E2ETest):
                 log.info(f"FIO succeeded to fill the PVC with data")
         log.info(f"Deleting the pod and attaching the full PVC to a new pod")
         self.pod_obj.delete()
+        log.info(f"Creating a new Pod with the existing full PVC")
         self.pod_obj = pod_factory(interface=self.interface, pvc=self.pvc_obj)
         used_space = get_used_space_on_mount_point(self.pod_obj)
         assert used_space == '100%', (
@@ -80,33 +79,23 @@ class TestPVCFullWithIORWO(E2ETest):
         )
 
 
-@pytest.mark.parametrize(
-    argnames=["interface"],
-    argvalues=[
-        pytest.param(
-            *[constants.CEPHFILESYSTEM],
-            marks=[
-                pytest.mark.polarion_id("OCS-854"),
-                pytest.mark.bugzilla("1745344")
-            ]
-        )
-    ]
-)
+@pytest.mark.polarion_id("OCS-854")
+@pytest.mark.bugzilla("1745344")
 @tier1
-class TestPVCFullWithIORWX(E2ETest):
+class TestPVCFullWithIORWX(ManageTest):
     """
     Test to verify PVC behavior when full with data
     """
-    pvc_size_gb = 50
+    pvc_size_gb = 5
 
     @pytest.fixture()
     def base_setup(
-        self, request, interface, pvc_factory, pod_factory
+        self, request, pvc_factory, pod_factory
     ):
         """
         A setup phase for the test
         """
-        self.interface = interface
+        self.interface = constants.CEPHFILESYSTEM
         self.pvc_obj = pvc_factory(
             interface=self.interface, size=self.pvc_size_gb,
             access_mode=constants.ACCESS_MODE_RWX
@@ -114,8 +103,7 @@ class TestPVCFullWithIORWX(E2ETest):
         self.pod_obj1 = pod_factory(interface=self.interface, pvc=self.pvc_obj)
         self.pod_obj2 = pod_factory(interface=self.interface, pvc=self.pvc_obj)
 
-    @pytest.mark.usefixtures(base_setup.__name__)
-    def test_pvc_no_space_left(self):
+    def test_pvc_no_space_left(self, base_setup):
         """
         Writing data to PVC to reach limit
         """
@@ -147,7 +135,8 @@ class TestPVCFullWithIORWX(E2ETest):
             "No error raised during FIO to fill the device with data"
         )
         log.info(
-            f"Deleting the first pod and checking used size from the 2nd pod")
+            f"Deleting the first pod and checking used size from the 2nd pod"
+        )
         self.pod_obj1.delete()
         used_space = get_used_space_on_mount_point(self.pod_obj2)
         assert used_space == '100%', (

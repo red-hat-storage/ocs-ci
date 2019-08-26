@@ -818,5 +818,5 @@ def get_used_space_on_mount_point(pod_obj):
     # Verify data's are written to mount-point
     mount_point = pod_obj.exec_cmd_on_pod(command="df -kh")
     mount_point = mount_point.split()
-    used_percentage = mount_point[mount_point.index('/var/lib/www/html') - 1]
+    used_percentage = mount_point[mount_point.index(constants.MOUNT_POINT) - 1]
     return used_percentage
