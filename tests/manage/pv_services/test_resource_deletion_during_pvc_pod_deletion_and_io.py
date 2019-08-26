@@ -87,6 +87,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
             wait_for_resource_state(
                 resource=pod_obj, state=constants.STATUS_RUNNING
             )
+            pod_obj.reload()
 
         return pvc_objs, pod_objs
 
