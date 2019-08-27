@@ -17,7 +17,7 @@ def check_alert_list(
     label,
     msg,
     alerts,
-    states=['pending', 'firing'],
+    states,
     severity="warning"
 ):
     """
@@ -58,6 +58,7 @@ def check_alert_list(
         assert target_alerts[key]['state'] == state, assert_msg
 
     logger.info(f"Alerts were triggered correctly during utilization")
+
 
 class PrometheusAPI(object):
     """
@@ -230,7 +231,7 @@ class PrometheusAPI(object):
         )
         if time_wait > 0:
             logger.info(f"Waiting for approximately {time_wait} seconds for alerts "
-                     f"to be cleared ({time_min} seconds since measurement end)")
+                        f"to be cleared ({time_min} seconds since measurement end)")
         else:
             time_wait = 1
         cleared_alerts = self.wait_for_alert(
