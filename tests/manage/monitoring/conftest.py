@@ -143,3 +143,75 @@ def workload_stop_ceph_mgr():
     logger.info(f"Upscaling deployment {mgr} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
     return measured_op
+
+
+@pytest.fixture(scope="session")
+def workload_stop_ceph_mon():
+    """
+    Downscales Ceph Monitor deployment, measures the time when it was
+    downscaled and monitors alerts that were triggered during this event.
+
+    Returns:
+        dict: Contains information about `start` and `stop` time for stopping
+            Ceph Monitor pod.
+    """
+    oc = ocp.OCP(
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA['cluster_namespace']
+    )
+    mon_deployments = oc.get(selector=constants.MON_APP_LABEL)['items']
+    mons = [
+        deployment['metadata']['name']
+        for deployment in mon_deployments
+    ]
+
+    # get monitor deployments to stop, leave even number of monitors
+    split_index = len(mons)//2 if len(mons) > 3 else 2
+    mons_to_stop = mons[split_index:]
+    logger.info(f"Monitors to stop: {mons_to_stop}")
+    logger.info(f"Monitors left to run: {mons[:split_index]}")
+
+    def stop_mon():
+        """
+        Downscale Ceph Monitor deployments for 12 minutes. First 15 minutes
+        the alert CephMonQuorumAtRisk should be in 'Pending'. After 15 minutes
+        the alert turns into 'Firing' state.
+        This configuration of monitoring can be observed in ceph-mixins which
+        are used in the project:
+            https://github.com/ceph/ceph-mixins/blob/d22afe8c0da34490cb77e52a202eefcf4f62a869/config.libsonnet#L16
+        `Firing` state shouldn't actually happen because monitor should be
+        automatically redeployed shortly after 10 minutes.
+
+        Returns:
+            str: Names of downscaled deployments.
+        """
+        # run_time of operation
+        run_time = 60 * 12
+        nonlocal oc
+        nonlocal mons_to_stop
+        for mon in mons_to_stop:
+            logger.info(f"Downscaling deployment {mon} to 0")
+            oc.exec_oc_cmd(f"scale --replicas=0 deployment/{mon}")
+        logger.info(f"Waiting for {run_time} seconds")
+        time.sleep(run_time)
+        return mons_to_stop
+
+    measured_op = measure_operation(stop_mon)
+
+    # get new list of monitors to make sure that new monitors were deployed
+    mon_deployments = oc.get(selector=constants.MON_APP_LABEL)['items']
+    mons = [
+        deployment['metadata']['name']
+        for deployment in mon_deployments
+    ]
+
+    # check that downscaled monitors are removed as OCS should redeploy them
+    check_old_mons_deleted = all(mon not in mons for mon in mons_to_stop)
+    if not check_old_mons_deleted:
+        for mon in mons_to_stop:
+            logger.info(f"Upscaling deployment {mon} back to 1")
+            oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mon}")
+        msg = f"Downscaled monitors {mons_to_stop} were not replaced"
+        assert check_old_mons_deleted, msg
+
+    return measured_op
