@@ -448,6 +448,9 @@ def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
     record_testsuite_property(
         'polarion-testrun-status-id', 'inprogress'
     )
+    record_testsuite_property(
+        'polarion-custom-isautomated', "True"
+    )
 
 
 @pytest.fixture(scope="session", autouse=True)
