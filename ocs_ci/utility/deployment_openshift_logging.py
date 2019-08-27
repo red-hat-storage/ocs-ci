@@ -9,7 +9,7 @@ import json
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.utility import templating
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
 from tests import helpers
 
@@ -229,7 +229,6 @@ def create_instance_in_clusterlogging(sc_name=None):
     inst_data = templating.load_yaml_to_dict(constants.CL_INSTANCE_YAML)
     inst_data['spec']['logStore']['elasticsearch']['storage']['storageClassName'] = sc_name
     inst_data['spec']['logStore']['elasticsearch']['storage']['size'] = "200Gi"
-    helpers.create_resource(**inst_data)
     node_count = inst_data['spec']['logStore']['elasticsearch']['nodeCount']
     helpers.create_resource(wait=False, **inst_data)
     oc = ocp.OCP('v1', 'ClusterLogging', 'openshift-logging')
@@ -261,7 +260,7 @@ def create_instance_in_clusterlogging(sc_name=None):
     return logging_instance
 
 
-@retry(CommandFailed, 5, 30, 2)
+@retry((CommandFailed, UnexpectedBehaviour), 10, 60, 2)
 def check_health_of_clusterlogging():
     """
     * Checks for ElasticSearch, curator, fluentd and kibana pods in
@@ -280,7 +279,6 @@ def check_health_of_clusterlogging():
     logger.info("Pods that are created by the instance")
     for pod in pods:
         pod_list.append(pod.name)
-    logger.info(pod_list)
     elasticsearch_pod = [
         pod for pod in pod_list if pod.startswith('elasticsearch')
     ]
@@ -297,5 +295,6 @@ def check_health_of_clusterlogging():
     if status_check['status'] == 'green':
         logger.info("Cluster logging is in Healthy state & Ready to use")
     else:
+        raise UnexpectedBehaviour
         logger.error("Cluster logging is in Bad state")
     return pod_list
