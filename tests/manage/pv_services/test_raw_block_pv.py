@@ -2,30 +2,48 @@ import logging
 import random
 from concurrent.futures import ThreadPoolExecutor
 import pytest
+
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
-
-from ocs_ci.framework.testlib import tier1, ManageTest, bugzilla
+from ocs_ci.framework.testlib import tier1, ManageTest
 from ocs_ci.ocs import constants
-
-from tests.fixtures import (
-    create_ceph_block_pool,
-    create_rbd_secret,
-    create_project,
-    create_rbd_storageclass
-)
 from tests import helpers
 
 log = logging.getLogger(__name__)
 
 
 @tier1
-@pytest.mark.usefixtures(
-    create_project.__name__,
+@pytest.mark.parametrize(
+    argnames=["reclaim_policy"],
+    argvalues=[
+        pytest.param(
+            constants.RECLAIM_POLICY_DELETE, marks=pytest.mark.polarion_id("OCS-751")
+        ),
+        pytest.param(
+            constants.RECLAIM_POLICY_RETAIN, marks=pytest.mark.polarion_id("OCS-750")
+        )
+    ]
 )
-class BaseRawBlockPV(ManageTest):
+class TestRawBlockPV(ManageTest):
     """
     Base class for creating pvc,pods and run IOs
     """
+    @pytest.fixture()
+    def namespace(self, project_factory):
+        """
+        Create a project for the test
+
+        Returns:
+            str: The newly created namespace
+
+        """
+        proj_obj = project_factory()
+        self.namespace = proj_obj.namespace
+
+    @pytest.fixture()
+    def storageclass(self, storageclass_factory, reclaim_policy):
+        """"""
+        self.reclaim_policy = reclaim_policy
+        self.sc_obj = storageclass_factory(interface=constants.CEPHBLOCKPOOL, reclaim_policy=self.reclaim_policy)
 
     def raw_block_pv(self):
         """
@@ -130,36 +148,12 @@ class BaseRawBlockPV(ManageTest):
             get_fio_rw_iops(pod)
         return pods, pvcs, pvs
 
-
-@tier1
-@pytest.mark.polarion_id("OCS-750")
-@pytest.mark.usefixtures(
-    create_rbd_secret.__name__,
-    create_ceph_block_pool.__name__,
-    create_rbd_storageclass.__name__,
-)
-class TestRawBlockPVRetain(BaseRawBlockPV):
-    reclaim_policy = constants.RECLAIM_POLICY_RETAIN
-
-    def test_raw_block_pv(self, teardown_factory):
+    def test_raw_block_pv(self, storageclass, namespace, teardown_factory):
+        """
+        Base function for creation of namespace, storageclass, pvcs and pods
+        """
         pods, pvcs, pvs = self.raw_block_pv()
-        teardown_factory(pvs)
-        teardown_factory(pvcs)
-        teardown_factory(pods)
-
-
-@bugzilla('1726266')
-@tier1
-@pytest.mark.polarion_id("OCS-751")
-@pytest.mark.usefixtures(
-    create_rbd_secret.__name__,
-    create_ceph_block_pool.__name__,
-    create_rbd_storageclass.__name__,
-)
-class TestRawBlockPVDelete(BaseRawBlockPV):
-    reclaim_policy = constants.RECLAIM_POLICY_DELETE
-
-    def test_raw_block_pv(self, teardown_factory):
-        pods, pvcs, _ = self.raw_block_pv()
+        if self.reclaim_policy == constants.RECLAIM_POLICY_RETAIN:
+            teardown_factory(pvs)
         teardown_factory(pvcs)
         teardown_factory(pods)

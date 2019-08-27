@@ -124,7 +124,7 @@ def ceph_pool_factory(request):
 def storageclass_factory(
     request,
     ceph_pool_factory,
-    secret_factory
+    secret_factory,
 ):
     """
     Create a storage class factory. Default is RBD based.
@@ -136,7 +136,8 @@ def storageclass_factory(
         interface=constants.CEPHBLOCKPOOL,
         secret=None,
         custom_data=None,
-        sc_name=None
+        sc_name=None,
+        reclaim_policy=constants.RECLAIM_POLICY_DELETE
     ):
         """
         Args:
@@ -148,6 +149,7 @@ def storageclass_factory(
                 by using these data. Parameters `block_pool` and `secret`
                 are not useds but references are set if provided.
             sc_name (str): Name of the storage class
+            reclaim_policy (str): Reclaim policy for storageclass
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -167,7 +169,8 @@ def storageclass_factory(
                 interface_type=interface,
                 interface_name=interface_name,
                 secret_name=secret.name,
-                sc_name=sc_name
+                sc_name=sc_name,
+                reclaim_policy=reclaim_policy
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.ceph_pool = ceph_pool
