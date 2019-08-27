@@ -770,26 +770,3 @@ def verify_node_name(pod_obj, node_name):
         return True
     else:
         return False
-
-
-def verify_pod_exists(namespace, pod_name):
-    """
-    Verifies if given pod is present in the given namespace
-
-    Args:
-        namespace (str): Namespace of the pod to check
-
-        pod_name (str): Pod name to check its existence
-
-    Returns:
-        bool: True if pod exists in the namespace, False
-        otherwise
-
-    """
-    pod_list = get_all_pods(namespace=namespace)
-    for pod in pod_list:
-        if pod.name == pod_name:
-            logger.info(f"Pod {pod.name} exists in the namespace {namespace}")
-            return True
-    logger.info(f"Pod {pod.name} does not exist in the namespace {namespace}")
-    return False

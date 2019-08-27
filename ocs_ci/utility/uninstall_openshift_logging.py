@@ -4,7 +4,7 @@ Function to teardown the openshift-logging
 import logging
 
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.resources.pod import get_all_pods, verify_pod_exists
+from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
 logger = logging.getLogger(__name__)
@@ -12,13 +12,9 @@ logger = logging.getLogger(__name__)
 
 @retry(UnexpectedBehaviour, 5, 30, 2)
 def check_pod_vanished(pod_list):
-    # for pod in pod_list:
-    #     if not verify_pod_exists(
-    #         namespace='openshift-logging', pod_name=pod.name
-    #     ):
-    #         return
-    #     logger.info(f"The pod {pod.name} still exists, Retrying ... ")
-    #     raise UnexpectedBehaviour
+    """
+    A function to check all the pods are vanished from the namespace
+    """
     pod_list = get_all_pods(namespace='openshift-logging')
     if pod_list:
         return
@@ -34,7 +30,9 @@ def uninstall_cluster_logging():
     # Validating the pods before deleting the instance
     pod_list = get_all_pods(namespace='openshift-logging')
     for pod in pod_list:
-        logger.info(f"Pods running in the openshift-logging namespace {pod.name}")
+        logger.info(
+            f"Pods running in the openshift-logging namespace {pod.name}"
+        )
 
     # Deleting the clusterlogging instance
     clusterlogging_obj = ocp.OCP(
@@ -43,11 +41,10 @@ def uninstall_cluster_logging():
     assert clusterlogging_obj.delete(resource_name='instance')
 
     # Verifying the pods if exists after deleting instance
-    pod_obj = ocp.OCP(
-        kind=constants.POD, namespace='openshift-logging'
-    )
     pod_list = [
-        pod for pod in pod_list if not pod.name.startswith('cluster-logging-operator')
+        pod for pod in pod_list if not pod.name.startswith(
+            'cluster-logging-operator'
+        )
     ]
 
     check_pod_vanished(pod_list)
