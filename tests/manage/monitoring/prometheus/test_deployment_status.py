@@ -3,7 +3,7 @@ import pytest
 import time
 
 from ocs_ci.framework.testlib import tier4
-from ocs_ci.utility.prometheus import PrometheusAPI
+from ocs_ci.utility import prometheus
 
 
 log = logging.getLogger(__name__)
@@ -17,41 +17,13 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
     is unavailable and that this alert is cleared when the manager
     is back online.
     """
-    prometheus = PrometheusAPI()
+    api = prometheus.PrometheusAPI()
 
     # get alerts from time when manager deployment was scaled down
     alerts = workload_stop_ceph_mgr.get('prometheus_alerts')
     target_label = 'CephMgrIsAbsent'
     target_msg = 'Storage metrics collector service not available anymore.'
-    target_alerts = [
-        alert
-        for alert
-        in alerts
-        if alert.get('labels').get('alertname') == target_label
-    ]
-    log.info(f"Checking properties of found {target_label} alerts")
-    msg = f"Incorrect number of {target_label} alerts"
-    assert len(target_alerts) == 2, msg
-
-    msg = 'Alert message is not correct'
-    assert target_alerts[0]['annotations']['message'] == target_msg, msg
-
-    msg = 'First alert doesn\'t have warning severity'
-    assert target_alerts[0]['annotations']['severity_level'] == 'warning', msg
-
-    msg = 'First alert is not in pending state'
-    assert target_alerts[0]['state'] == 'pending', msg
-
-    msg = 'Alert message is not correct'
-    assert target_alerts[1]['annotations']['message'] == target_msg, msg
-
-    msg = 'Second alert doesn\'t have warning severity'
-    assert target_alerts[1]['annotations']['severity_level'] == 'warning', msg
-
-    msg = 'First alert is not in firing state'
-    assert target_alerts[1]['state'] == 'firing', msg
-
-    log.info(f"Alerts were triggered correctly during utilization")
+    prometheus.check_alert_list(target_label, target_msg, alerts)
 
     # seconds to wait before alert is cleared after measurement is finished
     time_min = 30
@@ -65,7 +37,7 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
                  f"to be cleared ({time_min} seconds since measurement end)")
     else:
         time_wait = 1
-    cleared_alerts = prometheus.wait_for_alert(
+    cleared_alerts = api.wait_for_alert(
         name=target_label,
         state=None,
         timeout=time_wait

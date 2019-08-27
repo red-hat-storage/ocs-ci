@@ -13,6 +13,49 @@ from ocs_ci.ocs.ocp import OCP
 logger = logging.getLogger(name=__file__)
 
 
+def check_alert_list(label, msg, alerts):
+    """
+    Check list of alerts that there are 2 alerts with requested label and
+    message. First alerts should be pending and the second alert should be
+    firing.
+
+    Args:
+        label (str): Alert label.
+        msg (str): Alert message.
+        alerts (list): list of alerts to check.
+    """
+
+    target_alerts = [
+        alert
+        for alert
+        in alerts
+        if alert.get('labels').get('alertname') == label
+    ]
+
+    logger.info(f"Checking properties of found {label} alerts")
+    assert_msg = f"Incorrect number of {label} alerts"
+    assert len(target_alerts) == 2, assert_msg
+
+    assert_msg = 'Alert message is not correct'
+    assert target_alerts[0]['annotations']['message'] == msg, assert_msg
+
+    assert_msg = 'First alert doesn\'t have warning severity'
+    assert target_alerts[0]['annotations']['severity_level'] == 'warning', assert_msg
+
+    assert_msg = 'First alert is not in pending state'
+    assert target_alerts[0]['state'] == 'pending', assert_msg
+
+    assert_msg = 'Alert message is not correct'
+    assert target_alerts[1]['annotations']['message'] == msg, assert_msg
+
+    assert_msg = 'Second alert doesn\'t have warning severity'
+    assert target_alerts[1]['annotations']['severity_level'] == 'warning', assert_msg
+
+    assert_msg = 'First alert is not in firing state'
+    assert target_alerts[1]['state'] == 'firing', assert_msg
+
+    logger.info(f"Alerts were triggered correctly during utilization")
+
 class PrometheusAPI(object):
     """
     This is wrapper class for Prometheus API.
