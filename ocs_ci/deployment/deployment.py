@@ -108,9 +108,12 @@ class Deployment(object):
         deviceset_data = templating.load_yaml_to_dict(
             constants.DEVICESET_YAML
         )
+        device_size = int(
+            config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
+        )
         deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
             'storage'
-        ] = config.ENV_DATA['device_size']
+        ] = f"{device_size}Gi"
         cluster_data['spec']['storageDeviceSets'] = [deviceset_data]
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode='w+', prefix='cluster_storage', delete=False
