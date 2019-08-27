@@ -77,3 +77,4 @@ ENV_DATA:
   # but only once when move to new version like v15.
   ceph_image: 'ceph/ceph:v14.2.2-20190826'
   rook_image: 'rook/ceph:master'
+  worker_instance_type: 'm4.xlarge'
