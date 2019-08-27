@@ -246,7 +246,7 @@ def create_instance_in_clusterlogging(sc_name=None):
         condition=constants.STATUS_RUNNING, resource_count=11, timeout=200,
         sleep=5
     )
-    assert pod, "Pods are not in Running state."
+    assert pod_status, "Pods are not in Running state."
     logger.info("All pods are in Running state")
     pvc_obj = ocp.OCP(
         kind=constants.PVC, namespace='openshift-logging'
@@ -255,7 +255,7 @@ def create_instance_in_clusterlogging(sc_name=None):
         condition=constants.STATUS_BOUND, resource_count=node_count,
         timeout=150, sleep=5
     )
-    assert pvc, "PVCs are not in bound state."
+    assert pvc_status, "PVCs are not in bound state."
     logger.info("PVCs are Bound")
     return logging_instance
 
