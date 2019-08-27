@@ -12,6 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 class CSV(OCP):
+    """
+    This class represent ClusterServiceVersion (CSV) and contains all related
+    methods we need to do with CSV.
+    """
+
     def __init__(self, name="", *args, **kwargs):
         """
         Initializer function for CSV class

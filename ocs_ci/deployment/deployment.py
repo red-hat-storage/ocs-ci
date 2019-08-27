@@ -100,7 +100,6 @@ class Deployment(object):
         csv.wait_for_phase("Succeeded")
         cluster_data = templating.load_yaml_to_dict(
             self.ocs_operator_storage_cluster_cr,
-
         )
         cluster_data['metadata']['name'] = config.ENV_DATA[
             'storage_cluster_name'
