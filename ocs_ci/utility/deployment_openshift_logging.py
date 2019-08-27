@@ -242,7 +242,7 @@ def create_instance_in_clusterlogging(sc_name=None):
     pod_obj = ocp.OCP(
         kind=constants.POD, namespace='openshift-logging'
     )
-    pod = pod_obj.wait_for_resource(
+    pod_status = pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING, resource_count=11, timeout=200,
         sleep=5
     )
@@ -251,7 +251,7 @@ def create_instance_in_clusterlogging(sc_name=None):
     pvc_obj = ocp.OCP(
         kind=constants.PVC, namespace='openshift-logging'
     )
-    pvc = pvc_obj.wait_for_resource(
+    pvc_status = pvc_obj.wait_for_resource(
         condition=constants.STATUS_BOUND, resource_count=node_count,
         timeout=150, sleep=5
     )
