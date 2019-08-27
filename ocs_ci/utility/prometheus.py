@@ -210,3 +210,31 @@ class PrometheusAPI(object):
             time.sleep(sleep)
             timeout -= sleep
         return alerts
+
+    def check_alert_cleared(self, label, measure_end_time, time_min=30):
+        """
+        Check that all alerts with provided label are cleared.
+
+        Args:
+            label (str): Alerts label.
+            measure_end_time (int): Timestamp of measurement end.
+            time_min (int): Number of seconds to wait for alert to be cleared
+                since measurement end.
+        """
+        time_actual = time.time()
+        time_wait = int(
+            (measure_end_time + time_min) - time_actual
+        )
+        if time_wait > 0:
+            logger.info(f"Waiting for approximately {time_wait} seconds for alerts "
+                     f"to be cleared ({time_min} seconds since measurement end)")
+        else:
+            time_wait = 1
+        cleared_alerts = self.wait_for_alert(
+            name=label,
+            state=None,
+            timeout=time_wait
+        )
+        logger.info(f"Cleared alerts: {cleared_alerts}")
+        assert len(cleared_alerts) == 0, f"{label} alerts were not cleared"
+        logger.info(f"{label} alerts were cleared")
