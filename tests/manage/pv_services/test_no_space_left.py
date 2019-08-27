@@ -60,7 +60,7 @@ class TestPVCFullWithIORWO(ManageTest):
         try:
             self.pod_obj.get_fio_results()
         except ex.CommandFailed as cf:
-            if "No space left on device" not in cf.__str__():
+            if "No space left on device" not in str(cf):
                 raise
             else:
                 used_space = get_used_space_on_mount_point(self.pod_obj)
@@ -116,7 +116,7 @@ class TestPVCFullWithIORWX(ManageTest):
         try:
             self.pod_obj1.get_fio_results()
         except ex.CommandFailed as cf:
-            if "No space left on device" not in cf.__str__():
+            if "No space left on device" not in (cf):
                 raise
             else:
                 catch_error = True
