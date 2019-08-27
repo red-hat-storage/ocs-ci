@@ -34,11 +34,9 @@ class VSPHEREUPI(VSPHEREBASE):
         self.name = self.__class__.__name__
         super(VSPHEREUPI, self).__init__()
 
-
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
             super(VSPHEREUPI.OCPDeployment, self).__init__()
-
 
         def create_config(self):
             """
@@ -46,5 +44,3 @@ class VSPHEREUPI(VSPHEREBASE):
             """
             # Generate install-config from template
             raise NotImplementedError("config creation for vsphere is not implemented")
-
-
