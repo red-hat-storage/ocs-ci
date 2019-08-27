@@ -1,6 +1,5 @@
 import logging
 import pytest
-import time
 
 from ocs_ci.framework.testlib import tier4
 from ocs_ci.utility import prometheus
@@ -23,8 +22,13 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
     alerts = workload_stop_ceph_mgr.get('prometheus_alerts')
     target_label = 'CephMgrIsAbsent'
     target_msg = 'Storage metrics collector service not available anymore.'
+    states = ['pending', 'firing']
 
-    prometheus.check_alert_list(target_label, target_msg, alerts)
+    prometheus.check_alert_list(
+        label=target_label,
+        msg=target_msg,
+        alerts=alerts,
+        states=states)
     api.check_alert_cleared(
         label=target_label,
         measure_end_time=workload_stop_ceph_mgr.get('stop')

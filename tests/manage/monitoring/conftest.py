@@ -166,7 +166,7 @@ def workload_stop_ceph_mon():
     ]
 
     # get monitor deployments to stop, leave even number of monitors
-    split_index = len(mons)//2 if len(mons) > 3 else 2
+    split_index = len(mons) // 2 if len(mons) > 3 else 2
     mons_to_stop = mons[split_index:]
     logger.info(f"Monitors to stop: {mons_to_stop}")
     logger.info(f"Monitors left to run: {mons[:split_index]}")
