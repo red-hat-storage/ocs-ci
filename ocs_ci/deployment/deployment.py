@@ -198,7 +198,6 @@ class Deployment(object):
             )
         else:
             self.deploy_ocs_via_operator()
-            # Here implement the logic of OCS-operator
 
         pod = ocp.OCP(
             kind=constants.POD, namespace=self.namespace
