@@ -1,0 +1,20 @@
+# SmallFile workload using https://github.com/distributed-system-analysis/smallfile
+# smallfile is a python-based distributed POSIX workload generator which can be
+# used to quickly measure performance for a variety of metadata-intensive
+# workloads
+apiVersion: ripsaw.cloudbulldozer.io/v1alpha1
+kind: Benchmark
+metadata:
+  name: smallfile-benchmark
+  namespace: my-ripsaw
+spec:
+  workload:
+    name: smallfile
+    args:
+      clients: 1
+      operation: ["create","read","append", "delete"]
+      threads: 4
+      file_size: 64
+      files: 50000
+      storageclass: ceph-backed
+      storagesize: 100Gi
