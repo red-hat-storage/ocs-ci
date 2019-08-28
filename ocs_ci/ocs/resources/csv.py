@@ -40,11 +40,11 @@ class CSV(OCP):
                 otherwise.
 
         """
-        data = {}
         try:
             data = self.get(resource_name=self.name)
         except CommandFailed:
             logger.info(f"Cannot find CSV object {self.name}")
+            return False
         try:
             return data['status']['phase'] == phase
         except KeyError:

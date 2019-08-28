@@ -151,9 +151,7 @@ def load_yaml_to_dict(file, multi_document=False):
             iteration returns dict from one loaded document from a file.
 
     """
-    loader = yaml.safe_load
-    if multi_document:
-        loader = yaml.safe_load_all
+    loader = yaml.safe_load_all if multi_document else yaml.safe_load
     if file.startswith('http'):
         return loader(get_url_content(file))
     else:
