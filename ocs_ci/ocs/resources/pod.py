@@ -763,10 +763,20 @@ def verify_node_name(pod_obj, node_name):
         bool: True if the pod is running on a particular node, False otherwise
     """
 
-    logger.info(f"Checking whether the pod is running on node: {node_name}")
+    logger.info(
+        f"Checking whether the pod {pod_obj.name} is running on "
+        f"node {node_name}"
+    )
     actual_node = pod_obj.get().get('spec').get('nodeName')
-    logger.info(f"The pod is running on node: {actual_node}")
     if actual_node == node_name:
+        logger.info(
+            f"The pod {pod_obj.name} is running on the specified node "
+            f"{actual_node}"
+        )
         return True
     else:
+        logger.info(
+            f"The pod {pod_obj.name} is not running on the specified node "
+            f"specified node: {node_name}, actual node: {actual_node}"
+        )
         return False
