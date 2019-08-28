@@ -26,10 +26,10 @@ def check_alert_list(
     firing.
 
     Args:
-        label (str): Alert label.
-        msg (str): Alert message.
-        alerts (list): List of alerts to check.
-        states (list): List of states to check. Order is important.
+        label (str): Alert label
+        msg (str): Alert message
+        alerts (list): List of alerts to check
+        states (list): List of states to check, order is important
     """
 
     target_alerts = [
@@ -133,7 +133,7 @@ class PrometheusAPI(object):
 
         Args:
             resource (str): Represents part of uri that specifies given
-                resource.
+                resource
             payload (dict): Provide parameters to GET API call.
                 e.g. for `alerts` resource this can be
                 {'silenced': False, 'inhibited': False}
@@ -162,19 +162,19 @@ class PrometheusAPI(object):
         Search for alerts that have requested name and state.
 
         Args:
-            name (str): Alert name.
-            state (str): Alert state. If provided then there are searched
+            name (str): Alert name
+            state (str): Alert state, if provided then there are searched
                 alerts with provided state. If not provided then alerts are
                 searched for absence of the alert. Loop that looks for alerts
                 is broken when there are no alerts returned from API. This
                 is done because API is not returning any alerts that are not
-                in pending or firing state.
+                in pending or firing state
             timeout (int): Number of seconds for how long the alert should
-                be searched.
-            sleep (int): Number of seconds to sleep in between alert search.
+                be searched
+            sleep (int): Number of seconds to sleep in between alert search
 
         Returns:
-            list: List of alert records.
+            list: List of alert records
         """
         while timeout > 0:
             alerts_response = self.get(
@@ -220,10 +220,10 @@ class PrometheusAPI(object):
         Check that all alerts with provided label are cleared.
 
         Args:
-            label (str): Alerts label.
-            measure_end_time (int): Timestamp of measurement end.
+            label (str): Alerts label
+            measure_end_time (int): Timestamp of measurement end
             time_min (int): Number of seconds to wait for alert to be cleared
-                since measurement end.
+                since measurement end
         """
         time_actual = time.time()
         time_wait = int(
