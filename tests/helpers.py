@@ -93,7 +93,7 @@ def create_pod(
     interface_type=None, pvc_name=None,
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
-    raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE
+    raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1
 ):
     """
     Create a pod
@@ -109,6 +109,8 @@ def create_pod(
         dc_deployment (bool): True if creating pod as deploymentconfig
         raw_block_pv (bool): True for creating raw block pv based pod, False otherwise
         raw_block_device (str): raw block device for the pod
+        replica_count (int): Replica count for deployment config
+
     Returns:
         Pod: A Pod instance
 
@@ -132,6 +134,7 @@ def create_pod(
     if dc_deployment:
         pod_data['metadata']['labels']['app'] = pod_name
         pod_data['spec']['template']['metadata']['labels']['name'] = pod_name
+        pod_data['spec']['replicas'] = replica_count
 
     if pvc_name:
         if dc_deployment:
@@ -1005,6 +1008,7 @@ def delete_deploymentconfig(pod_obj):
     """
     dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG)
     dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
+    dc_ocp_obj.wait_for_delete(resource_name=pod_obj.get_labels().get('name'))
 
 
 def craft_s3_command(mcg_obj, cmd):
