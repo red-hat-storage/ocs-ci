@@ -3,15 +3,9 @@ import paramiko
 import string
 from time import sleep
 
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutException
+
 log = logging
-
-
-class TimeoutException(Exception):
-    pass
-
-
-class CommandFailed(Exception):
-    pass
 
 
 class WinNode(object):

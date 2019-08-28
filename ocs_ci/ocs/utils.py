@@ -15,8 +15,9 @@ from libcloud.compute.types import Provider
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.ceph import RolesContainer, CommandFailed, Ceph, CephNode
+from ocs_ci.ocs.ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.openstack import CephVMNode
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.utility.utils import create_directory_path
