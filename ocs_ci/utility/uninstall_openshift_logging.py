@@ -11,14 +11,15 @@ logger = logging.getLogger(__name__)
 
 
 @retry(UnexpectedBehaviour, 5, 30, 2)
-def check_pod_vanished(pod_list):
+def check_pod_vanished(pod_names):
     """
     A function to check all the pods are vanished from the namespace
     """
-    pod_list = get_all_pods(namespace='openshift-logging')
-    if pod_list:
-        return
-    raise UnexpectedBehaviour
+    pod_list_current = get_all_pods(namespace='openshift-logging')
+    pod_names_current = [pod.name for pod in pod_list_current]
+    for pod in pod_names:
+        if pod in pod_names_current:
+            raise UnexpectedBehaviour
 
 
 def uninstall_cluster_logging():
@@ -29,10 +30,18 @@ def uninstall_cluster_logging():
     """
     # Validating the pods before deleting the instance
     pod_list = get_all_pods(namespace='openshift-logging')
+
     for pod in pod_list:
         logger.info(
             f"Pods running in the openshift-logging namespace {pod.name}"
         )
+
+    # Excluding cluster-logging-operator from pod_list and getting pod names
+    pod_names_list = [
+        pod.name for pod in pod_list if not pod.name.startswith(
+            'cluster-logging-operator'
+        )
+    ]
 
     # Deleting the clusterlogging instance
     clusterlogging_obj = ocp.OCP(
@@ -40,14 +49,7 @@ def uninstall_cluster_logging():
     )
     assert clusterlogging_obj.delete(resource_name='instance')
 
-    # Verifying the pods if exists after deleting instance
-    pod_list = [
-        pod for pod in pod_list if not pod.name.startswith(
-            'cluster-logging-operator'
-        )
-    ]
-
-    check_pod_vanished(pod_list)
+    check_pod_vanished(pod_names_list)
     # Deleting the projects
     openshift_logging_namespace = ocp.OCP(
         kind=constants.NAMESPACES, namespace='openshift-logging'
