@@ -298,7 +298,8 @@ def create_dc_pods(request):
     class_instance.dc_pod_objs = [
         helpers.create_pod(
             interface_type=class_instance.interface, pvc_name=pvc_obj.name, do_reload=False,
-            namespace=class_instance.namespace, sa_name=class_instance.sa_obj.name, dc_deployment=True
+            namespace=class_instance.namespace, sa_name=class_instance.sa_obj.name, dc_deployment=True,
+            replica_count=class_instance.replica_count
         ) for pvc_obj in class_instance.pvc_objs
     ]
 
