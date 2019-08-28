@@ -20,21 +20,21 @@ def measure_operation(
     result.
 
     Args:
-        operation (function): Function to be performed.
+        operation (function): Function to be performed
         minimal_time (int): Minimal number of seconds to monitor a system.
             If provided then monitoring of system continues even when
             operation is finshed. If not specified then measurement is finished
-            when operation is complete.
+            when operation is complete
         metadata (dict): This can contain dictionary object with information
-            relevant to test (e.g. volume name, operating host, ...).
+            relevant to test (e.g. volume name, operating host, ...)
         measure_after (bool): Determine if time measurement is done before or
             after the operation returns its state. This can be useful e.g.
             for capacity utilization testing where operation fills capacity
-            and utilized data are measured after the utilization is completed.
+            and utilized data are measured after the utilization is completed
 
     Returns:
         dict: contains information about `start` and `stop` time of given
-            function and its `result` and provided `metadata`.
+            function and its `result` and provided `metadata`
     """
     def prometheus_log(info, alert_list):
         """
@@ -127,7 +127,7 @@ def workload_stop_ceph_mgr():
             https://github.com/ceph/ceph-mixins/blob/d22afe8c0da34490cb77e52a202eefcf4f62a869/config.libsonnet#L25
 
         Returns:
-            str: Name of downscaled deployment.
+            str: Name of downscaled deployment
         """
         # run_time of operation
         run_time = 60 * 6
@@ -153,7 +153,7 @@ def workload_stop_ceph_mon():
 
     Returns:
         dict: Contains information about `start` and `stop` time for stopping
-            Ceph Monitor pod.
+            Ceph Monitor pod
     """
     oc = ocp.OCP(
         kind=constants.DEPLOYMENT,
@@ -183,7 +183,7 @@ def workload_stop_ceph_mon():
         automatically redeployed shortly after 10 minutes.
 
         Returns:
-            str: Names of downscaled deployments.
+            str: Names of downscaled deployments
         """
         # run_time of operation
         run_time = 60 * 12
