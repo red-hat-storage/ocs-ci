@@ -8,7 +8,7 @@ from datetime import datetime
 from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-
+from ocs_ci.utility import aws
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     deployment, destroy, ignore_leftovers
@@ -21,7 +21,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
-from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs import constants, ocp, defaults, node
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 
@@ -374,6 +374,7 @@ def pod_factory(request, pvc_factory):
         instances.append(pod_obj)
         if status:
             helpers.wait_for_resource_state(pod_obj, status)
+            pod_obj.reload()
         pod_obj.pvc = pvc
 
         return pod_obj
@@ -803,3 +804,65 @@ def memory_leak_function(request):
     log.info(f"Start memory leak data capture in the test background")
     thread = threading.Thread(target=run_memory_leak_in_bg)
     thread.start()
+
+
+@pytest.fixture()
+def aws_obj():
+    """
+    Initialize AWS instance
+
+    Returns:
+        AWS: An instance of AWS class
+
+    """
+    aws_obj = aws.AWS()
+    return aws_obj
+
+
+@pytest.fixture()
+def ec2_instances(request, aws_obj):
+    """
+    Get cluster instances
+
+    Returns:
+        dict: The ID keys and the name values of the instances
+
+    """
+    # Get all cluster nodes objects
+    nodes = node.get_node_objs()
+
+    # Get the cluster nodes ec2 instances
+    ec2_instances = aws.get_instances_ids_and_names(nodes)
+    assert ec2_instances, f"Failed to get ec2 instances for node {[n.name for n in nodes]}"
+
+    def finalizer():
+        """
+        Make sure all instances are running
+        """
+        # Getting the instances that are in status 'stopping' (if there are any), to wait for them to
+        # get to status 'stopped' so it will be possible to start them
+        stopping_instances = {
+            key: val for key, val in ec2_instances.items() if (
+                aws_obj.get_instances_status_by_id(key) == constants.INSTANCE_STOPPING
+            )
+        }
+
+        # Waiting fot the instances that are in status 'stopping'
+        # (if there are any) to reach 'stopped'
+        if stopping_instances:
+            for stopping_instance in stopping_instances:
+                instance = aws_obj.get_ec2_instance(stopping_instance.key())
+                instance.wait_until_stopped()
+        stopped_instances = {
+            key: val for key, val in ec2_instances.items() if (
+                aws_obj.get_instances_status_by_id(key) == constants.INSTANCE_STOPPED
+            )
+        }
+
+        # Start the instances
+        if stopped_instances:
+            aws_obj.start_ec2_instances(instances=stopped_instances, wait=True)
+
+    request.addfinalizer(finalizer)
+
+    return ec2_instances

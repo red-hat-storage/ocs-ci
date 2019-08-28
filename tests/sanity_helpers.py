@@ -1,133 +1,77 @@
 import logging
 
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
+from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.cluster import CephCluster
-
-from tests import helpers
 
 
 logger = logging.getLogger(__name__)
 
 
-def health_check(nodes):
+class Sanity:
     """
-    Perform Ceph and cluster health checks
+    Class for cluster health and functional validations
     """
-    node.wait_for_nodes_status(nodes)
-    ceph_cluster = CephCluster()
-    assert ceph_health_check(
-        namespace=config.ENV_DATA['cluster_namespace']
-    )
-    ceph_cluster.cluster_health_check(timeout=60)
 
+    def __init__(self):
+        """
+        Initializer for Sanity class - Init CephCluster() in order to
+        set the cluster status before starting the tests
+        """
+        self.pvc_objs = list()
+        self.pod_objs = list()
+        self.ceph_cluster = CephCluster()
 
-def create_resources(resources, run_io=True):
-    """
-    Sanity validation - Create resources (FS and RBD) and run IO
+    def health_check(self):
+        """
+        Perform Ceph and cluster health checks
+        """
+        logger.info("Checking cluster and Ceph health")
+        node.wait_for_nodes_status()
 
-    Args:
-        resources (tuple): Lists of projects, secrets, pools,
-            storageclasses, pvcs and pods
-        run_io (bool): True for run IO, False otherwise
-
-    """
-    # Create resources and run IO for both FS and RBD
-    # Unpack resources
-    projects, secrets, pools, storageclasses, pvcs, pods = resources[:6]
-
-    # Project
-    projects.append(helpers.create_project())
-
-    # Secrets
-    secrets.append(helpers.create_secret(constants.CEPHBLOCKPOOL))
-    secrets.append(helpers.create_secret(constants.CEPHFILESYSTEM))
-
-    # Pools
-    pools.append(helpers.create_ceph_block_pool())
-    pools.append(helpers.get_cephfs_data_pool_name())
-
-    # Storageclasses
-    storageclasses.append(
-        helpers.create_storage_class(
-            interface_type=constants.CEPHBLOCKPOOL,
-            interface_name=pools[0].name,
-            secret_name=secrets[0].name
+        assert ceph_health_check(
+            namespace=config.ENV_DATA['cluster_namespace']
         )
-    )
-    storageclasses.append(
-        helpers.create_storage_class(
-            interface_type=constants.CEPHFILESYSTEM,
-            interface_name=pools[1],
-            secret_name=secrets[1].name
-        )
-    )
+        self.ceph_cluster.cluster_health_check(timeout=60)
 
-    # PVCs
-    pvcs.append(helpers.create_pvc(
-        sc_name=storageclasses[0].name, namespace=projects[0].namespace)
-    )
-    pvcs.append(helpers.create_pvc(
-        sc_name=storageclasses[1].name, namespace=projects[0].namespace)
-    )
-    for pvc in pvcs:
-        helpers.wait_for_resource_state(pvc, constants.STATUS_BOUND)
-        pvc.reload()
+    def create_resources(self, pvc_factory, pod_factory, run_io=True):
+        """
+        Sanity validation - Create resources (FS and RBD) and run IO
 
-    # Pods
-    pods.append(
-        helpers.create_pod(
-            interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvcs[0].name,
-            namespace=projects[0].namespace
-        )
-    )
-    pods.append(
-        helpers.create_pod(
-            interface_type=constants.CEPHFILESYSTEM, pvc_name=pvcs[1].name,
-            namespace=projects[0].namespace
-        )
-    )
-    for pod in pods:
-        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING)
-        pod.reload()
+        Args:
+            pvc_factory (function): A call to pvc_factory function
+            pod_factory (function): A call to pod_factory function
+            run_io (bool): True for run IO, False otherwise
 
-    if run_io:
-        # Run IO
-        for pod in pods:
+        """
+        logger.info(f"Creating resources and running IO as a sanity functional validation")
+
+        for interface in [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]:
+            pvc_obj = pvc_factory(interface)
+            self.pvc_objs.append(pvc_obj)
+            self.pod_objs.append(pod_factory(pvc=pvc_obj))
+        for pod in self.pod_objs:
             pod.run_io('fs', '1G')
-        for pod in pods:
-            fio_result = pod.get_fio_results()
-            logger.info(f"IOPs after FIO for pod {pod.name}:")
-            logger.info(
-                f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
-            )
-            logger.info(
-                f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
-            )
 
+        if run_io:
+            for pod in self.pod_objs:
+                get_fio_rw_iops(pod)
 
-def delete_resources(resources):
-    """
-    Sanity validation - Delete resources (FS and RBD)
+    def delete_resources(self):
+        """
+        Sanity validation - Delete resources (FS and RBD)
 
-    Args:
-        resources (tuple): Lists of projects, secrets, pools,
-            storageclasses, pvcs and pods
+        """
+        logger.info(f"Deleting resources as a sanity functional validation")
 
-    """
-    # Delete resources and run IO for both FS and RBD
-    # Unpack resources
-    projects, secrets, pools, storageclasses, pvcs, pods = resources[:6]
-
-    for resource_type in pods, pvcs, storageclasses, secrets:
-        for resource in resource_type:
-            resource.delete()
-            resource.ocp.wait_for_delete(resource.name)
-    if pools:
-        # Delete only the RBD pool
-        pools[0].delete()
-    if projects:
-        for project in projects:
-            project.delete(resource_name=project.namespace)
-            project.wait_for_delete(project.namespace)
+        for pod_obj in self.pod_objs:
+            pod_obj.delete()
+        for pod_obj in self.pod_objs:
+            pod_obj.ocp.wait_for_delete(pod_obj.name)
+        for pvc_obj in self.pvc_objs:
+            pvc_obj.delete()
+        for pvc_obj in self.pvc_objs:
+            pvc_obj.ocp.wait_for_delete(pvc_obj.name)

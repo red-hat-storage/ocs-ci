@@ -309,7 +309,13 @@ class OCP(object):
                 for item in sample:
                     try:
                         _name = item.get('metadata').get('name')
-                        if self.get_resource_status(_name) == condition:
+                        item_status = (
+                            self.get_resource_status(_name)
+                        )
+                        log.info(
+                            f"Item {_name} status is {item_status}"
+                        )
+                        if item_status == condition:
                             in_condition.append(item)
                     except CommandFailed as ex:
                         log.info(
@@ -317,9 +323,11 @@ class OCP(object):
                             f"Error: {ex}"
                         )
                     if resource_count:
-                        if len(in_condition) == resource_count and (
-                            len(sample) == len(in_condition)
-                        ):
+                        log.info(
+                            f"In condition resources: " 
+                            f"{[it.get('metadata').get('name') for it in in_condition]}"
+                        )
+                        if len(in_condition) == resource_count:
                             return True
                     elif len(sample) == len(in_condition):
                         return True
