@@ -32,96 +32,59 @@ class TestRawBlockPV(ManageTest):
         """
         Create a project for the test
 
-        Returns:
-            str: The newly created namespace
-
         """
         proj_obj = project_factory()
         self.namespace = proj_obj.namespace
 
     @pytest.fixture()
     def storageclass(self, storageclass_factory, reclaim_policy):
-        """"""
+        """
+        Create storage class with reclaim policy
+        """
         self.reclaim_policy = reclaim_policy
         self.sc_obj = storageclass_factory(interface=constants.CEPHBLOCKPOOL, reclaim_policy=self.reclaim_policy)
 
+    @property
     def raw_block_pv(self):
         """
         Testing basic creation of app pod with RBD RWX raw block pv support
         """
         worker_nodes = helpers.get_worker_nodes()
-        pvc_mb = helpers.create_pvc(
-            sc_name=self.sc_obj.name, size='500Mi',
-            access_mode=constants.ACCESS_MODE_RWX,
-            namespace=self.namespace,
-            volume_mode='Block'
-        )
-
-        pvc_gb = helpers.create_pvc(
-            sc_name=self.sc_obj.name, size='10Gi',
-            access_mode=constants.ACCESS_MODE_RWX,
-            namespace=self.namespace,
-            volume_mode='Block'
-        )
-
-        pvc_tb = helpers.create_pvc(
-            sc_name=self.sc_obj.name, size='1Ti',
-            access_mode=constants.ACCESS_MODE_RWX,
-            namespace=self.namespace,
-            volume_mode='Block'
-        )
-
-        pvcs = [pvc_mb, pvc_gb, pvc_tb]
+        pvcs = list()
+        for size in ['500Mi', '10Gi', '1Ti']:
+            pvcs.append(helpers.create_pvc(
+                sc_name=self.sc_obj.name, size=size,
+                access_mode=constants.ACCESS_MODE_RWX,
+                namespace=self.namespace,
+                volume_mode='Block'
+            )
+            )
+        pvc_mb, pvc_gb, pvc_tb = pvcs[0], pvcs[1], pvcs[2]
 
         for pvc in pvcs:
             helpers.wait_for_resource_state(
-                resource=pvc, state=constants.STATUS_BOUND
+                resource=pvc, state=constants.STATUS_BOUND, timeout=120
             )
 
         pvs = [pvc.backed_pv_obj for pvc in pvcs]
 
+        pods = list()
         pod_dict = constants.CSI_RBD_RAW_BLOCK_POD_YAML
-        pvc_mb_pods = [(helpers.create_pod(
-            interface_type=constants.CEPHBLOCKPOOL,
-            pvc_name=pvc_mb.name,
-            namespace=self.namespace,
-            raw_block_pv=True,
-            pod_dict_path=pod_dict,
-            node_name=random.choice(
-                worker_nodes)
-        )
-        ) for _ in range(3)
-        ]
+        for pvc in pvc_mb, pvc_gb, pvc_tb:
+            for _ in range(3):
+                pods.append(helpers.create_pod(
+                    interface_type=constants.CEPHBLOCKPOOL,
+                    pvc_name=pvc.name,
+                    namespace=self.namespace,
+                    raw_block_pv=True,
+                    pod_dict_path=pod_dict,
+                    node_name=random.choice(
+                        worker_nodes
+                    )
+                )
+                )
 
-        pvc_gb_pods = [(helpers.create_pod(
-            interface_type=constants.CEPHBLOCKPOOL,
-            pvc_name=pvc_gb.name,
-            namespace=self.namespace,
-            raw_block_pv=True,
-            pod_dict_path=pod_dict,
-            node_name=random.choice(
-                worker_nodes)
-        )
-        ) for _ in range(3)
-        ]
-
-        pvc_tb_pods = [(helpers.create_pod(
-            interface_type=constants.CEPHBLOCKPOOL,
-            pvc_name=pvc_tb.name,
-            namespace=self.namespace,
-            raw_block_pv=True,
-            pod_dict_path=pod_dict,
-            node_name=random.choice(
-                worker_nodes
-            )
-        )
-        ) for _ in range(3)
-        ]
-
-        def flatten(l):
-            return [item for sublist in l for item in sublist]
-        pods = [pvc_mb_pods, pvc_gb_pods, pvc_tb_pods]
-        pods = flatten(pods)
+        pvc_mb_pods, pvc_gb_pods, pvc_tb_pods = pods[0:3], pods[3:6], pods[6:9]
         for pod in pods:
             helpers.wait_for_resource_state(
                 resource=pod, state=constants.STATUS_RUNNING, timeout=120)
@@ -152,7 +115,7 @@ class TestRawBlockPV(ManageTest):
         """
         Base function for creation of namespace, storageclass, pvcs and pods
         """
-        pods, pvcs, pvs = self.raw_block_pv()
+        pods, pvcs, pvs = self.raw_block_pv
         if self.reclaim_policy == constants.RECLAIM_POLICY_RETAIN:
             teardown_factory(pvs)
         teardown_factory(pvcs)
