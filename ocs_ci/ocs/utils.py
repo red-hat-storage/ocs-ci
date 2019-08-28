@@ -5,6 +5,7 @@ import pickle
 import re
 import time
 import traceback
+from subprocess import TimeoutExpired
 
 import yaml
 from gevent import sleep
@@ -668,6 +669,9 @@ def collect_ocs_logs(dir_name):
         f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}"
     )
     must_gather_img = ocsci_config.REPORTING['must_gather_image']
+    must_gather_timeout = ocsci_config.REPORTING.get(
+        'must_gather_timeout', 600
+    )
     log.info(f"Must gather image: {must_gather_img} will be used.")
     create_directory_path(log_dir_path)
     dir_name = f"{dir_name}_ocs_logs"
@@ -676,6 +680,13 @@ def collect_ocs_logs(dir_name):
     log.info(f"OCS logs will be placed in location {dump_dir}")
     occli = OCP()
     try:
-        occli.exec_oc_cmd(cmd, out_yaml_format=False)
+        occli.exec_oc_cmd(
+            cmd, out_yaml_format=False, timeout=must_gather_timeout
+        )
     except CommandFailed as ex:
         log.error(f"Failed during must gather logs! Error: {ex}")
+    except TimeoutExpired as ex:
+        log.error(
+            f"Timeout {must_gather_timeout}s for must-gather reached, command"
+            f" exited with error: {ex}"
+        )
