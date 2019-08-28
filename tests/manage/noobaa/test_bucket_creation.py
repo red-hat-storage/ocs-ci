@@ -9,6 +9,7 @@ from tests.helpers import create_unique_resource_name
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.skipif(condition=True, reason="NooBaa is not deployed")
 @pytest.mark.filterwarnings('ignore::urllib3.exceptions.InsecureRequestWarning')
 @tier1
 class TestBucketCreation:
