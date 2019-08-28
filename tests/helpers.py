@@ -15,7 +15,7 @@ from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -1007,3 +1007,67 @@ def craft_s3_command(noobaa_obj, cmd):
     string_wrapper = "\""
 
     return f"{base_command}{cmd}{string_wrapper}"
+
+
+def wait_for_resource_count_change(
+    func_to_use, previous_num, namespace, change_type='increase',
+    min_difference=1, timeout=20, interval=2
+):
+    """
+    Wait for a change in total count of PVC or pod
+
+    Args:
+        func_to_use (function): Function to be used to fetch resource info
+            Supported functions: pod.get_all_pvcs(), pod.get_all_pods()
+        previous_num (int): Previous number of pods/PVCs for comparison
+        namespace (str): Name of the namespace
+        change_type (str): Type of change to check. Accepted values are
+            'increase' and 'decrease'. Default is 'increase'.
+        min_difference (int): Minimum required difference in PVC/pod count
+        timeout (int): Maximum wait time in seconds
+        interval (int): Time in seconds to wait between consecutive checks
+
+    Returns:
+        True if difference in count is greater than or equal to
+            'min_difference'. False in case of timeout.
+    """
+    try:
+        for sample in TimeoutSampler(
+            timeout, interval, func_to_use, namespace
+        ):
+            if func_to_use == pod.get_all_pods:
+                current_num = len(sample)
+            else:
+                current_num = len(sample['items'])
+
+            if change_type == 'increase':
+                count_diff = current_num - previous_num
+            else:
+                count_diff = previous_num - current_num
+            if count_diff >= min_difference:
+                return True
+    except TimeoutExpiredError:
+        return False
+
+
+def verify_pv_mounted_on_node(node_pv_dict):
+    """
+    Check if mount point of a PV exists on a node
+
+    Args:
+        node_pv_dict (dict): Node to PV list mapping
+            eg: {'node1': ['pv1', 'pv2', 'pv3'], 'node2': ['pv4', 'pv5']}
+
+    Returns:
+        dict: Node to existing PV list mapping
+            eg: {'node1': ['pv1', 'pv3'], 'node2': ['pv5']}
+    """
+    existing_pvs = {}
+    for node, pvs in node_pv_dict.items():
+        cmd = f'oc debug nodes/{node} -- df'
+        df_on_node = run_cmd(cmd)
+        existing_pvs[node] = []
+        for pv_name in pvs:
+            if f"/pv/{pv_name}/" in df_on_node:
+                existing_pvs[node].append(pv_name)
+    return existing_pvs
