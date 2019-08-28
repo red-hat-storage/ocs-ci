@@ -56,18 +56,18 @@ def verify_pv_not_exists(pvc_obj, cbp_name, rbd_image_id):
     """
 
     # Validate on ceph side
-    logger.info(f"Verifying pv {pvc_obj.backed_pv} exists on backend")
+    logger.info(f"Verifying PV {pvc_obj.backed_pv} exists on backend")
 
     _rc = helpers.verify_volume_deleted_in_backend(
         interface=constants.CEPHBLOCKPOOL, image_uuid=rbd_image_id,
         pool_name=cbp_name
     )
 
-    if _rc is False:
-        raise UnexpectedBehaviour(f"pv {pvc_obj.backed_pv} exists on backend")
+    if not _rc:
+        raise UnexpectedBehaviour(f"PV {pvc_obj.backed_pv} exists on backend")
     logger.info(
-        f"Expected: pv {pvc_obj.backed_pv} "
-        f"doesn't exist on backend after deleting pvc"
+        f"Expected: PV {pvc_obj.backed_pv} "
+        f"doesn't exist on backend after deleting PVC"
     )
 
     # Validate on oc side
@@ -76,11 +76,11 @@ def verify_pv_not_exists(pvc_obj, cbp_name, rbd_image_id):
         assert helpers.validate_pv_delete(pvc_obj.backed_pv)
     except AssertionError as ecf:
         assert "not found" in str(ecf), (
-             f"Unexpected: pv {pvc_obj.backed_pv} still exists"
-         )
+            f"Unexpected: PV {pvc_obj.backed_pv} still exists"
+        )
     logger.info(
-        f"Expected: pv should not be found "
-        f"after deleting corresponding pvc"
+        f"Expected: PV should not be found "
+        f"after deleting corresponding PVC"
     )
 
 
@@ -94,7 +94,7 @@ def create_pvc_and_verify_pvc_exists(sc_name, cbp_name):
     pvc_obj.reload()
 
     # Validate pv is created on ceph
-    logger.info(f"Verifying pv exists on backend")
+    logger.info(f"Verifying PV exists on backend")
     assert helpers.verify_volume_deleted_in_backend(
         interface=constants.CEPHBLOCKPOOL, image_uuid=pvc_obj.image_uuid,
         pool_name=cbp_name
@@ -120,7 +120,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         """
         failed_to_delete = []
         used_before_creating_pvc = check_ceph_used_space()
-        logger.info(f"Used before creating pvc {used_before_creating_pvc}")
+        logger.info(f"Used before creating PVC {used_before_creating_pvc}")
         pvc_obj = create_pvc_and_verify_pvc_exists(
             self.sc_obj.name, self.cbp_obj.name
         )
@@ -132,7 +132,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         used_percentage = pod.run_io_and_verify_mount_point(pod_obj)
         assert used_percentage > '90%', "I/O's didn't run completely"
         used_after_creating_pvc = check_ceph_used_space()
-        logger.info(f"Used after creating pvc {used_after_creating_pvc}")
+        logger.info(f"Used after creating PVC {used_after_creating_pvc}")
         assert used_before_creating_pvc < used_after_creating_pvc
         rbd_image_id = pvc_obj.image_uuid
         for resource in pod_obj, pvc_obj:
@@ -147,7 +147,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
             )
         verify_pv_not_exists(pvc_obj, self.cbp_obj.name, rbd_image_id)
         used_after_deleting_pvc = check_ceph_used_space()
-        logger.info(f"Used after deleting pvc {used_after_deleting_pvc}")
+        logger.info(f"Used after deleting PVC {used_after_deleting_pvc}")
         assert used_after_deleting_pvc < used_after_creating_pvc
         assert (abs(
             used_after_deleting_pvc - used_before_creating_pvc) < 0.2
