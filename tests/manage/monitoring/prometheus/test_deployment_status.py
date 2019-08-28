@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import tier4
+from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
 
 
@@ -20,7 +21,7 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
 
     # get alerts from time when manager deployment was scaled down
     alerts = workload_stop_ceph_mgr.get('prometheus_alerts')
-    target_label = 'CephMgrIsAbsent'
+    target_label = constants.ALERT_MGRISABSENT
     target_msg = 'Storage metrics collector service not available anymore.'
     states = ['pending', 'firing']
 
@@ -47,17 +48,15 @@ def test_ceph_monitor_stopped(workload_stop_ceph_mon):
 
     # get alerts from time when manager deployment was scaled down
     alerts = workload_stop_ceph_mon.get('prometheus_alerts')
-    target_label = 'CephMonQuorumAtRisk'
-    target_msg = 'Storage quorum at risk'
     for target_label, target_msg, target_states, target_severity in [
         (
-            'CephMonQuorumAtRisk',
+            constants.ALERT_MONQUORUMATRISK,
             'Storage quorum at risk',
             ['pending'],
             'error'
         ),
         (
-            'CephClusterWarningState',
+            constants.ALERT_CLUSTERWARNINGSTATE,
             'Storage cluster is in degraded state',
             ['pending', 'firing'],
             'warning'
