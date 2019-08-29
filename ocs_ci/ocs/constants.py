@@ -15,6 +15,7 @@ TOP_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 TEMPLATE_DIR = os.path.join(TOP_DIR, "ocs_ci", "templates")
+EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
 TEMPLATE_CSI_RBD_DIR = os.path.join(TEMPLATE_CSI_DIR, "rbd")
@@ -94,6 +95,9 @@ OPENSHIFT_OPERATORS_REDHAT_NAMESPACE = "openshift-operators-redhat"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
 MOUNT_POINT = '/var/lib/www/html'
+OCP_QE_MISC_REPO = (
+    "http://git.host.prod.eng.bos.redhat.com/git/openshift-misc.git"
+)
 
 DEFAULT_SECRET = 'rook-ceph-csi'
 DEFAULT_BLOCKPOOL = 'rbd'
