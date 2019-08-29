@@ -1088,13 +1088,13 @@ def verify_pv_mounted_on_node(node_pv_dict):
 
 def converge_lists(list_to_converge):
     """
-     Function to flatten and remove the sublist created during future obj
+    Function to flatten and remove the sublist created during future obj
 
-     Args:
-        list_to_converge (list): arg list of lists, eg: [[1,2],[3,4]]
+    Args:
+       list_to_converge (list): arg list of lists, eg: [[1,2],[3,4]]
 
-     Returns:
-         list (list): return converged list eg: [1,2,3,4]
+    Returns:
+        list (list): return converged list eg: [1,2,3,4]
     """
     return [item for sublist in list_to_converge for item in sublist]
 
@@ -1193,7 +1193,8 @@ def delete_objs_parallel(obj_list):
 def memory_leak_analysis(median_dict):
     """
     Function to analyse Memory leak after execution of test case
-    Memory leak is analyzed based on top output "RES" value, i.e. list[7] in code
+    Memory leak is analyzed based on top output "RES" value of ceph-osd daemon,
+    i.e. list[7] in code
 
     Args:
          median_dict (dict): dict of worker nodes and respective median value
@@ -1265,7 +1266,7 @@ def get_memory_leak_median_value():
     """
     Function to calculate memory leak Median value by collecting the data for 180 sec
     and find the median value which will be considered as starting point
-    to evaluate memory leak using "RES" value i.e. list[7] in code
+    to evaluate memory leak using "RES" value of ceph-osd daemon i.e. list[7] in code
 
     Returns:
         median_dict (dict): dict of worker nodes and respective median value

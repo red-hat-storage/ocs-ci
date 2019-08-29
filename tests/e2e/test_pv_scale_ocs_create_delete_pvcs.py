@@ -12,7 +12,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from tests import helpers
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources import pod, pvc
+from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import scale, E2ETest
 
 log = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ class BasePvcPodCreateDelete(E2ETest):
         rbd_rwo_pods = list()
         # TODO: RBD RWX pod creation
         for pvc_obj in rbd_pvcs:
-            if not pvc.get_pvc_access_mode(pvc_obj) == constants.ACCESS_MODE_RWX:
+            if not pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWX:
                 rbd_rwo_pods.append(pvc_obj)
         rbd_pods = helpers.create_pods_parallel(
             rbd_rwo_pods, self.namespace, constants.CEPHBLOCKPOOL
@@ -141,11 +141,10 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
     def test_pv_scale_out_create_delete_pvcs_with_and_without_io(
         self, memory_leak_function, namespace, storageclass, setup_fixture, start_io
     ):
-        self.pvc_count_1st_itr = 10
-        self.pvc_count_next_itr = 10
+        self.pvc_count_each_itr = 10
         self.scale_pod_count = 120
         self.size = '10Gi'
-        test_run_time = 300
+        test_run_time = 180
         self.all_pvc_obj, self.all_pod_obj = ([] for i in range(2))
         self.delete_pod_count = 0
 
@@ -154,7 +153,7 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
         log.info(f"Median dict values for memory leak {median_dict}")
 
         # First Iteration call to create PVC and POD
-        self.create_pvc_pod(self.rbd_sc_obj, self.cephfs_sc_obj, self.pvc_count_1st_itr,
+        self.create_pvc_pod(self.rbd_sc_obj, self.cephfs_sc_obj, self.pvc_count_each_itr,
                             self.size, start_io)
 
         # Continue to iterate till the scale pvc limit is reached
@@ -165,11 +164,11 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
                 break
             else:
                 with ThreadPoolExecutor() as executor:
-                    log.info(f"Create {self.pvc_count_next_itr} and "
+                    log.info(f"Create {self.pvc_count_each_itr} and "
                              f"in parallel delete {self.delete_pod_count} "
                              f"pods & pvc")
                     thread_list = [self.delete_pvc_pod(), self.create_pvc_pod(
-                        self.rbd_sc_obj, self.cephfs_sc_obj, self.pvc_count_next_itr,
+                        self.rbd_sc_obj, self.cephfs_sc_obj, self.pvc_count_each_itr,
                         self.size, start_io)]
                     for thread in thread_list:
                         executor.submit(thread)
