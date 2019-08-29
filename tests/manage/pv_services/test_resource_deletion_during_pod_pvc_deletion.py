@@ -114,7 +114,14 @@ class DisruptionBase(ManageTest):
         # Start IO on each pod
         log.info("Starting IO on pods")
         for pod_obj in self.pod_objs:
-            pod_obj.run_io(storage_type='fs', size=f'{self.pvc_size - 1}G')
+            if pod_obj.pvc.access_mode == constants.ACCESS_MODE_RWX:
+                io_size = int((self.pvc_size - 1) / 2)
+            else:
+                io_size = self.pvc_size - 1
+            pod_obj.run_io(
+                storage_type='fs', size=f'{io_size}G',
+                fio_filename=f'{pod_obj.name}_io'
+            )
         log.info("IO started on all pods.")
 
         # Start deleting pods
@@ -295,22 +302,33 @@ class TestDeleteResourceDuringPodPvcDeletion(DisruptionBase):
         """
         Create PVCs and pods
         """
+        access_modes = [constants.ACCESS_MODE_RWO]
+        if interface == constants.CEPHFILESYSTEM:
+            access_modes.append(constants.ACCESS_MODE_RWX)
         pvc_objs = multi_pvc_factory(
             interface=interface,
             project=None,
             storageclass=None,
             size=self.pvc_size,
-            access_mode=constants.ACCESS_MODE_RWO,
+            access_modes=access_modes,
             status=constants.STATUS_BOUND,
             num_of_pvc=self.num_of_pvcs,
             wait_each=False
         )
 
         pod_objs = []
+
+        # Create one pod using each RWO PVC and two pods using each RWX PVC
         for pvc_obj in pvc_objs:
+            if pvc_obj.access_mode == constants.ACCESS_MODE_RWX:
+                pod_obj = pod_factory(
+                    pvc=pvc_obj, status=constants.STATUS_RUNNING
+                )
+                pod_objs.append(pod_obj)
             pod_obj = pod_factory(pvc=pvc_obj, status=constants.STATUS_RUNNING)
             pod_objs.append(pod_obj)
 
+        log.info(f"Created {len(pod_objs)} pods.")
         return pvc_objs, pod_objs
 
     def test_disruptive_during_pod_pvc_deletion(
