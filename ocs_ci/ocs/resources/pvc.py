@@ -92,6 +92,16 @@ class PVC(OCS):
         image_uuid = "-".join(out.split('-')[-5:])
         return image_uuid
 
+    @property
+    def get_pvc_access_mode(self):
+        """
+        Function to get pvc access_mode
+
+        Returns:
+            (str): The accessModes Value of pvc_obj
+        """
+        return self.data.get('spec').get('accessModes')[0]
+
     def verify_pv_exists_in_backend(
             self, pool_name
     ):
