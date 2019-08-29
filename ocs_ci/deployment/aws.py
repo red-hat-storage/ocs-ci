@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 # As of now only IPI
 # TODO: Introduce UPI once we have proper doc
-__all__ = ['AWSIPI']
+__all__ = ['AWSIPI', 'AWSUPI']
 
 
 class AWSBase(Deployment):
@@ -181,3 +181,79 @@ class AWSIPI(AWSBase):
                 )
         except Exception:
             logger.error(traceback.format_exc())
+
+
+class AWSUPI(AWSBase):
+    """
+    A class to handle AWS UPI specific deployment
+    """
+    def __init__(self):
+        self.name = self.__class__.__name__
+        super(AWSUPI, self).__init__()
+
+    class OCPDeployment(BaseOCPDeployment):
+        def __init__(self):
+            super(AWSUPI.OCPDeployment, self).__init__()
+
+        def deploy_prereq(self):
+            """
+            Overriding deploy_prereq from parent. Perform all necessary
+            prerequisites for AWSUPI here.
+            """
+            super(AWSUPI.OCPDeployment, self).deploy_prereq()
+            # TODO: 1. git clone repo from openshift-qe repo
+            #       2. setup necessary env variables and AWS cli if necessary
+
+        def deploy(self, log_cli_level='DEBUG'):
+            """
+            Exact deployment will happen here
+
+            Args:
+                log_cli_level (str): openshift installer's log level
+                    (default: "DEBUG")
+            """
+            logger.info("Deploying OCP cluster")
+            logger.info(
+                f"Openshift-installer will be using loglevel:{log_cli_level}"
+            )
+
+            #TODO: call "upi_on_aws-install.sh" here
+
+    def deploy_ocp(self, log_cli_level='DEBUG'):
+        """
+        OCP deployment specific to AWS UPI
+
+        Args:
+             log_cli_level (str): openshift installer's log level
+                (default: 'DEBUG')
+        """
+        super(AWSUPI, self).deploy_ocp(log_cli_level)
+        volume_size = config.ENV_DATA.get('DEFAULT_EBS_VOLUME_SIZE', 100)
+        self.add_volume(volume_size)
+
+    def destroy_cluster(self, log_level="DEBUG"):
+        """
+        Destroy OCP cluster for AWS UPI
+
+        Args:
+            log_level (str): log level for openshift-installer (
+                default:DEBUG)
+        """
+        super(AWSIPI, self).destroy_cluster(log_level)
+
+        try:
+            # Retrieve cluster name and AWS region from metadata
+            cluster_name = self.ocp_deployment.metadata.get("clusterName")
+            # Find and delete volumes
+            volume_pattern = f"{cluster_name}*"
+            logger.debug(f"Finding volumes with pattern: {volume_pattern}")
+            volumes = self.aws.get_volumes_by_name_pattern(volume_pattern)
+            logger.debug(f"Found volumes: \n {volumes}")
+            for volume in volumes:
+                self.aws.detach_and_delete_volume(
+                    self.aws.ec2_resource.Volume(volume['id'])
+                )
+        except Exception:
+            logger.error(traceback.format_exc())
+
+        # TODO: Delete the cloudformation stacks
