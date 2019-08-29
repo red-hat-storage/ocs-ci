@@ -32,6 +32,10 @@ class TimeoutExpiredError(Exception):
         return f"{self.message}: {self.value}"
 
 
+class TimeoutException(Exception):
+    pass
+
+
 class MonCountException(Exception):
     pass
 
