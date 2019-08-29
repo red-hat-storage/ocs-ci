@@ -2,20 +2,20 @@
 This module contains platform specific methods and classes for deployment
 on AWS platform
 """
-import os
-import logging
 import json
+import logging
+import os
 import traceback
 
-from .deployment import Deployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
-from ocs_ci.utility.utils import run_cmd
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults, constants
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.ocs.exceptions import SameNamePrefixClusterAlreadyExistsException
 
+from ocs_ci.utility.utils import run_cmd, clone_repo
+from .deployment import Deployment
 
 logger = logging.getLogger(__name__)
 
@@ -201,8 +201,29 @@ class AWSUPI(AWSBase):
             prerequisites for AWSUPI here.
             """
             super(AWSUPI.OCPDeployment, self).deploy_prereq()
-            # TODO: 1. git clone repo from openshift-qe repo
-            #       2. setup necessary env variables and AWS cli if necessary
+
+            # setup necessary env variables
+            upi_env_vars = {
+                'INSTANCE_NAME_PREFIX': config.ENV_DATA['cluster_name'],
+                'AWS_REGION': config.ENV_DATA['region'],
+                'rhcos_ami': 'ami-06c85f9d106577272',
+                'route53_domain_name': config.ENV_DATA['base_domain'],
+                'vm_type_masters': config.ENV_DATA['master_instance_type'],
+                'vm_type_workers': config.ENV_DATA['worker_instance_type'],
+                'num_workers': 3
+            }
+            for key, value in upi_env_vars.items():
+                os.environ[key] = value
+
+            # ensure environment variables have been set correctly
+            for key, value in upi_env_vars.items():
+                assert os.getenv(key) == value, f"{os.getenv(key)} != {value}"
+
+            # git clone repo from openshift-qe repo
+            clone_repo(
+                constants.OCP_QE_MISC_REPO,
+                os.path.join(constants.EXTERNAL_DIR, 'openshift-misc')
+            )
 
         def deploy(self, log_cli_level='DEBUG'):
             """
