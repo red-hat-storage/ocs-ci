@@ -54,6 +54,7 @@ REPORTING:
 ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
   cluster_namespace: 'openshift-storage'
+  monitoring_enabled: true
   platform: 'AWS'
   deployment_type: 'ipi'
   region: 'us-east-2'
