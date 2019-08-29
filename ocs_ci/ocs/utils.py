@@ -655,29 +655,26 @@ def apply_oc_resource(
     occli.apply(cfg_file)
 
 
-def collect_ocs_logs(dir_name):
+def run_must_gather(log_dir_path, image, command=None):
     """
-    Collects OCS logs
+    Runs the must-gather tool against the cluster
 
     Args:
-        dir_name (str): directory name to store OCS logs. Logs will be stored
-            in dir_name suffix with _ocs_logs.
-
+        log_dir_path (str): directory for dumped must-gather logs
+        image (str): must-gather image registry path
+        command (str): optional command to execute within the must-gather image
     """
-    log_dir_path = os.path.join(
-        os.path.expanduser(ocsci_config.RUN['log_dir']),
-        f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}"
-    )
-    must_gather_img = ocsci_config.REPORTING['must_gather_image']
     must_gather_timeout = ocsci_config.REPORTING.get(
         'must_gather_timeout', 600
     )
-    log.info(f"Must gather image: {must_gather_img} will be used.")
+
+    log.info(f"Must gather image: {image} will be used.")
     create_directory_path(log_dir_path)
-    dir_name = f"{dir_name}_ocs_logs"
-    dump_dir = os.path.join(log_dir_path, dir_name)
-    cmd = f"adm must-gather --image={must_gather_img} --dest-dir={dump_dir}"
-    log.info(f"OCS logs will be placed in location {dump_dir}")
+    cmd = f"adm must-gather --image={image} --dest-dir={log_dir_path}"
+    if command:
+        cmd += f" -- {command}"
+
+    log.info(f"OCS logs will be placed in location {log_dir_path}")
     occli = OCP()
     try:
         occli.exec_oc_cmd(
@@ -690,3 +687,28 @@ def collect_ocs_logs(dir_name):
             f"Timeout {must_gather_timeout}s for must-gather reached, command"
             f" exited with error: {ex}"
         )
+
+
+def collect_ocs_logs(dir_name):
+    """
+    Collects OCS logs
+
+    Args:
+        dir_name (str): directory name to store OCS logs. Logs will be stored
+            in dir_name suffix with _ocs_logs.
+
+    """
+    log_dir_path = os.path.join(
+        os.path.expanduser(ocsci_config.RUN['log_dir']),
+        f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",
+        f"{dir_name}_ocs_logs"
+    )
+
+    run_must_gather(os.path.join(log_dir_path, 'ocs_must_gather'),
+                    ocsci_config.REPORTING['ocs_must_gather_image'])
+
+    ocp_log_dir_path = os.path.join(log_dir_path, 'ocp_must_gather')
+    ocp_must_gather_image = ocsci_config.REPORTING['ocp_must_gather_image']
+    run_must_gather(ocp_log_dir_path, ocp_must_gather_image)
+    run_must_gather(ocp_log_dir_path, ocp_must_gather_image,
+                    '/usr/bin/gather_service_logs worker')
