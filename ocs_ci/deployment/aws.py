@@ -2,6 +2,7 @@
 This module contains platform specific methods and classes for deployment
 on AWS platform
 """
+import boto3
 import json
 import logging
 import os
@@ -234,7 +235,7 @@ class AWSUPI(AWSBase):
                 'route53_domain_name': config.ENV_DATA['base_domain'],
                 'vm_type_masters': config.ENV_DATA['master_instance_type'],
                 'vm_type_workers': config.ENV_DATA['worker_instance_type'],
-                'num_workers': "3"
+                'num_workers': "3"  # TODO: read in num_workers
             }
             for key, value in upi_env_vars.items():
                 os.environ[key] = value
@@ -350,11 +351,11 @@ class AWSUPI(AWSBase):
             log_level (str): log level for openshift-installer (
                 default:DEBUG)
         """
-        super(AWSIPI, self).destroy_cluster(log_level)
+        super(AWSUPI, self).destroy_cluster(log_level)
+        cluster_name = self.ocp_deployment.metadata.get("clusterName")
 
         try:
             # Retrieve cluster name and AWS region from metadata
-            cluster_name = self.ocp_deployment.metadata.get("clusterName")
             # Find and delete volumes
             volume_pattern = f"{cluster_name}*"
             logger.debug(f"Finding volumes with pattern: {volume_pattern}")
@@ -367,4 +368,11 @@ class AWSUPI(AWSBase):
         except Exception:
             logger.error(traceback.format_exc())
 
-        # TODO: Delete the cloudformation stacks
+        # Delete the cloudformation stacks
+        suffixes = ['vpc', 'inf', 'sg', 'bs', 'ma']
+        for i in range(3):  # TODO: read in num_workers
+            suffixes.append(f'no{i}')
+        stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
+        cf = boto3.client('cloudformation')
+        for stack_name in stack_names:
+            cf.delete_stack(StackName=stack_name)
