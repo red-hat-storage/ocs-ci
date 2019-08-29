@@ -69,6 +69,7 @@ class TestPgSQLWorkload(E2ETest):
         pg_data = templating.load_yaml_to_dict(constants.PGSQL_BENCHMARK_YAML)
         pg_obj = OCS(**pg_data)
         pg_obj.create()
+
         # Wait for pgbench pod to be created
         log.info(
             "waiting for pgbench benchmark to create, "
@@ -78,11 +79,16 @@ class TestPgSQLWorkload(E2ETest):
         log.info(f"Waiting {wait_time} seconds...")
         time.sleep(wait_time)
 
+        # Get pg_bench pod name
+        jsonpath = '{.items[0].status.uuid}'
+        uuid = run_cmd(f"bin/oc get benchmarks -o jsonpath='{jsonpath}'")
+        uuid = uuid.split('-')[0]
         pgbench_pod = run_cmd(
-            'bin/oc get pods -l '
-            'app=pgbench-client -o name'
+            f'oc get pods -l app=pgbench-client-{uuid} -o name'
         )
         pgbench_pod = pgbench_pod.split('/')[1]
+
+        # Wait for pg_bench pod to initialized and complete
         run_cmd(
             'bin/oc wait --for condition=Initialized '
             f'pods/{pgbench_pod} '
@@ -90,7 +96,7 @@ class TestPgSQLWorkload(E2ETest):
         )
         run_cmd(
             'bin/oc wait --for condition=Complete jobs '
-            '-l app=pgbench-client '
+            f'-l app=pgbench-client-{uuid} '
             '--timeout=300s'
         )
 

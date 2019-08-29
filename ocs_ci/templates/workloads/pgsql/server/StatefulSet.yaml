@@ -28,7 +28,7 @@ spec:
     - metadata:
         name: postgres-persistent-storage
         annotations:
-          volume.beta.kubernetes.io/storage-class: rook-ceph-block-extented
+          volume.beta.kubernetes.io/storage-class: pgsql-workload
       spec:
         accessModes: [ "ReadWriteOnce" ]
         resources:
