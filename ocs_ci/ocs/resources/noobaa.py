@@ -101,7 +101,7 @@ class NooBaa(object):
 
         """
         try:
-            self._s3_resource.meta.client.head_bucket(Bucket=bucket.name)
+            self.s3_resource.meta.client.head_bucket(Bucket=bucket.name)
             logger.info(f"{bucket.name} exists")
             return True
         except ClientError:

@@ -5,7 +5,7 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import noobaa
 from tests import helpers
-from tests.helpers import craft_s3_command
+from tests.helpers import craft_s3_command, create_unique_resource_name
 
 logger = logging.getLogger(__name__)
 
@@ -44,32 +44,44 @@ def uploaded_objects(request, noobaa_obj, awscli_pod):
                 command=craft_s3_command(noobaa_obj, "rm " + uploaded_filename),
                 secrets=[noobaa_obj.access_key_id, noobaa_obj.access_key, noobaa_obj.endpoint]
             )
+
     request.addfinalizer(object_cleanup)
     return uploaded_objects_paths
 
 
 @pytest.fixture()
-def created_buckets(request, noobaa_obj):
+def created_buckets(request, noobaa_obj, amount=1):
     """
-    Deletes all buckets that were created as part of the test
+    Creates and deletes all buckets that were created as part of the test
 
     Args:
         noobaa_obj (NooBaa): A NooBaa object containing the NooBaa S3 connection credentials
+        amount (int): The amount of buckets to create
 
     Returns:
         list: An empty list of buckets
 
     """
-    created_buckets_names = []
+    created_bucket_names = []
 
     def bucket_cleanup():
-        for bucket in created_buckets_names:
+        for bucket in created_bucket_names:
             logger.info(f'Deleting bucket {bucket.name}')
             bucket.object_versions.delete()
             noobaa_obj.s3_delete_bucket(bucket)
+            logger.info(f"Verifying whether bucket: {bucket.name} exists"
+                        f" after deletion")
+            assert noobaa_obj.s3_verify_bucket_exists(bucket) is False
     request.addfinalizer(bucket_cleanup)
-    return created_buckets_names
-
+    for i in range(amount):
+        bucket_name = create_unique_resource_name(
+            resource_description='bucket', resource_type='s3'
+        )
+        logger.info(f'Creating bucket: {bucket_name}')
+        created_bucket_names.append(
+            noobaa_obj.s3_create_bucket(bucketname=bucket_name)
+        )
+    return created_bucket_names
 
 @pytest.fixture()
 def created_pods(request):

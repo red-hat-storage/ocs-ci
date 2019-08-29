@@ -51,3 +51,9 @@ class TestBucketIO(ManageTest):
                 secrets=[noobaa_obj.access_key_id, noobaa_obj.access_key, noobaa_obj.endpoint]
             )
             uploaded_objects.append(full_object_path)
+
+        assert set(
+            downloaded_files
+        ).issubset(
+            obj.key for obj in noobaa_obj.s3_list_all_objects_in_bucket(bucketname)
+        )

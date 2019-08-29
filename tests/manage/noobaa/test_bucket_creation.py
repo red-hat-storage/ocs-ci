@@ -27,6 +27,12 @@ class TestBucketCreation:
         Test bucket creation using the S3 SDK
         """
 
-        bucketname = create_unique_resource_name(self.__class__.__name__.lower(), 's3-bucket')
-        logger.info(f'Creating new bucket - {bucketname}')
-        created_buckets.append(noobaa_obj.s3_create_bucket(bucketname=bucketname))
+        for i in range(3):
+            bucketname = create_unique_resource_name(self.__class__.__name__.lower(), 's3-bucket')
+            logger.info(f"Creating new bucket - {bucketname}")
+            created_buckets.append(noobaa_obj.s3_create_bucket(bucketname=bucketname))
+        assert set(
+            bucket.name for bucket in created_buckets
+        ).issubset(
+            noobaa_obj.s3_list_all_bucket_names()
+        )
