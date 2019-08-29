@@ -173,3 +173,16 @@ def get_all_pvcs(namespace=None):
     )
     out = ocp_pvc_obj.get()
     return out
+
+
+def get_pvc_access_mode(pvc_obj):
+    """
+    Function to get pvc access_mode from given pvc_obj
+
+    Args:
+        pvc_obj (str): The pvc object
+
+    Returns:
+        access_mode (str): The accessModes on a given pvc_obj
+    """
+    return pvc_obj.get().get('spec').get('accessModes')[0]

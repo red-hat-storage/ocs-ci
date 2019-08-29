@@ -4,11 +4,15 @@ Helper functions file for OCS QE
 import logging
 import re
 import datetime
+import statistics
+import os
+import time
 
 from ocs_ci.ocs.ocp import OCP
 
 from uuid import uuid4
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
+from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources import pod, pvc
@@ -361,7 +365,8 @@ def create_storage_class(
 
 def create_pvc(
     sc_name, pvc_name=None, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-    size=None, do_reload=True, access_mode=constants.ACCESS_MODE_RWO
+    size=None, do_reload=True, access_mode=constants.ACCESS_MODE_RWO,
+    volume_mode=None
 ):
     """
     Create a PVC
@@ -374,6 +379,7 @@ def create_pvc(
         size(str): Size of pvc to create
         do_reload (bool): True for wait for reloading PVC after its creation, False otherwise
         access_mode (str): The access mode to be used for the PVC
+        volume_mode (str): Volume mode for rbd RWX pvc i.e. 'Block'
 
     Returns:
         PVC: PVC instance
@@ -389,6 +395,8 @@ def create_pvc(
     pvc_data['spec']['storageClassName'] = sc_name
     if size:
         pvc_data['spec']['resources']['requests']['storage'] = size
+    if volume_mode:
+        pvc_data['spec']['volumeMode'] = volume_mode
     ocs_obj = pvc.PVC(**pvc_data)
     created_pvc = ocs_obj.create(do_reload=do_reload)
     assert created_pvc, f"Failed to create resource {pvc_name}"
@@ -396,7 +404,8 @@ def create_pvc(
 
 
 def create_multiple_pvcs(
-    sc_name, namespace, number_of_pvc=1, size=None, do_reload=False
+    sc_name, namespace, number_of_pvc=1, size=None, do_reload=False,
+    access_mode=constants.ACCESS_MODE_RWO
 ):
     """
     Create one or more PVC
@@ -408,15 +417,19 @@ def create_multiple_pvcs(
         size (str): The size of the PVCs to create
         do_reload (bool): True for wait for reloading PVC after its creation,
             False otherwise
-
+        access_mode (str): The kind of access mode for PVC
 
     Returns:
          list: List of PVC objects
     """
+    if access_mode == 'ReadWriteMany' and 'rbd' in sc_name:
+        volume_mode = 'Block'
+    else:
+        volume_mode = None
     return [
         create_pvc(
             sc_name=sc_name, size=size, namespace=namespace,
-            do_reload=do_reload
+            do_reload=do_reload, access_mode=access_mode, volume_mode=volume_mode
         ) for _ in range(number_of_pvc)
     ]
 
@@ -1071,3 +1084,206 @@ def verify_pv_mounted_on_node(node_pv_dict):
             if f"/pv/{pv_name}/" in df_on_node:
                 existing_pvs[node].append(pv_name)
     return existing_pvs
+
+
+def converge_lists(list_to_converge):
+    """
+     Function to flatten and remove the sublist created during future obj
+
+     Args:
+        list_to_converge (list): arg list of lists, eg: [[1,2],[3,4]]
+
+     Returns:
+         list (list): return converged list eg: [1,2,3,4]
+    """
+    return [item for sublist in list_to_converge for item in sublist]
+
+
+def create_multiple_pvc_parallel(
+    sc_obj, namespace, number_of_pvc, size, access_modes
+):
+    """
+    Funtion to create multiple PVC in parallel using threads
+    Function will create PVCs based on the available access modes
+
+    Args:
+        sc_obj (str): Storage Class object
+        namespace (str): The namespace for creating pvc
+        number_of_pvc (int): NUmber of pvc to be created
+        size (str): size of the pvc eg: '10Gi'
+        access_modes (list): List of access modes for PVC creation
+
+    Returns:
+        pvc_objs_list (list): List of pvc objs created in function
+    """
+    obj_status_list, result_lists = ([] for i in range(2))
+    with ThreadPoolExecutor() as executor:
+        for mode in access_modes:
+            result_lists.append(
+                executor.submit(
+                    create_multiple_pvcs, sc_name=sc_obj.name,
+                    namespace=namespace, number_of_pvc=number_of_pvc,
+                    access_mode=mode, size=size)
+            )
+    result_list = [result.result() for result in result_lists]
+    pvc_objs_list = converge_lists(result_list)
+    # Check for all the pvcs in Bound state
+    with ThreadPoolExecutor() as executor:
+        for objs in pvc_objs_list:
+            obj_status_list.append(
+                executor.submit(wait_for_resource_state, objs, 'Bound')
+            )
+    if False in [obj.result() for obj in obj_status_list]:
+        raise TimeoutExpiredError
+    return pvc_objs_list
+
+
+def create_pods_parallel(pvc_list, namespace, interface):
+    """
+    Function to create pods in parallel
+
+    Args:
+        pvc_list (list): List of pvcs to be attached in pods
+        namesapce (str): The namespace for creating pod
+        interface (str): The interface backed the PVC
+
+    Returns:
+        pod_objs (list): Returns list of pods created
+    """
+    future_pod_objs = []
+    # Added 300 sec wait time since in scale test once the setup has more
+    # PODs time taken for the pod to be up will be based on resource available
+    wait_time = 300
+    with ThreadPoolExecutor() as executor:
+        for pvc_obj in pvc_list:
+            future_pod_objs.append(executor.submit(
+                create_pod, interface_type=interface,
+                pvc_name=pvc_obj.name, do_reload=False, namespace=namespace)
+            )
+    pod_objs = [pvc_obj.result() for pvc_obj in future_pod_objs]
+    # Check for all the pods are in Running state
+    # In above pod creation not waiting for the pod to be created because of threads usage
+    with ThreadPoolExecutor() as executor:
+        for obj in pod_objs:
+            future_pod_objs.append(
+                executor.submit(wait_for_resource_state, obj, 'Running', timeout=wait_time)
+            )
+    # If pods not up raise exception/failure
+    if False in [obj.result() for obj in future_pod_objs]:
+        raise TimeoutExpiredError
+    return pod_objs
+
+
+def delete_objs_parallel(obj_list):
+    """
+    Function to delete objs specified in list
+    Args:
+        obj_list(list): List can be obj of pod, pvc, etc
+
+    Returns:
+        bool: True if obj deleted else False
+
+    """
+    with ThreadPoolExecutor() as p:
+        for obj in obj_list:
+            p.submit(obj.delete)
+    return True
+
+
+def memory_leak_analysis(median_dict):
+    """
+    Function to analyse Memory leak after execution of test case
+    Memory leak is analyzed based on top output "RES" value, i.e. list[7] in code
+
+    Args:
+         median_dict (dict): dict of worker nodes and respective median value
+         eg: median_dict = {'worker_node_1':102400, 'worker_node_2':204800, ...}
+
+    More Detail on Median value:
+        For calculating memory leak require a constant value, which should not be
+        start or end of test, so calculating it by getting memory for 180 sec
+        before TC execution and take a median out of it.
+        Memory value could be different for each nodes, so identify constant value
+        for each node and update in median_dict
+
+    Usage:
+        test_case(.., memory_leak_function):
+            .....
+            median_dict = helpers.get_memory_leak_median_value()
+            .....
+            TC execution part, memory_leak_fun will capture data
+            ....
+            helpers.memory_leak_analysis(median_dict)
+            ....
+    """
+    # dict to store memory leak difference for each worker
+    diff = {}
+    for worker in get_worker_nodes():
+        memory_leak_data = []
+        if os.path.exists(f"/tmp/{worker}-top-output.txt"):
+            with open(f"/tmp/{worker}-top-output.txt", "r") as f:
+                data = f.readline()
+                list = data.split(" ")
+                list = [i for i in list if i]
+                memory_leak_data.append(list[7])
+        else:
+            logging.info(f"worker {worker} memory leak file not found")
+            raise UnexpectedBehaviour
+        number_of_lines = len(memory_leak_data) - 1
+        # Get the start value form median_dict arg for respective worker
+        start_value = median_dict[f"{worker}"]
+        end_value = memory_leak_data[number_of_lines]
+        logging.info(f"Median value {start_value}")
+        logging.info(f"End value {end_value}")
+        # Convert the values to kb for calculations
+        if start_value.__contains__('g'):
+            start_value = float(1024 ** 2 * float(start_value[:-1]))
+        elif start_value.__contains__('m'):
+            start_value = float(1024 * float(start_value[:-1]))
+        else:
+            start_value = float(start_value)
+        if end_value.__contains__('g'):
+            end_value = float(1024 ** 2 * float(end_value[:-1]))
+        elif end_value.__contains__('m'):
+            end_value = float(1024 * float(end_value[:-1]))
+        else:
+            end_value = float(end_value)
+        # Calculate the percentage of diff between start and end value
+        # Based on value decide TC pass or fail
+        diff[worker] = ((end_value - start_value) / start_value) * 100
+        logging.info(f"Percentage diff in start and end value {diff[worker]}")
+        if diff[worker] <= 20:
+            logging.info(f"No memory leak in worker {worker} passing the test")
+        else:
+            logging.info(f"There is a memory leak in worker {worker}")
+            logging.info(f"Memory median value start of the test {start_value}")
+            logging.info(f"Memory value end of the test {end_value}")
+            raise UnexpectedBehaviour
+
+
+def get_memory_leak_median_value():
+    """
+    Function to calculate memory leak Median value by collecting the data for 180 sec
+    and find the median value which will be considered as starting point
+    to evaluate memory leak using "RES" value i.e. list[7] in code
+
+    Returns:
+        median_dict (dict): dict of worker nodes and respective median value
+    """
+    median_dict = {}
+    timeout = 180  # wait for 180 sec to evaluate  memory leak median data.
+    logger.info(f"waiting for {timeout} sec to evaluate the median value")
+    time.sleep(timeout)
+    for worker in get_worker_nodes():
+        memory_leak_data = []
+        if os.path.exists(f"/tmp/{worker}-top-output.txt"):
+            with open(f"/tmp/{worker}-top-output.txt", "r") as f:
+                data = f.readline()
+                list = data.split(" ")
+                list = [i for i in list if i]
+                memory_leak_data.append(list[7])
+        else:
+            logging.info(f"worker {worker} memory leak file not found")
+            raise UnexpectedBehaviour
+        median_dict[f"{worker}"] = statistics.median(memory_leak_data)
+    return median_dict

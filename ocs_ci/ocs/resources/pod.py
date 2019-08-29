@@ -780,3 +780,18 @@ def verify_node_name(pod_obj, node_name):
             f"specified node: {node_name}, actual node: {actual_node}"
         )
         return False
+
+
+def get_pvc_name(pod_obj):
+    """
+    Function to get pvc_name from pod_obj
+
+    Args:
+        pod_obj (str): The pod object
+
+    Returns:
+        pvc_name (str): The pvc_name on a given pod_obj
+    """
+    return pod_obj.get().get(
+        'spec'
+    ).get('volumes')[0].get('persistentVolumeClaim').get('claimName')

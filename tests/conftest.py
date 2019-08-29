@@ -719,3 +719,87 @@ def rook_repo(request):
     get_rook_repo(
         config.RUN['rook_branch'], config.RUN.get('rook_to_checkout')
     )
+
+
+@pytest.fixture(scope="function")
+def memory_leak_function(request):
+    """
+    Function to start Memory leak thread which will be executed parallel with test run
+    Memory leak data will be captured in all worker nodes for ceph-osd process
+    Data will be appended in /tmp/(worker)-top-output.txt file for each worker
+    During teardown created tmp files will be deleted
+
+    Usage:
+        test_case(.., memory_leak_function):
+            .....
+            median_dict = helpers.get_memory_leak_median_value()
+            .....
+            TC execution part, memory_leak_fun will capture data
+            ....
+            helpers.memory_leak_analysis(median_dict)
+            ....
+    """
+    def finalizer():
+        """
+        Finalizer to stop memory leak data capture thread and cleanup the files
+        """
+        set_flag_status('terminated')
+        try:
+            for status in TimeoutSampler(90, 3, get_flag_status):
+                if status == 'terminated':
+                    break
+        except TimeoutExpiredError:
+            log.warning(
+                "Background test execution still in progress before"
+                "memory leak thread terminated"
+            )
+        if thread:
+            thread.join()
+        for worker in helpers.get_worker_nodes():
+            if os.path.exists(f"/tmp/{worker}-top-output.txt"):
+                os.remove(f"/tmp/{worker}-top-output.txt")
+        log.info(f"Memory leak capture has stopped")
+
+    request.addfinalizer(finalizer)
+
+    temp_file = tempfile.NamedTemporaryFile(
+        mode='w+', prefix='test_status', delete=False
+    )
+
+    def get_flag_status():
+        with open(temp_file.name, 'r') as t_file:
+            return t_file.readline()
+
+    def set_flag_status(value):
+        with open(temp_file.name, 'w') as t_file:
+            t_file.writelines(value)
+
+    set_flag_status('running')
+
+    def run_memory_leak_in_bg():
+        """
+        Function to run memory leak in background thread
+        Memory leak data is written in below format
+        date time PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ COMMAND
+        """
+        oc = ocp.OCP(
+            namespace=config.ENV_DATA['cluster_namespace']
+        )
+        while get_flag_status() == 'running':
+            for worker in helpers.get_worker_nodes():
+                filename = f"/tmp/{worker}-top-output.txt"
+                top_cmd = f"debug nodes/{worker} -- chroot /host top -n 2 b"
+                with open("/tmp/file.txt", "w+") as temp:
+                    temp.write(str(oc.exec_oc_cmd(
+                        command=top_cmd, out_yaml_format=False
+                    )))
+                    temp.seek(0)
+                    for line in temp:
+                        if line.__contains__("ceph-osd"):
+                            with open(filename, "a+") as f:
+                                f.write(str(datetime.now()))
+                                f.write(' ')
+                                f.write(line)
+    log.info(f"Start memory leak data capture in the test background")
+    thread = threading.Thread(target=run_memory_leak_in_bg)
+    thread.start()
