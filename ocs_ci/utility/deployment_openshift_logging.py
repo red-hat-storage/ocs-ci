@@ -9,7 +9,7 @@ import json
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.utility import templating
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
 from tests import helpers
 
@@ -48,7 +48,7 @@ def create_elasticsearch_operator_group(yaml_file, resource_name):
             elastic-search
 
     Returns:
-        Bool: True if operator group for elastic search is created
+        bool: True if operator group for elastic search is created
             successfully, false otherwise
 
     Example:
@@ -72,46 +72,6 @@ def create_elasticsearch_operator_group(yaml_file, resource_name):
     return True
 
 
-def create_elasticsearch_catalogsourceconfig(yaml_file, resource_name):
-    """
-    Creation of catalogsourceconfig(CSC) to enable the
-    Elasticsearch Operator on the cluster.
-
-    Args:
-        yaml_file (str): Path to yaml file to create catalogsourceconfig(CSC)
-            for elastic-search
-        resource_name (str): Name of the catalogsourceconfig(CSC) created for
-            elastic-search
-
-    Returns:
-        Bool: True if catalogsourceconfig(CSC) for elastic search is
-            created successfully, false otherwise
-
-    Example:
-        create_elasticsearch_catalogsourceconfig(
-            yaml_file=constants.EO_CSC_YAML, resource_name='elasticsearch'
-        )
-
-    """
-
-    create_csc = ocp.OCP(
-        kind=constants.CATALOG_SOURCE_CONFIG, namespace='openshift-marketplace'
-    )
-    es_csc = ocp.OCP(
-        kind=constants.CATALOG_SOURCE_CONFIG,
-        namespace='openshift-operators-redhat'
-    )
-
-    create_csc.create(yaml_file=yaml_file)
-    try:
-        es_csc.get(resource_name, out_yaml_format=True)
-        logger.info("The CatalogSourceConfig is created Successfully")
-    except CommandFailed:
-        logger.error("The resource is not found")
-        return False
-    return True
-
-
 def set_rbac(yaml_file, resource_name):
     """
     Setting Role Based Access Control to grant Prometheus
@@ -124,7 +84,7 @@ def set_rbac(yaml_file, resource_name):
             permissions
 
     Returns:
-        Bool: True if RBAC is set successfully,
+        bool: True if RBAC is set successfully,
             false otherwise
 
     Example:
@@ -194,7 +154,7 @@ def create_clusterlogging_operator_group(yaml_file):
             cluster-logging operator
 
     Returns:
-        Bool: True if operator group for cluster-logging is created
+        bool: True if operator group for cluster-logging is created
             successfully, false otherwise
 
     Example:
@@ -212,45 +172,6 @@ def create_clusterlogging_operator_group(yaml_file):
         logger.info('The Operator group is created successfully')
     except CommandFailed:
         logger.error('The resource is not found')
-        return False
-    return True
-
-
-def create_clusterlogging_catalogsourceconfig(yaml_file, resource_name):
-    """
-    Creation of catalogsourceconfig to enable the
-    cluster-logging Operator on the cluster.
-
-    Args:
-        yaml_file (str): Path to yaml file to create catalog source config for
-            cluster-logging
-        resource_name (str) : Name of the catalog source config created
-            for cluster-logging
-
-    Returns:
-        Bool: True if catalog source config for cluster-logging is created
-            successfully, false otherwise
-
-    Example:
-        cl_create_catalogsourceconfig(
-            constants.CL_CSC_YAML, 'cluster-logging-operator'
-        )
-
-    """
-
-    create_csc = ocp.OCP(
-        kind=constants.CATALOG_SOURCE_CONFIG, namespace='openshift-marketplace'
-    )
-    clusterlogging_csc = ocp.OCP(
-        kind=constants.CATALOG_SOURCE_CONFIG, namespace='openshift-logging'
-    )
-
-    create_csc.create(yaml_file=yaml_file)
-    try:
-        clusterlogging_csc.get(resource_name, out_yaml_format=True)
-        logger.info("The CatalogSourceConfig is created Successfully")
-    except CommandFailed:
-        logger.error("The resource is not found")
         return False
     return True
 
@@ -308,7 +229,8 @@ def create_instance_in_clusterlogging(sc_name=None):
     inst_data = templating.load_yaml_to_dict(constants.CL_INSTANCE_YAML)
     inst_data['spec']['logStore']['elasticsearch']['storage']['storageClassName'] = sc_name
     inst_data['spec']['logStore']['elasticsearch']['storage']['size'] = "200Gi"
-    helpers.create_resource(**inst_data)
+    node_count = inst_data['spec']['logStore']['elasticsearch']['nodeCount']
+    helpers.create_resource(wait=False, **inst_data)
     oc = ocp.OCP('v1', 'ClusterLogging', 'openshift-logging')
     logging_instance = oc.get(resource_name='instance', out_yaml_format='True')
     if logging_instance:
@@ -317,27 +239,28 @@ def create_instance_in_clusterlogging(sc_name=None):
     else:
         logger.error("Instance for clusterlogging is not created properly")
 
-    pv_obj = ocp.OCP(
+    pod_obj = ocp.OCP(
         kind=constants.POD, namespace='openshift-logging'
     )
-    ret = pv_obj.wait_for_resource(condition=constants.STATUS_RUNNING,
-                                   resource_count=11,
-                                   timeout=150, sleep=5
-                                   )
-    assert ret, "Pods are not in Running state."
+    pod_status = pod_obj.wait_for_resource(
+        condition=constants.STATUS_RUNNING, resource_count=11, timeout=200,
+        sleep=5
+    )
+    assert pod_status, "Pods are not in Running state."
     logger.info("All pods are in Running state")
-    pv_obj = ocp.OCP(
+    pvc_obj = ocp.OCP(
         kind=constants.PVC, namespace='openshift-logging'
     )
-    ret = pv_obj.wait_for_resource(condition=constants.STATUS_BOUND,
-                                   resource_count=3, timeout=150, sleep=5
-                                   )
-    assert ret, "PVCs are not in bound state."
+    pvc_status = pvc_obj.wait_for_resource(
+        condition=constants.STATUS_BOUND, resource_count=node_count,
+        timeout=150, sleep=5
+    )
+    assert pvc_status, "PVCs are not in bound state."
     logger.info("PVCs are Bound")
     return logging_instance
 
 
-@retry(CommandFailed, 5, 30, 2)
+@retry((CommandFailed, UnexpectedBehaviour), 10, 60, 2)
 def check_health_of_clusterlogging():
     """
     * Checks for ElasticSearch, curator, fluentd and kibana pods in
@@ -354,13 +277,12 @@ def check_health_of_clusterlogging():
     pod_list = []
     pods = get_all_pods(namespace='openshift-logging')
     logger.info("Pods that are created by the instance")
+    logger.info(pod_list)
     for pod in pods:
         pod_list.append(pod.name)
-    logger.info(pod_list)
     elasticsearch_pod = [
         pod for pod in pod_list if pod.startswith('elasticsearch')
     ]
-    logger.info(elasticsearch_pod)
     pod_obj = get_pod_obj(
         name=elasticsearch_pod[0], namespace='openshift-logging'
     )
@@ -373,5 +295,6 @@ def check_health_of_clusterlogging():
     if status_check['status'] == 'green':
         logger.info("Cluster logging is in Healthy state & Ready to use")
     else:
+        raise UnexpectedBehaviour
         logger.error("Cluster logging is in Bad state")
     return pod_list
