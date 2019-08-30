@@ -1,0 +1,7 @@
+---
+ENV_DATA:
+  platform: 'aws'
+  deployment_type: 'upi'
+  region: 'us-east-2'
+  skip_ocp_deployment: false
+  skip_ocs_deployment: false
