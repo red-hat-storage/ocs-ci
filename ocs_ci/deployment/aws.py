@@ -74,11 +74,7 @@ class AWSBase(Deployment):
         Args:
             size (int): Size of volume in GB (default: 100)
         """
-        tfvars_file = "terraform.tfvars.json"
-        with open(os.path.join(self.cluster_path, tfvars_file)) as f:
-            tfvars = json.load(f)
-
-        cluster_id = tfvars['cluster_id']
+        cluster_id = get_infra_id(self.cluster_path)
         worker_pattern = f'{cluster_id}-worker*'
         logger.info(f'Worker pattern: {worker_pattern}')
         self.create_ebs_volumes(worker_pattern, size)
@@ -376,3 +372,20 @@ class AWSUPI(AWSBase):
         cf = boto3.client('cloudformation')
         for stack_name in stack_names:
             cf.delete_stack(StackName=stack_name)
+
+
+def get_infra_id(cluster_path):
+    """
+    Get infraID from metadata.json in given cluster_path
+
+    Args:
+        cluster_path: path to cluster install directory
+
+    Returns:
+        str: metadata.json['infraID']
+
+    """
+    metadata_file = os.path.join(cluster_path, "metadata.json")
+    with open(metadata_file) as f:
+        metadata = json.loads(f.read())
+    return metadata.get("infraID")
