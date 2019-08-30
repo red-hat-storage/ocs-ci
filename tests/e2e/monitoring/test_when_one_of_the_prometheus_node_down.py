@@ -1,125 +1,76 @@
 import logging
-
 import pytest
 
-from time import sleep
-
-from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs import ocp, constants, defaults
 from ocs_ci.framework.testlib import tier4, E2ETest
 from ocs_ci.ocs.resources import pvc, pod
-from tests.fixtures import (
-    create_rbd_storageclass, create_ceph_block_pool,
-    create_rbd_secret
-)
-from tests.helpers import create_pvc, create_pod, create_unique_resource_name
-from ocs_ci.ocs.monitoring import (
-    collected_metrics_for_created_pvc,
-    get_kube_pod_spec_volumes_persistentvolumeclaims_info_metric
-)
+from tests import helpers
+from ocs_ci.ocs.monitoring import check_pvcdata_collected_on_prometheus
 from ocs_ci.utility import aws
+from ocs_ci.ocs.node import wait_for_nodes_status, get_typed_nodes
 from tests.helpers import wait_for_resource_state
+from tests import sanity_helpers
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.fixture()
-def test_fixture(request):
+def test_fixture(request, storageclass_factory):
     """
     Setup and teardown
     """
-    self = request.node.cls
 
-    def finalizer():
-        teardown(self)
-    request.addfinalizer(finalizer)
-    setup(self)
+    def teardown():
 
+        # Delete created app pods and pvcs
+        assert pod.delete_pods(pod_objs)
+        assert pvc.delete_pvcs(pvc_objs)
 
-def setup(self):
-    """
-    Create project, pvc and an app pod
-    """
+        # Switch to default project
+        ret = ocp.switch_to_default_rook_cluster_project()
+        assert ret, 'Failed to switch to default rook cluster project'
 
-    # Initializing
-    self.namespace_list = []
-    self.pvc_objs = []
-    self.pod_objs = []
+        # Delete created projects
+        for prj in namespace_list:
+            prj.delete(resource_name=prj.namespace)
 
-    assert create_multiple_project_and_pvc_and_check_metrics_are_collected(self)
+        # Validate all nodes are in READY state
+        wait_for_nodes_status()
 
+    request.addfinalizer(teardown)
 
-def teardown(self):
-    """
-    Delete app pods and PVCs
-    Delete project
-    """
-    # Delete created app pods and PVCs
-    assert pod.delete_pods(self.pod_objs)
-    assert pvc.delete_pvcs(self.pvc_objs)
+    # Create a storage class
+    sc = storageclass_factory()
 
-    # Switch to default project
-    ret = ocp.switch_to_default_rook_cluster_project()
-    assert ret, 'Failed to switch to default rook cluster project'
+    # Create projects
+    namespace_list = helpers.create_multilpe_projects(number_of_project=1)
 
-    # Delete projects created
-    for prj in self.namespace_list:
-        prj_obj = ocp.OCP(kind='Project', namespace=prj)
-        prj_obj.delete(resource_name=prj)
+    # Create pvcs
+    pvc_objs = [helpers.create_pvc(
+        sc_name=sc.name, namespace=each_namespace.namespace
+    ) for each_namespace in namespace_list]
+    for pvc_obj in pvc_objs:
+        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+        pvc_obj.reload()
 
+    # Create app pods
+    pod_objs = [helpers.create_pod(
+        interface_type=constants.CEPHBLOCKPOOL,
+        pvc_name=each_pvc.name, namespace=each_pvc.namespace
+    ) for each_pvc in pvc_objs]
+    for pod_obj in pod_objs:
+        helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
+        pod_obj.reload()
 
-def create_multiple_project_and_pvc_and_check_metrics_are_collected(self):
-    """
-    Creates projects, pvcs and app pods
-    """
-    for i in range(5):
-        # Create new project
-        self.namespace = create_unique_resource_name('test', 'namespace')
-        self.project_obj = ocp.OCP(kind='Project', namespace=self.namespace)
-        assert self.project_obj.new_project(self.namespace), (
-            f'Failed to create new project {self.namespace}'
-        )
-        # Create PVCs
-        self.pvc_obj = create_pvc(
-            sc_name=self.sc_obj.name, namespace=self.namespace
-        )
-
-        # Create pod
-        self.pod_obj = create_pod(
-            interface_type=constants.CEPHBLOCKPOOL,
-            pvc_name=self.pvc_obj.name, namespace=self.namespace
-        )
-
-        self.namespace_list.append(self.namespace)
-        self.pvc_objs.append(self.pvc_obj)
-        self.pod_objs.append(self.pod_obj)
-
-    # Check for the created pvc metrics is collected
-    for pvc_obj in self.pvc_objs:
-        assert collected_metrics_for_created_pvc(pvc_obj.name), (
+    # Check for the created pvc metrics on prometheus pod
+    for pvc_obj in pvc_objs:
+        assert check_pvcdata_collected_on_prometheus(pvc_obj.name), (
             f"On prometheus pod for created pvc {pvc_obj.name} related data is not collected"
         )
-    return True
+
+    return namespace_list, pvc_objs, pod_objs, sc
 
 
-def get_the_collected_metrics_for_pvcs_when_node_down():
-    """
-    Returns false if the metric/data are present
-    """
-    pvcs_data = get_kube_pod_spec_volumes_persistentvolumeclaims_info_metric()
-    pvcs_list = pvcs_data['data']['result']
-    if not pvcs_list:
-        logger.info("When one of the node down where prometheus"
-                    " hosted shouldn't be able to get the data/metrics")
-        return True
-    return False
-
-
-@pytest.mark.usefixtures(
-    create_rbd_secret.__name__,
-    create_ceph_block_pool.__name__,
-    create_rbd_storageclass.__name__,
-    test_fixture.__name__
-)
 @pytest.mark.polarion_id("OCS-606")
 class TestWhenOneOfThePrometheusNodeDown(E2ETest):
     """
@@ -127,56 +78,77 @@ class TestWhenOneOfThePrometheusNodeDown(E2ETest):
     on monitoring pods. All the data/metrics should be collected correctly.
     """
     @tier4
-    def test_when_one_of_the_prometheus_node_down(self):
+    def test_monitoring_when_one_of_the_prometheus_node_down(self, test_fixture):
         """
         Test case to validate when the prometheus pod is down and
         interaction with prometheus
         """
+        namespace_list, pvc_objs, pod_objs, sc = test_fixture
 
-        # Get the pod obj for of the prometheus pod, i.e prometheusk8s-0
-        pod_obj = pod.get_pod_obj(name='prometheus-k8s-0', namespace=defaults.OCS_MONITORING_NAMESPACE)
-
-        # Get the node where the prometheus pod is hosted
-        prometheus_pod_obj = pod_obj.get()
-        prometheus_node = prometheus_pod_obj['spec']['nodeName']
-
-        # Get the node information
-        nodes_obj = ocp.OCP(kind='node')
-        nodes_list = nodes_obj.get()['items']
-        instances = [node for node in nodes_list if node['metadata']['name'] == prometheus_node]
-
-        # Make one of the node down where the prometheus pod is hosted
         aws_obj = aws.AWS()
-        instance_dict = aws.get_instances_ids_and_names(instances)
-        aws_obj.stop_ec2_instances(instances=instance_dict, wait=True)
-
-        # Check for the created pvc metrics
-        for pvc_obj in self.pvc_objs:
-            assert collected_metrics_for_created_pvc(pvc_obj.name), (
-                f"On prometheus pod for created pvc {pvc_obj.name} related data is not collected"
-            )
 
         # Get all the openshift-monitoring pods
         monitoring_pod_obj_list = pod.get_all_pods(namespace=defaults.OCS_MONITORING_NAMESPACE)
 
-        # Get all the openshift-storage pods
-        ceph_pod_obj_list = pod.get_all_pods(namespace=defaults.OCS_MONITORING_NAMESPACE)
+        # Get the worker node list
+        workers = get_typed_nodes(node_type='worker')
 
-        # Make the node up which was down
-        aws_obj.start_ec2_instances(instances=instance_dict, wait=True)
+        # Get all prometheus pods
+        pod_obj_list = pod.get_all_pods(namespace=defaults.OCS_MONITORING_NAMESPACE, selector=['prometheus'])
 
-        wait_time = '60s'
-        logging.info(f"Waiting for {wait_time} seconds")
-        sleep(60)
+        for pod_obj in pod_obj_list:
+
+            # Get the node where the prometheus pod is hosted
+            prometheus_pod_obj = pod_obj.get()
+            prometheus_node = prometheus_pod_obj['spec']['nodeName']
+
+            prometheus_node = [node for node in workers if node.get().get('metadata').get('name') == prometheus_node]
+
+            # Make one of the node down where the prometheus pod is hosted
+            instances = aws.get_instances_ids_and_names(prometheus_node)
+            aws_obj.restart_ec2_instances(instances=instances, wait=True, force=True)
+
+            # Validate all nodes are in READY state
+            wait_for_nodes_status()
+
+        # Check the node are Ready state and check cluster is health ok
+        sanity_helpers.health_check(nodes=list(instances.values()))
 
         # Check all the monitoring pods are up
         for pod_obj in monitoring_pod_obj_list:
-            assert wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
+            wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
 
-        # Check all the openshift-storage pods are running
-        for pod_obj in ceph_pod_obj_list:
-            assert wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
+        # Check for the created pvc metrics after nodes restarting
+        for pvc_obj in pvc_objs:
+            assert check_pvcdata_collected_on_prometheus(pvc_obj.name), (
+                f"On prometheus pod for created pvc {pvc_obj.name} related data is not collected"
+            )
 
-        # Once the node up, create new pvc and
-        # also the pvc metrics which was created before the node down
-        assert create_multiple_project_and_pvc_and_check_metrics_are_collected(self)
+        # Create projects after restarting nodes
+        namespaces = helpers.create_multilpe_projects(number_of_project=1)
+        namespace_list.extend(namespaces)
+
+        # Create pvcs after restarting nodes
+        pvcs = [helpers.create_pvc(
+            sc_name=sc.name, namespace=each_namespace.namespace
+        ) for each_namespace in namespaces]
+        for pvc_obj in pvcs:
+            helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
+            pvc_obj.reload()
+        pvc_objs.extend(pvcs)
+
+        # Create app pods after restarting nodes
+        pods = [helpers.create_pod(
+            interface_type=constants.CEPHBLOCKPOOL,
+            pvc_name=each_pvc.name, namespace=each_pvc.namespace
+        ) for each_pvc in pvcs]
+        for pod_obj in pods:
+            helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
+            pod_obj.reload()
+        pod_objs.extend(pods)
+
+        # Check for the created pvc metrics on prometheus pod after restarting nodes
+        for pvc_obj in pvcs:
+            assert check_pvcdata_collected_on_prometheus(pvc_obj.name), (
+                f"On prometheus pod for created pvc {pvc_obj.name} related data is not collected"
+            )
