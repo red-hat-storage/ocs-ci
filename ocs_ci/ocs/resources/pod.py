@@ -280,16 +280,22 @@ class Pod(OCS):
 
 # Helper functions for Pods
 
-def get_all_pods(namespace=None):
+def get_all_pods(namespace=None, selector=None):
     """
     Get all pods in a namespace.
-    If namespace is None - get all pods
-
+    Args:
+        namespace (str): Name of the namespace
+            If namespace is None - get all pods
+        selector (list) : List of the resource selector to search with.
+            Example: ['alertmanager','prometheus']
     Returns:
         list: List of Pod objects
     """
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     pods = ocp_pod_obj.get()['items']
+    if selector:
+        pods_new = [pod for pod in pods if pod['metadata']['labels'].get('app') in selector]
+        pods = pods_new
     pod_objs = [Pod(**pod) for pod in pods]
     return pod_objs
 
