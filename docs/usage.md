@@ -65,7 +65,6 @@ to the pytest.
   bugzilla_password = yourPassword
   ```
 * `--collect-logs` - to collect OCS logs for failed test cases.
-* `--persistent-monitoring` - to configure persistent volume on monitoring pods.
 
 ## Examples
 

@@ -332,7 +332,7 @@ class Deployment(object):
                 f"MDS deployment Failed! Please check logs!"
             )
 
-        if config.RUN['cli_params']['monitoring']:
+        if config.ENV_DATA.get('monitoring_enabled') and config.ENV_DATA.get('persistent-monitoring'):
             # Create a pool, secrets and sc
             secret_obj = helpers.create_secret(interface_type=constants.CEPHBLOCKPOOL)
             cbj_obj = helpers.create_ceph_block_pool()
