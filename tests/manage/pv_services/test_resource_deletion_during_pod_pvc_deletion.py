@@ -111,7 +111,8 @@ class DisruptionBase(ManageTest):
             pod_obj.workload_setup(storage_type='fs')
         log.info("Setup for running IO is completed on pods")
 
-        # Start IO on each pod
+        # Start IO on each pod. RWX PVC will be used on two pods. So split the
+        # size accordingly
         log.info("Starting IO on pods")
         for pod_obj in self.pod_objs:
             if pod_obj.pvc.access_mode == constants.ACCESS_MODE_RWX:

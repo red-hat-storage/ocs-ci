@@ -684,8 +684,8 @@ def multi_pvc_factory(
             storageclass (object): ocs_ci.ocs.resources.ocs.OCS instance
                 of 'StorageClass' kind.
             size (int): The requested size for the PVC
-            access_modes (list): List of access modes. One one the access modes
-                will be chosen for creating PVC. If not specified,
+            access_modes (list): List of access modes. One of the access modes
+                will be chosen for creating each PVC. If not specified,
                 ReadWriteOnce will be selected for all PVCs.
                 eg: ['ReadWriteOnce', 'ReadOnlyMany', 'ReadWriteMany']
             access_modes_selection (str): Decides how to select accessMode for
