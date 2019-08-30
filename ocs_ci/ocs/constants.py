@@ -76,7 +76,6 @@ SUBSCRIPTION = "Subscription"
 NAMESPACES = "Namespaces"
 CLUSTER_LOGGING = "ClusterLogging"
 OPERATOR_GROUP = "OperatorGroup"
-CATALOG_SOURCE_CONFIG = "catsrc"
 
 # Other
 SECRET = "Secret"
@@ -212,9 +211,6 @@ EO_NAMESPACE_YAML = os.path.join(
 EO_OG_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_EO, "eo-og.yaml"
 )
-EO_CSC_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_EO, "eo-csc.yaml"
-)
 EO_RBAC_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_EO, "eo-rbac.yaml"
 )
@@ -228,9 +224,6 @@ CL_NAMESPACE_YAML = os.path.join(
 )
 CL_OG_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_CLO, "cl-og.yaml"
-)
-CL_CSC_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_CLO, "cl-csc.yaml"
 )
 CL_SUB_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_CLO, "cl-sub.yaml"
