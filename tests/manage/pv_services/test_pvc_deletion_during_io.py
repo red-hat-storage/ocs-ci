@@ -10,12 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 @tier2
-@pytest.mark.polarion_id("OCS-371")
 @pytest.mark.parametrize(
-    argnames=['interface'],
+    argnames=["interface"],
     argvalues=[
-        pytest.param(constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id('OCS-371')),
-        pytest.param(constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id('OCS-1318'))
+        pytest.param(constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-371")),
+        pytest.param(constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-1318"))
     ]
 )
 class TestDeletePVCWhileRunningIO(ManageTest):
@@ -26,8 +25,8 @@ class TestDeletePVCWhileRunningIO(ManageTest):
     pvc_obj = None
     pod_obj = None
 
-    @pytest.fixture()
-    def setup(self, interface, pvc_factory, pod_factory):
+    @pytest.fixture(autouse=True)
+    def test_setup(self, interface, pvc_factory, pod_factory):
         """
         Create resources for the test
 
