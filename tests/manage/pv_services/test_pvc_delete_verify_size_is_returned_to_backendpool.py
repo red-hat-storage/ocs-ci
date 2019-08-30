@@ -14,7 +14,6 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import ocp
-from ocs_ci.ocs.exceptions import ResourceLeftoversException
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool,
     create_rbd_secret
@@ -95,10 +94,10 @@ def create_pvc_and_verify_pvc_exists(sc_name, cbp_name):
 
     # Validate pv is created on ceph
     logger.info(f"Verifying PV exists on backend")
-    assert helpers.verify_volume_deleted_in_backend(
+    assert not helpers.verify_volume_deleted_in_backend(
         interface=constants.CEPHBLOCKPOOL, image_uuid=pvc_obj.image_uuid,
         pool_name=cbp_name
-    ) is False
+    )
     return pvc_obj
 
 
@@ -142,7 +141,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
             except TimeoutError:
                 failed_to_delete.append(resource)
         if failed_to_delete:
-            raise ResourceLeftoversException(
+            raise UnexpectedBehaviour(
                 f"Failed to delete resources: {failed_to_delete}"
             )
         verify_pv_not_exists(pvc_obj, self.cbp_obj.name, rbd_image_id)
