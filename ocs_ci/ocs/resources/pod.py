@@ -707,7 +707,6 @@ def get_pod_obj(name, namespace=None):
     return pod_obj
 
 
-<<<<<<< HEAD
 def get_pod_logs(pod_name, container=None):
     """
     Get logs from a given pod
