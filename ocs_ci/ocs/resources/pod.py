@@ -334,7 +334,18 @@ def get_ceph_tools_pod():
         selector='app=rook-ceph-tools'
     )['items']
     assert ct_pod_items, "No Ceph tools pod found"
-    ceph_pod = Pod(**ct_pod_items[0])
+
+    # In the case of node failure, the CT pod will be recreated with the old
+    # one in status Terminated. Therefore, need to filter out the Terminated pod
+    running_ct_pods = list()
+    for pod in ct_pod_items:
+        if ocp_pod_obj.get_resource_status(
+            pod.get('metadata').get('name')
+        ) == constants.STATUS_RUNNING:
+            running_ct_pods.append(pod)
+
+    assert running_ct_pods, "No running Ceph tools pod found"
+    ceph_pod = Pod(**running_ct_pods[0])
     return ceph_pod
 
 

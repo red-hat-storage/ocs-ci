@@ -2,11 +2,11 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier4, ignore_leftovers, bugzilla, ManageTest
+from ocs_ci.framework.testlib import tier4, ignore_leftovers, ManageTest
 from ocs_ci.ocs import constants
 from ocs_ci.utility import aws
 from ocs_ci.ocs.resources import pod
-from tests import sanity_helpers
+from tests.sanity_helpers import Sanity
 
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,14 @@ class TestNodesRestart(ManageTest):
     """
     Test ungraceful cluster shutdown
     """
+    @pytest.fixture(autouse=True)
+    def init_sanity(self):
+        """
+        Initialize Sanity instance
+
+        """
+        self.sanity_helpers = Sanity()
+
     @pytest.mark.parametrize(
         argnames=["force"],
         argvalues=[
@@ -29,15 +37,16 @@ class TestNodesRestart(ManageTest):
             pytest.param(*[False], marks=pytest.mark.polarion_id("OCS-895"))
         ]
     )
-    def test_nodes_restart_aws(self, resources, instances, aws_obj, force):
+    def test_nodes_restart_aws(
+        self, ec2_instances, aws_obj, pvc_factory, pod_factory, force
+    ):
         """
         Test ungraceful cluster shutdown - AWS
         """
-        aws_obj.restart_ec2_instances(instances=instances, wait=True, force=force)
-        sanity_helpers.health_check(nodes=list(instances.values()))
-        sanity_helpers.create_resources(resources=resources)
+        aws_obj.restart_ec2_instances(instances=ec2_instances, wait=True, force=force)
+        self.sanity_helpers.health_check()
+        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
-    @bugzilla('1735686')
     @pytest.mark.parametrize(
         argnames=["interface", "operation"],
         argvalues=[
@@ -48,7 +57,7 @@ class TestNodesRestart(ManageTest):
         ]
     )
     def test_pv_provisioning_under_degraded_state(
-        self, resources, instances, aws_obj, interface, operation
+        self, ec2_instances, aws_obj, pvc_factory, pod_factory, interface, operation
     ):
         """
         Test PV provisioning under degraded state
@@ -92,7 +101,7 @@ class TestNodesRestart(ManageTest):
         """
         if operation == 'delete_resources':
             # Create resources that their deletion will be tested later
-            sanity_helpers.create_resources(resources=resources)
+            self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
         provisioner_pod = None
 
@@ -115,6 +124,9 @@ class TestNodesRestart(ManageTest):
 
         # Get the ec2 instance of the node
         instances = aws.get_instances_ids_and_names([provisioner_node])
+        assert instances, (
+            f"Failed to get ec2 instances for node {provisioner_node_name}"
+        )
 
         # Stopping the nodes
         aws_obj.stop_ec2_instances(instances=instances, wait=True)
@@ -132,27 +144,36 @@ class TestNodesRestart(ManageTest):
             timeout=300, resource_name=provisioner_pod.name,
             condition=constants.STATUS_TERMINATING
         ), f"{interface} provisioner pod failed to reach status Terminating"
+        logger.info(
+            f"Pod {provisioner_pod_name} has reached status Terminating"
+        )
 
         # Wait for the provisioner pod to be started and reach running status
         logger.info(
             f"Waiting for pod {provisioner_pod_name} to reach status Running"
         )
+        logger.info(
+            f"Pod {provisioner_pod_name} has reached status Running"
+        )
+
+        # After this change https://github.com/rook/rook/pull/3642/, there are
+        # 2 provisioners for each interface
         assert provisioner_pod.ocp.wait_for_resource(
             timeout=600, condition=constants.STATUS_RUNNING, selector=selector,
-            resource_count=1
+            resource_count=2
         ), f"{interface} provisioner pod failed to reach status Running"
 
         if operation == 'create_resources':
             # Cluster validation (resources creation and IO running)
-            sanity_helpers.create_resources(resources=resources)
+            self.sanity_helpers.create_resources(pvc_factory, pod_factory)
         elif operation == 'delete_resources':
             # Cluster validation (resources creation and IO running)
-            sanity_helpers.delete_resources(resources=resources)
+            self.sanity_helpers.delete_resources()
 
         # Starting the nodes
         aws_obj.start_ec2_instances(instances=instances, wait=True)
 
         # Checking cluster and Ceph health
-        sanity_helpers.health_check(nodes=[provisioner_node_name])
+        self.sanity_helpers.health_check()
 
 # TODO: Add a test cases for VMWare and RHHI.Next

@@ -260,7 +260,16 @@ class CephCluster(object):
                 condition='Running', selector=self.mon_selector,
                 resource_count=count, timeout=timeout, sleep=3,
             )
-            actual = len(pod.get_mon_pods())
+
+            # TODO: Workaround for BZ1747385:
+            actual_mons = pod.get_mon_pods()
+            actual_running_mons = list()
+            for mon in actual_mons:
+                if mon.ocp.get_resource_status(mon.name) == constant.STATUS_RUNNING:
+                    actual_running_mons.append(mon)
+            actual = len(actual_running_mons)
+            # TODO: End of workaround for BZ1747385
+
             assert count == actual, f"Expected {count},  Got {actual}"
         except exceptions.TimeoutExpiredError as e:
             logger.error(e)
