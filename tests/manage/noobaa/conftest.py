@@ -52,19 +52,25 @@ def uploaded_objects(request, noobaa_obj, awscli_pod):
 @pytest.fixture()
 def bucket_factory(request, noobaa_obj):
     """
-    Creates and deletes all buckets that were created as part of the test
+    Create a bucket factory. Calling this fixture creates a new bucket(s).
+    For a custom amount, provide the 'amount' parameter.
 
     Args:
         noobaa_obj (NooBaa): A NooBaa object containing the NooBaa S3 connection credentials
-        amount (int): The amount of buckets to create
-
-    Returns:
-        list: An empty list of buckets
-
     """
     created_bucket_names = []
 
-    def _bucket_factory(amount=1):
+    def _create_buckets(amount=1):
+        """
+        Creates and deletes all buckets that were created as part of the test
+
+        Args:
+            amount (int): The amount of buckets to create
+
+        Returns:
+            list: A list of s3.Bucket objects, containing all the created buckets
+
+        """
         for i in range(amount):
             bucket_name = create_unique_resource_name(
                 resource_description='bucket', resource_type='s3'
@@ -88,7 +94,7 @@ def bucket_factory(request, noobaa_obj):
                 assert not noobaa_obj.s3_verify_bucket_exists(bucket)
     request.addfinalizer(bucket_cleanup)
 
-    return _bucket_factory
+    return _create_buckets
 
 
 @pytest.fixture()
