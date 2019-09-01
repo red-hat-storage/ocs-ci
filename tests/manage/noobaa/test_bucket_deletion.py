@@ -1,4 +1,5 @@
 import logging
+
 import pytest
 
 from ocs_ci.framework import config

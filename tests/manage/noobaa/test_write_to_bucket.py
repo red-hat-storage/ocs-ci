@@ -6,7 +6,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import constants
-from tests.helpers import create_unique_resource_name, craft_s3_command
+from tests.helpers import craft_s3_command
 
 logger = logging.getLogger(__name__)
 

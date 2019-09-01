@@ -4,7 +4,6 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import tier1
-from tests.helpers import create_unique_resource_name
 
 logger = logging.getLogger(__name__)
 
