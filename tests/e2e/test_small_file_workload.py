@@ -12,7 +12,7 @@ from ocs_ci.utility import templating
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest, tier1
+from ocs_ci.framework.testlib import E2ETest, workloads
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ def ripsaw(request, storageclass_factory):
     return ripsaw
 
 
-@tier1
+@workloads
 class TestSmallFileWorkload(E2ETest):
     """
     Deploy Ripsaw operator and run SmallFile workload
