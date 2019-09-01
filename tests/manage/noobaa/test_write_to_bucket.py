@@ -6,7 +6,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import constants
-from tests.helpers import create_unique_resource_name, craft_s3_command
+from tests.helpers import craft_s3_command
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class TestBucketIO(ManageTest):
     Test IO of a bucket
     """
     @pytest.mark.polarion_id("OCS-1300")
-    def test_write_file_to_bucket(self, noobaa_obj, awscli_pod, created_buckets, uploaded_objects):
+    def test_write_file_to_bucket(self, noobaa_obj, awscli_pod, bucket_factory, uploaded_objects):
         """
         Test object IO using the S3 SDK
         """
@@ -37,9 +37,7 @@ class TestBucketIO(ManageTest):
             )
             downloaded_files.append(obj.key)
 
-        bucketname = create_unique_resource_name(self.__class__.__name__.lower(), 's3-bucket')
-        logger.info(f'Creating the test bucket - {bucketname}')
-        created_buckets.append(noobaa_obj.s3_create_bucket(bucketname=bucketname))
+        bucketname = bucket_factory(1)[0].name
 
         # Write all downloaded objects to the new bucket
         logger.info(f'Writing objects to bucket')
@@ -51,3 +49,9 @@ class TestBucketIO(ManageTest):
                 secrets=[noobaa_obj.access_key_id, noobaa_obj.access_key, noobaa_obj.endpoint]
             )
             uploaded_objects.append(full_object_path)
+
+        assert set(
+            downloaded_files
+        ).issubset(
+            obj.key for obj in noobaa_obj.s3_list_all_objects_in_bucket(bucketname)
+        )
