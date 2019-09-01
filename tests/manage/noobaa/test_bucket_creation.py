@@ -4,7 +4,6 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import tier1
-from tests.helpers import create_unique_resource_name
 
 logger = logging.getLogger(__name__)
 
@@ -22,11 +21,13 @@ class TestBucketCreation:
         reason="Tests are not running on AWS deployed cluster"
     )
     @pytest.mark.polarion_id("OCS-1298")
-    def test_s3_bucket_creation(self, noobaa_obj, created_buckets):
+    def test_s3_bucket_creation(self, noobaa_obj, bucket_factory):
         """
         Test bucket creation using the S3 SDK
         """
 
-        bucketname = create_unique_resource_name(self.__class__.__name__.lower(), 's3-bucket')
-        logger.info(f'Creating new bucket - {bucketname}')
-        created_buckets.append(noobaa_obj.s3_create_bucket(bucketname=bucketname))
+        assert set(
+            bucket.name for bucket in bucket_factory(3)
+        ).issubset(
+            noobaa_obj.s3_list_all_bucket_names()
+        )
