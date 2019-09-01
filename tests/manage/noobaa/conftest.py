@@ -85,7 +85,7 @@ def bucket_factory(request, noobaa_obj):
                 logger.info(
                     f"Verifying whether bucket: {bucket.name} exists after deletion"
                 )
-                assert noobaa_obj.s3_verify_bucket_exists(bucket) is False
+                assert not noobaa_obj.s3_verify_bucket_exists(bucket)
     request.addfinalizer(bucket_cleanup)
 
     return _bucket_factory
