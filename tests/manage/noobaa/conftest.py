@@ -50,7 +50,7 @@ def uploaded_objects(request, noobaa_obj, awscli_pod):
 
 
 @pytest.fixture()
-def created_buckets(request, noobaa_obj, amount=1):
+def bucket_factory(request, noobaa_obj):
     """
     Creates and deletes all buckets that were created as part of the test
 
@@ -64,24 +64,32 @@ def created_buckets(request, noobaa_obj, amount=1):
     """
     created_bucket_names = []
 
+    def _bucket_factory(amount=1):
+        for i in range(amount):
+            bucket_name = create_unique_resource_name(
+                resource_description='bucket', resource_type='s3'
+            )
+            logger.info(f'Creating bucket: {bucket_name}')
+            created_bucket_names.append(
+                noobaa_obj.s3_create_bucket(bucketname=bucket_name)
+            )
+        return created_bucket_names
+
     def bucket_cleanup():
+        all_existing_buckets = noobaa_obj.s3_list_all_bucket_names()
         for bucket in created_bucket_names:
-            logger.info(f'Deleting bucket {bucket.name}')
-            bucket.object_versions.delete()
-            noobaa_obj.s3_delete_bucket(bucket)
-            logger.info(f"Verifying whether bucket: {bucket.name} exists"
-                        f" after deletion")
-            assert noobaa_obj.s3_verify_bucket_exists(bucket) is False
+            if bucket.name in all_existing_buckets:
+                logger.info(f'Deleting bucket {bucket.name}')
+                bucket.object_versions.delete()
+                noobaa_obj.s3_delete_bucket(bucket)
+                logger.info(
+                    f"Verifying whether bucket: {bucket.name} exists after deletion"
+                )
+                assert noobaa_obj.s3_verify_bucket_exists(bucket) is False
     request.addfinalizer(bucket_cleanup)
-    for i in range(amount):
-        bucket_name = create_unique_resource_name(
-            resource_description='bucket', resource_type='s3'
-        )
-        logger.info(f'Creating bucket: {bucket_name}')
-        created_bucket_names.append(
-            noobaa_obj.s3_create_bucket(bucketname=bucket_name)
-        )
-    return created_bucket_names
+
+    return _bucket_factory
+
 
 @pytest.fixture()
 def created_pods(request):

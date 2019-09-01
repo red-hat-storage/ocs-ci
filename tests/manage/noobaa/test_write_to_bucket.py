@@ -22,7 +22,7 @@ class TestBucketIO(ManageTest):
     Test IO of a bucket
     """
     @pytest.mark.polarion_id("OCS-1300")
-    def test_write_file_to_bucket(self, noobaa_obj, awscli_pod, created_buckets, uploaded_objects):
+    def test_write_file_to_bucket(self, noobaa_obj, awscli_pod, bucket_factory, uploaded_objects):
         """
         Test object IO using the S3 SDK
         """
@@ -37,9 +37,7 @@ class TestBucketIO(ManageTest):
             )
             downloaded_files.append(obj.key)
 
-        bucketname = create_unique_resource_name(self.__class__.__name__.lower(), 's3-bucket')
-        logger.info(f'Creating the test bucket - {bucketname}')
-        created_buckets.append(noobaa_obj.s3_create_bucket(bucketname=bucketname))
+        bucketname = bucket_factory(1)[0].name
 
         # Write all downloaded objects to the new bucket
         logger.info(f'Writing objects to bucket')

@@ -22,14 +22,12 @@ class TestBucketDeletion:
         reason="Tests are not running on AWS deployed cluster"
     )
     @pytest.mark.polarion_id("OCS-1299")
-    def test_s3_bucket_delete(self, noobaa_obj, created_buckets):
+    def test_s3_bucket_delete(self, noobaa_obj, bucket_factory):
         """
         Test deletion of bucket using the S3 SDK
         """
-        for bucket in created_buckets:
+
+        for bucket in bucket_factory(3):
             logger.info(f"Deleting bucket: {bucket.name}")
             noobaa_obj.s3_delete_bucket(bucket)
             assert noobaa_obj.s3_verify_bucket_exists(bucket) is False
-            # Removing the bucket in order to exclude it from the teardown
-            # Since it's already removed
-            created_buckets.remove(bucket)
