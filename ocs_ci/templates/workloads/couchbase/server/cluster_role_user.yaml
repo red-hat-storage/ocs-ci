@@ -1,0 +1,26 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: couchbasecluster
+rules:
+- apiGroups:
+  - couchbase.com
+  resources:
+  - couchbaseclusters
+  verbs:
+  - "*"
+(venv) [ec2-user@ip-10-0-0-241 couchbase]$ fg
+vi /tmp/foo
+(venv) [ec2-user@ip-10-0-0-241 couchbase]$ cat cluster-role-user.yaml 
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: couchbasecluster
+rules:
+- apiGroups:
+  - couchbase.com
+  resources:
+  - couchbaseclusters
+  verbs:
+  - "*"
+

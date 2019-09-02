@@ -1,4 +1,3 @@
-
 """
 RipSaw Class to run various workloads and scale tests
 """
@@ -40,14 +39,18 @@ class RipSaw(object):
             run_cmd('oc apply -f my_custom_bench')
         """
         self.args = kwargs
-        self.repo = self.args.get('repo', 'https://github.com/cloud-bulldozer/ripsaw')
+        self.repo = self.args.get(
+            'repo', 'https://github.com/cloud-bulldozer/ripsaw'
+        )
         self.branch = self.args.get('branch', 'master')
         self.namespace = self.args.get('namespace', 'my-ripsaw')
         self.pgsql_is_setup = False
+        self.couchbase_is_setup = False
         self.ocp = OCP()
         self.ns_obj = OCP(kind='namespace')
         self.pod_obj = OCP(kind='pod')
         self._create_namespace()
+        self.dir_extension = '/ripsaw'
         self._clone_ripsaw()
 
     def _create_namespace(self):
@@ -84,10 +87,15 @@ class RipSaw(object):
             crd (str): Name of file to apply
         """
         self.crd = crd
-        self.dir += '/ripsaw'
+        self.dir += self.dir_extension
         run(f'oc apply -f deploy', shell=True, check=True, cwd=self.dir)
         run(f'oc apply -f {crd}', shell=True, check=True, cwd=self.dir)
-        run(f'oc apply -f {self.operator}', shell=True, check=True, cwd=self.dir)
+        run(
+            f'oc apply -f {self.operator}',
+            shell=True,
+            check=True,
+            cwd=self.dir
+        )
 
     def setup_postgresql(self):
         """
@@ -119,6 +127,117 @@ class RipSaw(object):
             raise cf
         self.pgsql_is_setup = True
 
+    def setup_couchbase(self):
+        """
+        Deploy Couchbase server
+        """
+        try:
+            cb_admission = templating.load_yaml_to_dict(
+                constants.COUCHBASE_ADMISSION_YAML
+            )
+            cb_crd = templating.load_yaml_to_dict(
+                constants.COUCHBASE_CRD_YAML
+            )
+            cb_operator_role = templating.load_yaml_to_dict(
+                constants.COUCHBASE_OPERATOR_ROLE
+            )
+            cb_cluster_role_user = templating.load_yaml_to_dict(
+                constants.COUCHBASE_CLUSTER_ROLE_USER
+            )
+            cb_operator_deployment = templating.load_yaml_to_dict(
+                constants.COUCHBASE_OPERATOR_DEPLOYMENT
+            )
+            cb_secret = templating.load_yaml_to_dict(
+                constants.COUCHBASE_SECRET
+            )
+            cb_start_couchbase = templating.load_yaml_to_dict(
+                constants.COUCHBASE_START_COUCHBASE
+            )
+            self.cb_admission = OCS(**cb_admission)
+            self.cb_admission.create()
+            run(
+                f'oc login -u system:admin',
+                shell=True,
+                check=True,
+                cwd=self.dir
+            )
+            run(
+                f'oc new-project operator-example-namespace',
+                shell=True,
+                check=True,
+                cwd=self.dir
+            )
+            self.cb_crd = OCS(**cb_crd)
+            self.cb_crd.create()
+            run(
+                f'oc create secret docker-registry rh-catalog '
+                f'--docker-server=registry.connect.redhat.com '
+                f'--docker-username=wusui '
+                f'--docker-password=aardvark '
+                f'--docker-email=wusui@redhat.com',
+                shell=True,
+                check=True,
+                cwd=self.dir
+            )
+            self.cb_operator_role = OCS(**cb_operator_role)
+            self.cb_operator_role.create()
+            run(
+                f'oc create serviceaccount couchbase-operator '
+                f'--namespace operator-example-namespace',
+                shell=True,
+                check=True,
+                cwd=self.dir
+            )
+            run(
+                f'oc secrets add serviceaccount/couchbase-operator '
+                f'secrets/rh-catalog --for=pull',
+                shell=True,
+                check=True,
+                cwd=self.dir
+            )
+            run(
+                f'oc secrets add serviceaccount/default '
+                f'secrets/rh-catalog --for=pull',
+                shell=True,
+                check=True,
+                cwd=self.dir
+            )
+            run(
+                f'oc create rolebinding couchbase-operator-rolebinding '
+                f'--role couchbase-operator --serviceaccount '
+                f'operator-example-namespace:couchbase-operator '
+                f'--namespace operator-example-namespace',
+                shell=True,
+                check=True,
+                cwd=self.dir
+            )
+            self.cb_cluster_role_user = OCS(**cb_cluster_role_user)
+            self.cb_cluster_role_user.create()
+            run(
+                f'oc create rolebinding '
+                f'couchbasecluster-admin-rolebinding '
+                f'--clusterrole couchbasecluster '
+                f'--user-admin',
+                shell=True,
+                check=True,
+                cwd=self.dir
+            )
+            self.cb_operator_deployment = OCS(**cb_operator_deployment)
+            self.cb_operator_deployment.create()
+            self.cb_secret = OCS(**cb_secret)
+            self.cb_secret.create()
+            self.cb_start_couchbase = OCS(**cb_start_couchbase)
+            self.cb_start_couchbase.create()
+            self.pod_obj.wait_for_resource(
+                condition='Running',
+                selector='app=couchbase',
+                timeout=240
+            )
+        except (CommandFailed, CalledProcessError) as cf:
+            log.error('Failed during setup of Couchbase server')
+            raise cf
+        self.couchbase_is_setup = True
+
     def cleanup(self):
         run(f'oc delete -f {self.crd}', shell=True, cwd=self.dir)
         run(f'oc delete -f {self.operator}', shell=True, cwd=self.dir)
@@ -128,4 +247,12 @@ class RipSaw(object):
             self.pgsql_sset.delete()
             self.pgsql_cmap.delete()
             self.pgsql_service.delete()
+        if self.couchbase_is_setup:
+            self.cb_start_couchbase.delete()
+            self.cb_secret.delete()
+            self.cb_operator_deployment.delete()
+            self.cb_cluster_role_user.delete()
+            self.cb_operator_role.delete()
+            self.cb_crd.delete()
+            self.cb_admission.delete()
         self.ns_obj.wait_for_delete(resource_name=self.namespace)

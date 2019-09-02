@@ -1018,6 +1018,26 @@ def parse_pgsql_logs(data):
     return list_data
 
 
+def parse_couchbase_logs(data):
+    """
+    Parse Couchbase workload output
+
+    Right now, just find exceptions and throughput
+    """
+    out_data = {}
+    exception_lines = []
+    in_text = data.split('\n')
+    for in_line in in_text:
+        if in_line.find('Exception') >= 0:
+            exception_lines.append(in_line)
+        if in_line.startswith('[OVERALL], Throughput(ops/sec),'):
+            fields = in_line.split(',')
+            out_data['throughput'] = fields[-1]
+    if exception_lines:
+        out_data['exceptions'] = exception_lines
+    return out_data
+
+
 def create_directory_path(path):
     """
     Creates directory if path doesn't exists
