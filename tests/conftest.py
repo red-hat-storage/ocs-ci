@@ -4,6 +4,8 @@ import tempfile
 import pytest
 import threading
 from datetime import datetime
+import random
+from math import floor
 
 from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -302,6 +304,7 @@ def pvc_factory(
             helpers.wait_for_resource_state(pvc_obj, status)
         pvc_obj.storageclass = storageclass
         pvc_obj.project = project
+        pvc_obj.access_mode = access_mode
         instances.append(pvc_obj)
 
         return pvc_obj
@@ -652,14 +655,21 @@ def multi_pvc_factory(
 ):
     """
     Create a Persistent Volume Claims factory. Calling this fixture creates a
-    set of new PVCs.
+    set of new PVCs. Options for PVC creation based on provided assess modes:
+    1. For each PVC, choose random value from the list of access modes
+    2. Create PVCs based on the specified distribution number of access modes.
+       Create sets of PVCs based on the order of access modes.
+    3. Create PVCs based on the specified distribution number of access modes.
+       The order of PVC creation is independent of access mode.
     """
     def factory(
         interface=constants.CEPHBLOCKPOOL,
         project=None,
         storageclass=None,
         size=None,
-        access_mode=constants.ACCESS_MODE_RWO,
+        access_modes=None,
+        access_modes_selection='distribute_sequential',
+        access_mode_dist_ratio=None,
         status=constants.STATUS_BOUND,
         num_of_pvc=1,
         wait_each=False
@@ -674,9 +684,31 @@ def multi_pvc_factory(
             storageclass (object): ocs_ci.ocs.resources.ocs.OCS instance
                 of 'StorageClass' kind.
             size (int): The requested size for the PVC
-            access_mode (str): ReadWriteOnce, ReadOnlyMany or ReadWriteMany.
-                This decides the access mode to be used for the PVC.
-                ReadWriteOnce is default.
+            access_modes (list): List of access modes. One of the access modes
+                will be chosen for creating each PVC. If not specified,
+                ReadWriteOnce will be selected for all PVCs.
+                eg: ['ReadWriteOnce', 'ReadOnlyMany', 'ReadWriteMany']
+            access_modes_selection (str): Decides how to select accessMode for
+                each PVC from the options given in 'access_modes' list.
+                Values are 'select_random', 'distribute_random'
+                'select_random' : While creating each PVC, one access mode will
+                    be selected from the 'access_modes' list.
+                'distribute_random' : The access modes in the list
+                    'access_modes' will be distributed based on the values in
+                    'distribute_ratio' and the order in which PVCs are created
+                    will not be based on the access modes. For example, 1st and
+                    6th PVC might have same access mode.
+                'distribute_sequential' :The access modes in the list
+                    'access_modes' will be distributed based on the values in
+                    'distribute_ratio' and the order in which PVCs are created
+                    will be as sets of PVCs of same assess mode. For example,
+                    first set of 10 will be having same access mode followed by
+                    next set of 13 with a different access mode.
+            access_mode_dist_ratio (list): Contains the number of PVCs to be
+                created for each access mode. If not specified, the given list
+                of access modes will be equally distributed among the PVCs.
+                eg: [10,12] for num_of_pvc=22 and
+                access_modes=['ReadWriteOnce', 'ReadWriteMany']
             status (str): If provided then factory waits for object to reach
                 desired state.
             num_of_pvc(int): Number of PVCs to be created
@@ -695,7 +727,30 @@ def multi_pvc_factory(
         project = project or project_factory()
         storageclass = storageclass or storageclass_factory(interface)
 
-        for _ in range(num_of_pvc):
+        access_modes = access_modes or [constants.ACCESS_MODE_RWO]
+
+        access_modes_list = []
+        if access_modes_selection == 'select_random':
+            for _ in range(num_of_pvc):
+                mode = random.choice(access_modes)
+                access_modes_list.append(mode)
+
+        else:
+            if not access_mode_dist_ratio:
+                num_of_modes = len(access_modes)
+                dist_val = floor(num_of_pvc / num_of_modes)
+                access_mode_dist_ratio = [dist_val] * num_of_modes
+                access_mode_dist_ratio[-1] = (
+                    dist_val + (num_of_pvc % num_of_modes)
+                )
+            zipped_share = list(zip(access_modes, access_mode_dist_ratio))
+            for mode, share in zipped_share:
+                access_modes_list.extend([mode] * share)
+
+        if access_modes_selection == 'distribute_random':
+            random.shuffle(access_modes_list)
+
+        for access_mode in access_modes_list:
             pvc_obj = pvc_factory(
                 interface=interface,
                 project=project,
