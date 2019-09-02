@@ -255,3 +255,8 @@ INSTANCE_SHUTTING_DOWN = 32
 NODE_READY = 'Ready'
 NODE_NOT_READY = 'NotReady'
 NODE_READY_SCHEDULING_DISABLED = 'Ready,SchedulingDisabled'
+
+# Alert labels
+ALERT_CLUSTERWARNINGSTATE = 'CephClusterWarningState'
+ALERT_MGRISABSENT = 'CephMgrIsAbsent'
+ALERT_MONQUORUMATRISK = 'CephMonQuorumAtRisk'
