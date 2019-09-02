@@ -5,7 +5,7 @@ import logging
 import pytest
 import ocs_ci.ocs.exceptions as ex
 
-from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.framework.testlib import tier2, ManageTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
 
@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
         ),
     ]
 )
-@tier1
+@tier2
 class TestPVCFullWithIORWO(ManageTest):
     """
     Test to verify PVC behavior when full with data
@@ -81,7 +81,7 @@ class TestPVCFullWithIORWO(ManageTest):
 
 @pytest.mark.polarion_id("OCS-854")
 @pytest.mark.bugzilla("1745344")
-@tier1
+@tier2
 class TestPVCFullWithIORWX(ManageTest):
     """
     Test to verify PVC behavior when full with data
@@ -116,7 +116,7 @@ class TestPVCFullWithIORWX(ManageTest):
         try:
             self.pod_obj1.get_fio_results()
         except ex.CommandFailed as cf:
-            if "No space left on device" not in (cf):
+            if "No space left on device" not in str(cf):
                 raise
             else:
                 catch_error = True
