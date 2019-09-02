@@ -4,14 +4,16 @@ Module to perform IOs with several weights
 import pytest
 import logging
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-from ocs_ci.framework.testlib import ManageTest, tier1, google_api_required
+from ocs_ci.framework.testlib import (
+    ManageTest, performance, google_api_required,
+)
 
 
 logger = logging.getLogger(__name__)
 
 
 @google_api_required
-@tier1
+@performance
 class TestIOPerformance(ManageTest):
     """
     Test IO performance

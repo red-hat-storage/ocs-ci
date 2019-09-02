@@ -9,7 +9,7 @@ from ocs_ci.utility import templating, utils
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest, tier1
+from ocs_ci.framework.testlib import E2ETest, workloads
 from tests import helpers
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
@@ -42,7 +42,7 @@ def ripsaw(request):
     return ripsaw
 
 
-@tier1
+@workloads
 class TestPgSQLWorkload(E2ETest):
     """
     Deploy an PGSQL workload using operator
