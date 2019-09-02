@@ -38,8 +38,6 @@ DEPLOYMENT:
   installer_version: "4.2.0-0.nightly"
   force_download_installer: True
   force_download_client: True
-  # Change this variable to false to not deploy via OCS operator.
-  ocs_operator_deployment: True
   # opened issue here about the version in the name of OLM
   # https://github.com/openshift/ocs-operator/issues/50
   ocs_csv_version: "v0.0.1"
