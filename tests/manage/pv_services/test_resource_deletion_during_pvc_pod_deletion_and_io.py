@@ -68,28 +68,41 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         """
         Create PVCs and pods
         """
+        access_modes = [constants.ACCESS_MODE_RWO]
+        if interface == constants.CEPHFILESYSTEM:
+            access_modes.append(constants.ACCESS_MODE_RWX)
         pvc_objs = multi_pvc_factory(
             interface=interface,
             project=None,
             storageclass=None,
             size=self.pvc_size,
-            access_mode=constants.ACCESS_MODE_RWO,
+            access_modes=access_modes,
+            access_modes_selection='distribute_random',
             status=constants.STATUS_BOUND,
             num_of_pvc=self.num_of_pvcs,
             wait_each=False
         )
 
         pod_objs = []
+        rwx_pod_objs = []
+
+        # Create one pod using each RWO PVC and two pods using each RWX PVC
         for pvc_obj in pvc_objs:
+            if pvc_obj.access_mode == constants.ACCESS_MODE_RWX:
+                pod_obj = pod_factory(pvc=pvc_obj, status="")
+                rwx_pod_objs.append(pod_obj)
             pod_obj = pod_factory(pvc=pvc_obj, status="")
             pod_objs.append(pod_obj)
-        for pod_obj in pod_objs:
+
+        # Wait for pods to be in Running state
+        for pod_obj in pod_objs + rwx_pod_objs:
             wait_for_resource_state(
                 resource=pod_obj, state=constants.STATUS_RUNNING
             )
             pod_obj.reload()
+        log.info(f"Created {len(pod_objs) + len(rwx_pod_objs)} pods.")
 
-        return pvc_objs, pod_objs
+        return pvc_objs, pod_objs, rwx_pod_objs
 
     def delete_pods(self, pods_to_delete):
         """
@@ -99,6 +112,22 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
             pod_obj.delete(wait=False)
         return True
 
+    def run_io_on_pods(self, pod_objs):
+        """
+        Run IO on pods
+        """
+        # Start IO on each pod. RWX PVC will be used on two pods. So split the
+        # size accordingly
+        for pod_obj in pod_objs:
+            if pod_obj.pvc.access_mode == constants.ACCESS_MODE_RWX:
+                io_size = int((self.pvc_size - 1) / 2)
+            else:
+                io_size = self.pvc_size - 1
+            pod_obj.run_io(
+                storage_type='fs', size=f'{io_size}G', runtime=30,
+                fio_filename=f'{pod_obj.name}_io'
+            )
+
     def test_disruptive_during_pod_pvc_deletion_and_io(
         self, interface, resource_to_delete,
         setup_base
@@ -107,7 +136,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         Delete ceph/rook pod while PVCs deletion, pods deletion and IO are
         progressing
         """
-        pvc_objs, pod_objs = setup_base
+        pvc_objs, pod_objs, rwx_pod_objs = setup_base
         sc_obj = pvc_objs[0].storageclass
         namespace = pvc_objs[0].project.namespace
 
@@ -116,15 +145,45 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         # Select pods to be deleted
         pods_to_delete = pod_objs[:num_of_pods_to_delete]
+        pods_to_delete.extend(
+            [pod for pod in rwx_pod_objs for pod_obj in pods_to_delete if (
+                pod_obj.pvc == pod.pvc
+            )]
+        )
 
         # Select pods to run IO
         io_pods = pod_objs[num_of_pods_to_delete:num_of_pods_to_delete + num_of_io_pods]
+        io_pods.extend(
+            [pod for pod in rwx_pod_objs for pod_obj in io_pods if (
+                pod_obj.pvc == pod.pvc
+            )]
+        )
 
         # Select pods which are having PVCs to delete
         pods_for_pvc = pod_objs[num_of_pods_to_delete + num_of_io_pods:]
+        pvcs_to_delete = [pod_obj.pvc for pod_obj in pods_for_pvc]
+        pods_for_pvc.extend(
+            [pod for pod in rwx_pod_objs for pod_obj in pods_for_pvc if (
+                pod_obj.pvc == pod.pvc
+            )]
+        )
 
-        # Select PVCs to delete
-        pvcs_to_delete = pvc_objs[num_of_pods_to_delete + num_of_io_pods:]
+        log.info(
+            f"{len(pods_to_delete)} pods selected for deletion in which "
+            f"{len(pods_to_delete) - num_of_pods_to_delete} pairs of pod "
+            f"share same RWX PVC"
+        )
+        log.info(
+            f"{len(io_pods)} pods selected for running IO in which "
+            f"{len(io_pods) - num_of_io_pods} pairs of pod share same "
+            f"RWX PVC"
+        )
+        no_of_rwx_pvcs_delete = len(pods_for_pvc) - len(pvcs_to_delete)
+        log.info(
+            f"{len(pvcs_to_delete)} PVCs selected for deletion. "
+            f"RWO PVCs: {len(pvcs_to_delete) - no_of_rwx_pvcs_delete}, "
+            f"RWX PVCs: {no_of_rwx_pvcs_delete}"
+        )
 
         pod_functions = {
             'mds': get_mds_pods, 'mon': get_mon_pods, 'mgr': get_mgr_pods,
@@ -173,13 +232,13 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         # Do setup on pods for running IO
         log.info("Setting up pods for running IO.")
-        for pod_obj in pod_objs:
+        for pod_obj in pod_objs + rwx_pod_objs:
             executor.submit(pod_obj.workload_setup, storage_type='fs')
 
         # Wait for setup on pods to complete
-        for pod_obj in pod_objs:
+        for pod_obj in pod_objs + rwx_pod_objs:
             for sample in TimeoutSampler(
-                100, 2, getattr, pod_obj, 'wl_setup_done'
+                180, 2, getattr, pod_obj, 'wl_setup_done'
             ):
                 if sample:
                     log.info(
@@ -191,8 +250,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         # Start IO on pods having PVCs to delete to load data
         log.info("Starting IO on pods having PVCs to delete.")
-        for pod_obj in pods_for_pvc:
-            pod_obj.run_io(storage_type='fs', size=f'{self.pvc_size - 1}G')
+        self.run_io_on_pods(pods_for_pvc)
         log.info("IO started on pods having PVCs to delete.")
 
         log.info("Fetching IO results from the pods having PVCs to delete.")
@@ -210,8 +268,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         # Start IO on pods to be deleted
         log.info("Starting IO on pods to be deleted.")
-        for pod_obj in pods_to_delete:
-            pod_obj.run_io(storage_type='fs', size=f'{self.pvc_size - 1}G')
+        self.run_io_on_pods(pods_to_delete)
         log.info("IO started on pods to be deleted.")
 
         # Start deleting PVCs
@@ -223,8 +280,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         log.info("Started deleting pods")
 
         # Start IO on IO pods
-        for pod_obj in io_pods:
-            pod_obj.run_io(storage_type='fs', size=f'{self.pvc_size - 1}G')
+        self.run_io_on_pods(io_pods)
         log.info("Started IO on IO pods")
 
         # Verify pvc deletion has started
