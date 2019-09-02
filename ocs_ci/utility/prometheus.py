@@ -21,9 +21,9 @@ def check_alert_list(
     severity="warning"
 ):
     """
-    Check list of alerts that there are 2 alerts with requested label and
-    message. First alerts should be pending and the second alert should be
-    firing.
+    Check list of alerts that there are alerts with requested label and
+    message for each provided state. If some alert is missing then this check
+    fails.
 
     Args:
         label (str): Alert label
