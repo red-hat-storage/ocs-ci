@@ -1,7 +1,7 @@
 import pytest
 import logging
 
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, workloads
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ class TestJenkinsSimulation(ManageTest):
     Run simulation for "Jenkins" - git clone
     """
 
-    @tier1
+    @workloads
     def test_git_clone(self, pod):
         """
         git clones a large repository
