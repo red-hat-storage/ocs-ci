@@ -124,7 +124,7 @@ def ceph_pool_factory(request):
 def storageclass_factory(
     request,
     ceph_pool_factory,
-    secret_factory
+    secret_factory,
 ):
     """
     Create a storage class factory. Default is RBD based.
@@ -136,7 +136,8 @@ def storageclass_factory(
         interface=constants.CEPHBLOCKPOOL,
         secret=None,
         custom_data=None,
-        sc_name=None
+        sc_name=None,
+        reclaim_policy=constants.RECLAIM_POLICY_DELETE
     ):
         """
         Args:
@@ -148,6 +149,7 @@ def storageclass_factory(
                 by using these data. Parameters `block_pool` and `secret`
                 are not useds but references are set if provided.
             sc_name (str): Name of the storage class
+            reclaim_policy (str): Reclaim policy for storageclass
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -167,7 +169,8 @@ def storageclass_factory(
                 interface_type=interface,
                 interface_name=interface_name,
                 secret_name=secret.name,
-                sc_name=sc_name
+                sc_name=sc_name,
+                reclaim_policy=reclaim_policy
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.ceph_pool = ceph_pool
@@ -412,10 +415,13 @@ def teardown_factory(request):
     def factory(resource_obj):
         """
         Args:
-            resource_obj (OCS object): Object to teardown after the test
+            resource_obj (OCS object or list of OCS objects) : Object to teardown after the test
 
         """
-        instances.append(resource_obj)
+        if isinstance(resource_obj, list):
+            instances.extend(resource_obj)
+        else:
+            instances.append(resource_obj)
 
     def finalizer():
         """
@@ -427,7 +433,9 @@ def teardown_factory(request):
                 instance.ocp.wait_for_delete(
                     instance.name
                 )
-
+                if instance.kind == constants.PVC:
+                    if instance.reclaim_policy == constants.RECLAIM_POLICY_DELETE:
+                        helpers.validate_pv_delete(instance.backed_pv)
     request.addfinalizer(finalizer)
     return factory
 
@@ -620,7 +628,7 @@ def run_io_in_background(request):
                 results.append((reads, writes))
 
                 file_path = os.path.join(
-                    pod_obj.get_mount_path(),
+                    pod_obj.get_storage_path(storage_type='fs'),
                     pod_obj.io_params['filename']
                 )
                 pod_obj.exec_cmd_on_pod(f'rm -rf {file_path}')

@@ -146,6 +146,10 @@ CSI_RBD_POD_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pod.yaml"
 )
 
+CSI_RBD_RAW_BLOCK_POD_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "raw_block_pod.yaml"
+)
+
 CSI_CEPHFS_POD_YAML = os.path.join(
     TEMPLATE_CSI_FS_DIR, "pod.yaml"
 )
@@ -244,6 +248,7 @@ FIO_IO_RW_PARAMS_YAML = os.path.join(
 # constants
 RBD_INTERFACE = 'rbd'
 CEPHFS_INTERFACE = 'cephfs'
+RAW_BLOCK_DEVICE = '/dev/block'
 
 # EC2 instance statuses
 INSTANCE_PENDING = 0
