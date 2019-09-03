@@ -48,16 +48,22 @@ class NooBaa(object):
             aws_secret_access_key=self.access_key
         )
 
-    def s3_create_bucket(self, bucketname):
+    def s3_create_bucket(self, bucketname, region='us-east-1'):
         """
         Args:
             bucketname: Name of the bucket to be created
+            region: Name of the region for the bucket to be created on (defualt is us-east-1, as the SDK default)
 
         Returns:
             s3.Bucket object
 
         """
-        return self.s3_resource.create_bucket(Bucket=bucketname)
+        return self.s3_resource.create_bucket(
+            Bucket=bucketname,
+            CreateBucketConfiguration={
+                'LocationConstraint': region
+            }
+        )
 
     def s3_delete_bucket(self, bucket):
         """
