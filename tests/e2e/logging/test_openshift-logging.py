@@ -15,6 +15,7 @@ from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
+
 @pytest.fixture()
 def test_fixture(request):
     """
@@ -58,7 +59,7 @@ def test_fixture(request):
         interface_name=cbp_obj.name,
         secret_name=constants.DEFAULT_SECRET,
         reclaim_policy="Delete"
-        )
+    )
     assert sc_obj, f"Failed to create storage class"
     assert obj.create_instance_in_clusterlogging(sc_name=sc_obj.name)
 
