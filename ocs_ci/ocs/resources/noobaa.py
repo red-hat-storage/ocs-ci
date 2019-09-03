@@ -52,7 +52,7 @@ class NooBaa(object):
         """
         Args:
             bucketname: Name of the bucket to be created
-            region: Name of the region for the bucket to be created on (defualt is us-east-1, as the SDK default)
+            region: Name of the region for the bucket to be created on
 
         Returns:
             s3.Bucket object
