@@ -3,7 +3,7 @@ import logging
 
 import boto3
 from botocore.client import ClientError
-
+from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(name=__file__)
@@ -48,7 +48,7 @@ class NooBaa(object):
             aws_secret_access_key=self.access_key
         )
 
-    def s3_create_bucket(self, bucketname, region='us-east-1'):
+    def s3_create_bucket(self, bucketname, region=config.ENV_DATA['region']):
         """
         Args:
             bucketname: Name of the bucket to be created
