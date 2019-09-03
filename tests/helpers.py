@@ -162,9 +162,10 @@ def create_pod(
     else:
         pod_obj = pod.Pod(**pod_data)
         pod_name = pod_data.get('metadata').get('name')
+        logger.info(f'Creating new Pod {pod_name} for test')
         created_resource = pod_obj.create(do_reload=do_reload)
         assert created_resource, (
-            f"Failed to create resource {pod_name}"
+            f"Failed to create Pod {pod_name}"
         )
 
         return pod_obj
@@ -376,7 +377,7 @@ def create_pvc(
             associated with
         pvc_name (str): The name of the PVC to create
         namespace (str): The namespace for the PVC creation
-        size(str): Size of pvc to create
+        size (str): Size of pvc to create
         do_reload (bool): True for wait for reloading PVC after its creation, False otherwise
         access_mode (str): The access mode to be used for the PVC
         volume_mode (str): Volume mode for rbd RWX pvc i.e. 'Block'

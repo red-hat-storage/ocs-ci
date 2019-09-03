@@ -84,6 +84,7 @@ IGNORE_SC_GP2 = "gp2"
 IGNORE_SC_FLEX = "rook-ceph-block"
 TEST_FILES_BUCKET = "ocsci-test-files"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
+MOUNT_POINT = '/var/lib/www/html'
 
 
 DEFAULT_BLOCKPOOL = 'rbd'
