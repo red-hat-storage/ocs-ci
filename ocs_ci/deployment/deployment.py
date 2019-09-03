@@ -13,7 +13,7 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     run_cmd, ceph_health_check, is_cluster_running
 )
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.resources.ocs import OCS
@@ -87,11 +87,60 @@ class Deployment(object):
         self.ocp_deployment.deploy_prereq()
         self.ocp_deployment.deploy(log_cli_level)
 
+    def label_and_taint_nodes(self):
+        """
+        Label and taint worker nodes to be used by OCS operator
+        """
+
+        nodes = ocp.OCP(kind='node').get().get('items', [])
+        worker_nodes = [
+            node for node in nodes if "node-role.kubernetes.io/worker"
+            in node['metadata']['labels']
+        ]
+        if not worker_nodes:
+            raise UnavailableResourceException("No worker node found!")
+        to_label = config.DEPLOYMENT.get('ocs_operator_nodes_to_label', 3)
+        to_taint = config.DEPLOYMENT.get('ocs_operator_nodes_to_tain', 0)
+        worker_count = len(worker_nodes)
+        if worker_count < to_label or worker_count < to_taint:
+            raise UnavailableResourceException(
+                f"Not enough worker nodes: {worker_count} to label: "
+                f"{to_label} or taint: {to_taint}!"
+            )
+
+        workers_to_label = " ".join(
+            [node['metadata']['name'] for node in worker_nodes[:to_label]]
+        )
+        if workers_to_label:
+            _ocp = ocp.OCP(kind='node')
+            logger.info(
+                f"Label nodes: {workers_to_label} with label: "
+                f"{constants.OPERATOR_NODE_LABEL}"
+            )
+            label_cmd = (
+                f"label nodes {workers_to_label} {constants.OPERATOR_NODE_LABEL}"
+            )
+            _ocp.exec_oc_cmd(command=label_cmd)
+
+        workers_to_taint = " ".join(
+            [node['metadata']['name'] for node in worker_nodes[:to_taint]]
+        )
+        if workers_to_taint:
+            logger.info(
+                f"Taint nodes: {workers_to_taint} with taint: "
+                f"{constants.OPERATOR_NODE_TAINT}"
+            )
+            taint_cmd = (
+                f"adm taint nodes {workers_to_taint} {constants.OPERATOR_NODE_TAINT}"
+            )
+            _ocp.exec_oc_cmd(command=taint_cmd)
+
     def deploy_ocs_via_operator(self):
         """
         Method for deploy OCS via OCS operator
         """
         logger.info("Deployment of OCS via OCS operator")
+        self.label_and_taint_nodes()
         run_cmd(f"oc create -f {constants.OPERATOR_OLM_MANIFEST}")
         csv = CSV(
             name=f"ocs-operator.{self.ocs_operator_version}", kind="csv",

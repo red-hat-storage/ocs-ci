@@ -42,6 +42,10 @@ DEPLOYMENT:
   # https://github.com/openshift/ocs-operator/issues/50
   ocs_csv_version: "v0.0.1"
   ocs_operator_storage_cluster_cr: "https://raw.githubusercontent.com/openshift/ocs-operator/master/deploy/crds/ocs_v1alpha1_storagecluster_cr.yaml"
+  ocs_operator_nodes_to_label: 3
+  # This is described as a WA for minimal configuration 3/3 worker/master
+  # nodes. See: https://github.com/openshift/ocs-operator
+  ocs_operator_nodes_to_tain: 0
 
 # Section for reporting configuration
 REPORTING:

@@ -120,7 +120,7 @@ class AWSIPI(AWSBase):
                 (default: "DEBUG")
         """
         super(AWSIPI, self).deploy_ocp(log_cli_level)
-        if not self.deploy_ocs_via_operator:
+        if not self.ocs_operator_deployment:
             volume_size = int(
                 config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
             )
