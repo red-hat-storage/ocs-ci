@@ -57,12 +57,12 @@ def verify_pv_not_exists(pvc_obj, cbp_name, rbd_image_id):
     # Validate on ceph side
     logger.info(f"Verifying PV {pvc_obj.backed_pv} exists on backend")
 
-    _rc = helpers.verify_volume_deleted_in_backend(
+    status = helpers.verify_volume_deleted_in_backend(
         interface=constants.CEPHBLOCKPOOL, image_uuid=rbd_image_id,
         pool_name=cbp_name
     )
 
-    if not _rc:
+    if not status:
         raise UnexpectedBehaviour(f"PV {pvc_obj.backed_pv} exists on backend")
     logger.info(
         f"Expected: PV {pvc_obj.backed_pv} "
