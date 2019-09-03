@@ -18,15 +18,6 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope='class')
-def test_fixture(request):
-    """
-    Setup and teardown
-    * The setup will deploy openshift-logging in the cluster
-    * The teardown will uninstall cluster-logging from the cluster
-    """
-
-    def finalizer():
-        teardown(cbp_obj, sc_obj)
 @pytest.fixture()
 def test_fixture(request):
     """
@@ -97,20 +88,6 @@ def test_fixture(request):
     assert ocp_logging_obj.check_health_of_clusterlogging()
 
 
-def teardown(cbp_obj, sc_obj):
-    """
-    The teardown will uninstall the openshift-logging from the cluster
-    """
-    cbp_obj.delete()
-    sc_obj.delete()
-        )
-    assert sc_obj, f"Failed to create storage class"
-    assert obj.create_instance_in_clusterlogging(sc_name=sc_obj.name)
-
-    # Check the health of the cluster-logging
-    assert obj.check_health_of_clusterlogging()
-
-
 def teardown(sc_obj, cbp_obj):
     """
     The teardown will uninstall the openshift-logging from the cluster
@@ -123,55 +100,7 @@ def teardown(sc_obj, cbp_obj):
 @pytest.mark.usefixtures(
     test_fixture.__name__
 )
-class Test_openshift_logging_on_ocs(E2ETest):
-    """
-    The class contains tests to verify openshift-logging backed by OCS.
-    """
-    @pytest.fixture()
-    def create_pvc_and_deploymentconfig_pod(self, request, pvc_factory):
-        """
-        """
-        def finalizer():
-            helpers.delete_deploymentconfig(pod_obj)
-
-        request.addfinalizer(finalizer)
-
-        # Create pvc
 class TestLogging_in_EFK_stack(E2ETest):
-    """
-    The class contains the testcases related to openshift-logging
-    """
-    @pytest.mark.polarion_id("OCS-657")
-    @tier1
-    @retry(ModuleNotFoundError, 6, 300, 3)
-    def test_create_new_project_to_verify_logging(self, pvc_factory):
-        """
-        This function creates new project to verify logging in EFK stack
-        1. Creates new project
-        2. Creates PVC
-        3. Creates Deployment pod in the new_project and run-io on the app pod
-        4. Logs into the EFK stack and check for new_project
-        5. And checks for the file_count in the new_project in EFK stack
-        """
-
-        # Create pvc
-
-        pvc_obj = pvc_factory()
-
-        # Create service_account to get privilege for deployment pods
-        sa_name = helpers.create_serviceaccount(pvc_obj.project.namespace)
-
-        helpers.add_scc_policy(sa_name=sa_name.name, namespace=pvc_obj.project.namespace)
-
-        pod_obj = helpers.create_pod(
-            interface_type=constants.CEPHBLOCKPOOL,
-            pvc_name=pvc_obj.name,
-            namespace=pvc_obj.project.namespace,
-            sa_name=sa_name.name,
-            dc_deployment=True
-        )
-        helpers.wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
-        return pod_obj, pvc_obj
 
     @pytest.mark.polarion_id("OCS-657")
     @tier1
