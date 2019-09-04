@@ -5,14 +5,13 @@ This file contains the testcases for openshift-logging
 import pytest
 import logging
 
-from tests import helpers, disruption_helpers
+from tests import helpers
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants
 from ocs_ci.utility import deployment_openshift_logging as obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.framework.testlib import E2ETest, tier1
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.resources.pvc import get_all_pvcs
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +66,7 @@ def test_fixture(request):
     # Check the health of the cluster-logging
     assert obj.check_health_of_clusterlogging()
 
+
 def teardown(sc_obj, cbp_obj):
     """
     The teardown will uninstall the openshift-logging from the cluster
@@ -111,7 +111,6 @@ class TestLogging_in_EFK_stack(E2ETest):
         helpers.wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
         return pod_obj, pvc_obj
 
-
     @pytest.mark.polarion_id("OCS-657")
     @tier1
     @retry(ModuleNotFoundError, 6, 300, 3)
@@ -125,8 +124,8 @@ class TestLogging_in_EFK_stack(E2ETest):
         5. And checks for the file_count in the new_project in EFK stack
         """
 
-
         pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
+
         # Running IO on the app_pod
         pod_obj.run_io(storage_type='fs', size=8000)
 
@@ -147,4 +146,3 @@ class TestLogging_in_EFK_stack(E2ETest):
             logger.info(f"The file_count in the project is {file_count}")
         else:
             raise ModuleNotFoundError
-
