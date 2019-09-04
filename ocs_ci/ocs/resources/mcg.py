@@ -9,16 +9,16 @@ from ocs_ci.ocs.ocp import OCP
 logger = logging.getLogger(name=__file__)
 
 
-class NooBaa(object):
+class MCG(object):
     """
-    Wrapper class for NooBaa's S3 service
+    Wrapper class for MCG's S3 service
     """
 
     s3_resource, ocp_resource, endpoint, region, access_key_id, access_key = (None,) * 6
 
     def __init__(self):
         """
-        Constructor for the NooBaa class
+        Constructor for the MCG class
         """
         ocp_obj = OCP(kind='noobaa', namespace='noobaa')
         results = ocp_obj.get()
