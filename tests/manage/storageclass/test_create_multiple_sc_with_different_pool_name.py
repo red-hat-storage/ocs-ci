@@ -3,7 +3,7 @@ import logging
 from tests import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier2
 from tests.fixtures import (
     create_rbd_secret, create_project
 )
@@ -11,7 +11,7 @@ from tests.fixtures import (
 log = logging.getLogger(__name__)
 
 
-@tier1
+@tier2
 @pytest.mark.usefixtures(
     create_project.__name__,
     create_rbd_secret.__name__,

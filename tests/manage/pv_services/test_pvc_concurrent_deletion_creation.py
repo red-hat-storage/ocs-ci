@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from ocs_ci.ocs import exceptions, constants
-from ocs_ci.framework.testlib import tier1, ManageTest, bugzilla
+from ocs_ci.framework.testlib import tier2, ManageTest, bugzilla
 from ocs_ci.ocs.resources.pvc import delete_pvcs
 from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool, create_rbd_secret,
@@ -34,7 +34,7 @@ def test_fixture(request):
 
 
 @bugzilla('1734259')
-@tier1
+@tier2
 @pytest.mark.usefixtures(
     create_project.__name__,
     create_rbd_secret.__name__,

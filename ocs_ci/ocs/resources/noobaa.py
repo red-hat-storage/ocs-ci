@@ -3,7 +3,7 @@ import logging
 
 import boto3
 from botocore.client import ClientError
-
+from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(name=__file__)
@@ -48,16 +48,22 @@ class NooBaa(object):
             aws_secret_access_key=self.access_key
         )
 
-    def s3_create_bucket(self, bucketname):
+    def s3_create_bucket(self, bucketname, region=config.ENV_DATA['region']):
         """
         Args:
             bucketname: Name of the bucket to be created
+            region: Name of the region for the bucket to be created on
 
         Returns:
             s3.Bucket object
 
         """
-        return self.s3_resource.create_bucket(Bucket=bucketname)
+        return self.s3_resource.create_bucket(
+            Bucket=bucketname,
+            CreateBucketConfiguration={
+                'LocationConstraint': region
+            }
+        )
 
     def s3_delete_bucket(self, bucket):
         """
@@ -101,7 +107,7 @@ class NooBaa(object):
 
         """
         try:
-            self._s3_resource.meta.client.head_bucket(Bucket=bucket.name)
+            self.s3_resource.meta.client.head_bucket(Bucket=bucket.name)
             logger.info(f"{bucket.name} exists")
             return True
         except ClientError:

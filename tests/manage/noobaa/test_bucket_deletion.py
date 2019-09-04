@@ -1,41 +1,11 @@
 import logging
+
 import pytest
 
-from tests.helpers import create_unique_resource_name
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import tier1
 
 logger = logging.getLogger(__name__)
-
-
-@pytest.fixture()
-def create_buckets(request, noobaa_obj):
-    """
-    Creates multiple buckets
-    """
-    created_buckets = []
-
-    def verify_bucket():
-        """
-        Verifies whether buckets exists after deletion
-
-        """
-        for bucket in created_buckets:
-            logger.info(f"Verifying whether bucket: {bucket.name} exists"
-                        f" after deletion")
-            assert noobaa_obj.s3_verify_bucket_exists(bucket) is False
-
-    request.addfinalizer(verify_bucket)
-
-    bucket_name = create_unique_resource_name(
-        resource_description='bucket', resource_type='s3'
-    )
-    logger.info(f'Creating bucket: {bucket_name}')
-    created_buckets.append(
-        noobaa_obj.s3_create_bucket(bucketname=bucket_name)
-    )
-
-    return created_buckets
 
 
 @pytest.mark.skipif(condition=True, reason="NooBaa is not deployed")
@@ -53,10 +23,12 @@ class TestBucketDeletion:
         reason="Tests are not running on AWS deployed cluster"
     )
     @pytest.mark.polarion_id("OCS-1299")
-    def test_s3_bucket_delete(self, noobaa_obj, create_buckets):
+    def test_s3_bucket_delete(self, noobaa_obj, bucket_factory):
         """
         Test deletion of bucket using the S3 SDK
         """
-        for bucket in create_buckets:
+
+        for bucket in bucket_factory(3):
             logger.info(f"Deleting bucket: {bucket.name}")
             noobaa_obj.s3_delete_bucket(bucket)
+            assert noobaa_obj.s3_verify_bucket_exists(bucket) is False

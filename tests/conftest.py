@@ -4,6 +4,8 @@ import tempfile
 import pytest
 import threading
 from datetime import datetime
+import random
+from math import floor
 
 from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -122,7 +124,7 @@ def ceph_pool_factory(request):
 def storageclass_factory(
     request,
     ceph_pool_factory,
-    secret_factory
+    secret_factory,
 ):
     """
     Create a storage class factory. Default is RBD based.
@@ -134,7 +136,8 @@ def storageclass_factory(
         interface=constants.CEPHBLOCKPOOL,
         secret=None,
         custom_data=None,
-        sc_name=None
+        sc_name=None,
+        reclaim_policy=constants.RECLAIM_POLICY_DELETE
     ):
         """
         Args:
@@ -146,6 +149,7 @@ def storageclass_factory(
                 by using these data. Parameters `block_pool` and `secret`
                 are not useds but references are set if provided.
             sc_name (str): Name of the storage class
+            reclaim_policy (str): Reclaim policy for storageclass
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -165,7 +169,8 @@ def storageclass_factory(
                 interface_type=interface,
                 interface_name=interface_name,
                 secret_name=secret.name,
-                sc_name=sc_name
+                sc_name=sc_name,
+                reclaim_policy=reclaim_policy
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.ceph_pool = ceph_pool
@@ -302,6 +307,7 @@ def pvc_factory(
             helpers.wait_for_resource_state(pvc_obj, status)
         pvc_obj.storageclass = storageclass
         pvc_obj.project = project
+        pvc_obj.access_mode = access_mode
         instances.append(pvc_obj)
 
         return pvc_obj
@@ -409,10 +415,13 @@ def teardown_factory(request):
     def factory(resource_obj):
         """
         Args:
-            resource_obj (OCS object): Object to teardown after the test
+            resource_obj (OCS object or list of OCS objects) : Object to teardown after the test
 
         """
-        instances.append(resource_obj)
+        if isinstance(resource_obj, list):
+            instances.extend(resource_obj)
+        else:
+            instances.append(resource_obj)
 
     def finalizer():
         """
@@ -424,7 +433,9 @@ def teardown_factory(request):
                 instance.ocp.wait_for_delete(
                     instance.name
                 )
-
+                if instance.kind == constants.PVC:
+                    if instance.reclaim_policy == constants.RECLAIM_POLICY_DELETE:
+                        helpers.validate_pv_delete(instance.backed_pv)
     request.addfinalizer(finalizer)
     return factory
 
@@ -617,7 +628,7 @@ def run_io_in_background(request):
                 results.append((reads, writes))
 
                 file_path = os.path.join(
-                    pod_obj.get_mount_path(),
+                    pod_obj.get_storage_path(storage_type='fs'),
                     pod_obj.io_params['filename']
                 )
                 pod_obj.exec_cmd_on_pod(f'rm -rf {file_path}')
@@ -652,14 +663,21 @@ def multi_pvc_factory(
 ):
     """
     Create a Persistent Volume Claims factory. Calling this fixture creates a
-    set of new PVCs.
+    set of new PVCs. Options for PVC creation based on provided assess modes:
+    1. For each PVC, choose random value from the list of access modes
+    2. Create PVCs based on the specified distribution number of access modes.
+       Create sets of PVCs based on the order of access modes.
+    3. Create PVCs based on the specified distribution number of access modes.
+       The order of PVC creation is independent of access mode.
     """
     def factory(
         interface=constants.CEPHBLOCKPOOL,
         project=None,
         storageclass=None,
         size=None,
-        access_mode=constants.ACCESS_MODE_RWO,
+        access_modes=None,
+        access_modes_selection='distribute_sequential',
+        access_mode_dist_ratio=None,
         status=constants.STATUS_BOUND,
         num_of_pvc=1,
         wait_each=False
@@ -674,9 +692,31 @@ def multi_pvc_factory(
             storageclass (object): ocs_ci.ocs.resources.ocs.OCS instance
                 of 'StorageClass' kind.
             size (int): The requested size for the PVC
-            access_mode (str): ReadWriteOnce, ReadOnlyMany or ReadWriteMany.
-                This decides the access mode to be used for the PVC.
-                ReadWriteOnce is default.
+            access_modes (list): List of access modes. One of the access modes
+                will be chosen for creating each PVC. If not specified,
+                ReadWriteOnce will be selected for all PVCs.
+                eg: ['ReadWriteOnce', 'ReadOnlyMany', 'ReadWriteMany']
+            access_modes_selection (str): Decides how to select accessMode for
+                each PVC from the options given in 'access_modes' list.
+                Values are 'select_random', 'distribute_random'
+                'select_random' : While creating each PVC, one access mode will
+                    be selected from the 'access_modes' list.
+                'distribute_random' : The access modes in the list
+                    'access_modes' will be distributed based on the values in
+                    'distribute_ratio' and the order in which PVCs are created
+                    will not be based on the access modes. For example, 1st and
+                    6th PVC might have same access mode.
+                'distribute_sequential' :The access modes in the list
+                    'access_modes' will be distributed based on the values in
+                    'distribute_ratio' and the order in which PVCs are created
+                    will be as sets of PVCs of same assess mode. For example,
+                    first set of 10 will be having same access mode followed by
+                    next set of 13 with a different access mode.
+            access_mode_dist_ratio (list): Contains the number of PVCs to be
+                created for each access mode. If not specified, the given list
+                of access modes will be equally distributed among the PVCs.
+                eg: [10,12] for num_of_pvc=22 and
+                access_modes=['ReadWriteOnce', 'ReadWriteMany']
             status (str): If provided then factory waits for object to reach
                 desired state.
             num_of_pvc(int): Number of PVCs to be created
@@ -695,7 +735,30 @@ def multi_pvc_factory(
         project = project or project_factory()
         storageclass = storageclass or storageclass_factory(interface)
 
-        for _ in range(num_of_pvc):
+        access_modes = access_modes or [constants.ACCESS_MODE_RWO]
+
+        access_modes_list = []
+        if access_modes_selection == 'select_random':
+            for _ in range(num_of_pvc):
+                mode = random.choice(access_modes)
+                access_modes_list.append(mode)
+
+        else:
+            if not access_mode_dist_ratio:
+                num_of_modes = len(access_modes)
+                dist_val = floor(num_of_pvc / num_of_modes)
+                access_mode_dist_ratio = [dist_val] * num_of_modes
+                access_mode_dist_ratio[-1] = (
+                    dist_val + (num_of_pvc % num_of_modes)
+                )
+            zipped_share = list(zip(access_modes, access_mode_dist_ratio))
+            for mode, share in zipped_share:
+                access_modes_list.extend([mode] * share)
+
+        if access_modes_selection == 'distribute_random':
+            random.shuffle(access_modes_list)
+
+        for access_mode in access_modes_list:
             pvc_obj = pvc_factory(
                 interface=interface,
                 project=project,
@@ -719,3 +782,87 @@ def rook_repo(request):
     get_rook_repo(
         config.RUN['rook_branch'], config.RUN.get('rook_to_checkout')
     )
+
+
+@pytest.fixture(scope="function")
+def memory_leak_function(request):
+    """
+    Function to start Memory leak thread which will be executed parallel with test run
+    Memory leak data will be captured in all worker nodes for ceph-osd process
+    Data will be appended in /tmp/(worker)-top-output.txt file for each worker
+    During teardown created tmp files will be deleted
+
+    Usage:
+        test_case(.., memory_leak_function):
+            .....
+            median_dict = helpers.get_memory_leak_median_value()
+            .....
+            TC execution part, memory_leak_fun will capture data
+            ....
+            helpers.memory_leak_analysis(median_dict)
+            ....
+    """
+    def finalizer():
+        """
+        Finalizer to stop memory leak data capture thread and cleanup the files
+        """
+        set_flag_status('terminated')
+        try:
+            for status in TimeoutSampler(90, 3, get_flag_status):
+                if status == 'terminated':
+                    break
+        except TimeoutExpiredError:
+            log.warning(
+                "Background test execution still in progress before"
+                "memory leak thread terminated"
+            )
+        if thread:
+            thread.join()
+        for worker in helpers.get_worker_nodes():
+            if os.path.exists(f"/tmp/{worker}-top-output.txt"):
+                os.remove(f"/tmp/{worker}-top-output.txt")
+        log.info(f"Memory leak capture has stopped")
+
+    request.addfinalizer(finalizer)
+
+    temp_file = tempfile.NamedTemporaryFile(
+        mode='w+', prefix='test_status', delete=False
+    )
+
+    def get_flag_status():
+        with open(temp_file.name, 'r') as t_file:
+            return t_file.readline()
+
+    def set_flag_status(value):
+        with open(temp_file.name, 'w') as t_file:
+            t_file.writelines(value)
+
+    set_flag_status('running')
+
+    def run_memory_leak_in_bg():
+        """
+        Function to run memory leak in background thread
+        Memory leak data is written in below format
+        date time PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ COMMAND
+        """
+        oc = ocp.OCP(
+            namespace=config.ENV_DATA['cluster_namespace']
+        )
+        while get_flag_status() == 'running':
+            for worker in helpers.get_worker_nodes():
+                filename = f"/tmp/{worker}-top-output.txt"
+                top_cmd = f"debug nodes/{worker} -- chroot /host top -n 2 b"
+                with open("/tmp/file.txt", "w+") as temp:
+                    temp.write(str(oc.exec_oc_cmd(
+                        command=top_cmd, out_yaml_format=False
+                    )))
+                    temp.seek(0)
+                    for line in temp:
+                        if line.__contains__("ceph-osd"):
+                            with open(filename, "a+") as f:
+                                f.write(str(datetime.now()))
+                                f.write(' ')
+                                f.write(line)
+    log.info(f"Start memory leak data capture in the test background")
+    thread = threading.Thread(target=run_memory_leak_in_bg)
+    thread.start()

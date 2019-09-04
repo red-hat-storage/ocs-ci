@@ -47,13 +47,15 @@ REPORTING:
     project_id: "OpenShiftContainerStorage"
   # Upstream: 'US' or Downstream: 'DS', used only for reporting (Test Run Name)
   us_ds: 'US'
-  must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
+  ocp_must_gather_image: "quay.io/openshift/origin-must-gather"
+  ocs_must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
 
 # This is the default information about environment. Will be overwritten with
 # --cluster-conf file.yaml data you will pass to the pytest.
 ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
   cluster_namespace: 'openshift-storage'
+  monitoring_enabled: true
   platform: 'AWS'
   deployment_type: 'ipi'
   region: 'us-east-2'
@@ -62,5 +64,5 @@ ENV_DATA:
   # Do not change to specific version like v14.2.1-20190430 if not needed
   # cause we don't need to update it each time new 14.x version is released
   # but only once when move to new version like v15.
-  ceph_image: 'ceph/ceph:v14.2.2-20190722'
+  ceph_image: 'ceph/ceph:v14.2.2-20190826'
   rook_image: 'rook/ceph:master'

@@ -184,15 +184,20 @@ class Pod(OCS):
             return [item for item in out if item]
         return out
 
-    def get_mount_path(self):
+    def get_storage_path(self, storage_type='fs'):
         """
-        Get the pod volume mount path
+        Get the pod volume mount path or device path
 
         Returns:
-            str: The mount path of the volume on the pod (e.g. /var/lib/www/html/)
+            str: The mount path of the volume on the pod (e.g. /var/lib/www/html/) if storage_type is fs
+                 else device path of raw block pv
         """
         # TODO: Allow returning a path of a specified volume of a specified
         #  container
+        if storage_type == 'block':
+            return self.pod_data.get('spec').get('containers')[0].get(
+                'volumeDevices')[0].get('devicePath')
+
         return (
             self.pod_data.get(
                 'spec'
@@ -209,7 +214,7 @@ class Pod(OCS):
         """
         work_load = 'fio'
         name = f'test_workload_{work_load}'
-        path = self.get_mount_path()
+        path = self.get_storage_path(storage_type)
         # few io parameters for Fio
 
         self.wl_obj = workload.WorkLoad(
@@ -258,6 +263,7 @@ class Pod(OCS):
                 constants.FIO_IO_PARAMS_YAML
             )
         self.io_params['runtime'] = runtime
+        size = size if isinstance(size, str) else f"{size}G"
         self.io_params['size'] = size
         if fio_filename:
             self.io_params['filename'] = fio_filename
@@ -280,16 +286,22 @@ class Pod(OCS):
 
 # Helper functions for Pods
 
-def get_all_pods(namespace=None):
+def get_all_pods(namespace=None, selector=None):
     """
     Get all pods in a namespace.
-    If namespace is None - get all pods
-
+    Args:
+        namespace (str): Name of the namespace
+            If namespace is None - get all pods
+        selector (list) : List of the resource selector to search with.
+            Example: ['alertmanager','prometheus']
     Returns:
         list: List of Pod objects
     """
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     pods = ocp_pod_obj.get()['items']
+    if selector:
+        pods_new = [pod for pod in pods if pod['metadata']['labels'].get('app') in selector]
+        pods = pods_new
     pod_objs = [Pod(**pod) for pod in pods]
     return pod_objs
 
@@ -780,3 +792,36 @@ def verify_node_name(pod_obj, node_name):
             f"specified node: {node_name}, actual node: {actual_node}"
         )
         return False
+
+
+def get_pvc_name(pod_obj):
+    """
+    Function to get pvc_name from pod_obj
+
+    Args:
+        pod_obj (str): The pod object
+
+    Returns:
+        pvc_name (str): The pvc_name on a given pod_obj
+    """
+    return pod_obj.get().get(
+        'spec'
+    ).get('volumes')[0].get('persistentVolumeClaim').get('claimName')
+
+
+def get_used_space_on_mount_point(pod_obj):
+    """
+    Get the used space on a mount point
+
+    Args:
+        pod_obj (POD): The pod object
+
+    Returns:
+        int: Percentage represent the used space on the mount point
+
+    """
+    # Verify data's are written to mount-point
+    mount_point = pod_obj.exec_cmd_on_pod(command="df -kh")
+    mount_point = mount_point.split()
+    used_percentage = mount_point[mount_point.index(constants.MOUNT_POINT) - 1]
+    return used_percentage

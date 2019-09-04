@@ -11,11 +11,9 @@ spec:
     elasticsearch:
       nodeCount: 3
       resources:
-        limits:
-          memory: "2Gi"
         requests:
-          cpu: "300m"
-          memory: "16Gi"
+          cpu: "600m"
+          memory: "4Gi"
       storage:
         storageClassName: "gp2"
         size: "200G"

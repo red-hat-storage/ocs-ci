@@ -76,7 +76,6 @@ SUBSCRIPTION = "Subscription"
 NAMESPACES = "Namespaces"
 CLUSTER_LOGGING = "ClusterLogging"
 OPERATOR_GROUP = "OperatorGroup"
-CATALOG_SOURCE_CONFIG = "catsrc"
 
 # Other
 SECRET = "Secret"
@@ -88,6 +87,7 @@ ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
+MOUNT_POINT = '/var/lib/www/html'
 
 DEFAULT_BLOCKPOOL = 'rbd'
 # encoded value of 'admin'
@@ -146,6 +146,10 @@ CSI_PVC_YAML = os.path.join(
 
 CSI_RBD_POD_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pod.yaml"
+)
+
+CSI_RBD_RAW_BLOCK_POD_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "raw_block_pod.yaml"
 )
 
 CSI_CEPHFS_POD_YAML = os.path.join(
@@ -214,9 +218,6 @@ EO_NAMESPACE_YAML = os.path.join(
 EO_OG_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_EO, "eo-og.yaml"
 )
-EO_CSC_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_EO, "eo-csc.yaml"
-)
 EO_RBAC_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_EO, "eo-rbac.yaml"
 )
@@ -230,9 +231,6 @@ CL_NAMESPACE_YAML = os.path.join(
 )
 CL_OG_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_CLO, "cl-og.yaml"
-)
-CL_CSC_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_CLO, "cl-csc.yaml"
 )
 CL_SUB_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_CLO, "cl-sub.yaml"
@@ -252,6 +250,7 @@ FIO_IO_RW_PARAMS_YAML = os.path.join(
 # constants
 RBD_INTERFACE = 'rbd'
 CEPHFS_INTERFACE = 'cephfs'
+RAW_BLOCK_DEVICE = '/dev/block'
 
 # EC2 instance statuses
 INSTANCE_PENDING = 0
@@ -264,3 +263,8 @@ INSTANCE_SHUTTING_DOWN = 32
 NODE_READY = 'Ready'
 NODE_NOT_READY = 'NotReady'
 NODE_READY_SCHEDULING_DISABLED = 'Ready,SchedulingDisabled'
+
+# Alert labels
+ALERT_CLUSTERWARNINGSTATE = 'CephClusterWarningState'
+ALERT_MGRISABSENT = 'CephMgrIsAbsent'
+ALERT_MONQUORUMATRISK = 'CephMonQuorumAtRisk'
