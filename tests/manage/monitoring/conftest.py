@@ -1,4 +1,5 @@
 import logging
+import os
 import pytest
 import threading
 import time
@@ -12,7 +13,11 @@ logger = logging.getLogger(__name__)
 
 
 def measure_operation(
-    operation, minimal_time=None, metadata=None, measure_after=False
+    operation,
+    result_file,
+    minimal_time=None,
+    metadata=None,
+    measure_after=False
 ):
     """
     Get dictionary with keys 'start', 'stop', 'metadata' and 'result' that
@@ -21,6 +26,9 @@ def measure_operation(
 
     Args:
         operation (function): Function to be performed
+        result_file (str): File name that should contain measurement results
+            including logs in json format. If this file exists then it is
+            used for test.
         minimal_time (int): Minimal number of seconds to monitor a system.
             If provided then monitoring of system continues even when
             operation is finshed. If not specified then measurement is finished
@@ -64,40 +72,58 @@ def measure_operation(
             time.sleep(3)
         logger.info('Logging of all prometheus alerts stopped')
 
-    if not measure_after:
-        start_time = time.time()
+    if os.path.isfile(result_file) and os.access(result_file, os.R_OK):
+        logger.info(
+            f"File {result_file} already created."
+            f" Trying to use it for tests..."
+        )
+        results = json.load(result_file)
+        logger.info(
+            f"File {result_file} loaded. Content of file:\n{results}"
+        )
 
-    # init logging thread that checks for Prometheus alerts
-    # while workload is running
-    # based on https://docs.python.org/3/howto/logging-cookbook.html#logging-from-multiple-threads
-    info = {'run': True}
-    alert_list = []
+    else:
+        logger.info(
+            f"File {result_file} not created yet. Starting measurement..."
+        )
+        if not measure_after:
+            start_time = time.time()
 
-    logging_thread = threading.Thread(
-        target=prometheus_log,
-        args=(info, alert_list)
-    )
-    logging_thread.start()
+        # init logging thread that checks for Prometheus alerts
+        # while workload is running
+        # based on https://docs.python.org/3/howto/logging-cookbook.html#logging-from-multiple-threads
+        info = {'run': True}
+        alert_list = []
 
-    result = operation()
-    if measure_after:
-        start_time = time.time()
-    passed_time = time.time() - start_time
-    if minimal_time:
-        additional_time = minimal_time - passed_time
-        if additional_time > 0:
-            time.sleep(additional_time)
-    stop_time = time.time()
-    info['run'] = False
-    logging_thread.join()
-    logger.info(f"Alerts found during measurement: {alert_list}")
-    return {
-        'start': start_time,
-        'stop': stop_time,
-        'result': result,
-        'metadata': metadata,
-        'prometheus_alerts': alert_list
-    }
+        logging_thread = threading.Thread(
+            target=prometheus_log,
+            args=(info, alert_list)
+        )
+        logging_thread.start()
+
+        result = operation()
+        if measure_after:
+            start_time = time.time()
+        passed_time = time.time() - start_time
+        if minimal_time:
+            additional_time = minimal_time - passed_time
+            if additional_time > 0:
+                time.sleep(additional_time)
+        stop_time = time.time()
+        info['run'] = False
+        logging_thread.join()
+        logger.info(f"Alerts found during measurement: {alert_list}")
+        results = {
+            'start': start_time,
+            'stop': stop_time,
+            'result': result,
+            'metadata': metadata,
+            'prometheus_alerts': alert_list
+        }
+        with open(result_file, 'w') as outfile:
+            logger.info(f"Dumping results of measurement into {result_file}")
+            json.dump(results, outfile)
+    return results
 
 
 @pytest.fixture(scope="session")
