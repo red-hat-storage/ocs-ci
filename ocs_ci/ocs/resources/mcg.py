@@ -11,7 +11,7 @@ logger = logging.getLogger(name=__file__)
 
 class MCG(object):
     """
-    Wrapper class for MCG's S3 service
+    Wrapper class for the Multi Cloud Gateway's S3 service
     """
 
     s3_resource, ocp_resource, endpoint, region, access_key_id, access_key = (None,) * 6
