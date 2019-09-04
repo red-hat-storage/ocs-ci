@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import pytest
@@ -77,7 +78,8 @@ def measure_operation(
             f"File {result_file} already created."
             f" Trying to use it for tests..."
         )
-        results = json.load(result_file)
+        with open(result_file) as open_file:
+            results = json.load(open_file)
         logger.info(
             f"File {result_file} loaded. Content of file:\n{results}"
         )
@@ -143,10 +145,11 @@ def measurement_dir(tmp_path):
         )
     else:
         measurement_dir = os.path.join(
-            tmp_path,
+            os.path.dirname(tmp_path),
             'measurement_results'
         )
-        os.mkdir(measurement_dir)
+        if not os.path.exists(measurement_dir):
+            os.mkdir(measurement_dir)
         logger.info(
             f"Generated new measurement dir: {measurement_dir}"
         )
@@ -200,7 +203,7 @@ def workload_stop_ceph_mgr(measurement_dir):
 
 
 @pytest.fixture
-def workload_stop_ceph_mon():
+def workload_stop_ceph_mon(measurement_dir):
     """
     Downscales Ceph Monitor deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
