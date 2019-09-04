@@ -126,39 +126,42 @@ def measure_operation(
     return results
 
 
-@pytest.fixture(scope="session")
-def measurement_directory(tmp_path):
+@pytest.fixture
+def measurement_dir(tmp_path):
     """
     Returns directory path where should be stored all results related
     to measurement. If 'measurement_dir' is provided by config then use it,
     otherwise new directory is generated.
+
+    Returns:
+        str: Path to measurement directory
     """
-    if config.ENV_DATA['measurement_dir']:
-        measurement_dir = config.ENV_DATA['measurement_dir']
+    if config.ENV_DATA.get('measurement_dir'):
+        measurement_dir = config.ENV_DATA.get('measurement_dir')
         logger.info(
-            f"using measurement dir from configuration: {measurement_dir}"
+            f"Using measurement dir from configuration: {measurement_dir}"
         )
     else:
         measurement_dir = os.path.join(
             tmp_path,
-            'measurement_results',
-            result_file
+            'measurement_results'
         )
+        os.mkdir(measurement_dir)
         logger.info(
-            f"generated new measurement dir: {measurement_dir}"
+            f"Generated new measurement dir: {measurement_dir}"
         )
     return measurement_dir
 
 
-@pytest.fixture(scope="session")
-def workload_stop_ceph_mgr():
+@pytest.fixture
+def workload_stop_ceph_mgr(measurement_dir):
     """
     Downscales Ceph Manager deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
 
     Returns:
         dict: Contains information about `start` and `stop` time for stopping
-            Ceph Manager pod.
+            Ceph Manager pod
     """
     oc = ocp.OCP(
         kind=constants.DEPLOYMENT,
@@ -189,13 +192,14 @@ def workload_stop_ceph_mgr():
         time.sleep(run_time)
         return oc.get(mgr)
 
-    measured_op = measure_operation(stop_mgr)
+    test_file = os.path.join(measurement_dir, 'stop_mgr.json')
+    measured_op = measure_operation(stop_mgr, test_file)
     logger.info(f"Upscaling deployment {mgr} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
     return measured_op
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def workload_stop_ceph_mon():
     """
     Downscales Ceph Monitor deployment, measures the time when it was
@@ -246,7 +250,8 @@ def workload_stop_ceph_mon():
         time.sleep(run_time)
         return mons_to_stop
 
-    measured_op = measure_operation(stop_mon)
+    test_file = os.path.join(measurement_dir, 'stop_mon.json')
+    measured_op = measure_operation(stop_mon, test_file)
 
     # get new list of monitors to make sure that new monitors were deployed
     mon_deployments = oc.get(selector=constants.MON_APP_LABEL)['items']
