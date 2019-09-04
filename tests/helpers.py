@@ -1007,13 +1007,13 @@ def delete_deploymentconfig(pod_obj):
     dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
 
 
-def craft_s3_command(noobaa_obj, cmd):
+def craft_s3_command(mcg_obj, cmd):
     """
     Crafts the AWS CLI S3 command including the
     login credentials and command to be ran
 
     Args:
-        noobaa_obj: A NooBaa object containing the NooBaa S3 connection credentials
+        mcg_obj: An MCG object containing the MCG S3 connection credentials
         cmd: The AWSCLI command to run
 
     Returns:
@@ -1021,11 +1021,11 @@ def craft_s3_command(noobaa_obj, cmd):
 
     """
     base_command = (
-        f"sh -c \"AWS_ACCESS_KEY_ID={noobaa_obj.access_key_id} "
-        f"AWS_SECRET_ACCESS_KEY={noobaa_obj.access_key} "
-        f"AWS_DEFAULT_REGION={noobaa_obj.region} "
+        f"sh -c \"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
+        f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
+        f"AWS_DEFAULT_REGION={mcg_obj.region} "
         f"aws s3 "
-        f"--endpoint={noobaa_obj.endpoint} "
+        f"--endpoint={mcg_obj.endpoint} "
     )
     string_wrapper = "\""
 

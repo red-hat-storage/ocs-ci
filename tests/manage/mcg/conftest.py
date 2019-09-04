@@ -3,7 +3,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources import noobaa
+from ocs_ci.ocs.resources import mcg
 from tests import helpers
 from tests.helpers import craft_s3_command, create_unique_resource_name
 
@@ -11,24 +11,24 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture()
-def noobaa_obj():
+def mcg_obj():
     """
-    Returns a NooBaa resource that's connected to the S3 endpoint
+    Returns an MCG resource that's connected to the S3 endpoint
     Returns:
-        NooBaa: A NooBaa resource
+        MCG: An MCG resource
 
     """
-    noobaa_obj = noobaa.NooBaa()
-    return noobaa_obj
+    mcg_obj = mcg.MCG()
+    return mcg_obj
 
 
 @pytest.fixture()
-def uploaded_objects(request, noobaa_obj, awscli_pod):
+def uploaded_objects(request, mcg_obj, awscli_pod):
     """
     Deletes all objects that were created as part of the test
 
     Args:
-        noobaa_obj (NooBaa): A NooBaa object containing the NooBaa S3 connection credentials
+        mcg_obj (MCG): An MCG object containing the MCG S3 connection credentials
         awscli_pod (Pod): A pod running the AWSCLI tools
 
     Returns:
@@ -41,8 +41,8 @@ def uploaded_objects(request, noobaa_obj, awscli_pod):
         for uploaded_filename in uploaded_objects_paths:
             logger.info(f'Deleting object {uploaded_filename}')
             awscli_pod.exec_cmd_on_pod(
-                command=craft_s3_command(noobaa_obj, "rm " + uploaded_filename),
-                secrets=[noobaa_obj.access_key_id, noobaa_obj.access_key, noobaa_obj.endpoint]
+                command=craft_s3_command(mcg_obj, "rm " + uploaded_filename),
+                secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.endpoint]
             )
 
     request.addfinalizer(object_cleanup)
@@ -50,13 +50,13 @@ def uploaded_objects(request, noobaa_obj, awscli_pod):
 
 
 @pytest.fixture()
-def bucket_factory(request, noobaa_obj):
+def bucket_factory(request, mcg_obj):
     """
     Create a bucket factory. Calling this fixture creates a new bucket(s).
     For a custom amount, provide the 'amount' parameter.
 
     Args:
-        noobaa_obj (NooBaa): A NooBaa object containing the NooBaa S3 connection credentials
+        mcg_obj (MCG): An MCG object containing the MCG S3 connection credentials
     """
     created_bucket_names = []
 
@@ -77,21 +77,21 @@ def bucket_factory(request, noobaa_obj):
             )
             logger.info(f'Creating bucket: {bucket_name}')
             created_bucket_names.append(
-                noobaa_obj.s3_create_bucket(bucketname=bucket_name)
+                mcg_obj.s3_create_bucket(bucketname=bucket_name)
             )
         return created_bucket_names
 
     def bucket_cleanup():
-        all_existing_buckets = noobaa_obj.s3_list_all_bucket_names()
+        all_existing_buckets = mcg_obj.s3_list_all_bucket_names()
         for bucket in created_bucket_names:
             if bucket.name in all_existing_buckets:
                 logger.info(f'Deleting bucket {bucket.name}')
                 bucket.object_versions.delete()
-                noobaa_obj.s3_delete_bucket(bucket)
+                mcg_obj.s3_delete_bucket(bucket)
                 logger.info(
                     f"Verifying whether bucket: {bucket.name} exists after deletion"
                 )
-                assert not noobaa_obj.s3_verify_bucket_exists(bucket)
+                assert not mcg_obj.s3_verify_bucket_exists(bucket)
     request.addfinalizer(bucket_cleanup)
 
     return _create_buckets
@@ -117,7 +117,7 @@ def created_pods(request):
 
 
 @pytest.fixture()
-def awscli_pod(noobaa_obj, created_pods):
+def awscli_pod(mcg_obj, created_pods):
     """
     Creates a new AWSCLI pod for relaying commands
 
