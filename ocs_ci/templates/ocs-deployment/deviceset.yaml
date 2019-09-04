@@ -12,4 +12,4 @@ dataPVCTemplate:
     resources:
       requests:
         storage: 1Ti
-
+portable: true
