@@ -9,6 +9,7 @@ from tests import helpers
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.ocs import constants
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
+from ocs_ci.utility import deployment_openshift_logging as obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.framework.testlib import E2ETest, tier1
 from ocs_ci.utility.retry import retry
@@ -63,7 +64,7 @@ def test_fixture(request):
     assert ocp_logging_obj.check_health_of_clusterlogging()
 
 
-def teardown(cbp_obj, sc_obj):
+def teardown(sc_obj, cbp_obj):
     """
     The teardown will uninstall the openshift-logging from the cluster
     """
