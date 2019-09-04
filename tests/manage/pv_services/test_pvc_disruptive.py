@@ -110,7 +110,7 @@ class TestPVCDisruption(ManageTest):
     """
     Base class for PVC related disruption tests
     """
-    @pytest.fixture()
+    @pytest.fixture(autouse=True)
     def setup(self, interface, storageclass_factory, project_factory):
         """
         Create StorageClass and Project for the test
@@ -119,9 +119,8 @@ class TestPVCDisruption(ManageTest):
             OCS: An OCS instance of the storage class
             OCP: An OCP instance of project
         """
-        sc_obj = storageclass_factory(interface=interface)
-        proj_obj = project_factory()
-        return sc_obj, proj_obj
+        self.sc_obj = storageclass_factory(interface=interface)
+        self.proj_obj = project_factory()
 
     def verify_resource_creation(self, func_to_use, previous_num, namespace):
         """
@@ -175,7 +174,7 @@ class TestPVCDisruption(ManageTest):
 
     def test_pvc_disruptive(
         self, interface, operation_to_disrupt, resource_to_delete,
-        setup, multi_pvc_factory, pod_factory
+        multi_pvc_factory, pod_factory
     ):
         """
         Base function for PVC disruptive tests.
@@ -183,8 +182,7 @@ class TestPVCDisruption(ManageTest):
         'operation_to_disrupt' is progressing.
         """
         num_of_pvc = 6
-        storageclass, proj_obj = setup
-        namespace = proj_obj.namespace
+        namespace = self.proj_obj.namespace
 
         # Fetch the number of Pods and PVCs
         initial_num_of_pods = len(pod.get_all_pods(namespace=namespace))
@@ -203,7 +201,7 @@ class TestPVCDisruption(ManageTest):
         # Start creation of PVCs
         bulk_pvc_create = executor.submit(
             multi_pvc_factory, interface=interface,
-            project=proj_obj, storageclass=storageclass, size=5,
+            project=self.proj_obj, storageclass=self.sc_obj, size=5,
             access_modes=access_modes,
             access_modes_selection='distribute_random',
             status=constants.STATUS_BOUND, num_of_pvc=num_of_pvc,
@@ -289,12 +287,9 @@ class TestPVCDisruption(ManageTest):
         logging.info("Fetching FIO results.")
         for pod_obj in pod_objs:
             fio_result = pod_obj.get_fio_results()
-            logging.info(f"IOPs after FIO on pod {pod_obj.name}:")
-            logging.info(
-                f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
-            )
-            logging.info(
-                f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
+            err_count = fio_result.get('jobs')[0].get('error')
+            assert err_count == 0, (
+                f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
             )
         logging.info("Verified FIO result on pods.")
 
@@ -328,11 +323,8 @@ class TestPVCDisruption(ManageTest):
         logging.info("Fetching FIO results from new pods")
         for pod_obj in pod_objs:
             fio_result = pod_obj.get_fio_results()
-            logging.info(f"IOPs after FIO on pod {pod_obj.name}:")
-            logging.info(
-                f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
-            )
-            logging.info(
-                f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
+            err_count = fio_result.get('jobs')[0].get('error')
+            assert err_count == 0, (
+                f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
             )
         logging.info("Verified FIO result on new pods.")
