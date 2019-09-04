@@ -8,7 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import tier1
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.skipif(condition=True, reason="NooBaa is not deployed")
+@pytest.mark.skipif(condition=True, reason="MCG is not deployed")
 @pytest.mark.filterwarnings(
     'ignore::urllib3.exceptions.InsecureRequestWarning'
 )
@@ -23,12 +23,12 @@ class TestBucketDeletion:
         reason="Tests are not running on AWS deployed cluster"
     )
     @pytest.mark.polarion_id("OCS-1299")
-    def test_s3_bucket_delete(self, noobaa_obj, bucket_factory):
+    def test_s3_bucket_delete(self, mcg_obj, bucket_factory):
         """
         Test deletion of bucket using the S3 SDK
         """
 
         for bucket in bucket_factory(3):
             logger.info(f"Deleting bucket: {bucket.name}")
-            noobaa_obj.s3_delete_bucket(bucket)
-            assert noobaa_obj.s3_verify_bucket_exists(bucket) is False
+            mcg_obj.s3_delete_bucket(bucket)
+            assert mcg_obj.s3_verify_bucket_exists(bucket) is False
