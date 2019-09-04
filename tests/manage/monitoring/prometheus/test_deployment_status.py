@@ -29,7 +29,8 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
         label=target_label,
         msg=target_msg,
         alerts=alerts,
-        states=states)
+        states=states,
+        severity='critical')
     api.check_alert_cleared(
         label=target_label,
         measure_end_time=workload_stop_ceph_mgr.get('stop')
