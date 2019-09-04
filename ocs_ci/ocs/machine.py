@@ -17,7 +17,7 @@ def get_machine_objs(machine_names=None):
         If None, will return all cluster machines
 
     Returns:
-        list: Cluster machine OCP objects
+        list: Cluster machine OCS objects
     """
     machines_obj = OCP(
         kind='Machine', namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
@@ -78,7 +78,7 @@ def get_machine_type(machine_name):
     Returns:
         str: Type of the machine
     """
-    machines_obj = get_machine_objs()
+    machines_obj = get_machine_objs([machine_name])
     for machine in machines_obj:
         if machine.get().get('metadata').get('name') == machine_name:
             machine_type = machine.get().get('metadata').get(
@@ -100,10 +100,8 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
     Returns:
         bool: True in case of success, False otherwise
     """
-    if get_machine_type(machine_name) == constants.MASTER_MACHINE:
-        machines = get_machines(machine_type=constants.MASTER_MACHINE)
-    else:
-        machines = get_machines(machine_type=constants.WORKER_MACHINE)
+    machine_type = get_machine_type(machine_name)
+    machines = get_machines(machine_type=machine_type)
     delete_machine(machine_name)
     for machine in machines:
         if re.match(machine.name[:-6], machine_name):
