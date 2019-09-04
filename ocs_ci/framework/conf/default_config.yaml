@@ -66,3 +66,6 @@ ENV_DATA:
   # but only once when move to new version like v15.
   ceph_image: 'ceph/ceph:v14.2.2-20190826'
   rook_image: 'rook/ceph:master'
+  # uncomment to use custom directory for storing measurement data related to
+  # monitoring tests, otherwise generate temporary directory for each test run
+  # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
