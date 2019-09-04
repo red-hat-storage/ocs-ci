@@ -127,6 +127,30 @@ def measure_operation(
 
 
 @pytest.fixture(scope="session")
+def measurement_directory(tmp_path):
+    """
+    Returns directory path where should be stored all results related
+    to measurement. If 'measurement_dir' is provided by config then use it,
+    otherwise new directory is generated.
+    """
+    if config.ENV_DATA['measurement_dir']:
+        measurement_dir = config.ENV_DATA['measurement_dir']
+        logger.info(
+            f"using measurement dir from configuration: {measurement_dir}"
+        )
+    else:
+        measurement_dir = os.path.join(
+            tmp_path,
+            'measurement_results',
+            result_file
+        )
+        logger.info(
+            f"generated new measurement dir: {measurement_dir}"
+        )
+    return measurement_dir
+
+
+@pytest.fixture(scope="session")
 def workload_stop_ceph_mgr():
     """
     Downscales Ceph Manager deployment, measures the time when it was
