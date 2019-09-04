@@ -5,13 +5,14 @@ This file contains the testcases for openshift-logging
 import pytest
 import logging
 
-from tests import helpers
+from tests import helpers, disruption_helpers
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility import deployment_openshift_logging as obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.framework.testlib import E2ETest, tier1
 from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.resources.pvc import get_all_pvcs
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,6 @@ def test_fixture(request):
     # Check the health of the cluster-logging
     assert obj.check_health_of_clusterlogging()
 
-
 def teardown(sc_obj, cbp_obj):
     """
     The teardown will uninstall the openshift-logging from the cluster
@@ -83,21 +83,17 @@ class TestLogging_in_EFK_stack(E2ETest):
     """
     The class contains the testcases related to openshift-logging
     """
-    @pytest.mark.polarion_id("OCS-657")
-    @tier1
-    @retry(ModuleNotFoundError, 6, 300, 3)
-    def test_create_new_project_to_verify_logging(self, pvc_factory):
+    @pytest.fixture()
+    def create_pvc_and_deploymentconfig_pod(self, request, pvc_factory):
         """
-        This function creates new project to verify logging in EFK stack
-        1. Creates new project
-        2. Creates PVC
-        3. Creates Deployment pod in the new_project and run-io on the app pod
-        4. Logs into the EFK stack and check for new_project
-        5. And checks for the file_count in the new_project in EFK stack
+
         """
+        def finalizer():
+            helpers.delete_deploymentconfig(pod_obj)
+
+        request.addfinalizer(finalizer)
 
         # Create pvc
-
         pvc_obj = pvc_factory()
 
         # Create service_account to get privilege for deployment pods
@@ -113,9 +109,26 @@ class TestLogging_in_EFK_stack(E2ETest):
             dc_deployment=True
         )
         helpers.wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
+        return pod_obj, pvc_obj
 
+
+    @pytest.mark.polarion_id("OCS-657")
+    @tier1
+    @retry(ModuleNotFoundError, 6, 300, 3)
+    def test_create_new_project_to_verify_logging(self, create_pvc_and_deploymentconfig_pod):
+        """
+        This function creates new project to verify logging in EFK stack
+        1. Creates new project
+        2. Creates PVC
+        3. Creates Deployment pod in the new_project and run-io on the app pod
+        4. Logs into the EFK stack and check for new_project
+        5. And checks for the file_count in the new_project in EFK stack
+        """
+
+
+        pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
         # Running IO on the app_pod
-        pod_obj.run_io(storage_type='block', size=8000)
+        pod_obj.run_io(storage_type='fs', size=8000)
 
         # Searching for new_project in EFK stack
         pod_list = get_all_pods(namespace='openshift-logging')
@@ -134,4 +147,4 @@ class TestLogging_in_EFK_stack(E2ETest):
             logger.info(f"The file_count in the project is {file_count}")
         else:
             raise ModuleNotFoundError
-        helpers.delete_deploymentconfig(pod_obj)
+
