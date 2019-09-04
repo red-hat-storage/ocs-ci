@@ -113,10 +113,11 @@ class TestPVCDisruption(ManageTest):
     @pytest.fixture()
     def setup(self, interface, storageclass_factory, project_factory):
         """
-        Create StorageClass for the test
+        Create StorageClass and Project for the test
 
         Returns:
             OCS: An OCS instance of the storage class
+            OCP: An OCP instance of project
         """
         sc_obj = storageclass_factory(interface=interface)
         proj_obj = project_factory()
