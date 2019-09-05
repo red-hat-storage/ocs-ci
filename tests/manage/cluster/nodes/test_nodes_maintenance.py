@@ -97,7 +97,7 @@ class TestNodesMaintenance(ManageTest):
         self, ec2_instances, aws_obj, pvc_factory, pod_factory, node_type
     ):
         """
-        OCS-1292/OCs-1293:
+        OCS-1292/OCS-1293:
         - Maintenance (mark as unscheduable and drain) 1 worker/master node
         - Restart the node's ec2 instance
         - Mark the node as scheduable
