@@ -50,7 +50,8 @@ log = logging.getLogger(__name__)
 )
 class TestResourceDeletionDuringCreationOperations(ManageTest):
     """
-    Test class
+    This class consists of tests which verifies resource deletion during
+    multiple operations - pods creation, PVC creation and IO
     """
     num_of_pvcs = 10
     pvc_size = 5
@@ -242,16 +243,16 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         log.info("Fetching IO results from IO pods.")
         for pod_obj in io_pods:
             fio_result = pod_obj.get_fio_results()
+            err_count = fio_result.get('jobs')[0].get('error')
+            assert err_count == 0, (
+                f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
+            )
             log.info(f"IOPs after FIO on pod {pod_obj.name}:")
             log.info(
                 f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
             )
             log.info(
                 f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
-            )
-            err_count = fio_result.get('jobs')[0].get('error')
-            assert err_count == 0, (
-                f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
             )
         log.info("Verified IO result on IO pods.")
 
@@ -324,15 +325,15 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         log.info("Fetching IO results from newly created pods")
         for pod_obj in pod_objs_re:
             fio_result = pod_obj.get_fio_results()
+            err_count = fio_result.get('jobs')[0].get('error')
+            assert err_count == 0, (
+                f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
+            )
             log.info(f"IOPs after FIO on pod {pod_obj.name}:")
             log.info(
                 f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
             )
             log.info(
                 f"Write: {fio_result.get('jobs')[0].get('write').get('iops')}"
-            )
-            err_count = fio_result.get('jobs')[0].get('error')
-            assert err_count == 0, (
-                f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
             )
         log.info("Verified IO result on newly created pods.")
