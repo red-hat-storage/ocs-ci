@@ -28,3 +28,6 @@ CEPHFS_PROVISIONER = f'{ROOK_CLUSTER_NAMESPACE}.cephfs.csi.ceph.com'
 TEMP_YAML = os.path.join(constants.TEMPLATE_DIR, "temp.yaml")
 
 PROMETHEUS_ROUTE = 'prometheus-k8s'
+
+# Default device size in Gigs
+DEVICE_SIZE = 100

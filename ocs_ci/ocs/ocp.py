@@ -106,9 +106,11 @@ class OCP(object):
         """
         command = f"get {self.kind} {resource_name}"
         if all_namespaces and not self.namespace:
-            command += "-A"
+            command += " -A"
+        elif self.namespace:
+            command += f" -n {self.namespace}"
         if selector is not None:
-            command += f"--selector={selector}"
+            command += f" --selector={selector}"
         if out_yaml_format:
             command += " -o yaml"
         return self.exec_oc_cmd(command)

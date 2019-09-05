@@ -1,9 +1,11 @@
-import os
-
-import yaml
+import logging
 from jinja2 import Environment, FileSystemLoader, Template
+import yaml
 
 from ocs_ci.ocs.constants import TEMPLATE_DIR
+from ocs_ci.utility.utils import get_url_content
+
+logger = logging.getLogger(__name__)
 
 
 def load_config_data(data_path):
@@ -136,10 +138,10 @@ def dump_to_temp_yaml(src_file, dst_file, **kwargs):
 
 def load_yaml_to_dict(file, multi_document=False):
     """
-    Load yaml file to the dictionary
+    Load yaml file (local or from URL) and convert it to dictionary
 
     Args:
-        file (str): Path to yaml file to load
+        file (str): Path to the file or URL address
         multi_document (bool): True if yaml contains more documents
 
     Returns:
@@ -149,11 +151,12 @@ def load_yaml_to_dict(file, multi_document=False):
             iteration returns dict from one loaded document from a file.
 
     """
-    template = os.path.join(file)
-    if not multi_document:
-        return yaml.safe_load(open(template, 'r'))
+    loader = yaml.safe_load_all if multi_document else yaml.safe_load
+    if file.startswith('http'):
+        return loader(get_url_content(file))
     else:
-        return yaml.safe_load_all(open(template, 'r'))
+        with open(file, 'r') as fs:
+            return loader(fs)
 
 
 def get_n_document_from_yaml(yaml_generator, index=0):
@@ -179,5 +182,8 @@ def get_n_document_from_yaml(yaml_generator, index=0):
 
 
 def dump_dict_to_temp_yaml(data, temp_yaml):
+    yaml_data = yaml.dump(data)
     with open(temp_yaml, 'w') as yaml_file:
-        return yaml.dump(data, yaml_file)
+        yaml_file.write(yaml_data)
+    logger.info(yaml_data)
+    return yaml_data
