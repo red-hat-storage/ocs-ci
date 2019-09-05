@@ -46,6 +46,7 @@ DEPLOYMENT:
   # This is described as a WA for minimal configuration 3/3 worker/master
   # nodes. See: https://github.com/openshift/ocs-operator
   ocs_operator_nodes_to_tain: 0
+  ocs_operator_deployment: True
 
 # Section for reporting configuration
 REPORTING:

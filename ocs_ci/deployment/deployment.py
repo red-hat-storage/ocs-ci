@@ -33,7 +33,7 @@ class Deployment(object):
         self.ocp_deployment_type = config.ENV_DATA['deployment_type']
         self.cluster_path = config.ENV_DATA['cluster_path']
         self.ocs_operator_deployment = config.DEPLOYMENT.get(
-            'ocs_operator_deployment', False
+            'ocs_operator_deployment', True
         )
         self.ocs_operator_version = config.DEPLOYMENT.get('ocs_csv_version')
         self.ocs_operator_storage_cluster_cr = config.DEPLOYMENT.get(
