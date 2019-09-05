@@ -84,8 +84,10 @@ IGNORE_SC_GP2 = "gp2"
 IGNORE_SC_FLEX = "rook-ceph-block"
 TEST_FILES_BUCKET = "ocsci-test-files"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
+OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
+MASTER_MACHINE = "master"
+WORKER_MACHINE = "worker"
 MOUNT_POINT = '/var/lib/www/html'
-
 
 DEFAULT_BLOCKPOOL = 'rbd'
 # encoded value of 'admin'
