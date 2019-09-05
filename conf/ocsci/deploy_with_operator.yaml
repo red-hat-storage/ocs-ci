@@ -1,6 +1,0 @@
----
-# This is the config for deployment via OCS-operator. Once stabilized this
-# should be moved to ocs_ci/framework/conf/default_config.yaml and enabled
-# by default.
-DEPLOYMENT:
-  ocs_operator_deployment: True
