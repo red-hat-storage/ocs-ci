@@ -132,3 +132,25 @@ def check_pvcdata_collected_on_prometheus(pvc_name):
         )
     logger.info(f"Created pvc {pvc_name} data {pvc_list} is collected on prometheus pod")
     return True
+
+
+def check_ceph_health_status_metrics_on_prometheus(mgr_pod):
+    """
+    Check ceph health status metric is collected on prometheus pod
+
+    Args:
+        mgr_pod (str): Name of the mgr pod
+
+    Returns:
+        (bool): True on success, false otherwise
+
+    """
+    prometheus = ocs_ci.utility.prometheus.PrometheusAPI()
+    response = prometheus.get(
+        'query?query=ceph_health_status'
+    )
+    ceph_health_metric = json.loads(response.content.decode('utf-8'))
+    return bool(
+        [mgr_pod for health_status in ceph_health_metric.get('data').get(
+            'result') if mgr_pod == health_status.get('metric').get('pod')]
+    )
