@@ -11,8 +11,6 @@ import traceback
 import shutil
 from subprocess import Popen, PIPE
 
-import pytest
-
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults, constants
@@ -198,21 +196,12 @@ class AWSUPI(AWSBase):
         def __init__(self):
             super(AWSUPI.OCPDeployment, self).__init__()
             self.upi_repo_path = os.path.join(
-                constants.EXTERNAL_DIR, 'openshift-misc',
+                self.cluster_path, 'openshift-misc',
             )
-            self.upi_unique_path = os.path.join(
-                constants.EXTERNAL_DIR,
-                f"aws_upi_deploy_{config.RUN['run_id']}"
-            )
-            try:
-                os.mkdir(self.upi_unique_path)
-            except OSError:
-                logger.error("Already a cluster exists with same runid")
-                pytest.fail("Cluster with same runid exists")
 
             self.upi_script_path = os.path.join(
-                self.upi_unique_path,
-                f'openshift-misc/v3-launch-templates/functionality-testing'
+                self.upi_repo_path,
+                f'v3-launch-templates/functionality-testing'
                 f'/aos-4_2/hosts/'
             )
 
@@ -245,17 +234,18 @@ class AWSUPI(AWSBase):
                 constants.OCP_QE_MISC_REPO, self.upi_repo_path
             )
 
-            # copy openshift-misc cloned repos to this run dir
-            shutil.copytree(
-                self.upi_repo_path,
-                os.path.join(self.upi_unique_path, "openshift-misc")
+            # create install-dir inside upi_script_path
+            relative_cluster_path = "../../../../../../"
+            os.symlink(
+                os.path.join(
+                    relative_cluster_path,
+                    os.path.basename(self.cluster_path.rstrip('/'))
+                ),
+                os.path.join(self.upi_script_path, "install-dir")
             )
 
-            # create install-dir inside upi_script_path
-            os.mkdir(os.path.join(self.upi_script_path, "install-dir"))
-
             # NOT A CLEAN APPROACH: copy openshift-install and oc binary to
-            # script path because upi script expectes it to be present in
+            # script path because upi script expects it to be present in
             # script dir
             bindir = os.path.join(os.getcwd(), 'bin')
             shutil.copy2(
@@ -264,20 +254,6 @@ class AWSUPI(AWSBase):
             )
             shutil.copy2(
                 os.path.join(bindir, 'oc'), self.upi_script_path
-            )
-            # copy install-config.yaml from cluster_path to
-            # upi_script_path/install-dir
-            shutil.copy2(
-                os.path.join(self.cluster_path, "install-config.yaml"),
-                os.path.join(self.upi_script_path, "install-dir/")
-            )
-            # Remove current cluster_path dir and make it as symlink to
-            # upi_script_path/install-dir/ so that further operations
-            # operates transparently
-            shutil.rmtree(self.cluster_path, ignore_errors=True)
-            os.symlink(
-                os.path.join(self.upi_script_path, "install-dir/"),
-                self.cluster_path.rstrip('/'),
             )
 
         def deploy(self, log_cli_level='DEBUG'):
@@ -311,8 +287,10 @@ class AWSUPI(AWSBase):
                 fd.write(data)
 
             sys.path.append(self.upi_script_path)
+            full_path = os.getcwd()
             proc = Popen(
-                [f'{self.upi_script_path}/upi_on_aws-install.sh'],
+                [f'{full_path}/'
+                 f'upi_on_aws-install.sh'],
                 stdout=PIPE, stderr=PIPE,
             )
             stdout, stderr = proc.communicate()
