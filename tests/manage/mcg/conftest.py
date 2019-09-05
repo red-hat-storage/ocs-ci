@@ -60,38 +60,39 @@ def bucket_factory(request, mcg_obj):
     """
     created_bucket_names = []
 
-    def _create_buckets(amount=1):
+    def _create_buckets(amount=1, interface='S3'):
         """
         Creates and deletes all buckets that were created as part of the test
 
         Args:
             amount (int): The amount of buckets to create
+            interface (str): The interface to use for creation of buckets. S3 | OC | CLI
 
         Returns:
             list: A list of s3.Bucket objects, containing all the created buckets
 
         """
         for i in range(amount):
-            bucket_name = create_unique_resource_name(
-                resource_description='bucket', resource_type='s3'
+            bucket_name = interface.lower() + '-' + create_unique_resource_name(
+                resource_description='bucket', resource_type=interface
             )
             logger.info(f'Creating bucket: {bucket_name}')
+
             created_bucket_names.append(
-                mcg_obj.s3_create_bucket(bucketname=bucket_name)
-            )
+                getattr(mcg_obj, bucket_name.split('-')[0])(bucketname=bucket_name))
+
         return created_bucket_names
 
     def bucket_cleanup():
         all_existing_buckets = mcg_obj.s3_list_all_bucket_names()
-        for bucket in created_bucket_names:
-            if bucket.name in all_existing_buckets:
-                logger.info(f'Deleting bucket {bucket.name}')
-                bucket.object_versions.delete()
-                mcg_obj.s3_delete_bucket(bucket)
-                logger.info(
-                    f"Verifying whether bucket: {bucket.name} exists after deletion"
-                )
-                assert not mcg_obj.s3_verify_bucket_exists(bucket)
+        for bucket_name in set(created_bucket_names).intersection(all_existing_buckets):
+            logger.info(f'Cleanin up bucket {bucket_name}')
+            getattr(mcg_obj, f'{bucket_name.split("-")[0]}_delete_bucket')(bucketname=bucket_name)
+            logger.info(
+                f"Verifying whether bucket: {bucket_name} exists after deletion"
+            )
+            assert not mcg_obj.s3_verify_bucket_exists(bucket_name)
+
     request.addfinalizer(bucket_cleanup)
 
     return _create_buckets

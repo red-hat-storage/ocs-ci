@@ -5,6 +5,7 @@ import boto3
 from botocore.client import ClientError
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility.utils import run_mcg_cmd
 
 logger = logging.getLogger(name=__file__)
 
@@ -52,7 +53,7 @@ class MCG(object):
         """
         Args:
             bucketname: Name of the bucket to be created
-            region: Name of the region for the bucket to be created on
+            region: Name of the region for the bucket to be created on
 
         Returns:
             s3.Bucket object
@@ -63,15 +64,59 @@ class MCG(object):
             CreateBucketConfiguration={
                 'LocationConstraint': region
             }
-        )
+        ).name
+    s3_create_obc = s3_create_bucket
 
-    def s3_delete_bucket(self, bucket):
+    def oc_create_obc(self, bucketname):
         """
         Args:
-            bucket: The bucket object to be deleted
+            bucketname: The bucket name to be created
 
         """
-        bucket.delete()
+        # TODO: Implement
+        raise NotImplementedError()
+
+    def cli_create_obc(self, bucketname):
+        """
+        Args:
+            bucketname: Name of bucket to be created
+
+        """
+        assert 'Created' in run_mcg_cmd(f'obc create --exact {bucketname}')
+
+    def s3_delete_bucket(self, bucketname):
+        """
+        Args:
+            bucketname: Name of bucket to be deleted
+
+        """
+        logger.info(f"Deleting bucket: {bucketname}")
+        self.s3_resource.Bucket(bucketname).object_versions.delete()
+        self.s3_resource.Bucket(bucketname).delete()
+    s3_delete_obc = s3_delete_bucket
+
+    def oc_delete_obc(self, bucketname):
+        """
+        Args:
+            bucketname:
+
+        Returns:
+
+        """
+        # TODO: Implement
+        logger.info(f"Deleting bucket: {bucketname}")
+        raise NotImplementedError()
+
+    def cli_delete_obc(self, bucketname):
+        """
+        Args:
+            bucketname: Name of bucket to be deleted
+
+        Returns:
+
+        """
+        logger.info(f"Deleting bucket: {bucketname}")
+        assert 'Deleted' in run_mcg_cmd(f'obc delete {bucketname}')
 
     def s3_list_all_bucket_names(self):
         """
@@ -96,38 +141,20 @@ class MCG(object):
         """
         return [bucket for bucket in self.s3_resource.buckets.all()]
 
-    def s3_verify_bucket_exists(self, bucket):
+    def s3_verify_bucket_exists(self, bucketname):
         """
         Verifies whether the Bucket exists
         Args:
-            bucket(S3 object) : The bucket object to be verified
+            bucketname(S3 object) : The bucket object to be verified
 
         Returns:
               bool: True if bucket exists, False otherwise
 
         """
         try:
-            self.s3_resource.meta.client.head_bucket(Bucket=bucket.name)
-            logger.info(f"{bucket.name} exists")
+            self.s3_resource.meta.client.head_bucket(Bucket=bucketname)
+            logger.info(f"{bucketname} exists")
             return True
         except ClientError:
-            logger.info(f"{bucket.name} does not exist")
+            logger.info(f"{bucketname} does not exist")
             return False
-
-    def oc_create_bucket(self, bucketname):
-        """
-        Todo: Design and implement
-        """
-        raise NotImplementedError()
-
-    def oc_delete_bucket(self, bucketname):
-        """
-        Todo: Design and implement
-        """
-        raise NotImplementedError()
-
-    def oc_list_all_buckets(self):
-        """
-        Todo: Design and implement
-        """
-        raise NotImplementedError()

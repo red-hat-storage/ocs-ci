@@ -8,6 +8,8 @@ import string
 import subprocess
 import time
 import traceback
+from shutil import which
+
 import requests
 import yaml
 import re
@@ -408,6 +410,20 @@ def run_cmd(cmd, secrets=None, **kwargs):
             f"\nError is {mask_secrets(r.stderr.decode(), secrets)}"
         )
     return mask_secrets(r.stdout.decode(), secrets)
+
+
+def run_mcg_cmd(cmd):
+    """
+    Invokes `run_cmd` with a noobaa prefix
+
+    Args:
+        cmd: The MCG command to be run
+
+    Returns:
+        str: Stdout of the command
+
+    """
+    return run_cmd('noobaa ' + cmd)
 
 
 def download_file(url, filename):
@@ -1188,3 +1204,7 @@ def get_rook_repo(branch='master', to_checkout=None):
     run_cmd(f"git reset --hard origin/{branch}", cwd=cwd)
     if to_checkout:
         run_cmd(f"git checkout {to_checkout}", cwd=cwd)
+
+
+def check_if_executable_in_path(exec_name):
+    return which(exec_name) is not None
