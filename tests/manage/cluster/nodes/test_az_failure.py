@@ -39,6 +39,7 @@ class TestAvailabilityZones(ManageTest):
             instances (dict): cluster ec2 instances objects
 
         """
+        sanity_helpers.health_check(nodes=list(instances.values()))
         # Select instances in randomly chosen availability zone:
         instances_in_az = self.random_availability_zone_selector(aws_obj, instances)
         logger.info(f"AZ selected, Instances: {instances_in_az} to be blocked")
@@ -51,7 +52,7 @@ class TestAvailabilityZones(ManageTest):
         security_group_id = self.block_aws_availability_zone(aws_obj, instances_in_az)
 
         # Check cluster's health, need to be unhealthy at that point
-        sanity_helpers.health_check(nodes=list(instances.values()))
+        assert self.check_cluster_health(instances) == 0
 
         # TODO add test plan stages
 
@@ -60,7 +61,7 @@ class TestAvailabilityZones(ManageTest):
         logger.info(f"Access restores")
 
         # Check cluster's health, need to be healthy at that point
-        sanity_helpers.health_check(nodes=list(instances.values()))
+        assert self.check_cluster_health(instances) == 1
 
     def random_availability_zone_selector(self, aws_obj, instances):
         """
@@ -108,3 +109,11 @@ class TestAvailabilityZones(ManageTest):
         aws_obj.block_instances_access(security_group_id, instances_in_az)
 
         return security_group_id
+
+    def check_cluster_health(self, instances):
+        try:
+            sanity_helpers.health_check(nodes=list(instances.values()))
+            return True
+        except Exception as e:
+            print(e)
+            return False
