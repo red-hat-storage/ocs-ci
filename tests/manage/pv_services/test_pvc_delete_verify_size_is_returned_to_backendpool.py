@@ -149,5 +149,5 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         logger.info(f"Used after deleting PVC {used_after_deleting_pvc}")
         assert used_after_deleting_pvc < used_after_creating_pvc
         assert (abs(
-            used_after_deleting_pvc - used_before_creating_pvc) < 0.2
+            used_after_deleting_pvc - used_before_creating_pvc) < 0.5
         )
