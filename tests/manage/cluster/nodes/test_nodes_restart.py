@@ -141,7 +141,7 @@ class TestNodesRestart(ManageTest):
             f"Waiting for pod {provisioner_pod_name} to reach status Terminating"
         )
         assert provisioner_pod.ocp.wait_for_resource(
-            timeout=300, resource_name=provisioner_pod.name,
+            timeout=600, resource_name=provisioner_pod.name,
             condition=constants.STATUS_TERMINATING
         ), f"{interface} provisioner pod failed to reach status Terminating"
         logger.info(

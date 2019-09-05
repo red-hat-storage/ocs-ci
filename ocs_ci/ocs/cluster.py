@@ -118,7 +118,12 @@ class CephCluster(object):
         Get accurate info on current state of pods
         """
         self._ceph_pods = pod.get_all_pods(self._namespace)
-        self.mons = pod.get_mon_pods(self.mon_selector, self.namespace)
+        # TODO: Workaround for BZ1748325:
+        mons = pod.get_mon_pods(self.mon_selector, self.namespace)
+        for mon in mons:
+            if mon.ocp.get_resource_status(mon.name) == constant.STATUS_RUNNING:
+                self.mons.append(mon)
+        # TODO: End of workaround for BZ1748325
         self.mdss = pod.get_mds_pods(self.mds_selector, self.namespace)
         self.mgrs = pod.get_mgr_pods(self.mgr_selector, self.namespace)
         self.osds = pod.get_osd_pods(self.osd_selector, self.namespace)
