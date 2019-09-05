@@ -201,8 +201,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
             project=proj_obj, storageclass=storageclass, size=self.pvc_size,
             access_modes=access_modes,
             access_modes_selection='distribute_random',
-            status=constants.STATUS_BOUND, num_of_pvc=num_of_new_pvcs,
-            wait_each=False
+            status="", num_of_pvc=num_of_new_pvcs, wait_each=False
         )
 
         # Start IO on each pod

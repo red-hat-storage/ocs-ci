@@ -769,7 +769,7 @@ def multi_pvc_factory(
             )
             pvc_list.append(pvc_obj)
 
-        if not wait_each:
+        if status and not wait_each:
             for pvc_obj in pvc_list:
                 helpers.wait_for_resource_state(pvc_obj, status)
         return pvc_list
