@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import node
-from ocs_ci.framework.testlib import tier4, ignore_leftovers, ManageTest, bugzilla
+from ocs_ci.framework.testlib import tier4, ignore_leftovers, ManageTest
 from ocs_ci.framework import config
 from ocs_ci.utility import aws
 from tests.sanity_helpers import Sanity
