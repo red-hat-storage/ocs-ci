@@ -64,7 +64,7 @@ def test_fixture(request):
     assert ocp_logging_obj.check_health_of_clusterlogging()
 
 
-def teardown(sc_obj, cbp_obj):
+def teardown(cbp_obj, sc_obj):
     """
     The teardown will uninstall the openshift-logging from the cluster
     """
