@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 )
 class TestRwoUsingMultiplePods(ManageTest):
     """
-    This test class consists of tests to verify RWO reclaim policy by using
+    This test class consists of tests to verify RWO access mode by using
     RWO PVC in multiple pods
     """
     @pytest.fixture(autouse=True)
@@ -54,7 +54,7 @@ class TestRwoUsingMultiplePods(ManageTest):
 
     def test_verify_rwo_using_multiple_pods(self, interface, pod_factory):
         """
-        This test case verifies RWO reclaim policy by trying to mount same RWO
+        This test case verifies RWO access mode by trying to mount same RWO
         PVC on different pods, delete running pods one by one and ensure that
         only one pod is running at a time
         """
