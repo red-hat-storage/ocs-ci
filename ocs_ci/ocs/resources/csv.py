@@ -4,7 +4,7 @@ CSV related functionalities
 import logging
 
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceInUnexpectedState
 from ocs_ci.utility.utils import TimeoutSampler
 
 
@@ -17,16 +17,17 @@ class CSV(OCP):
     methods we need to do with CSV.
     """
 
-    def __init__(self, name="", *args, **kwargs):
+    def __init__(self, resource_name="", *args, **kwargs):
         """
         Initializer function for CSV class
 
         Args:
-            name (str): Name of CSV
+            resource_name (str): Name of CSV
 
         """
-        super(CSV, self).__init__(*args, **kwargs)
-        self.name = name
+        super(CSV, self).__init__(
+            resource_name=resource_name, *args, **kwargs
+        )
 
     def check_phase(self, phase):
         """
@@ -40,17 +41,20 @@ class CSV(OCP):
                 otherwise.
 
         """
+        self.check_name_is_specified()
         try:
-            data = self.get(resource_name=self.name)
+            data = self.get()
         except CommandFailed:
-            logger.info(f"Cannot find CSV object {self.name}")
+            logger.info(f"Cannot find CSV object {self.resource_name}")
             return False
         try:
-            return data['status']['phase'] == phase
+            current_phase = data['status']['phase']
+            logger.info(f"CSV {self.resource_name} is in phase: {current_phase}!")
+            return current_phase == phase
         except KeyError:
             logger.info(
-                f"Problem while reading phase status of CSV {self.name}, "
-                f"data: {data}"
+                f"Problem while reading phase status of CSV "
+                f"{self.resource_name}, data: {data}"
             )
         return False
 
@@ -65,7 +69,11 @@ class CSV(OCP):
             sleep (int): Time in seconds to sleep between attempts
 
         """
+        self.check_name_is_specified()
         sampler = TimeoutSampler(
             timeout, sleep, self.check_phase, phase=phase
         )
-        sampler.wait_for_func_status(True)
+        if not sampler.wait_for_func_status(True):
+            raise ResourceInUnexpectedState(
+                f"CSV: {self.resource_name} is not in expected phase: {phase}"
+            )

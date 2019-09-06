@@ -31,3 +31,6 @@ PROMETHEUS_ROUTE = 'prometheus-k8s'
 
 # Default device size in Gigs
 DEVICE_SIZE = 100
+
+MARKETPLACE_NAMESPACE = "openshift-marketplace"
+OCS_OPERATOR_NAME = "ocs-operator"
