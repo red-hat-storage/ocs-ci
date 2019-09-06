@@ -329,7 +329,7 @@ class Deployment(object):
         wa_cmd = (
             "for POOL in rook-ceph-cephblockpool rook-ceph-cephfilesystem-metadata"
             " rook-ceph-cephfilesystem-data0; do for PGN"
-            " in pg_num pgp_num; do ceph osd pool set ${POOL} ${PGN} 100;"
+            " in pg_num pgp_num; do ceph osd pool set ${POOL} ${PGN} 64;"
             "done; done"
         )
         logger.info("Applying WA for BZ: 1747388")
