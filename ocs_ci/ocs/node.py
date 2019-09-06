@@ -1,10 +1,10 @@
 import logging
+import copy
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.utility.utils import TimeoutSampler
-
 
 log = logging.getLogger(__name__)
 
@@ -57,7 +57,9 @@ def get_typed_nodes(node_type='worker', num_of_nodes=None):
     return typed_nodes
 
 
-def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=180):
+def wait_for_nodes_status(
+    node_names=None, status=constants.NODE_READY, timeout=180
+):
     """
     Wait until all nodes are in the given status
 
@@ -74,20 +76,25 @@ def wait_for_nodes_status(node_names=None, status=constants.NODE_READY, timeout=
             reached the desired state
 
     """
-    if not node_names:
-        node_names = [node.name for node in get_node_objs()]
-
-    log.info(f"Waiting for nodes {node_names} to reach status {status}")
     try:
-        for sample in TimeoutSampler(timeout, 3, get_node_objs, node_names):
+        if not node_names:
+            for sample in TimeoutSampler(60, 3, get_node_objs):
+                if sample:
+                    node_names = [node.name for node in sample]
+                    break
+        nodes_not_in_state = copy.deepcopy(node_names)
+        log.info(f"Waiting for nodes {node_names} to reach status {status}")
+        for sample in TimeoutSampler(timeout, 3, get_node_objs, nodes_not_in_state):
             for node in sample:
                 if node.ocp.get_resource_status(node.name) == status:
-                    node_names.remove(node.name)
-            if not node_names:
+                    nodes_not_in_state.remove(node.name)
+            if not nodes_not_in_state:
                 break
 
     except TimeoutExpiredError:
-        log.error(f"The following nodes haven't reached status {status}: {node_names}")
+        log.error(
+            f"The following nodes haven't reached status {status}: {node_names}"
+        )
         raise exceptions.ResourceWrongStatusException(
             node_names, [n.describe() for n in get_node_objs(node_names)]
         )
@@ -102,8 +109,9 @@ def unschedule_nodes(node_names):
 
     """
     ocp = OCP(kind='node')
-    for node_name in node_names:
-        ocp.exec_oc_cmd(f"adm cordon {node_name}")
+    node_names_str = ' '.join(node_names)
+    log.info(f"Unscheduling nodes {node_names_str}")
+    ocp.exec_oc_cmd(f"adm cordon {node_names_str}")
 
     wait_for_nodes_status(
         node_names, status=constants.NODE_READY_SCHEDULING_DISABLED
@@ -119,9 +127,9 @@ def schedule_nodes(node_names):
 
     """
     ocp = OCP(kind='node')
-    for node_name in node_names:
-        ocp.exec_oc_cmd(f"adm uncordon {node_name}")
-        log.info(f"Scheduling node {node_name}")
+    node_names_str = ' '.join(node_names)
+    ocp.exec_oc_cmd(f"adm uncordon {node_names_str}")
+    log.info(f"Scheduling nodes {node_names_str}")
     wait_for_nodes_status(node_names)
 
 
@@ -134,19 +142,9 @@ def drain_nodes(node_names):
 
     """
     ocp = OCP(kind='node')
-    node_names = ' '.join(node_names)
-    log.info(f'Draining nodes {node_names}')
-    ocp.exec_oc_cmd(f"adm drain {node_names}")
-
-
-def maintenance_nodes(node_names):
-    """
-    Move nodes to maintenance
-
-    Args:
-        node_names (list): The names of the nodes
-
-    """
-    unschedule_nodes(node_names)
-    log.info(f'Moving nodes {node_names} to maintenance')
-    drain_nodes(node_names)
+    node_names_str = ' '.join(node_names)
+    log.info(f'Draining nodes {node_names_str}')
+    ocp.exec_oc_cmd(
+        f"adm drain {node_names_str} --force=true --ignore-daemonsets "
+        f"--delete-local-data"
+    )
