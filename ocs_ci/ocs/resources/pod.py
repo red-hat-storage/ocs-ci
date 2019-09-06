@@ -814,7 +814,9 @@ def validate_pods_are_respinned_and_running_state(pod_objs_list):
         current_time_utc = time.time()
         sec = current_time_utc - ts
         if (sec / 3600) >= 1:
-            logger.error(f'Pod {pod.name} is not respinned, the age of the pod is {start_time}')
+            logger.error(
+                f'Pod {pod.name} is not respinned, the age of the pod is {start_time}'
+            )
             return False
 
     return True
