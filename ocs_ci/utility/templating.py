@@ -194,7 +194,7 @@ def dump_data_to_temp_yaml(data, temp_yaml):
         str: dumped yaml data
 
     """
-    dumper = yaml.dump if typ(data) == dict else yaml.dump_all
+    dumper = yaml.dump if type(data) == dict else yaml.dump_all
     yaml_data = dumper(data)
     with open(temp_yaml, 'w') as yaml_file:
         yaml_file.write(yaml_data)
