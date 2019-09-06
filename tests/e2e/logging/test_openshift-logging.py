@@ -12,7 +12,7 @@ from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.framework.testlib import E2ETest, tier1
 from ocs_ci.utility.retry import retry
-import pdb
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +38,6 @@ def test_fixture(request):
     assert ocp_logging_obj.set_rbac(
         yaml_file=constants.EO_RBAC_YAML, resource_name='prometheus-k8s'
     )
-    pdb.set_trace()
     assert ocp_logging_obj.create_elasticsearch_subscription(constants.EO_SUB_YAML)
 
     # Deploys cluster-logging operator on the project openshift-logging
@@ -50,6 +49,7 @@ def test_fixture(request):
         yaml_file=constants.CL_SUB_YAML
     )
 
+    # Creates storage class
     cbp_obj = helpers.create_ceph_block_pool()
     sc_obj = helpers.create_storage_class(
         interface_type=constants.CEPHBLOCKPOOL,
@@ -77,7 +77,7 @@ def teardown(cbp_obj, sc_obj):
 )
 class Test_openshift_logging_on_ocs(E2ETest):
     """
-    The class contains the testcases related to openshift-logging
+    The class contains tests to verify openshift-logging backed by OCS.
     """
     @pytest.fixture()
     def create_pvc_and_deploymentconfig_pod(self, request, pvc_factory):
