@@ -93,6 +93,8 @@ def get_ocsci_conf():
             base_domain=env['AWS_DOMAIN'],
         ),
     )
+    if env.get("DOWNSTREAM") == "true":
+        conf_obj['REPORTING'] = dict(us_ds='DS')
     # Apply image configuration if present
     image_types = [
         'rook',
