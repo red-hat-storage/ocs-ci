@@ -2,25 +2,26 @@
 This module contains platform specific methods and classes for deployment
 on AWS platform
 """
-import boto3
 import json
 import logging
 import os
+import shutil
 import sys
 import traceback
-import shutil
 from subprocess import Popen, PIPE
+
+import boto3
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults, constants
+from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.ocs.exceptions import SameNamePrefixClusterAlreadyExistsException
 
 from ocs_ci.utility.utils import run_cmd, clone_repo
 from .deployment import Deployment
-from ocs_ci.ocs import exceptions
 
 logger = logging.getLogger(__name__)
 
