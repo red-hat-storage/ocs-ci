@@ -104,6 +104,22 @@ class AWSBase(Deployment):
             return True
         return False
 
+    def destroy_volumes(self):
+        try:
+            # Retrieve cluster name and AWS region from metadata
+            cluster_name = self.ocp_deployment.metadata.get("clusterName")
+            # Find and delete volumes
+            volume_pattern = f"{cluster_name}*"
+            logger.debug(f"Finding volumes with pattern: {volume_pattern}")
+            volumes = self.aws.get_volumes_by_name_pattern(volume_pattern)
+            logger.debug(f"Found volumes: \n {volumes}")
+            for volume in volumes:
+                self.aws.detach_and_delete_volume(
+                    self.aws.ec2_resource.Volume(volume['id'])
+                )
+        except Exception:
+            logger.error(traceback.format_exc())
+
 
 class AWSIPI(AWSBase):
     """
@@ -167,21 +183,7 @@ class AWSIPI(AWSBase):
             log_level (str): log level openshift-installer (default: DEBUG)
         """
         super(AWSIPI, self).destroy_cluster(log_level)
-
-        try:
-            # Retrieve cluster name and AWS region from metadata
-            cluster_name = self.ocp_deployment.metadata.get("clusterName")
-            # Find and delete volumes
-            volume_pattern = f"{cluster_name}*"
-            logger.debug(f"Finding volumes with pattern: {volume_pattern}")
-            volumes = self.aws.get_volumes_by_name_pattern(volume_pattern)
-            logger.debug(f"Found volumes: \n {volumes}")
-            for volume in volumes:
-                self.aws.detach_and_delete_volume(
-                    self.aws.ec2_resource.Volume(volume['id'])
-                )
-        except Exception:
-            logger.error(traceback.format_exc())
+        self.destroy_volumes()
 
 
 class AWSUPI(AWSBase):
@@ -313,7 +315,6 @@ class AWSUPI(AWSBase):
         """
         super(AWSUPI, self).deploy_ocp(log_cli_level)
         volume_size = config.ENV_DATA.get('DEFAULT_EBS_VOLUME_SIZE', 100)
-        # TODO: Implement add_volume for UPI
         # existing function looks for terraform files
         self.add_volume(volume_size)
 
@@ -325,30 +326,15 @@ class AWSUPI(AWSBase):
             log_level (str): log level for openshift-installer (
                 default:DEBUG)
         """
-        super(AWSUPI, self).destroy_cluster(log_level)
-        cluster_name = self.ocp_deployment.metadata.get("clusterName")
-
-        try:
-            # Retrieve cluster name and AWS region from metadata
-            # Find and delete volumes
-            volume_pattern = f"{cluster_name}*"
-            logger.debug(f"Finding volumes with pattern: {volume_pattern}")
-            volumes = self.aws.get_volumes_by_name_pattern(volume_pattern)
-            logger.debug(f"Found volumes: \n {volumes}")
-            for volume in volumes:
-                self.aws.detach_and_delete_volume(
-                    self.aws.ec2_resource.Volume(volume['id'])
-                )
-        except Exception:
-            logger.error(traceback.format_exc())
-
-        # Delete the cloudformation stacks
+        cluster_name = get_cluster_name(self.cluster_path)
+        self.destroy_volumes()
         suffixes = ['vpc', 'inf', 'sg', 'bs', 'ma']
         for i in range(3):  # TODO: read in num_workers
             suffixes.append(f'no{i}')
         stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
         cf = boto3.client('cloudformation')
         for stack_name in stack_names:
+            logger.info("Destroying stack: %s", stack_name)
             cf.delete_stack(StackName=stack_name)
 
 
@@ -367,3 +353,20 @@ def get_infra_id(cluster_path):
     with open(metadata_file) as f:
         metadata = json.loads(f.read())
     return metadata.get("infraID")
+
+
+def get_cluster_name(cluster_path):
+    """
+    Get clusterName from metadata.json in given cluster_path
+
+    Args:
+        cluster_path: path to cluster install directory
+
+    Returns:
+        str: metadata.json['clusterName']
+
+    """
+    metadata_file = os.path.join(cluster_path, "metadata.json")
+    with open(metadata_file) as f:
+        metadata = json.loads(f.read())
+    return metadata.get("clusterName")
