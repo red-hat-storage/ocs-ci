@@ -90,7 +90,7 @@ class OCS(object):
 
     def create(self, do_reload=True):
         log.info(f"Adding {self.kind} with name {self.name}")
-        templating.dump_dict_to_temp_yaml(self.data, self.temp_yaml.name)
+        templating.dump_data_to_temp_yaml(self.data, self.temp_yaml.name)
         status = self.ocp.create(yaml_file=self.temp_yaml.name)
         if do_reload:
             self.reload()
