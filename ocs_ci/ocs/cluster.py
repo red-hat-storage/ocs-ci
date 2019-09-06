@@ -119,7 +119,12 @@ class CephCluster(object):
         Get accurate info on current state of pods
         """
         self._ceph_pods = pod.get_all_pods(self._namespace)
-        self.mons = pod.get_mon_pods(self.mon_selector, self.namespace)
+        # TODO: Workaround for BZ1748325:
+        mons = pod.get_mon_pods(self.mon_selector, self.namespace)
+        for mon in mons:
+            if mon.ocp.get_resource_status(mon.name) == constant.STATUS_RUNNING:
+                self.mons.append(mon)
+        # TODO: End of workaround for BZ1748325
         self.mdss = pod.get_mds_pods(self.mds_selector, self.namespace)
         self.mgrs = pod.get_mgr_pods(self.mgr_selector, self.namespace)
         self.osds = pod.get_osd_pods(self.osd_selector, self.namespace)
@@ -261,7 +266,16 @@ class CephCluster(object):
                 condition='Running', selector=self.mon_selector,
                 resource_count=count, timeout=timeout, sleep=3,
             )
-            actual = len(pod.get_mon_pods())
+
+            # TODO: Workaround for BZ1748325:
+            actual_mons = pod.get_mon_pods()
+            actual_running_mons = list()
+            for mon in actual_mons:
+                if mon.ocp.get_resource_status(mon.name) == constant.STATUS_RUNNING:
+                    actual_running_mons.append(mon)
+            actual = len(actual_running_mons)
+            # TODO: End of workaround for BZ1748325
+
             assert count == actual, f"Expected {count},  Got {actual}"
         except exceptions.TimeoutExpiredError as e:
             logger.error(e)
