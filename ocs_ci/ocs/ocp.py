@@ -319,9 +319,11 @@ class OCP(object):
                             f"Error: {ex}"
                         )
                     if resource_count:
-                        if len(in_condition) == resource_count and (
-                            len(sample) == len(in_condition)
-                        ):
+                        items_in_condition = (
+                            [it.get('metadata').get('name') for it in in_condition]
+                        )
+                        log.info(f"In condition resources: {items_in_condition}")
+                        if len(in_condition) == resource_count:
                             return True
                     elif len(sample) == len(in_condition):
                         return True
