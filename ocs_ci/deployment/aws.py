@@ -291,6 +291,7 @@ class AWSUPI(AWSBase):
 
             sys.path.append(self.upi_script_path)
             full_path = os.getcwd()
+            logger.info("Executing UPI install script")
             proc = Popen(
                 [os.path.join(full_path, 'upi_on_aws-install.sh')],
                 stdout=PIPE, stderr=PIPE,
@@ -304,6 +305,8 @@ class AWSUPI(AWSBase):
                 logger.error(stderr)
                 raise exceptions.CommandFailed("upi install script failed")
             logger.info(stdout)
+
+            self.test_cluster()
 
     def deploy_ocp(self, log_cli_level='DEBUG'):
         """
