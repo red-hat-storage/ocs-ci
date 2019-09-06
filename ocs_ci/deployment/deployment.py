@@ -165,7 +165,7 @@ class Deployment(object):
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode='w+', prefix='cluster_storage', delete=False
         )
-        templating.dump_dict_to_temp_yaml(
+        templating.dump_data_to_temp_yaml(
             cluster_data, cluster_data_yaml.name
         )
 
