@@ -84,13 +84,19 @@ class TestRwoUsingMultiplePods(ManageTest):
                         resource=pod_obj, state=constants.STATUS_RUNNING,
                         timeout=60
                     )
-                    if pod_obj.get()['spec']['nodeName'] == pod_running_node:
-                        log.info(
-                            f"Expected: Pod {pod_obj.name} is in Running. "
-                            f"Pods which are running are on the same node "
-                            f"{pod_running_node}"
-                        )
-                        pod_objs_running.append(pod_obj)
+                    assert (
+                        pod_obj.get()['spec']['nodeName'] == pod_running_node
+                    ), (
+                        f"Unexpected: Pod {pod_obj} is in Running state. "
+                        f"RWO PVC {self.pvc_obj.name} is mounted on pods "
+                        f"which are on different nodes."
+                    )
+                    log.info(
+                        f"Expected: Pod {pod_obj.name} is in Running. "
+                        f"Pods which are running are on the same node "
+                        f"{pod_running_node}"
+                    )
+                    pod_objs_running.append(pod_obj)
                 except ResourceWrongStatusException:
                     log.info(f"Verified: Pod {pod_obj.name} is not Running")
 
