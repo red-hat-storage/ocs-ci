@@ -204,8 +204,8 @@ class AWSUPI(AWSBase):
 
             self.upi_script_path = os.path.join(
                 self.upi_repo_path,
-                f'v3-launch-templates/functionality-testing'
-                f'/aos-4_2/hosts/'
+                'v3-launch-templates/functionality-testing'
+                '/aos-4_2/hosts/'
             )
 
         def deploy_prereq(self):
@@ -292,8 +292,7 @@ class AWSUPI(AWSBase):
             sys.path.append(self.upi_script_path)
             full_path = os.getcwd()
             proc = Popen(
-                [f'{full_path}/'
-                 f'upi_on_aws-install.sh'],
+                [os.path.join(full_path, 'upi_on_aws-install.sh')],
                 stdout=PIPE, stderr=PIPE,
             )
             stdout, stderr = proc.communicate()
