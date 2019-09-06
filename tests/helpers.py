@@ -125,7 +125,7 @@ def create_pod(
         interface = constants.CEPHFS_INTERFACE
     if dc_deployment:
         pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
-    pod_data = templating.load_yaml_to_dict(pod_dict)
+    pod_data = templating.load_yaml(pod_dict)
     pod_name = create_unique_resource_name(
         f'test-{interface}', 'pod'
     )
@@ -223,14 +223,14 @@ def create_secret(interface_type):
     """
     secret_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
-        secret_data = templating.load_yaml_to_dict(
+        secret_data = templating.load_yaml(
             constants.CSI_RBD_SECRET_YAML
         )
         secret_data['stringData']['userID'] = constants.ADMIN_USER
         secret_data['stringData']['userKey'] = get_admin_key()
         interface = constants.RBD_INTERFACE
     elif interface_type == constants.CEPHFILESYSTEM:
-        secret_data = templating.load_yaml_to_dict(
+        secret_data = templating.load_yaml(
             constants.CSI_CEPHFS_SECRET_YAML
         )
         del secret_data['stringData']['userID']
@@ -256,7 +256,7 @@ def create_ceph_block_pool(pool_name=None):
     Returns:
         OCS: An OCS instance for the Ceph block pool
     """
-    cbp_data = templating.load_yaml_to_dict(constants.CEPHBLOCKPOOL_YAML)
+    cbp_data = templating.load_yaml(constants.CEPHBLOCKPOOL_YAML)
     cbp_data['metadata']['name'] = (
         pool_name if pool_name else create_unique_resource_name(
             'test', 'cbp'
@@ -282,7 +282,7 @@ def create_ceph_file_system(pool_name=None):
     Returns:
         OCS: An OCS instance for the Ceph file system
     """
-    cfs_data = templating.load_yaml_to_dict(constants.CEPHFILESYSTEM_YAML)
+    cfs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
     cfs_data['metadata']['name'] = (
         pool_name if pool_name else create_unique_resource_name(
             'test', 'cfs'
@@ -321,7 +321,7 @@ def create_storage_class(
 
     sc_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
-        sc_data = templating.load_yaml_to_dict(
+        sc_data = templating.load_yaml(
             constants.CSI_RBD_STORAGECLASS_YAML
         )
         sc_data['parameters'][
@@ -335,7 +335,7 @@ def create_storage_class(
             provisioner if provisioner else defaults.RBD_PROVISIONER
         )
     elif interface_type == constants.CEPHFILESYSTEM:
-        sc_data = templating.load_yaml_to_dict(
+        sc_data = templating.load_yaml(
             constants.CSI_CEPHFS_STORAGECLASS_YAML
         )
         sc_data['parameters'][
@@ -395,7 +395,7 @@ def create_pvc(
     Returns:
         PVC: PVC instance
     """
-    pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
+    pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
     pvc_data['metadata']['name'] = (
         pvc_name if pvc_name else create_unique_resource_name(
             'test', 'pvc'
@@ -953,7 +953,7 @@ def create_serviceaccount(namespace):
         OCS: An OCS instance for the service_account
     """
 
-    service_account_data = templating.load_yaml_to_dict(
+    service_account_data = templating.load_yaml(
         constants.SERVICE_ACCOUNT_YAML
     )
     service_account_data['metadata']['name'] = create_unique_resource_name(

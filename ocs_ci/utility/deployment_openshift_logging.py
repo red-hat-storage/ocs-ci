@@ -226,7 +226,7 @@ def create_instance_in_clusterlogging(sc_name=None):
             values, storage class and size details etc.
 
     """
-    inst_data = templating.load_yaml_to_dict(constants.CL_INSTANCE_YAML)
+    inst_data = templating.load_yaml(constants.CL_INSTANCE_YAML)
     inst_data['spec']['logStore']['elasticsearch']['storage']['storageClassName'] = sc_name
     inst_data['spec']['logStore']['elasticsearch']['storage']['size'] = "200Gi"
     node_count = inst_data['spec']['logStore']['elasticsearch']['nodeCount']

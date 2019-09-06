@@ -26,7 +26,7 @@ class OCS(object):
                 resource's dictionary and use it to pass as **kwargs
                 2) For new resource, use yaml files templates under
                 /templates/CSI like:
-                obj_dict = load_yaml_to_dict(
+                obj_dict = load_yaml(
                     os.path.join(
                         TEMPLATE_DIR, "some_resource.yaml"
                         )
