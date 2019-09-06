@@ -10,7 +10,7 @@ from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest, tier1
+from ocs_ci.framework.testlib import E2ETest, tier1, workloads
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 log = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ def ripsaw(request, storageclass_factory):
     request.addfinalizer(teardown)
     return ripsaw
 
-
+@workloads
 @tier1
 class TestPgSQLWorkload(E2ETest):
     """
