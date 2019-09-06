@@ -8,51 +8,48 @@ import logging
 from tests import helpers
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.ocs import constants
-from ocs_ci.utility import deployment_openshift_logging as obj
+from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.framework.testlib import E2ETest, tier1
 from ocs_ci.utility.retry import retry
-
+import pdb
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
 def test_fixture(request):
     """
     Setup and teardown
-
     * The setup will deploy openshift-logging in the cluster
-
     * The teardown will uninstall cluster-logging from the cluster
-
     """
 
     def finalizer():
-        teardown(sc_obj, cbp_obj)
+        teardown(cbp_obj, sc_obj)
 
     request.addfinalizer(finalizer)
 
     # Deploys elastic-search operator on the project openshift-operators-redhat
-    obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
-    assert obj.create_elasticsearch_operator_group(
+    ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
+    assert ocp_logging_obj.create_elasticsearch_operator_group(
         yaml_file=constants.EO_OG_YAML,
         resource_name='openshift-operators-redhat'
     )
-    assert obj.set_rbac(
+    assert ocp_logging_obj.set_rbac(
         yaml_file=constants.EO_RBAC_YAML, resource_name='prometheus-k8s'
     )
-    assert obj.create_elasticsearch_subscription(constants.EO_SUB_YAML)
+    pdb.set_trace()
+    assert ocp_logging_obj.create_elasticsearch_subscription(constants.EO_SUB_YAML)
 
     # Deploys cluster-logging operator on the project openshift-logging
-    obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
-    assert obj.create_clusterlogging_operator_group(
+    ocp_logging_obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
+    assert ocp_logging_obj.create_clusterlogging_operator_group(
         yaml_file=constants.CL_OG_YAML
     )
-    assert obj.create_clusterlogging_subscription(
+    assert ocp_logging_obj.create_clusterlogging_subscription(
         yaml_file=constants.CL_SUB_YAML
     )
 
-    # Creates instance for cluster-logging
     cbp_obj = helpers.create_ceph_block_pool()
     sc_obj = helpers.create_storage_class(
         interface_type=constants.CEPHBLOCKPOOL,
@@ -60,33 +57,31 @@ def test_fixture(request):
         secret_name=constants.DEFAULT_SECRET,
         reclaim_policy="Delete"
     )
-    assert sc_obj, f"Failed to create storage class"
-    assert obj.create_instance_in_clusterlogging(sc_name=sc_obj.name)
+    assert ocp_logging_obj.create_instance_in_clusterlogging(sc_name=sc_obj.name)
 
     # Check the health of the cluster-logging
-    assert obj.check_health_of_clusterlogging()
+    assert ocp_logging_obj.check_health_of_clusterlogging()
 
 
-def teardown(sc_obj, cbp_obj):
+def teardown(cbp_obj, sc_obj):
     """
     The teardown will uninstall the openshift-logging from the cluster
     """
-    sc_obj.delete()
     cbp_obj.delete()
+    sc_obj.delete()
     uninstall_cluster_logging()
 
 
 @pytest.mark.usefixtures(
     test_fixture.__name__
 )
-class TestLogging_in_EFK_stack(E2ETest):
+class Test_openshift_logging_on_ocs(E2ETest):
     """
     The class contains the testcases related to openshift-logging
     """
     @pytest.fixture()
     def create_pvc_and_deploymentconfig_pod(self, request, pvc_factory):
         """
-
         """
         def finalizer():
             helpers.delete_deploymentconfig(pod_obj)
@@ -137,12 +132,11 @@ class TestLogging_in_EFK_stack(E2ETest):
         elasticsearch_pod_obj = get_pod_obj(
             name=elasticsearch_pod[1], namespace='openshift-logging'
         )
-        projects = elasticsearch_pod_obj.exec_cmd_on_pod(command='indices | grep project', out_yaml_format=True)
+        projects = elasticsearch_pod_obj.exec_cmd_on_pod(
+            command='indices | grep project', out_yaml_format=True
+        )
         logger.info(projects)
         if pvc_obj.project.namespace in projects:
             logger.info("The new project exists in the EFK stack")
-            file_count = elasticsearch_pod_obj.exec_cmd_on_pod(
-                command=f"es_util --query=project.{pvc_obj.project.namespace}.*/_count")
-            logger.info(f"The file_count in the project is {file_count}")
         else:
             raise ModuleNotFoundError
