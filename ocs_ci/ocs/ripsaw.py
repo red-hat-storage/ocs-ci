@@ -94,13 +94,13 @@ class RipSaw(object):
         Deploy postgres sql server
         """
         try:
-            pgsql_service = templating.load_yaml_to_dict(
+            pgsql_service = templating.load_yaml(
                 constants.PGSQL_SERVICE_YAML
             )
-            pgsql_cmap = templating.load_yaml_to_dict(
+            pgsql_cmap = templating.load_yaml(
                 constants.PGSQL_CONFIGMAP_YAML
             )
-            pgsql_sset = templating.load_yaml_to_dict(
+            pgsql_sset = templating.load_yaml(
                 constants.PGSQL_STATEFULSET_YAML
             )
             self.pgsql_service = OCS(**pgsql_service)

@@ -52,7 +52,7 @@ class TestPgSQLWorkload(E2ETest):
 
         # Create pgbench benchmark
         log.info("Create resource file for pgbench workload")
-        pg_data = templating.load_yaml_to_dict(constants.PGSQL_BENCHMARK_YAML)
+        pg_data = templating.load_yaml(constants.PGSQL_BENCHMARK_YAML)
         pg_obj = OCS(**pg_data)
         pg_obj.create()
 

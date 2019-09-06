@@ -45,7 +45,7 @@ class TestFIOWorkload(ManageTest):
             name, path, work_load, storage_type, self.pod_obj
         )
         assert wl.setup()
-        io_params = templating.load_yaml_to_dict(constants.FIO_IO_PARAMS_YAML)
+        io_params = templating.load_yaml(constants.FIO_IO_PARAMS_YAML)
         io_params['runtime'] = runtime
         io_params['size'] = size
 
