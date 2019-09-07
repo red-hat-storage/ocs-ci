@@ -323,10 +323,14 @@ class TestDeleteResourceDuringPodPvcDeletion(DisruptionBase):
         for pvc_obj in pvc_objs:
             if pvc_obj.access_mode == constants.ACCESS_MODE_RWX:
                 pod_obj = pod_factory(
-                    pvc=pvc_obj, status=constants.STATUS_RUNNING
+                    interface=interface, pvc=pvc_obj,
+                    status=constants.STATUS_RUNNING
                 )
                 pod_objs.append(pod_obj)
-            pod_obj = pod_factory(pvc=pvc_obj, status=constants.STATUS_RUNNING)
+            pod_obj = pod_factory(
+                interface=interface, pvc=pvc_obj,
+                status=constants.STATUS_RUNNING
+            )
             pod_objs.append(pod_obj)
 
         log.info(f"Created {len(pod_objs)} pods.")
