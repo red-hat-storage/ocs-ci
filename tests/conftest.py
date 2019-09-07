@@ -448,18 +448,30 @@ def service_account_factory(request):
     instances = []
     active_service_account_obj = None
 
-    def factory(project=None):
+    def factory(
+        project=None, service_account=None
+    ):
         """
         Args:
             project (object): ocs_ci.ocs.resources.ocs.OCS instance
                 of 'Project' kind.
+            service_account (str): service_account_name
 
         Returns:
-            object: helpers.create_serviceaccount instance.
+            object: serviceaccount instance.
         """
         nonlocal active_service_account_obj
-        if active_service_account_obj:
+
+        if active_service_account_obj and not service_account:
             return active_service_account_obj
+        elif service_account:
+            sa_obj = helpers.get_serviceaccount_obj(sa_name=service_account, namespace=pvc.namespace.project)
+            if not helpers.validate_scc_policy(sa_name=service_account, namespace=pvc.namespace.project):
+                helpers.add_scc_policy(sa_name=service_account, namespace=pvc.namespace.project)
+            sa_obj.project = project
+            active_service_account_obj = sa_obj
+            instances.append(sa_obj)
+            return sa_obj
         else:
             sa_obj = helpers.create_serviceaccount(
                 namespace=project.namespace,
@@ -501,6 +513,7 @@ def dc_pod_factory(
     def factory(
         interface=constants.CEPHBLOCKPOOL,
         pvc=None,
+        service_account=None,
         size=None,
         custom_data=None,
         replica_count=1,
@@ -511,6 +524,7 @@ def dc_pod_factory(
                 whether a RBD based or CephFS resource is created.
                 RBD is default.
             pvc (PVC object): ocs_ci.ocs.resources.pvc.PVC instance kind.
+            service_account (str): service account name for dc_pods
             size (int): The requested size for the PVC
             custom_data (dict): If provided then Pod object is created
                 by using these data. Parameter `pvc` is not used but reference
@@ -522,7 +536,7 @@ def dc_pod_factory(
         else:
 
             pvc = pvc or pvc_factory(interface=interface, size=size)
-            sa_obj = service_account_factory(project=pvc.project)
+            sa_obj = service_account_factory(project=pvc.project,service_account=service_account)
             dc_pod_obj = helpers.create_pod(
                 interface_type=interface, pvc_name=pvc.name, do_reload=False,
                 namespace=pvc.namespace, sa_name=sa_obj.name, dc_deployment=True,

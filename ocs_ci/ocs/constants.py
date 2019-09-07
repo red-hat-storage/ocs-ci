@@ -76,6 +76,9 @@ SUBSCRIPTION = "Subscription"
 NAMESPACES = "Namespaces"
 CLUSTER_LOGGING = "ClusterLogging"
 OPERATOR_GROUP = "OperatorGroup"
+SERVICE_ACCOUNT = "Serviceaccount"
+SCC = "SecurityContextConstraints"
+PRIVILEGED = "privileged"
 
 # Other
 SECRET = "Secret"
