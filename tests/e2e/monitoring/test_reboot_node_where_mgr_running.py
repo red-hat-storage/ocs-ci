@@ -5,7 +5,7 @@ from ocs_ci.ocs import ocp, constants, defaults
 from ocs_ci.framework.testlib import tier4, E2ETest
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import aws
-from tests import sanity_helpers
+from tests.sanity_helpers import Sanity
 from ocs_ci.ocs.monitoring import (
     check_pvcdata_collected_on_prometheus,
     check_ceph_health_status_metrics_on_prometheus
@@ -60,6 +60,13 @@ class TestRebootNodeWhereMgrRunningAndInteractionWithPrometheus(E2ETest):
     stored on persistent monitoring
     """
 
+    @pytest.fixture(autouse=True)
+    def init_sanity(self):
+        """
+        Initialize Sanity instance
+        """
+        self.sanity_helpers = Sanity()
+
     @tier4
     def test_monitoring_after_rebooting_node_where_mgr_is_running(self, test_fixture):
         """
@@ -88,7 +95,7 @@ class TestRebootNodeWhereMgrRunningAndInteractionWithPrometheus(E2ETest):
         wait_for_nodes_status()
 
         # Check the node are Ready state and check cluster is health ok
-        sanity_helpers.health_check(nodes=list(instances.values()))
+        self.sanity_helpers.health_check()
 
         # Check for ceph health check metrics is updated with new mgr pod
         wait_to_update_in_prometheus_pod()
