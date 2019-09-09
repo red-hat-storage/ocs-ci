@@ -18,7 +18,7 @@ from ocs_ci.framework.testlib import ManageTest, tier2
 )
 class TestRunIOMultipleDcPods(ManageTest):
     """
-    Run IO on multiple dc pods in parallel - RBD
+    Run IO on multiple dc pods in parallel
 
     Steps:
         1:- Create project
