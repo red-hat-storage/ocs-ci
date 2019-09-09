@@ -8,13 +8,13 @@ from tests.sanity_helpers import Sanity
 from ocs_ci.ocs.monitoring import check_pvcdata_collected_on_prometheus
 from ocs_ci.ocs.node import wait_for_nodes_status, get_typed_nodes
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 
 
 logger = logging.getLogger(__name__)
 
 
-@retry(CommandFailed, tries=10, delay=3, backoff=1)
+@retry((CommandFailed, TimeoutExpiredError), tries=10, delay=3, backoff=1)
 def wait_for_master_node_to_be_running_state():
     """
     Waits for the all the nodes to be in running state
@@ -28,9 +28,10 @@ def test_fixture(pod_factory, num_of_pod=2):
     Setup and teardown
     """
     pod_objs = [
-        pod_factory(interface=constants.CEPHBLOCKPOOL,
-                    status=constants.STATUS_RUNNING
-                    ) for _ in range(num_of_pod)
+        pod_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            status=constants.STATUS_RUNNING
+        ) for _ in range(num_of_pod)
     ]
 
     # Check for the created pvc metrics on prometheus pod
