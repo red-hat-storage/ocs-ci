@@ -23,9 +23,10 @@ def test_fixture(pod_factory, num_of_pod=2):
     Setup and teardown
     """
     pod_objs = [
-        pod_factory(interface=constants.CEPHBLOCKPOOL,
-                    status=constants.STATUS_RUNNING
-                    ) for _ in range(num_of_pod)
+        pod_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            status=constants.STATUS_RUNNING
+        ) for _ in range(num_of_pod)
     ]
 
     # Check for the created pvc metrics on prometheus pod
@@ -38,7 +39,7 @@ def test_fixture(pod_factory, num_of_pod=2):
 
 
 @retry(AssertionError, tries=10, delay=3, backoff=1)
-def wait_to_update_in_prometheus_pod():
+def wait_to_update_mgrpod_info_prometheus_pod():
 
     logger.info(
         f"Verifying ceph health status metrics is updated after rebooting the node"
@@ -98,7 +99,7 @@ class TestRebootNodeWhereMgrRunningAndInteractionWithPrometheus(E2ETest):
         self.sanity_helpers.health_check()
 
         # Check for ceph health check metrics is updated with new mgr pod
-        wait_to_update_in_prometheus_pod()
+        wait_to_update_mgrpod_info_prometheus_pod()
 
         # Check for the created pvc metrics after rebooting the node where mgr pod was running
         for pod_obj in pod_objs:
