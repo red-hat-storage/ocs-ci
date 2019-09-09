@@ -296,13 +296,11 @@ class OCP(object):
                 False otherwise
 
         """
-        log.info(
-            ("Waiting for a resource(s) of kind %s identified by name '%s'"
-            " and selector %s to reach desired condition %s"),
-            self._kind,
-            resource_name,
-            selector,
-            condition)
+        log.info((
+            f"Waiting for a resource(s) of kind {self._kind}"
+            f" identified by name '{resource_name}'"
+            f" and selector {selector}"
+            f" to reach desired condition {condition}"))
 
         try:
             for sample in TimeoutSampler(
@@ -314,10 +312,9 @@ class OCP(object):
                     status = self.get_resource_status(resource_name)
                     if status == condition:
                         return True
-                    log.info(
-                        "status of %s was %s, but we were waiting for %s",
-                        resource_name,
-                        status, condition)
+                    log.info((
+                        f"status of {resource_name} was {status},"
+                        f" but we were waiting for {condition}"))
                     actual_status = status
                 # More than 1 resources returned
                 elif sample.get('kind') == 'List':
@@ -343,21 +340,16 @@ class OCP(object):
                                 return True
                         elif len(sample) == len(in_condition):
                             return True
-                    log.info(
-                        ("status of %s item(s) were %s, but we were waiting"
-                        " for all of them to be %s"),
-                        resource_name,
-                        actual_status,
-                        condition)
+                    log.info((
+                        f"status of {resource_name} item(s) were {actual_status},"
+                        f" but we were waiting"
+                        f" for all of them to be {condition}"))
         except TimeoutExpiredError as ex:
-            log.error("timeout expired: %s", ex)
-            log.error(
-                ("Wait for %s resource %s to reach desired condition %s failed"
-                ", last actual status was %s"),
-                self._kind,
-                resource_name,
-                condition,
-                actual_status)
+            log.error(f"timeout expired: {ex}")
+            log.error((
+                f"Wait for {self._kind} resource {resource_name}"
+                f" to reach desired condition {condition} failed,"
+                f" last actual status was {actual_status}"))
             raise(ex)
 
         return False
