@@ -994,11 +994,11 @@ def validate_scc_policy(sa_name, namespace):
     Returns:
         bool: True if sc_name is present in scc of privileged else False
     """
-    sa_name=f"system:serviceaccount:{namespace}:{sa_name}"
+    sa_name = f"system:serviceaccount:{namespace}:{sa_name}"
     logger.info(sa_name)
     ocp_scc_obj = ocp.OCP(kind=constants.SCC, namespace=namespace)
-    scc_dict =  ocp_scc_obj.get(resource_name=constants.PRIVILEGED)
-    scc_users_list=scc_dict.get('users')
+    scc_dict = ocp_scc_obj.get(resource_name=constants.PRIVILEGED)
+    scc_users_list = scc_dict.get('users')
     for scc_user in scc_users_list:
         if scc_user == sa_name:
             return True

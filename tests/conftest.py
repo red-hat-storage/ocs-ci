@@ -465,9 +465,9 @@ def service_account_factory(request):
         if active_service_account_obj and not service_account:
             return active_service_account_obj
         elif service_account:
-            sa_obj = helpers.get_serviceaccount_obj(sa_name=service_account, namespace=pvc.namespace.project)
-            if not helpers.validate_scc_policy(sa_name=service_account, namespace=pvc.namespace.project):
-                helpers.add_scc_policy(sa_name=service_account, namespace=pvc.namespace.project)
+            sa_obj = helpers.get_serviceaccount_obj(sa_name=service_account, namespace=project.namespace)
+            if not helpers.validate_scc_policy(sa_name=service_account, namespace=project.namespace):
+                helpers.add_scc_policy(sa_name=service_account, namespace=project.namespace)
             sa_obj.project = project
             active_service_account_obj = sa_obj
             instances.append(sa_obj)
@@ -536,7 +536,7 @@ def dc_pod_factory(
         else:
 
             pvc = pvc or pvc_factory(interface=interface, size=size)
-            sa_obj = service_account_factory(project=pvc.project,service_account=service_account)
+            sa_obj = service_account_factory(project=pvc.project, service_account=service_account)
             dc_pod_obj = helpers.create_pod(
                 interface_type=interface, pvc_name=pvc.name, do_reload=False,
                 namespace=pvc.namespace, sa_name=sa_obj.name, dc_deployment=True,
