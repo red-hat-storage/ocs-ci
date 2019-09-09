@@ -326,7 +326,7 @@ class OCP(object):
                             item_name = item.get('metadata').get('name')
                             status = self.get_resource_status(item_name)
                             actual_status.append(status)
-                            if status  == condition:
+                            if status == condition:
                                 in_condition.append(item)
                         except CommandFailed as ex:
                             log.info(
