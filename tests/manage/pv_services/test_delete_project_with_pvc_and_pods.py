@@ -49,6 +49,7 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
     def test_delete_project_with_pvc_and_pods(self, project_factory,
                                               storageclass_factory, pvc_factory,
                                               multi_pvc_factory, pod_factory):
+        # Start with Project 1
         log.info("Creating OCP+OCS Setup")
         ocp_setup = ocp.OCP()
         ocs_setup = OCS()  # TODO: Scale to at-least 800 pvcs/pods
@@ -77,28 +78,66 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
                                      access_mode=constants.ACCESS_MODE_RWO,
                                      num_of_pvc=self.rbd_pvcs_num)
 
-        # CUTOFF POINT
+        # Delete the entire Project 1 (along with all of its PVCs)
         pvs = helpers.get_all_pvs()
         space_used_before_deletion = check_ceph_used_space()
-        start_time = time.time()
-        # Delete the entire Project (along with all of its PVCs)
+        project_deletion_start_time = time.time()
         #ocp.switch_to_default_rook_cluster_project() #TODO: Is this needed?
-        log.info("Deleting the entire first Project")
-        self.project.delete(resource_name=self.project.namespace)
-        log.info("Waiting for Project deletion success...")
-        self.project.wait_for_delete(resource_name=self.project.namespace)
-        log.info("Project deleted successfully.")
-        project_deletion_time = time.time() - start_time
+        log.info("Deleting Project 1")
+        project_1.delete(resource_name=project_1.namespace)
+        log.info("Waiting for Project 1 deletion success...")
+        project_1.wait_for_delete(resource_name=project_1.namespace)
+        log.info("Project 1 deleted successfully.")
+        project_deletion_time = time.time() - project_deletion_start_time
         log.info(
-            "Project deletion time: {} seconds".format(project_deletion_time))
+            "Project 1 deletion time: {} seconds".format(project_deletion_time))
         # PVs delete might still be running, check until all PVs are deleted
+        # Check time between first PV delete and last PV delete
         time_between_pvcs_deletion_success = 0
+        # Also check delete time per each PV
+        individual_pv_delete_times = []
         for pv in pvs:
+            pv_start_time = time.time()
             pv_name = pv.backed_pv
+            pv.delete()
             pv.ocp.wait_for_delete(pv_name)
             helpers.validate_pv_delete(pv_name)
+            pv_delete_time = time.time() - pv_start_time
+            individual_pv_delete_times.append({pv_name: pv_delete_time})
+            time_between_pvcs_deletion_success += pv_delete_time
         # Verify space has been reclaimed
         space_used_after_deletion = check_ceph_used_space()
         log.info("Verifying space has been reclaimed...")
         assert space_used_after_deletion < space_used_before_deletion
         log.info("Space reclaimed successfully.")
+
+        # Project 1 done, moving on to Project 2
+        log.info("Creating Project 2")
+        project_2 = project_factory()
+
+        log.info("Creating {} CephFS PVCs "
+                 "(each bound to an app pod)".format(self.cephfs_pvcs_num))
+        cephfs_pvcs_pods = \
+            [pod_factory(pvc=pvc_obj, interface=constants.CEPHFILESYSTEM)
+             for pvc_obj in multi_pvc_factory(interface=constants.CEPHFILESYSTEM,
+                                              project=project_2,
+                                              num_of_pvc=self.cephfs_pvcs_num)]
+        rbd_pvcs_pods = \
+            [pod_factory(pvc=pvc_obj, interface=constants.CEPHBLOCKPOOL)
+             for pvc_obj in multi_pvc_factory(interface=constants.CEPHBLOCKPOOL,
+                                              project=project_2,
+                                              num_of_pvc=self.rbd_pvcs_num)]
+        # Delete the entire Project 2 (along with all of its PVCs)
+        pvs = helpers.get_all_pvs()
+        space_used_before_deletion = check_ceph_used_space()
+        start_time = time.time()
+        # ocp.switch_to_default_rook_cluster_project() #TODO: Is this needed?
+        log.info("Deleting Project 2")
+        project_2.delete(resource_name=project_2.namespace)
+        log.info("Waiting for Project 2 deletion success...")
+        project_2.wait_for_delete(resource_name=project_2.namespace)
+        log.info("Project 2 deleted successfully.")
+        project_deletion_time = time.time() - start_time
+        log.info(
+            "Project 2 deletion time: {} seconds".format(project_deletion_time))
+        # PVs delete might still be running, check until all PVs are deleted
