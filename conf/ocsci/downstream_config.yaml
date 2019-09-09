@@ -12,3 +12,5 @@ ENV_DATA:
 REPORTING:
   # Upstream: 'US' or Downstream: 'DS', used only for reporting (Test Run Name)
   us_ds: 'DS'
+DEPLOYMENT:
+  ocs_operator_deployment: false

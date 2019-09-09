@@ -26,6 +26,11 @@ def parse_args():
         dest='ocsci_conf',
         action='store_false',
     )
+    parser.add_argument(
+        '--skip-bugzilla-conf',
+        dest='bugzilla_conf',
+        action='store_false',
+    )
     return parser.parse_args()
 
 
@@ -120,6 +125,11 @@ def write_ocsci_conf():
         ocs_conf_file.write(yaml.safe_dump(ocs_conf))
 
 
+def write_bugzilla_conf():
+    with open('bugzilla.cfg', 'w') as bz_cfg_file:
+        bz_cfg_file.write(env['BUGZILLA_CFG'])
+
+
 if __name__ == "__main__":
     args = parse_args()
     if args.aws:
@@ -128,3 +138,5 @@ if __name__ == "__main__":
         write_pull_secret()
     if args.ocsci_conf:
         write_ocsci_conf()
+    if args.bugzilla_conf:
+        write_bugzilla_conf()

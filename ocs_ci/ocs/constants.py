@@ -84,7 +84,10 @@ IGNORE_SC_GP2 = "gp2"
 IGNORE_SC_FLEX = "rook-ceph-block"
 TEST_FILES_BUCKET = "ocsci-test-files"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
-
+OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
+MASTER_MACHINE = "master"
+WORKER_MACHINE = "worker"
+MOUNT_POINT = '/var/lib/www/html'
 
 DEFAULT_BLOCKPOOL = 'rbd'
 # encoded value of 'admin'
@@ -143,6 +146,10 @@ CSI_PVC_YAML = os.path.join(
 
 CSI_RBD_POD_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pod.yaml"
+)
+
+CSI_RBD_RAW_BLOCK_POD_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "raw_block_pod.yaml"
 )
 
 CSI_CEPHFS_POD_YAML = os.path.join(
@@ -218,6 +225,10 @@ EO_SUB_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_EO, "eo-sub.yaml"
 )
 
+DEVICESET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "deviceset.yaml"
+)
+
 # Openshift-logging clusterlogging operator deployment yamls
 CL_NAMESPACE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_CLO, "cl-namespace.yaml"
@@ -243,6 +254,7 @@ FIO_IO_RW_PARAMS_YAML = os.path.join(
 # constants
 RBD_INTERFACE = 'rbd'
 CEPHFS_INTERFACE = 'cephfs'
+RAW_BLOCK_DEVICE = '/dev/block'
 
 # EC2 instance statuses
 INSTANCE_PENDING = 0
@@ -260,3 +272,11 @@ NODE_READY_SCHEDULING_DISABLED = 'Ready,SchedulingDisabled'
 ALERT_CLUSTERWARNINGSTATE = 'CephClusterWarningState'
 ALERT_MGRISABSENT = 'CephMgrIsAbsent'
 ALERT_MONQUORUMATRISK = 'CephMonQuorumAtRisk'
+
+# OCS Deployment related constants
+OPERATOR_REPOSITORY = (
+    'https://raw.githubusercontent.com/openshift/ocs-operator/master/deploy'
+)
+OPERATOR_OLM_MANIFEST = f'{OPERATOR_REPOSITORY}/deploy-with-olm.yaml'
+OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
+OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"

@@ -30,6 +30,7 @@ class TestAvailabilityZones(ManageTest):
     5. restore availability zone access
     6. validate - cluster functionality and health
     """
+    sanity_helpers = sanity_helpers.Sanity()
 
     def test_availability_zone_failure(self, aws_obj, instances):
         """
@@ -39,7 +40,7 @@ class TestAvailabilityZones(ManageTest):
             instances (dict): cluster ec2 instances objects
 
         """
-        sanity_helpers.health_check(nodes=list(instances.values()))
+        self.sanity_helpers.health_check()
         # Select instances in randomly chosen availability zone:
         instances_in_az = self.random_availability_zone_selector(aws_obj, instances)
         logger.info(f"AZ selected, Instances: {instances_in_az} to be blocked")
@@ -112,7 +113,7 @@ class TestAvailabilityZones(ManageTest):
 
     def check_cluster_health(self, instances):
         try:
-            sanity_helpers.health_check(nodes=list(instances.values()))
+            self.sanity_helpers.health_check()
             return True
         except Exception as e:
             print(e)

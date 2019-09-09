@@ -3,22 +3,22 @@ import logging
 
 import boto3
 from botocore.client import ClientError
-
+from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(name=__file__)
 
 
-class NooBaa(object):
+class MCG(object):
     """
-    Wrapper class for NooBaa's S3 service
+    Wrapper class for the Multi Cloud Gateway's S3 service
     """
 
     s3_resource, ocp_resource, endpoint, region, access_key_id, access_key = (None,) * 6
 
     def __init__(self):
         """
-        Constructor for the NooBaa class
+        Constructor for the MCG class
         """
         ocp_obj = OCP(kind='noobaa', namespace='noobaa')
         results = ocp_obj.get()
@@ -48,16 +48,22 @@ class NooBaa(object):
             aws_secret_access_key=self.access_key
         )
 
-    def s3_create_bucket(self, bucketname):
+    def s3_create_bucket(self, bucketname, region=config.ENV_DATA['region']):
         """
         Args:
             bucketname: Name of the bucket to be created
+            region: Name of the region for the bucket to be created on
 
         Returns:
             s3.Bucket object
 
         """
-        return self.s3_resource.create_bucket(Bucket=bucketname)
+        return self.s3_resource.create_bucket(
+            Bucket=bucketname,
+            CreateBucketConfiguration={
+                'LocationConstraint': region
+            }
+        )
 
     def s3_delete_bucket(self, bucket):
         """

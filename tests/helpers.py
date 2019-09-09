@@ -92,7 +92,8 @@ def wait_for_resource_state(resource, state, timeout=60):
 def create_pod(
     interface_type=None, pvc_name=None,
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-    node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False
+    node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
+    raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE
 ):
     """
     Create a pod
@@ -106,7 +107,8 @@ def create_pod(
         pod_dict_path (str): YAML path for the pod
         sa_name (str): Serviceaccount name
         dc_deployment (bool): True if creating pod as deploymentconfig
-
+        raw_block_pv (bool): True for creating raw block pv based pod, False otherwise
+        raw_block_device (str): raw block device for the pod
     Returns:
         Pod: A Pod instance
 
@@ -139,6 +141,11 @@ def create_pod(
         else:
             pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
 
+    if interface_type == constants.CEPHBLOCKPOOL and raw_block_pv:
+        pod_data['spec']['containers'][0]['volumeDevices'][0]['devicePath'] = raw_block_device
+        pod_data['spec']['containers'][0]['volumeDevices'][0]['name'] = pod_data.get('spec').get('volumes')[
+            0].get('name')
+
     if node_name:
         pod_data['spec']['nodeName'] = node_name
     else:
@@ -162,9 +169,10 @@ def create_pod(
     else:
         pod_obj = pod.Pod(**pod_data)
         pod_name = pod_data.get('metadata').get('name')
+        logger.info(f'Creating new Pod {pod_name} for test')
         created_resource = pod_obj.create(do_reload=do_reload)
         assert created_resource, (
-            f"Failed to create resource {pod_name}"
+            f"Failed to create Pod {pod_name}"
         )
 
         return pod_obj
@@ -376,7 +384,7 @@ def create_pvc(
             associated with
         pvc_name (str): The name of the PVC to create
         namespace (str): The namespace for the PVC creation
-        size(str): Size of pvc to create
+        size (str): Size of pvc to create
         do_reload (bool): True for wait for reloading PVC after its creation, False otherwise
         access_mode (str): The access mode to be used for the PVC
         volume_mode (str): Volume mode for rbd RWX pvc i.e. 'Block'
@@ -691,7 +699,9 @@ def get_all_pvs():
     return ocp_pv_obj.get()
 
 
-@retry(AssertionError, tries=10, delay=5, backoff=1)
+# TODO: revert counts of tries and delay,BZ 1726266
+
+@retry(AssertionError, tries=20, delay=10, backoff=1)
 def validate_pv_delete(pv_name):
     """
     validates if pv is deleted after pvc deletion
@@ -710,7 +720,7 @@ def validate_pv_delete(pv_name):
 
     try:
         if ocp_pv_obj.get(resource_name=pv_name):
-            raise AssertionError
+            raise AssertionError('PV exists after PVC deletion')
 
     except CommandFailed:
         return True
@@ -997,13 +1007,13 @@ def delete_deploymentconfig(pod_obj):
     dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
 
 
-def craft_s3_command(noobaa_obj, cmd):
+def craft_s3_command(mcg_obj, cmd):
     """
     Crafts the AWS CLI S3 command including the
     login credentials and command to be ran
 
     Args:
-        noobaa_obj: A NooBaa object containing the NooBaa S3 connection credentials
+        mcg_obj: An MCG object containing the MCG S3 connection credentials
         cmd: The AWSCLI command to run
 
     Returns:
@@ -1011,11 +1021,11 @@ def craft_s3_command(noobaa_obj, cmd):
 
     """
     base_command = (
-        f"sh -c \"AWS_ACCESS_KEY_ID={noobaa_obj.access_key_id} "
-        f"AWS_SECRET_ACCESS_KEY={noobaa_obj.access_key} "
-        f"AWS_DEFAULT_REGION={noobaa_obj.region} "
+        f"sh -c \"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
+        f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
+        f"AWS_DEFAULT_REGION={mcg_obj.region} "
         f"aws s3 "
-        f"--endpoint={noobaa_obj.endpoint} "
+        f"--endpoint={mcg_obj.endpoint} "
     )
     string_wrapper = "\""
 

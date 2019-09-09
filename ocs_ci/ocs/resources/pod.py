@@ -144,6 +144,20 @@ class Pod(OCS):
         rsh_cmd += command
         return self.ocp.exec_oc_cmd(rsh_cmd, out_yaml_format, secrets=secrets, **kwargs)
 
+    def exec_bash_cmd_on_pod(self, command):
+        """
+        Execute a pure bash command on a pod via oc exec where you can use
+        bash syntaxt like &&, ||, ;, for loop and so on.
+
+        Args:
+            command (str): The command to execute on the given pod
+
+        Returns:
+            str: stdout of the command
+        """
+        cmd = f'exec {self.name} -- bash -c "{command}"'
+        return self.ocp.exec_oc_cmd(cmd, out_yaml_format=False)
+
     def get_labels(self):
         """
         Get labels from pod
@@ -184,15 +198,20 @@ class Pod(OCS):
             return [item for item in out if item]
         return out
 
-    def get_mount_path(self):
+    def get_storage_path(self, storage_type='fs'):
         """
-        Get the pod volume mount path
+        Get the pod volume mount path or device path
 
         Returns:
-            str: The mount path of the volume on the pod (e.g. /var/lib/www/html/)
+            str: The mount path of the volume on the pod (e.g. /var/lib/www/html/) if storage_type is fs
+                 else device path of raw block pv
         """
         # TODO: Allow returning a path of a specified volume of a specified
         #  container
+        if storage_type == 'block':
+            return self.pod_data.get('spec').get('containers')[0].get(
+                'volumeDevices')[0].get('devicePath')
+
         return (
             self.pod_data.get(
                 'spec'
@@ -209,7 +228,7 @@ class Pod(OCS):
         """
         work_load = 'fio'
         name = f'test_workload_{work_load}'
-        path = self.get_mount_path()
+        path = self.get_storage_path(storage_type)
         # few io parameters for Fio
 
         self.wl_obj = workload.WorkLoad(
@@ -258,6 +277,7 @@ class Pod(OCS):
                 constants.FIO_IO_PARAMS_YAML
             )
         self.io_params['runtime'] = runtime
+        size = size if isinstance(size, str) else f"{size}G"
         self.io_params['size'] = size
         if fio_filename:
             self.io_params['filename'] = fio_filename
@@ -314,7 +334,18 @@ def get_ceph_tools_pod():
         selector='app=rook-ceph-tools'
     )['items']
     assert ct_pod_items, "No Ceph tools pod found"
-    ceph_pod = Pod(**ct_pod_items[0])
+
+    # In the case of node failure, the CT pod will be recreated with the old
+    # one in status Terminated. Therefore, need to filter out the Terminated pod
+    running_ct_pods = list()
+    for pod in ct_pod_items:
+        if ocp_pod_obj.get_resource_status(
+            pod.get('metadata').get('name')
+        ) == constants.STATUS_RUNNING:
+            running_ct_pods.append(pod)
+
+    assert running_ct_pods, "No running Ceph tools pod found"
+    ceph_pod = Pod(**running_ct_pods[0])
     return ceph_pod
 
 
@@ -801,3 +832,21 @@ def get_pvc_name(pod_obj):
     return pod_obj.get().get(
         'spec'
     ).get('volumes')[0].get('persistentVolumeClaim').get('claimName')
+
+
+def get_used_space_on_mount_point(pod_obj):
+    """
+    Get the used space on a mount point
+
+    Args:
+        pod_obj (POD): The pod object
+
+    Returns:
+        int: Percentage represent the used space on the mount point
+
+    """
+    # Verify data's are written to mount-point
+    mount_point = pod_obj.exec_cmd_on_pod(command="df -kh")
+    mount_point = mount_point.split()
+    used_percentage = mount_point[mount_point.index(constants.MOUNT_POINT) - 1]
+    return used_percentage

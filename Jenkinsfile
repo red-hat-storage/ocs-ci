@@ -20,6 +20,7 @@ pipeline {
     AWS_ACCESS_KEY_ID = credentials('openshift-dev-aws-access-key-id')
     AWS_SECRET_ACCESS_KEY = credentials('openshift-dev-aws-secret-access-key')
     PULL_SECRET = credentials('openshift-pull-secret')
+    BUGZILLA_CFG = credentials('ocs-bugzilla-cfg')
   }
   stages {
     stage("Setup") {
