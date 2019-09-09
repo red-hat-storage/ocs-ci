@@ -11,6 +11,7 @@ import traceback
 from subprocess import Popen, PIPE
 
 import boto3
+from botocore.exceptions import ClientError
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
@@ -20,6 +21,7 @@ from ocs_ci.ocs.parallel import parallel
 from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.ocs.exceptions import SameNamePrefixClusterAlreadyExistsException
 
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd, clone_repo
 from .deployment import Deployment
 
@@ -330,15 +332,42 @@ class AWSUPI(AWSBase):
                 default:DEBUG)
         """
         cluster_name = get_cluster_name(self.cluster_path)
+        # Destroy extra volumes
         self.destroy_volumes()
-        suffixes = ['vpc', 'inf', 'sg', 'bs', 'ma']
-        for i in range(3):  # TODO: read in num_workers
-            suffixes.append(f'no{i}')
-        stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
+
+        # Create cloudformation client
         cf = boto3.client('cloudformation')
+
+        # Delete master, bootstrap, security group, and worker stacks
+        suffixes = ['ma', 'bs', 'sg']
+        # TODO: read in num_workers in a better way
+        num_workers = int(os.environ.get('num_workers', 3))
+        for i in range(num_workers - 1, -1, -1):
+            suffixes.insert(0, f'no{i}')
+        stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
         for stack_name in stack_names:
             logger.info("Destroying stack: %s", stack_name)
             cf.delete_stack(StackName=stack_name)
+            verify_stack_deleted(stack_name)
+
+        # Call openshift-installer destroy cluster
+        super(AWSUPI, self).destroy_cluster(log_level)
+
+        # Delete inf and vpc stacks
+        suffixes = ['inf', 'vpc']
+        stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
+        for stack_name in stack_names:
+            logger.info("Destroying stack: %s", stack_name)
+            cf.delete_stack(StackName=stack_name)
+            verify_stack_deleted(stack_name)
+
+        # Delete openshift-misc repository from cluster_path
+        openshift_misc_path = os.path.join(self.cluster_path, 'openshift-misc')
+        logger.info(
+            "Removing openshift-misc directory located at %s",
+            openshift_misc_path
+        )
+        shutil.rmtree(openshift_misc_path)
 
 
 def get_infra_id(cluster_path):
@@ -373,3 +402,25 @@ def get_cluster_name(cluster_path):
     with open(metadata_file) as f:
         metadata = json.loads(f.read())
     return metadata.get("clusterName")
+
+
+class StackStatusError(Exception):
+    pass
+
+
+@retry(StackStatusError, tries=12, delay=30, backoff=1)
+def verify_stack_deleted(stack_name):
+    try:
+        cf = boto3.client('cloudformation')
+        result = cf.describe_stacks(StackName=stack_name)
+        stacks = result['Stacks']
+        for stack in stacks:
+            status = stack['StackStatus']
+            raise StackStatusError(
+                f'{stack_name} not deleted yet, current status: {status}.'
+            )
+    except ClientError as e:
+        assert f"Stack with id {stack_name} does not exist" in str(e)
+        logger.info(
+            "Received expected ClientError, stack successfully deleted"
+        )
