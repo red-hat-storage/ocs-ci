@@ -37,105 +37,47 @@ def check_ceph_used_space():
     )
 
 @tier1
+@pytest.mark.polarion_id("OCS-278")
 class TestDeleteProjectWithPVCAndPods(ManageTest):
-    @pytest.fixture()
-    def setup_first(self):
-        """
-        Set up the first environment for the test
-        :return: setup_success (True/False)
-        """
-        log.info("Creating OCP+OCS Setup")
-        self.ocp_setup = ocp.OCP()
-        self.ocs_setup = OCS() # TODO: Scale to at-least 800 pvcs/pods
+    """
+    Create at least 2 projects, one with just pvcs and the other with pvcs
+    attached to pod, and delete them.
+    """
+    cephfs_pvcs_num = 100
+    rbd_pvcs_num = 100
 
-        log.info("Creating CephFS Secret")
-        self.cephfs_secret_obj = helpers.create_secret(constants.CEPHFILESYSTEM)
-        log.info("Creating RBD Secret")
-        self.rbd_secret_obj = helpers.create_secret(constants.CEPHBLOCKPOOL)
-        log.info("Creating CephBlockPool")
-        self.rbd_pool = helpers.create_ceph_block_pool()
+    def test_delete_project_with_pvc_and_pods(self, project_factory,
+                                              storageclass_factory, pvc_factory,
+                                              multi_pvc_factory, pod_factory):
+        log.info("Creating OCP+OCS Setup")
+        ocp_setup = ocp.OCP()
+        ocs_setup = OCS()  # TODO: Scale to at-least 800 pvcs/pods
+
+        log.info("Creating CephFS Storage class")
+        cephfs_sc = storageclass_factory(interface=constants.CEPHFILESYSTEM)
+        log.info("Creating RBD Storage class")
+        rbd_sc = storageclass_factory(interface=constants.CEPHBLOCKPOOL)
 
         log.info("Creating Project 1")
-        self.project = helpers.create_project()
+        project_1 = project_factory()
 
-        log.info("Creating RBD Storage class")
-        self.rbd_sc_obj = helpers.create_storage_class(
-            constants.CEPHBLOCKPOOL,
-            self.rbd_pool.name,
-            self.rbd_secret_obj.name
-        )
-
-        log.info("Creating CephFS Storage class")
-        self.cephfs_sc_obj = helpers.create_storage_class(
-            constants.CEPHFILESYSTEM,
-            helpers.get_cephfs_data_pool_name(),
-            self.cephfs_secret_obj.name
-        )
-
+        log.info("Creating {} CephFS PVCs".format(self.cephfs_pvcs_num))
         # Generate a given number of CephFS PVCs, randomly assigned RWO or RWX
-        cephfs_pvcs_num = 100
-        self.cephfs_pvcs = [helpers.create_pvc(sc_name=self.cephfs_sc_obj.name,
-                                          access_mode=random.choice(
-                                              [constants.ACCESS_MODE_RWO,
-                                               constants.ACCESS_MODE_RWX]),
-                                          namespace=self.project.namespace)
-                       for i in range(0, cephfs_pvcs_num)]
+        cephfs_pvcs = [pvc_factory(interface=constants.CEPHFILESYSTEM,
+                                   project=project_1,
+                                   storageclass=cephfs_sc,
+                                   access_mode=random.choice(
+                                       [constants.ACCESS_MODE_RWO,
+                                        constants.ACCESS_MODE_RWX]))
+                       for i in range(0, self.cephfs_pvcs_num)]
+        log.info("Creating {} RBD PVCs".format(self.rbd_pvcs_num))
+        rbd_pvcs = multi_pvc_factory(interface=constants.CEPHBLOCKPOOL,
+                                     project=project_1,
+                                     storageclass=rbd_sc,
+                                     access_mode=constants.ACCESS_MODE_RWO,
+                                     num_of_pvc=self.rbd_pvcs_num)
 
-        # Generate a given number of RBD PVCs, all RWO
-        rbd_pvcs_num = 100
-        self.rbd_pvcs = [helpers.create_pvc(sc_name=self.rbd_sc_obj.name,
-                                       access_mode=constants.ACCESS_MODE_RWO,
-                                       namespace=self.project.namespace)
-                    for i in range(0, rbd_pvcs_num)]
-
-    @pytest.fixture()
-    def setup_second(self):
-        """
-        Set up the second environment for the test
-        :return: setup_success (True/False)
-        """
-
-        log.info("Creating CephFS Secret")
-        self.cephfs_secret_obj = helpers.create_secret(constants.CEPHFILESYSTEM)
-        log.info("Creating RBD Secret")
-        self.rbd_secret_obj = helpers.create_secret(constants.CEPHBLOCKPOOL)
-        log.info("Creating CephBlockPool")
-        self.rbd_pool = helpers.create_ceph_block_pool()
-
-        log.info("Creating Project 2")
-        self.project = helpers.create_project()
-
-        log.info("Creating RBD Storage class")
-        self.rbd_sc_obj = helpers.create_storage_class(
-            constants.CEPHBLOCKPOOL,
-            self.rbd_pool.name,
-            self.rbd_secret_obj.name
-        )
-
-        log.info("Creating CephFS Storage class")
-        self.cephfs_sc_obj = helpers.create_storage_class(
-            constants.CEPHFILESYSTEM,
-            helpers.get_cephfs_data_pool_name(),
-            self.cephfs_secret_obj.name
-        )
-
-        # Generate a given number of CephFS PVCs, randomly assigned RWO or RWX
-        cephfs_pvcs_num = 100
-        self.cephfs_pvcs = [helpers.create_pvc(sc_name=self.cephfs_sc_obj.name,
-                                          access_mode=random.choice(
-                                              [constants.ACCESS_MODE_RWO,
-                                               constants.ACCESS_MODE_RWX]),
-                                          namespace=self.project.namespace)
-                       for i in range(0, cephfs_pvcs_num)]
-
-        # Generate a given number of RBD PVCs, all RWO
-        rbd_pvcs_num = 100
-        self.rbd_pvcs = [helpers.create_pvc(sc_name=self.rbd_sc_obj.name,
-                                       access_mode=constants.ACCESS_MODE_RWO,
-                                       namespace=self.project.namespace)
-                    for i in range(0, rbd_pvcs_num)]
-
-    def test_delete_project_with_pvc_and_pods(self):
+        # CUTOFF POINT
         pvs = helpers.get_all_pvs()
         space_used_before_deletion = check_ceph_used_space()
         start_time = time.time()
