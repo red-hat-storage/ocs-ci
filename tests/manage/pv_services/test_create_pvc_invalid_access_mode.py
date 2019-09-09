@@ -50,3 +50,4 @@ class TestCreatePvcInvalidAccessMode(ManageTest):
             assert expected_err in str(err), (
                 f"Couldn't verify PVC creation. Unexpected error {str(err)}"
             )
+            log.info("PVC creation failed as expected.")
