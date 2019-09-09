@@ -89,9 +89,11 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         # Create one pod using each RWO PVC and two pods using each RWX PVC
         for pvc_obj in pvc_objs:
             if pvc_obj.access_mode == constants.ACCESS_MODE_RWX:
-                pod_obj = pod_factory(pvc=pvc_obj, status="")
+                pod_obj = pod_factory(
+                    interface=interface, pvc=pvc_obj, status=""
+                )
                 rwx_pod_objs.append(pod_obj)
-            pod_obj = pod_factory(pvc=pvc_obj, status="")
+            pod_obj = pod_factory(interface=interface, pvc=pvc_obj, status="")
             pod_objs.append(pod_obj)
 
         # Wait for pods to be in Running state
@@ -191,7 +193,9 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         }
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=resource_to_delete)
-        executor = ThreadPoolExecutor(max_workers=len(pod_objs))
+        executor = ThreadPoolExecutor(
+            max_workers=len(pod_objs) + len(rwx_pod_objs)
+        )
 
         # Get number of pods of type 'resource_to_delete'
         num_of_resource_to_delete = len(pod_functions[resource_to_delete]())
