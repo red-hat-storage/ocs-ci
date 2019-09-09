@@ -132,7 +132,7 @@ run-ci tests/
 
 If you would like to destroy existing cluster you can run following command:
 ```bash
-run-ci -m deployment \
+run-ci -m destroy \
     --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir tests/ \
     --teardown
