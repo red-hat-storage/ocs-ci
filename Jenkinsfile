@@ -7,10 +7,17 @@
 //   openshift-dev-aws-access-key-id (AWS_ACCESS_KEY_ID)
 //   openshift-dev-aws-secret-access-key (AWS_SECRET_ACCESS_KEY)
 //   openshift-pull-secret (PULL_SECRET)
+//   ocs-bugzilla-cfg (BUGZILLA_CFG)
 // It may also provide these optional parameters to override the framework's
 // defaults:
+//   OCS_OPERATOR_DEPLOYMENT
 //   ROOK_IMAGE
 //   CEPH_IMAGE
+//   CEPH_CSI_IMAGE
+//   ROOK_CSI_REGISTRAR_IMAGE
+//   ROOK_CSI_PROVISIONER_IMAGE
+//   ROOK_CSI_SNAPSHOTTER_IMAGE
+//   ROOK_CSI_ATTACHER_IMAGE
 //   EMAIL
 pipeline {
   agent { node { label "ocs-ci" }}
