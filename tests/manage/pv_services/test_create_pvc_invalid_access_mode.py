@@ -45,7 +45,7 @@ class TestCreatePvcInvalidAccessMode(ManageTest):
                 custom_data=None,
                 status=constants.STATUS_BOUND
             )
-            assert not self.pvc_obj, "Unexpected: PVC creation didn't failed."
+            assert not self.pvc_obj, "Unexpected: PVC creation hasn't failed."
         except CommandFailed as err:
             assert expected_err in str(err), (
                 f"Couldn't verify PVC creation. Unexpected error {str(err)}"
