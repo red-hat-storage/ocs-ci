@@ -19,7 +19,8 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, run_cmd
+from ocs_ci.ocs.constants import NODE_SCRIPT_DIR
 
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
@@ -143,6 +144,24 @@ class Pod(OCS):
         rsh_cmd = f"rsh {self.name} "
         rsh_cmd += command
         return self.ocp.exec_oc_cmd(rsh_cmd, out_yaml_format, secrets=secrets, **kwargs)
+
+    def exec_script(self, script=None):
+        """"
+        Execute python script on the node
+
+        Args:
+            Script (str): Script name to Execute
+        """
+        # use the right git branch to get the script
+        git_cmd = run_cmd('git rev-parse --abbrev-ref HEAD')
+        git_branch = git_cmd.strip()
+        # set script location
+        script_file = (
+            f"{NODE_SCRIPT_DIR}/{git_branch}/ocs_ci/node_scripts/{script}"
+        )
+        self.exec_bash_cmd_on_pod(
+            f'curl -O {script_file} && python {script}'
+        )
 
     def exec_bash_cmd_on_pod(self, command):
         """

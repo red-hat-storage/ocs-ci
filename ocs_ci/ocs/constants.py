@@ -88,6 +88,7 @@ OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
 MOUNT_POINT = '/var/lib/www/html'
+NODE_SCRIPT_DIR = 'https://raw.githubusercontent.com/red-hat-storage/ocs-ci/'
 
 DEFAULT_BLOCKPOOL = 'rbd'
 # encoded value of 'admin'
