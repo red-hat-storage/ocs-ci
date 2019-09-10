@@ -302,6 +302,10 @@ class OCP(object):
             f" and selector {selector}"
             f" to reach desired condition {condition}"))
 
+        # actual status of the resource we are waiting for, setting it to None
+        # now prevents UnboundLocalError raised when waiting timeouts
+        actual_status = None
+
         try:
             for sample in TimeoutSampler(
                 timeout, sleep, self.get, resource_name, True, selector
