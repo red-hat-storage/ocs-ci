@@ -19,6 +19,7 @@
 //   ROOK_CSI_SNAPSHOTTER_IMAGE
 //   ROOK_CSI_ATTACHER_IMAGE
 //   EMAIL
+//   UMB_MESSAGE
 pipeline {
   agent { node { label "ocs-ci" }}
   environment {
@@ -105,6 +106,27 @@ pipeline {
         run-ci -m deployment --teardown --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
         """
       junit testResults: "logs/junit.xml", keepLongStdio: false
+    }
+    success {
+      script {
+        if( env.UMB_MESSAGE == true || env.UMB_MESSAGE == "true" ){
+          sendCIMessage \
+            providerName: 'Red Hat UMB', \
+            overrides: [ topic: 'VirtualTopic.qe.ci.jenkins' ], \
+            failOnError: false, \
+            messageType: 'Tier1TestingDone', \
+            messageProperties: '''
+              TOOL=ocs-ci
+              PRODUCT=ocs
+              PRODUCT_BUILD_CAUSE=${BUILD_CAUSE}
+            ''', \
+            messageContent: '''
+              {
+                "SENDER_BUILD_NUMBER": "${BUILD_NUMBER}"
+              }
+            '''
+        }
+      }
     }
   }
 }
