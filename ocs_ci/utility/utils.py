@@ -1207,4 +1207,14 @@ def get_rook_repo(branch='master', to_checkout=None):
 
 
 def check_if_executable_in_path(exec_name):
+    """
+    Checks whether an executable can be found in the $PATH
+
+    Args:
+        exec_name: Name of executable to look for
+
+    Returns:
+        Boolean: Whether the executable was found
+
+    """
     return which(exec_name) is not None

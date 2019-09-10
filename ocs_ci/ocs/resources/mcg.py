@@ -112,8 +112,6 @@ class MCG(object):
         Args:
             bucketname: Name of bucket to be deleted
 
-        Returns:
-
         """
         logger.info(f"Deleting bucket: {bucketname}")
         assert 'Deleted' in run_mcg_cmd(f'obc delete {bucketname}')
@@ -145,7 +143,7 @@ class MCG(object):
         """
         Verifies whether the Bucket exists
         Args:
-            bucketname(S3 object) : The bucket object to be verified
+            bucketname : The bucket name to be verified
 
         Returns:
               bool: True if bucket exists, False otherwise

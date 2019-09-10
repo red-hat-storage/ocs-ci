@@ -86,7 +86,7 @@ def bucket_factory(request, mcg_obj):
     def bucket_cleanup():
         all_existing_buckets = mcg_obj.s3_list_all_bucket_names()
         for bucket_name in set(created_bucket_names).intersection(all_existing_buckets):
-            logger.info(f'Cleanin up bucket {bucket_name}')
+            logger.info(f'Cleaning up bucket {bucket_name}')
             getattr(mcg_obj, f'{bucket_name.split("-")[0]}_delete_bucket')(bucketname=bucket_name)
             logger.info(
                 f"Verifying whether bucket: {bucket_name} exists after deletion"
