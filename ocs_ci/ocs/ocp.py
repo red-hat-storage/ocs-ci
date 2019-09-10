@@ -344,10 +344,16 @@ class OCP(object):
                                 return True
                         elif len(sample) == len(in_condition):
                             return True
+                    # preparing logging message with expected number of
+                    # resource items we are waiting for
+                    if resource_count > 0:
+                        exp_num_str = f"all {resource_count}"
+                    else:
+                        exp_num_str = "all"
                     log.info((
                         f"status of {resource_name} item(s) were {actual_status},"
                         f" but we were waiting"
-                        f" for all of them to be {condition}"))
+                        f" for {exp_num_str} of them to be {condition}"))
         except TimeoutExpiredError as ex:
             log.error(f"timeout expired: {ex}")
             log.error((
