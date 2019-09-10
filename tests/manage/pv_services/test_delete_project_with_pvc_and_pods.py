@@ -52,7 +52,7 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         # Start with Project 1
         log.info("Creating OCP+OCS Setup")
         ocp_setup = ocp.OCP()
-        ocs_setup = OCS()  # TODO: Scale to at-least 800 pvcs/pods
+        ocs_setup = OCS()  # TODO: Scale the setup to at-least 800 pvcs/pods
 
         log.info("Creating CephFS Storage class")
         cephfs_sc = storageclass_factory(interface=constants.CEPHFILESYSTEM)
@@ -99,12 +99,14 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         for pv in pvs:
             pv_start_time = time.time()
             pv_name = pv.backed_pv
-            pv.delete()
+            #pv.delete()
             pv.ocp.wait_for_delete(pv_name)
             helpers.validate_pv_delete(pv_name)
             pv_delete_time = time.time() - pv_start_time
             individual_pv_delete_times.append({pv_name: pv_delete_time})
             time_between_pvcs_deletion_success += pv_delete_time
+        log.info("{} seconds between first and last PVC deletion".format(
+            time_between_pvcs_deletion_success))
         # Verify space has been reclaimed
         space_used_after_deletion = check_ceph_used_space()
         log.info("Verifying space has been reclaimed...")
@@ -141,3 +143,23 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         log.info(
             "Project 2 deletion time: {} seconds".format(project_deletion_time))
         # PVs delete might still be running, check until all PVs are deleted
+        # Check time between first PV delete and last PV delete
+        time_between_pvcs_deletion_success = 0
+        # Also check delete time per each PV
+        individual_pv_delete_times = []
+        for pv in pvs:
+            pv_start_time = time.time()
+            pv_name = pv.backed_pv
+            # pv.delete()
+            pv.ocp.wait_for_delete(pv_name)
+            helpers.validate_pv_delete(pv_name)
+            pv_delete_time = time.time() - pv_start_time
+            individual_pv_delete_times.append({pv_name: pv_delete_time})
+            time_between_pvcs_deletion_success += pv_delete_time
+        log.info("{} seconds between first and last PVC deletion".format(
+            time_between_pvcs_deletion_success))
+        # Verify space has been reclaimed
+        space_used_after_deletion = check_ceph_used_space()
+        log.info("Verifying space has been reclaimed...")
+        assert space_used_after_deletion < space_used_before_deletion
+        log.info("Space reclaimed successfully.")
