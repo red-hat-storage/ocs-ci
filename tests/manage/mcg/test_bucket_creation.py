@@ -43,7 +43,6 @@ class TestBucketCreation:
             mcg_obj.cli_list_all_bucket_names()
         )
 
-    @pytest.mark.skipif(condition=True, reason="OC is not deployed")
     def test_oc_bucket_creation(self, mcg_obj, bucket_factory):
         """
         Test bucket creation using OC commands
@@ -51,5 +50,5 @@ class TestBucketCreation:
         assert set(
             bucketname for bucketname in bucket_factory(3, 'OC')
         ).issubset(
-            mcg_obj.s3_list_all_bucket_names()
+            mcg_obj.oc_list_all_bucket_names()
         )

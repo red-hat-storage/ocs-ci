@@ -43,12 +43,11 @@ class TestBucketDeletion:
             assert mcg_obj.cli_verify_bucket_exists(bucketname) is False, \
                 f"Found {bucketname} that should've been removed"
 
-    @pytest.mark.skipif(condition=True, reason="OC is not deployed")
     def test_oc_bucket_delete(self, mcg_obj, bucket_factory):
         """
         Test deletion of buckets using OC commands
         """
         for bucketname in bucket_factory(3, 'OC'):
             logger.info(f"Deleting bucket: {bucketname}")
-            mcg_obj.cli_delete_obc(bucketname)
-            assert mcg_obj.cli_verify_bucket_exists(bucketname) is False
+            mcg_obj.oc_delete_obc(bucketname)
+            assert mcg_obj.oc_verify_bucket_exists(bucketname) is False
