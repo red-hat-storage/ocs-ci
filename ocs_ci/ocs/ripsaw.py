@@ -124,6 +124,8 @@ class RipSaw(object):
         run(f'oc delete -f {self.operator}', shell=True, cwd=self.dir)
         run(f'oc delete -f deploy', shell=True, cwd=self.dir)
         run_cmd(f'oc delete project {self.namespace}')
+        # Reset namespace to default 'openshift-storage'
+        run(f'oc project openshift-storage', shell=True)
         if self.pgsql_is_setup:
             self.pgsql_sset.delete()
             self.pgsql_cmap.delete()

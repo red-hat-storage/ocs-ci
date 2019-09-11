@@ -33,7 +33,6 @@ def ripsaw(request, storageclass_factory):
 
 
 @workloads
-@tier1
 class TestPgSQLWorkload(E2ETest):
     """
     Deploy an PGSQL workload using operator
@@ -58,7 +57,7 @@ class TestPgSQLWorkload(E2ETest):
 
         # Wait for pgbench pod to be created
         for pgbench_pod in TimeoutSampler(
-            60, 3, get_pod_name_by_pattern, 'pgbench-1-dbs-client', 'my-ripsaw'
+            120, 3, get_pod_name_by_pattern, 'pgbench-1-dbs-client', 'my-ripsaw'
         ):
             try:
                 if pgbench_pod[0] is not None:
