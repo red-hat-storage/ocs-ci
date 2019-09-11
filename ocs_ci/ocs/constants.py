@@ -92,6 +92,7 @@ MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
 MOUNT_POINT = '/var/lib/www/html'
 
+DEFAULT_SECRET = 'rook-ceph-csi'
 DEFAULT_BLOCKPOOL = 'rbd'
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
