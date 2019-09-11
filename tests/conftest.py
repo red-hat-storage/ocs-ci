@@ -48,8 +48,17 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
+def secret_factory_class(request):
+    return secret_factory_fixture(request)
+
+
+@pytest.fixture(scope='function')
 def secret_factory(request):
+    return secret_factory_fixture(request)
+
+
+def secret_factory_fixture(request):
     """
     Secret factory. Calling this fixture creates a new secret.
     RBD based is default.
@@ -84,8 +93,17 @@ def secret_factory(request):
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
+def ceph_pool_factory_class(request):
+    return ceph_pool_factory_fixture(request)
+
+
+@pytest.fixture(scope='function')
 def ceph_pool_factory(request):
+    return ceph_pool_factory_fixture(request)
+
+
+def ceph_pool_factory_fixture(request):
     """
     Create a Ceph pool factory.
     Calling this fixture creates new Ceph pool instance.
@@ -120,8 +138,33 @@ def ceph_pool_factory(request):
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
+def storageclass_factory_class(
+    request,
+    ceph_pool_factory_class,
+    secret_factory_class
+):
+    return storageclass_factory_fixture(
+        request,
+        ceph_pool_factory_class,
+        secret_factory_class
+    )
+
+
+@pytest.fixture(scope='function')
 def storageclass_factory(
+    request,
+    ceph_pool_factory,
+    secret_factory
+):
+    return storageclass_factory_fixture(
+        request,
+        ceph_pool_factory,
+        secret_factory
+    )
+
+
+def storageclass_factory_fixture(
     request,
     ceph_pool_factory,
     secret_factory,
@@ -193,7 +236,16 @@ def storageclass_factory(
 
 
 @pytest.fixture()
+def project_factory_class(request):
+    return project_factory_fixture(request)
+
+
+@pytest.fixture()
 def project_factory(request):
+    return project_factory_fixture(request)
+
+
+def project_factory_fixture(request):
     """
     Create a new project factory.
     Calling this fixture creates new project.
@@ -223,8 +275,33 @@ def project_factory(request):
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
+def pvc_factory_class(
+    request,
+    storageclass_factory_class,
+    project_factory_class
+):
+    return pvc_factory_fixture(
+        request,
+        storageclass_factory_class,
+        project_factory_class
+    )
+
+
+@pytest.fixture(scope='function')
 def pvc_factory(
+    request,
+    storageclass_factory,
+    project_factory
+):
+    return pvc_factory_fixture(
+        request,
+        storageclass_factory,
+        project_factory,
+    )
+
+
+def pvc_factory_fixture(
     request,
     storageclass_factory,
     project_factory
@@ -336,8 +413,17 @@ def pvc_factory(
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
+def pod_factory_class(request, pvc_factory_class):
+    return pod_factory_fixture(request, pvc_factory_class)
+
+
+@pytest.fixture(scope='function')
 def pod_factory(request, pvc_factory):
+    return pod_factory_fixture(request, pvc_factory)
+
+
+def pod_factory_fixture(request, pvc_factory):
     """
     Create a Pod factory. Calling this fixture creates new Pod.
     For custom Pods provide 'pvc' parameter.
@@ -398,8 +484,17 @@ def pod_factory(request, pvc_factory):
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
+def teardown_factory_class(request):
+    return teardown_factory_fixture(request)
+
+
+@pytest.fixture(scope='function')
 def teardown_factory(request):
+    return teardown_factory_fixture(request)
+
+
+def teardown_factory_fixture(request):
     """
     Tearing down a resource that was created during the test
     To use this factory, you'll need to pass 'teardown_factory' to your test
@@ -775,8 +870,29 @@ def interface_iterate(request):
     return request.param['interface']
 
 
-@pytest.fixture()
-def multi_pvc_factory(
+@pytest.fixture(scope='class')
+def multi_pvc_factory_class(
+    storageclass_factory_class,
+    project_factory_class,
+    pvc_factory_class
+):
+    return multi_pvc_factory_fixture(
+        storageclass_factory_class,
+        project_factory_class,
+        pvc_factory_class
+    )
+
+
+@pytest.fixture(scope='function')
+def multi_pvc_factory(storageclass_factory, project_factory, pvc_factory):
+    return multi_pvc_factory_fixture(
+        storageclass_factory,
+        project_factory,
+        pvc_factory
+    )
+
+
+def multi_pvc_factory_fixture(
     storageclass_factory,
     project_factory,
     pvc_factory
