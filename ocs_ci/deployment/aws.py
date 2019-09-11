@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import shutil
-import sys
 import traceback
 from subprocess import Popen, PIPE
 
@@ -110,7 +109,7 @@ class AWSBase(Deployment):
     def destroy_volumes(self):
         try:
             # Retrieve cluster name and AWS region from metadata
-            cluster_name = self.ocp_deployment.metadata.get("clusterName")
+            cluster_name = get_cluster_name(self.cluster_path)
             # Find and delete volumes
             volume_pattern = f"{cluster_name}*"
             logger.debug(f"Finding volumes with pattern: {volume_pattern}")
@@ -240,7 +239,9 @@ class AWSUPI(AWSBase):
             )
 
             # create install-dir inside upi_script_path
-            relative_cluster_path = "../../../../../../"
+            # cluster_path is 6 directories higher than the sym-link
+            # path must be relative to the UPI script location
+            relative_cluster_path = "../" * 6
             os.symlink(
                 os.path.join(
                     relative_cluster_path,
@@ -291,12 +292,16 @@ class AWSUPI(AWSBase):
             with open("./upi_on_aws-install.sh", "w") as fd:
                 fd.write(data)
 
-            sys.path.append(self.upi_script_path)
-            full_path = os.getcwd()
+            # ensure oc is on PATH for UPI install script
+            test_env = os.environ.copy()
+            path = test_env.get('PATH')
+            oc_path = os.path.join(constants.TOP_DIR, 'bin')
+            test_env['PATH'] = f'{oc_path}:{path}'
+
             logger.info("Executing UPI install script")
             proc = Popen(
-                [os.path.join(full_path, 'upi_on_aws-install.sh')],
-                stdout=PIPE, stderr=PIPE,
+                [os.path.join(self.upi_script_path, 'upi_on_aws-install.sh')],
+                stdout=PIPE, stderr=PIPE, env=test_env
             )
             stdout, stderr = proc.communicate()
 
