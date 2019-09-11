@@ -8,7 +8,7 @@ import yaml
 import shlex
 import re
 
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs import defaults
@@ -165,7 +165,7 @@ class OCP(object):
         if out_yaml_format:
             command += " -o yaml"
         output = self.exec_oc_cmd(command)
-        logging.debug(f"{yaml.dump(output)}")
+        log.debug(f"{yaml.dump(output)}")
         return output
 
     def delete(self, yaml_file=None, resource_name='', wait=True, force=False):
@@ -296,37 +296,71 @@ class OCP(object):
                 False otherwise
 
         """
-        for sample in TimeoutSampler(
-            timeout, sleep, self.get, resource_name, True, selector
-        ):
+        log.info((
+            f"Waiting for a resource(s) of kind {self._kind}"
+            f" identified by name '{resource_name}'"
+            f" and selector {selector}"
+            f" to reach desired condition {condition}"))
 
-            # Only 1 resource expected to be returned
-            if resource_name:
-                if self.get_resource_status(resource_name) == condition:
-                    return True
-            # More than 1 resources returned
-            elif sample.get('kind') == 'List':
-                in_condition = []
-                sample = sample['items']
-                for item in sample:
-                    try:
-                        _name = item.get('metadata').get('name')
-                        if self.get_resource_status(_name) == condition:
-                            in_condition.append(item)
-                    except CommandFailed as ex:
-                        log.info(
-                            f"Failed to get status of resource: {_name}, "
-                            f"Error: {ex}"
-                        )
-                    if resource_count:
-                        items_in_condition = (
-                            [it.get('metadata').get('name') for it in in_condition]
-                        )
-                        log.info(f"In condition resources: {items_in_condition}")
-                        if len(in_condition) == resource_count:
-                            return True
-                    elif len(sample) == len(in_condition):
+        # actual status of the resource we are waiting for, setting it to None
+        # now prevents UnboundLocalError raised when waiting timeouts
+        actual_status = None
+
+        try:
+            for sample in TimeoutSampler(
+                timeout, sleep, self.get, resource_name, True, selector
+            ):
+
+                # Only 1 resource expected to be returned
+                if resource_name:
+                    status = self.get_resource_status(resource_name)
+                    if status == condition:
                         return True
+                    log.info((
+                        f"status of {resource_name} was {status},"
+                        f" but we were waiting for {condition}"))
+                    actual_status = status
+                # More than 1 resources returned
+                elif sample.get('kind') == 'List':
+                    in_condition = []
+                    actual_status = []
+                    sample = sample['items']
+                    for item in sample:
+                        try:
+                            item_name = item.get('metadata').get('name')
+                            status = self.get_resource_status(item_name)
+                            actual_status.append(status)
+                            if status == condition:
+                                in_condition.append(item)
+                        except CommandFailed as ex:
+                            log.info(
+                                f"Failed to get status of resource: {item_name}, "
+                                f"Error: {ex}"
+                            )
+                        if resource_count:
+                            if len(in_condition) == resource_count and (
+                                len(sample) == len(in_condition)
+                            ):
+                                return True
+                        elif len(sample) == len(in_condition):
+                            return True
+                    # preparing logging message with expected number of
+                    # resource items we are waiting for
+                    if resource_count > 0:
+                        exp_num_str = f"all {resource_count}"
+                    else:
+                        exp_num_str = "all"
+                    log.info((
+                        f"status of {resource_name} item(s) were {actual_status},"
+                        f" but we were waiting"
+                        f" for {exp_num_str} of them to be {condition}"))
+        except TimeoutExpiredError as ex:
+            log.error(f"timeout expired: {ex}")
+            log.error((
+                f"Wait for {self._kind} resource {resource_name}"
+                f" to reach desired condition {condition} failed,"
+                f" last actual status was {actual_status}"))
+            raise(ex)
 
         return False
 
