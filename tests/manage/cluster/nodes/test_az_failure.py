@@ -1,6 +1,7 @@
 import logging
 import pytest
 import random
+import time
 
 from ocs_ci.framework.testlib import ManageTest, tier4
 from ocs_ci.framework import config
@@ -32,7 +33,7 @@ class TestAvailabilityZones(ManageTest):
     """
     sanity_helpers = sanity_helpers.Sanity()
 
-    def test_availability_zone_failure(self, aws_obj, instances):
+    def test_availability_zone_failure(self, aws_obj, ec2_instances):
         """
 
         Args:
@@ -42,7 +43,7 @@ class TestAvailabilityZones(ManageTest):
         """
         self.sanity_helpers.health_check()
         # Select instances in randomly chosen availability zone:
-        instances_in_az = self.random_availability_zone_selector(aws_obj, instances)
+        instances_in_az = self.random_availability_zone_selector(aws_obj, ec2_instances)
         logger.info(f"AZ selected, Instances: {instances_in_az} to be blocked")
 
         # Storing current security groups for selected instances:
@@ -53,7 +54,8 @@ class TestAvailabilityZones(ManageTest):
         security_group_id = self.block_aws_availability_zone(aws_obj, instances_in_az)
 
         # Check cluster's health, need to be unhealthy at that point
-        assert self.check_cluster_health(instances) == 0
+        time.sleep(300)
+        assert self.check_cluster_health() == 0
 
         # TODO add test plan stages
 
@@ -62,24 +64,24 @@ class TestAvailabilityZones(ManageTest):
         logger.info(f"Access restores")
 
         # Check cluster's health, need to be healthy at that point
-        assert self.check_cluster_health(instances) == 1
+        assert self.check_cluster_health() == 1
 
-    def random_availability_zone_selector(self, aws_obj, instances):
+    def random_availability_zone_selector(self, aws_obj, ec2_instances):
         """
         Get all instances within random availability zone
 
         Args:
             aws_obj (obj): aws.AWS() object
-            instances (dict): cluster ec2 instances objects
+            ec2_instances (dict): cluster ec2 instances objects
 
         Returns:
             list: instances_in_az
 
         """
-        random_az_selector = random.choice(list(instances.keys()))
+        random_az_selector = random.choice(list(ec2_instances.keys()))
         random_az_selected = aws_obj.get_availability_zone_id_by_instance_id(random_az_selector)
         instances_in_az = list()
-        for instance in instances.keys():
+        for instance in ec2_instances.keys():
             az = aws_obj.get_availability_zone_id_by_instance_id(instance)
             if random_az_selected == az:
                 instances_in_az.append(instance)
@@ -111,7 +113,7 @@ class TestAvailabilityZones(ManageTest):
 
         return security_group_id
 
-    def check_cluster_health(self, instances):
+    def check_cluster_health(self):
         try:
             self.sanity_helpers.health_check()
             return True
