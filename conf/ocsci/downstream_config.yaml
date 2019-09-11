@@ -12,5 +12,6 @@ ENV_DATA:
 REPORTING:
   # Upstream: 'US' or Downstream: 'DS', used only for reporting (Test Run Name)
   us_ds: 'DS'
+  ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
 DEPLOYMENT:
   ocs_operator_deployment: false

@@ -441,6 +441,126 @@ def teardown_factory(request):
     return factory
 
 
+@pytest.fixture()
+def service_account_factory(request):
+    """
+    Create a service account
+    """
+    instances = []
+    active_service_account_obj = None
+
+    def factory(
+        project=None, service_account=None
+    ):
+        """
+        Args:
+            project (object): ocs_ci.ocs.resources.ocs.OCS instance
+                of 'Project' kind.
+            service_account (str): service_account_name
+
+        Returns:
+            object: serviceaccount instance.
+        """
+        nonlocal active_service_account_obj
+
+        if active_service_account_obj and not service_account:
+            return active_service_account_obj
+        elif service_account:
+            sa_obj = helpers.get_serviceaccount_obj(sa_name=service_account, namespace=project.namespace)
+            if not helpers.validate_scc_policy(sa_name=service_account, namespace=project.namespace):
+                helpers.add_scc_policy(sa_name=service_account, namespace=project.namespace)
+            sa_obj.project = project
+            active_service_account_obj = sa_obj
+            instances.append(sa_obj)
+            return sa_obj
+        else:
+            sa_obj = helpers.create_serviceaccount(
+                namespace=project.namespace,
+            )
+            sa_obj.project = project
+            active_service_account_obj = sa_obj
+            helpers.add_scc_policy(sa_name=sa_obj.name, namespace=project.namespace)
+            assert sa_obj, "Failed to create serviceaccount"
+            instances.append(sa_obj)
+            return sa_obj
+
+    def finalizer():
+        """
+        Delete the service account
+        """
+        for instance in instances:
+            helpers.remove_scc_policy(
+                sa_name=instance.name,
+                namespace=instance.namespace
+            )
+            instance.delete()
+            instance.ocp.wait_for_delete(resource_name=instance.name)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def dc_pod_factory(
+    request,
+    service_account_factory,
+    pvc_factory,
+):
+    """
+    Create deploymentconfig pods
+    """
+    instances = []
+
+    def factory(
+        interface=constants.CEPHBLOCKPOOL,
+        pvc=None,
+        service_account=None,
+        size=None,
+        custom_data=None,
+        replica_count=1,
+    ):
+        """
+        Args:
+            interface (str): CephBlockPool or CephFileSystem. This decides
+                whether a RBD based or CephFS resource is created.
+                RBD is default.
+            pvc (PVC object): ocs_ci.ocs.resources.pvc.PVC instance kind.
+            service_account (str): service account name for dc_pods
+            size (int): The requested size for the PVC
+            custom_data (dict): If provided then Pod object is created
+                by using these data. Parameter `pvc` is not used but reference
+                is set if provided.
+            replica_count (int): Replica count for deployment config
+        """
+        if custom_data:
+            dc_pod_obj = helpers.create_resource(**custom_data)
+        else:
+
+            pvc = pvc or pvc_factory(interface=interface, size=size)
+            sa_obj = service_account_factory(project=pvc.project, service_account=service_account)
+            dc_pod_obj = helpers.create_pod(
+                interface_type=interface, pvc_name=pvc.name, do_reload=False,
+                namespace=pvc.namespace, sa_name=sa_obj.name, dc_deployment=True,
+                replica_count=replica_count
+            )
+        instances.append(dc_pod_obj)
+        log.info(dc_pod_obj.name)
+        helpers.wait_for_resource_state(
+            dc_pod_obj, constants.STATUS_RUNNING, timeout=180
+        )
+        return dc_pod_obj
+
+    def finalizer():
+        """
+        Delete dc pods
+        """
+        for instance in instances:
+            helpers.delete_deploymentconfig(instance)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
 @pytest.fixture(scope="session", autouse=True)
 def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
     """
@@ -769,7 +889,7 @@ def multi_pvc_factory(
                 status=status_tmp
             )
             pvc_list.append(pvc_obj)
-
+            pvc_obj.project = project
         if status and not wait_each:
             for pvc_obj in pvc_list:
                 helpers.wait_for_resource_state(pvc_obj, status)
