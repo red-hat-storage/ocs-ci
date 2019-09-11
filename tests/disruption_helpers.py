@@ -22,17 +22,27 @@ class Disruptions:
         self.resource = resource
         if self.resource == 'mgr':
             self.resource_obj = pod.get_mgr_pods()
+            self.type = 'rook-ceph'
         if self.resource == 'mon':
             self.resource_obj = pod.get_mon_pods()
+            self.type = 'rook-ceph'
         if self.resource == 'osd':
             self.resource_obj = pod.get_osd_pods()
+            self.type = 'rook-ceph'
         if self.resource == 'mds':
             self.resource_obj = pod.get_mds_pods()
+            self.type = 'rook-ceph'
+        if self.resource == 'cephfsplugin':
+            self.resource_obj = pod.get_cephfsplugin_pods()
+            self.type = 'csi'
+        if self.resource == 'rbdplugin':
+            self.resource_obj = pod.get_rbdplugin_pods()
+            self.type = 'csi'
         self.resource_count = len(self.resource_obj)
 
     def delete_resource(self):
         self.resource_obj[0].delete(force=True)
         assert POD.wait_for_resource(
-            condition='Running', selector=f'app=rook-ceph-{self.resource}',
+            condition='Running', selector=f'app={self.type}-{self.resource}',
             resource_count=self.resource_count, timeout=300
         )

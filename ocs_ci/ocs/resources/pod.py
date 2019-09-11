@@ -850,3 +850,37 @@ def get_used_space_on_mount_point(pod_obj):
     mount_point = mount_point.split()
     used_percentage = mount_point[mount_point.index(constants.MOUNT_POINT) - 1]
     return used_percentage
+
+
+def get_cephfsplugin_pods(cephfsplugin_label=constants.CSI_CEPHFSPLUGIN_LABEL, namespace=None):
+    """
+    Fetches info of csi-cephfsplugin pods
+
+    Args:
+        cephfsplugin_label (str): Label associated with csi-cephfsplugin pods
+        namespace (str): Name of cluster namespace
+
+    Returns:
+        list : csi-cephfsplugin pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    cephfsplugins = get_pods_having_label(cephfsplugin_label, namespace)
+    cephfsplugin_pods = [Pod(**cephfsplugin) for cephfsplugin in cephfsplugins]
+    return cephfsplugin_pods
+
+
+def get_rbdplugin_pods(rbdplugin_label=constants.CSI_RBDPLUGIN_LABEL, namespace=None):
+    """
+    Fetches info of csi-rbdplugin pods
+
+    Args:
+        rbdplugin_label (str): Label associated with csi-rbdplugin pods
+        namespace (str): Name of cluster namespace
+
+    Returns:
+        list : csi-rbdplugin pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    rbdplugins = get_pods_having_label(rbdplugin_label, namespace)
+    rbdplugin_pods = [Pod(**rbdplugin) for rbdplugin in rbdplugins]
+    return rbdplugin_pods
