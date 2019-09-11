@@ -46,19 +46,26 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
     cephfs_pvcs_num = 100
     rbd_pvcs_num = 100
 
-    def test_delete_project_with_pvc_and_pods(self, project_factory,
-                                              storageclass_factory, pvc_factory,
-                                              multi_pvc_factory, pod_factory):
-        # Start with Project 1
+    @pytest.fixture()
+    def setup(self, storageclass_factory):
+        """
+        Create an OCP+OCS Setup, as well as two Storage classes:
+        one for CephFS and one for RBD.
+        Scale the setup to at-least 800 pvcs/pods.
+        """
         log.info("Creating OCP+OCS Setup")
-        ocp_setup = ocp.OCP()
-        ocs_setup = OCS()  # TODO: Scale the setup to at-least 800 pvcs/pods
+        self.ocp_setup = ocp.OCP()
+        self.ocs_setup = OCS()  # TODO: Scale the setup to at-least 800 pvcs/pods
 
         log.info("Creating CephFS Storage class")
-        cephfs_sc = storageclass_factory(interface=constants.CEPHFILESYSTEM)
+        self.cephfs_sc = storageclass_factory(interface=constants.CEPHFILESYSTEM)
         log.info("Creating RBD Storage class")
-        rbd_sc = storageclass_factory(interface=constants.CEPHBLOCKPOOL)
+        self.rbd_sc = storageclass_factory(interface=constants.CEPHBLOCKPOOL)
 
+    def test_delete_project_with_pvc_and_pods(self, project_factory,
+                                              pvc_factory, multi_pvc_factory,
+                                              pod_factory):
+        # Start with Project 1
         log.info("Creating Project 1")
         project_1 = project_factory()
 
@@ -67,7 +74,7 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         rwo_pvcs = random.randint(0, self.cephfs_pvcs_num)
         cephfs_pvcs = [pvc_factory(interface=constants.CEPHFILESYSTEM,
                                    project=project_1,
-                                   storageclass=cephfs_sc,
+                                   storageclass=self.cephfs_sc,
                                    access_mode=
                                    constants.ACCESS_MODE_RWO if i < rwo_pvcs
                                    else constants.ACCESS_MODE_RWX)
@@ -75,7 +82,7 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         log.info("Creating {} RBD PVCs".format(self.rbd_pvcs_num))
         rbd_pvcs = multi_pvc_factory(interface=constants.CEPHBLOCKPOOL,
                                      project=project_1,
-                                     storageclass=rbd_sc,
+                                     storageclass=self.rbd_sc,
                                      access_mode=constants.ACCESS_MODE_RWO,
                                      num_of_pvc=self.rbd_pvcs_num)
 
