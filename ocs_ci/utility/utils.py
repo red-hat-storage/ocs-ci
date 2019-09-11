@@ -7,7 +7,6 @@ import shlex
 import string
 import subprocess
 import time
-import traceback
 import requests
 import yaml
 import re
@@ -19,7 +18,6 @@ from ocs_ci.ocs.exceptions import (
     UnavailableBuildException,
 )
 from ocs_ci.framework import config
-from ocs_ci.utility.aws import AWS
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from ocs_ci.ocs import constants
@@ -471,54 +469,6 @@ def expose_nightly_ocp_version(version):
         version_url_content = get_url_content(latest_nightly_url)
         version_json = json.loads(version_url_content)
         return version_json['name']
-
-
-def destroy_cluster(cluster_path, log_level="DEBUG"):
-    """
-    Destroy existing cluster resources in AWS.
-
-    Args:
-        cluster_path (str): filepath to cluster directory to be destroyed
-        log_level (str): log level to set for openshift_installer
-
-    """
-    # Download installer
-    installer = get_openshift_installer()
-
-    destroy_cmd = (
-        f"{installer} destroy cluster "
-        f"--dir {cluster_path} "
-        f"--log-level {log_level}"
-    )
-
-    try:
-        cluster_path = os.path.normpath(cluster_path)
-
-        # Retrieve cluster name and aws region from metadata
-        metadata_file = os.path.join(cluster_path, "metadata.json")
-        with open(metadata_file) as f:
-            metadata = json.loads(f.read())
-        cluster_name = metadata.get("clusterName")
-        region_name = metadata.get("aws").get("region")
-
-        # Execute destroy cluster using OpenShift installer
-        log.info(f"Destroying cluster defined in {cluster_path}")
-        run_cmd(destroy_cmd)
-
-        # Find and delete volumes
-        aws = AWS(region_name)
-        volume_pattern = f"{cluster_name}*"
-        log.debug(f"Finding volumes with pattern: {volume_pattern}")
-        volumes = aws.get_volumes_by_name_pattern(volume_pattern)
-        log.debug(f"Found volumes: \n {volumes}")
-        for volume in volumes:
-            aws.detach_and_delete_volume(aws.ec2_resource.Volume(volume['id']))
-
-        # Remove installer
-        delete_file(installer)
-
-    except Exception:
-        log.error(traceback.format_exc())
 
 
 def get_openshift_installer(
