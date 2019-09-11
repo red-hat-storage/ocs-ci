@@ -11,7 +11,6 @@ from tests.helpers import craft_s3_command
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.skipif(condition=True, reason="MCG is not deployed")
 @pytest.mark.skipif(
     condition=config.ENV_DATA['platform'] != 'AWS',
     reason="Tests are not running on AWS deployed cluster"
@@ -37,7 +36,7 @@ class TestBucketIO(ManageTest):
             )
             downloaded_files.append(obj.key)
 
-        bucketname = bucket_factory(1)[0].name
+        bucketname = bucket_factory(1)[0]
 
         # Write all downloaded objects to the new bucket
         logger.info(f'Writing objects to bucket')
