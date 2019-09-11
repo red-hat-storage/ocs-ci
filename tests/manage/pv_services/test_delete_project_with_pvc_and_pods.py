@@ -64,12 +64,13 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
 
         log.info("Creating {} CephFS PVCs".format(self.cephfs_pvcs_num))
         # Generate a given number of CephFS PVCs, randomly assigned RWO or RWX
+        rwo_pvcs = random.randint(0, self.cephfs_pvcs_num)
         cephfs_pvcs = [pvc_factory(interface=constants.CEPHFILESYSTEM,
                                    project=project_1,
                                    storageclass=cephfs_sc,
-                                   access_mode=random.choice(
-                                       [constants.ACCESS_MODE_RWO,
-                                        constants.ACCESS_MODE_RWX]))
+                                   access_mode=
+                                   constants.ACCESS_MODE_RWO if i < rwo_pvcs
+                                   else constants.ACCESS_MODE_RWX)
                        for i in range(0, self.cephfs_pvcs_num)]
         log.info("Creating {} RBD PVCs".format(self.rbd_pvcs_num))
         rbd_pvcs = multi_pvc_factory(interface=constants.CEPHBLOCKPOOL,
@@ -82,7 +83,7 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         pvs = helpers.get_all_pvs()
         space_used_before_deletion = check_ceph_used_space()
         project_deletion_start_time = time.time()
-        #ocp.switch_to_default_rook_cluster_project() #TODO: Is this needed?
+        ocp.switch_to_default_rook_cluster_project()
         log.info("Deleting Project 1")
         project_1.delete(resource_name=project_1.namespace)
         log.info("Waiting for Project 1 deletion success...")
