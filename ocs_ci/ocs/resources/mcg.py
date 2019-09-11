@@ -4,6 +4,7 @@ import logging
 import boto3
 from botocore.client import ClientError
 from ocs_ci.framework import config
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import run_mcg_cmd
 
@@ -21,7 +22,7 @@ class MCG(object):
         """
         Constructor for the MCG class
         """
-        ocp_obj = OCP(kind='noobaa', namespace='noobaa')
+        ocp_obj = OCP(kind='noobaa', namespace='openshift-storage')
         results = ocp_obj.get()
         self.endpoint = 'http:' + (
             results.get('items')[0].get('status').get('services')
@@ -32,7 +33,7 @@ class MCG(object):
             results.get('items')[0].get('status').get('accounts')
             .get('admin').get('secretRef').get('name')
         )
-        secret_ocp_obj = OCP(kind='secret', namespace='noobaa')
+        secret_ocp_obj = OCP(kind='secret', namespace='openshift-storage')
         results2 = secret_ocp_obj.get(creds_secret_name)
 
         self.access_key_id = base64.b64decode(
@@ -82,7 +83,7 @@ class MCG(object):
             bucketname: Name of bucket to be created
 
         """
-        assert 'Created' in run_mcg_cmd(f'obc create --exact {bucketname}')
+        run_mcg_cmd(f'obc create --exact {bucketname}')
 
     def s3_delete_bucket(self, bucketname):
         """
@@ -114,7 +115,7 @@ class MCG(object):
 
         """
         logger.info(f"Deleting bucket: {bucketname}")
-        assert 'Deleted' in run_mcg_cmd(f'obc delete {bucketname}')
+        run_mcg_cmd(f'obc delete {bucketname}')
 
     def s3_list_all_bucket_names(self):
         """
@@ -123,6 +124,20 @@ class MCG(object):
 
         """
         return [bucket.name for bucket in self.s3_resource.buckets.all()]
+
+    def oc_list_all_bucket_names(self):
+        """
+
+        Returns:
+            list: A list of all bucket names
+        """
+        return [bucket.get('spec').get('bucketName')
+                for bucket
+                in OCP(namespace='openshift-storage', kind='obc').get().get('items')]
+
+    def cli_list_all_bucket_names(self):
+        # TODO: Implement once CLI bucket.list works
+        return self.oc_list_all_bucket_names()
 
     def s3_list_all_objects_in_bucket(self, bucketname):
         """
@@ -156,3 +171,18 @@ class MCG(object):
         except ClientError:
             logger.info(f"{bucketname} does not exist")
             return False
+
+    def oc_verify_bucket_exists(self, bucketname):
+        try:
+            OCP(namespace='openshift-storage', kind='obc').get(bucketname)
+            logger.info(f"{bucketname} exists")
+            return True
+        except CommandFailed as e:
+            if 'NotFound' in repr(e):
+                logger.info(f"{bucketname} does not exist")
+                return False
+            raise e
+
+    def cli_verify_bucket_exists(self, bucketname):
+        # TODO: Implement once CLI bucket.list works
+        return self.oc_verify_bucket_exists(bucketname)

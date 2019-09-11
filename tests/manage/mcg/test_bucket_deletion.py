@@ -9,7 +9,6 @@ from ocs_ci.utility.utils import check_if_executable_in_path
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.skipif(condition=True, reason="MCG is not deployed")
 @pytest.mark.filterwarnings(
     'ignore::urllib3.exceptions.InsecureRequestWarning'
 )
@@ -22,27 +21,29 @@ class TestBucketDeletion:
     """
     Test bucket Creation Deletion of buckets
     """
-
+    # TODO: remove skipif
     @pytest.mark.polarion_id("OCS-1299")
     def test_s3_bucket_delete(self, mcg_obj, bucket_factory):
         """
         Test deletion of bucket using the S3 SDK
         """
-
         for bucketname in bucket_factory(3, 'S3'):
             logger.info(f"Deleting bucket: {bucketname}")
             mcg_obj.s3_delete_bucket(bucketname)
-            assert mcg_obj.s3_verify_bucket_exists(bucketname) is False
+            assert mcg_obj.s3_verify_bucket_exists(bucketname) is False, \
+                f"Found {bucketname} that should've been removed"
 
-    @pytest.mark.skipif(condition=check_if_executable_in_path('noobaa'), reason='MCG CLI was not found')
+    @pytest.mark.skipif(condition=check_if_executable_in_path('noobaa') is False, reason='MCG CLI was not found')
     def test_cli_bucket_delete(self, mcg_obj, bucket_factory):
         """
         Test deletion of buckets using the MCG CLI
         """
         for bucketname in bucket_factory(3, 'CLI'):
             mcg_obj.cli_delete_obc(bucketname)
-            assert mcg_obj.cli_verify_bucket_exists(bucketname) is False
+            assert mcg_obj.cli_verify_bucket_exists(bucketname) is False, \
+                f"Found {bucketname} that should've been removed"
 
+    @pytest.mark.skipif(condition=True, reason="OC is not deployed")
     def test_oc_bucket_delete(self, mcg_obj, bucket_factory):
         """
         Test deletion of buckets using OC commands

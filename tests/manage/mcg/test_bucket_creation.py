@@ -9,7 +9,6 @@ from ocs_ci.utility.utils import check_if_executable_in_path
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.skipif(condition=True, reason="MCG is not deployed")
 @pytest.mark.filterwarnings(
     'ignore::urllib3.exceptions.InsecureRequestWarning'
 )
@@ -22,31 +21,29 @@ class TestBucketCreation:
     """
     Test creation of a bucket
     """
-
     @pytest.mark.polarion_id("OCS-1298")
     def test_s3_bucket_creation(self, mcg_obj, bucket_factory):
         """
         Test bucket creation using the S3 SDK
         """
-
         assert set(
             bucketname for bucketname in bucket_factory(3, 'S3')
         ).issubset(
             mcg_obj.s3_list_all_bucket_names()
         )
 
-    @pytest.mark.skipif(condition=check_if_executable_in_path('noobaa'), reason='MCG CLI was not found')
+    @pytest.mark.skipif(condition=check_if_executable_in_path('noobaa') is False, reason='MCG CLI was not found')
     def test_cli_bucket_creation(self, mcg_obj, bucket_factory):
         """
         Test bucket creation using the MCG CLI
         """
-
         assert set(
             bucketname for bucketname in bucket_factory(3, 'CLI')
         ).issubset(
-            mcg_obj.s3_list_all_bucket_names()
+            mcg_obj.cli_list_all_bucket_names()
         )
 
+    @pytest.mark.skipif(condition=True, reason="OC is not deployed")
     def test_oc_bucket_creation(self, mcg_obj, bucket_factory):
         """
         Test bucket creation using OC commands

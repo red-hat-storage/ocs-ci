@@ -73,13 +73,12 @@ def bucket_factory(request, mcg_obj):
 
         """
         for i in range(amount):
-            bucket_name = interface.lower() + '-' + create_unique_resource_name(
-                resource_description='bucket', resource_type=interface
+            bucket_name = create_unique_resource_name(
+                resource_description='bucket', resource_type=interface.lower()
             )
             logger.info(f'Creating bucket: {bucket_name}')
-
-            created_bucket_names.append(
-                getattr(mcg_obj, bucket_name.split('-')[0])(bucketname=bucket_name))
+            getattr(mcg_obj, f'{bucket_name.split("-")[0]}_create_obc')(bucketname=bucket_name)
+            created_bucket_names.append(bucket_name)
 
         return created_bucket_names
 
@@ -87,7 +86,7 @@ def bucket_factory(request, mcg_obj):
         all_existing_buckets = mcg_obj.s3_list_all_bucket_names()
         for bucket_name in set(created_bucket_names).intersection(all_existing_buckets):
             logger.info(f'Cleaning up bucket {bucket_name}')
-            getattr(mcg_obj, f'{bucket_name.split("-")[0]}_delete_bucket')(bucketname=bucket_name)
+            getattr(mcg_obj, f'{bucket_name.split("-")[0]}_delete_obc')(bucketname=bucket_name)
             logger.info(
                 f"Verifying whether bucket: {bucket_name} exists after deletion"
             )

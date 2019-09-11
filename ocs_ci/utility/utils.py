@@ -412,18 +412,19 @@ def run_cmd(cmd, secrets=None, **kwargs):
     return mask_secrets(r.stdout.decode(), secrets)
 
 
-def run_mcg_cmd(cmd):
+def run_mcg_cmd(cmd, namespace='openshift-storage'):
     """
     Invokes `run_cmd` with a noobaa prefix
 
     Args:
         cmd: The MCG command to be run
+        namespace: The namespace to use for the command
 
     Returns:
         str: Stdout of the command
 
     """
-    return run_cmd('noobaa ' + cmd)
+    return run_cmd(f'noobaa -n {namespace} ' + cmd)
 
 
 def download_file(url, filename):
