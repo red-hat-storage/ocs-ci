@@ -99,7 +99,6 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         for pv in pvs:
             pv_start_time = time.time()
             pv_name = pv.backed_pv
-            #pv.delete()
             pv.ocp.wait_for_delete(pv_name)
             helpers.validate_pv_delete(pv_name)
             pv_delete_time = time.time() - pv_start_time
@@ -119,21 +118,24 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
 
         log.info("Creating {} CephFS PVCs "
                  "(each bound to an app pod)".format(self.cephfs_pvcs_num))
-        cephfs_pvcs_pods = \
-            [pod_factory(pvc=pvc_obj, interface=constants.CEPHFILESYSTEM)
-             for pvc_obj in multi_pvc_factory(interface=constants.CEPHFILESYSTEM,
-                                              project=project_2,
-                                              num_of_pvc=self.cephfs_pvcs_num)]
-        rbd_pvcs_pods = \
-            [pod_factory(pvc=pvc_obj, interface=constants.CEPHBLOCKPOOL)
-             for pvc_obj in multi_pvc_factory(interface=constants.CEPHBLOCKPOOL,
-                                              project=project_2,
-                                              num_of_pvc=self.rbd_pvcs_num)]
+        cephfs_pvcs_pods = [
+            pod_factory(pvc=pvc_obj, interface=constants.CEPHFILESYSTEM)
+            for pvc_obj in multi_pvc_factory(interface=constants.CEPHFILESYSTEM,
+                                             project=project_2,
+                                             num_of_pvc=self.cephfs_pvcs_num)
+        ]
+        rbd_pvcs_pods = [
+            pod_factory(pvc=pvc_obj, interface=constants.CEPHBLOCKPOOL)
+            for pvc_obj in multi_pvc_factory(interface=constants.CEPHBLOCKPOOL,
+                                             project=project_2,
+                                             num_of_pvc=self.rbd_pvcs_num)
+        ]
         # Delete the entire Project 2 (along with all of its PVCs)
         pvs = helpers.get_all_pvs()
         space_used_before_deletion = check_ceph_used_space()
         start_time = time.time()
-        # ocp.switch_to_default_rook_cluster_project() #TODO: Is this needed?
+        # Switch back to default project
+        ocp.switch_to_default_rook_cluster_project()
         log.info("Deleting Project 2")
         project_2.delete(resource_name=project_2.namespace)
         log.info("Waiting for Project 2 deletion success...")
@@ -150,7 +152,6 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         for pv in pvs:
             pv_start_time = time.time()
             pv_name = pv.backed_pv
-            # pv.delete()
             pv.ocp.wait_for_delete(pv_name)
             helpers.validate_pv_delete(pv_name)
             pv_delete_time = time.time() - pv_start_time
