@@ -32,7 +32,10 @@ class TestBucketCreation:
             mcg_obj.s3_list_all_bucket_names()
         )
 
-    @pytest.mark.skipif(condition=check_if_executable_in_path('noobaa') is False, reason='MCG CLI was not found')
+    @pytest.mark.skipif(
+        condition=check_if_executable_in_path('noobaa') is False,
+        reason='MCG CLI was not found'
+    )
     def test_cli_bucket_creation(self, mcg_obj, bucket_factory):
         """
         Test bucket creation using the MCG CLI
