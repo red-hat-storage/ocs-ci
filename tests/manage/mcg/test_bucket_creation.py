@@ -27,7 +27,7 @@ class TestBucketCreation:
         Test bucket creation using the S3 SDK
         """
         assert set(
-            bucketname for bucketname in bucket_factory(3, 'S3')
+            bucket.name for bucket in bucket_factory(3, 'S3')
         ).issubset(
             mcg_obj.s3_list_all_bucket_names()
         )
@@ -41,7 +41,7 @@ class TestBucketCreation:
         Test bucket creation using the MCG CLI
         """
         assert set(
-            bucketname for bucketname in bucket_factory(3, 'CLI')
+            bucket.name for bucket in bucket_factory(3, 'CLI')
         ).issubset(
             mcg_obj.cli_list_all_bucket_names()
         )
@@ -51,7 +51,7 @@ class TestBucketCreation:
         Test bucket creation using OC commands
         """
         assert set(
-            bucketname for bucketname in bucket_factory(3, 'OC')
+            bucket.name for bucket in bucket_factory(3, 'OC')
         ).issubset(
             mcg_obj.oc_list_all_bucket_names()
         )

@@ -1,0 +1,78 @@
+import logging
+from abc import ABC, abstractmethod
+
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility import templating
+from ocs_ci.utility.utils import run_mcg_cmd
+from tests.helpers import create_unique_resource_name, create_resource
+
+logger = logging.getLogger(name=__file__)
+
+
+class MCGBucket(ABC):
+    """
+    A class to represent an MCG cloud
+    """
+    mcg, name = (None,) * 2
+
+    def __init__(self, mcg, name):
+        """
+        Constructor of an MCG bucket
+        """
+        self.mcg = mcg
+        self.name = name
+        logger.info(f"Creating bucket: {self.name}")
+
+    def __hash__(self):
+        return hash(self.name)
+
+    def __eq__(self, other):
+        if type(other) == str:
+            return self.name == other
+        elif type(other) == MCGBucket:
+            return self.name == other.name
+
+    def delete(self):
+        logger.info(f"Deleting bucket: {self.name}")
+        self.internal_delete()
+
+    @abstractmethod
+    def internal_delete(self):
+        pass
+
+
+class S3Bucket(MCGBucket):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.mcg.s3_resource.create_bucket(Bucket=self.name)
+
+    def internal_delete(self):
+        self.mcg.s3_resource.Bucket(self.name).object_versions.delete()
+        self.mcg.s3_resource.Bucket(self.name).delete()
+
+    def list_all_buckets(self):
+        return [bucket.name for bucket in self.mcg.s3_resource.buckets.all()]
+
+
+class OCBucket(MCGBucket):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        obc_data = templating.load_yaml_to_dict(constants.MCG_OBC_YAML)
+        if self.name is None:
+            self.name = create_unique_resource_name('oc', 'obc')
+        obc_data['metadata']['name'] = self.name
+        obc_data['spec']['bucketName'] = self.name
+        create_resource(**obc_data)
+
+    def internal_delete(self):
+        OCP(kind='obc', namespace='openshift-storage').delete(resource_name=self.name)
+
+
+class CLIBucket(MCGBucket):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        run_mcg_cmd(f'obc create --exact {self.name}')
+
+    def internal_delete(self):
+        run_mcg_cmd(f'obc delete {self.name}')

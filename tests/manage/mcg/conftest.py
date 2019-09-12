@@ -4,6 +4,7 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import mcg
+from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from tests import helpers
 from tests.helpers import craft_s3_command, create_unique_resource_name
 
@@ -58,7 +59,13 @@ def bucket_factory(request, mcg_obj):
     Args:
         mcg_obj (MCG): An MCG object containing the MCG S3 connection credentials
     """
-    created_bucket_names = []
+    created_buckets = []
+
+    bucketMap = {
+        's3': S3Bucket,
+        'oc': OCBucket,
+        'cli': CLIBucket
+    }
 
     def _create_buckets(amount=1, interface='S3'):
         """
@@ -72,25 +79,30 @@ def bucket_factory(request, mcg_obj):
             list: A list of s3.Bucket objects, containing all the created buckets
 
         """
+        if interface.lower() not in bucketMap:
+            raise RuntimeError(
+                f'Invalid interface type received: {interface}. '
+                f'available types: {", ".join(bucketMap.keys())}'
+            )
         for i in range(amount):
             bucket_name = create_unique_resource_name(
                 resource_description='bucket', resource_type=interface.lower()
             )
-            logger.info(f'Creating bucket: {bucket_name}')
-            getattr(mcg_obj, f'{bucket_name.split("-")[0]}_create_obc')(bucketname=bucket_name)
-            created_bucket_names.append(bucket_name)
-
-        return created_bucket_names
+            created_buckets.append(
+                bucketMap[interface.lower()](mcg_obj, bucket_name)
+            )
+        return created_buckets
 
     def bucket_cleanup():
         all_existing_buckets = mcg_obj.s3_list_all_bucket_names()
-        for bucket_name in set(created_bucket_names).intersection(all_existing_buckets):
-            logger.info(f'Cleaning up bucket {bucket_name}')
-            getattr(mcg_obj, f'{bucket_name.split("-")[0]}_delete_obc')(bucketname=bucket_name)
-            logger.info(
-                f"Verifying whether bucket: {bucket_name} exists after deletion"
-            )
-            assert not mcg_obj.s3_verify_bucket_exists(bucket_name)
+        for bucket in created_buckets:
+            if bucket.name in all_existing_buckets:
+                logger.info(f'Cleaning up bucket {bucket.name}')
+                bucket.delete()
+                logger.info(
+                    f"Verifying whether bucket: {bucket.name} exists after deletion"
+                )
+                assert not mcg_obj.s3_verify_bucket_exists(bucket.name)
 
     request.addfinalizer(bucket_cleanup)
 

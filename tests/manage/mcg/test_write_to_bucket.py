@@ -36,7 +36,7 @@ class TestBucketIO(ManageTest):
             )
             downloaded_files.append(obj.key)
 
-        bucketname = bucket_factory(1)[0]
+        bucketname = bucket_factory(1)[0].name
 
         # Write all downloaded objects to the new bucket
         logger.info(f'Writing objects to bucket')
