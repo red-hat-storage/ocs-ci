@@ -96,7 +96,10 @@ def get_ocsci_conf():
     if env.get("DOWNSTREAM") == "true":
         conf_obj['REPORTING'] = dict(us_ds='DS')
     if env.get("OCS_OPERATOR_DEPLOYMENT") == "true":
-        raise NotImplementedError("OCS operator deployment not yet implemented")
+        conf_obj['DEPLOYMENT'] = dict(
+            ocs_operator_deployment=True,
+            ocs_operator_image=env['OCS_OPERATOR_IMAGE'],
+        )
     else:
         conf_obj['DEPLOYMENT'] = dict(ocs_operator_deployment=False)
         # Apply image configuration if present
