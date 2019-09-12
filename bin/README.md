@@ -7,4 +7,4 @@ here are available to all tests (this is done in
 The directory is intentionally empty (there should be no other files committed
 there). Command line tools like `oc` and `openshift-install` are installed
 there during deployment (see
-[test_ocs_basic_install.py](../tests/ecosystem/deployment/test_ocs_basic_install.py)).
+[test_deployment.py](../tests/ecosystem/deployment/test_deployment.py)).

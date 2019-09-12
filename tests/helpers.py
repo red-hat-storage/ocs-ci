@@ -109,11 +109,8 @@ def create_pod(
         dc_deployment (bool): True if creating pod as deploymentconfig
         raw_block_pv (bool): True for creating raw block pv based pod, False otherwise
         raw_block_device (str): raw block device for the pod
-<<<<<<< HEAD
-=======
         replica_count (int): Replica count for deployment config
 
->>>>>>> master
     Returns:
         Pod: A Pod instance
 
@@ -726,7 +723,8 @@ def validate_pv_delete(pv_name):
 
     try:
         if ocp_pv_obj.get(resource_name=pv_name):
-            raise AssertionError('PV exists after PVC deletion')
+            msg = f"{constants.PV} {pv_name} is not deleted after PVC deletion"
+            raise AssertionError(msg)
 
     except CommandFailed:
         return True
