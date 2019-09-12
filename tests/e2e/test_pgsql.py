@@ -95,4 +95,3 @@ class TestPgSQLWorkload(E2ETest):
         # Clean up pgbench benchmark
         log.info("Deleting PG bench benchmark")
         pg_obj.delete()
-
