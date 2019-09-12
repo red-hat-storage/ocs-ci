@@ -131,3 +131,4 @@ class RipSaw(object):
             self.pgsql_cmap.delete()
             self.pgsql_service.delete()
         self.ns_obj.wait_for_delete(resource_name=self.namespace)
+

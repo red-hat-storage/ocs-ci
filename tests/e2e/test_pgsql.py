@@ -10,7 +10,7 @@ from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest, tier1, workloads
+from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 log = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ class TestPgSQLWorkload(E2ETest):
 
         # Wait for pgbench pod to be created
         for pgbench_pod in TimeoutSampler(
-            120, 3, get_pod_name_by_pattern, 'pgbench-1-dbs-client', 'my-ripsaw'
+            180, 3, get_pod_name_by_pattern, 'pgbench-1-dbs-client', 'my-ripsaw'
         ):
             try:
                 if pgbench_pod[0] is not None:
@@ -95,3 +95,4 @@ class TestPgSQLWorkload(E2ETest):
         # Clean up pgbench benchmark
         log.info("Deleting PG bench benchmark")
         pg_obj.delete()
+
