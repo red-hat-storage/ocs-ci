@@ -70,12 +70,16 @@ class MCG(object):
                 'LocationConstraint': region
             }
         ).name
+    # Method alias to support the getattr abstraction in bucket_factory
     s3_create_obc = s3_create_bucket
 
     def oc_create_obc(self, bucketname):
         """
         Args:
             bucketname: Name of bucket to be created
+
+        Returns:
+            OCS: An OCS object representing the created bucket
 
         """
         obc_data = templating.load_yaml_to_dict(constants.MCG_OBC_YAML)
@@ -103,6 +107,7 @@ class MCG(object):
         logger.info(f"Deleting bucket: {bucketname}")
         self.s3_resource.Bucket(bucketname).object_versions.delete()
         self.s3_resource.Bucket(bucketname).delete()
+    # Method alias to support the getattr abstraction in bucket_factory
     s3_delete_obc = s3_delete_bucket
 
     def oc_delete_obc(self, bucketname):
