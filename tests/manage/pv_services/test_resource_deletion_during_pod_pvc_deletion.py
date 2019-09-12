@@ -1,6 +1,7 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import pytest
+from functools import partial
 
 from ocs_ci.framework.testlib import ManageTest, tier4
 from ocs_ci.framework import config
@@ -10,8 +11,7 @@ from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check, run_cmd
 from ocs_ci.ocs.resources.pod import (
-    get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods,
-    get_cephfsplugin_pods, get_rbdplugin_pods
+    get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods, get_plugin_pods
 )
 from tests.helpers import verify_volume_deleted_in_backend
 from tests import disruption_helpers
@@ -68,9 +68,10 @@ class DisruptionBase(ManageTest):
         'operation_to_disrupt' is progressing.
         """
         pod_functions = {
-            'mds': get_mds_pods, 'mon': get_mon_pods, 'mgr': get_mgr_pods,
-            'osd': get_osd_pods, 'rbdplugin': get_rbdplugin_pods,
-            'cephfsplugin': get_cephfsplugin_pods
+            'mds': partial(get_mds_pods), 'mon': partial(get_mon_pods),
+            'mgr': partial(get_mgr_pods), 'osd': partial(get_osd_pods),
+            'rbdplugin': partial(get_plugin_pods, interface=interface),
+            'cephfsplugin': partial(get_plugin_pods, interface=interface)
         }
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=resource_to_delete)

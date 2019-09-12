@@ -852,35 +852,22 @@ def get_used_space_on_mount_point(pod_obj):
     return used_percentage
 
 
-def get_cephfsplugin_pods(cephfsplugin_label=constants.CSI_CEPHFSPLUGIN_LABEL, namespace=None):
+def get_plugin_pods(interface, namespace=None):
     """
-    Fetches info of csi-cephfsplugin pods
+    Fetches info of csi-cephfsplugin pods or csi-rbdplugin pods
 
     Args:
-        cephfsplugin_label (str): Label associated with csi-cephfsplugin pods
+        interface (str): Interface type. eg: CephBlockPool, CephFileSystem
         namespace (str): Name of cluster namespace
 
     Returns:
-        list : csi-cephfsplugin pod objects
+        list : csi-cephfsplugin pod objects or csi-rbdplugin pod objects
     """
+    if interface == constants.CEPHFILESYSTEM:
+        plugin_label = constants.CSI_CEPHFSPLUGIN_LABEL
+    if interface == constants.CEPHBLOCKPOOL:
+        plugin_label = constants.CSI_RBDPLUGIN_LABEL
     namespace = namespace or config.ENV_DATA['cluster_namespace']
-    cephfsplugins = get_pods_having_label(cephfsplugin_label, namespace)
-    cephfsplugin_pods = [Pod(**cephfsplugin) for cephfsplugin in cephfsplugins]
-    return cephfsplugin_pods
-
-
-def get_rbdplugin_pods(rbdplugin_label=constants.CSI_RBDPLUGIN_LABEL, namespace=None):
-    """
-    Fetches info of csi-rbdplugin pods
-
-    Args:
-        rbdplugin_label (str): Label associated with csi-rbdplugin pods
-        namespace (str): Name of cluster namespace
-
-    Returns:
-        list : csi-rbdplugin pod objects
-    """
-    namespace = namespace or config.ENV_DATA['cluster_namespace']
-    rbdplugins = get_pods_having_label(rbdplugin_label, namespace)
-    rbdplugin_pods = [Pod(**rbdplugin) for rbdplugin in rbdplugins]
-    return rbdplugin_pods
+    plugins_info = get_pods_having_label(plugin_label, namespace)
+    plugin_pods = [Pod(**plugin) for plugin in plugins_info]
+    return plugin_pods

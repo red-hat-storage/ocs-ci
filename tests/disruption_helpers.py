@@ -33,10 +33,14 @@ class Disruptions:
             self.resource_obj = pod.get_mds_pods()
             self.type = 'rook-ceph'
         if self.resource == 'cephfsplugin':
-            self.resource_obj = pod.get_cephfsplugin_pods()
+            self.resource_obj = pod.get_plugin_pods(
+                interface=constants.CEPHFILESYSTEM
+            )
             self.type = 'csi'
         if self.resource == 'rbdplugin':
-            self.resource_obj = pod.get_rbdplugin_pods()
+            self.resource_obj = pod.get_plugin_pods(
+                interface=constants.CEPHBLOCKPOOL
+            )
             self.type = 'csi'
         self.resource_count = len(self.resource_obj)
 
