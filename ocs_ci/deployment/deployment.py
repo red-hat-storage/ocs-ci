@@ -272,6 +272,10 @@ class Deployment(object):
         create_oc_resource(
             'toolbox.yaml', self.cluster_path, _templating, config.ENV_DATA
         )
+        assert pod.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector='app=rook-ceph-tools', resource_count=1, timeout=600
+        )
 
         if not self.ocs_operator_deployment:
             logger.info(f"Waiting {wait_time} seconds...")
