@@ -56,9 +56,6 @@ class TestDrainNodeWherePrometheusPodHosted(E2ETest):
         """
         pod_objs = test_fixture
 
-        # # Get the worker node list
-        # worker_nodes = node.get_typed_nodes(node_type='worker')
-
         # Get the prometheus pod
         pod_obj_list = pod.get_all_pods(namespace=defaults.OCS_MONITORING_NAMESPACE, selector=['prometheus'])
 
@@ -84,6 +81,8 @@ class TestDrainNodeWherePrometheusPodHosted(E2ETest):
             POD = ocp.OCP(kind=constants.POD, namespace=defaults.OCS_MONITORING_NAMESPACE)
             assert POD.wait_for_resource(
                 condition='Running', selector=f'app=prometheus', timeout=60
+            ), (
+                f"One or more prometheus pods are not in running state"
             )
 
             # Validate prometheus pod is re-spinned on new healthy node
