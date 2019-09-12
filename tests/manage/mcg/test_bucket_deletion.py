@@ -21,7 +21,6 @@ class TestBucketDeletion:
     """
     Test bucket Creation Deletion of buckets
     """
-    # TODO: remove skipif
     @pytest.mark.polarion_id("OCS-1299")
     def test_s3_bucket_delete(self, mcg_obj, bucket_factory):
         """
