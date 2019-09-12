@@ -4,6 +4,7 @@ Function to teardown the openshift-logging
 import logging
 
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
@@ -26,7 +27,7 @@ def uninstall_cluster_logging():
     """
     Function to uninstall cluster-logging from the cluster
     * Deletes the project "openshift-logging"
-        & "openshift-operators-redhat"
+        and "openshift-operators-redhat"
     """
     # Validating the pods before deleting the instance
     pod_list = get_all_pods(namespace='openshift-logging')
@@ -50,6 +51,22 @@ def uninstall_cluster_logging():
     assert clusterlogging_obj.delete(resource_name='instance')
 
     check_pod_vanished(pod_names_list)
+
+    # Deleting the PVCs
+    pvc_obj = ocp.OCP(
+        kind=constants.PVC, namespace='openshift-logging'
+    )
+    pvc_list = get_all_pvcs(namespace='openshift-logging')
+    for pvc in range(len(pvc_list) - 1):
+        pvc_obj.delete(resource_name=pvc_list['items'][pvc]['metadata']['name'])
+        pvc_obj.wait_for_delete(resource_name=pvc_list['items'][pvc]['metadata']['name'])
+
+    # Deleting the RBAC permission set
+    rbac_role = ocp.OCP(
+        kind=constants.ROLE, namespace='openshift-operators-redhat'
+    )
+    rbac_role.delete(yaml_file=constants.EO_RBAC_YAML)
+
     # Deleting the projects
     openshift_logging_namespace = ocp.OCP(
         kind=constants.NAMESPACES, namespace='openshift-logging'
