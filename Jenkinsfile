@@ -110,7 +110,28 @@ pipeline {
     }
     success {
       script {
-        if( env.UMB_MESSAGE == true || env.UMB_MESSAGE == "true" ){
+        if( env.OCS_OPERATOR_DEPLOYMENT in [true, 'true'] ) {
+          def messageContent = '''
+          {
+            "SENDER_BUILD_NUMBER": "${BUILD_NUMBER}",
+            "OCS_OPERATOR_IMAGE": "${env.OCS_OPERATOR_IMAGE}"
+          }
+          '''
+        } else {
+          def messageContent = '''
+          {
+            "SENDER_BUILD_NUMBER": "${BUILD_NUMBER}",
+            "ROOK_IMAGE": "${ROOK_IMAGE}",
+            "CEPH_IMAGE": "${CEPH_IMAGE}",
+            "CEPH_CSI_IMAGE": "${CEPH_CSI_IMAGE}",
+            "ROOK_CSI_REGISTRAR_IMAGE": "${ROOK_CSI_REGISTRAR_IMAGE}",
+            "ROOK_CSI_PROVISIONER_IMAGE": "${ROOK_CSI_PROVISIONER_IMAGE}",
+            "ROOK_CSI_SNAPSHOTTER_IMAGE": "${ROOK_CSI_SNAPSHOTTER_IMAGE}",
+            "ROOK_CSI_ATTACHER_IMAGE": "${ROOK_CSI_ATTACHER_IMAGE}",
+          }
+          '''
+        }
+        if( env.UMB_MESSAGE in [true, 'true'] ) {
           sendCIMessage \
             providerName: 'Red Hat UMB', \
             overrides: [ topic: 'VirtualTopic.qe.ci.jenkins' ], \
@@ -120,12 +141,9 @@ pipeline {
               TOOL=ocs-ci
               PRODUCT=ocs
               PRODUCT_BUILD_CAUSE=${BUILD_CAUSE}
+              OCS_OPERATOR_DEPLOYMENT=${env.OCS_OPERATOR_DEPLOYMENT}
             ''', \
-            messageContent: '''
-              {
-                "SENDER_BUILD_NUMBER": "${BUILD_NUMBER}"
-              }
-            '''
+            messageContent: messageContent
         }
       }
     }
