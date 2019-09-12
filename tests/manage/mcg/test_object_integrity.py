@@ -15,33 +15,16 @@ logger = logging.getLogger(__name__)
     condition=config.ENV_DATA['platform'] != 'AWS',
     reason="Tests are not running on AWS deployed cluster"
 )
-def check_md5sum(original_object, result_object, awscli_pod):
-    md5sum = awscli_pod.exec_cmd_on_pod(
-        command=f'md5sum {original_object} {result_object}'
-    )
-    md5sum_original = md5sum.split()[0]
-    md5sum_result = md5sum.split()[2]
-    assert md5sum_original == md5sum_result, (
-        'Data Corruption Found'
-    )
-    logger.info(f'Passed: MD5 comparison for '
-                f'{original_object} and {result_object}')
-    return True
-
-
 @tier1
 class TestBucketIntegrity(ManageTest):
     """
     Test data integrity of a bucket
     """
-
     @pytest.mark.polarion_id("OCS-1321")
-    def test_check_object_integrity(self, mcg_obj, awscli_pod, bucket_factory,
-                                    uploaded_objects):
+    def test_check_object_integrity(self, mcg_obj, awscli_pod, bucket_factory, uploaded_objects):
         """
         Test object integrity using md5sum
         """
-
         # Retrieve a list of all objects on the test-objects bucket and
         # downloads them to the pod
         downloaded_files = []
@@ -87,4 +70,4 @@ class TestBucketIntegrity(ManageTest):
             uploaded_objects.append(s3_cmd)
 
             # Checksum is compared between original and result object
-            assert check_md5sum(original_object, result_object, awscli_pod)
+            assert mcg_obj.verify_s3_object_integrity(original_object, result_object, awscli_pod)

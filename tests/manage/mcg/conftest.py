@@ -6,6 +6,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import mcg
 from tests import helpers
 from tests.helpers import craft_s3_command, create_unique_resource_name
+from ocs_ci.ocs import defaults
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +129,7 @@ def awscli_pod(mcg_obj, created_pods):
     Returns:
         pod: A pod running the AWS CLI
     """
-    awscli_pod_obj = helpers.create_pod(namespace='noobaa',
+    awscli_pod_obj = helpers.create_pod(namespace=defaults.ROOK_CLUSTER_NAMESPACE,
                                         pod_dict_path=constants.AWSCLI_POD_YAML)
     helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
     created_pods.append(awscli_pod_obj)

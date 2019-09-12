@@ -5,6 +5,8 @@ import boto3
 from botocore.client import ClientError
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs import defaults
+
 
 logger = logging.getLogger(name=__file__)
 
@@ -20,7 +22,7 @@ class MCG(object):
         """
         Constructor for the MCG class
         """
-        ocp_obj = OCP(kind='noobaa', namespace='noobaa')
+        ocp_obj = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
         results = ocp_obj.get()
         self.endpoint = 'http:' + (
             results.get('items')[0].get('status').get('services')
@@ -31,7 +33,7 @@ class MCG(object):
             results.get('items')[0].get('status').get('accounts')
             .get('admin').get('secretRef').get('name')
         )
-        secret_ocp_obj = OCP(kind='secret', namespace='noobaa')
+        secret_ocp_obj = OCP(kind='secret', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
         results2 = secret_ocp_obj.get(creds_secret_name)
 
         self.access_key_id = base64.b64decode(
@@ -112,6 +114,28 @@ class MCG(object):
             return True
         except ClientError:
             logger.info(f"{bucket.name} does not exist")
+            return False
+
+    def verify_s3_object_integrity(self, original_object, result_object, awscli_pod):
+        """
+        Verifies checksum between orignial object and result object on an awscli pod
+        Args:
+            orignal_object(str) : The Object that is uploaded to the s3 bucket
+            result_object(str) :  The Object that is downloaded from the s3 bucket
+
+        Returns:
+              bool: True if checksum matches, False otherwise
+
+        """
+        md5sum = awscli_pod.exec_cmd_on_pod(
+            command=f'md5sum {original_object} {result_object}'
+        )
+        md5sum_original, md5sum_result = md5sum.split()[0], md5sum.split()[2]
+        if md5sum_original == md5sum_result:
+            logger.info(f'Passed: MD5 comparison for {original_object} and {result_object}')
+            return True
+        else:
+            logger.info('Data Corruption Found')
             return False
 
     def oc_create_bucket(self, bucketname):
