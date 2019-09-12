@@ -14,6 +14,7 @@ import re
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.resources import ocs
 import ocs_ci.ocs.constants as constant
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
 from ocs_ci. ocs import ocp
@@ -383,3 +384,25 @@ class CephCluster(object):
         )
         logging.info(f"Removed the mon {random_mon} from the cluster")
         return remove_mon
+
+    @retry(exceptions.UnexpectedBehaviour, tries=10, delay=3, backoff=1)
+    def check_ceph_used_space(self):
+        """
+        Check for the used space in cluster
+
+        Returns:
+            used_in_gb: Amount of used space in cluster (in GBs)
+
+        Raises:
+            UnexpectedBehaviour: If used size keeps varying in Ceph status
+        """
+        ct_pod = pod.get_ceph_tools_pod()
+        ceph_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph status")
+        assert ceph_status
+        used = ceph_status.get('pgmap').get('bytes_used')
+        if used:
+            used_in_gb = used / constant.GB
+            return used_in_gb
+        raise exceptions.UnexpectedBehaviour(
+            f"In Ceph status, used size keeps varying"
+        )
