@@ -11,6 +11,7 @@
 // It may also provide these optional parameters to override the framework's
 // defaults:
 //   OCS_OPERATOR_DEPLOYMENT
+//   OCS_OPERATOR_IMAGE
 //   ROOK_IMAGE
 //   CEPH_IMAGE
 //   CEPH_CSI_IMAGE
