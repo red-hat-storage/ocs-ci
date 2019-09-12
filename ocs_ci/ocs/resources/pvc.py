@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 class PVC(OCS):
     """
-    A basic PersistentVolumeClaim kind resource
+    A basic PersistentVolumeClaim kind resource.
     """
 
     def __init__(self, **kwargs):
