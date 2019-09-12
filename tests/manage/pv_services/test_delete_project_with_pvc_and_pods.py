@@ -3,48 +3,37 @@ The purpose of this test case is to delete at least 2 projects:
 One project with just pvcs and the other with pvcs attached to a pod
 """
 import logging
-import random
 import time
 import pytest
+from itertools import cycle
 
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.utility.retry import retry
 from tests import helpers
 
 log = logging.getLogger(__name__)
 
 
-@retry(UnexpectedBehaviour, tries=10, delay=3, backoff=1)
-def check_ceph_used_space():
-    """
-    Check for the used space in cluster
-    """
-    ct_pod = pod.get_ceph_tools_pod()
-    ceph_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph status")
-    assert ceph_status is not None
-    used = ceph_status['pgmap']['bytes_used']
-    used_in_gb = used / constants.GB
-    global used_space
-    if used_space and used_space == used_in_gb:
-        return used_in_gb
-    used_space = used_in_gb
-    raise UnexpectedBehaviour(
-        f"In Ceph status, used size is keeping varying"
-    )
-
 @tier1
 @pytest.mark.polarion_id("OCS-278")
+@pytest.mark.parametrize(
+    argnames=["pvcs_num"],
+    argvalues=[
+        pytest.param(
+            100, marks=pytest.mark.tier1
+        ),
+        pytest.param(
+            1000, marks=pytest.mark.scale
+        )
+    ]
+)
 class TestDeleteProjectWithPVCAndPods(ManageTest):
     """
     Create at least 2 projects, one with just pvcs and the other with pvcs
     attached to pod, and delete them.
     """
-    cephfs_pvcs_num = 100
-    rbd_pvcs_num = 100
 
     @pytest.fixture()
     def setup(self, storageclass_factory):
@@ -53,42 +42,41 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         one for CephFS and one for RBD.
         Scale the setup to at-least 800 pvcs/pods.
         """
-        log.info("Creating OCP+OCS Setup")
         self.ocp_setup = ocp.OCP()
         self.ocs_setup = OCS()  # TODO: Scale the setup to at-least 800 pvcs/pods
+        self.ceph_cluster = CephCluster()
 
         log.info("Creating CephFS Storage class")
         self.cephfs_sc = storageclass_factory(interface=constants.CEPHFILESYSTEM)
         log.info("Creating RBD Storage class")
         self.rbd_sc = storageclass_factory(interface=constants.CEPHBLOCKPOOL)
 
-    def test_delete_project_with_pvc_and_pods(self, project_factory,
-                                              pvc_factory, multi_pvc_factory,
-                                              pod_factory):
+    def test_delete_project_with_pvc_and_pods(
+        self, project_factory, multi_pvc_factory,
+        pvc_factory, pod_factory, pvcs_num
+    ):
         # Start with Project 1
-        log.info("Creating Project 1")
+        log.info("Creating Project")
         project_1 = project_factory()
 
-        log.info("Creating {} CephFS PVCs".format(self.cephfs_pvcs_num))
-        # Generate a given number of CephFS PVCs, randomly assigned RWO or RWX
-        rwo_pvcs = random.randint(0, self.cephfs_pvcs_num)
+        log.info("Creating {} CephFS PVCs".format(pvcs_num))
+        # Generate a given number of CephFS PVCs, some RWO and some RWX
+        rwo_rwx = cycle([constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX])
         cephfs_pvcs = [pvc_factory(interface=constants.CEPHFILESYSTEM,
                                    project=project_1,
                                    storageclass=self.cephfs_sc,
-                                   access_mode=
-                                   constants.ACCESS_MODE_RWO if i < rwo_pvcs
-                                   else constants.ACCESS_MODE_RWX)
-                       for i in range(0, self.cephfs_pvcs_num)]
-        log.info("Creating {} RBD PVCs".format(self.rbd_pvcs_num))
+                                   access_mode=next(rwo_rwx))
+                       for i in range(0, pvcs_num)]
+        log.info("Creating {} RBD PVCs".format(pvcs_num))
         rbd_pvcs = multi_pvc_factory(interface=constants.CEPHBLOCKPOOL,
                                      project=project_1,
                                      storageclass=self.rbd_sc,
                                      access_mode=constants.ACCESS_MODE_RWO,
-                                     num_of_pvc=self.rbd_pvcs_num)
+                                     num_of_pvc=pvcs_num)
 
         # Delete the entire Project 1 (along with all of its PVCs)
         pvs = helpers.get_all_pvs()
-        space_used_before_deletion = check_ceph_used_space()
+        space_used_before_deletion = self.ceph_cluster.check_ceph_used_space()
         project_deletion_start_time = time.time()
         ocp.switch_to_default_rook_cluster_project()
         log.info("Deleting Project 1")
@@ -115,7 +103,7 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         log.info("{} seconds between first and last PVC deletion".format(
             time_between_pvcs_deletion_success))
         # Verify space has been reclaimed
-        space_used_after_deletion = check_ceph_used_space()
+        space_used_after_deletion = self.ceph_cluster.check_ceph_used_space()
         log.info("Verifying space has been reclaimed...")
         assert space_used_after_deletion < space_used_before_deletion
         log.info("Space reclaimed successfully.")
@@ -124,23 +112,24 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         log.info("Creating Project 2")
         project_2 = project_factory()
 
-        log.info("Creating {} CephFS PVCs "
-                 "(each bound to an app pod)".format(self.cephfs_pvcs_num))
+        log.info("Creating a mix of {} CephFS & RBD PVCs "
+                 "(each bound to an app pod)".format(2 * pvcs_num))
         cephfs_pvcs_pods = [
             pod_factory(pvc=pvc_obj, interface=constants.CEPHFILESYSTEM)
             for pvc_obj in multi_pvc_factory(interface=constants.CEPHFILESYSTEM,
                                              project=project_2,
-                                             num_of_pvc=self.cephfs_pvcs_num)
+                                             num_of_pvc=pvcs_num)
         ]
+
         rbd_pvcs_pods = [
             pod_factory(pvc=pvc_obj, interface=constants.CEPHBLOCKPOOL)
             for pvc_obj in multi_pvc_factory(interface=constants.CEPHBLOCKPOOL,
                                              project=project_2,
-                                             num_of_pvc=self.rbd_pvcs_num)
+                                             num_of_pvc=pvcs_num)
         ]
         # Delete the entire Project 2 (along with all of its PVCs)
         pvs = helpers.get_all_pvs()
-        space_used_before_deletion = check_ceph_used_space()
+        space_used_before_deletion = self.ceph_cluster.check_ceph_used_space()
         start_time = time.time()
         # Switch back to default project
         ocp.switch_to_default_rook_cluster_project()
@@ -168,7 +157,11 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         log.info("{} seconds between first and last PVC deletion".format(
             time_between_pvcs_deletion_success))
         # Verify space has been reclaimed
-        space_used_after_deletion = check_ceph_used_space()
+        space_used_after_deletion = self.ceph_cluster.check_ceph_used_space()
         log.info("Verifying space has been reclaimed...")
-        assert space_used_after_deletion < space_used_before_deletion
+        assert space_used_after_deletion < space_used_before_deletion, (
+            f"Space hasn't been reclaimed after PVs deletion."
+            f"/nUsed space before deletion: " f"{space_used_before_deletion}"
+            f"/nUsed space after deletion: {space_used_after_deletion}"
+        )
         log.info("Space reclaimed successfully.")
