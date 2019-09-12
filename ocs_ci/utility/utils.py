@@ -7,7 +7,6 @@ import shlex
 import string
 import subprocess
 import time
-import traceback
 from shutil import which
 
 import requests
