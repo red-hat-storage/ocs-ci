@@ -277,9 +277,9 @@ def check_health_of_clusterlogging():
     pod_list = []
     pods = get_all_pods(namespace='openshift-logging')
     logger.info("Pods that are created by the instance")
-    logger.info(pod_list)
     for pod in pods:
         pod_list.append(pod.name)
+    logger.info(pod_list)
     elasticsearch_pod = [
         pod for pod in pod_list if pod.startswith('elasticsearch')
     ]

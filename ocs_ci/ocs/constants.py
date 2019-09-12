@@ -77,6 +77,9 @@ SUBSCRIPTION = "Subscription"
 NAMESPACES = "Namespaces"
 CLUSTER_LOGGING = "ClusterLogging"
 OPERATOR_GROUP = "OperatorGroup"
+SERVICE_ACCOUNT = "Serviceaccount"
+SCC = "SecurityContextConstraints"
+PRIVILEGED = "privileged"
 
 # Other
 SECRET = "Secret"
@@ -85,9 +88,12 @@ IGNORE_SC_GP2 = "gp2"
 IGNORE_SC_FLEX = "rook-ceph-block"
 TEST_FILES_BUCKET = "ocsci-test-files"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
+OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
+MASTER_MACHINE = "master"
+WORKER_MACHINE = "worker"
 MOUNT_POINT = '/var/lib/www/html'
 
-
+DEFAULT_SECRET = 'rook-ceph-csi'
 DEFAULT_BLOCKPOOL = 'rbd'
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
