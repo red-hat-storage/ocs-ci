@@ -116,6 +116,13 @@ class Pod(OCS):
                 ):
                     if sample:
                         return yaml.safe_load(self.fio_thread.result())
+            else:
+                # if self.fio_thread status is pending
+                for sample in TimeoutSampler(
+                    timeout=FIO_TIMEOUT, sleep=3, func=self.fio_thread.done
+                ):
+                    if sample:
+                        return yaml.safe_load(self.fio_thread.result())
 
         except CommandFailed as ex:
             logger.exception(f"FIO failed: {ex}")
@@ -228,18 +235,22 @@ class Pod(OCS):
         """
         work_load = 'fio'
         name = f'test_workload_{work_load}'
-        path = self.get_storage_path(storage_type)
+        if self.path:
+            path = self.path
+        else:
+            path = self.get_storage_path(storage_type)
         # few io parameters for Fio
 
         self.wl_obj = workload.WorkLoad(
             name, path, work_load, storage_type, self, jobs
         )
-        assert self.wl_obj.setup(), f"Setup for FIO failed on pod {self.name}"
+        if not self.wl_setup_done:
+            assert self.wl_obj.setup(), f"Setup for FIO failed on pod {self.name}"
         self.wl_setup_done = True
 
     def run_io(
         self, storage_type, size, io_direction='rw', rw_ratio=75,
-        jobs=1, runtime=60, depth=4, fio_filename=None
+        jobs=1, runtime=60, depth=4, fio_filename=None, path=None
     ):
         """
         Execute FIO on a pod
@@ -263,9 +274,11 @@ class Pod(OCS):
             runtime (int): Number of seconds IO should run for
             depth (int): IO depth
             fio_filename(str): Name of fio file created on app pod's mount point
+            path (str): mount path or device path in app pod
         """
-        if not self.wl_setup_done:
-            self.workload_setup(storage_type=storage_type, jobs=jobs)
+
+        self.path = path
+        self.workload_setup(storage_type=storage_type, jobs=jobs)
 
         if io_direction == 'rw':
             self.io_params = templating.load_yaml(
@@ -297,8 +310,24 @@ class Pod(OCS):
         assert wl.setup(), "Setup up for git failed"
         wl.run()
 
+    def get_paths(self, pvcs_count, storage_type):
+        """
+        Get mutliple mount or device paths  of the volume on the pod
+        Returns:
+              paths (list): Returns list of mount or device paths  of the volume on the pod
+
+        """
+        paths = list()
+        for i in range(pvcs_count):
+            if storage_type == 'block':
+                paths.append(self.get().get('spec').get('containers')[0].get('volumeDevices')[i].get('devicePath'))
+            else:
+                paths.append(self.get().get('spec').get('containers')[0].get('volumeMounts')[i].get('mountPath'))
+
+        return paths
 
 # Helper functions for Pods
+
 
 def get_all_pods(namespace=None, selector=None):
     """
