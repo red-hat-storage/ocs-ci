@@ -100,6 +100,7 @@ class PVC(OCS):
         """
         return self.data.get('spec').get('accessModes')[0]
 
+    @property
     def backed_sc(self):
         """
         Returns the storage class of pvc object in namespace
