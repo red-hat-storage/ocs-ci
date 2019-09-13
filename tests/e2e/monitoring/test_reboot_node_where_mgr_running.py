@@ -10,7 +10,7 @@ from ocs_ci.ocs.monitoring import (
     check_pvcdata_collected_on_prometheus,
     check_ceph_health_status_metrics_on_prometheus
 )
-from ocs_ci.ocs.node import wait_for_nodes_status, get_typed_nodes
+from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.utility.retry import retry
 
 
@@ -77,9 +77,6 @@ class TestRebootNodeWhereMgrRunningAndInteractionWithPrometheus(E2ETest):
         pod_objs = test_fixture
 
         aws_obj = aws.AWS()
-
-        # Get the worker node list
-        workers = get_typed_nodes(node_type='worker')
 
         # Get the mgr pod obj
         mgr_pod_obj = pod.get_mgr_pods()
