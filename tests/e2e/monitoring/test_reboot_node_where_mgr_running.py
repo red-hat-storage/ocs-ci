@@ -85,11 +85,10 @@ class TestRebootNodeWhereMgrRunningAndInteractionWithPrometheus(E2ETest):
         mgr_pod_obj = pod.get_mgr_pods()
 
         # Get the node where the mgr pod is hosted
-        mgr_node = mgr_pod_obj[0].get().get('spec').get('nodeName')
-        mgr_node = [node for node in workers if node.get().get('metadata').get('name') == mgr_node]
+        mgr_node_obj = pod.get_pod_node(mgr_pod_obj[0])
 
         # Reboot the node where the mgr pod is hosted
-        instances = aws.get_instances_ids_and_names(mgr_node)
+        instances = aws.get_instances_ids_and_names([mgr_node_obj])
         aws_obj.restart_ec2_instances(instances=instances, wait=True, force=True)
 
         # Validate all nodes are in READY state
