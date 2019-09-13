@@ -268,12 +268,12 @@ class Pod(OCS):
             self.workload_setup(storage_type=storage_type, jobs=jobs)
 
         if io_direction == 'rw':
-            self.io_params = templating.load_yaml_to_dict(
+            self.io_params = templating.load_yaml(
                 constants.FIO_IO_RW_PARAMS_YAML
             )
             self.io_params['rwmixread'] = rw_ratio
         else:
-            self.io_params = templating.load_yaml_to_dict(
+            self.io_params = templating.load_yaml(
                 constants.FIO_IO_PARAMS_YAML
             )
         self.io_params['runtime'] = runtime

@@ -136,7 +136,7 @@ def dump_to_temp_yaml(src_file, dst_file, **kwargs):
         yaml.dump(data, yaml_file)
 
 
-def load_yaml_to_dict(file, multi_document=False):
+def load_yaml(file, multi_document=False):
     """
     Load yaml file (local or from URL) and convert it to dictionary
 
@@ -161,7 +161,7 @@ def load_yaml_to_dict(file, multi_document=False):
 
 def get_n_document_from_yaml(yaml_generator, index=0):
     """
-    Returns n document from yaml generator loaded by load_yaml_to_dict with
+    Returns n document from yaml generator loaded by load_yaml with
     multi_document = True.
 
     Args:
