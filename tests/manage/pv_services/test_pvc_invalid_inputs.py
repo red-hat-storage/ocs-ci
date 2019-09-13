@@ -34,7 +34,7 @@ def setup(self):
     """
     # Create a storage class
     log.info("Creating a Storage Class")
-    self.sc_data = templating.load_yaml_to_dict(
+    self.sc_data = templating.load_yaml(
         constants.CSI_RBD_STORAGECLASS_YAML
     )
     self.sc_data['metadata']['name'] = helpers.create_unique_resource_name(
@@ -82,7 +82,7 @@ def create_pvc_invalid_name(pvcname):
     Returns:
         None
     """
-    pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
+    pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
     pvc_data['metadata']['name'] = pvcname
     pvc_data['spec']['storageClassName'] = SC_OBJ.name
     pvc_obj = PVC(**pvc_data)
@@ -117,7 +117,7 @@ def create_pvc_invalid_size(pvcsize):
     Returns:
         None
     """
-    pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
+    pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
     pvc_data['metadata']['name'] = "auto"
     pvc_data['spec']['resources']['requests']['storage'] = pvcsize
     pvc_data['spec']['storageClassName'] = SC_OBJ.name

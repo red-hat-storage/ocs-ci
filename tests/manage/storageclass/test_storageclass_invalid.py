@@ -103,7 +103,7 @@ class TestStorageClassInvalid(ManageTest):
         Test that Persistent Volume Claim can not be created from misconfigured
         CephFS Storage Class.
         """
-        pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
+        pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
         pvc_name = helpers.create_unique_resource_name('test', 'pvc')
         pvc_data['metadata']['name'] = pvc_name
         pvc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE

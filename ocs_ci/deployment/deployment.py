@@ -146,13 +146,13 @@ class Deployment(object):
             namespace=self.namespace
         )
         csv.wait_for_phase("Succeeded")
-        cluster_data = templating.load_yaml_to_dict(
+        cluster_data = templating.load_yaml(
             self.ocs_operator_storage_cluster_cr,
         )
         cluster_data['metadata']['name'] = config.ENV_DATA[
             'storage_cluster_name'
         ]
-        deviceset_data = templating.load_yaml_to_dict(
+        deviceset_data = templating.load_yaml(
             constants.DEVICESET_YAML
         )
         device_size = int(
@@ -304,7 +304,7 @@ class Deployment(object):
             time.sleep(wait_time)
 
             # Create MDS pods for CephFileSystem
-            fs_data = templating.load_yaml_to_dict(constants.CEPHFILESYSTEM_YAML)
+            fs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
             fs_data['metadata']['namespace'] = self.namespace
 
             ceph_obj = OCS(**fs_data)
