@@ -93,7 +93,8 @@ def create_pod(
     interface_type=None, pvc_name=None,
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
-    raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1
+    raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1,
+    attach_multi_pvc=False, pvc_list=None
 ):
     """
     Create a pod
@@ -110,6 +111,8 @@ def create_pod(
         raw_block_pv (bool): True for creating raw block pv based pod, False otherwise
         raw_block_device (str): raw block device for the pod
         replica_count (int): Replica count for deployment config
+        attach_multi_pvc (bool): To attach multiple pvcs to single pod
+        pvc_list (list): list of pvcs to attach to single pod
 
     Returns:
         Pod: A Pod instance
@@ -135,20 +138,23 @@ def create_pod(
         pod_data['metadata']['labels']['app'] = pod_name
         pod_data['spec']['template']['metadata']['labels']['name'] = pod_name
         pod_data['spec']['replicas'] = replica_count
+    if attach_multi_pvc and not raw_block_pv:
+        pod_data = attach_multiple_pvc_single_pod(pod_data, pvc_list)
+    else:
+        if pvc_name:
+            if dc_deployment:
+                pod_data['spec']['template']['spec']['volumes'][0][
+                    'persistentVolumeClaim'
+                ]['claimName'] = pvc_name
+            else:
+                pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
 
-    if pvc_name:
-        if dc_deployment:
-            pod_data['spec']['template']['spec']['volumes'][0][
-                'persistentVolumeClaim'
-            ]['claimName'] = pvc_name
+    if raw_block_pv:
+        if attach_multi_pvc:
+            pod_data = attach_multiple_pvc_single_pod(pod_data, pvc_list, raw_block_pv=True)
         else:
-            pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
-
-    if interface_type == constants.CEPHBLOCKPOOL and raw_block_pv:
-        pod_data['spec']['containers'][0]['volumeDevices'][0]['devicePath'] = raw_block_device
-        pod_data['spec']['containers'][0]['volumeDevices'][0]['name'] = pod_data.get('spec').get('volumes')[
-            0].get('name')
-
+            pod_data['spec']['containers'][0]['volumeDevices'][0]['devicePath'] = raw_block_device
+            pod_data['spec']['containers'][0]['volumeDevices'][0]['name'] = pod_data['spec']['volumes'][0]['name']
     if node_name:
         pod_data['spec']['nodeName'] = node_name
     else:
@@ -704,7 +710,7 @@ def get_all_pvs():
 
 # TODO: revert counts of tries and delay,BZ 1726266
 
-@retry(AssertionError, tries=20, delay=10, backoff=1)
+@retry(AssertionError, tries=30, delay=10, backoff=1)
 def validate_pv_delete(pv_name):
     """
     validates if pv is deleted after pvc deletion
@@ -1345,3 +1351,34 @@ def get_memory_leak_median_value():
             raise UnexpectedBehaviour
         median_dict[f"{worker}"] = statistics.median(memory_leak_data)
     return median_dict
+
+
+def attach_multiple_pvc_single_pod(pod_data, pvc_list, raw_block_pv=False):
+    """
+    Attaching multiple pvcs to single pod
+
+    pod_data (str): Pod data
+    pvc_list (list) List of pvcs to attach
+
+    Returns:
+        pod_data (str): pod data with multiple pvcs, mount paths added
+    """
+
+    volume_list = pod_data.get('spec').get('volumes')
+    del volume_list[0]
+    if raw_block_pv:
+        device_list = pod_data.get('spec').get('containers')[0]['volumeDevices']
+        del device_list[0]
+    else:
+        mount_list = pod_data.get('spec').get('containers')[0]['volumeMounts']
+        del mount_list[0]
+    for pvc_obj in pvc_list:
+        volume_name = f'my-volume-{pvc_list.index(pvc_obj)}'
+        volume_list.append({'name': volume_name, 'persistentVolumeClaim': {'claimName': f'{pvc_obj.name}'}})
+        if raw_block_pv:
+            device_path = f'{constants.RAW_BLOCK_DEVICE+str(pvc_list.index(pvc_obj))}'
+            device_list.append({'devicePath': device_path, 'name': volume_name})
+        else:
+            mount_path = f'/var/lib/www/html{str(pvc_list.index(pvc_obj))}'
+            mount_list.append({'mountPath': mount_path, 'name': volume_name})
+    return pod_data
