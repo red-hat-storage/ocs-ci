@@ -272,6 +272,10 @@ class Deployment(object):
         create_oc_resource(
             'toolbox.yaml', self.cluster_path, _templating, config.ENV_DATA
         )
+        assert pod.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector='app=rook-ceph-tools', resource_count=1, timeout=600
+        )
 
         if not self.ocs_operator_deployment:
             logger.info(f"Waiting {wait_time} seconds...")
@@ -299,17 +303,16 @@ class Deployment(object):
             logger.info(f"Waiting {wait_time} seconds...")
             time.sleep(wait_time)
 
-        # TODO: Check resources below and move away once handled by operator
-        # Create MDS pods for CephFileSystem
-        fs_data = templating.load_yaml_to_dict(constants.CEPHFILESYSTEM_YAML)
-        fs_data['metadata']['namespace'] = self.namespace
+            # Create MDS pods for CephFileSystem
+            fs_data = templating.load_yaml_to_dict(constants.CEPHFILESYSTEM_YAML)
+            fs_data['metadata']['namespace'] = self.namespace
 
-        ceph_obj = OCS(**fs_data)
-        ceph_obj.create()
-        assert pod.wait_for_resource(
-            condition=constants.STATUS_RUNNING, selector='app=rook-ceph-mds',
-            resource_count=2, timeout=600
-        )
+            ceph_obj = OCS(**fs_data)
+            ceph_obj.create()
+            assert pod.wait_for_resource(
+                condition=constants.STATUS_RUNNING, selector='app=rook-ceph-mds',
+                resource_count=2, timeout=600
+            )
 
         # Check for CephFilesystem creation in ocp
         cfs_data = cfs.get()

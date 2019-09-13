@@ -2,7 +2,7 @@
 apiVersion: ceph.rook.io/v1
 kind: CephFilesystem
 metadata:
-  name: ocsci-cephfs
+  name: rook-ceph-cephfilesystem
   namespace: openshift-storage
 spec:
 # The metadata pool spec. Must use replication.
