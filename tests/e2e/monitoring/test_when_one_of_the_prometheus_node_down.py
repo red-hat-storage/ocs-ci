@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import ocp, constants, defaults
-from ocs_ci.framework.testlib import tier4, E2ETest
+from ocs_ci.framework.testlib import tier4, E2ETest, bugzilla
 from ocs_ci.ocs.resources import pvc, pod
 from tests import helpers
 from ocs_ci.ocs.monitoring import check_pvcdata_collected_on_prometheus
@@ -71,6 +71,7 @@ def test_fixture(request, storageclass_factory):
     return namespace_list, pvc_objs, pod_objs, sc
 
 
+@bugzilla('1751657')
 @pytest.mark.polarion_id("OCS-606")
 class TestWhenOneOfThePrometheusNodeDown(E2ETest):
     """
