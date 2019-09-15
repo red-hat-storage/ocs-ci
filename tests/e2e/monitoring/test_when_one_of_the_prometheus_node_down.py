@@ -2,14 +2,14 @@ import logging
 import pytest
 
 from ocs_ci.ocs import ocp, constants, defaults
-from ocs_ci.framework.testlib import tier4, E2ETest
+from ocs_ci.framework.testlib import tier4, E2ETest, bugzilla
 from ocs_ci.ocs.resources import pvc, pod
 from tests import helpers
 from ocs_ci.ocs.monitoring import check_pvcdata_collected_on_prometheus
 from ocs_ci.utility import aws
 from ocs_ci.ocs.node import wait_for_nodes_status, get_typed_nodes
 from tests.helpers import wait_for_resource_state
-from tests import sanity_helpers
+from tests.sanity_helpers import Sanity
 
 logger = logging.getLogger(__name__)
 
@@ -71,12 +71,21 @@ def test_fixture(request, storageclass_factory):
     return namespace_list, pvc_objs, pod_objs, sc
 
 
+@bugzilla('1751657')
 @pytest.mark.polarion_id("OCS-606")
 class TestWhenOneOfThePrometheusNodeDown(E2ETest):
     """
     When the nodes are down, there should not be any functional impact
     on monitoring pods. All the data/metrics should be collected correctly.
     """
+    @pytest.fixture(autouse=True)
+    def init_sanity(self):
+        """
+        Initialize Sanity instance
+
+        """
+        self.sanity_helpers = Sanity()
+
     @tier4
     def test_monitoring_when_one_of_the_prometheus_node_down(self, test_fixture):
         """
@@ -112,7 +121,7 @@ class TestWhenOneOfThePrometheusNodeDown(E2ETest):
             wait_for_nodes_status()
 
         # Check the node are Ready state and check cluster is health ok
-        sanity_helpers.health_check(nodes=list(instances.values()))
+        self.sanity_helpers.health_check()
 
         # Check all the monitoring pods are up
         for pod_obj in monitoring_pod_obj_list:
