@@ -155,7 +155,7 @@ def storageclass_factory_class(
 def storageclass_factory(
     request,
     ceph_pool_factory,
-    secret_factory,
+    secret_factory
 ):
     return storageclass_factory_fixture(
         request,
@@ -192,7 +192,6 @@ def storageclass_factory_fixture(
                 by using these data. Parameters `block_pool` and `secret`
                 are not useds but references are set if provided.
             sc_name (str): Name of the storage class
-            reclaim_policy (str): Reclaim policy for storageclass
 
         Returns:
             object: helpers.create_storage_class instance with links to
