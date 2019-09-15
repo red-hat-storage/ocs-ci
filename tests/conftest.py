@@ -169,30 +169,6 @@ def storageclass_factory_fixture(
     ceph_pool_factory,
     secret_factory,
 ):
-    return storageclass_factory_fixture(
-        request,
-        ceph_pool_factory,
-        secret_factory
-    )
-
-
-def storageclass_factory_fixture(
-    request,
-    ceph_pool_factory,
-    secret_factory,
-):
-    return storageclass_factory_fixture(
-        request,
-        ceph_pool_factory,
-        secret_factory
-    )
-
-
-def storageclass_factory_fixture(
-    request,
-    ceph_pool_factory,
-    secret_factory,
-):
     """
     Create a storage class factory. Default is RBD based.
     Calling this fixture creates new storage class instance.
