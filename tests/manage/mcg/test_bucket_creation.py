@@ -2,9 +2,7 @@ import logging
 
 import pytest
 
-from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier1
-from ocs_ci.utility.utils import check_if_executable_in_path
+from ocs_ci.framework.pytest_customization.marks import tier1, noobaa_cli_required, aws_platform_required
 
 logger = logging.getLogger(__name__)
 
@@ -12,10 +10,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.filterwarnings(
     'ignore::urllib3.exceptions.InsecureRequestWarning'
 )
-@pytest.mark.skipif(
-    condition=config.ENV_DATA['platform'] != 'AWS',
-    reason="Tests are not running on AWS deployed cluster"
-)
+@aws_platform_required
 @tier1
 class TestBucketCreation:
     """
@@ -32,10 +27,7 @@ class TestBucketCreation:
             mcg_obj.s3_list_all_bucket_names()
         )
 
-    @pytest.mark.skipif(
-        condition=check_if_executable_in_path('noobaa') is False,
-        reason='MCG CLI was not found'
-    )
+    @noobaa_cli_required
     def test_cli_bucket_creation(self, mcg_obj, bucket_factory):
         """
         Test bucket creation using the MCG CLI

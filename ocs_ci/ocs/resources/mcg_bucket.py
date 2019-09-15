@@ -12,7 +12,7 @@ logger = logging.getLogger(name=__file__)
 
 class MCGBucket(ABC):
     """
-    A class to represent an MCG cloud
+    Base abstract class for MCG buckets
     """
     mcg, name = (None,) * 2
 
@@ -34,6 +34,10 @@ class MCGBucket(ABC):
             return self.name == other.name
 
     def delete(self):
+        """
+        Super method that first logs the bucket deletion and then calls
+        the appropriate implementation
+        """
         logger.info(f"Deleting bucket: {self.name}")
         self.internal_delete()
 
@@ -43,19 +47,25 @@ class MCGBucket(ABC):
 
 
 class S3Bucket(MCGBucket):
+    """
+    Implementation of an MCG bucket using the S3 API
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.mcg.s3_resource.create_bucket(Bucket=self.name)
 
     def internal_delete(self):
+        """
+        Deletes the bucket using the S3 API
+        """
         self.mcg.s3_resource.Bucket(self.name).object_versions.delete()
         self.mcg.s3_resource.Bucket(self.name).delete()
 
-    def list_all_buckets(self):
-        return [bucket.name for bucket in self.mcg.s3_resource.buckets.all()]
-
 
 class OCBucket(MCGBucket):
+    """
+    Implementation of an MCG bucket using the OC CLI
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         obc_data = templating.load_yaml_to_dict(constants.MCG_OBC_YAML)
@@ -66,13 +76,22 @@ class OCBucket(MCGBucket):
         create_resource(**obc_data)
 
     def internal_delete(self):
-        OCP(kind='obc', namespace='openshift-storage').delete(resource_name=self.name)
+        """
+        Deletes the bucket using the OC CLI
+        """
+        OCP(kind='obc', namespace=self.mcg.namespace).delete(resource_name=self.name)
 
 
 class CLIBucket(MCGBucket):
+    """
+    Implementation of an MCG bucket using the NooBaa CLI
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         run_mcg_cmd(f'obc create --exact {self.name}')
 
     def internal_delete(self):
+        """
+        Deletes the bucket using the NooBaa CLI
+        """
         run_mcg_cmd(f'obc delete {self.name}')
