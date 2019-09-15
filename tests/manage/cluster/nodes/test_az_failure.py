@@ -42,6 +42,8 @@ class TestAvailabilityZones(ManageTest):
 
         """
         self.sanity_helpers.health_check()
+        logger.info("2ND HEALTH CHECK:")
+        self.sanity_helpers.health_check()
         # Select instances in randomly chosen availability zone:
         instances_in_az = self.random_availability_zone_selector(aws_obj, ec2_instances)
         logger.info(f"AZ selected, Instances: {instances_in_az} to be blocked")
@@ -54,7 +56,6 @@ class TestAvailabilityZones(ManageTest):
         security_group_id = self.block_aws_availability_zone(aws_obj, instances_in_az)
 
         # Check cluster's health, need to be unhealthy at that point
-        time.sleep(300)
         assert self.check_cluster_health() == 0
 
         # TODO add test plan stages
