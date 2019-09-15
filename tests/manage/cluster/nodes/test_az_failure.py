@@ -1,7 +1,6 @@
 import logging
 import pytest
 import random
-import time
 
 from ocs_ci.framework.testlib import ManageTest, tier4
 from ocs_ci.framework import config
@@ -31,19 +30,18 @@ class TestAvailabilityZones(ManageTest):
     5. restore availability zone access
     6. validate - cluster functionality and health
     """
-    sanity_helpers = sanity_helpers.Sanity()
 
     def test_availability_zone_failure(self, aws_obj, ec2_instances):
         """
 
         Args:
             aws_obj (obj): aws.AWS() object
-            instances (dict): cluster ec2 instances objects
+            ec2_instances (dict): cluster ec2 instances objects
 
         """
-        self.sanity_helpers.health_check()
-        logger.info("2ND HEALTH CHECK:")
-        self.sanity_helpers.health_check()
+        # Check cluster health before test beginning
+        assert self.check_cluster_health() == 1
+
         # Select instances in randomly chosen availability zone:
         instances_in_az = self.random_availability_zone_selector(aws_obj, ec2_instances)
         logger.info(f"AZ selected, Instances: {instances_in_az} to be blocked")
@@ -54,6 +52,7 @@ class TestAvailabilityZones(ManageTest):
 
         # Blocking instances:
         security_group_id = self.block_aws_availability_zone(aws_obj, instances_in_az)
+        logger.info("Access Blocked")
 
         # Check cluster's health, need to be unhealthy at that point
         assert self.check_cluster_health() == 0
@@ -115,6 +114,7 @@ class TestAvailabilityZones(ManageTest):
         return security_group_id
 
     def check_cluster_health(self):
+        self.sanity_helpers = sanity_helpers.Sanity()
         try:
             self.sanity_helpers.health_check()
             return True
