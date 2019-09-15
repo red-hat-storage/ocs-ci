@@ -15,7 +15,6 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
 from ocs_ci.ocs import constants, ocp, defaults
-from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.csv import CSV
 from tests import helpers
@@ -147,13 +146,13 @@ class Deployment(object):
             namespace=self.namespace
         )
         csv.wait_for_phase("Succeeded")
-        cluster_data = templating.load_yaml_to_dict(
+        cluster_data = templating.load_yaml(
             self.ocs_operator_storage_cluster_cr,
         )
         cluster_data['metadata']['name'] = config.ENV_DATA[
             'storage_cluster_name'
         ]
-        deviceset_data = templating.load_yaml_to_dict(
+        deviceset_data = templating.load_yaml(
             constants.DEVICESET_YAML
         )
         device_size = int(
@@ -273,6 +272,10 @@ class Deployment(object):
         create_oc_resource(
             'toolbox.yaml', self.cluster_path, _templating, config.ENV_DATA
         )
+        assert pod.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector='app=rook-ceph-tools', resource_count=1, timeout=600
+        )
 
         if not self.ocs_operator_deployment:
             logger.info(f"Waiting {wait_time} seconds...")
@@ -300,17 +303,16 @@ class Deployment(object):
             logger.info(f"Waiting {wait_time} seconds...")
             time.sleep(wait_time)
 
-        # TODO: Check resources below and move away once handled by operator
-        # Create MDS pods for CephFileSystem
-        fs_data = templating.load_yaml_to_dict(constants.CEPHFILESYSTEM_YAML)
-        fs_data['metadata']['namespace'] = self.namespace
+            # Create MDS pods for CephFileSystem
+            fs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
+            fs_data['metadata']['namespace'] = self.namespace
 
-        ceph_obj = OCS(**fs_data)
-        ceph_obj.create()
-        assert pod.wait_for_resource(
-            condition=constants.STATUS_RUNNING, selector='app=rook-ceph-mds',
-            resource_count=2, timeout=600
-        )
+            ceph_obj = OCS(**fs_data)
+            ceph_obj.create()
+            assert pod.wait_for_resource(
+                condition=constants.STATUS_RUNNING, selector='app=rook-ceph-mds',
+                resource_count=2, timeout=600
+            )
 
         # Check for CephFilesystem creation in ocp
         cfs_data = cfs.get()
@@ -323,18 +325,6 @@ class Deployment(object):
             logger.error(
                 f"MDS deployment Failed! Please check logs!"
             )
-
-        # WA for bug: https://bugzilla.redhat.com/show_bug.cgi?id=1747388
-        cluster = CephCluster()
-        wa_cmd = (
-            "for POOL in ocsci-cephfs-metadata ocsci-cephfs-data0; do for PGN"
-            " in pg_num pgp_num; do ceph osd pool set ${POOL} ${PGN} 100;"
-            "done; done"
-        )
-        logger.info("Applying WA for BZ: 1747388")
-        out = cluster.toolbox.exec_bash_cmd_on_pod(wa_cmd)
-        logging.info(f"Out of the WA cmd {wa_cmd} is: {out}")
-        # end of WA
 
         # Verify health of ceph cluster
         # TODO: move destroy cluster logic to new CLI usage pattern?
