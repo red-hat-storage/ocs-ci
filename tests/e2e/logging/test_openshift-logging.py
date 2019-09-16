@@ -5,6 +5,7 @@ This file contains the testcases for openshift-logging
 import logging
 
 import pytest
+import re
 
 import random
 from ocs_ci.ocs.resources.csv import CSV
@@ -14,11 +15,12 @@ from ocs_ci.ocs.ocp import OCP
 from tests import helpers, disruption_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
-from ocs_ci.utility.retry import retry
 from ocs_ci.framework.testlib import E2ETest, workloads, tier4, ignore_leftovers
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility import templating
+
 
 logger = logging.getLogger(__name__)
 
@@ -224,7 +226,7 @@ class Test_openshift_logging_on_ocs(E2ETest):
             command=f'es_util --query=project.{project1}.*/_count'
         )
         assert project1_filecount['_shards']['successful'] == 0, f"No files found in project {project1}"
-        logger.info(f'The files in the project 1 {project1_filecount}')
+        logger.info(f'Total number of files in project 1 {project1_filecount}')
 
         # Create another app_pod in new project
         pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
@@ -237,7 +239,54 @@ class Test_openshift_logging_on_ocs(E2ETest):
         project2_filecount = elasticsearch_pod_obj.exec_cmd_on_pod(
             command=f'es_util --query=project.{project2}.*/_count', out_yaml_format=True
         )
-        logger.info(f'The files in the project2 {project2_filecount}')
-
         assert project2_filecount['_shards']['successful'] == 0, f"No files found in project {project2}"
-        logger.info(f'The files in the project 2 {project2_filecount}')
+        logger.info(f'Total number files in project 2 {project2_filecount}')
+
+    @pytest.mark.polarion_id("OCS-665")
+    @tier4
+    def test_create_and_delete_multiple_app_pods_and_verify_logs(self, multi_pvc_factory, dc_pod_factory):
+        """
+        The test is to create and delete multiple app pods in a project
+        to verify in EFK stack
+        """
+
+        # Creates multiple app-pods
+        num_of_pvcs = 10
+        pvc_size = 2
+
+        pvc_objs = multi_pvc_factory(
+            size=pvc_size, num_of_pvc=num_of_pvcs
+        )
+
+        dc_pod_objs = list()
+        for pvc_obj in pvc_objs:
+            dc_pod_objs.append(dc_pod_factory(pvc=pvc_obj))
+
+        dc_pod_list = []
+        for pod in dc_pod_objs:
+            dc_pod_list.append(pod.name)
+
+        project = pvc_obj.project.namespace
+
+        # Collects project indices from EFK stack
+        elasticsearch_pod_obj = self.get_elasticsearch_pod_obj()
+        project_index = elasticsearch_pod_obj.exec_cmd_on_pod(
+            command='indices', out_yaml_format=False
+        )
+
+        # Validates if the project exists in EFK stack
+        self.validate_project_exists(pvc_obj)
+
+        for item in project_index.split("\n"):
+            if project in item:
+                index = re.findall(r'\.*(project+\S+)', item.strip())
+                logger.info(f'The project index is {index}')
+
+        # Validating all the app-pod log files exists in EFK stack
+        for pod_name in dc_pod_list:
+            cmd = f"es_util --query=" \
+                f"{index[0]}/_search -d '{{\"query\": {{ \"match\": {{\"kubernetes.pod_name\": \"{pod_name}\"}}}}}}'"
+            pod_log_files = elasticsearch_pod_obj.exec_cmd_on_pod(
+                command=cmd, out_yaml_format=False
+            )
+            logger.info(f'The pod log files of {pod_name} is {pod_log_files}')
