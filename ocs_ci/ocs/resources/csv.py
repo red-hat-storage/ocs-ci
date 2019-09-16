@@ -68,6 +68,10 @@ class CSV(OCP):
             timeout (int): Timeout in seconds to wait for desired phase
             sleep (int): Time in seconds to sleep between attempts
 
+        Raises:
+            ResourceInUnexpectedState: In case the CSV is not in expected
+                phase.
+
         """
         self.check_name_is_specified()
         sampler = TimeoutSampler(
