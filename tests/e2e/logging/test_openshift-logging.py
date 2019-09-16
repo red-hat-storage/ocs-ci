@@ -9,9 +9,8 @@ from tests import helpers
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.ocs import constants
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
-from ocs_ci.utility import deployment_openshift_logging as obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
-from ocs_ci.framework.testlib import E2ETest, tier1
+from ocs_ci.framework.testlib import E2ETest, tier1, ignore_leftovers
 from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
@@ -76,6 +75,7 @@ def teardown(cbp_obj, sc_obj):
 @pytest.mark.usefixtures(
     test_fixture.__name__
 )
+@ignore_leftovers
 class Test_openshift_logging_on_ocs(E2ETest):
     """
     The class contains tests to verify openshift-logging backed by OCS.
