@@ -295,8 +295,9 @@ class DisruptionBase(ManageTest):
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'delete_pods', 'rbdplugin'],
-            marks=pytest.mark.polarion_id("OCS-1009")
-        ),
+            marks=[pytest.mark.polarion_id("OCS-1009"), pytest.mark.bugzilla(
+                '1752487'
+            )]),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pods', 'cephfsplugin'],
             marks=pytest.mark.polarion_id("OCS-1018")
