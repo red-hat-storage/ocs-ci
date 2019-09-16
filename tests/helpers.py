@@ -1195,7 +1195,7 @@ def create_multiple_pvc_parallel(
     return pvc_objs_list
 
 
-def create_pods_parallel(pvc_list, namespace, interface):
+def create_pods_parallel(pvc_list, namespace, interface, raw_block_pv=False):
     """
     Function to create pods in parallel
 
@@ -1203,6 +1203,7 @@ def create_pods_parallel(pvc_list, namespace, interface):
         pvc_list (list): List of pvcs to be attached in pods
         namesapce (str): The namespace for creating pod
         interface (str): The interface backed the PVC
+        raw_block_pv (bool): Either RAW block or not
 
     Returns:
         pod_objs (list): Returns list of pods created
@@ -1213,10 +1214,17 @@ def create_pods_parallel(pvc_list, namespace, interface):
     wait_time = 300
     with ThreadPoolExecutor() as executor:
         for pvc_obj in pvc_list:
-            future_pod_objs.append(executor.submit(
-                create_pod, interface_type=interface,
-                pvc_name=pvc_obj.name, do_reload=False, namespace=namespace)
-            )
+            if not raw_block_pv:
+                future_pod_objs.append(executor.submit(
+                    create_pod, interface_type=interface,
+                    pvc_name=pvc_obj.name, do_reload=False, namespace=namespace)
+                )
+            else:
+                future_pod_objs.append(executor.submit(
+                    create_pod, interface_type=interface,
+                    pvc_name=pvc_obj.name, do_reload=False, namespace=namespace,
+                    raw_block_pv=raw_block_pv, pod_dict_path=constants.CSI_RBD_RAW_BLOCK_POD_YAML)
+                )
     pod_objs = [pvc_obj.result() for pvc_obj in future_pod_objs]
     # Check for all the pods are in Running state
     # In above pod creation not waiting for the pod to be created because of threads usage
