@@ -37,7 +37,7 @@ necessary dependencies
 Configure your ocs-ci.yaml and pass it with --ocsci-conf parameter
 
 This file is used to allow configuration around a number of things within ocs-ci.
-The default file is in `ocs_ci/framework/conf/default_config.yaml`.
+The default configuration file can be found in `ocs_ci/framework/conf/default_config.yaml`.
 
 The required keys are in the template. Values are placeholders and should be replaced by legitimate values.
 Values for report portal or polarion are only required if you plan on posting to that particular service.
