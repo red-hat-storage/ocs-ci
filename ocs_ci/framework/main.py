@@ -7,6 +7,7 @@ import yaml
 
 from ocs_ci import framework
 from ocs_ci.utility import utils
+from ocs_ci.ocs import constants
 
 
 def init_ocsci_conf(arguments=None):
@@ -26,11 +27,25 @@ def init_ocsci_conf(arguments=None):
             os.path.abspath(os.path.expanduser(config_file))
         ) as file_stream:
             custom_config_data = yaml.safe_load(file_stream)
+            if custom_config_data.get('ENV_DATA').get('platform') == 'vsphere':
+                if not os.path.isfile(constants.VSPHERE_CONFIG_PATH):
+                    msg = "vsphere_upi.yaml MUST be provided for vSphere Platform"
+                    pytest.fail(msg)
+                with open(os.path.expanduser(constants.VSPHERE_CONFIG_PATH)) as file_stream:
+                    vsphere_config_data = yaml.safe_load(file_stream)
+                    framework.config.update(vsphere_config_data)
             framework.config.update(custom_config_data)
     cluster_config = args.cluster_conf
     if cluster_config:
         with open(os.path.expanduser(cluster_config)) as file_stream:
             cluster_config_data = yaml.safe_load(file_stream)
+            if cluster_config_data.get('ENV_DATA').get('platform') == 'vsphere':
+                if not os.path.isfile(constants.VSPHERE_CONFIG_PATH):
+                    msg = "vsphere_upi.yaml MUST be provided for vSphere Platform"
+                    pytest.fail(msg)
+                with open(os.path.expanduser(constants.VSPHERE_CONFIG_PATH)) as file_stream:
+                    vsphere_config_data = yaml.safe_load(file_stream)
+                    framework.config.update(vsphere_config_data)
             framework.config.update(cluster_config_data)
     framework.config.RUN['run_id'] = int(time.time())
     bin_dir = framework.config.RUN.get('bin_dir')
