@@ -38,10 +38,12 @@ DEPLOYMENT:
   installer_version: "4.2.0-0.nightly"
   force_download_installer: True
   force_download_client: True
-  # opened issue here about the version in the name of OLM
-  # https://github.com/openshift/ocs-operator/issues/50
-  ocs_csv_version: "v0.0.1"
+  # You can overwrite csv channel version by following parameter
+  # ocs_csv_channel: "alpha"
   ocs_operator_storage_cluster_cr: "https://raw.githubusercontent.com/openshift/ocs-operator/master/deploy/crds/ocs_v1_storagecluster_cr.yaml"
+  ocs_operator_olm: "https://raw.githubusercontent.com/openshift/ocs-operator/master/deploy/deploy-with-olm.yaml"
+  # you can overwrite the image for ocs operator catalog souce by following parameter:
+  # ocs_operator_image: "quay.io/ocs-dev/ocs-registry:latest"
   ocs_operator_nodes_to_label: 3
   # This is described as a WA for minimal configuration 3/3 worker/master
   # nodes. See: https://github.com/openshift/ocs-operator

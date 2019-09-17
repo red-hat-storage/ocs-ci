@@ -278,9 +278,10 @@ ALERT_MGRISABSENT = 'CephMgrIsAbsent'
 ALERT_MONQUORUMATRISK = 'CephMonQuorumAtRisk'
 
 # OCS Deployment related constants
-OPERATOR_REPOSITORY = (
-    'https://raw.githubusercontent.com/openshift/ocs-operator/master/deploy'
-)
-OPERATOR_OLM_MANIFEST = f'{OPERATOR_REPOSITORY}/deploy-with-olm.yaml'
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
+OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
+OPERATOR_CS_QUAY_API_QUERY = (
+    'https://quay.io/api/v1/repository/rhceph-dev/ocs-registry/'
+    'tag/?onlyActiveTags=true&limit=2'
+)
