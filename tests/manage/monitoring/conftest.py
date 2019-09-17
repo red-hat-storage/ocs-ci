@@ -73,6 +73,8 @@ def measure_operation(
             time.sleep(3)
         logger.info('Logging of all prometheus alerts stopped')
 
+    # check if file with results for this operation already exists
+    # if it exists then use it
     if os.path.isfile(result_file) and os.access(result_file, os.R_OK):
         logger.info(
             f"File {result_file} already created."
@@ -84,6 +86,8 @@ def measure_operation(
             f"File {result_file} loaded. Content of file:\n{results}"
         )
 
+    # if there is no file with results from previous run
+    # then perform operation measurement
     else:
         logger.info(
             f"File {result_file} not created yet. Starting measurement..."
