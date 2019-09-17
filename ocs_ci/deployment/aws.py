@@ -200,7 +200,7 @@ class AWSUPI(AWSBase):
         def __init__(self):
             super(AWSUPI.OCPDeployment, self).__init__()
             self.upi_repo_path = os.path.join(
-                self.cluster_path, 'openshift-misc',
+                os.path.abspath(self.cluster_path), 'openshift-misc',
             )
 
             self.upi_script_path = os.path.join(
