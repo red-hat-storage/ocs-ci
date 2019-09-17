@@ -292,16 +292,10 @@ class AWSUPI(AWSBase):
             with open("./upi_on_aws-install.sh", "w") as fd:
                 fd.write(data)
 
-            # ensure oc is on PATH for UPI install script
-            test_env = os.environ.copy()
-            path = test_env.get('PATH')
-            oc_path = os.path.join(constants.TOP_DIR, 'bin')
-            test_env['PATH'] = f'{oc_path}:{path}'
-
             logger.info("Executing UPI install script")
             proc = Popen(
                 [os.path.join(self.upi_script_path, 'upi_on_aws-install.sh')],
-                stdout=PIPE, stderr=PIPE, env=test_env
+                stdout=PIPE, stderr=PIPE
             )
             stdout, stderr = proc.communicate()
 
