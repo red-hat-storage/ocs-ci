@@ -70,6 +70,7 @@ class UnavailableResourceException(Exception):
     pass
 
 
+<<<<<<< HEAD
 class TagNotFoundException(Exception):
     pass
 
@@ -79,6 +80,9 @@ class ResourceNameNotSpecifiedException(Exception):
 
 
 class ResourceInUnexpectedState(Exception):
+=======
+class VMMaxDisksReachedException(Exception):
+>>>>>>> Adding constants and exception required for vSphere platform
     pass
 
 

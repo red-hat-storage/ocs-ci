@@ -105,6 +105,7 @@ DEFAULT_BLOCKPOOL = 'rbd'
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
 GB = 1024 ** 3
+GB2KB = 1024 ** 2
 
 # Reclaim Policy
 RECLAIM_POLICY_RETAIN = 'Retain'
@@ -313,3 +314,15 @@ VSPHERE_PLATFORM = 'vsphere'
 # Default SC based on platforms
 DEFAULT_SC_AWS = "gp2"
 DEFAULT_SC_VSPHERE = "thin"
+
+# ignition files
+BOOTSTRAP_IGN = "bootstrap.ign"
+MASTER_IGN = "master.ign"
+WORKER_IGN = "worker.ign"
+
+# vSphere related constants
+VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
+VM_DISK_TYPE = "thin"
+VM_DISK_MODE = "persistent"
+INSTALLER_DEFAULT_MEMORY = "8192"
+INSTALLER_DEFAULT_DNS = "8.8.8.8"
