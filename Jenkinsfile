@@ -21,6 +21,7 @@
 //   ROOK_CSI_ATTACHER_IMAGE
 //   EMAIL
 //   UMB_MESSAGE
+import groovy.json.JsonBuilder
 pipeline {
   agent { node { label "ocs-ci" }}
   environment {
@@ -110,32 +111,37 @@ pipeline {
     }
     success {
       script {
-        def messageContent = '''
-        {
-          "SENDER_BUILD_NUMBER": "${BUILD_NUMBER}",
-          "OCS_OPERATOR_IMAGE": "${env.OCS_OPERATOR_IMAGE}",
-          "ROOK_IMAGE": "${ROOK_IMAGE}",
-          "CEPH_IMAGE": "${CEPH_IMAGE}",
-          "CEPH_CSI_IMAGE": "${CEPH_CSI_IMAGE}",
-          "ROOK_CSI_REGISTRAR_IMAGE": "${ROOK_CSI_REGISTRAR_IMAGE}",
-          "ROOK_CSI_PROVISIONER_IMAGE": "${ROOK_CSI_PROVISIONER_IMAGE}",
-          "ROOK_CSI_SNAPSHOTTER_IMAGE": "${ROOK_CSI_SNAPSHOTTER_IMAGE}",
-          "ROOK_CSI_ATTACHER_IMAGE": "${ROOK_CSI_ATTACHER_IMAGE}",
-        }
-        '''
         if( env.UMB_MESSAGE in [true, 'true'] ) {
+          def properties = '''
+            TOOL=ocs-ci
+            PRODUCT=ocs
+            PRODUCT_BUILD_CAUSE=${BUILD_CAUSE}
+            OCS_OPERATOR_DEPLOYMENT=${env.OCS_OPERATOR_DEPLOYMENT}
+          '''
+          def contentObj = [
+            "SENDER_BUILD_NUMBER": "${BUILD_NUMBER}",
+            "OCS_OPERATOR_IMAGE": "${env.OCS_OPERATOR_IMAGE}",
+            "ROOK_IMAGE": "${ROOK_IMAGE}",
+            "CEPH_IMAGE": "${CEPH_IMAGE}",
+            "CEPH_CSI_IMAGE": "${CEPH_CSI_IMAGE}",
+            "ROOK_CSI_REGISTRAR_IMAGE": "${ROOK_CSI_REGISTRAR_IMAGE}",
+            "ROOK_CSI_PROVISIONER_IMAGE": "${ROOK_CSI_PROVISIONER_IMAGE}",
+            "ROOK_CSI_SNAPSHOTTER_IMAGE": "${ROOK_CSI_SNAPSHOTTER_IMAGE}",
+            "ROOK_CSI_ATTACHER_IMAGE": "${ROOK_CSI_ATTACHER_IMAGE}",
+          ]
+          def builder = new JsonBuilder()
+          builder(contentObj)
+          def content = builder.toString()
+          echo "Sending UMB message"
+          echo "Properties: %s".format(properties)
+          echo "Content: %s".format(content)
           sendCIMessage (
             providerName: 'Red Hat UMB',
             overrides: [ topic: 'VirtualTopic.qe.ci.jenkins' ],
             failOnError: false,
             messageType: 'Tier1TestingDone',
-            messageProperties: '''
-              TOOL=ocs-ci
-              PRODUCT=ocs
-              PRODUCT_BUILD_CAUSE=${BUILD_CAUSE}
-              OCS_OPERATOR_DEPLOYMENT=${env.OCS_OPERATOR_DEPLOYMENT}
-            ''',
-            messageContent: messageContent
+            messageProperties: properties,
+            messageContent: content
           )
         }
       }
