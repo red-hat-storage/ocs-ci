@@ -37,6 +37,7 @@ setup(
         # issue opened for pytest_marker_bugzilla here:
         # https://github.com/eanxgeek/pytest_marker_bugzilla/issues/43
         'pytest_marker_bugzilla>=0.9.1.dev6'
+        'pyvmomi',
     ],
     entry_points={
         'console_scripts': [
