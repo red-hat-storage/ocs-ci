@@ -112,12 +112,16 @@ pipeline {
     success {
       script {
         if( env.UMB_MESSAGE in [true, 'true'] ) {
-          def properties = '''
+          def operator_image = "${env.OCS_OPERATOR_IMAGE}"
+          // quay.io/rhceph-dev/ocs-operator:4.2-58.e59ca0f.master -> 4.2
+          def operator_version = operator_image.split(':')[-1].split('-')[0]
+          def properties = """
             TOOL=ocs-ci
             PRODUCT=ocs
+            PRODUCT_VERSION={operator_version}
             PRODUCT_BUILD_CAUSE=${BUILD_CAUSE}
             OCS_OPERATOR_DEPLOYMENT=${env.OCS_OPERATOR_DEPLOYMENT}
-          '''
+          """
           def contentObj = [
             "SENDER_BUILD_NUMBER": "${BUILD_NUMBER}",
             "OCS_OPERATOR_IMAGE": "${env.OCS_OPERATOR_IMAGE}",
