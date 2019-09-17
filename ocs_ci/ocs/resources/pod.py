@@ -275,11 +275,17 @@ class Pod(OCS):
                 constants.FIO_IO_RW_PARAMS_YAML
             )
             self.io_params['rwmixread'] = rw_ratio
-        else:
+        elif io_direction == 'wo':
             self.io_params = templating.load_yaml(
                 constants.FIO_IO_PARAMS_YAML
             )
+        elif io_direction == 'ro':
+            self.io_params = templating.load_yaml(
+                constants.FIO_IO_PARAMS_YAML
+            )
+            self.io_params['rw'] = 'randread'
         self.io_params['runtime'] = runtime
+
         size = size if isinstance(size, str) else f"{size}G"
         self.io_params['size'] = size
         if fio_filename:
