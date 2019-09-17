@@ -12,11 +12,13 @@ import random
 import re
 
 import ocs_ci.ocs.resources.pod as pod
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import ocs
 import ocs_ci.ocs.constants as constant
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
-from ocs_ci. ocs import ocp
+from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs import exceptions
 
 logger = logging.getLogger(__name__)
@@ -100,6 +102,8 @@ class CephCluster(object):
         self.scan_cluster()
         logging.info(f"Number of mons = {self.mon_count}")
         logging.info(f"Number of mds = {self.mds_count}")
+
+        self.used_space = 0
 
     @property
     def cluster_name(self):
@@ -397,3 +401,20 @@ class CephCluster(object):
         )
         logging.info(f"Removed the mon {random_mon} from the cluster")
         return remove_mon
+
+    @retry(UnexpectedBehaviour, tries=20, delay=5, backoff=1)
+    def check_ceph_pool_used_space(self, cbp_name):
+        """
+        Check for the used space of the pool in cluster
+        """
+        ct_pod = pod.get_ceph_tools_pod()
+        rados_status = ct_pod.exec_ceph_cmd(ceph_cmd=f"rados df -p {cbp_name}")
+        assert rados_status is not None
+        used = rados_status['pools'][0]['size_bytes']
+        used_in_gb = format(used / constants.GB, '.4f')
+        if self.used_space and self.used_space == used_in_gb:
+            return float(self.used_space)
+        self.used_space = used_in_gb
+        raise UnexpectedBehaviour(
+            f"Used size is varying"
+        )
