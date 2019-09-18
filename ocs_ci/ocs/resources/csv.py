@@ -22,7 +22,7 @@ class CSV(OCP):
         Initializer function for CSV class
 
         Args:
-            name (str): Name of CSV
+            resource_name (str): Name of CSV
 
         """
         super(CSV, self).__init__(
