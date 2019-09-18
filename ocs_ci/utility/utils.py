@@ -410,7 +410,7 @@ def run_cmd(cmd, secrets=None, **kwargs):
     return mask_secrets(r.stdout.decode(), secrets)
 
 
-def run_mcg_cmd(cmd, namespace='openshift-storage'):
+def run_mcg_cmd(cmd, namespace=None):
     """
     Invokes `run_cmd` with a noobaa prefix
 
@@ -422,6 +422,7 @@ def run_mcg_cmd(cmd, namespace='openshift-storage'):
         str: Stdout of the command
 
     """
+    namespace = namespace if namespace else config.ENV_DATA['cluster_namespace']
     return run_cmd(f'noobaa -n {namespace} ' + cmd)
 
 
