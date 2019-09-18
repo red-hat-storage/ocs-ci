@@ -402,7 +402,7 @@ class CephCluster(object):
         logging.info(f"Removed the mon {random_mon} from the cluster")
         return remove_mon
 
-    @retry(UnexpectedBehaviour, tries=20, delay=5, backoff=1)
+    @retry(UnexpectedBehaviour, tries=20, delay=10, backoff=1)
     def check_ceph_pool_used_space(self, cbp_name):
         """
         Check for the used space of a pool in cluster
