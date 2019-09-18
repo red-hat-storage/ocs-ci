@@ -275,7 +275,7 @@ class AWSUPI(AWSBase):
                 f"Openshift-installer will be using loglevel:{log_cli_level}"
             )
 
-            # Invoke upi_on_aws-install.sh
+            # Invoke UPI on AWS install script
             cidir = os.getcwd()
             logger.info("Changing CWD")
             try:
@@ -286,15 +286,17 @@ class AWSUPI(AWSBase):
                 )
             logger.info(f"CWD changed to {self.upi_script_path}")
 
-            with open("./upi_on_aws-install.sh", "r") as fd:
+            with open(f"./{constants.UPI_INSTALL_SCRIPT}", "r") as fd:
                 buf = fd.read()
             data = buf.replace("openshift-qe-upi", "ocs-qe-upi")
-            with open("./upi_on_aws-install.sh", "w") as fd:
+            with open(f"./{constants.UPI_INSTALL_SCRIPT}", "w") as fd:
                 fd.write(data)
 
             logger.info("Executing UPI install script")
             proc = Popen(
-                [os.path.join(self.upi_script_path, 'upi_on_aws-install.sh')],
+                [os.path.join(
+                    self.upi_script_path, constants.UPI_INSTALL_SCRIPT
+                )],
                 stdout=PIPE, stderr=PIPE
             )
             stdout, stderr = proc.communicate()
