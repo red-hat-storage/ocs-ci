@@ -224,7 +224,7 @@ class AWSUPI(AWSBase):
                 'route53_domain_name': config.ENV_DATA['base_domain'],
                 'vm_type_masters': config.ENV_DATA['master_instance_type'],
                 'vm_type_workers': config.ENV_DATA['worker_instance_type'],
-                'num_workers': "3"  # TODO: read in num_workers
+                'num_workers': str(config.ENV_DATA['worker_replicas'])
             }
             for key, value in upi_env_vars.items():
                 os.environ[key] = value
