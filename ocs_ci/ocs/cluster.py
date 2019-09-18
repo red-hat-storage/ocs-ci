@@ -405,7 +405,13 @@ class CephCluster(object):
     @retry(UnexpectedBehaviour, tries=20, delay=5, backoff=1)
     def check_ceph_pool_used_space(self, cbp_name):
         """
-        Check for the used space of the pool in cluster
+        Check for the used space of a pool in cluster
+
+         Returns:
+            used_in_gb (float): Amount of used space in pool (in GBs)
+
+         Raises:
+            UnexpectedBehaviour: If used size keeps varying in Ceph status
         """
         ct_pod = pod.get_ceph_tools_pod()
         rados_status = ct_pod.exec_ceph_cmd(ceph_cmd=f"rados df -p {cbp_name}")
@@ -416,5 +422,5 @@ class CephCluster(object):
             return float(self.used_space)
         self.used_space = used_in_gb
         raise UnexpectedBehaviour(
-            f"Used size is varying"
+            f"In Rados df, Used size is varying"
         )
