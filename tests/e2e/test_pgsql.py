@@ -57,7 +57,7 @@ class TestPgSQLWorkload(E2ETest):
 
         # Wait for pgbench pod to be created
         for pgbench_pod in TimeoutSampler(
-            180, 3, get_pod_name_by_pattern, 'pgbench-1-dbs-client', 'my-ripsaw'
+            300, 3, get_pod_name_by_pattern, 'pgbench-1-dbs-client', 'my-ripsaw'
         ):
             try:
                 if pgbench_pod[0] is not None:
