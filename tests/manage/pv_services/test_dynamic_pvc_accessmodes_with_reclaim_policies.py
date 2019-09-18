@@ -143,15 +143,23 @@ class BaseDynamicPvc(ManageTest):
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, constants.RECLAIM_POLICY_DELETE],
-            marks=pytest.mark.polarion_id("OCS-533")
+            marks=[
+                pytest.mark.polarion_id("OCS-533"),
+                pytest.mark.bugzilla("1750916")]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_RETAIN],
-            marks=pytest.mark.polarion_id("OCS-525")
+            marks=[
+                pytest.mark.polarion_id("OCS-525"),
+                pytest.mark.bugzilla("1751866"),
+                pytest.mark.bugzilla("1750916")]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_DELETE],
-            marks=pytest.mark.polarion_id("OCS-526")
+            marks=[
+                pytest.mark.polarion_id("OCS-526"),
+                pytest.mark.bugzilla("1751866"),
+                pytest.mark.bugzilla("1750916")]
         )
     ]
 )
@@ -275,6 +283,8 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
         self.dynamic_pvc_base(interface_type, reclaim_policy)
 
     @tier1
+    @pytest.mark.bugzilla("1750916")
+    @pytest.mark.bugzilla("1751866")
     @pytest.mark.usefixtures(
         create_cephfs_secret.__name__,
         create_project.__name__
