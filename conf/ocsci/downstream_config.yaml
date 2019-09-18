@@ -9,9 +9,15 @@ ENV_DATA:
   rook_csi_snapshotter_image: 'quay.io/openshift/origin-csi-external-snapshotter:4.2'
   rook_csi_attacher_image: 'quay.io/openshift/origin-csi-external-attacher:4.2'
   cluster_namespace: 'openshift-storage'
+  worker_instance_type: 'm5.4xlarge'
 REPORTING:
   # Upstream: 'US' or Downstream: 'DS', used only for reporting (Test Run Name)
   us_ds: 'DS'
   ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
 DEPLOYMENT:
-  ocs_operator_deployment: false
+  ocs_operator_deployment: true
+  ocs_operator_storage_cluster_cr: "http://pkgs.devel.redhat.com/cgit/containers/ocs-registry/plain/ocs_v1_storagecluster_cr.yaml?h=ocs-4.2-rhel-8"
+  ocs_operator_olm: "http://pkgs.devel.redhat.com/cgit/containers/ocs-registry/plain/deploy-with-olm.yaml?h=ocs-4.2-rhel-8"
+  # you can overwrite the image for ocs operator catalog souce by following parameter:
+  # ocs_operator_image: "quay.io/rhceph-dev/ocs-registry:4.2-32.9b6c93e.master"
+  ocs_operator_image: "quay.io/rhceph-dev/ocs-registry:4.2-54.0e339e4.master"

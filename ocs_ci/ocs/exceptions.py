@@ -68,3 +68,15 @@ class ResourceWrongStatusException(Exception):
 
 class UnavailableResourceException(Exception):
     pass
+
+
+class TagNotFoundException(Exception):
+    pass
+
+
+class ResourceNameNotSpecifiedException(Exception):
+    pass
+
+
+class ResourceInUnexpectedState(Exception):
+    pass

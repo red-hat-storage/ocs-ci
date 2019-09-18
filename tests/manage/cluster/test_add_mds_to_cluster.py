@@ -69,7 +69,7 @@ def verify_fs_exist(pod_count):
     return False
 
 
-@bugzilla('1738833')
+@bugzilla('1752286')
 @tier1
 @pytest.mark.usefixtures(
     test_fixture.__name__,

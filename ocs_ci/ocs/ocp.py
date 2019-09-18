@@ -8,7 +8,11 @@ import yaml
 import shlex
 import re
 
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ResourceNameNotSpecifiedException,
+    TimeoutExpiredError,
+)
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs import defaults
@@ -21,7 +25,10 @@ class OCP(object):
     A basic OCP object to run basic 'oc' commands
     """
 
-    def __init__(self, api_version='v1', kind='Service', namespace=None):
+    def __init__(
+        self, api_version='v1', kind='Service', namespace=None,
+        resource_name=''
+    ):
         """
         Initializer function
 
@@ -29,10 +36,13 @@ class OCP(object):
             api_version (str): TBD
             kind (str): TBD
             namespace (str): The name of the namespace to use
+            resource_name (str): Resource name
         """
         self._api_version = api_version
         self._kind = kind
         self._namespace = namespace
+        self._resource_name = resource_name
+        self._data = {}
 
     @property
     def api_version(self):
@@ -45,6 +55,17 @@ class OCP(object):
     @property
     def namespace(self):
         return self._namespace
+
+    @property
+    def resource_name(self):
+        return self._resource_name
+
+    @property
+    def data(self):
+        if self._data:
+            return self._data
+        self._data = self.get()
+        return self._data
 
     def exec_oc_cmd(self, command, out_yaml_format=True, secrets=None, **kwargs):
         """
@@ -104,6 +125,7 @@ class OCP(object):
         Returns:
             dict: Dictionary represents a returned yaml file
         """
+        resource_name = resource_name if resource_name else self.resource_name
         command = f"get {self.kind} {resource_name}"
         if all_namespaces and not self.namespace:
             command += " -A"
@@ -301,6 +323,7 @@ class OCP(object):
             f" identified by name '{resource_name}'"
             f" and selector {selector}"
             f" to reach desired condition {condition}"))
+        resource_name = resource_name if resource_name else self.resource_name
 
         # actual status of the resource we are waiting for, setting it to None
         # now prevents UnboundLocalError raised when waiting timeouts
@@ -433,6 +456,24 @@ class OCP(object):
         ]
 
         return resource_info[status_index]
+
+    def check_name_is_specified(self, resource_name=''):
+        """
+        Check if the name of the resource is specified in class level and
+        if not raise the exception.
+
+        Raises:
+            ResourceNameNotSpecifiedException: in case the name is not
+                specified.
+
+        """
+        resource_name = (
+            resource_name if resource_name else self.resource_name
+        )
+        if not resource_name:
+            raise ResourceNameNotSpecifiedException(
+                "Resource name has to be specified in class!"
+            )
 
 
 def switch_to_project(project_name):

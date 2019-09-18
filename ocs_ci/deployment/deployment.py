@@ -11,12 +11,13 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.utils import create_oc_resource, apply_oc_resource
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
-    run_cmd, ceph_health_check, is_cluster_running
+    run_cmd, ceph_health_check, is_cluster_running, get_latest_ds_olm_tag
 )
 from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
 from ocs_ci.ocs import constants, ocp, defaults
-from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.csv import CSV
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from tests import helpers
 
 
@@ -33,10 +34,6 @@ class Deployment(object):
         self.cluster_path = config.ENV_DATA['cluster_path']
         self.ocs_operator_deployment = config.DEPLOYMENT.get(
             'ocs_operator_deployment', True
-        )
-        self.ocs_operator_version = config.DEPLOYMENT.get('ocs_csv_version')
-        self.ocs_operator_storage_cluster_cr = config.DEPLOYMENT.get(
-            'ocs_operator_storage_cluster_cr'
         )
         self.namespace = config.ENV_DATA["cluster_namespace"]
 
@@ -134,20 +131,74 @@ class Deployment(object):
             )
             _ocp.exec_oc_cmd(command=taint_cmd)
 
+    def get_olm_manifest(self):
+        """
+        This method prepare manifest for deploy OCS operator.
+
+        Returns:
+            str: Path to olm deploy manifest
+
+        """
+        image = config.DEPLOYMENT.get('ocs_operator_image', '')
+        image_and_tag = image.split(':')
+        image = image_and_tag[0]
+        image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
+        if not image_tag and config.REPORTING.get("us_ds") == 'DS':
+            image_tag = get_latest_ds_olm_tag()
+        ocs_operator_olm = config.DEPLOYMENT['ocs_operator_olm']
+        olm_data_generator = templating.load_yaml(
+            ocs_operator_olm, multi_document=True
+        )
+        yaml_data = []
+        cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
+        # TODO: Once needed we can also set the channel for the subscription
+        # from config.DEPLOYMENT.get('ocs_csv_channel')
+        for yaml_doc in olm_data_generator:
+            change_cs_condition = (
+                (image or image_tag) and yaml_doc['kind'] == 'CatalogSource'
+                and yaml_doc['metadata']['name'] == cs_name
+            )
+            if change_cs_condition:
+                image_from_spec = yaml_doc['spec']['image']
+                image = image if image else image_from_spec.split(':')[0]
+                yaml_doc['spec']['image'] = (
+                    f"{image}:{image_tag if image_tag else 'latest'}"
+                )
+            yaml_data.append(yaml_doc)
+        olm_manifest = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='olm_manifest', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            yaml_data, olm_manifest.name
+        )
+        return olm_manifest.name
+
     def deploy_ocs_via_operator(self):
         """
         Method for deploy OCS via OCS operator
         """
         logger.info("Deployment of OCS via OCS operator")
+        olm_manifest = self.get_olm_manifest()
         self.label_and_taint_nodes()
-        run_cmd(f"oc create -f {constants.OPERATOR_OLM_MANIFEST}")
+        run_cmd(f"oc create -f {olm_manifest}")
+        # wait for package manifest
+        package_manifest = PackageManifest(
+            resource_name=defaults.OCS_OPERATOR_NAME
+        )
+        # Wait for package manifest is ready
+        package_manifest.wait_for_resource()
+        channel = config.DEPLOYMENT.get('ocs_csv_channel')
+        csv_name = package_manifest.get_current_csv(channel=channel)
         csv = CSV(
-            name=f"ocs-operator.{self.ocs_operator_version}", kind="csv",
+            resource_name=csv_name, kind="csv",
             namespace=self.namespace
         )
         csv.wait_for_phase("Succeeded")
+        ocs_operator_storage_cluster_cr = config.DEPLOYMENT.get(
+            'ocs_operator_storage_cluster_cr'
+        )
         cluster_data = templating.load_yaml(
-            self.ocs_operator_storage_cluster_cr,
+            ocs_operator_storage_cluster_cr
         )
         cluster_data['metadata']['name'] = config.ENV_DATA[
             'storage_cluster_name'
@@ -165,10 +216,9 @@ class Deployment(object):
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode='w+', prefix='cluster_storage', delete=False
         )
-        templating.dump_dict_to_temp_yaml(
+        templating.dump_data_to_temp_yaml(
             cluster_data, cluster_data_yaml.name
         )
-
         run_cmd(f"oc create -f {cluster_data_yaml.name}")
 
     def deploy_ocs(self):
@@ -268,10 +318,12 @@ class Deployment(object):
             resource_count=3, timeout=600
         )
 
-        # Creatig toolbox pod
-        create_oc_resource(
-            'toolbox.yaml', self.cluster_path, _templating, config.ENV_DATA
-        )
+        if not self.ocs_operator_deployment:
+            # Creatig toolbox pod
+            create_oc_resource(
+                'toolbox.yaml', self.cluster_path, _templating,
+                config.ENV_DATA,
+            )
         assert pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector='app=rook-ceph-tools', resource_count=1, timeout=600

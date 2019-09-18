@@ -15,7 +15,7 @@ import smtplib
 from ocs_ci.ocs.exceptions import CephHealthException
 from ocs_ci.ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
-    UnavailableBuildException,
+    TagNotFoundException, UnavailableBuildException,
 )
 from ocs_ci.framework import config
 from email.mime.multipart import MIMEMultipart
@@ -1138,3 +1138,21 @@ def get_rook_repo(branch='master', to_checkout=None):
     run_cmd(f"git reset --hard origin/{branch}", cwd=cwd)
     if to_checkout:
         run_cmd(f"git checkout {to_checkout}", cwd=cwd)
+
+
+def get_latest_ds_olm_tag():
+    """
+    This function returns latest tag of OCS downstream registry
+
+    Returns:
+        str: latest tag for downstream image from quay registry
+
+    Raises:
+        TagNotFoundException: In case no tag found
+
+    """
+    _req = requests.get(constants.OPERATOR_CS_QUAY_API_QUERY)
+    req = list(filter(lambda x: x['name'] != 'latest', _req.json()['tags']))
+    if len(req) != 1:
+        raise TagNotFoundException(f"Couldn't find any tag!")
+    return req[0]['name']
