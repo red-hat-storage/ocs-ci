@@ -152,11 +152,11 @@ def measurement_dir(tmp_path):
             os.path.dirname(tmp_path),
             'measurement_results'
         )
-        if not os.path.exists(measurement_dir):
-            os.mkdir(measurement_dir)
+    if not os.path.exists(measurement_dir):
         logger.info(
-            f"Generated new measurement dir: {measurement_dir}"
+            f"Measurement dir {measurement_dir} doesn't exist. Creating it."
         )
+        os.mkdir(measurement_dir)
     return measurement_dir
 
 
@@ -199,7 +199,7 @@ def workload_stop_ceph_mgr(measurement_dir):
         time.sleep(run_time)
         return oc.get(mgr)
 
-    test_file = os.path.join(measurement_dir, 'stop_mgr.json')
+    test_file = os.path.join(measurement_dir, 'workload_stop_ceph_mgr.json')
     measured_op = measure_operation(stop_mgr, test_file)
     logger.info(f"Upscaling deployment {mgr} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
@@ -257,7 +257,7 @@ def workload_stop_ceph_mon(measurement_dir):
         time.sleep(run_time)
         return mons_to_stop
 
-    test_file = os.path.join(measurement_dir, 'stop_mon.json')
+    test_file = os.path.join(measurement_dir, 'workload_stop_ceph_mon.json')
     measured_op = measure_operation(stop_mon, test_file)
 
     # get new list of monitors to make sure that new monitors were deployed
