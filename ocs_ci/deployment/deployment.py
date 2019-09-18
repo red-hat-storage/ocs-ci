@@ -99,6 +99,8 @@ class Deployment(object):
         to_taint = config.DEPLOYMENT.get('ocs_operator_nodes_to_tain', 0)
         worker_count = len(worker_nodes)
         if worker_count < to_label or worker_count < to_taint:
+            logger.info(f"All nodes: {nodes}")
+            logger.info(f"Worker nodes: {worker_nodes}")
             raise UnavailableResourceException(
                 f"Not enough worker nodes: {worker_count} to label: "
                 f"{to_label} or taint: {to_taint}!"
