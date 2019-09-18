@@ -97,8 +97,8 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         Test case to verify after delete pvc size returned to backend pools
         """
         failed_to_delete = []
-        ceph_cluster = CephCluster()
-        used_before_creating_pvc = ceph_cluster.check_ceph_pool_used_space(cbp_name=self.cbp_obj.name)
+        ceph_obj1 = CephCluster()
+        used_before_creating_pvc = ceph_obj1.check_ceph_pool_used_space(cbp_name=self.cbp_obj.name)
         logger.info(f"Used before creating PVC {used_before_creating_pvc}")
         pvc_obj = create_pvc_and_verify_pvc_exists(
             self.sc_obj.name, self.cbp_obj.name
@@ -109,7 +109,7 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
         pod_obj.reload()
         pod.run_io_and_verify_mount_point(pod_obj, bs='10M', count='300')
-        used_after_creating_pvc = ceph_cluster.check_ceph_pool_used_space(cbp_name=self.cbp_obj.name)
+        used_after_creating_pvc = ceph_obj1.check_ceph_pool_used_space(cbp_name=self.cbp_obj.name)
         logger.info(f"Used after creating PVC {used_after_creating_pvc}")
         assert used_before_creating_pvc < used_after_creating_pvc
         rbd_image_id = pvc_obj.image_uuid
@@ -124,7 +124,9 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
                 f"Failed to delete resources: {failed_to_delete}"
             )
         verify_pv_not_exists(pvc_obj, self.cbp_obj.name, rbd_image_id)
-        used_after_deleting_pvc = ceph_cluster.check_ceph_pool_used_space(cbp_name=self.cbp_obj.name)
+        ceph_obj2 = CephCluster()
+        used_after_deleting_pvc = ceph_obj2.check_ceph_pool_used_space(cbp_name=self.cbp_obj.name)
+
         logger.info(f"Used after deleting PVC {used_after_deleting_pvc}")
         assert used_after_deleting_pvc < used_after_creating_pvc
         assert (abs(
