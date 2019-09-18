@@ -78,7 +78,6 @@ ENV_DATA:
   base_domain: 'qe.rh-ocs.com'
   master_instance_type: 'm4.xlarge'
   worker_instance_type: 'm4.xlarge'
-  rhcos_ami: 'ami-06c85f9d106577272'
   skip_ocp_deployment: false
   skip_ocs_deployment: false
   # Do not change to specific version like v14.2.1-20190430 if not needed
