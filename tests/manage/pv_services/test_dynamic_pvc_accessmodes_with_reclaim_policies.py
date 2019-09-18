@@ -275,6 +275,8 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
         self.dynamic_pvc_base(interface_type, reclaim_policy)
 
     @tier1
+    @pytest.mark.bugzilla("1750916")
+    @pytest.mark.bugzilla("1751866")
     @pytest.mark.usefixtures(
         create_cephfs_secret.__name__,
         create_project.__name__
