@@ -30,6 +30,20 @@ class TestAvailabilityZones(ManageTest):
     5. restore availability zone access
     6. validate - cluster functionality and health
     """
+    @pytest.fixture(autouse=True)
+    def init_sanity(self):
+        """
+        init Sanity() object
+        """
+
+        self.sanity_helpers = sanity_helpers.Sanity()
+
+    def test_health_check(self):
+        """
+
+        Returns:
+
+        """
 
     def test_availability_zone_failure(self, aws_obj, ec2_instances):
         """
@@ -39,8 +53,6 @@ class TestAvailabilityZones(ManageTest):
             ec2_instances (dict): cluster ec2 instances objects
 
         """
-        # Check cluster health before test beginning
-        assert self.check_cluster_health() == 1
 
         # Select instances in randomly chosen availability zone:
         instances_in_az = self.random_availability_zone_selector(aws_obj, ec2_instances)
@@ -56,8 +68,6 @@ class TestAvailabilityZones(ManageTest):
 
         # Check cluster's health, need to be unhealthy at that point
         assert self.check_cluster_health() == 0
-
-        # TODO add test plan stages
 
         # Restore access for blocked instances
         aws_obj.restore_instances_access(security_group_id, original_sgs)
@@ -114,7 +124,6 @@ class TestAvailabilityZones(ManageTest):
         return security_group_id
 
     def check_cluster_health(self):
-        self.sanity_helpers = sanity_helpers.Sanity()
         try:
             self.sanity_helpers.health_check()
             return True
