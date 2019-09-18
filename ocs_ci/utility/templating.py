@@ -136,7 +136,7 @@ def dump_to_temp_yaml(src_file, dst_file, **kwargs):
         yaml.dump(data, yaml_file)
 
 
-def load_yaml_to_dict(file, multi_document=False):
+def load_yaml(file, multi_document=False):
     """
     Load yaml file (local or from URL) and convert it to dictionary
 
@@ -161,7 +161,7 @@ def load_yaml_to_dict(file, multi_document=False):
 
 def get_n_document_from_yaml(yaml_generator, index=0):
     """
-    Returns n document from yaml generator loaded by load_yaml_to_dict with
+    Returns n document from yaml generator loaded by load_yaml with
     multi_document = True.
 
     Args:
@@ -181,8 +181,21 @@ def get_n_document_from_yaml(yaml_generator, index=0):
     raise IndexError(f"Passed yaml generator doesn't have index {index}")
 
 
-def dump_dict_to_temp_yaml(data, temp_yaml):
-    yaml_data = yaml.dump(data)
+def dump_data_to_temp_yaml(data, temp_yaml):
+    """
+    Dump data to temporary yaml file
+
+    Args:
+        data (dict or list): dict or list (in case of multi_document) with
+            data to dump to the yaml file.
+        temp_yaml (str): file path of yaml file
+
+    Returns:
+        str: dumped yaml data
+
+    """
+    dumper = yaml.dump if type(data) == dict else yaml.dump_all
+    yaml_data = dumper(data)
     with open(temp_yaml, 'w') as yaml_file:
         yaml_file.write(yaml_data)
     logger.info(yaml_data)

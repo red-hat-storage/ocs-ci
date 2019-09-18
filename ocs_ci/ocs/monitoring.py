@@ -25,7 +25,7 @@ def create_configmap_cluster_monitoring_pod(sc_name):
 
     """
     logger.info("Creating configmap cluster-monitoring-config")
-    config_map = templating.load_yaml_to_dict(
+    config_map = templating.load_yaml(
         constants.CONFIGURE_PVC_ON_MONITORING_POD
     )
     config = yaml.safe_load(config_map['data']['config.yaml'])

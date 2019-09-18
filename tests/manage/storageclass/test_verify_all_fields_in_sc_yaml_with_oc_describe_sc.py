@@ -44,7 +44,7 @@ class TestVerifyAllFieldsInScYamlWithOcDescribe(ManageTest):
         output
         """
         log.info(f"Creating a {interface} storage class")
-        self.sc_data = templating.load_yaml_to_dict(
+        self.sc_data = templating.load_yaml(
             getattr(constants, f"CSI_{interface}_STORAGECLASS_YAML")
         )
         self.sc_data['metadata']['name'] = (
