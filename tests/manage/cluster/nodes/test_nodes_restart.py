@@ -38,14 +38,14 @@ class TestNodesRestart(ManageTest):
         ]
     )
     def test_nodes_restart_aws(
-        self, ec2_instances, aws_obj, pvc_factory, pod_factory, force
+        self, ec2_instances, aws_obj, pvc_factory, pod_factory, dc_pod_factory, force
     ):
         """
         Test ungraceful cluster shutdown - AWS
         """
         aws_obj.restart_ec2_instances(instances=ec2_instances, wait=True, force=force)
         self.sanity_helpers.health_check()
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(pvc_factory, pod_factory, dc_pod_factory)
 
     @pytest.mark.parametrize(
         argnames=["interface", "operation"],
@@ -57,7 +57,7 @@ class TestNodesRestart(ManageTest):
         ]
     )
     def test_pv_provisioning_under_degraded_state(
-        self, ec2_instances, aws_obj, pvc_factory, pod_factory, interface, operation
+        self, ec2_instances, aws_obj, pvc_factory, pod_factory, dc_pod_factory, interface, operation
     ):
         """
         Test PV provisioning under degraded state
@@ -101,7 +101,7 @@ class TestNodesRestart(ManageTest):
         """
         if operation == 'delete_resources':
             # Create resources that their deletion will be tested later
-            self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+            self.sanity_helpers.create_resources(pvc_factory, pod_factory, dc_pod_factory)
 
         provisioner_pod = None
 
@@ -165,7 +165,7 @@ class TestNodesRestart(ManageTest):
 
         if operation == 'create_resources':
             # Cluster validation (resources creation and IO running)
-            self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+            self.sanity_helpers.create_resources(pvc_factory, pod_factory, dc_pod_factory)
         elif operation == 'delete_resources':
             # Cluster validation (resources creation and IO running)
             self.sanity_helpers.delete_resources()

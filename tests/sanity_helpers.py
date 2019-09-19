@@ -1,5 +1,7 @@
 import logging
 
+from tests import helpers
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
@@ -22,6 +24,7 @@ class Sanity:
         """
         self.pvc_objs = list()
         self.pod_objs = list()
+        self.dc_pod_objs = list()
         self.ceph_cluster = CephCluster()
 
     def health_check(self):
@@ -36,13 +39,14 @@ class Sanity:
         )
         self.ceph_cluster.cluster_health_check(timeout=60)
 
-    def create_resources(self, pvc_factory, pod_factory, run_io=True):
+    def create_resources(self, pvc_factory, pod_factory, dc_pod_factory, run_io=True):
         """
         Sanity validation - Create resources (FS and RBD) and run IO
 
         Args:
             pvc_factory (function): A call to pvc_factory function
             pod_factory (function): A call to pod_factory function
+            dc_pod_factory (function): A call to dc_pod_factory function
             run_io (bool): True for run IO, False otherwise
 
         """
@@ -52,11 +56,18 @@ class Sanity:
             pvc_obj = pvc_factory(interface)
             self.pvc_objs.append(pvc_obj)
             self.pod_objs.append(pod_factory(pvc=pvc_obj))
+            pvc_obj = pvc_factory(interface)
+            self.pvc_objs.append(pvc_obj)
+            self.dc_pod_objs.append(dc_pod_factory(pvc=pvc_obj))
         if run_io:
             for pod in self.pod_objs:
                 pod.run_io('fs', '1G')
+            for dc_pod in self.dc_pod_objs:
+                dc_pod.run_io('fs', '1G')
             for pod in self.pod_objs:
                 get_fio_rw_iops(pod)
+            for dc_pod in self.dc_pod_objs:
+                get_fio_rw_iops(dc_pod)
 
     def delete_resources(self):
         """
@@ -69,6 +80,8 @@ class Sanity:
             pod_obj.delete()
         for pod_obj in self.pod_objs:
             pod_obj.ocp.wait_for_delete(pod_obj.name)
+        for dc_pod_obj in self.dc_pod_objs:
+            helpers.delete_deploymentconfig(dc_pod_obj)
         for pvc_obj in self.pvc_objs:
             pvc_obj.delete()
         for pvc_obj in self.pvc_objs:
