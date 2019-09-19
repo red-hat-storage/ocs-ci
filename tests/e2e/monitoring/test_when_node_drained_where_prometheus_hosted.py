@@ -37,7 +37,7 @@ class TestDrainNodeWherePrometheusPodHosted(E2ETest):
     @pytest.fixture(autouse=True)
     def test_fixture(self, pod_factory, num_of_pod=3):
         """
-        Setup and teardown
+        Create resources for the test
         """
         self.pod_objs = [
             pod_factory(
