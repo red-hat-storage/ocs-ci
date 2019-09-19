@@ -12,6 +12,7 @@
 // defaults:
 //   OCS_OPERATOR_DEPLOYMENT
 //   OCS_OPERATOR_IMAGE
+//   OCS_REGISTRY_IMAGE
 //   ROOK_IMAGE
 //   CEPH_IMAGE
 //   CEPH_CSI_IMAGE
@@ -125,6 +126,7 @@ pipeline {
           def contentObj = [
             "SENDER_BUILD_NUMBER": "${BUILD_NUMBER}",
             "OCS_OPERATOR_IMAGE": "${env.OCS_OPERATOR_IMAGE}",
+            "OCS_REGISTRY_IMAGE": "${env.OCS_REGISTRY_IMAGE}",
             "ROOK_IMAGE": "${ROOK_IMAGE}",
             "CEPH_IMAGE": "${CEPH_IMAGE}",
             "CEPH_CSI_IMAGE": "${CEPH_CSI_IMAGE}",
