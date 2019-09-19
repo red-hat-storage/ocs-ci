@@ -22,7 +22,6 @@
 //   ROOK_CSI_ATTACHER_IMAGE
 //   EMAIL
 //   UMB_MESSAGE
-import groovy.json.JsonBuilder
 pipeline {
   agent { node { label "ocs-ci" }}
   environment {
@@ -123,7 +122,7 @@ pipeline {
             PRODUCT_BUILD_CAUSE=${BUILD_CAUSE}
             OCS_OPERATOR_DEPLOYMENT=${env.OCS_OPERATOR_DEPLOYMENT}
           """
-          def contentObj = [
+          def content_string = '''{
             "SENDER_BUILD_NUMBER": "${BUILD_NUMBER}",
             "OCS_OPERATOR_IMAGE": "${env.OCS_OPERATOR_IMAGE}",
             "OCS_REGISTRY_IMAGE": "${env.OCS_REGISTRY_IMAGE}",
@@ -134,20 +133,18 @@ pipeline {
             "ROOK_CSI_PROVISIONER_IMAGE": "${ROOK_CSI_PROVISIONER_IMAGE}",
             "ROOK_CSI_SNAPSHOTTER_IMAGE": "${ROOK_CSI_SNAPSHOTTER_IMAGE}",
             "ROOK_CSI_ATTACHER_IMAGE": "${ROOK_CSI_ATTACHER_IMAGE}",
-          ]
-          def builder = new JsonBuilder()
-          builder(contentObj)
-          def content = builder.toString()
+          }'''
+          def content = readJSON text: content_string
           echo "Sending UMB message"
-          echo "Properties: %s".format(properties)
-          echo "Content: %s".format(content)
+          echo 'Properties: ' + properties
+          echo 'Content: ' + content.toString()
           sendCIMessage (
             providerName: 'Red Hat UMB',
             overrides: [ topic: 'VirtualTopic.qe.ci.jenkins' ],
             failOnError: false,
             messageType: 'Tier1TestingDone',
             messageProperties: properties,
-            messageContent: content
+            messageContent: content.toString()
           )
         }
       }
