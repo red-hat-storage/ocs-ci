@@ -119,7 +119,6 @@ pipeline {
             TOOL=ocs-ci
             PRODUCT=ocs
             PRODUCT_VERSION={operator_version}
-            PRODUCT_BUILD_CAUSE=${BUILD_CAUSE}
             OCS_OPERATOR_DEPLOYMENT=${env.OCS_OPERATOR_DEPLOYMENT}
           """
           def content_string = '''{
