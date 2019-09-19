@@ -144,6 +144,20 @@ class Pod(OCS):
         rsh_cmd += command
         return self.ocp.exec_oc_cmd(rsh_cmd, out_yaml_format, secrets=secrets, **kwargs)
 
+    def exec_bash_cmd_on_pod(self, command):
+        """
+        Execute a pure bash command on a pod via oc exec where you can use
+        bash syntaxt like &&, ||, ;, for loop and so on.
+
+        Args:
+            command (str): The command to execute on the given pod
+
+        Returns:
+            str: stdout of the command
+        """
+        cmd = f'exec {self.name} -- bash -c "{command}"'
+        return self.ocp.exec_oc_cmd(cmd, out_yaml_format=False)
+
     def get_labels(self):
         """
         Get labels from pod
@@ -254,12 +268,12 @@ class Pod(OCS):
             self.workload_setup(storage_type=storage_type, jobs=jobs)
 
         if io_direction == 'rw':
-            self.io_params = templating.load_yaml_to_dict(
+            self.io_params = templating.load_yaml(
                 constants.FIO_IO_RW_PARAMS_YAML
             )
             self.io_params['rwmixread'] = rw_ratio
         else:
-            self.io_params = templating.load_yaml_to_dict(
+            self.io_params = templating.load_yaml(
                 constants.FIO_IO_PARAMS_YAML
             )
         self.io_params['runtime'] = runtime
@@ -320,7 +334,18 @@ def get_ceph_tools_pod():
         selector='app=rook-ceph-tools'
     )['items']
     assert ct_pod_items, "No Ceph tools pod found"
-    ceph_pod = Pod(**ct_pod_items[0])
+
+    # In the case of node failure, the CT pod will be recreated with the old
+    # one in status Terminated. Therefore, need to filter out the Terminated pod
+    running_ct_pods = list()
+    for pod in ct_pod_items:
+        if ocp_pod_obj.get_resource_status(
+            pod.get('metadata').get('name')
+        ) == constants.STATUS_RUNNING:
+            running_ct_pods.append(pod)
+
+    assert running_ct_pods, "No running Ceph tools pod found"
+    ceph_pod = Pod(**running_ct_pods[0])
     return ceph_pod
 
 
@@ -825,3 +850,24 @@ def get_used_space_on_mount_point(pod_obj):
     mount_point = mount_point.split()
     used_percentage = mount_point[mount_point.index(constants.MOUNT_POINT) - 1]
     return used_percentage
+
+
+def get_plugin_pods(interface, namespace=None):
+    """
+    Fetches info of csi-cephfsplugin pods or csi-rbdplugin pods
+
+    Args:
+        interface (str): Interface type. eg: CephBlockPool, CephFileSystem
+        namespace (str): Name of cluster namespace
+
+    Returns:
+        list : csi-cephfsplugin pod objects or csi-rbdplugin pod objects
+    """
+    if interface == constants.CEPHFILESYSTEM:
+        plugin_label = constants.CSI_CEPHFSPLUGIN_LABEL
+    if interface == constants.CEPHBLOCKPOOL:
+        plugin_label = constants.CSI_RBDPLUGIN_LABEL
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    plugins_info = get_pods_having_label(plugin_label, namespace)
+    plugin_pods = [Pod(**plugin) for plugin in plugins_info]
+    return plugin_pods

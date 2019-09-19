@@ -93,7 +93,7 @@ def create_pod(
     interface_type=None, pvc_name=None,
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
-    raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE
+    raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1
 ):
     """
     Create a pod
@@ -109,6 +109,8 @@ def create_pod(
         dc_deployment (bool): True if creating pod as deploymentconfig
         raw_block_pv (bool): True for creating raw block pv based pod, False otherwise
         raw_block_device (str): raw block device for the pod
+        replica_count (int): Replica count for deployment config
+
     Returns:
         Pod: A Pod instance
 
@@ -123,7 +125,7 @@ def create_pod(
         interface = constants.CEPHFS_INTERFACE
     if dc_deployment:
         pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
-    pod_data = templating.load_yaml_to_dict(pod_dict)
+    pod_data = templating.load_yaml(pod_dict)
     pod_name = create_unique_resource_name(
         f'test-{interface}', 'pod'
     )
@@ -132,6 +134,7 @@ def create_pod(
     if dc_deployment:
         pod_data['metadata']['labels']['app'] = pod_name
         pod_data['spec']['template']['metadata']['labels']['name'] = pod_name
+        pod_data['spec']['replicas'] = replica_count
 
     if pvc_name:
         if dc_deployment:
@@ -220,14 +223,14 @@ def create_secret(interface_type):
     """
     secret_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
-        secret_data = templating.load_yaml_to_dict(
+        secret_data = templating.load_yaml(
             constants.CSI_RBD_SECRET_YAML
         )
         secret_data['stringData']['userID'] = constants.ADMIN_USER
         secret_data['stringData']['userKey'] = get_admin_key()
         interface = constants.RBD_INTERFACE
     elif interface_type == constants.CEPHFILESYSTEM:
-        secret_data = templating.load_yaml_to_dict(
+        secret_data = templating.load_yaml(
             constants.CSI_CEPHFS_SECRET_YAML
         )
         del secret_data['stringData']['userID']
@@ -253,7 +256,7 @@ def create_ceph_block_pool(pool_name=None):
     Returns:
         OCS: An OCS instance for the Ceph block pool
     """
-    cbp_data = templating.load_yaml_to_dict(constants.CEPHBLOCKPOOL_YAML)
+    cbp_data = templating.load_yaml(constants.CEPHBLOCKPOOL_YAML)
     cbp_data['metadata']['name'] = (
         pool_name if pool_name else create_unique_resource_name(
             'test', 'cbp'
@@ -279,7 +282,7 @@ def create_ceph_file_system(pool_name=None):
     Returns:
         OCS: An OCS instance for the Ceph file system
     """
-    cfs_data = templating.load_yaml_to_dict(constants.CEPHFILESYSTEM_YAML)
+    cfs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
     cfs_data['metadata']['name'] = (
         pool_name if pool_name else create_unique_resource_name(
             'test', 'cfs'
@@ -318,7 +321,7 @@ def create_storage_class(
 
     sc_data = dict()
     if interface_type == constants.CEPHBLOCKPOOL:
-        sc_data = templating.load_yaml_to_dict(
+        sc_data = templating.load_yaml(
             constants.CSI_RBD_STORAGECLASS_YAML
         )
         sc_data['parameters'][
@@ -332,7 +335,7 @@ def create_storage_class(
             provisioner if provisioner else defaults.RBD_PROVISIONER
         )
     elif interface_type == constants.CEPHFILESYSTEM:
-        sc_data = templating.load_yaml_to_dict(
+        sc_data = templating.load_yaml(
             constants.CSI_CEPHFS_STORAGECLASS_YAML
         )
         sc_data['parameters'][
@@ -392,7 +395,7 @@ def create_pvc(
     Returns:
         PVC: PVC instance
     """
-    pvc_data = templating.load_yaml_to_dict(constants.CSI_PVC_YAML)
+    pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
     pvc_data['metadata']['name'] = (
         pvc_name if pvc_name else create_unique_resource_name(
             'test', 'pvc'
@@ -720,7 +723,8 @@ def validate_pv_delete(pv_name):
 
     try:
         if ocp_pv_obj.get(resource_name=pv_name):
-            raise AssertionError('PV exists after PVC deletion')
+            msg = f"{constants.PV} {pv_name} is not deleted after PVC deletion"
+            raise AssertionError(msg)
 
     except CommandFailed:
         return True
@@ -949,7 +953,7 @@ def create_serviceaccount(namespace):
         OCS: An OCS instance for the service_account
     """
 
-    service_account_data = templating.load_yaml_to_dict(
+    service_account_data = templating.load_yaml(
         constants.SERVICE_ACCOUNT_YAML
     )
     service_account_data['metadata']['name'] = create_unique_resource_name(
@@ -958,6 +962,48 @@ def create_serviceaccount(namespace):
     service_account_data['metadata']['namespace'] = namespace
 
     return create_resource(**service_account_data)
+
+
+def get_serviceaccount_obj(sa_name, namespace):
+    """
+    Get serviceaccount obj
+
+    Args:
+        sa_name (str): Service Account name
+        namespace (str): The namespace for the serviceaccount creation
+
+    Returns:
+        OCS: An OCS instance for the service_account
+    """
+    ocp_sa_obj = ocp.OCP(kind=constants.SERVICE_ACCOUNT, namespace=namespace)
+    try:
+        sa_dict = ocp_sa_obj.get(resource_name=sa_name)
+        return OCS(**sa_dict)
+
+    except CommandFailed:
+        logger.error("ServiceAccount not found in specified namespace")
+
+
+def validate_scc_policy(sa_name, namespace):
+    """
+    Validate serviceaccount is added to scc of privileged
+
+    Args:
+        sa_name (str): Service Account name
+        namespace (str): The namespace for the serviceaccount creation
+
+    Returns:
+        bool: True if sc_name is present in scc of privileged else False
+    """
+    sa_name = f"system:serviceaccount:{namespace}:{sa_name}"
+    logger.info(sa_name)
+    ocp_scc_obj = ocp.OCP(kind=constants.SCC, namespace=namespace)
+    scc_dict = ocp_scc_obj.get(resource_name=constants.PRIVILEGED)
+    scc_users_list = scc_dict.get('users')
+    for scc_user in scc_users_list:
+        if scc_user == sa_name:
+            return True
+    return False
 
 
 def add_scc_policy(sa_name, namespace):
@@ -1005,15 +1051,16 @@ def delete_deploymentconfig(pod_obj):
     """
     dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG)
     dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
+    dc_ocp_obj.wait_for_delete(resource_name=pod_obj.get_labels().get('name'))
 
 
-def craft_s3_command(noobaa_obj, cmd):
+def craft_s3_command(mcg_obj, cmd):
     """
     Crafts the AWS CLI S3 command including the
     login credentials and command to be ran
 
     Args:
-        noobaa_obj: A NooBaa object containing the NooBaa S3 connection credentials
+        mcg_obj: An MCG object containing the MCG S3 connection credentials
         cmd: The AWSCLI command to run
 
     Returns:
@@ -1021,11 +1068,11 @@ def craft_s3_command(noobaa_obj, cmd):
 
     """
     base_command = (
-        f"sh -c \"AWS_ACCESS_KEY_ID={noobaa_obj.access_key_id} "
-        f"AWS_SECRET_ACCESS_KEY={noobaa_obj.access_key} "
-        f"AWS_DEFAULT_REGION={noobaa_obj.region} "
+        f"sh -c \"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
+        f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
+        f"AWS_DEFAULT_REGION={mcg_obj.region} "
         f"aws s3 "
-        f"--endpoint={noobaa_obj.endpoint} "
+        f"--endpoint={mcg_obj.endpoint} "
     )
     string_wrapper = "\""
 

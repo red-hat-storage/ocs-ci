@@ -26,6 +26,11 @@ def parse_args():
         dest='ocsci_conf',
         action='store_false',
     )
+    parser.add_argument(
+        '--skip-bugzilla-conf',
+        dest='bugzilla_conf',
+        action='store_false',
+    )
     return parser.parse_args()
 
 
@@ -88,21 +93,27 @@ def get_ocsci_conf():
             base_domain=env['AWS_DOMAIN'],
         ),
     )
-    # Apply image configuration if present
-    image_types = [
-        'rook',
-        'ceph',
-        'ceph_csi',
-        'rook_csi_registrar',
-        'rook_csi_provisioner',
-        'rook_csi_snapshotter',
-        'rook_csi_attacher',
-    ]
-    for image_type in image_types:
-        image_key = f"{image_type}_image"
-        image_value = env.get(image_key.upper())
-        if image_value is not None:
-            conf_obj['ENV_DATA'][image_key] = image_value
+    if env.get("DOWNSTREAM") == "true":
+        conf_obj['REPORTING'] = dict(us_ds='DS')
+    if env.get("OCS_OPERATOR_DEPLOYMENT") == "true":
+        raise NotImplementedError("OCS operator deployment not yet implemented")
+    else:
+        conf_obj['DEPLOYMENT'] = dict(ocs_operator_deployment=False)
+        # Apply image configuration if present
+        image_types = [
+            'rook',
+            'ceph',
+            'ceph_csi',
+            'rook_csi_registrar',
+            'rook_csi_provisioner',
+            'rook_csi_snapshotter',
+            'rook_csi_attacher',
+        ]
+        for image_type in image_types:
+            image_key = f"{image_type}_image"
+            image_value = env.get(image_key.upper())
+            if image_value is not None:
+                conf_obj['ENV_DATA'][image_key] = image_value
     return conf_obj
 
 
@@ -120,6 +131,11 @@ def write_ocsci_conf():
         ocs_conf_file.write(yaml.safe_dump(ocs_conf))
 
 
+def write_bugzilla_conf():
+    with open('bugzilla.cfg', 'w') as bz_cfg_file:
+        bz_cfg_file.write(env['BUGZILLA_CFG'])
+
+
 if __name__ == "__main__":
     args = parse_args()
     if args.aws:
@@ -128,3 +144,5 @@ if __name__ == "__main__":
         write_pull_secret()
     if args.ocsci_conf:
         write_ocsci_conf()
+    if args.bugzilla_conf:
+        write_bugzilla_conf()

@@ -64,3 +64,19 @@ class ResourceWrongStatusException(Exception):
 
     def __str__(self):
         return f"Resource {self.resource_name} describe output: {self.describe_out}"
+
+
+class UnavailableResourceException(Exception):
+    pass
+
+
+class TagNotFoundException(Exception):
+    pass
+
+
+class ResourceNameNotSpecifiedException(Exception):
+    pass
+
+
+class ResourceInUnexpectedState(Exception):
+    pass
