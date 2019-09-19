@@ -1,0 +1,5 @@
+---
+# This is the backup plan if the deployment with operator is brokne.
+# If the above is true, please use this config to deploy OCS with old way.
+DEPLOYMENT:
+  ocs_operator_deployment: false

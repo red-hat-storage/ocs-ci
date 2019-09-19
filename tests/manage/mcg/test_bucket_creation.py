@@ -8,7 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import tier1
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.skipif(condition=True, reason="NooBaa is not deployed")
+@pytest.mark.skipif(condition=True, reason="MCG is not deployed")
 @pytest.mark.filterwarnings('ignore::urllib3.exceptions.InsecureRequestWarning')
 @tier1
 class TestBucketCreation:
@@ -21,7 +21,7 @@ class TestBucketCreation:
         reason="Tests are not running on AWS deployed cluster"
     )
     @pytest.mark.polarion_id("OCS-1298")
-    def test_s3_bucket_creation(self, noobaa_obj, bucket_factory):
+    def test_s3_bucket_creation(self, mcg_obj, bucket_factory):
         """
         Test bucket creation using the S3 SDK
         """
@@ -29,5 +29,5 @@ class TestBucketCreation:
         assert set(
             bucket.name for bucket in bucket_factory(3)
         ).issubset(
-            noobaa_obj.s3_list_all_bucket_names()
+            mcg_obj.s3_list_all_bucket_names()
         )

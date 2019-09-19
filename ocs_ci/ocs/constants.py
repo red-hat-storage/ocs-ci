@@ -76,6 +76,9 @@ SUBSCRIPTION = "Subscription"
 NAMESPACES = "Namespaces"
 CLUSTER_LOGGING = "ClusterLogging"
 OPERATOR_GROUP = "OperatorGroup"
+SERVICE_ACCOUNT = "Serviceaccount"
+SCC = "SecurityContextConstraints"
+PRIVILEGED = "privileged"
 
 # Other
 SECRET = "Secret"
@@ -84,9 +87,14 @@ IGNORE_SC_GP2 = "gp2"
 IGNORE_SC_FLEX = "rook-ceph-block"
 TEST_FILES_BUCKET = "ocsci-test-files"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
+OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
+OPENSHIFT_LOGGING_NAMESPACE = "openshift-logging"
+OPENSHIFT_OPERATORS_REDHAT_NAMESPACE = "openshift-operators-redhat"
+MASTER_MACHINE = "master"
+WORKER_MACHINE = "worker"
 MOUNT_POINT = '/var/lib/www/html'
 
-
+DEFAULT_SECRET = 'rook-ceph-csi'
 DEFAULT_BLOCKPOOL = 'rbd'
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
@@ -101,6 +109,7 @@ ACCESS_MODE_RWO = 'ReadWriteOnce'
 ACCESS_MODE_ROX = 'ReadOnlyMany'
 ACCESS_MODE_RWX = 'ReadWriteMany'
 
+# Pod label
 MON_APP_LABEL = "app=rook-ceph-mon"
 MDS_APP_LABEL = "app=rook-ceph-mds"
 TOOL_APP_LABEL = "app=rook-ceph-tools"
@@ -108,6 +117,8 @@ MGR_APP_LABEL = "app=rook-ceph-mgr"
 OSD_APP_LABEL = "app=rook-ceph-osd"
 CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = "app=csi-cephfsplugin-provisioner"
 CSI_RBDPLUGIN_PROVISIONER_LABEL = "app=csi-rbdplugin-provisioner"
+CSI_CEPHFSPLUGIN_LABEL = "app=csi-cephfsplugin"
+CSI_RBDPLUGIN_LABEL = "app=csi-rbdplugin"
 
 # YAML paths
 TOOL_POD_YAML = os.path.join(
@@ -223,6 +234,10 @@ EO_SUB_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_EO, "eo-sub.yaml"
 )
 
+DEVICESET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "deviceset.yaml"
+)
+
 # Openshift-logging clusterlogging operator deployment yamls
 CL_NAMESPACE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_CLO, "cl-namespace.yaml"
@@ -266,3 +281,20 @@ NODE_READY_SCHEDULING_DISABLED = 'Ready,SchedulingDisabled'
 ALERT_CLUSTERWARNINGSTATE = 'CephClusterWarningState'
 ALERT_MGRISABSENT = 'CephMgrIsAbsent'
 ALERT_MONQUORUMATRISK = 'CephMonQuorumAtRisk'
+
+# OCS Deployment related constants
+OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
+OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
+OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
+OPERATOR_CS_QUAY_API_QUERY = (
+    'https://quay.io/api/v1/repository/rhceph-dev/ocs-registry/'
+    'tag/?onlyActiveTags=true&limit=2'
+)
+
+# Platforms
+AWS_PLATFORM = 'aws'
+VSPHERE_PLATFORM = 'vsphere'
+
+# Default SC based on platforms
+DEFAULT_SC_AWS = "gp2"
+DEFAULT_SC_VSPHERE = "thin"

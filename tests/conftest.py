@@ -10,7 +10,7 @@ from math import floor
 from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-
+from ocs_ci.utility import aws
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     deployment, destroy, ignore_leftovers
@@ -23,7 +23,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
-from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs import constants, ocp, defaults, node
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 
@@ -48,8 +48,17 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
+def secret_factory_class(request):
+    return secret_factory_fixture(request)
+
+
+@pytest.fixture(scope='function')
 def secret_factory(request):
+    return secret_factory_fixture(request)
+
+
+def secret_factory_fixture(request):
     """
     Secret factory. Calling this fixture creates a new secret.
     RBD based is default.
@@ -84,8 +93,17 @@ def secret_factory(request):
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
+def ceph_pool_factory_class(request):
+    return ceph_pool_factory_fixture(request)
+
+
+@pytest.fixture(scope='function')
 def ceph_pool_factory(request):
+    return ceph_pool_factory_fixture(request)
+
+
+def ceph_pool_factory_fixture(request):
     """
     Create a Ceph pool factory.
     Calling this fixture creates new Ceph pool instance.
@@ -120,8 +138,33 @@ def ceph_pool_factory(request):
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
+def storageclass_factory_class(
+    request,
+    ceph_pool_factory_class,
+    secret_factory_class
+):
+    return storageclass_factory_fixture(
+        request,
+        ceph_pool_factory_class,
+        secret_factory_class
+    )
+
+
+@pytest.fixture(scope='function')
 def storageclass_factory(
+    request,
+    ceph_pool_factory,
+    secret_factory
+):
+    return storageclass_factory_fixture(
+        request,
+        ceph_pool_factory,
+        secret_factory
+    )
+
+
+def storageclass_factory_fixture(
     request,
     ceph_pool_factory,
     secret_factory,
@@ -149,7 +192,6 @@ def storageclass_factory(
                 by using these data. Parameters `block_pool` and `secret`
                 are not useds but references are set if provided.
             sc_name (str): Name of the storage class
-            reclaim_policy (str): Reclaim policy for storageclass
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -194,7 +236,16 @@ def storageclass_factory(
 
 
 @pytest.fixture()
+def project_factory_class(request):
+    return project_factory_fixture(request)
+
+
+@pytest.fixture()
 def project_factory(request):
+    return project_factory_fixture(request)
+
+
+def project_factory_fixture(request):
     """
     Create a new project factory.
     Calling this fixture creates new project.
@@ -224,8 +275,33 @@ def project_factory(request):
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
+def pvc_factory_class(
+    request,
+    storageclass_factory_class,
+    project_factory_class
+):
+    return pvc_factory_fixture(
+        request,
+        storageclass_factory_class,
+        project_factory_class
+    )
+
+
+@pytest.fixture(scope='function')
 def pvc_factory(
+    request,
+    storageclass_factory,
+    project_factory
+):
+    return pvc_factory_fixture(
+        request,
+        storageclass_factory,
+        project_factory,
+    )
+
+
+def pvc_factory_fixture(
     request,
     storageclass_factory,
     project_factory
@@ -337,8 +413,17 @@ def pvc_factory(
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
+def pod_factory_class(request, pvc_factory_class):
+    return pod_factory_fixture(request, pvc_factory_class)
+
+
+@pytest.fixture(scope='function')
 def pod_factory(request, pvc_factory):
+    return pod_factory_fixture(request, pvc_factory)
+
+
+def pod_factory_fixture(request, pvc_factory):
     """
     Create a Pod factory. Calling this fixture creates new Pod.
     For custom Pods provide 'pvc' parameter.
@@ -380,6 +465,7 @@ def pod_factory(request, pvc_factory):
         instances.append(pod_obj)
         if status:
             helpers.wait_for_resource_state(pod_obj, status)
+            pod_obj.reload()
         pod_obj.pvc = pvc
 
         return pod_obj
@@ -398,8 +484,17 @@ def pod_factory(request, pvc_factory):
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
+def teardown_factory_class(request):
+    return teardown_factory_fixture(request)
+
+
+@pytest.fixture(scope='function')
 def teardown_factory(request):
+    return teardown_factory_fixture(request)
+
+
+def teardown_factory_fixture(request):
     """
     Tearing down a resource that was created during the test
     To use this factory, you'll need to pass 'teardown_factory' to your test
@@ -436,6 +531,126 @@ def teardown_factory(request):
                 if instance.kind == constants.PVC:
                     if instance.reclaim_policy == constants.RECLAIM_POLICY_DELETE:
                         helpers.validate_pv_delete(instance.backed_pv)
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def service_account_factory(request):
+    """
+    Create a service account
+    """
+    instances = []
+    active_service_account_obj = None
+
+    def factory(
+        project=None, service_account=None
+    ):
+        """
+        Args:
+            project (object): ocs_ci.ocs.resources.ocs.OCS instance
+                of 'Project' kind.
+            service_account (str): service_account_name
+
+        Returns:
+            object: serviceaccount instance.
+        """
+        nonlocal active_service_account_obj
+
+        if active_service_account_obj and not service_account:
+            return active_service_account_obj
+        elif service_account:
+            sa_obj = helpers.get_serviceaccount_obj(sa_name=service_account, namespace=project.namespace)
+            if not helpers.validate_scc_policy(sa_name=service_account, namespace=project.namespace):
+                helpers.add_scc_policy(sa_name=service_account, namespace=project.namespace)
+            sa_obj.project = project
+            active_service_account_obj = sa_obj
+            instances.append(sa_obj)
+            return sa_obj
+        else:
+            sa_obj = helpers.create_serviceaccount(
+                namespace=project.namespace,
+            )
+            sa_obj.project = project
+            active_service_account_obj = sa_obj
+            helpers.add_scc_policy(sa_name=sa_obj.name, namespace=project.namespace)
+            assert sa_obj, "Failed to create serviceaccount"
+            instances.append(sa_obj)
+            return sa_obj
+
+    def finalizer():
+        """
+        Delete the service account
+        """
+        for instance in instances:
+            helpers.remove_scc_policy(
+                sa_name=instance.name,
+                namespace=instance.namespace
+            )
+            instance.delete()
+            instance.ocp.wait_for_delete(resource_name=instance.name)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def dc_pod_factory(
+    request,
+    service_account_factory,
+    pvc_factory,
+):
+    """
+    Create deploymentconfig pods
+    """
+    instances = []
+
+    def factory(
+        interface=constants.CEPHBLOCKPOOL,
+        pvc=None,
+        service_account=None,
+        size=None,
+        custom_data=None,
+        replica_count=1,
+    ):
+        """
+        Args:
+            interface (str): CephBlockPool or CephFileSystem. This decides
+                whether a RBD based or CephFS resource is created.
+                RBD is default.
+            pvc (PVC object): ocs_ci.ocs.resources.pvc.PVC instance kind.
+            service_account (str): service account name for dc_pods
+            size (int): The requested size for the PVC
+            custom_data (dict): If provided then Pod object is created
+                by using these data. Parameter `pvc` is not used but reference
+                is set if provided.
+            replica_count (int): Replica count for deployment config
+        """
+        if custom_data:
+            dc_pod_obj = helpers.create_resource(**custom_data)
+        else:
+
+            pvc = pvc or pvc_factory(interface=interface, size=size)
+            sa_obj = service_account_factory(project=pvc.project, service_account=service_account)
+            dc_pod_obj = helpers.create_pod(
+                interface_type=interface, pvc_name=pvc.name, do_reload=False,
+                namespace=pvc.namespace, sa_name=sa_obj.name, dc_deployment=True,
+                replica_count=replica_count
+            )
+        instances.append(dc_pod_obj)
+        log.info(dc_pod_obj.name)
+        helpers.wait_for_resource_state(
+            dc_pod_obj, constants.STATUS_RUNNING, timeout=180
+        )
+        return dc_pod_obj
+
+    def finalizer():
+        """
+        Delete dc pods
+        """
+        for instance in instances:
+            helpers.delete_deploymentconfig(instance)
+
     request.addfinalizer(finalizer)
     return factory
 
@@ -655,8 +870,29 @@ def interface_iterate(request):
     return request.param['interface']
 
 
-@pytest.fixture()
-def multi_pvc_factory(
+@pytest.fixture(scope='class')
+def multi_pvc_factory_class(
+    storageclass_factory_class,
+    project_factory_class,
+    pvc_factory_class
+):
+    return multi_pvc_factory_fixture(
+        storageclass_factory_class,
+        project_factory_class,
+        pvc_factory_class
+    )
+
+
+@pytest.fixture(scope='function')
+def multi_pvc_factory(storageclass_factory, project_factory, pvc_factory):
+    return multi_pvc_factory_fixture(
+        storageclass_factory,
+        project_factory,
+        pvc_factory
+    )
+
+
+def multi_pvc_factory_fixture(
     storageclass_factory,
     project_factory,
     pvc_factory
@@ -768,8 +1004,8 @@ def multi_pvc_factory(
                 status=status_tmp
             )
             pvc_list.append(pvc_obj)
-
-        if not wait_each:
+            pvc_obj.project = project
+        if status and not wait_each:
             for pvc_obj in pvc_list:
                 helpers.wait_for_resource_state(pvc_obj, status)
         return pvc_list
@@ -866,3 +1102,65 @@ def memory_leak_function(request):
     log.info(f"Start memory leak data capture in the test background")
     thread = threading.Thread(target=run_memory_leak_in_bg)
     thread.start()
+
+
+@pytest.fixture()
+def aws_obj():
+    """
+    Initialize AWS instance
+
+    Returns:
+        AWS: An instance of AWS class
+
+    """
+    aws_obj = aws.AWS()
+    return aws_obj
+
+
+@pytest.fixture()
+def ec2_instances(request, aws_obj):
+    """
+    Get cluster instances
+
+    Returns:
+        dict: The ID keys and the name values of the instances
+
+    """
+    # Get all cluster nodes objects
+    nodes = node.get_node_objs()
+
+    # Get the cluster nodes ec2 instances
+    ec2_instances = aws.get_instances_ids_and_names(nodes)
+    assert ec2_instances, f"Failed to get ec2 instances for node {[n.name for n in nodes]}"
+
+    def finalizer():
+        """
+        Make sure all instances are running
+        """
+        # Getting the instances that are in status 'stopping' (if there are any), to wait for them to
+        # get to status 'stopped' so it will be possible to start them
+        stopping_instances = {
+            key: val for key, val in ec2_instances.items() if (
+                aws_obj.get_instances_status_by_id(key) == constants.INSTANCE_STOPPING
+            )
+        }
+
+        # Waiting fot the instances that are in status 'stopping'
+        # (if there are any) to reach 'stopped'
+        if stopping_instances:
+            for stopping_instance in stopping_instances:
+                instance = aws_obj.get_ec2_instance(stopping_instance.key())
+                instance.wait_until_stopped()
+        stopped_instances = {
+            key: val for key, val in ec2_instances.items() if (
+                aws_obj.get_instances_status_by_id(key) == constants.INSTANCE_STOPPED
+            )
+        }
+
+        # Start the instances
+        if stopped_instances:
+            aws_obj.start_ec2_instances(instances=stopped_instances, wait=True)
+
+    request.addfinalizer(finalizer)
+
+    return ec2_instances

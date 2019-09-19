@@ -51,7 +51,7 @@ def create_storageclass(sc_name, expect_fail=False):
     """
 
     # Create a storage class
-    sc_data = templating.load_yaml_to_dict(constants.CSI_RBD_STORAGECLASS_YAML)
+    sc_data = templating.load_yaml(constants.CSI_RBD_STORAGECLASS_YAML)
     sc_data['metadata']['name'] = sc_name
     sc_data['parameters']['clusterID'] = defaults.ROOK_CLUSTER_NAMESPACE
 

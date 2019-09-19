@@ -21,10 +21,16 @@ ROOK_CLUSTER_NAMESPACE = 'openshift-storage'
 OCS_MONITORING_NAMESPACE = 'openshift-monitoring'
 KUBECONFIG_LOCATION = 'auth/kubeconfig'  # relative from cluster_dir
 API_VERSION = "v1"
-CEPHFILESYSTEM_NAME = 'ocsci-cephfs'
+CEPHFILESYSTEM_NAME = 'rook-ceph-cephfilesystem'
 RBD_PROVISIONER = f'{ROOK_CLUSTER_NAMESPACE}.rbd.csi.ceph.com'
 CEPHFS_PROVISIONER = f'{ROOK_CLUSTER_NAMESPACE}.cephfs.csi.ceph.com'
 
 TEMP_YAML = os.path.join(constants.TEMPLATE_DIR, "temp.yaml")
 
 PROMETHEUS_ROUTE = 'prometheus-k8s'
+
+# Default device size in Gigs
+DEVICE_SIZE = 100
+
+MARKETPLACE_NAMESPACE = "openshift-marketplace"
+OCS_OPERATOR_NAME = "ocs-operator"

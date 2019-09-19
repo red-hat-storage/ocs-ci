@@ -50,7 +50,7 @@ class TestSmallFileWorkload(E2ETest):
         ripsaw.apply_crd('resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml')
 
         log.info("Running SmallFile bench")
-        sf_data = templating.load_yaml_to_dict(constants.SMALLFILE_BENCHMARK_YAML)
+        sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
         sf_obj = OCS(**sf_data)
         sf_obj.create()
         # wait for benchmark pods to get created - takes a while

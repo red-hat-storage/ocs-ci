@@ -440,6 +440,7 @@ class AWS(object):
             force (bool): True for force instance stop, False otherwise
 
         """
+        logger.info(f"Restarting instances {list(instances.values())}")
         self.stop_ec2_instances(instances=instances, wait=wait, force=force)
         self.start_ec2_instances(instances=instances, wait=wait)
 

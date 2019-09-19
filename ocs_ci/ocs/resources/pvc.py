@@ -8,9 +8,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import run_cmd
-from ocs_ci.ocs.resources import pod
 
 log = logging.getLogger(__name__)
 
@@ -102,6 +100,7 @@ class PVC(OCS):
         """
         return self.data.get('spec').get('accessModes')[0]
 
+    @property
     def backed_sc(self):
         """
         Returns the storage class of pvc object in namespace
@@ -129,34 +128,6 @@ class PVC(OCS):
         sc_obj = OCS(**data)
         sc_obj.reload()
         return sc_obj.get().get('reclaimPolicy')
-
-    def verify_pv_exists_in_backend(
-        self, pool_name
-    ):
-        """
-        Verifies given pv exists in ceph backend
-
-        Args:
-            pool_name (str): Name of the rbd-pool
-
-        Returns:
-             bool: True if pv exists on backend, False otherwise
-
-        """
-        spec_volhandle = "'{.spec.csi.volumeHandle}'"
-        cmd = f"oc get pv/{self.backed_pv} -o jsonpath={spec_volhandle} -n {self.namespace}"
-        out = run_cmd(cmd=cmd)
-        image_uuid = "-".join(out.split('-')[5:10])
-        cmd = f"rbd info -p {pool_name} csi-vol-{image_uuid}"
-        ct_pod = pod.get_ceph_tools_pod()
-        try:
-            ct_pod.exec_ceph_cmd(
-                ceph_cmd=cmd, format='json'
-            )
-        except CommandFailed as ecf:
-            log.error(f"PV is not found on ceph backend: str{ecf}")
-            return False
-        return True
 
     def resize_pvc(self, new_size, verify=False):
         """

@@ -65,6 +65,21 @@ class OCPDeployment:
             # also to ensure it ends up as a single line.
             return json.dumps(json.loads(f.read()))
 
+    def get_ssh_key(self):
+        """
+        Loads public ssh to be used for deployment
+
+        Returns:
+            str: public ssh key or empty string if not found
+
+        """
+        ssh_key = os.path.expanduser(config.DEPLOYMENT.get('ssh_key'))
+        if not os.path.isfile(ssh_key):
+            return ''
+        with open(ssh_key, "r") as fs:
+            lines = fs.readlines()
+            return lines[0].rstrip("\n") if lines else ''
+
     def deploy_prereq(self):
         """
         Perform generic prereq before calling openshift-installer
@@ -125,6 +140,9 @@ class OCPDeployment:
         # Parse the rendered YAML so that we can manipulate the object directly
         install_config_obj = yaml.safe_load(install_config_str)
         install_config_obj['pullSecret'] = self.get_pull_secret()
+        ssh_key = self.get_ssh_key()
+        if ssh_key:
+            install_config_obj['sshKey'] = ssh_key
         install_config_str = yaml.safe_dump(install_config_obj)
         install_config = os.path.join(self.cluster_path, "install-config.yaml")
         with open(install_config, "w") as f:

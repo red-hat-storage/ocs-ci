@@ -1,6 +1,7 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import pytest
+from functools import partial
 
 from ocs_ci.framework.testlib import ManageTest, tier4
 from ocs_ci.framework import config
@@ -8,7 +9,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods, get_all_pods,
-    get_fio_rw_iops
+    get_fio_rw_iops, get_plugin_pods
 )
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from tests.helpers import (
@@ -51,6 +52,16 @@ log = logging.getLogger(__name__)
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'mds'],
             marks=pytest.mark.polarion_id("OCS-816")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'cephfsplugin'],
+            marks=pytest.mark.polarion_id("OCS-1012")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'rbdplugin'],
+            marks=[pytest.mark.polarion_id("OCS-1015"), pytest.mark.bugzilla(
+                '1752487'
+            )]
         )
     ]
 )
@@ -89,9 +100,11 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         # Create one pod using each RWO PVC and two pods using each RWX PVC
         for pvc_obj in pvc_objs:
             if pvc_obj.access_mode == constants.ACCESS_MODE_RWX:
-                pod_obj = pod_factory(pvc=pvc_obj, status="")
+                pod_obj = pod_factory(
+                    interface=interface, pvc=pvc_obj, status=""
+                )
                 rwx_pod_objs.append(pod_obj)
-            pod_obj = pod_factory(pvc=pvc_obj, status="")
+            pod_obj = pod_factory(interface=interface, pvc=pvc_obj, status="")
             pod_objs.append(pod_obj)
 
         # Wait for pods to be in Running state
@@ -186,12 +199,17 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         )
 
         pod_functions = {
-            'mds': get_mds_pods, 'mon': get_mon_pods, 'mgr': get_mgr_pods,
-            'osd': get_osd_pods
+            'mds': partial(get_mds_pods), 'mon': partial(get_mon_pods),
+            'mgr': partial(get_mgr_pods), 'osd': partial(get_osd_pods),
+            'rbdplugin': partial(get_plugin_pods, interface=interface),
+            'cephfsplugin': partial(get_plugin_pods, interface=interface)
         }
+
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=resource_to_delete)
-        executor = ThreadPoolExecutor(max_workers=len(pod_objs))
+        executor = ThreadPoolExecutor(
+            max_workers=len(pod_objs) + len(rwx_pod_objs)
+        )
 
         # Get number of pods of type 'resource_to_delete'
         num_of_resource_to_delete = len(pod_functions[resource_to_delete]())

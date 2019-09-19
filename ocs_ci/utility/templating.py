@@ -1,9 +1,11 @@
-import os
-
-import yaml
+import logging
 from jinja2 import Environment, FileSystemLoader, Template
+import yaml
 
 from ocs_ci.ocs.constants import TEMPLATE_DIR
+from ocs_ci.utility.utils import get_url_content
+
+logger = logging.getLogger(__name__)
 
 
 def load_config_data(data_path):
@@ -134,12 +136,12 @@ def dump_to_temp_yaml(src_file, dst_file, **kwargs):
         yaml.dump(data, yaml_file)
 
 
-def load_yaml_to_dict(file, multi_document=False):
+def load_yaml(file, multi_document=False):
     """
-    Load yaml file to the dictionary
+    Load yaml file (local or from URL) and convert it to dictionary
 
     Args:
-        file (str): Path to yaml file to load
+        file (str): Path to the file or URL address
         multi_document (bool): True if yaml contains more documents
 
     Returns:
@@ -149,16 +151,17 @@ def load_yaml_to_dict(file, multi_document=False):
             iteration returns dict from one loaded document from a file.
 
     """
-    template = os.path.join(file)
-    if not multi_document:
-        return yaml.safe_load(open(template, 'r'))
+    loader = yaml.safe_load_all if multi_document else yaml.safe_load
+    if file.startswith('http'):
+        return loader(get_url_content(file))
     else:
-        return yaml.safe_load_all(open(template, 'r'))
+        with open(file, 'r') as fs:
+            return loader(fs)
 
 
 def get_n_document_from_yaml(yaml_generator, index=0):
     """
-    Returns n document from yaml generator loaded by load_yaml_to_dict with
+    Returns n document from yaml generator loaded by load_yaml with
     multi_document = True.
 
     Args:
@@ -178,6 +181,22 @@ def get_n_document_from_yaml(yaml_generator, index=0):
     raise IndexError(f"Passed yaml generator doesn't have index {index}")
 
 
-def dump_dict_to_temp_yaml(data, temp_yaml):
+def dump_data_to_temp_yaml(data, temp_yaml):
+    """
+    Dump data to temporary yaml file
+
+    Args:
+        data (dict or list): dict or list (in case of multi_document) with
+            data to dump to the yaml file.
+        temp_yaml (str): file path of yaml file
+
+    Returns:
+        str: dumped yaml data
+
+    """
+    dumper = yaml.dump if type(data) == dict else yaml.dump_all
+    yaml_data = dumper(data)
     with open(temp_yaml, 'w') as yaml_file:
-        return yaml.dump(data, yaml_file)
+        yaml_file.write(yaml_data)
+    logger.info(yaml_data)
+    return yaml_data

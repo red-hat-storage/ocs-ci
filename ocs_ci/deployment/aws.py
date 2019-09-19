@@ -11,6 +11,7 @@ from .deployment import Deployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.framework import config
+from ocs_ci.ocs import defaults
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.utility.aws import AWS as AWSUtil
 
@@ -119,8 +120,11 @@ class AWSIPI(AWSBase):
                 (default: "DEBUG")
         """
         super(AWSIPI, self).deploy_ocp(log_cli_level)
-        volume_size = config.ENV_DATA.get('DEFAULT_EBS_VOLUME_SIZE', 100)
-        self.add_volume(volume_size)
+        if not self.ocs_operator_deployment:
+            volume_size = int(
+                config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
+            )
+            self.add_volume(volume_size)
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
