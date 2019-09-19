@@ -99,6 +99,7 @@ def get_ocsci_conf():
         conf_obj['DEPLOYMENT'] = dict(
             ocs_operator_deployment=True,
             ocs_operator_image=env['OCS_OPERATOR_IMAGE'],
+            ocs_registry_image=env['OCS_REGISTRY_IMAGE'],
         )
     else:
         conf_obj['DEPLOYMENT'] = dict(ocs_operator_deployment=False)
