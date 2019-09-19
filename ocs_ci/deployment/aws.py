@@ -79,6 +79,18 @@ class AWSBase(Deployment):
         # TODO: Implement later
         super(AWSBase, self).add_node()
 
+    def check_cluster_existence(self):
+        """
+        Check cluster existence
+
+        """
+        cluster_name = config.ENV_DATA['cluster_name']
+        pattern = cluster_name.split("-")[0] + '*'
+        if self.aws.get_instances_by_name_pattern(pattern):
+            logger.warning(f"Cluster with name {cluster_name} already exists")
+            return True
+        return False
+
 
 class AWSIPI(AWSBase):
     """
@@ -100,16 +112,18 @@ class AWSIPI(AWSBase):
                 log_cli_level (str): openshift installer's log level
                     (default: "DEBUG")
             """
-            logger.info("Deploying OCP cluster")
-            logger.info(
-                f"Openshift-installer will be using loglevel:{log_cli_level}"
-            )
-            run_cmd(
-                f"{self.installer} create cluster "
-                f"--dir {self.cluster_path} "
-                f"--log-level {log_cli_level}"
-            )
-            self.test_cluster()
+            aws_ipi = AWSIPI()
+            if not aws_ipi.check_cluster_existence():
+                logger.info("Deploying OCP cluster")
+                logger.info(
+                    f"Openshift-installer will be using loglevel:{log_cli_level}"
+                )
+                run_cmd(
+                    f"{self.installer} create cluster "
+                    f"--dir {self.cluster_path} "
+                    f"--log-level {log_cli_level}"
+                )
+                self.test_cluster()
 
     def deploy_ocp(self, log_cli_level='DEBUG'):
         """
