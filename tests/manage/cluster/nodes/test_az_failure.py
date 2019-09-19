@@ -41,16 +41,16 @@ class TestAvailabilityZones(ManageTest):
     def test_health_check(self):
         """
 
-        Returns:
+        Temp function for unittests. check cluster health before
+            main test
 
         """
+        self.check_cluster_health()
 
-    def test_availability_zone_failure(self, aws_obj, ec2_instances):
+    def test_availability_zone_failure(self, aws_obj, ec2_instances, pvc_factory, pod_factory):
         """
 
-        Args:
-            aws_obj (obj): aws.AWS() object
-            ec2_instances (dict): cluster ec2 instances objects
+        Simulate AWS availability zone failure
 
         """
 
@@ -68,6 +68,13 @@ class TestAvailabilityZones(ManageTest):
 
         # Check cluster's health, need to be unhealthy at that point
         assert self.check_cluster_health() == 0
+
+        # Create resources
+        logger.info("Trying to create resources on un-healthy cluster")
+        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        logger.info("Resources Created")
+
+        # Delete resources
 
         # Restore access for blocked instances
         aws_obj.restore_instances_access(security_group_id, original_sgs)
