@@ -3,10 +3,11 @@ This module contains the vSphere related methods
 """
 import atexit
 import logging
+import ssl
 
 from pyVmomi import vim, vmodl
 from pyVim.task import WaitForTask
-from pyVim.connect import SmartConnectNoSSL, Disconnect
+from pyVim.connect import Disconnect, SmartStubAdapter, VimSessionOrientedStub
 from ocs_ci.ocs.exceptions import VMMaxDisksReachedException
 from ocs_ci.ocs.constants import GB2KB, VM_DISK_TYPE, VM_DISK_MODE
 
@@ -32,6 +33,7 @@ class VSPHERE(object):
         self._user = user
         self._password = password
         self._port = port
+        self.sslContext = ssl._create_unverified_context()
         self._si = self._get_service_instance()
 
     def _get_service_instance(self):
@@ -43,12 +45,17 @@ class VSPHERE(object):
 
         """
         try:
-            service_instance = SmartConnectNoSSL(
+            smart_stub = SmartStubAdapter(
                 host=self._host,
-                user=self._user,
-                pwd=self._password,
-                port=self._port
+                port=int(self._port),
+                sslContext=self.sslContext,
+                connectionPoolTimeout=0
             )
+            session_stub = VimSessionOrientedStub(
+                smart_stub,
+                VimSessionOrientedStub.makeUserLoginMethod(self._user, self._password))
+            service_instance = vim.ServiceInstance('ServiceInstance', session_stub)
+
             # Ensure connection to server is closed on program exit
             atexit.register(Disconnect, service_instance)
             return service_instance
