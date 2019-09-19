@@ -290,3 +290,11 @@ OPERATOR_CS_QUAY_API_QUERY = (
     'https://quay.io/api/v1/repository/rhceph-dev/ocs-registry/'
     'tag/?onlyActiveTags=true&limit=2'
 )
+
+# Platforms
+AWS_PLATFORM = 'aws'
+VSPHERE_PLATFORM = 'vsphere'
+
+# Default SC based on platforms
+DEFAULT_SC_AWS = "gp2"
+DEFAULT_SC_VSPHERE = "thin"
