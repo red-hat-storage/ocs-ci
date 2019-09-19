@@ -17,27 +17,6 @@ from ocs_ci.utility.retry import retry
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture()
-def test_fixture(pod_factory, num_of_pod=2):
-    """
-    Setup and teardown
-    """
-    pod_objs = [
-        pod_factory(
-            interface=constants.CEPHBLOCKPOOL,
-            status=constants.STATUS_RUNNING
-        ) for _ in range(num_of_pod)
-    ]
-
-    # Check for the created pvc metrics on prometheus pod
-    for pod_obj in pod_objs:
-        assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
-            f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
-        )
-
-    return pod_objs
-
-
 @retry(AssertionError, tries=10, delay=3, backoff=1)
 def wait_to_update_mgrpod_info_prometheus_pod():
 
@@ -55,6 +34,7 @@ def wait_to_update_mgrpod_info_prometheus_pod():
 
 
 @pytest.mark.polarion_id("OCS-710")
+@tier4
 class TestRebootNodeWhereMgrRunningAndInteractionWithPrometheus(E2ETest):
     """
     Rebooting node where mgr is running shouldn't impact the data/metrics
@@ -68,13 +48,29 @@ class TestRebootNodeWhereMgrRunningAndInteractionWithPrometheus(E2ETest):
         """
         self.sanity_helpers = Sanity()
 
-    @tier4
-    def test_monitoring_after_rebooting_node_where_mgr_is_running(self, test_fixture):
+    @pytest.fixture(autouse=True)
+    def test_fixture(self, pod_factory, num_of_pod=2):
+        """
+        Create resources for the test
+        """
+        self.pod_objs = [
+            pod_factory(
+                interface=constants.CEPHBLOCKPOOL,
+                status=constants.STATUS_RUNNING
+            ) for _ in range(num_of_pod)
+        ]
+
+        # Check for the created pvc metrics on prometheus pod
+        for pod_obj in self.pod_objs:
+            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
+                f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
+            )
+
+    def test_monitoring_after_rebooting_node_where_mgr_is_running(self):
         """
         Test case to validate rebooting a node where mgr is running
         should not delete the data collected on prometheus pod
         """
-        pod_objs = test_fixture
 
         aws_obj = aws.AWS()
 
@@ -98,7 +94,7 @@ class TestRebootNodeWhereMgrRunningAndInteractionWithPrometheus(E2ETest):
         wait_to_update_mgrpod_info_prometheus_pod()
 
         # Check for the created pvc metrics after rebooting the node where mgr pod was running
-        for pod_obj in pod_objs:
+        for pod_obj in self.pod_objs:
             assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
                 f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
             )
