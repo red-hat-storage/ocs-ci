@@ -224,6 +224,11 @@ class Deployment(object):
         deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
             'storage'
         ] = f"{device_size}Gi"
+
+        if self.platform.lower() == constants.VSPHERE_PLATFORM:
+            cluster_data['spec']['monPVCTemplate']['spec']['storageClassName'] = constants.DEFAULT_SC_VSPHERE
+            deviceset_data['dataPVCTemplate']['spec']['storageClassName'] = constants.DEFAULT_SC_VSPHERE
+
         cluster_data['spec']['storageDeviceSets'] = [deviceset_data]
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode='w+', prefix='cluster_storage', delete=False
