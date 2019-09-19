@@ -14,7 +14,6 @@ from subprocess import run, CalledProcessError
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility import templating
 
-
 log = logging.getLogger(__name__)
 
 

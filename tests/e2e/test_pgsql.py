@@ -77,7 +77,7 @@ class TestPgSQLWorkload(E2ETest):
         )
 
         # Running pgbench and parsing logs
-        output = run_cmd(f'bin/oc logs {pgbench_client_pod}')
+        output = run_cmd(f'oc logs {pgbench_client_pod}')
         pg_output = utils.parse_pgsql_logs(output)
         log.info(
             "*******PGBench output log*********\n"
