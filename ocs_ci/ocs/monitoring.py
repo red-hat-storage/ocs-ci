@@ -154,3 +154,32 @@ def check_ceph_health_status_metrics_on_prometheus(mgr_pod):
         [mgr_pod for health_status in ceph_health_metric.get('data').get(
             'result') if mgr_pod == health_status.get('metric').get('pod')]
     )
+
+
+def prometheus_health_check(name='monitoring', kind='ClusterOperator'):
+    """
+    Return true if the prometheus cluster is healthy
+     Args:
+        name (str) : Name of the resources
+        kind (str): Kind of the resource
+     Returns:
+         bool : True on prometheus health is ok, false otherwise
+     """
+    ocp_obj = OCP(kind=kind)
+    health_info = ocp_obj.get(resource_name=name)
+    health_conditions = health_info.get('status').get('conditions')
+
+     # Check prometheus is degraded
+    # If degraded, degraded value will be True, AVAILABLE is False
+    available = False
+    degraded = True
+    for i in health_conditions:
+        if {('type', 'Available'), ('status', 'True')}.issubset(set(i.items())):
+            logging.info("Prometheus cluster available value is set true")
+            available = True
+        if {('status', 'False'), ('type', 'Degraded')}.issubset(set(i.items())):
+            logging.info("Prometheus cluster degraded value is set false")
+            degraded = False
+
+     if available and not degraded:
+        return True
