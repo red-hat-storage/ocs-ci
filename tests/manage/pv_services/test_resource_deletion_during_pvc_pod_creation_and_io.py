@@ -1,11 +1,12 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import pytest
+from functools import partial
 
 from ocs_ci.framework.testlib import ManageTest, tier4
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
-    get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods
+    get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods, get_plugin_pods
 )
 from ocs_ci.utility.utils import TimeoutSampler
 from tests import helpers, disruption_helpers
@@ -44,8 +45,17 @@ log = logging.getLogger(__name__)
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'mds'],
             marks=pytest.mark.polarion_id("OCS-741")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'cephfsplugin'],
+            marks=pytest.mark.polarion_id("OCS-1011")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'rbdplugin'],
+            marks=[pytest.mark.polarion_id("OCS-1010"), pytest.mark.bugzilla(
+                '1752487'
+            )]
         )
-
     ]
 )
 class TestResourceDeletionDuringCreationOperations(ManageTest):
@@ -114,7 +124,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
                 resource=pod_obj, state=constants.STATUS_RUNNING
             )
             pod_obj.reload()
-            log.info(f"Created {len(io_pods)} for running IO.")
+        log.info(f"Created {len(io_pods)} pods for running IO.")
 
         return pvc_objs, io_pods, pvc_objs_new_pods, access_modes
 
@@ -158,8 +168,10 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         storageclass = pvc_objs[0].storageclass
 
         pod_functions = {
-            'mds': get_mds_pods, 'mon': get_mon_pods, 'mgr': get_mgr_pods,
-            'osd': get_osd_pods
+            'mds': partial(get_mds_pods), 'mon': partial(get_mon_pods),
+            'mgr': partial(get_mgr_pods), 'osd': partial(get_osd_pods),
+            'rbdplugin': partial(get_plugin_pods, interface=interface),
+            'cephfsplugin': partial(get_plugin_pods, interface=interface)
         }
 
         executor = ThreadPoolExecutor(max_workers=len(io_pods))
