@@ -1,13 +1,15 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import pytest
+from functools import partial
 
 from ocs_ci.framework.testlib import ManageTest, tier4
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from tests import helpers, disruption_helpers
 
 
@@ -103,6 +105,16 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'run_io', 'mds'],
             marks=pytest.mark.polarion_id("OCS-556")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'run_io', 'rbdplugin'],
+            marks=[pytest.mark.polarion_id("OCS-1014"), pytest.mark.bugzilla(
+                '1752487'
+            )]
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'run_io', 'cephfsplugin'],
+            marks=pytest.mark.polarion_id("OCS-1017")
         )
     ]
 )
@@ -181,6 +193,16 @@ class TestPVCDisruption(ManageTest):
         Deletion of 'resource_to_delete' will be introduced while
         'operation_to_disrupt' is progressing.
         """
+        pod_functions = {
+            'mds': partial(pod.get_mds_pods), 'mon': partial(pod.get_mon_pods),
+            'mgr': partial(pod.get_mgr_pods), 'osd': partial(pod.get_osd_pods),
+            'rbdplugin': partial(pod.get_plugin_pods, interface=interface),
+            'cephfsplugin': partial(pod.get_plugin_pods, interface=interface)
+        }
+
+        # Get number of pods of type 'resource_to_delete'
+        num_of_resource_to_delete = len(pod_functions[resource_to_delete]())
+
         num_of_pvc = 6
         namespace = self.proj_obj.namespace
 
@@ -328,3 +350,16 @@ class TestPVCDisruption(ManageTest):
                 f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
             )
         logging.info("Verified FIO result on new pods.")
+
+        # Verify number of pods of type 'resource_to_delete'
+        final_num_resource_to_delete = len(pod_functions[resource_to_delete]())
+        assert final_num_resource_to_delete == num_of_resource_to_delete, (
+            f"Total number of {resource_to_delete} pods is not matching with "
+            f"initial value. Total number of pods before deleting a pod: "
+            f"{num_of_resource_to_delete}. Total number of pods present now: "
+            f"{final_num_resource_to_delete}"
+        )
+
+        # Check ceph status
+        ceph_health_check(namespace=config.ENV_DATA['cluster_namespace'])
+        logger.info("Ceph cluster health is OK")
