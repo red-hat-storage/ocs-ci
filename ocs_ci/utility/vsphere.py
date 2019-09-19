@@ -196,8 +196,8 @@ class VSPHERE(object):
 
         """
         return [device for device in vm.config.hardware.device
-                if (isinstance(device, vim.vm.device.VirtualSCSIController) or
-                    isinstance(device, vim.vm.device.VirtualSCSIController))
+                if (isinstance(device, vim.vm.device.VirtualSCSIController)
+                    or isinstance(device, vim.vm.device.VirtualSCSIController))
                 ]
 
     def get_controller_for_adding_disk(self, vm):
