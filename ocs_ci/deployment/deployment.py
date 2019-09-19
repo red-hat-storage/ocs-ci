@@ -386,14 +386,8 @@ class Deployment(object):
         assert ceph_health_check(
             namespace=self.namespace
         )
-        # patch gp2 (EBS) storage class as 'non-default'
-        logger.info("Patch gp2 storageclass as non-default")
-        patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
-        run_cmd(
-            f"oc patch storageclass gp2 "
-            f"-p {patch} "
-            f"--request-timeout=120s"
-        )
+        # patch gp2/thin storage class as 'non-default'
+        self.patch_default_sc_to_non_default()
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -411,3 +405,23 @@ class Deployment(object):
         Implement platform specif add_node in child class
         """
         raise NotImplementedError("add node functionality node implemented")
+
+    def patch_default_sc_to_non_default(self):
+        """
+        Patch storage class which comes as default with installation to non-default
+        """
+        sc_to_patch = None
+        if self.platform.lower() == constants.AWS_PLATFORM:
+            sc_to_patch = constants.DEFAULT_SC_AWS
+        elif self.platform.lower() == constants.VSPHERE_PLATFORM:
+            sc_to_patch = constants.DEFAULT_SC_VSPHERE
+        else:
+            logger.info(f"Unsupported platform {self.platform} to patch")
+        if sc_to_patch:
+            logger.info(f"Patch {sc_to_patch} storageclass as non-default")
+            patch = " '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}' "
+            run_cmd(
+                f"oc patch storageclass {sc_to_patch} "
+                f"-p {patch} "
+                f"--request-timeout=120s"
+            )
