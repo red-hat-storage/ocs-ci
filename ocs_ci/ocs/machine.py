@@ -2,8 +2,7 @@ import re
 import logging
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs import constants
-
+from ocs_ci.ocs import constants, defaults
 
 log = logging.getLogger(__name__)
 
@@ -120,3 +119,84 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
         log.info(f"{new_machine.name} is in {state} state")
         return state == constants.STATUS_RUNNING.islower()
     return False
+
+
+def get_machinesets():
+    """
+    Get machine sets
+
+    Returns:
+        machine_sets (list): list of machine sets
+    """
+    machine_sets = list()
+    machinesets_obj = OCP(kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
+    for machine in machinesets_obj.get()['items']:
+        machine_sets.append(machine.get('spec').get('selector').get(
+            'matchLabels').get('machine.openshift.io/cluster-api-machineset')
+        )
+
+    return machine_sets
+
+
+def get_replica_count(machine_set):
+    """
+    Get replica count of a machine set
+
+    Args:
+        machine_set (str): Name of a machine set to get replica count
+
+    Returns:
+        replica count (int): replica count of a machine set
+    """
+    machinesets_obj = OCP(kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
+    return machinesets_obj.get(resource_name=machine_set).get('spec').get('replicas')
+
+
+def add_node(machine_set, count):
+    """
+    Add new node to the cluster
+
+    Args:
+        machine_set (str): Name of a machine set to get increase replica count
+        count (int): Count to increase
+
+    Returns:
+        bool: True if commands executes successfully
+    """
+    ocp = OCP(namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
+    ocp.exec_oc_cmd(f'scale --replicas={count} machinesets {machine_set}')
+    return True
+
+
+def add_capacity(count, storagecluster_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Add capacity to the cluster
+
+    Args:
+        storagecluster_name (str): Name of a storage cluster
+        count (int): Count of osds to add, for ex: if total count of osds is 3, it will add 3 osds more
+    Returns:
+        bool: True if commands executes successfully
+    """
+    ocp = OCP(namespace=namespace)
+    # ToDo Update patch command with pr https://github.com/red-hat-storage/ocs-ci/pull/803
+    cmd = f'''
+patch storagecluster/{storagecluster_name} --type='json' -p='[{{"op": "replace",
+"path": "/spec/storageDeviceSets/0/count", "value":{count}}}]'
+            '''
+    ocp.exec_oc_cmd(cmd)
+    return True
+
+
+def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Get storage cluster name
+
+    Args:
+        namespace (str): Namespace of the resource
+    Returns:
+        str: Storage cluster name
+    """
+
+    sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
+    return sc_obj.get().get('items')[0].get('metadata').get('name')
