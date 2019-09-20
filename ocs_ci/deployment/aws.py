@@ -199,8 +199,9 @@ class AWSUPI(AWSBase):
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
             super(AWSUPI.OCPDeployment, self).__init__()
+            upi_repo_name = f'openshift-misc-{config.RUN["run_id"]}'
             self.upi_repo_path = os.path.join(
-                os.path.abspath(self.cluster_path), 'openshift-misc',
+                constants.EXTERNAL_DIR, upi_repo_name,
             )
 
             self.upi_script_path = os.path.join(
@@ -238,17 +239,13 @@ class AWSUPI(AWSBase):
                 constants.OCP_QE_MISC_REPO, self.upi_repo_path
             )
 
-            # create install-dir inside upi_script_path
-            # cluster_path is 6 directories higher than the sym-link
-            # path must be relative to the UPI script location
-            relative_cluster_path = "../" * 6
-            os.symlink(
-                os.path.join(
-                    relative_cluster_path,
-                    os.path.basename(self.cluster_path.rstrip('/'))
-                ),
-                os.path.join(self.upi_script_path, "install-dir")
+            # Sym link install-dir to cluster_path
+            install_dir = os.path.join(self.upi_script_path, "install-dir")
+            absolute_cluster_path = os.path.abspath(self.cluster_path)
+            logger.info(
+                "Sym linking %s to %s", install_dir, absolute_cluster_path
             )
+            os.symlink(absolute_cluster_path, install_dir)
 
             # NOT A CLEAN APPROACH: copy openshift-install and oc binary to
             # script path because upi script expects it to be present in
@@ -311,6 +308,13 @@ class AWSUPI(AWSBase):
 
             self.test_cluster()
 
+            # Delete openshift-misc repository
+            logger.info(
+                "Removing openshift-misc directory located at %s",
+                self.upi_repo_path
+            )
+            shutil.rmtree(self.upi_repo_path)
+
     def deploy_ocp(self, log_cli_level='DEBUG'):
         """
         OCP deployment specific to AWS UPI
@@ -363,14 +367,6 @@ class AWSUPI(AWSBase):
             logger.info("Destroying stack: %s", stack_name)
             cf.delete_stack(StackName=stack_name)
             verify_stack_deleted(stack_name)
-
-        # Delete openshift-misc repository from cluster_path
-        openshift_misc_path = os.path.join(self.cluster_path, 'openshift-misc')
-        logger.info(
-            "Removing openshift-misc directory located at %s",
-            openshift_misc_path
-        )
-        shutil.rmtree(openshift_misc_path)
 
 
 def get_infra_id(cluster_path):
