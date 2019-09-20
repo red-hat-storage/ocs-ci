@@ -1174,8 +1174,6 @@ def nodes():
     for nodes related operations, like nodes restart,
     detach/attach volume, etc.
 
-    Returns:
-
     """
     factory = platform_nodes.PlatformNodesFactory()
     nodes = factory.get_nodes_platform()
