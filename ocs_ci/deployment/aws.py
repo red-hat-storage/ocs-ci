@@ -248,7 +248,7 @@ class AWSUPI(AWSBase):
             # NOT A CLEAN APPROACH: copy openshift-install and oc binary to
             # script path because upi script expects it to be present in
             # script dir
-            bindir = os.path.join(os.getcwd(), 'bin')
+            bindir = os.path.abspath(os.path.expanduser(config.RUN['bin_dir']))
             shutil.copy2(
                 os.path.join(bindir, 'openshift-install'),
                 self.upi_script_path,
