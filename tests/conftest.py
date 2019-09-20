@@ -23,7 +23,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
-from ocs_ci.ocs import constants, ocp, defaults, node
+from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 
@@ -1164,3 +1164,19 @@ def ec2_instances(request, aws_obj):
     request.addfinalizer(finalizer)
 
     return ec2_instances
+
+
+@pytest.fixture()
+def nodes():
+    """
+    Return an instance of the relevant platform nodes class
+    (e.g. AWSNodes, VMWareNodes) to be later used in the test
+    for nodes related operations, like nodes restart,
+    detach/attach volume, etc.
+
+    Returns:
+
+    """
+    factory = platform_nodes.PlatformNodesFactory()
+    nodes = factory.get_nodes_platform()
+    return nodes
