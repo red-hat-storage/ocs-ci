@@ -80,18 +80,16 @@ class AWSBase(Deployment):
         # TODO: Implement later
         super(AWSBase, self).add_node()
 
-    def check_cluster_existence(self):
+    def check_cluster_existence(self, cluster_name_prefix):
         """
-        Check cluster existence
+        Check cluster existence according to cluster name prefix
 
         Returns:
             bool: True in case a cluster with the same name prefix already exists,
                 False otherwise
+
         """
-        cluster_name = config.ENV_DATA['cluster_name']
-        pattern = cluster_name.split("-")[0] + '*'
-        if self.aws.get_instances_by_name_pattern(pattern):
-            logger.warning(f"Cluster with name prefix {pattern} already exists")
+        if self.aws.get_instances_by_name_pattern(cluster_name_prefix):
             return True
         return False
 
@@ -135,10 +133,14 @@ class AWSIPI(AWSBase):
             log_cli_level (str): openshift installer's log level
                 (default: "DEBUG")
         """
-        if self.check_cluster_existence() and not (
-            config.DEPLOYMENT.get('force_deploy_multiple_clusters')
-        ):
-            raise SameNamePrefixClusterAlreadyExistsException
+        if not config.DEPLOYMENT.get('force_deploy_multiple_clusters'):
+            cluster_name = config.ENV_DATA['cluster_name']
+            prefix = cluster_name.split("-")[0] + '*'
+            if self.check_cluster_existence(prefix):
+                raise SameNamePrefixClusterAlreadyExistsException(
+                    f"Cluster with name prefix {prefix} already exists. "
+                    f"Please destroy the existing cluster for a new cluster deployment"
+                )
         super(AWSIPI, self).deploy_ocp(log_cli_level)
         if not self.ocs_operator_deployment:
             volume_size = int(
