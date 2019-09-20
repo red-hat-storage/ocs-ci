@@ -149,31 +149,32 @@ class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
         self.rbd_sc_obj = storageclass_factory(interface=constants.CEPHBLOCKPOOL)
         self.cephfs_sc_obj = storageclass_factory(interface=constants.CEPHFILESYSTEM)
 
+    # TODO: Skipping memory leak fixture call in test function because of bz 1750328
     def test_pv_scale_out_create_pvcs_and_respin_ceph_pods(
-        self, memory_leak_function, namespace, storageclass, setup_fixture, resource_to_delete
+        self, namespace, storageclass, setup_fixture, resource_to_delete
     ):
-        self.pvc_count_each_itr = 10
-        self.scale_pod_count = 120
-        self.size = '10Gi'
+        pvc_count_each_itr = 10
+        scale_pod_count = 120
+        size = '10Gi'
         test_run_time = 180
         self.all_pvc_obj, self.all_pod_obj = ([] for i in range(2))
 
         # Identify median memory value for each worker node
-        median_dict = helpers.get_memory_leak_median_value()
-        log.info(f"Median dict values for memory leak {median_dict}")
+        # TODO: Skipping memory leak test because of bz 1750328
+        # median_dict = helpers.get_memory_leak_median_value()
+        # log.info(f"Median dict values for memory leak {median_dict}")
 
         # First Iteration call to create PVC and POD
-        self.create_pvc_pod(self.rbd_sc_obj, self.cephfs_sc_obj, self.pvc_count_each_itr,
-                            self.size)
+        self.create_pvc_pod(self.rbd_sc_obj, self.cephfs_sc_obj, pvc_count_each_itr, size)
         # Re-spin the ceph pods one by one in parallel with PVC and POD creation
         while True:
-            if self.scale_pod_count <= len(self.all_pod_obj):
-                log.info(f"Create {self.scale_pod_count} pvc and pods")
+            if scale_pod_count <= len(self.all_pod_obj):
+                log.info(f"Create {scale_pod_count} pvc and pods")
                 break
             else:
                 thread1 = threading.Thread(target=self.respin_ceph_pod, args=(resource_to_delete, ))
                 thread2 = threading.Thread(target=self.create_pvc_pod, args=(
-                    self.rbd_sc_obj, self.cephfs_sc_obj, self.pvc_count_each_itr, self.size, ))
+                    self.rbd_sc_obj, self.cephfs_sc_obj, pvc_count_each_itr, size, ))
                 thread1.start()
                 thread2.start()
             thread1.join()
@@ -181,4 +182,5 @@ class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
 
         # Added sleep for test case run time and for capturing memory leak after scale
         time.sleep(test_run_time)
-        helpers.memory_leak_analysis(median_dict)
+        # TODO: Skipping memory leak analysis because of bz 1750328
+        # helpers.memory_leak_analysis(median_dict)

@@ -30,9 +30,7 @@ class Disruptions:
             self.resource_obj = pod.get_mds_pods()
         self.resource_count = len(self.resource_obj)
 
-    def delete_resource(self, resource_id=None):
-        if not resource_id:
-            resource_id = 0
+    def delete_resource(self, resource_id=0):
         self.resource_obj[resource_id].delete(force=True)
         assert POD.wait_for_resource(
             condition='Running', selector=f'app=rook-ceph-{self.resource}',
