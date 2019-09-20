@@ -38,12 +38,15 @@ to the pytest.
 ### Additional arguments:
 
 * `--cluster-name <name>` - name of cluster.
-* `--ocsci-conf` - with this configuration you can overwrite the default
-    OCS-CI parameters defined in `conf/ocsci/default_config.yaml`. This
-    parameter can take multiple files separated by comma.
+* `--ocsci-conf` - with this configuration parameter you can overwrite the
+    default OCS-CI config parameters defined in
+    [default config](/ocs_ci/framework/conf/default_config.yaml).
+    This is the repeatable parameter and you can use it multiple times for
+    adding multiple config files. (The last one overwrites previous config!)
 * `--cluster-conf` - with this configuration you can overwrite the default
     parameters for cluster and deployment. See the example of such file
-    [here](../conf/ocs_basic_install.yml).
+    [here](../conf/ocs_basic_install.yml). This parameter is obsolete and going
+    to be repleced by the --ocsci-conf parameter.
 * `--deploy` - if this is given and a cluster can not be accessed from the
     provided `--cluster-path` then a new test cluster will be deployed.
 * `--teardown` - if this is given the testing cluster will be destroyed after

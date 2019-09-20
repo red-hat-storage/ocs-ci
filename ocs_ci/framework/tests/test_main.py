@@ -58,8 +58,8 @@ class TestEntrypoint(object):
             ocsci_conf2='TEST_SECTION: null',
         ).dirname
         main.main([
-            '--ocsci-conf', f"{os.path.join(tempdir, 'ocsci_conf1.yaml')},"
-            f"{os.path.join(tempdir, 'ocsci_conf2.yaml')}",
+            '--ocsci-conf', f"{os.path.join(tempdir, 'ocsci_conf1.yaml')}",
+            '--ocsci-conf', f"{os.path.join(tempdir, 'ocsci_conf2.yaml')}",
         ])
         assert config_update.call_args_list == [
             mock.call(dict(RUN=None)),
