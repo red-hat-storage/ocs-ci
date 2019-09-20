@@ -78,6 +78,8 @@ ROUTE = "Route"
 NODE = "Node"
 DEPLOYMENTCONFIG = "deploymentconfig"
 CONFIG = "Config"
+MACHINESETS = 'machinesets'
+STORAGECLUSTER = 'storagecluster'
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
