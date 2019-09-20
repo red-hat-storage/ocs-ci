@@ -4,7 +4,7 @@ import boto3
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier1, ocs_openshift_ci
 from ocs_ci.ocs import constants
 from tests.helpers import craft_s3_command
 
@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
     reason="Tests are not running on AWS deployed cluster"
 )
 @tier1
+@ocs_openshift_ci
 class TestBucketIO(ManageTest):
     """
     Test IO of a bucket

@@ -3,7 +3,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.framework.pytest_customization.marks import tier1, ocs_openshift_ci
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
     'ignore::urllib3.exceptions.InsecureRequestWarning'
 )
 @tier1
+@ocs_openshift_ci
 class TestBucketDeletion:
     """
     Test bucket Creation Deletion of buckets

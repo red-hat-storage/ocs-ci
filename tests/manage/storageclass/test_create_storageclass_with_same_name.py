@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.framework.testlib import tier1, ManageTest, ocs_openshift_ci
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import templating
@@ -79,6 +79,7 @@ def create_storageclass(sc_name, expect_fail=False):
 
 
 @tier1
+@ocs_openshift_ci
 @pytest.mark.usefixtures(
     test_fixture.__name__,
 )

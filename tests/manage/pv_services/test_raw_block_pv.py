@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
-from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.framework.testlib import tier1, ManageTest, ocs_openshift_ci
 from ocs_ci.ocs import constants
 from tests import helpers
 
@@ -12,6 +12,7 @@ log = logging.getLogger(__name__)
 
 
 @tier1
+@ocs_openshift_ci
 @pytest.mark.parametrize(
     argnames=["reclaim_policy"],
     argvalues=[

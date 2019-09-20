@@ -1,6 +1,6 @@
 import logging
 import pytest
-from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.framework.testlib import tier1, ManageTest, ocs_openshift_ci
 from tests import helpers
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.resources.pod import list_ceph_images
@@ -55,6 +55,7 @@ def teardown(self):
 
 
 @tier1
+@ocs_openshift_ci
 @pytest.mark.usefixtures(
     create_ceph_block_pool.__name__,
     create_rbd_secret.__name__,
