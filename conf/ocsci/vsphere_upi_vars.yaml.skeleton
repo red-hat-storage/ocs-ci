@@ -1,0 +1,29 @@
+---
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  region: '<aws region>'
+  base_domain: '<base domain>'
+  # vsphere details
+  vsphere_server: '<vSphere server>'
+  vsphere_user: '<vSphere user>'
+  vsphere_password: '<vSphere password>'
+  vsphere_cluster: '<vSphere cluster>'
+  vsphere_datacenter: '<vSphere Datacenter>'
+  vsphere_datastore: '<vSphere Datastore>'
+  machine_cidr: '<machine cidr  where IP addresses will be assigned for cluster nodes>'
+  ipam: '<ipam server>'
+  ipam_token: '<ipam token>'
+  # use vm_network if you are using separate VLAN
+  vm_network: '<vm network>'
+  vm_template: 'rhcos-410.8.20190520.1'
+  # use gateway and dns if needed
+  gateway: '<gateway>'
+  dns: '<dns>'
+  # httpd server is used to upload bootstrap ignition file
+  httpd_server: '<httpd server name or ip >'
+  path_to_upload: '<path to upload to server>'
+  user: '<user for httpd server>' #password-less ssh is needed to server
+  extra_disks: '<number of disks to add for worker nodes>'
+  disk_size: '<size of disk in GB>'
+  memory: '<memory in MB>'

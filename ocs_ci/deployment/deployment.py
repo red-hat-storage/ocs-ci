@@ -205,7 +205,7 @@ class Deployment(object):
             resource_name=csv_name, kind="csv",
             namespace=self.namespace
         )
-        csv.wait_for_phase("Succeeded")
+        csv.wait_for_phase("Succeeded", 900)
         ocs_operator_storage_cluster_cr = config.DEPLOYMENT.get(
             'ocs_operator_storage_cluster_cr'
         )
