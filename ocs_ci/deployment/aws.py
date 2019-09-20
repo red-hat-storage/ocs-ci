@@ -27,8 +27,6 @@ from .deployment import Deployment
 logger = logging.getLogger(__name__)
 
 
-# As of now only IPI
-# TODO: Introduce UPI once we have proper doc
 __all__ = ['AWSIPI', 'AWSUPI']
 
 
