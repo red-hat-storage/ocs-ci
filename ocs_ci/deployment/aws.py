@@ -116,8 +116,6 @@ class AWSIPI(AWSBase):
                 log_cli_level (str): openshift installer's log level
                     (default: "DEBUG")
             """
-            # aws_ipi = AWSIPI()
-            # if not aws_ipi.check_cluster_existence():
             logger.info("Deploying OCP cluster")
             logger.info(
                 f"Openshift-installer will be using loglevel:{log_cli_level}"
