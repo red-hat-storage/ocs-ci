@@ -135,7 +135,9 @@ class AWSIPI(AWSBase):
             log_cli_level (str): openshift installer's log level
                 (default: "DEBUG")
         """
-        if self.check_cluster_existence():
+        if self.check_cluster_existence() and not (
+            config.DEPLOYMENT.get('force_deploy_multiple_clusters')
+        ):
             raise SameNamePrefixClusterAlreadyExistsException
         super(AWSIPI, self).deploy_ocp(log_cli_level)
         if not self.ocs_operator_deployment:
