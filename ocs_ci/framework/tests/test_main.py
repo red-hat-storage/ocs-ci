@@ -48,3 +48,20 @@ class TestEntrypoint(object):
             mock.call(dict(RUN=None)),
             mock.call(dict(DEPLOYMENT=None)),
         ]
+
+    @mock.patch('ocs_ci.framework.main.pytest.main')
+    @mock.patch.object(config, 'update')
+    def test_multi_config_passing(self, config_update, pytest_main, testdir):
+        tempdir = testdir.makefile(
+            '.yaml',
+            ocsci_conf1='RUN: null',
+            ocsci_conf2='TEST_SECTION: null',
+        ).dirname
+        main.main([
+            '--ocsci-conf', f"{os.path.join(tempdir, 'ocsci_conf1.yaml')},"
+            f"{os.path.join(tempdir, 'ocsci_conf2.yaml')}",
+        ])
+        assert config_update.call_args_list == [
+            mock.call(dict(RUN=None)),
+            mock.call(dict(TEST_SECTION=None)),
+        ]

@@ -39,14 +39,23 @@ def init_ocsci_conf(arguments=None):
     custom_config = get_param('--ocsci-conf', arguments)
     cluster_config = get_param('--cluster-conf', arguments)
     if custom_config:
-        with open(os.path.expanduser(custom_config)) as file_stream:
-            custom_config_data = yaml.safe_load(file_stream)
-            framework.config.update(custom_config_data)
+        config_files = [cc.strip() for cc in custom_config.split(",")]
+        for config_file in config_files:
+            with open(
+                os.path.abspath(os.path.expanduser(config_file))
+            ) as file_stream:
+                custom_config_data = yaml.safe_load(file_stream)
+                framework.config.update(custom_config_data)
     if cluster_config:
         with open(os.path.expanduser(cluster_config)) as file_stream:
             cluster_config_data = yaml.safe_load(file_stream)
             framework.config.update(cluster_config_data)
     framework.config.RUN['run_id'] = int(time.time())
+    bin_dir = framework.config.RUN.get('bin_dir')
+    if bin_dir:
+        framework.config.RUN['bin_dir'] = os.path.abspath(
+            os.path.expanduser(framework.config.RUN['bin_dir'])
+        )
 
 
 def main(arguments):
@@ -59,6 +68,7 @@ def main(arguments):
         '-p', 'ocs_ci.framework.pytest_customization.reports',
         '--logger-logsdir', pytest_logs_dir,
     ])
-    utils.add_path_to_env_path(os.path.expanduser(
-        framework.config.RUN['bin_dir']))
+    bin_dir = framework.config.RUN.get('bin_dir')
+    if bin_dir:
+        utils.add_path_to_env_path(bin_dir)
     return pytest.main(arguments)
