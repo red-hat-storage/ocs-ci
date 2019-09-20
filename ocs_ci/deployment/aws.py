@@ -14,6 +14,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.utility.aws import AWS as AWSUtil
+from ocs_ci.ocs.exceptions import SameNamePrefixClusterAlreadyExistsException
 
 
 logger = logging.getLogger(__name__)
@@ -83,11 +84,14 @@ class AWSBase(Deployment):
         """
         Check cluster existence
 
+        Returns:
+            bool: True in case a cluster with the same name prefix already exists,
+                False otherwise
         """
         cluster_name = config.ENV_DATA['cluster_name']
         pattern = cluster_name.split("-")[0] + '*'
         if self.aws.get_instances_by_name_pattern(pattern):
-            logger.warning(f"Cluster with name {cluster_name} already exists")
+            logger.warning(f"Cluster with name prefix {pattern} already exists")
             return True
         return False
 
@@ -112,18 +116,18 @@ class AWSIPI(AWSBase):
                 log_cli_level (str): openshift installer's log level
                     (default: "DEBUG")
             """
-            aws_ipi = AWSIPI()
-            if not aws_ipi.check_cluster_existence():
-                logger.info("Deploying OCP cluster")
-                logger.info(
-                    f"Openshift-installer will be using loglevel:{log_cli_level}"
-                )
-                run_cmd(
-                    f"{self.installer} create cluster "
-                    f"--dir {self.cluster_path} "
-                    f"--log-level {log_cli_level}"
-                )
-                self.test_cluster()
+            # aws_ipi = AWSIPI()
+            # if not aws_ipi.check_cluster_existence():
+            logger.info("Deploying OCP cluster")
+            logger.info(
+                f"Openshift-installer will be using loglevel:{log_cli_level}"
+            )
+            run_cmd(
+                f"{self.installer} create cluster "
+                f"--dir {self.cluster_path} "
+                f"--log-level {log_cli_level}"
+            )
+            self.test_cluster()
 
     def deploy_ocp(self, log_cli_level='DEBUG'):
         """
@@ -133,6 +137,8 @@ class AWSIPI(AWSBase):
             log_cli_level (str): openshift installer's log level
                 (default: "DEBUG")
         """
+        if self.check_cluster_existence():
+            raise SameNamePrefixClusterAlreadyExistsException
         super(AWSIPI, self).deploy_ocp(log_cli_level)
         if not self.ocs_operator_deployment:
             volume_size = int(
