@@ -68,6 +68,7 @@ POD = "Pod"
 ROUTE = "Route"
 NODE = "Node"
 DEPLOYMENTCONFIG = "deploymentconfig"
+MACHINESETS = 'machinesets'
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
 ROLE = 'Role'
@@ -88,8 +89,6 @@ IGNORE_SC_FLEX = "rook-ceph-block"
 TEST_FILES_BUCKET = "ocsci-test-files"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
-OPENSHIFT_LOGGING_NAMESPACE = "openshift-logging"
-OPENSHIFT_OPERATORS_REDHAT_NAMESPACE = "openshift-operators-redhat"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
 MOUNT_POINT = '/var/lib/www/html'
@@ -109,7 +108,6 @@ ACCESS_MODE_RWO = 'ReadWriteOnce'
 ACCESS_MODE_ROX = 'ReadOnlyMany'
 ACCESS_MODE_RWX = 'ReadWriteMany'
 
-# Pod label
 MON_APP_LABEL = "app=rook-ceph-mon"
 MDS_APP_LABEL = "app=rook-ceph-mds"
 TOOL_APP_LABEL = "app=rook-ceph-tools"
@@ -117,8 +115,6 @@ MGR_APP_LABEL = "app=rook-ceph-mgr"
 OSD_APP_LABEL = "app=rook-ceph-osd"
 CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = "app=csi-cephfsplugin-provisioner"
 CSI_RBDPLUGIN_PROVISIONER_LABEL = "app=csi-rbdplugin-provisioner"
-CSI_CEPHFSPLUGIN_LABEL = "app=csi-cephfsplugin"
-CSI_RBDPLUGIN_LABEL = "app=csi-rbdplugin"
 
 # YAML paths
 TOOL_POD_YAML = os.path.join(
@@ -290,11 +286,3 @@ OPERATOR_CS_QUAY_API_QUERY = (
     'https://quay.io/api/v1/repository/rhceph-dev/ocs-registry/'
     'tag/?onlyActiveTags=true&limit=2'
 )
-
-# Platforms
-AWS_PLATFORM = 'aws'
-VSPHERE_PLATFORM = 'vsphere'
-
-# Default SC based on platforms
-DEFAULT_SC_AWS = "gp2"
-DEFAULT_SC_VSPHERE = "thin"

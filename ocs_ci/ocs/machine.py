@@ -3,7 +3,7 @@ import logging
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
-
+from ocs_ci.utility.utils import run_cmd
 
 log = logging.getLogger(__name__)
 
@@ -120,3 +120,28 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
         log.info(f"{new_machine.name} is in {state} state")
         return state == constants.STATUS_RUNNING.islower()
     return False
+
+
+def get_machinesets():
+    machines = list()
+    machinesets_obj = OCP(kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
+    for machine in machinesets_obj.get()['items']:
+        machines.append(machine.get('spec').get('selector').get(
+            'matchLabels').get('machine.openshift.io/cluster-api-machineset'))
+
+    return machines
+
+
+def get_replica_count(machine):
+    machinesets_obj = OCP(kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
+    return machinesets_obj.get(resource_name=machine).get('spec').get('replicas')
+
+
+def add_node(machine, count):
+    run_cmd(f'oc -n {constants.OPENSHIFT_MACHINE_API_NAMESPACE} scale --replicas={count} machinesets {machine}')
+    return True
+
+
+def remove_node(machine, count):
+    run_cmd(f'oc -n {constants.OPENSHIFT_MACHINE_API_NAMESPACE} scale --replicas={count} machinesets {machine}')
+    return True
