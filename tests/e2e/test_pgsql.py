@@ -10,7 +10,7 @@ from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest, tier1, workloads
+from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 log = logging.getLogger(__name__)
@@ -33,7 +33,6 @@ def ripsaw(request, storageclass_factory):
 
 
 @workloads
-@tier1
 class TestPgSQLWorkload(E2ETest):
     """
     Deploy an PGSQL workload using operator
@@ -58,7 +57,7 @@ class TestPgSQLWorkload(E2ETest):
 
         # Wait for pgbench pod to be created
         for pgbench_pod in TimeoutSampler(
-            60, 3, get_pod_name_by_pattern, 'pgbench-1-dbs-client', 'my-ripsaw'
+            300, 3, get_pod_name_by_pattern, 'pgbench-1-dbs-client', 'my-ripsaw'
         ):
             try:
                 if pgbench_pod[0] is not None:
@@ -78,7 +77,7 @@ class TestPgSQLWorkload(E2ETest):
         )
 
         # Running pgbench and parsing logs
-        output = run_cmd(f'bin/oc logs {pgbench_client_pod}')
+        output = run_cmd(f'oc logs {pgbench_client_pod}')
         pg_output = utils.parse_pgsql_logs(output)
         log.info(
             "*******PGBench output log*********\n"
