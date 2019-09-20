@@ -142,7 +142,7 @@ def check_ceph_health_status_metrics_on_prometheus(mgr_pod):
         mgr_pod (str): Name of the mgr pod
 
     Returns:
-        (bool): True on success, false otherwise
+        bool: True on success, false otherwise
 
     """
     prometheus = ocs_ci.utility.prometheus.PrometheusAPI()
