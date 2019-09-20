@@ -8,39 +8,18 @@ from tests.sanity_helpers import Sanity
 from ocs_ci.ocs.monitoring import check_pvcdata_collected_on_prometheus
 from ocs_ci.ocs.node import wait_for_nodes_status, get_typed_nodes
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed
 
 
 logger = logging.getLogger(__name__)
 
 
-@retry((CommandFailed, TimeoutExpiredError), tries=10, delay=3, backoff=1)
+@retry((CommandFailed, TimeoutError), tries=10, delay=3, backoff=1)
 def wait_for_master_node_to_be_running_state():
     """
     Waits for the all the nodes to be in running state
     """
-    wait_for_nodes_status()
-
-
-@pytest.fixture()
-def test_fixture(pod_factory, num_of_pod=2):
-    """
-    Setup and teardown
-    """
-    pod_objs = [
-        pod_factory(
-            interface=constants.CEPHBLOCKPOOL,
-            status=constants.STATUS_RUNNING
-        ) for _ in range(num_of_pod)
-    ]
-
-    # Check for the created pvc metrics on prometheus pod
-    for pod_obj in pod_objs:
-        assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
-            f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
-        )
-
-    return pod_objs
+    wait_for_nodes_status(timeout=900)
 
 
 @pytest.mark.polarion_id("OCS-709")
@@ -58,14 +37,30 @@ class TestRebootMasterNodeAndInteractionWithPrometheus(E2ETest):
         """
         self.sanity_helpers = Sanity()
 
+    @pytest.fixture(autouse=True)
+    def test_fixture(self, pod_factory, num_of_pod=1):
+        """
+        Create resources for tests
+        """
+        self.pod_objs = [
+            pod_factory(
+                interface=constants.CEPHBLOCKPOOL,
+                status=constants.STATUS_RUNNING
+            ) for _ in range(num_of_pod)
+        ]
+
+        # Check for the created pvc metrics on prometheus pod
+        for pod_obj in self.pod_objs:
+            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
+                f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
+            )
+
     @tier4
-    def test_monitoring_after_rebooting_master_node(self, test_fixture, pod_factory):
+    def test_monitoring_after_rebooting_master_node(self, pod_factory):
         """
         Test case to validate reboot master node and its
         interaction with prometheus pods
         """
-        pod_objs = test_fixture
-
         aws_obj = aws.AWS()
 
         # Get the master node list
@@ -83,7 +78,7 @@ class TestRebootMasterNodeAndInteractionWithPrometheus(E2ETest):
         self.sanity_helpers.health_check()
 
         # Check for the created pvc metrics after rebooting the master nodes
-        for pod_obj in pod_objs:
+        for pod_obj in self.pod_objs:
             assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
                 f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
             )
@@ -92,7 +87,7 @@ class TestRebootMasterNodeAndInteractionWithPrometheus(E2ETest):
             interface=constants.CEPHBLOCKPOOL,
             status=constants.STATUS_RUNNING
         )
-        pod_objs.extend([pod_obj])
+        self.pod_objs.extend([pod_obj])
 
         # Check for the new created pvc metrics on prometheus pod
         assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
