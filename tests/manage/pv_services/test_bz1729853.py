@@ -37,11 +37,61 @@ def get_pvc_dict(name, storage_class):
     return pvc_dict
 
 
+def get_deploymentconfig_dict(name, pvc_name):
+    template = textwrap.dedent(f"""
+        kind: 'DeploymentConfig'
+        apiVersion: 'v1'
+        metadata:
+          name: {name}
+        spec:
+          template:
+            metadata:
+              labels:
+                name: {name}
+            spec:
+              restartPolicy: 'Always'
+              volumes:
+              - name: 'cirros-vol'
+                persistentVolumeClaim:
+                  claimName: {pvc_name}
+              containers:
+              - name: 'cirros'
+                image: 'cirros'
+                imagePullPolicy: 'IfNotPresent'
+                volumeMounts:
+                - mountPath: '/mnt'
+                  name: 'cirros-vol'
+                command: ['sh']
+                args:
+                - '-ec'
+                - 'while true; do
+                       (mount | grep /mnt) && (head -c 1048576 < /dev/urandom > /mnt/random-data.log) || exit 1;
+                       sleep 20 ;
+                   done'
+                livenessProbe:
+                  exec:
+                    command:
+                    - 'sh'
+                    - '-ec'
+                    - 'mount | grep /mnt && head -c 1024 < /dev/urandom >> /mnt/random-data.log'
+                  initialDelaySeconds: 3
+                  periodSeconds: 3
+          replicas: 1
+          triggers:
+            - type: 'ConfigChange'
+          paused: false
+          revisionHistoryLimit: 2
+        """)
+    dc_dict = yaml.safe_load(template)
+    return dc_dict
+
+
 # TODO: this is a hack, move this functionality (creating a resource from a
 # dict) into OCP class
 def ocp_create(ocp_obj, resource_dict):
     with tempfile.NamedTemporaryFile(prefix='ocs-ci') as tf:
-        tf.write(yaml.dump(resource_dict).encode())
+        resource_str = yaml.dump(resource_dict).encode()
+        tf.write(resource_str)
         tf.file.flush()
         ocp_obj.create(yaml_file=tf.name)
 
@@ -57,7 +107,7 @@ def test_bz1729853(storageclass_factory):
     # create cluster wide resources: a storage classe, secret ...
     rbd_sc = storageclass_factory(constants.CEPHBLOCKPOOL)
 
-    total_runs = 3
+    total_runs = 1
     for pn in range(1, total_runs + 1):
         namespace = f"bz-1729853-{pn:02d}"
         logger.info(
@@ -67,13 +117,19 @@ def test_bz1729853(storageclass_factory):
 
         # create few PVcs in the project
         ocp_pvc = ocp.OCP(kind=constants.PVC, namespace=namespace)
+        ocp_dc = ocp.OCP(kind=constants.DEPLOYMENTCONFIG, namespace=namespace)
         total_vols = 100
-        logger.info(
-            f"now we are going to create {total_vols} PVCs using {rbd_sc.name}")
+        logger.info((
+            f"now we are going to create {total_vols} "
+            "PVC and DeploymentConfig pairs"
+            f"using {rbd_sc.name}"))
         for i in range(1, total_vols + 1):
             pvc_name = f"{namespace}-pvc-{i:03d}"
             pvc_dict = get_pvc_dict(pvc_name, rbd_sc.name)
             ocp_create(ocp_pvc, pvc_dict)
+            dc_name = f"{namespace}-dc-{i:03d}"
+            dc_dict = get_deploymentconfig_dict(dc_name, pvc_name)
+            ocp_create(ocp_dc, dc_dict)
 
         logger.info(
             f"now we are going to wait for {total_vols} PVCs to be Bound")
@@ -84,8 +140,18 @@ def test_bz1729853(storageclass_factory):
             resource_count=100,
             timeout=100*30)
 
+        # TODO: implement this wait
+        # logger.info(
+        #     f"now we are going to wait for {total_vols} DCs to be Running")
+        # ocp_dc.wait_for_resource(
+        #     condition=constants.STATUS_RUNNING,
+        #     resource_count=100,
+        #     timeout=100*30)
+
         logger.info(f"initiating delete of project {namespace}")
-        # TODO: don't wait for completion ...
+        # note that this just initializes the deletion, it doesn't wait for all
+        # reousrces in the namespace to be deleted (which is exactly what we
+        # need to do here)
         project.delete(resource_name=namespace)
 
         # TODO: wait, checking the status
