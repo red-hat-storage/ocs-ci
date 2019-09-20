@@ -30,7 +30,7 @@ class TestDetachAttachWorkerVolumeAWS(ManageTest):
         self.sanity_helpers = Sanity()
 
     @pytest.mark.polarion_id("OCS-1085")
-    def test_detach_attach_worker_volume(self, aws_obj, pvc_factory, pod_factory):
+    def test_detach_attach_worker_volume(self, nodes, pvc_factory, pod_factory):
         """
         Detach and attach worker volume
 
@@ -48,26 +48,31 @@ class TestDetachAttachWorkerVolumeAWS(ManageTest):
         assert worker, "Failed to find a worker node for the test"
         worker = worker[0]
 
-        # Get the worker node's ec2 instance ID and name
-        instance = aws.get_instances_ids_and_names([worker])
-        assert instance, f"Failed to get ec2 instances for node {worker.name}"
-
-        instance_id = [*instance][0]
-
-        # Get the ec2 instance data volume Volume instance
-        ec2_volume = aws.get_data_volumes(instance_id)[0]
+        # # Get the worker node's ec2 instance ID and name
+        # instance = aws.get_instances_ids_and_names([worker])
+        # assert instance, f"Failed to get ec2 instances for node {worker.name}"
+        #
+        # instance_id = [*instance][0]
+        #
+        # # Get the ec2 instance data volume Volume instance
+        # ec2_volume = aws.get_data_volumes(instance_id)[0]
 
         # Detach volume (logging is done inside the function)
-        aws_obj.detach_volume(ec2_volume)
+        data_volume = nodes.get_data_volume(worker)
+        nodes.detach_volume([worker])
+
+        # aws_obj.detach_volume(ec2_volume)
 
         # Validate cluster is still functional
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
         # Attach volume (logging is done inside the function)
-        aws_obj.attach_volume(ec2_volume, instance_id)
+        nodes.attach_volume([worker], data_volume)
+        # aws_obj.attach_volume(ec2_volume, instance_id)
 
         # Restart the instance so the volume will get re-mounted
-        aws_obj.restart_ec2_instances(instances=instance, wait=True)
+        # aws_obj.restart_ec2_instances(instances=instance, wait=True)
+        nodes.restart_nodes([worker])
 
         # Cluster health check
         self.sanity_helpers.health_check()

@@ -15,8 +15,12 @@ class PlatformNodesFactory:
         return self.cls_map[platform]()
 
 
-class PlatformNodes(object):
+class NodesBase(object):
+    """
+    A base class for nodes related operations.
+    Should be inherited by specific platform classes
 
+    """
     def get_data_volume(self, node):
         pass
 
@@ -36,7 +40,11 @@ class PlatformNodes(object):
         pass
 
 
-class VMWareNodes(PlatformNodes):
+class VMWareNodes(NodesBase):
+    """
+    VMWare nodes class
+
+    """
     def get_data_volume(self, node):
         raise NotImplementedError(
             "Get data volume functionality is not implemented for VMWare"
@@ -68,8 +76,11 @@ class VMWareNodes(PlatformNodes):
         )
 
 
-class AWSNodes(PlatformNodes):
+class AWSNodes(NodesBase):
+    """
+    AWS EC2 instances class
 
+    """
     def __init__(self):
         self.aws = aws.AWS()
 
@@ -100,7 +111,3 @@ class AWSNodes(PlatformNodes):
     def attach_volume(self, node, volume):
         instance = self.get_instances([node])
         self.aws.attach_volume(volume, [*instance][0])
-
-
-
-
