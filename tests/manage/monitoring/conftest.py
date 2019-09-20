@@ -1,4 +1,6 @@
+import json
 import logging
+import os
 import pytest
 import threading
 import time
@@ -12,7 +14,11 @@ logger = logging.getLogger(__name__)
 
 
 def measure_operation(
-    operation, minimal_time=None, metadata=None, measure_after=False
+    operation,
+    result_file,
+    minimal_time=None,
+    metadata=None,
+    measure_after=False
 ):
     """
     Get dictionary with keys 'start', 'stop', 'metadata' and 'result' that
@@ -21,6 +27,9 @@ def measure_operation(
 
     Args:
         operation (function): Function to be performed
+        result_file (str): File name that should contain measurement results
+            including logs in json format. If this file exists then it is
+            used for test.
         minimal_time (int): Minimal number of seconds to monitor a system.
             If provided then monitoring of system continues even when
             operation is finshed. If not specified then measurement is finished
@@ -64,51 +73,102 @@ def measure_operation(
             time.sleep(3)
         logger.info('Logging of all prometheus alerts stopped')
 
-    if not measure_after:
-        start_time = time.time()
+    # check if file with results for this operation already exists
+    # if it exists then use it
+    if os.path.isfile(result_file) and os.access(result_file, os.R_OK):
+        logger.info(
+            f"File {result_file} already created."
+            f" Trying to use it for tests..."
+        )
+        with open(result_file) as open_file:
+            results = json.load(open_file)
+        logger.info(
+            f"File {result_file} loaded. Content of file:\n{results}"
+        )
 
-    # init logging thread that checks for Prometheus alerts
-    # while workload is running
-    # based on https://docs.python.org/3/howto/logging-cookbook.html#logging-from-multiple-threads
-    info = {'run': True}
-    alert_list = []
+    # if there is no file with results from previous run
+    # then perform operation measurement
+    else:
+        logger.info(
+            f"File {result_file} not created yet. Starting measurement..."
+        )
+        if not measure_after:
+            start_time = time.time()
 
-    logging_thread = threading.Thread(
-        target=prometheus_log,
-        args=(info, alert_list)
-    )
-    logging_thread.start()
+        # init logging thread that checks for Prometheus alerts
+        # while workload is running
+        # based on https://docs.python.org/3/howto/logging-cookbook.html#logging-from-multiple-threads
+        info = {'run': True}
+        alert_list = []
 
-    result = operation()
-    if measure_after:
-        start_time = time.time()
-    passed_time = time.time() - start_time
-    if minimal_time:
-        additional_time = minimal_time - passed_time
-        if additional_time > 0:
-            time.sleep(additional_time)
-    stop_time = time.time()
-    info['run'] = False
-    logging_thread.join()
-    logger.info(f"Alerts found during measurement: {alert_list}")
-    return {
-        'start': start_time,
-        'stop': stop_time,
-        'result': result,
-        'metadata': metadata,
-        'prometheus_alerts': alert_list
-    }
+        logging_thread = threading.Thread(
+            target=prometheus_log,
+            args=(info, alert_list)
+        )
+        logging_thread.start()
+
+        result = operation()
+        if measure_after:
+            start_time = time.time()
+        passed_time = time.time() - start_time
+        if minimal_time:
+            additional_time = minimal_time - passed_time
+            if additional_time > 0:
+                time.sleep(additional_time)
+        stop_time = time.time()
+        info['run'] = False
+        logging_thread.join()
+        logger.info(f"Alerts found during measurement: {alert_list}")
+        results = {
+            'start': start_time,
+            'stop': stop_time,
+            'result': result,
+            'metadata': metadata,
+            'prometheus_alerts': alert_list
+        }
+        with open(result_file, 'w') as outfile:
+            logger.info(f"Dumping results of measurement into {result_file}")
+            json.dump(results, outfile)
+    return results
 
 
-@pytest.fixture(scope="session")
-def workload_stop_ceph_mgr():
+@pytest.fixture
+def measurement_dir(tmp_path):
+    """
+    Returns directory path where should be stored all results related
+    to measurement. If 'measurement_dir' is provided by config then use it,
+    otherwise new directory is generated.
+
+    Returns:
+        str: Path to measurement directory
+    """
+    if config.ENV_DATA.get('measurement_dir'):
+        measurement_dir = config.ENV_DATA.get('measurement_dir')
+        logger.info(
+            f"Using measurement dir from configuration: {measurement_dir}"
+        )
+    else:
+        measurement_dir = os.path.join(
+            os.path.dirname(tmp_path),
+            'measurement_results'
+        )
+    if not os.path.exists(measurement_dir):
+        logger.info(
+            f"Measurement dir {measurement_dir} doesn't exist. Creating it."
+        )
+        os.mkdir(measurement_dir)
+    return measurement_dir
+
+
+@pytest.fixture
+def workload_stop_ceph_mgr(measurement_dir):
     """
     Downscales Ceph Manager deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
 
     Returns:
         dict: Contains information about `start` and `stop` time for stopping
-            Ceph Manager pod.
+            Ceph Manager pod
     """
     oc = ocp.OCP(
         kind=constants.DEPLOYMENT,
@@ -139,14 +199,15 @@ def workload_stop_ceph_mgr():
         time.sleep(run_time)
         return oc.get(mgr)
 
-    measured_op = measure_operation(stop_mgr)
+    test_file = os.path.join(measurement_dir, 'workload_stop_ceph_mgr.json')
+    measured_op = measure_operation(stop_mgr, test_file)
     logger.info(f"Upscaling deployment {mgr} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
     return measured_op
 
 
-@pytest.fixture(scope="session")
-def workload_stop_ceph_mon():
+@pytest.fixture
+def workload_stop_ceph_mon(measurement_dir):
     """
     Downscales Ceph Monitor deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -196,7 +257,8 @@ def workload_stop_ceph_mon():
         time.sleep(run_time)
         return mons_to_stop
 
-    measured_op = measure_operation(stop_mon)
+    test_file = os.path.join(measurement_dir, 'workload_stop_ceph_mon.json')
+    measured_op = measure_operation(stop_mon, test_file)
 
     # get new list of monitors to make sure that new monitors were deployed
     mon_deployments = oc.get(selector=constants.MON_APP_LABEL)['items']
