@@ -27,7 +27,8 @@ def init_ocsci_conf(arguments=None):
             os.path.abspath(os.path.expanduser(config_file))
         ) as file_stream:
             custom_config_data = yaml.safe_load(file_stream)
-            if custom_config_data.get('ENV_DATA').get('platform') == 'vsphere':
+            custom_config_data_str = str(custom_config_data)
+            if "'platform': 'vsphere'" in custom_config_data_str:
                 if not os.path.isfile(constants.VSPHERE_CONFIG_PATH):
                     msg = "vsphere_upi_vars.yaml MUST be provided for vSphere Platform"
                     pytest.fail(msg)
@@ -39,7 +40,8 @@ def init_ocsci_conf(arguments=None):
     if cluster_config:
         with open(os.path.expanduser(cluster_config)) as file_stream:
             cluster_config_data = yaml.safe_load(file_stream)
-            if cluster_config_data.get('ENV_DATA').get('platform') == 'vsphere':
+            cluster_config_data_str = str(cluster_config_data)
+            if "'platform': 'vsphere'" in cluster_config_data_str:
                 if not os.path.isfile(constants.VSPHERE_CONFIG_PATH):
                     msg = "vsphere_upi_vars.yaml MUST be provided for vSphere Platform"
                     pytest.fail(msg)
