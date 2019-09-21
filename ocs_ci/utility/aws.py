@@ -640,9 +640,9 @@ def get_data_volumes(instance_id):
     aws = AWS()
     volumes = aws.get_ec2_instance_volumes(instance_id)
 
-    # Get the data volume according to DeleteOnTermination
+    # Get the data volume according to the volume tags
     return [
-        vol for vol in volumes if vol.attachments[0].get('DeleteOnTermination') is False
+        vol for vol in volumes if [tag for tag in vol.tags if 'deviceset' in tag['Value']]
     ]
 
 

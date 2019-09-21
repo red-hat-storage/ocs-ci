@@ -3,20 +3,14 @@ import pytest
 
 from ocs_ci.ocs import node
 from ocs_ci.framework.testlib import tier4, ignore_leftovers, ManageTest
-from ocs_ci.framework import config
-from ocs_ci.utility import aws
 from tests.sanity_helpers import Sanity
 
 logger = logging.getLogger(__name__)
 
 
 @tier4
-@pytest.mark.skipif(
-    condition=config.ENV_DATA['platform'] != 'AWS',
-    reason="Tests are not running on AWS deployed cluster"
-)
 @ignore_leftovers
-class TestDetachAttachWorkerVolumeAWS(ManageTest):
+class TestDetachAttachWorkerVolume(ManageTest):
     """
     Test class for detach and attach worker volume
 
@@ -48,37 +42,26 @@ class TestDetachAttachWorkerVolumeAWS(ManageTest):
         assert worker, "Failed to find a worker node for the test"
         worker = worker[0]
 
-        # # Get the worker node's ec2 instance ID and name
-        # instance = aws.get_instances_ids_and_names([worker])
-        # assert instance, f"Failed to get ec2 instances for node {worker.name}"
-        #
-        # instance_id = [*instance][0]
-        #
-        # # Get the ec2 instance data volume Volume instance
-        # ec2_volume = aws.get_data_volumes(instance_id)[0]
+        # Get the node's data volume
+        data_volume = nodes.get_data_volume(worker)
 
         # Detach volume (logging is done inside the function)
-        data_volume = nodes.get_data_volume(worker)
-        nodes.detach_volume([worker])
-
-        # aws_obj.detach_volume(ec2_volume)
+        nodes.detach_volume(data_volume)
 
         # Validate cluster is still functional
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
         # Attach volume (logging is done inside the function)
-        nodes.attach_volume([worker], data_volume)
-        # aws_obj.attach_volume(ec2_volume, instance_id)
+        nodes.attach_volume(worker, data_volume)
 
         # Restart the instance so the volume will get re-mounted
-        # aws_obj.restart_ec2_instances(instances=instance, wait=True)
         nodes.restart_nodes([worker])
 
         # Cluster health check
         self.sanity_helpers.health_check()
 
     @pytest.mark.polarion_id("OCS-1086")
-    def test_detach_attach_2_workers_volumes(self, aws_obj, pvc_factory, pod_factory):
+    def test_detach_attach_2_workers_volumes(self, nodes, pvc_factory, pod_factory):
         """
         Detach and attach disk from 2 worker nodes
 
@@ -94,29 +77,20 @@ class TestDetachAttachWorkerVolumeAWS(ManageTest):
         workers = node.get_typed_nodes(num_of_nodes=2)
         assert workers, "Failed to find worker nodes for the test"
 
-        # Get the worker nodes ec2 instance IDs and names
-        instances = aws.get_instances_ids_and_names(workers)
-        assert instances, (
-            f"Failed to get ec2 instances for node {[w.name for w in workers]}"
-        )
+        for worker in workers:
 
-        for instance in instances.items():
-            instance_id = [*instance][0]
-
-            # Get the ec2 instance data volume Volume instance
-            ec2_volume = aws.get_data_volumes(instance_id)[0]
+            # Get the data volume
+            data_volume = nodes.get_data_volume(worker)
 
             # Detach volume (logging is done inside the function)
-            aws_obj.detach_volume(ec2_volume)
+            nodes.detach_volume(worker)
 
             # Attach volume (logging is done inside the function)
-            aws_obj.attach_volume(ec2_volume, instance_id)
+            nodes.attach_volume(worker, data_volume)
 
         # Restart the instances so the volume will get re-mounted
-        aws_obj.restart_ec2_instances(instances=instances, wait=True)
+        nodes.restart_nodes(workers)
 
         # Validate cluster is still functional
         self.sanity_helpers.health_check()
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
-
-# TODO: Add test cases for VMWare and RHHI.Next

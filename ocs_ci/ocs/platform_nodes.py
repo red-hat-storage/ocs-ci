@@ -100,12 +100,11 @@ class AWSNodes(NodesBase):
         instances = self.get_instances(nodes)
         self.aws.start_ec2_instances(instances=instances, wait=True)
 
-    def restart_nodes(self, nodes):
+    def restart_nodes(self, nodes, wait=True):
         instances = self.get_instances(nodes)
-        self.aws.restart_ec2_instances(instances=instances, wait=True)
+        self.aws.restart_ec2_instances(instances=instances, wait=wait)
 
-    def detach_volume(self, node):
-        data_volume = self.get_data_volume(node)
+    def detach_volume(self, data_volume):
         self.aws.detach_volume(data_volume)
 
     def attach_volume(self, node, volume):
