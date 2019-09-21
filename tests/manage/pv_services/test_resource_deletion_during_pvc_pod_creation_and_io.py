@@ -245,7 +245,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         # Confirm PVCs are Bound
         for pvc_obj in pvc_objs_new:
             helpers.wait_for_resource_state(
-                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=120
+                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=180
             )
             pvc_obj.reload()
         log.info("Verified: New PVCs are Bound.")
