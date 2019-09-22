@@ -1,11 +1,11 @@
 import base64
 import logging
+import shlex
 
 import boto3
 from botocore.client import ClientError
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs import defaults
 
 
 logger = logging.getLogger(name=__file__)
@@ -16,13 +16,14 @@ class MCG(object):
     Wrapper class for the Multi Cloud Gateway's S3 service
     """
 
-    s3_resource, ocp_resource, endpoint, region, access_key_id, access_key = (None,) * 6
+    s3_resource, ocp_resource, endpoint, region, access_key_id, access_key, namespace = (None,) * 7
 
     def __init__(self):
         """
         Constructor for the MCG class
         """
-        ocp_obj = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        self.namespace = config.ENV_DATA['cluster_namespace']
+        ocp_obj = OCP(kind='noobaa', namespace=self.namespace)
         results = ocp_obj.get()
         self.endpoint = 'http:' + (
             results.get('items')[0].get('status').get('services')
@@ -33,7 +34,7 @@ class MCG(object):
             results.get('items')[0].get('status').get('accounts')
             .get('admin').get('secretRef').get('name')
         )
-        secret_ocp_obj = OCP(kind='secret', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
         results2 = secret_ocp_obj.get(creds_secret_name)
 
         self.access_key_id = base64.b64decode(
@@ -116,26 +117,26 @@ class MCG(object):
             logger.info(f"{bucket.name} does not exist")
             return False
 
-    def verify_s3_object_integrity(self, original_object, result_object, awscli_pod):
+    def verify_s3_object_integrity(self, original_object_path, result_object_path, awscli_pod):
         """
         Verifies checksum between orignial object and result object on an awscli pod
+
         Args:
-            orignal_object(str) : The Object that is uploaded to the s3 bucket
-            result_object(str) :  The Object that is downloaded from the s3 bucket
+            original_object_path (str): The Object that is uploaded to the s3 bucket
+            result_object_path (str):  The Object that is downloaded from the s3 bucket
+            awscli_pod (pod): A pod running the AWSCLI tools
 
         Returns:
               bool: True if checksum matches, False otherwise
 
         """
-        md5sum = awscli_pod.exec_cmd_on_pod(
-            command=f'md5sum {original_object} {result_object}'
-        )
-        md5sum_original, md5sum_result = md5sum.split()[0], md5sum.split()[2]
-        if md5sum_original == md5sum_result:
-            logger.info(f'Passed: MD5 comparison for {original_object} and {result_object}')
+        md5sum = shlex.split(awscli_pod.exec_cmd_on_pod(command=f'md5sum {original_object_path} {result_object_path}'))
+        if md5sum[0] == md5sum[2]:
+            logger.info(f'Passed: MD5 comparison for {original_object_path} and {result_object_path}')
             return True
         else:
-            logger.info('Data Corruption Found')
+            logger.error(f'Failed: MD5 comparison of {original_object_path} and {result_object_path} - '
+                         f'{md5sum[0]} ≠ {md5sum[2]}')
             return False
 
     def oc_create_bucket(self, bucketname):
