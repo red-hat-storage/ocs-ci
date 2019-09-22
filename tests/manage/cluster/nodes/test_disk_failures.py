@@ -57,18 +57,15 @@ class TestDetachAttachWorkerVolume(ManageTest):
         - Validate cluster functionality, without checking cluster and Ceph
           health (as one node volume is detached, the cluster will be unhealthy)
           by creating resources and running IO
-        - Attach back the volume to the node
+        - Wait for the volumes to be re-attached back to the worker node
         - Restart the node so the volume will get re-mounted
 
         """
-        # Requesting 1 worker node for the test as this case includes detach and
-        # attach of data volume of 1 worker node
-        worker = node.get_typed_nodes(num_of_nodes=1)
-        assert worker, "Failed to find a worker node for the test"
-        worker = worker[0]
+        # Get a data volume
+        data_volume = nodes.get_data_volumes()[0]
 
-        # Get the node's data volume
-        data_volume = nodes.get_data_volume(worker)
+        # Get the worker node according to the volume attachment
+        worker = nodes.get_node_by_attached_volume(data_volume)
 
         # Detach volume (logging is done inside the function)
         nodes.detach_volume(data_volume)
@@ -83,8 +80,9 @@ class TestDetachAttachWorkerVolume(ManageTest):
         except CommandFailed as ex:
             if "connection timed out" in str(ex):
                 logger.info(
-                    "Ceph tools box was running on the node that its data volume has be "
-                    "detached. Hence, waiting for a new Ceph tools box pod to spin up"
+                    "Ceph tools box was running on the node that its data "
+                    "volume has been detached. Hence, waiting for a new "
+                    "Ceph tools box pod to spin up"
                 )
                 wait_for_resource_count_change(
                     func_to_use=get_all_pods, previous_num=1,
@@ -96,8 +94,10 @@ class TestDetachAttachWorkerVolume(ManageTest):
         finally:
             self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
-        # Attach volume (logging is done inside the function)
-        nodes.attach_volume(worker, data_volume)
+        # Wait for worker volume to be re-attached automatically to the node
+        assert nodes.wait_for_volume_attach(data_volume), (
+            f"Volume {data_volume.id} failed to be re-attached to a worker node"
+        )
 
         # Restart the instance so the volume will get re-mounted
         nodes.restart_nodes([worker])
@@ -106,35 +106,39 @@ class TestDetachAttachWorkerVolume(ManageTest):
         self.sanity_helpers.health_check()
 
     @pytest.mark.polarion_id("OCS-1086")
-    def test_detach_attach_2_workers_volumes(self, nodes, pvc_factory, pod_factory):
+    def test_detach_attach_2_data_volumes(self, nodes, pvc_factory, pod_factory):
         """
         Detach and attach disk from 2 worker nodes
 
-        - Detach the data volume from 2 of the worker nodes
-        - Attach back the volume to the worker nodes
+        - Detach the data 2 of the data volumes from their worker nodes
+        - Wait for the volumes to be re-attached back to the worker nodes
         - Restart the nodes so the volume will get re-mounted in each node
         - Check cluster health and functionality to make sure detach,
           attach and restart did not affect the cluster
 
         """
-        # Requesting 2 worker nodes for the test as this case includes
-        # detach and attach of data volume of 1 worker node
-        workers = node.get_typed_nodes(num_of_nodes=2)
-        assert workers, "Failed to find worker nodes for the test"
+        # Get 2 data volumes
+        data_volumes = nodes.get_data_volumes()[:2]
+        workers_and_volumes = [
+            {'worker': nodes.get_node_by_attached_volume(vol), 'volume': vol}
+            for vol in data_volumes
+        ]
 
-        for worker in workers:
+        for worker_and_volume in workers_and_volumes:
+            # Detach the volume (logging is done inside the function)
+            nodes.detach_volume(worker_and_volume['volume'])
 
-            # Get the data volume
-            data_volume = nodes.get_data_volume(worker)
-
-            # Detach volume (logging is done inside the function)
-            nodes.detach_volume(worker)
-
-            # Attach volume (logging is done inside the function)
-            nodes.attach_volume(worker, data_volume)
+        for worker_and_volume in workers_and_volumes:
+            # Wait for worker volume to be re-attached automatically to the node
+            assert nodes.wait_for_volume_attach(worker_and_volume['volume']), (
+                f"Volume {worker_and_volume['volume']} "
+                f"failed to be re-attached to a worker node"
+            )
 
         # Restart the instances so the volume will get re-mounted
-        nodes.restart_nodes(workers)
+        nodes.restart_nodes(
+            [worker_and_volume['worker'] for worker_and_volume in workers_and_volumes]
+        )
 
         # Validate cluster is still functional
         self.sanity_helpers.health_check()

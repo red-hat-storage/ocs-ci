@@ -74,6 +74,7 @@ class AWSBase(Deployment):
         worker_pattern = f'{cluster_id}-worker*'
         logger.info(f'Worker pattern: {worker_pattern}')
         self.create_ebs_volumes(worker_pattern, size)
+        self.create_ebs_volumes(worker_pattern, size)
 
     def add_node(self):
         # TODO: Implement later
