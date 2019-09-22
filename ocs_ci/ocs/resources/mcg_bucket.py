@@ -68,7 +68,7 @@ class OCBucket(MCGBucket):
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        obc_data = templating.load_yaml_to_dict(constants.MCG_OBC_YAML)
+        obc_data = templating.load_yaml(constants.MCG_OBC_YAML)
         if self.name is None:
             self.name = create_unique_resource_name('oc', 'obc')
         obc_data['metadata']['name'] = self.name
