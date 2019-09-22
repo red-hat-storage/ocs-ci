@@ -2,7 +2,7 @@ import logging
 import pytest
 import random
 
-from ocs_ci.framework.testlib import ManageTest, tier4
+from ocs_ci.framework.testlib import ManageTest, tier4, bugzilla
 from ocs_ci.framework import config
 from tests import sanity_helpers
 
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
     condition=config.ENV_DATA['platform'] != 'AWS',
     reason="Tests are not running on AWS deployed cluster"
 )
-@pytest.mark.skipif(condition=False, reason="Tests are not ready to be ran")
+@bugzilla('1754287')
 class TestAvailabilityZones(ManageTest):
     """
     test availability zone failure:
