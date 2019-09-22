@@ -1,5 +1,9 @@
+import logging
 from ocs_ci.framework import config
 from ocs_ci.utility import aws
+
+
+logger = logging.getLogger(__name__)
 
 
 class PlatformNodesFactory:
@@ -84,29 +88,38 @@ class AWSNodes(NodesBase):
     def __init__(self):
         self.aws = aws.AWS()
 
-    def get_instances(self, nodes):
+    def get_ec2_instances(self, nodes):
         return aws.get_instances_ids_and_names(nodes)
 
     def get_data_volume(self, node):
-        instance = self.get_instances([node])
+        instance = self.get_ec2_instances([node])
         instance_id = [*instance][0]
         return aws.get_data_volumes(instance_id)[0]
 
     def stop_nodes(self, nodes):
-        instances = self.get_instances(nodes)
+        instances = self.get_ec2_instances(nodes)
         self.aws.stop_ec2_instances(instances=instances, wait=True)
 
     def start_nodes(self, nodes):
-        instances = self.get_instances(nodes)
+        instances = self.get_ec2_instances(nodes)
         self.aws.start_ec2_instances(instances=instances, wait=True)
 
     def restart_nodes(self, nodes, wait=True):
-        instances = self.get_instances(nodes)
+        instances = self.get_ec2_instances(nodes)
         self.aws.restart_ec2_instances(instances=instances, wait=wait)
 
     def detach_volume(self, data_volume):
         self.aws.detach_volume(data_volume)
 
     def attach_volume(self, node, volume):
-        instance = self.get_instances([node])
-        self.aws.attach_volume(volume, [*instance][0])
+        instance = self.get_ec2_instances([node])
+        volume_attachments = [
+            at.get('InstanceId') for at in volume.attachments
+        ]
+        if not volume_attachments:
+            self.aws.attach_volume(volume, [*instance][0])
+        else:
+            logger.warning(
+                f"Volume {volume.id} is already attached to EC2 "
+                f"instance/s {volume_attachments}"
+            )

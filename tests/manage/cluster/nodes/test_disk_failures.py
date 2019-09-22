@@ -1,9 +1,13 @@
 import logging
 import pytest
 
-from ocs_ci.ocs import node
+from ocs_ci.ocs import node, constants
+from ocs_ci.framework import config
+from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.framework.testlib import tier4, ignore_leftovers, ManageTest
 from tests.sanity_helpers import Sanity
+from tests.helpers import wait_for_resource_count_change, get_admin_key
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +19,27 @@ class TestDetachAttachWorkerVolume(ManageTest):
     Test class for detach and attach worker volume
 
     """
+    @pytest.fixture(autouse=True)
+    def teardown(self, request, nodes):
+        """
+        Restart nodes that are in status NotReady, for situations in
+        which the test failed before restarting the node after detach volume,
+        which leaves nodes in NotReady
+
+        """
+        def finalizer():
+            not_ready_nodes = [
+                n for n in node.get_node_objs() if n
+                .ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
+            ]
+            logger.warning(
+                f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
+            )
+            if not_ready_nodes:
+                nodes.restart_nodes(not_ready_nodes)
+                node.wait_for_nodes_status()
+        request.addfinalizer(finalizer)
+
     @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
@@ -49,7 +74,27 @@ class TestDetachAttachWorkerVolume(ManageTest):
         nodes.detach_volume(data_volume)
 
         # Validate cluster is still functional
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        try:
+            # In case the selected node that its volume disk was detached was the one
+            # running the ceph tools pod, we'll need to wait for a new ct pod to start.
+            # For that, a function that connects to the ct pod is being used to check if
+            # it's alive
+            _ = get_admin_key()
+        except CommandFailed as ex:
+            if "connection timed out" in str(ex):
+                logger.info(
+                    "Ceph tools box was running on the node that its data volume has be "
+                    "detached. Hence, waiting for a new Ceph tools box pod to spin up"
+                )
+                wait_for_resource_count_change(
+                    func_to_use=get_all_pods, previous_num=1,
+                    namespace=config.ENV_DATA['cluster_namespace'], timeout=120,
+                    selector='app=rook-ceph-tools'
+                )
+            else:
+                raise
+        finally:
+            self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
         # Attach volume (logging is done inside the function)
         nodes.attach_volume(worker, data_volume)
