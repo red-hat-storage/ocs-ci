@@ -18,34 +18,13 @@ from tests.fixtures import (
     create_rbd_storageclass, create_ceph_block_pool,
     create_rbd_secret
 )
-
+from ocs_ci.ocs.cluster import CephCluster
 logger = logging.getLogger(__name__)
 _templating = templating.Templating()
 
 PV = ocp.OCP(
     kind='PersistentVolume', namespace=defaults.ROOK_CLUSTER_NAMESPACE
 )
-
-used_space = 0
-
-
-@retry(UnexpectedBehaviour, tries=20, delay=5, backoff=1)
-def check_ceph_used_space():
-    """
-    Check for the used space in cluster
-    """
-    ct_pod = pod.get_ceph_tools_pod()
-    ceph_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph status")
-    assert ceph_status is not None
-    used = ceph_status['pgmap']['bytes_used']
-    used_in_gb = used / constants.GB
-    global used_space
-    if used_space and used_space == used_in_gb:
-        return used_in_gb
-    used_space = used_in_gb
-    raise UnexpectedBehaviour(
-        f"In Ceph status, used size is varying"
-    )
 
 
 @retry(UnexpectedBehaviour, tries=5, delay=3, backoff=1)
@@ -118,7 +97,8 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         Test case to verify after delete pvc size returned to backend pools
         """
         failed_to_delete = []
-        used_before_creating_pvc = check_ceph_used_space()
+        ceph_obj1 = CephCluster()
+        used_before_creating_pvc = ceph_obj1.check_ceph_pool_used_space(cbp_name=self.cbp_obj.name)
         logger.info(f"Used before creating PVC {used_before_creating_pvc}")
         pvc_obj = create_pvc_and_verify_pvc_exists(
             self.sc_obj.name, self.cbp_obj.name
@@ -128,9 +108,8 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         )
         helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
         pod_obj.reload()
-        used_percentage = pod.run_io_and_verify_mount_point(pod_obj)
-        assert used_percentage > '90%', "I/O's didn't run completely"
-        used_after_creating_pvc = check_ceph_used_space()
+        pod.run_io_and_verify_mount_point(pod_obj, bs='10M', count='300')
+        used_after_creating_pvc = ceph_obj1.check_ceph_pool_used_space(cbp_name=self.cbp_obj.name)
         logger.info(f"Used after creating PVC {used_after_creating_pvc}")
         assert used_before_creating_pvc < used_after_creating_pvc
         rbd_image_id = pvc_obj.image_uuid
@@ -145,7 +124,9 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
                 f"Failed to delete resources: {failed_to_delete}"
             )
         verify_pv_not_exists(pvc_obj, self.cbp_obj.name, rbd_image_id)
-        used_after_deleting_pvc = check_ceph_used_space()
+        ceph_obj2 = CephCluster()
+        used_after_deleting_pvc = ceph_obj2.check_ceph_pool_used_space(cbp_name=self.cbp_obj.name)
+
         logger.info(f"Used after deleting PVC {used_after_deleting_pvc}")
         assert used_after_deleting_pvc < used_after_creating_pvc
         assert (abs(

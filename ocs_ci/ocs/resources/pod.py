@@ -850,3 +850,24 @@ def get_used_space_on_mount_point(pod_obj):
     mount_point = mount_point.split()
     used_percentage = mount_point[mount_point.index(constants.MOUNT_POINT) - 1]
     return used_percentage
+
+
+def get_plugin_pods(interface, namespace=None):
+    """
+    Fetches info of csi-cephfsplugin pods or csi-rbdplugin pods
+
+    Args:
+        interface (str): Interface type. eg: CephBlockPool, CephFileSystem
+        namespace (str): Name of cluster namespace
+
+    Returns:
+        list : csi-cephfsplugin pod objects or csi-rbdplugin pod objects
+    """
+    if interface == constants.CEPHFILESYSTEM:
+        plugin_label = constants.CSI_CEPHFSPLUGIN_LABEL
+    if interface == constants.CEPHBLOCKPOOL:
+        plugin_label = constants.CSI_RBDPLUGIN_LABEL
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    plugins_info = get_pods_having_label(plugin_label, namespace)
+    plugin_pods = [Pod(**plugin) for plugin in plugins_info]
+    return plugin_pods
