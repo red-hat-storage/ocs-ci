@@ -52,3 +52,27 @@ class TestBucketIO(ManageTest):
         ).issubset(
             obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(bucketname)
         )
+
+    def test_data_reduction(self, mcg_obj, awscli_pod, bucket_factory):
+        """
+        Test data reduction mechanics
+
+        """
+        # TODO: Privatize test bucket
+        download_dir = '/aws/downloaded'
+        synccmd = (
+            f"aws s3 sync s3://{constants.TEST_FILES_BUCKET} {download_dir} --no-sign-request"
+        )
+        assert 'download' in awscli_pod.exec_cmd_on_pod(command=synccmd, out_yaml_format=False)
+
+        bucketname = None
+        for bucket in bucket_factory(5):
+            synccmd = f'sync {download_dir} s3://{bucket.name}'
+            awscli_pod.exec_cmd_on_pod(
+                command=craft_s3_command(mcg_obj, synccmd),
+                out_yaml_format=False,
+                secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+            )
+            bucketname = bucket.name
+
+        assert mcg_obj.check_data_reduction(bucketname)
