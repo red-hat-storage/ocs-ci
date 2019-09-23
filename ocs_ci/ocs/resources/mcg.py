@@ -53,6 +53,13 @@ class MCG(object):
             creds_secret_obj.get('data').get('AWS_SECRET_ACCESS_KEY')
         ).decode('utf-8')
 
+        self.noobaa_user = base64.b64decode(
+            creds_secret_obj.get('data').get('email')
+        ).decode('utf-8')
+        self.noobaa_password = base64.b64decode(
+            creds_secret_obj.get('data').get('password')
+        )
+
         self._ocp_resource = ocp_obj
         self.s3_resource = boto3.resource(
             's3', verify=False, endpoint_url=self.s3_endpoint,
