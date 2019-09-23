@@ -42,7 +42,7 @@ class TestBucketIO(ManageTest):
             copycommand = f"cp {obj_name} {full_object_path}"
             assert 'Completed' in awscli_pod.exec_cmd_on_pod(
                 command=craft_s3_command(mcg_obj, copycommand), out_yaml_format=False,
-                secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.endpoint]
+                secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
             )
             uploaded_objects.append(full_object_path)
 

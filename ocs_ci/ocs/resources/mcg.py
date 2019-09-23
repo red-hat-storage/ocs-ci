@@ -17,7 +17,11 @@ class MCG(object):
     Wrapper class for the Multi Cloud Gateway's S3 service
     """
 
-    s3_resource, ocp_resource, endpoint, region, access_key_id, access_key, namespace = (None,) * 7
+    (
+        s3_resource, s3_endpoint, ocp_resource,
+        mgmt_endpoint, region, access_key_id, access_key,
+        namespace, noobaa_user, noobaa_password
+    ) = (None,) * 10
 
     def __init__(self):
         """
@@ -26,11 +30,15 @@ class MCG(object):
         self.namespace = config.ENV_DATA['cluster_namespace']
         ocp_obj = OCP(kind='noobaa', namespace=self.namespace)
         results = ocp_obj.get()
-        self.endpoint = 'http:' + (
+        self.s3_endpoint = (
             results.get('items')[0].get('status').get('services')
-            .get('serviceS3').get('externalDNS')[0].split(':')[1]
+            .get('serviceS3').get('externalDNS')[0]
         )
-        self.region = self.endpoint.split('.')[1]
+        self.mgmt_endpoint = (
+            results.get('items')[0].get('status').get('services')
+            .get('serviceMgmt').get('externalDNS')[0]
+        )
+        self.region = self.s3_endpoint.split('.')[1]
         creds_secret_name = (
             results.get('items')[0].get('status').get('accounts')
             .get('admin').get('secretRef').get('name')
@@ -47,7 +55,7 @@ class MCG(object):
 
         self._ocp_resource = ocp_obj
         self.s3_resource = boto3.resource(
-            's3', verify=False, endpoint_url=self.endpoint,
+            's3', verify=False, endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
         )
