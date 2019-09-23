@@ -183,3 +183,6 @@ def prometheus_health_check(name='monitoring', kind='ClusterOperator'):
 
     if available and not degraded:
         return True
+
+    logging.error(f"Prometheus cluster is degraded {health_conditions}")
+    return False
