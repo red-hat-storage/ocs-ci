@@ -1073,6 +1073,7 @@ def craft_s3_command(mcg_obj, cmd):
         f"AWS_DEFAULT_REGION={mcg_obj.region} "
         f"aws s3 "
         f"--endpoint={mcg_obj.endpoint} "
+        f"--no-verify-ssl "
     )
     string_wrapper = "\""
 
