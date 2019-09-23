@@ -64,5 +64,10 @@ aws_platform_required = pytest.mark.skipif(
     reason="Tests are not running on AWS deployed cluster"
 )
 
+# Filter warnings
+filter_insecure_request_warning = pytest.mark.filterwarnings(
+    'ignore::urllib3.exceptions.InsecureRequestWarning'
+)
+
 # here is the place to implement some plugins hooks which will process marks
 # if some operation needs to be done for some specific marked tests.
