@@ -5,9 +5,10 @@ all related hooks/plugins to markers.
 import os
 import pytest
 from ocs_ci.framework import config
-
+from ocs_ci.utility.utils import check_if_executable_in_path
 
 # tier marks
+
 tier1 = pytest.mark.tier1(value=1)
 tier2 = pytest.mark.tier2(value=2)
 tier3 = pytest.mark.tier3(value=3)
@@ -51,6 +52,16 @@ google_api_required = pytest.mark.skipif(
     not os.path.exists(os.path.expanduser(
         config.RUN['google_api_secret'])
     ), reason="Google API credentials don't exist"
+)
+
+noobaa_cli_required = pytest.mark.skipif(
+    not check_if_executable_in_path('noobaa'),
+    reason='MCG CLI was not found'
+)
+
+aws_platform_required = pytest.mark.skipif(
+    config.ENV_DATA['platform'] != 'AWS',
+    reason="Tests are not running on AWS deployed cluster"
 )
 
 # here is the place to implement some plugins hooks which will process marks
