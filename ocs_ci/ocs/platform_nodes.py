@@ -31,28 +31,44 @@ class NodesBase(object):
 
     """
     def get_data_volumes(self):
-        pass
+        raise NotImplementedError(
+            "Get data volume functionality is not implemented"
+        )
 
     def get_node_by_attached_volume(self, volume):
-        pass
+        raise NotImplementedError(
+            "Get node by attached volume functionality is not implemented"
+        )
 
     def stop_nodes(self, nodes):
-        pass
+        raise NotImplementedError(
+            "Stop nodes functionality is not implemented"
+        )
 
     def start_nodes(self, nodes):
-        pass
+        raise NotImplementedError(
+            "Start nodes functionality is not implemented"
+        )
 
     def restart_nodes(self, nodes):
-        pass
+        raise NotImplementedError(
+            "Restart nodes functionality is not implemented"
+        )
 
     def detach_volume(self, node):
-        pass
+        raise NotImplementedError(
+            "Detach volume functionality is not implemented"
+        )
 
     def attach_volume(self, node, volume):
-        pass
+        raise NotImplementedError(
+            "Attach volume functionality is not implemented"
+        )
 
     def wait_for_volume_attach(self, volume):
-        pass
+        raise NotImplementedError(
+            "Wait for volume attach functionality is not implemented"
+        )
 
 
 class VMWareNodes(NodesBase):
