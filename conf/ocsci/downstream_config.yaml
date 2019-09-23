@@ -20,4 +20,3 @@ DEPLOYMENT:
   ocs_operator_olm: "http://pkgs.devel.redhat.com/cgit/containers/ocs-registry/plain/deploy-with-olm.yaml?h=ocs-4.2-rhel-8"
   # you can overwrite the image for ocs operator catalog souce by following parameter:
   # ocs_operator_image: "quay.io/rhceph-dev/ocs-registry:4.2-32.9b6c93e.master"
-  ocs_operator_image: "quay.io/rhceph-dev/ocs-registry:4.2-54.0e339e4.master"
