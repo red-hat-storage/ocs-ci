@@ -26,6 +26,7 @@ TEMPLATE_FIO_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fio")
 TEMPLATE_SMALLFILE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "smallfile")
 TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
 TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
+TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_CONFIGURE_PVC_MONITORING_POD = os.path.join(
     TEMPLATE_DIR, "openshift-infra/monitoring/"
 )
@@ -152,6 +153,10 @@ ROOK_CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(
 
 CSI_PVC_YAML = os.path.join(
     TEMPLATE_PV_PVC_DIR, "PersistentVolumeClaim.yaml"
+)
+
+MCG_OBC_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml"
 )
 
 CSI_RBD_POD_YAML = os.path.join(
