@@ -11,7 +11,7 @@ from .deployment import Deployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.framework import config
-from ocs_ci.ocs import defaults
+from ocs_ci.ocs import defaults, constants
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.ocs.exceptions import SameNamePrefixClusterAlreadyExistsException
@@ -89,7 +89,13 @@ class AWSBase(Deployment):
                 False otherwise
 
         """
-        if self.aws.get_instances_by_name_pattern(cluster_name_prefix):
+        instances = self.aws.get_instances_by_name_pattern(cluster_name_prefix)
+        instance_objs = [self.aws.get_ec2_instance(ins.get('id')) for ins in instances]
+        non_terminated_instances = [
+            ins for ins in instance_objs if ins.state
+            .get('Code') != constants.INSTANCE_TERMINATED
+        ]
+        if non_terminated_instances:
             return True
         return False
 
