@@ -7,6 +7,8 @@ import shlex
 import string
 import subprocess
 import time
+from shutil import which
+
 import requests
 import yaml
 import re
@@ -406,6 +408,22 @@ def run_cmd(cmd, secrets=None, **kwargs):
             f"\nError is {mask_secrets(r.stderr.decode(), secrets)}"
         )
     return mask_secrets(r.stdout.decode(), secrets)
+
+
+def run_mcg_cmd(cmd, namespace=None):
+    """
+    Invokes `run_cmd` with a noobaa prefix
+
+    Args:
+        cmd: The MCG command to be run
+        namespace: The namespace to use for the command
+
+    Returns:
+        str: Stdout of the command
+
+    """
+    namespace = namespace if namespace else config.ENV_DATA['cluster_namespace']
+    return run_cmd(f'noobaa -n {namespace} ' + cmd)
 
 
 def download_file(url, filename):
@@ -1156,3 +1174,17 @@ def get_latest_ds_olm_tag():
     if len(req) != 1:
         raise TagNotFoundException(f"Couldn't find any tag!")
     return req[0]['name']
+
+
+def check_if_executable_in_path(exec_name):
+    """
+    Checks whether an executable can be found in the $PATH
+
+    Args:
+        exec_name: Name of executable to look for
+
+    Returns:
+        Boolean: Whether the executable was found
+
+    """
+    return which(exec_name) is not None
