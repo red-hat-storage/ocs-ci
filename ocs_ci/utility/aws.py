@@ -626,24 +626,24 @@ def get_instances_ids_and_names(instances):
     }
 
 
-def get_data_volumes(instance_id):
+def get_data_volumes(deviceset_pvs):
     """
     Get the instance data volumes (which doesn't include root FS)
 
     Args:
-        instance_id (str): The ID of the instance
+        deviceset_pvs (list): PVC objects of the deviceset PVs
 
     Returns:
         list: ec2 Volume instances
 
     """
     aws = AWS()
-    volumes = aws.get_ec2_instance_volumes(instance_id)
 
-    # Get the data volume according to DeleteOnTermination
-    return [
-        vol for vol in volumes if vol.attachments[0].get('DeleteOnTermination') is False
+    volume_ids = [
+        'vol-' + pv.get().get('spec').get('awsElasticBlockStore')
+        .get('volumeID').partition('vol-')[-1] for pv in deviceset_pvs
     ]
+    return [aws.ec2_resource.Volume(vol_id) for vol_id in volume_ids]
 
 
 def get_vpc_id_by_node_obj(aws_obj, instances):

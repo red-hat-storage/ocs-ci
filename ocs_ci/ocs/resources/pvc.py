@@ -165,12 +165,13 @@ def delete_pvcs(pvc_objs, concurrent=False):
     return True
 
 
-def get_all_pvcs(namespace=None):
+def get_all_pvcs(namespace=None, selector=None):
     """
     Gets all pvc in given namespace
 
     Args:
         namespace (str): Name of namespace
+        selector (str): The label selector to look for
 
     Returns:
          dict: Dict of all pvc in namespaces
@@ -180,5 +181,41 @@ def get_all_pvcs(namespace=None):
     ocp_pvc_obj = OCP(
         kind=constants.PVC, namespace=namespace
     )
-    out = ocp_pvc_obj.get()
+    out = ocp_pvc_obj.get(selector=selector)
     return out
+
+
+def get_all_pvc_objs(namespace=None, selector=None):
+    """
+    Gets all PVCs objects in given namespace
+
+    Args:
+        namespace (str): Name of namespace
+        selector (str): The label selector to look for
+
+    Returns:
+         list: Instances of PVC
+
+    """
+    all_pvcs = get_all_pvcs(namespace=namespace, selector=selector)
+    err_msg = f"Failed to get the PVCs for namespace {namespace}"
+    if selector:
+        err_msg = err_msg + f" and selector {selector}"
+    assert all_pvcs, err_msg
+    return [PVC(**pvc) for pvc in all_pvcs['items']]
+
+
+def get_deviceset_pvs():
+    """
+    Get the deviceset PVs
+
+    Returns:
+        list: the deviceset PVs OCS objects
+
+    Raises:
+        AssertionError: In case the deviceset PVCs are not found
+
+    """
+    deviceset_pvcs = get_all_pvc_objs(selector=constants.DEFAULT_DEVICESET_LABEL)
+    assert deviceset_pvcs, "Failed to find the deviceset PVCs"
+    return [pvc.backed_pv_obj for pvc in deviceset_pvcs]
