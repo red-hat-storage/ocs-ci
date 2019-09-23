@@ -95,7 +95,6 @@ class AWSBase(Deployment):
             ins for ins in instance_objs if ins.state
             .get('Code') != constants.INSTANCE_TERMINATED
         ]
-        from ipdb import set_trace; set_trace()
         logger.error(
             f"Non terminated EC2 instances with the same name prefix were found"
             f" {[ins.id for ins in non_terminated_instances]}"
