@@ -36,7 +36,7 @@ setup(
         'oauth2client',
         # issue opened for pytest_marker_bugzilla here:
         # https://github.com/eanxgeek/pytest_marker_bugzilla/issues/43
-        'pytest_marker_bugzilla==0.9.1.dev2'
+        'pytest_marker_bugzilla>=0.9.1.dev6'
     ],
     entry_points={
         'console_scripts': [
