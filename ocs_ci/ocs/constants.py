@@ -119,6 +119,7 @@ CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = "app=csi-cephfsplugin-provisioner"
 CSI_RBDPLUGIN_PROVISIONER_LABEL = "app=csi-rbdplugin-provisioner"
 CSI_CEPHFSPLUGIN_LABEL = "app=csi-cephfsplugin"
 CSI_RBDPLUGIN_LABEL = "app=csi-rbdplugin"
+DEFAULT_DEVICESET_LABEL = "ceph.rook.io/DeviceSet=example-deviceset"
 
 # YAML paths
 TOOL_POD_YAML = os.path.join(
