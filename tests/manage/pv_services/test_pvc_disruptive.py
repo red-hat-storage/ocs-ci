@@ -129,15 +129,21 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
             marks=pytest.mark.polarion_id("OCS-942")
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'create_pvc', 'rbdplugin_provisioner'],
+            *[
+                constants.CEPHFILESYSTEM, 'create_pvc',
+                'cephfsplugin_provisioner'
+            ],
             marks=pytest.mark.polarion_id("OCS-948")
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'create_pod', 'rbdplugin_provisioner'],
+            *[
+                constants.CEPHFILESYSTEM, 'create_pod',
+                'cephfsplugin_provisioner'
+            ],
             marks=pytest.mark.polarion_id("OCS-947")
         ),
         pytest.param(
-            *[constants.CEPHFILESYSTEM, 'run_io', 'rbdplugin_provisioner'],
+            *[constants.CEPHFILESYSTEM, 'run_io', 'cephfsplugin_provisioner'],
             marks=pytest.mark.polarion_id("OCS-949")
         )
     ]
@@ -222,8 +228,12 @@ class TestPVCDisruption(ManageTest):
             'mgr': partial(pod.get_mgr_pods), 'osd': partial(pod.get_osd_pods),
             'rbdplugin': partial(pod.get_plugin_pods, interface=interface),
             'cephfsplugin': partial(pod.get_plugin_pods, interface=interface),
-            'cephfsplugin_provisioner': partial(pod.get_cephfsplugin_provisioner_pods),
-            'rbdplugin_provisioner': partial(pod.get_rbdfsplugin_provisioner_pods)
+            'cephfsplugin_provisioner': partial(
+                pod.get_cephfsplugin_provisioner_pods
+            ),
+            'rbdplugin_provisioner': partial(
+                pod.get_rbdfsplugin_provisioner_pods
+            )
         }
 
         # Get number of pods of type 'resource_to_delete'
