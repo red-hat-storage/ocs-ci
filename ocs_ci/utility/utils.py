@@ -852,7 +852,10 @@ def email_reports():
     [recipients.append(mailid) for mailid in mailids.split(",")]
     sender = "ocs-ci@redhat.com"
     msg = MIMEMultipart('alternative')
-    msg['Subject'] = f"ocs-ci results for {get_testrun_name()} (RUN ID: {config.RUN['run_id']})"
+    msg['Subject'] = (
+        f"ocs-ci results for {get_testrun_name()} - {config.ENV_DATA.get('platform').upper()}-"
+        f"{config.ENV_DATA.get('deployment_type').upper()} (RUN ID: {config.RUN['run_id']})"
+    )
     msg['From'] = sender
     msg['To'] = ", ".join(recipients)
 
