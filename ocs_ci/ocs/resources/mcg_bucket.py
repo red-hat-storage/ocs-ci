@@ -73,6 +73,7 @@ class OCBucket(MCGBucket):
             self.name = create_unique_resource_name('oc', 'obc')
         obc_data['metadata']['name'] = self.name
         obc_data['spec']['bucketName'] = self.name
+        obc_data['metadata']['namespace'] = self.mcg.namespace
         create_resource(**obc_data)
 
     def internal_delete(self):
