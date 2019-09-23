@@ -169,7 +169,7 @@ def prometheus_health_check(name='monitoring', kind='ClusterOperator'):
     health_info = ocp_obj.get(resource_name=name)
     health_conditions = health_info.get('status').get('conditions')
 
-     # Check prometheus is degraded
+    # Check prometheus is degraded
     # If degraded, degraded value will be True, AVAILABLE is False
     available = False
     degraded = True
@@ -181,5 +181,5 @@ def prometheus_health_check(name='monitoring', kind='ClusterOperator'):
             logging.info("Prometheus cluster degraded value is set false")
             degraded = False
 
-     if available and not degraded:
+    if available and not degraded:
         return True
