@@ -178,12 +178,15 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
                 log.info(f"Created {scale_pod_count} pvc and pods")
                 break
             else:
-                log.info(f"Create {pvc_count_each_itr} and "
-                         f"in parallel delete {self.delete_pod_count} "
-                         f"pods & pvc")
+                log.info(
+                    f"Create {pvc_count_each_itr} and in parallel delete {self.delete_pod_count}"
+                    " pods & pvc"
+                )
                 thread1 = threading.Thread(target=self.delete_pvc_pod, args=())
                 thread2 = threading.Thread(target=self.create_pvc_pod, args=(
-                    self.rbd_sc_obj, self.cephfs_sc_obj, pvc_count_each_itr, size, start_io))
+                    self.rbd_sc_obj, self.cephfs_sc_obj, pvc_count_each_itr, size, start_io
+                )
+                )
                 thread1.start()
                 thread2.start()
             thread1.join()
