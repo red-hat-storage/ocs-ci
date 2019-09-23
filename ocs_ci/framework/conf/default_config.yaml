@@ -50,6 +50,7 @@ DEPLOYMENT:
   ocs_operator_nodes_to_tain: 0
   ocs_operator_deployment: True
   ssh_key: "~/.ssh/libra.pub"
+  force_deploy_multiple_clusters: False
 
 # Section for reporting configuration
 REPORTING:

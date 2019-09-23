@@ -80,3 +80,7 @@ class ResourceNameNotSpecifiedException(Exception):
 
 class ResourceInUnexpectedState(Exception):
     pass
+
+
+class SameNamePrefixClusterAlreadyExistsException(Exception):
+    pass
