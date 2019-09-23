@@ -44,13 +44,13 @@ class MCG(object):
             .get('admin').get('secretRef').get('name')
         )
         secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
-        results2 = secret_ocp_obj.get(creds_secret_name)
+        creds_secret_obj = secret_ocp_obj.get(creds_secret_name)
 
         self.access_key_id = base64.b64decode(
-            results2.get('data').get('AWS_ACCESS_KEY_ID')
+            creds_secret_obj.get('data').get('AWS_ACCESS_KEY_ID')
         ).decode('utf-8')
         self.access_key = base64.b64decode(
-            results2.get('data').get('AWS_SECRET_ACCESS_KEY')
+            creds_secret_obj.get('data').get('AWS_SECRET_ACCESS_KEY')
         ).decode('utf-8')
 
         self._ocp_resource = ocp_obj
