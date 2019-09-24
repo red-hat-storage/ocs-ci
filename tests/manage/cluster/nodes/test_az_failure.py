@@ -1,9 +1,10 @@
 import logging
-import pytest
 import random
 
-from ocs_ci.framework.testlib import ManageTest, tier4, bugzilla
+import pytest
+
 from ocs_ci.framework import config
+from ocs_ci.framework.testlib import ManageTest, tier4, bugzilla
 from tests import sanity_helpers
 
 logger = logging.getLogger(__name__)
@@ -38,28 +39,24 @@ class TestAvailabilityZones(ManageTest):
 
         self.sanity_helpers = sanity_helpers.Sanity()
 
-    @pytest.fixture(autouse=True)
-    def teardown(self, request):
+    @pytest.fixture()
+    def teardown(self, request, ec2_instances, aws_obj):
 
         def finalizer():
-            # restore_accessibility
+            current_sg = aws_obj.store_security_groups_for_instances(self.instances_in_az)
+            if self.original_sgs != current_sg:
+                aws_obj.restore_instances_access(self.security_group_id, self.original_sgs)
+                logger.info(f"Access restores")
 
-            # delete_blocking_security_group
+            if self.security_group_id in aws_obj.get_all_security_groups():
+                logger.info(f"deleting: {self.security_group_id}")
+                aws_obj.delete_security_group(self.security_group_id)
 
-            """do whatever required for teardown"""
+        request.addfinalizer(finalizer)
 
-        request.addfinalier(finalizer)
-
-    def test_health_check(self):
-        """
-
-        Temp function for unittests. check cluster health before
-            main test
-
-        """
-        self.check_cluster_health()
-
-    def test_availability_zone_failure(self, aws_obj, ec2_instances, pvc_factory, pod_factory):
+    def test_availability_zone_failure(
+            self, aws_obj, ec2_instances, pvc_factory, pod_factory, teardown
+    ):
         """
 
         Simulate AWS availability zone failure
@@ -67,19 +64,19 @@ class TestAvailabilityZones(ManageTest):
         """
 
         # Select instances in randomly chosen availability zone:
-        instances_in_az = self.random_availability_zone_selector(aws_obj, ec2_instances)
-        logger.info(f"AZ selected, Instances: {instances_in_az} to be blocked")
+        self.instances_in_az = self.random_availability_zone_selector(aws_obj, ec2_instances)
+        logger.info(f"AZ selected, Instances: {self.instances_in_az} to be blocked")
 
         # Storing current security groups for selected instances:
-        original_sgs = aws_obj.store_security_groups_for_instances(instances_in_az)
-        logger.info(f"Original security groups of selected instances: {original_sgs}")
+        self.original_sgs = aws_obj.store_security_groups_for_instances(self.instances_in_az)
+        logger.info(f"Original security groups of selected instances: {self.original_sgs}")
 
         # Blocking instances:
-        security_group_id = self.block_aws_availability_zone(aws_obj, instances_in_az)
+        self.security_group_id = self.block_aws_availability_zone(aws_obj, self.instances_in_az)
         logger.info("Access Blocked")
 
         # Check cluster's health, need to be unhealthy at that point
-        assert self.check_cluster_health() == 0
+        # assert self.check_cluster_health() == 0
 
         # Create resources
         logger.info("Trying to create resources on un-healthy cluster")
@@ -89,7 +86,7 @@ class TestAvailabilityZones(ManageTest):
         # Delete resources
 
         # Restore access for blocked instances
-        aws_obj.restore_instances_access(security_group_id, original_sgs)
+        aws_obj.restore_instances_access(self.security_group_id, self.original_sgs)
         logger.info(f"Access restores")
 
         # Check cluster's health, need to be healthy at that point
