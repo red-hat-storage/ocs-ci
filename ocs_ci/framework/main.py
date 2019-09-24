@@ -1,3 +1,4 @@
+import argparse
 import os
 import time
 
@@ -8,37 +9,6 @@ from ocs_ci import framework
 from ocs_ci.utility import utils
 
 
-def get_param(param, arguments, default=None, repeatable=False):
-    """
-    Get parameter from list of arguments. Arguments can be in following format:
-    ['--parameter', 'param_value'] or ['--parameter=param_value']
-
-    Args:
-        param (str): Name of parameter
-        arguments (list): List of arguments from CLI
-        default (str): Default value for the parameter
-        repeatable (bool): True if parameter is repeatable, False otherwise
-
-    Returns:
-        str: if not repeatable and parameter is passed
-        list: if repeatable is True
-        None: if not repeatable and no default value specified
-
-    """
-    values = []
-    for index, arg in enumerate(arguments):
-        if param in arg:
-            if '=' in arg:
-                values.append(arg.split('=')[1])
-            else:
-                values.append(arguments[index + 1])
-            if values and not repeatable:
-                break
-    if repeatable:
-        return [default] if not values and default is not None else values
-    return values[0] if values else default
-
-
 def init_ocsci_conf(arguments=None):
     """
     Update the config object with any files passed via the CLI
@@ -46,16 +16,18 @@ def init_ocsci_conf(arguments=None):
     Args:
         arguments (list): Arguments for pytest execution
     """
-    if not arguments:
-        return
-    custom_config = get_param('--ocsci-conf', arguments, repeatable=True)
-    cluster_config = get_param('--cluster-conf', arguments)
-    for config_file in custom_config:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--ocsci-conf', action='append', default=[])
+    # cluster-conf parameter will be deleted once we will update all the jobs
+    parser.add_argument('--cluster-conf')
+    args, unknown = parser.parse_known_args()
+    for config_file in args.ocsci_conf:
         with open(
             os.path.abspath(os.path.expanduser(config_file))
         ) as file_stream:
             custom_config_data = yaml.safe_load(file_stream)
             framework.config.update(custom_config_data)
+    cluster_config = args.cluster_conf
     if cluster_config:
         with open(os.path.expanduser(cluster_config)) as file_stream:
             cluster_config_data = yaml.safe_load(file_stream)
