@@ -852,10 +852,7 @@ def email_reports():
     [recipients.append(mailid) for mailid in mailids.split(",")]
     sender = "ocs-ci@redhat.com"
     msg = MIMEMultipart('alternative')
-    msg['Subject'] = (
-        f"ocs-ci results for {get_testrun_name()} - {config.ENV_DATA.get('platform').upper()}-"
-        f"{config.ENV_DATA.get('deployment_type').upper()} (RUN ID: {config.RUN['run_id']})"
-    )
+    msg['Subject'] = f"ocs-ci results for {get_testrun_name()}"
     msg['From'] = sender
     msg['To'] = ", ".join(recipients)
 
@@ -1062,6 +1059,7 @@ def get_testrun_name():
     """
     markers = config.RUN['cli_params'].get('-m', '').replace(" ", "-")
     us_ds = config.REPORTING.get("us_ds")
+    us_ds = "Upstream" if us_ds.upper() == "US" else "Downstream" if us_ds.upper() == "DS" else us_ds
     if config.REPORTING["polarion"].get("testrun_name"):
         testrun_name = config.REPORTING["polarion"]["testrun_name"]
     elif markers:
@@ -1073,6 +1071,11 @@ def get_testrun_name():
         str.maketrans(
             {key: '-' for key in ''' \\/.:*"<>|~!@#$?%^&'*(){}+`,=\t'''}
         )
+    )
+    # form complete testrun name that includes deployment platform, type and runid
+    testrun_name = (
+        f"{testrun_name} - {config.ENV_DATA.get('platform').upper()}-"
+        f"{config.ENV_DATA.get('deployment_type').upper()} (RUN ID: {config.RUN['run_id']})"
     )
     return testrun_name
 
