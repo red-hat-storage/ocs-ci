@@ -7,11 +7,21 @@
 //   openshift-dev-aws-access-key-id (AWS_ACCESS_KEY_ID)
 //   openshift-dev-aws-secret-access-key (AWS_SECRET_ACCESS_KEY)
 //   openshift-pull-secret (PULL_SECRET)
+//   ocs-bugzilla-cfg (BUGZILLA_CFG)
 // It may also provide these optional parameters to override the framework's
 // defaults:
+//   OCS_OPERATOR_DEPLOYMENT
+//   OCS_OPERATOR_IMAGE
+//   OCS_REGISTRY_IMAGE
 //   ROOK_IMAGE
 //   CEPH_IMAGE
+//   CEPH_CSI_IMAGE
+//   ROOK_CSI_REGISTRAR_IMAGE
+//   ROOK_CSI_PROVISIONER_IMAGE
+//   ROOK_CSI_SNAPSHOTTER_IMAGE
+//   ROOK_CSI_ATTACHER_IMAGE
 //   EMAIL
+//   UMB_MESSAGE
 pipeline {
   agent { node { label "ocs-ci" }}
   environment {
@@ -98,6 +108,45 @@ pipeline {
         run-ci -m deployment --teardown --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
         """
       junit testResults: "logs/junit.xml", keepLongStdio: false
+    }
+    success {
+      script {
+        if( env.UMB_MESSAGE in [true, 'true'] ) {
+          def operator_image = "${env.OCS_OPERATOR_IMAGE}"
+          // quay.io/rhceph-dev/ocs-operator:4.2-58.e59ca0f.master -> 4.2
+          def operator_version = operator_image.split(':')[-1].split('-')[0]
+          def properties = """
+            TOOL=ocs-ci
+            PRODUCT=ocs
+            PRODUCT_VERSION={operator_version}
+            OCS_OPERATOR_DEPLOYMENT=${env.OCS_OPERATOR_DEPLOYMENT}
+          """
+          def content_string = '''{
+            "SENDER_BUILD_NUMBER": "${BUILD_NUMBER}",
+            "OCS_OPERATOR_IMAGE": "${env.OCS_OPERATOR_IMAGE}",
+            "OCS_REGISTRY_IMAGE": "${env.OCS_REGISTRY_IMAGE}",
+            "ROOK_IMAGE": "${ROOK_IMAGE}",
+            "CEPH_IMAGE": "${CEPH_IMAGE}",
+            "CEPH_CSI_IMAGE": "${CEPH_CSI_IMAGE}",
+            "ROOK_CSI_REGISTRAR_IMAGE": "${ROOK_CSI_REGISTRAR_IMAGE}",
+            "ROOK_CSI_PROVISIONER_IMAGE": "${ROOK_CSI_PROVISIONER_IMAGE}",
+            "ROOK_CSI_SNAPSHOTTER_IMAGE": "${ROOK_CSI_SNAPSHOTTER_IMAGE}",
+            "ROOK_CSI_ATTACHER_IMAGE": "${ROOK_CSI_ATTACHER_IMAGE}",
+          }'''
+          def content = readJSON text: content_string
+          echo "Sending UMB message"
+          echo 'Properties: ' + properties
+          echo 'Content: ' + content.toString()
+          sendCIMessage (
+            providerName: 'Red Hat UMB',
+            overrides: [ topic: 'VirtualTopic.qe.ci.jenkins' ],
+            failOnError: false,
+            messageType: 'Tier1TestingDone',
+            messageProperties: properties,
+            messageContent: content.toString()
+          )
+        }
+      }
     }
   }
 }

@@ -3,6 +3,7 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs import exceptions
 from .aws import AWSIPI
+from .vmware import VSPHEREUPI
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,7 @@ class DeploymentFactory(object):
     def __init__(self):
         # A map all existing deployments and respective classes
         # should be put here
-        self.cls_map = {'aws_ipi': AWSIPI, 'aws_upi': None}
+        self.cls_map = {'aws_ipi': AWSIPI, 'aws_upi': None, 'vsphere_upi': VSPHEREUPI}
 
     def get_deployment(self):
         """

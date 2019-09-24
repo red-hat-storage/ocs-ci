@@ -11,9 +11,10 @@ from .deployment import Deployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.framework import config
-from ocs_ci.ocs import defaults
+from ocs_ci.ocs import defaults, constants
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.utility.aws import AWS as AWSUtil
+from ocs_ci.ocs.exceptions import SameNamePrefixClusterAlreadyExistsException
 
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,29 @@ class AWSBase(Deployment):
         # TODO: Implement later
         super(AWSBase, self).add_node()
 
+    def check_cluster_existence(self, cluster_name_prefix):
+        """
+        Check cluster existence according to cluster name prefix
+
+        Returns:
+            bool: True in case a cluster with the same name prefix already exists,
+                False otherwise
+
+        """
+        instances = self.aws.get_instances_by_name_pattern(cluster_name_prefix)
+        instance_objs = [self.aws.get_ec2_instance(ins.get('id')) for ins in instances]
+        non_terminated_instances = [
+            ins for ins in instance_objs if ins.state
+            .get('Code') != constants.INSTANCE_TERMINATED
+        ]
+        if non_terminated_instances:
+            logger.error(
+                f"Non terminated EC2 instances with the same name prefix were"
+                f" found: {[ins.id for ins in non_terminated_instances]}"
+            )
+            return True
+        return False
+
 
 class AWSIPI(AWSBase):
     """
@@ -119,6 +143,14 @@ class AWSIPI(AWSBase):
             log_cli_level (str): openshift installer's log level
                 (default: "DEBUG")
         """
+        if not config.DEPLOYMENT.get('force_deploy_multiple_clusters'):
+            cluster_name = config.ENV_DATA['cluster_name']
+            prefix = cluster_name.split("-")[0] + '*'
+            if self.check_cluster_existence(prefix):
+                raise SameNamePrefixClusterAlreadyExistsException(
+                    f"Cluster with name prefix {prefix} already exists. "
+                    f"Please destroy the existing cluster for a new cluster deployment"
+                )
         super(AWSIPI, self).deploy_ocp(log_cli_level)
         if not self.ocs_operator_deployment:
             volume_size = int(

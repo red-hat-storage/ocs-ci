@@ -91,12 +91,17 @@ def get_ocsci_conf():
             cluster_name=f"{cluster_user}-ocs-ci-{pipeline_id}",
             region=env['AWS_REGION'],
             base_domain=env['AWS_DOMAIN'],
+            worker_instance_type='m5.4xlarge',
         ),
     )
     if env.get("DOWNSTREAM") == "true":
         conf_obj['REPORTING'] = dict(us_ds='DS')
     if env.get("OCS_OPERATOR_DEPLOYMENT") == "true":
-        raise NotImplementedError("OCS operator deployment not yet implemented")
+        conf_obj['DEPLOYMENT'] = dict(
+            ocs_operator_deployment=True,
+            ocs_operator_image=env['OCS_OPERATOR_IMAGE'],
+            ocs_registry_image=env['OCS_REGISTRY_IMAGE'],
+        )
     else:
         conf_obj['DEPLOYMENT'] = dict(ocs_operator_deployment=False)
         # Apply image configuration if present

@@ -850,3 +850,78 @@ def get_used_space_on_mount_point(pod_obj):
     mount_point = mount_point.split()
     used_percentage = mount_point[mount_point.index(constants.MOUNT_POINT) - 1]
     return used_percentage
+
+
+def get_plugin_pods(interface, namespace=None):
+    """
+    Fetches info of csi-cephfsplugin pods or csi-rbdplugin pods
+
+    Args:
+        interface (str): Interface type. eg: CephBlockPool, CephFileSystem
+        namespace (str): Name of cluster namespace
+
+    Returns:
+        list : csi-cephfsplugin pod objects or csi-rbdplugin pod objects
+    """
+    if interface == constants.CEPHFILESYSTEM:
+        plugin_label = constants.CSI_CEPHFSPLUGIN_LABEL
+    if interface == constants.CEPHBLOCKPOOL:
+        plugin_label = constants.CSI_RBDPLUGIN_LABEL
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    plugins_info = get_pods_having_label(plugin_label, namespace)
+    plugin_pods = [Pod(**plugin) for plugin in plugins_info]
+    return plugin_pods
+
+
+def plugin_provisioner_leader(interface, namespace=None):
+    """
+    Find csi-cephfsplugin-provisioner or csi-rbdplugin-provisioner leader pod
+
+    Args:
+        interface (str): Interface type. eg: CephBlockPool, CephFileSystem
+        namespace (str): Name of cluster namespace
+
+    Returns:
+        Pod: csi-cephfsplugin-provisioner or csi-rbdplugin-provisioner leader
+            pod
+    """
+    non_leader_msg = 'failed to acquire lease'
+    lease_acq_msg = 'successfully acquired lease'
+    lease_renew_msg = 'successfully renewed lease'
+    leader_pod = ''
+
+    if interface == constants.CEPHBLOCKPOOL:
+        pods = get_rbdfsplugin_provisioner_pods(namespace=namespace)
+    if interface == constants.CEPHFILESYSTEM:
+        pods = get_cephfsplugin_provisioner_pods(namespace=namespace)
+
+    pods_log = {}
+    for pod in pods:
+        pods_log[pod] = get_pod_logs(
+            pod_name=pod.name, container='csi-provisioner'
+        ).split('\n')
+
+    for pod, log_list in pods_log.items():
+        # Reverse the list to find last occurrence of message without
+        # iterating over all elements
+        log_list.reverse()
+        for log_msg in log_list:
+            # Check for last occurrence of leader messages.
+            # This will be the first occurrence in reversed list.
+            if (lease_renew_msg in log_msg) or (lease_acq_msg in log_msg):
+                curr_index = log_list.index(log_msg)
+                # Ensure that there is no non leader message logged after
+                # the last occurrence of leader message
+                if not any(
+                    non_leader_msg in msg for msg in log_list[:curr_index]
+                ):
+                    assert not leader_pod, (
+                        "Couldn't identify plugin provisioner leader pod by "
+                        "analysing the logs. Found more than one match."
+                    )
+                    leader_pod = pod
+                break
+
+    assert leader_pod, "Couldn't identify plugin provisioner leader pod."
+    logger.info(f"Plugin provisioner leader pod is {leader_pod.name}")
+    return leader_pod

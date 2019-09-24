@@ -37,8 +37,7 @@ necessary dependencies
 Configure your ocs-ci.yaml and pass it with --ocsci-conf parameter
 
 This file is used to allow configuration around a number of things within ocs-ci.
-The default file is in conf/ocsci/default_config.yaml.
-TODO: Once moved to pytest update properly this file: `ocs-ci.yaml.template`.
+The default file is in `ocs_ci/framework/conf/default_config.yaml`.
 
 The required keys are in the template. Values are placeholders and should be replaced by legitimate values.
 Values for report portal or polarion are only required if you plan on posting to that particular service.
@@ -59,6 +58,36 @@ The name of the file should be `pull-secret`.
 In addition you will need to add a registry auth to your pull-secret to
 support deploying CI / Nightly builds. Please follow the instructions
 [here](https://mojo.redhat.com/docs/DOC-1204026) to do so.
+
+### SSH key
+
+We would like to use a shared ssh key with engineering which allows us to connect
+to the nodes via known ssh key for QE and engineering.
+To setup the shared public ssh key for your deployment you have to follow
+these steps:
+
+Download private libra ssh key from secret location.
+
+```console
+wget https://secret.url.of.our.key -O ~/.ssh/libra.pem
+chmod 600 ~/.ssh/libra.pem
+ssh-keygen -y -f ~/.ssh/libra.pem > ~/.ssh/libra.pub
+```
+
+Ask people on ocs-qe mailing list or chat room if you don't know where to find the
+secret URL for libra key. Or look for this mail thread:
+`SSH key deployed on our nodes` where the URL was mentioned.
+
+If you would like to use a different path, you can overwrite it in the custom
+config file under the DEPLOYMENT section with this key and value:
+`ssh_key: "~/your/custom/path/ssh-key.pub"`.
+
+If you don't want to use the shared key, you can change this value to
+`~/.ssh/id_rsa.pub` to use your own public key.
+
+> If the public key does not exist, the deployment of this public key is skipped.
+
+How to connect to the node via SSH you can find [here](./debugging.md).
 
 ## Tests
 

@@ -1081,7 +1081,7 @@ def craft_s3_command(mcg_obj, cmd):
 
 def wait_for_resource_count_change(
     func_to_use, previous_num, namespace, change_type='increase',
-    min_difference=1, timeout=20, interval=2
+    min_difference=1, timeout=20, interval=2, **func_kwargs
 ):
     """
     Wait for a change in total count of PVC or pod
@@ -1103,7 +1103,7 @@ def wait_for_resource_count_change(
     """
     try:
         for sample in TimeoutSampler(
-            timeout, interval, func_to_use, namespace
+            timeout, interval, func_to_use, namespace, func_kwargs
         ):
             if func_to_use == pod.get_all_pods:
                 current_num = len(sample)
@@ -1195,14 +1195,15 @@ def create_multiple_pvc_parallel(
     return pvc_objs_list
 
 
-def create_pods_parallel(pvc_list, namespace, interface):
+def create_pods_parallel(pvc_list, namespace, interface, raw_block_pv=False):
     """
     Function to create pods in parallel
 
     Args:
         pvc_list (list): List of pvcs to be attached in pods
-        namesapce (str): The namespace for creating pod
+        namespace (str): The namespace for creating pod
         interface (str): The interface backed the PVC
+        raw_block_pv (bool): Either RAW block or not
 
     Returns:
         pod_objs (list): Returns list of pods created
@@ -1211,11 +1212,16 @@ def create_pods_parallel(pvc_list, namespace, interface):
     # Added 300 sec wait time since in scale test once the setup has more
     # PODs time taken for the pod to be up will be based on resource available
     wait_time = 300
+    if raw_block_pv:
+        pod_dict_path = constants.CSI_RBD_RAW_BLOCK_POD_YAML
+    else:
+        pod_dict_path = None
     with ThreadPoolExecutor() as executor:
         for pvc_obj in pvc_list:
             future_pod_objs.append(executor.submit(
                 create_pod, interface_type=interface,
-                pvc_name=pvc_obj.name, do_reload=False, namespace=namespace)
+                pvc_name=pvc_obj.name, do_reload=False, namespace=namespace,
+                raw_block_pv=raw_block_pv, pod_dict_path=pod_dict_path)
             )
     pod_objs = [pvc_obj.result() for pvc_obj in future_pod_objs]
     # Check for all the pods are in Running state

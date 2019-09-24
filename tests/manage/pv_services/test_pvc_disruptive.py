@@ -1,13 +1,15 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import pytest
+from functools import partial
 
 from ocs_ci.framework.testlib import ManageTest, tier4
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from tests import helpers, disruption_helpers
 
 
@@ -103,6 +105,46 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'run_io', 'mds'],
             marks=pytest.mark.polarion_id("OCS-556")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'run_io', 'rbdplugin'],
+            marks=[pytest.mark.polarion_id("OCS-1014"), pytest.mark.bugzilla(
+                '1752487'
+            )]
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'run_io', 'cephfsplugin'],
+            marks=pytest.mark.polarion_id("OCS-1017")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'create_pvc', 'rbdplugin_provisioner'],
+            marks=pytest.mark.polarion_id("OCS-941")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'create_pod', 'rbdplugin_provisioner'],
+            marks=pytest.mark.polarion_id("OCS-940")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'run_io', 'rbdplugin_provisioner'],
+            marks=pytest.mark.polarion_id("OCS-942")
+        ),
+        pytest.param(
+            *[
+                constants.CEPHFILESYSTEM, 'create_pvc',
+                'cephfsplugin_provisioner'
+            ],
+            marks=pytest.mark.polarion_id("OCS-948")
+        ),
+        pytest.param(
+            *[
+                constants.CEPHFILESYSTEM, 'create_pod',
+                'cephfsplugin_provisioner'
+            ],
+            marks=pytest.mark.polarion_id("OCS-947")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'run_io', 'cephfsplugin_provisioner'],
+            marks=pytest.mark.polarion_id("OCS-949")
         )
     ]
 )
@@ -181,6 +223,22 @@ class TestPVCDisruption(ManageTest):
         Deletion of 'resource_to_delete' will be introduced while
         'operation_to_disrupt' is progressing.
         """
+        pod_functions = {
+            'mds': partial(pod.get_mds_pods), 'mon': partial(pod.get_mon_pods),
+            'mgr': partial(pod.get_mgr_pods), 'osd': partial(pod.get_osd_pods),
+            'rbdplugin': partial(pod.get_plugin_pods, interface=interface),
+            'cephfsplugin': partial(pod.get_plugin_pods, interface=interface),
+            'cephfsplugin_provisioner': partial(
+                pod.get_cephfsplugin_provisioner_pods
+            ),
+            'rbdplugin_provisioner': partial(
+                pod.get_rbdfsplugin_provisioner_pods
+            )
+        }
+
+        # Get number of pods of type 'resource_to_delete'
+        num_of_resource_to_delete = len(pod_functions[resource_to_delete]())
+
         num_of_pvc = 6
         namespace = self.proj_obj.namespace
 
@@ -214,7 +272,7 @@ class TestPVCDisruption(ManageTest):
                 get_all_pvcs, initial_num_of_pvc, namespace
             )
             assert ret, "Wait timeout: PVCs are not being created."
-            logging.info(
+            logger.info(
                 f"PVCs creation has started."
             )
             DISRUPTION_OPS.delete_resource()
@@ -227,7 +285,7 @@ class TestPVCDisruption(ManageTest):
                 resource=pvc_obj, state=constants.STATUS_BOUND, timeout=120
             )
             pvc_obj.reload()
-        logging.info("Verified: PVCs are Bound.")
+        logger.info("Verified: PVCs are Bound.")
 
         # Start creating pods
         bulk_pod_create = executor.submit(
@@ -240,7 +298,7 @@ class TestPVCDisruption(ManageTest):
                 pod.get_all_pods, initial_num_of_pods, namespace
             )
             assert ret, "Wait timeout: Pods are not being created."
-            logging.info(
+            logger.info(
                 f"Pods creation has started."
             )
             DISRUPTION_OPS.delete_resource()
@@ -253,7 +311,7 @@ class TestPVCDisruption(ManageTest):
                 resource=pod_obj, state=constants.STATUS_RUNNING
             )
             pod_obj.reload()
-        logging.info("Verified: All pods are Running.")
+        logger.info("Verified: All pods are Running.")
 
         # Do setup on pods for running IO
         logger.info("Setting up pods for running IO.")
@@ -279,19 +337,19 @@ class TestPVCDisruption(ManageTest):
                 storage_type='fs', size='1G', runtime=10,
                 fio_filename=f'{pod_obj.name}_io_file1'
             )
-        logging.info("FIO started on all pods.")
+        logger.info("FIO started on all pods.")
 
         if operation_to_disrupt == 'run_io':
             DISRUPTION_OPS.delete_resource()
 
-        logging.info("Fetching FIO results.")
+        logger.info("Fetching FIO results.")
         for pod_obj in pod_objs:
             fio_result = pod_obj.get_fio_results()
             err_count = fio_result.get('jobs')[0].get('error')
             assert err_count == 0, (
                 f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
             )
-        logging.info("Verified FIO result on pods.")
+        logger.info("Verified FIO result on pods.")
 
         # Delete pods
         for pod_obj in pod_objs:
@@ -320,11 +378,24 @@ class TestPVCDisruption(ManageTest):
                 fio_filename=f'{pod_obj.name}_io_file2'
             )
 
-        logging.info("Fetching FIO results from new pods")
+        logger.info("Fetching FIO results from new pods")
         for pod_obj in pod_objs:
             fio_result = pod_obj.get_fio_results()
             err_count = fio_result.get('jobs')[0].get('error')
             assert err_count == 0, (
                 f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
             )
-        logging.info("Verified FIO result on new pods.")
+        logger.info("Verified FIO result on new pods.")
+
+        # Verify number of pods of type 'resource_to_delete'
+        final_num_resource_to_delete = len(pod_functions[resource_to_delete]())
+        assert final_num_resource_to_delete == num_of_resource_to_delete, (
+            f"Total number of {resource_to_delete} pods is not matching with "
+            f"initial value. Total number of pods before deleting a pod: "
+            f"{num_of_resource_to_delete}. Total number of pods present now: "
+            f"{final_num_resource_to_delete}"
+        )
+
+        # Check ceph status
+        ceph_health_check(namespace=config.ENV_DATA['cluster_namespace'])
+        logger.info("Ceph cluster health is OK")

@@ -38,6 +38,7 @@ def pytest_addoption(parser):
     parser.addoption(
         '--ocsci-conf',
         dest='ocsci_conf',
+        action="append",
         help="Path to config file of OCS CI",
     )
     parser.addoption(

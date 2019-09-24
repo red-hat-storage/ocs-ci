@@ -26,6 +26,7 @@ TEMPLATE_FIO_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fio")
 TEMPLATE_SMALLFILE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "smallfile")
 TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
 TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
+TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_CONFIGURE_PVC_MONITORING_POD = os.path.join(
     TEMPLATE_DIR, "openshift-infra/monitoring/"
 )
@@ -88,6 +89,8 @@ IGNORE_SC_FLEX = "rook-ceph-block"
 TEST_FILES_BUCKET = "ocsci-test-files"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
+OPENSHIFT_LOGGING_NAMESPACE = "openshift-logging"
+OPENSHIFT_OPERATORS_REDHAT_NAMESPACE = "openshift-operators-redhat"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
 MOUNT_POINT = '/var/lib/www/html'
@@ -107,6 +110,7 @@ ACCESS_MODE_RWO = 'ReadWriteOnce'
 ACCESS_MODE_ROX = 'ReadOnlyMany'
 ACCESS_MODE_RWX = 'ReadWriteMany'
 
+# Pod label
 MON_APP_LABEL = "app=rook-ceph-mon"
 MDS_APP_LABEL = "app=rook-ceph-mds"
 TOOL_APP_LABEL = "app=rook-ceph-tools"
@@ -114,6 +118,9 @@ MGR_APP_LABEL = "app=rook-ceph-mgr"
 OSD_APP_LABEL = "app=rook-ceph-osd"
 CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = "app=csi-cephfsplugin-provisioner"
 CSI_RBDPLUGIN_PROVISIONER_LABEL = "app=csi-rbdplugin-provisioner"
+CSI_CEPHFSPLUGIN_LABEL = "app=csi-cephfsplugin"
+CSI_RBDPLUGIN_LABEL = "app=csi-rbdplugin"
+DEFAULT_DEVICESET_LABEL = "ceph.rook.io/DeviceSet=example-deviceset"
 
 # YAML paths
 TOOL_POD_YAML = os.path.join(
@@ -146,6 +153,10 @@ ROOK_CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(
 
 CSI_PVC_YAML = os.path.join(
     TEMPLATE_PV_PVC_DIR, "PersistentVolumeClaim.yaml"
+)
+
+MCG_OBC_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml"
 )
 
 CSI_RBD_POD_YAML = os.path.join(
@@ -266,6 +277,7 @@ INSTANCE_STOPPING = 64
 INSTANCE_STOPPED = 80
 INSTANCE_RUNNING = 16
 INSTANCE_SHUTTING_DOWN = 32
+INSTANCE_TERMINATED = 48
 
 # Node statuses
 NODE_READY = 'Ready'
@@ -285,3 +297,11 @@ OPERATOR_CS_QUAY_API_QUERY = (
     'https://quay.io/api/v1/repository/rhceph-dev/ocs-registry/'
     'tag/?onlyActiveTags=true&limit=2'
 )
+
+# Platforms
+AWS_PLATFORM = 'aws'
+VSPHERE_PLATFORM = 'vsphere'
+
+# Default SC based on platforms
+DEFAULT_SC_AWS = "gp2"
+DEFAULT_SC_VSPHERE = "thin"
