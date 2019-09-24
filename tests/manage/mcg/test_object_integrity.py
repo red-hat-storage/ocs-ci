@@ -3,7 +3,7 @@ import logging
 import boto3
 import pytest
 
-# from ocs_ci.framework.pytest_customization.marks import aws_platform_required
+from ocs_ci.framework.pytest_customization.marks import aws_platform_required
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import constants
 from tests.helpers import craft_s3_command
@@ -11,7 +11,8 @@ from tests.helpers import craft_s3_command
 logger = logging.getLogger(__name__)
 
 
-# @aws_platform_required
+@pytest.mark.filterwarnings('ignore::urllib3.exceptions.InsecureRequestWarning')
+@aws_platform_required
 @tier1
 class TestBucketIntegrity(ManageTest):
     """
