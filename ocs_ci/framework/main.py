@@ -20,7 +20,7 @@ def init_ocsci_conf(arguments=None):
     parser.add_argument('--ocsci-conf', action='append', default=[])
     # cluster-conf parameter will be deleted once we will update all the jobs
     parser.add_argument('--cluster-conf')
-    args, unknown = parser.parse_known_args()
+    args, unknown = parser.parse_known_args(args=arguments)
     for config_file in args.ocsci_conf:
         with open(
             os.path.abspath(os.path.expanduser(config_file))
