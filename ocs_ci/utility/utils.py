@@ -1272,7 +1272,7 @@ def replace_content_in_file(file, old, new):
     new value to the file
 
     Args:
-        file (str): Name of the in which conetents will be replaced
+        file (str): Name of the file in which contents will be replaced
         old (str): Data to search for
         new (str): Data to replace the old value
 
@@ -1311,11 +1311,11 @@ def clone_repo(url, location, branch='master', to_checkout=None):
     Clone a repository or checkout latest changes if it already exists at
     specified location.
 
-     Args:
-         url (str): location of the repository to clone
-         location (str): path where the repository will be cloned to
-         branch (str): branch name to checkout
-         to_checkout (str): commit id or tag to checkout
+    Args:
+        url (str): location of the repository to clone
+        location (str): path where the repository will be cloned to
+        branch (str): branch name to checkout
+        to_checkout (str): commit id or tag to checkout
 
     """
     if not os.path.isdir(location):

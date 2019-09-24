@@ -43,8 +43,10 @@ class VSPHEREBASE(Deployment):
     def attach_disk(self, size=100):
         """
         Add a new disk to all the workers nodes
+
         Args:
             size (int): Size of disk in GB (default: 100)
+
         """
         vms = self.vsphere.get_all_vms_in_pool(
             config.ENV_DATA.get("cluster_name"),
@@ -83,20 +85,6 @@ class VSPHEREUPI(VSPHEREBASE):
             )
             self.terraform_work_dir = f"{self.upi_repo_path}/upi/vsphere/"
             self.terraform = Terraform(self.terraform_work_dir)
-
-        def get_public_key(self):
-            """
-            Reads the public key
-            Returns:
-                str: string which contains public key
-            """
-            public_key_path = os.path.join(
-                constants.TOP_DIR,
-                "data",
-                "id_rsa.pub"
-            )
-            with open(public_key_path, "r") as f:
-                return f.read()
 
         def deploy_prereq(self):
             """
@@ -194,34 +182,36 @@ class VSPHEREUPI(VSPHEREBASE):
             """
             Converts yaml file to tfvars. It creates the tfvars with the
             same filename in the required format which is used for deployment.
+
             Args:
                 yaml (str): File path to yaml
+
             Returns:
                 str: File path to tfvars
+
             """
             data = load_yaml(yaml)
-            tfvars_file = f"{yaml.split('.')[0]}.tfvars"
-            fd = open(tfvars_file, "w+")
-            for key, val in data.items():
-                if key == "control_plane_ignition":
-                    fd.write("control_plane_ignition = <<END_OF_MASTER_IGNITION\n")
-                    fd.write(f"{val}\n")
-                    fd.write("END_OF_MASTER_IGNITION\n")
-                    continue
+            tfvars_file = os.path.splitext(yaml)[0]
+            with open(tfvars_file, "w+") as fd:
+                for key, val in data.items():
+                    if key == "control_plane_ignition":
+                        fd.write("control_plane_ignition = <<END_OF_MASTER_IGNITION\n")
+                        fd.write(f"{val}\n")
+                        fd.write("END_OF_MASTER_IGNITION\n")
+                        continue
 
-                if key == "compute_ignition":
-                    fd.write("compute_ignition = <<END_OF_WORKER_IGNITION\n")
-                    fd.write(f"{val}\n")
-                    fd.write("END_OF_WORKER_IGNITION\n")
-                    continue
+                    if key == "compute_ignition":
+                        fd.write("compute_ignition = <<END_OF_WORKER_IGNITION\n")
+                        fd.write(f"{val}\n")
+                        fd.write("END_OF_WORKER_IGNITION\n")
+                        continue
 
-                fd.write(key)
-                fd.write(" = ")
-                fd.write("\"")
-                fd.write(f"{val}")
-                fd.write("\"\n")
+                    fd.write(key)
+                    fd.write(" = ")
+                    fd.write("\"")
+                    fd.write(f"{val}")
+                    fd.write("\"\n")
 
-            fd.close()
             return tfvars_file
 
         def create_config(self):
@@ -244,7 +234,7 @@ class VSPHEREUPI(VSPHEREBASE):
             # Parse the rendered YAML so that we can manipulate the object directly
             install_config_obj = yaml.safe_load(install_config_str)
             install_config_obj['pullSecret'] = self.get_pull_secret()
-            install_config_obj['sshKey'] = self.get_public_key()
+            install_config_obj['sshKey'] = self.get_ssh_key()
             install_config_str = yaml.safe_dump(install_config_obj)
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
             with open(install_config, "w") as f:
@@ -275,9 +265,11 @@ class VSPHEREUPI(VSPHEREBASE):
         def deploy(self, log_cli_level='DEBUG'):
             """
             Deployment specific to OCP cluster on this platform
+
             Args:
                 log_cli_level (str): openshift installer's log level
                     (default: "DEBUG")
+
             """
             logger.info("Deploying OCP cluster for vSphere platform")
             logger.info(
@@ -315,9 +307,11 @@ class VSPHEREUPI(VSPHEREBASE):
     def deploy_ocp(self, log_cli_level='DEBUG'):
         """
         Deployment specific to OCP cluster on vSphere platform
+
         Args:
             log_cli_level (str): openshift installer's log level
                 (default: "DEBUG")
+
         """
         super(VSPHEREUPI, self).deploy_ocp(log_cli_level)
         disk_size = config.ENV_DATA.get('disk_size', 100)
@@ -326,8 +320,10 @@ class VSPHEREUPI(VSPHEREBASE):
     def destroy_cluster(self, log_level="DEBUG"):
         """
         Destroy OCP cluster specific to vSphere UPI
+
         Args:
             log_level (str): log level openshift-installer (default: DEBUG)
+
         """
         upi_repo_path = os.path.join(
             constants.EXTERNAL_DIR, 'installer',
