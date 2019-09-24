@@ -81,7 +81,7 @@ pipeline {
       steps {
         sh """
         source ./venv/bin/activate
-        run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
+        run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocs.yaml --ocsci-conf=conf/ocsci/downstream_config.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
         """
       }
     }
