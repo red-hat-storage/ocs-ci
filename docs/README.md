@@ -22,3 +22,4 @@ Rest of the information you can find in those sections
 * [Writing tests](./writing_tests.md) - information about how to write tests.
 * [Fixture usage](./fixture_usage.md) - information about how to write and use
   fixtures.
+* [Debugging](./debugging.md) - useful debugging information.
