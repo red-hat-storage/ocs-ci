@@ -38,6 +38,18 @@ class TestAvailabilityZones(ManageTest):
 
         self.sanity_helpers = sanity_helpers.Sanity()
 
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+
+        def finalizer():
+            # restore_accessibility
+
+            # delete_blocking_security_group
+
+            """do whatever required for teardown"""
+
+        request.addfinalier(finalizer)
+
     def test_health_check(self):
         """
 
