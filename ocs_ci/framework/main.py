@@ -38,7 +38,7 @@ def init_ocsci_conf(arguments=None):
         framework.config.RUN['bin_dir'] = os.path.abspath(
             os.path.expanduser(framework.config.RUN['bin_dir'])
         )
-        utils.add_path_to_env_path(bin_dir)
+        utils.add_path_to_env_path(framework.config.RUN['bin_dir'])
 
 
 def main(arguments):
