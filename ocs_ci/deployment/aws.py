@@ -95,11 +95,11 @@ class AWSBase(Deployment):
             ins for ins in instance_objs if ins.state
             .get('Code') != constants.INSTANCE_TERMINATED
         ]
-        logger.error(
-            f"Non terminated EC2 instances with the same name prefix were found"
-            f" {[ins.id for ins in non_terminated_instances]}"
-        )
         if non_terminated_instances:
+            logger.error(
+                f"Non terminated EC2 instances with the same name prefix were"
+                f" found: {[ins.id for ins in non_terminated_instances]}"
+            )
             return True
         return False
 
