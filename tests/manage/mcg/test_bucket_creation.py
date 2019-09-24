@@ -2,32 +2,48 @@ import logging
 
 import pytest
 
-from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.framework.pytest_customization.marks import tier1, noobaa_cli_required, aws_platform_required
 
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.skipif(condition=True, reason="MCG is not deployed")
-@pytest.mark.filterwarnings('ignore::urllib3.exceptions.InsecureRequestWarning')
+@pytest.mark.filterwarnings(
+    'ignore::urllib3.exceptions.InsecureRequestWarning'
+)
+@aws_platform_required
 @tier1
 class TestBucketCreation:
     """
     Test creation of a bucket
     """
-
-    @pytest.mark.skipif(
-        condition=config.ENV_DATA['platform'] != 'AWS',
-        reason="Tests are not running on AWS deployed cluster"
-    )
     @pytest.mark.polarion_id("OCS-1298")
     def test_s3_bucket_creation(self, mcg_obj, bucket_factory):
         """
         Test bucket creation using the S3 SDK
         """
-
         assert set(
-            bucket.name for bucket in bucket_factory(3)
+            bucket.name for bucket in bucket_factory(3, 'S3')
         ).issubset(
             mcg_obj.s3_list_all_bucket_names()
+        )
+
+    @noobaa_cli_required
+    def test_cli_bucket_creation(self, mcg_obj, bucket_factory):
+        """
+        Test bucket creation using the MCG CLI
+        """
+        assert set(
+            bucket.name for bucket in bucket_factory(3, 'CLI')
+        ).issubset(
+            mcg_obj.cli_list_all_bucket_names()
+        )
+
+    def test_oc_bucket_creation(self, mcg_obj, bucket_factory):
+        """
+        Test bucket creation using OC commands
+        """
+        assert set(
+            bucket.name for bucket in bucket_factory(3, 'OC')
+        ).issubset(
+            mcg_obj.oc_list_all_bucket_names()
         )

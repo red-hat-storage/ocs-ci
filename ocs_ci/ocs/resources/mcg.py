@@ -4,8 +4,11 @@ import shlex
 
 import boto3
 from botocore.client import ClientError
+
 from ocs_ci.framework import config
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility.utils import run_mcg_cmd
 
 
 logger = logging.getLogger(name=__file__)
@@ -51,31 +54,6 @@ class MCG(object):
             aws_secret_access_key=self.access_key
         )
 
-    def s3_create_bucket(self, bucketname, region=config.ENV_DATA['region']):
-        """
-        Args:
-            bucketname: Name of the bucket to be created
-            region: Name of the region for the bucket to be created on
-
-        Returns:
-            s3.Bucket object
-
-        """
-        return self.s3_resource.create_bucket(
-            Bucket=bucketname,
-            CreateBucketConfiguration={
-                'LocationConstraint': region
-            }
-        )
-
-    def s3_delete_bucket(self, bucket):
-        """
-        Args:
-            bucket: The bucket object to be deleted
-
-        """
-        bucket.delete()
-
     def s3_list_all_bucket_names(self):
         """
         Returns:
@@ -83,6 +61,26 @@ class MCG(object):
 
         """
         return [bucket.name for bucket in self.s3_resource.buckets.all()]
+
+    def oc_list_all_bucket_names(self):
+        """
+        Returns:
+            list: A list of all bucket names
+
+        """
+        all_obcs_in_namespace = OCP(namespace=self.namespace, kind='obc').get().get('items')
+        return [bucket.get('spec').get('bucketName')
+                for bucket
+                in all_obcs_in_namespace]
+
+    def cli_list_all_bucket_names(self):
+        """
+        Returns:
+            list: A list of all bucket names
+
+        """
+        obc_lst = run_mcg_cmd('obc list').split('\n')[1:-1]
+        return [row.split()[1] for row in obc_lst]
 
     def s3_list_all_objects_in_bucket(self, bucketname):
         """
@@ -99,22 +97,22 @@ class MCG(object):
         """
         return [bucket for bucket in self.s3_resource.buckets.all()]
 
-    def s3_verify_bucket_exists(self, bucket):
+    def s3_verify_bucket_exists(self, bucketname):
         """
-        Verifies whether the Bucket exists
+        Verifies whether a bucket with the given bucketname exists
         Args:
-            bucket(S3 object) : The bucket object to be verified
+            bucketname : The bucket name to be verified
 
         Returns:
               bool: True if bucket exists, False otherwise
 
         """
         try:
-            self.s3_resource.meta.client.head_bucket(Bucket=bucket.name)
-            logger.info(f"{bucket.name} exists")
+            self.s3_resource.meta.client.head_bucket(Bucket=bucketname)
+            logger.info(f"{bucketname} exists")
             return True
         except ClientError:
-            logger.info(f"{bucket.name} does not exist")
+            logger.info(f"{bucketname} does not exist")
             return False
 
     def verify_s3_object_integrity(self, original_object_path, result_object_path, awscli_pod):
@@ -139,20 +137,34 @@ class MCG(object):
                          f'{md5sum[0]} ≠ {md5sum[2]}')
             return False
 
-    def oc_create_bucket(self, bucketname):
+    def oc_verify_bucket_exists(self, bucketname):
         """
-        Todo: Design and implement
-        """
-        raise NotImplementedError()
+        Verifies whether a bucket with the given bucketname exists
+        Args:
+            bucketname : The bucket name to be verified
 
-    def oc_delete_bucket(self, bucketname):
-        """
-        Todo: Design and implement
-        """
-        raise NotImplementedError()
+        Returns:
+              bool: True if bucket exists, False otherwise
 
-    def oc_list_all_buckets(self):
         """
-        Todo: Design and implement
+        try:
+            OCP(namespace=self.namespace, kind='obc').get(bucketname)
+            logger.info(f"{bucketname} exists")
+            return True
+        except CommandFailed as e:
+            if 'NotFound' in repr(e):
+                logger.info(f"{bucketname} does not exist")
+                return False
+            raise
+
+    def cli_verify_bucket_exists(self, bucketname):
         """
-        raise NotImplementedError()
+        Verifies whether a bucket with the given bucketname exists
+        Args:
+            bucketname : The bucket name to be verified
+
+        Returns:
+              bool: True if bucket exists, False otherwise
+
+        """
+        return bucketname in self.cli_list_all_bucket_names()

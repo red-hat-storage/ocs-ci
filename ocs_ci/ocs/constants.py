@@ -26,6 +26,7 @@ TEMPLATE_FIO_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fio")
 TEMPLATE_SMALLFILE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "smallfile")
 TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
 TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
+TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_CONFIGURE_PVC_MONITORING_POD = os.path.join(
     TEMPLATE_DIR, "openshift-infra/monitoring/"
 )
@@ -154,6 +155,10 @@ CSI_PVC_YAML = os.path.join(
     TEMPLATE_PV_PVC_DIR, "PersistentVolumeClaim.yaml"
 )
 
+MCG_OBC_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml"
+)
+
 CSI_RBD_POD_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pod.yaml"
 )
@@ -272,6 +277,7 @@ INSTANCE_STOPPING = 64
 INSTANCE_STOPPED = 80
 INSTANCE_RUNNING = 16
 INSTANCE_SHUTTING_DOWN = 32
+INSTANCE_TERMINATED = 48
 
 # Node statuses
 NODE_READY = 'Ready'
