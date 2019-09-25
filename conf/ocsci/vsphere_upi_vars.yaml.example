@@ -22,6 +22,7 @@ ENV_DATA:
   dns: '<dns>'
   httpd_server: 'server_name'
   path_to_upload: '/var/www/html/ocs4qe'
-  user: 'ocs4qe' #password-less ssh is needed to server
+  httpd_server_user: 'ocs4qe'
+  httpd_server_password: '<password for httpd server>'
   extra_disks: '1'
   disk_size: '60'

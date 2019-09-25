@@ -112,7 +112,8 @@ class VSPHEREUPI(VSPHEREBASE):
                 config.ENV_DATA.get('httpd_server'),
                 bootstrap_path,
                 remote_path,
-                config.ENV_DATA.get('user')
+                config.ENV_DATA.get('httpd_server_user'),
+                config.ENV_DATA.get('httpd_server_password')
             )
 
             # generate bootstrap ignition url

@@ -1224,7 +1224,7 @@ def check_if_executable_in_path(exec_name):
     return which(exec_name) is not None
 
 
-def upload_file(server, localpath, remotepath, user=None):
+def upload_file(server, localpath, remotepath, user=None, password=None):
     """
     Upload a file to remote server
 
@@ -1238,11 +1238,10 @@ def upload_file(server, localpath, remotepath, user=None):
     if not user:
         user = 'root'
 
-    util.load_host_keys(os.path.expanduser('~/.ssh/known_hosts'))
     ssh = SSHClient()
     ssh.set_missing_host_key_policy(
         AutoAddPolicy())
-    ssh.connect(hostname=server, username=user)
+    ssh.connect(hostname=server, username=user, password=password)
     sftp = ssh.open_sftp()
     log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
     sftp.put(localpath, remotepath)

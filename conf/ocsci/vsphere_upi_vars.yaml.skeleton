@@ -23,7 +23,8 @@ ENV_DATA:
   # httpd server is used to upload bootstrap ignition file
   httpd_server: '<httpd server name or ip >'
   path_to_upload: '<path to upload to server>'
-  user: '<user for httpd server>' #password-less ssh is needed to server
+  httpd_server_user: '<user for httpd server>'
+  httpd_server_password: '<password for httpd server>'
   extra_disks: '<number of disks to add for worker nodes>'
   disk_size: '<size of disk in GB>'
   memory: '<memory in MB>'
