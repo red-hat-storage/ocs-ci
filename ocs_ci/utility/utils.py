@@ -25,7 +25,7 @@ from email.mime.text import MIMEText
 from ocs_ci.ocs import constants
 from ocs_ci.utility.retry import retry
 from bs4 import BeautifulSoup
-from paramiko import SSHClient, AutoAddPolicy, util
+from paramiko import SSHClient, AutoAddPolicy
 
 log = logging.getLogger(__name__)
 
