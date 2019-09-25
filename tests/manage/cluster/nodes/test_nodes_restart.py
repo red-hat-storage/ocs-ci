@@ -1,9 +1,9 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import tier4, ignore_leftovers, ManageTest, aws_platform_required
+from ocs_ci.framework.testlib import tier4, ignore_leftovers, ManageTest, bugzilla
 from ocs_ci.ocs import constants
-from ocs_ci.utility import aws
+from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.resources import pod
 from tests.sanity_helpers import Sanity
 
@@ -12,19 +12,30 @@ logger = logging.getLogger(__name__)
 
 
 @tier4
-@aws_platform_required
 @ignore_leftovers
 class TestNodesRestart(ManageTest):
     """
     Test ungraceful cluster shutdown
     """
     @pytest.fixture(autouse=True)
-    def init_sanity(self):
+    def init_sanity(self, storageclass_factory):
         """
         Initialize Sanity instance
 
         """
-        self.sanity_helpers = Sanity()
+        self.sanity_helpers = Sanity(
+            storageclass_factory=storageclass_factory
+        )
+
+    @pytest.fixture(autouse=True)
+    def teardown(self, request, nodes):
+        """
+        Make sure all nodes are up again
+
+        """
+        def finalizer():
+            nodes.restart_nodes_teardown()
+        request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
         argnames=["force"],
@@ -33,13 +44,12 @@ class TestNodesRestart(ManageTest):
             pytest.param(*[False], marks=pytest.mark.polarion_id("OCS-895"))
         ]
     )
-    def test_nodes_restart_aws(
-        self, ec2_instances, aws_obj, pvc_factory, pod_factory, force
-    ):
+    def test_nodes_restart(self, nodes, pvc_factory, pod_factory, force):
         """
-        Test ungraceful cluster shutdown - AWS
+        Test nodes restart (from the platform layer, i.e, EC2 instances, VMWare VMs)
         """
-        aws_obj.restart_ec2_instances(instances=ec2_instances, wait=True, force=force)
+        ocp_nodes = get_node_objs()
+        nodes.restart_nodes(nodes=ocp_nodes, wait=True, force=force)
         self.sanity_helpers.health_check()
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
@@ -52,46 +62,47 @@ class TestNodesRestart(ManageTest):
             pytest.param(*['cephfs', 'delete_resources'], marks=pytest.mark.polarion_id("OCS-1242"))
         ]
     )
+    @bugzilla('1748001')
     def test_pv_provisioning_under_degraded_state(
-        self, ec2_instances, aws_obj, pvc_factory, pod_factory, interface, operation
+        self, nodes, pvc_factory, pod_factory, interface, operation
     ):
         """
         Test PV provisioning under degraded state
 
         OCS-1138:
-        - Stop 1 ec2 instance worker node that has the RBD provisioner
+        - Stop 1 worker node that has the RBD provisioner
           pod running on
         - Wait for the RBD pod provisioner to come up again to running status
         - Validate cluster functionality, without checking cluster and Ceph
           health by creating resources and running IO
-        - Start the worker node ec2 instance
+        - Start the worker node
         - Check cluster and Ceph health
 
         OCS-1241:
-        - Stop 1 ec2 instance worker node that has the RBD provisioner
+        - Stop 1 worker node that has the RBD provisioner
           pod running on
         - Wait for the RBD pod provisioner to come up again to running status
         - Validate cluster functionality, without checking cluster and Ceph
           health by deleting resources and running IO
-        - Start the worker node ec2 instance
+        - Start the worker node
         - Check cluster and Ceph health
 
         OCS-1139:
-        - Stop 1 ec2 instance worker node that has the CephFS provisioner
+        - Stop 1 worker node that has the CephFS provisioner
           pod running on
         - Wait for the CephFS pod provisioner to come up again to running status
         - Validate cluster functionality, without checking cluster and Ceph
           health by creating resources and running IO
-        - Start the worker node ec2 instance
+        - Start the worker node
         - Check cluster and Ceph health
 
         OCS-1242:
-        - Stop 1 ec2 instance worker node that has the CephFS provisioner
+        - Stop 1 worker node that has the CephFS provisioner
           pod running on
         - Wait for the CephFS pod provisioner to come up again to running status
         - Validate cluster functionality, without checking cluster and Ceph
           health by deleting resources and running IO
-        - Start the worker node ec2 instance
+        - Start the worker node
         - Check cluster and Ceph health
 
         """
@@ -118,14 +129,8 @@ class TestNodesRestart(ManageTest):
             f"{interface} provisioner pod is running on node {provisioner_node_name}"
         )
 
-        # Get the ec2 instance of the node
-        instances = aws.get_instances_ids_and_names([provisioner_node])
-        assert instances, (
-            f"Failed to get ec2 instances for node {provisioner_node_name}"
-        )
-
         # Stopping the nodes
-        aws_obj.stop_ec2_instances(instances=instances, wait=True)
+        nodes.stop_nodes(nodes=[provisioner_node])
 
         # Wait for the provisioner pod to get to running status
         selector = constants.CSI_RBDPLUGIN_PROVISIONER_LABEL if (
@@ -167,9 +172,7 @@ class TestNodesRestart(ManageTest):
             self.sanity_helpers.delete_resources()
 
         # Starting the nodes
-        aws_obj.start_ec2_instances(instances=instances, wait=True)
+        nodes.start_nodes(nodes=[provisioner_node])
 
         # Checking cluster and Ceph health
         self.sanity_helpers.health_check()
-
-# TODO: Add a test cases for VMWare and RHHI.Next
