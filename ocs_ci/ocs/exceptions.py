@@ -88,3 +88,7 @@ class VMMaxDisksReachedException(Exception):
 
 class SameNamePrefixClusterAlreadyExistsException(Exception):
     pass
+
+
+class MissingRequiredConfigKeyError(Exception):
+    pass
