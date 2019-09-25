@@ -307,9 +307,10 @@ def workload_stop_ceph_osd(measurement_dir):
     def stop_osd():
         """
         Downscale Ceph osd deployments for 11 minutes. First 1 minutes
-        the alert CephOSDDiskNotResponding should be in 'Pending'. After 1 minute
-        the alert turns into 'Firing' state.        This configuration of osd can be observed in ceph-mixins which
-        are used in the project:
+        the alert CephOSDDiskNotResponding should be in 'Pending'.
+        After 1 minute the alert turns into 'Firing' state.
+        This configuration of osd can be observed in ceph-mixins which
+        is used in the project:
             https://github.com/ceph/ceph-mixins/blob/d22afe8c0da34490cb77e52a202eefcf4f62a869/config.libsonnet#L21
         There should be also CephClusterWarningState alert that takes 10
         minutest to be firing.
