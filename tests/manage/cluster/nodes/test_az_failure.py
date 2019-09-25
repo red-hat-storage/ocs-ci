@@ -5,6 +5,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import ManageTest, tier4, bugzilla
+from ocs_ci.ocs.exceptions import CommandFailed
 from tests import sanity_helpers
 
 logger = logging.getLogger(__name__)
@@ -46,16 +47,16 @@ class TestAvailabilityZones(ManageTest):
             current_sg = aws_obj.store_security_groups_for_instances(self.instances_in_az)
             if self.original_sgs != current_sg:
                 aws_obj.restore_instances_access(self.security_group_id, self.original_sgs)
-                logger.info(f"Access restores")
+                logger.info(f"Access to EC2 instances {self.instances_in_az} has been restored")
 
             if self.security_group_id in aws_obj.get_all_security_groups():
-                logger.info(f"deleting: {self.security_group_id}")
+                logger.info(f"Deleting: {self.security_group_id}")
                 aws_obj.delete_security_group(self.security_group_id)
 
         request.addfinalizer(finalizer)
 
     def test_availability_zone_failure(
-            self, aws_obj, ec2_instances, pvc_factory, pod_factory, teardown
+        self, aws_obj, ec2_instances, pvc_factory, pod_factory, teardown
     ):
         """
 
@@ -73,10 +74,13 @@ class TestAvailabilityZones(ManageTest):
 
         # Blocking instances:
         self.security_group_id = self.block_aws_availability_zone(aws_obj, self.instances_in_az)
-        logger.info("Access Blocked")
+        logger.info(f"Access to EC2 instances {self.instances_in_az} has been blocked")
 
         # Check cluster's health, need to be unhealthy at that point
-        assert self.check_cluster_health() == 0
+
+        assert not self.check_cluster_health(), \
+            "Cluster is wrongly reported as healthy. " \
+            "EC2 Instances {self.instances_in_az} are blocked"
 
         # Create resources
         logger.info("Trying to create resources on un-healthy cluster")
@@ -93,7 +97,8 @@ class TestAvailabilityZones(ManageTest):
         logger.info(f"Access restores")
 
         # Check cluster's health, need to be healthy at that point
-        assert self.check_cluster_health() == 1
+
+        assert self.check_cluster_health(), "Cluster is unhealthy"
 
     def random_availability_zone_selector(self, aws_obj, ec2_instances):
         """
@@ -146,6 +151,6 @@ class TestAvailabilityZones(ManageTest):
         try:
             self.sanity_helpers.health_check()
             return True
-        except Exception as e:
-            print(e)
+        except CommandFailed as e:
+            print(e, "Cluster is not healthy")
             return False

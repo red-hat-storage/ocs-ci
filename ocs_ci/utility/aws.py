@@ -464,7 +464,7 @@ class AWS(object):
         Get all security groups in AWS region
 
         Returns:
-            all_sg_group: list: All security groups
+            list: All security groups
         """
         all_sg_group = list()
 
