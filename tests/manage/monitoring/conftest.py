@@ -291,11 +291,11 @@ def workload_stop_ceph_osd(measurement_dir):
     """
     oc = ocp.OCP(
         kind=constants.DEPLOYMENT,
-        namespace=config.ENV_DATA['cluster_namespace']
+        namespace=config.ENV_DATA.get('cluster_namespace')
     )
-    osd_deployments = oc.get(selector=constants.OSD_APP_LABEL)['items']
+    osd_deployments = oc.get(selector=constants.OSD_APP_LABEL).get('items')
     osds = [
-        deployment['metadata']['name']
+        deployment.get('metadata').get('name')
         for deployment in osd_deployments
     ]
 
