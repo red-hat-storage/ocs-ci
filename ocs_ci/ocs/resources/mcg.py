@@ -6,9 +6,13 @@ import boto3
 import requests
 from botocore.client import ClientError
 
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility.utils import run_mcg_cmd, TimeoutSampler
+from ocs_ci.utility import templating
+from ocs_ci.utility.utils import run_mcg_cmd, TimeoutSampler, run_cmd
+from tests.helpers import create_unique_resource_name, create_resource
 
 logger = logging.getLogger(name=__file__)
 
@@ -237,4 +241,71 @@ class MCG(object):
             logger.error(
                 'Not enough data reduction. Something is wrong.'
             )
+            return False
+
+    def request_aws_credentials(self):
+        awscreds_data = templating.load_yaml(constants.MCG_AWS_CREDS_YAML)
+        req_name = create_unique_resource_name('awscredreq', 'credentialsrequests')
+        awscreds_data['metadata']['name'] = req_name
+        awscreds_data['metadata']['namespace'] = self.namespace
+        awscreds_data['spec']['secretRef']['name'] = req_name
+        awscreds_data['spec']['secretRef']['namespace'] = self.namespace
+        creds_request = create_resource(**awscreds_data)
+
+        def _retrieve_credreq_uid():
+            return run_cmd(
+                f"oc get credentialsrequests {creds_request.name} -o jsonpath={{.metadata.uid}}"
+            )
+
+        try:
+            for uid in TimeoutSampler(30, 5, _retrieve_credreq_uid):
+                if uid != "":
+                    logger.info(f'Secret created successfully.')
+                    break
+                else:
+                    logger.info(
+                        f'Credentials were not yet created or could not be found. '
+                        f'Retrying...'
+                    )
+        except TimeoutExpiredError:
+            logger.error(
+                'Failed to create credentials'
+            )
+
+        secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
+        return (
+            base64.b64decode(
+                secret_ocp_obj.get(creds_request.name).get('data').get('aws_access_key_id')
+            ).decode('utf-8'),
+            base64.b64decode(
+                secret_ocp_obj.get(creds_request.name).get('data').get('aws_secret_access_key')
+            ).decode('utf-8')
+        )
+
+    def create_new_connection(self, conn_name=None):
+        if conn_name is None:
+            conn_name = create_unique_resource_name('backstorebucket', 'awsbucket')
+
+        access_id, access_key = self.request_aws_credentials()
+
+        params = {
+            "auth_method": "AWS_V4",
+            "endpoint": "https://s3.amazonaws.com",
+            "endpoint_type": "AWS",
+            "identity": access_id,
+            "name": conn_name,
+            "secret": access_key
+        }
+
+        try:
+            for resp in TimeoutSampler(
+                30, 3, self.send_rpc_query, 'account_api', 'add_external_connection', params
+            ):
+                if 'error' not in resp.text:
+                    logger.info(f'Connection {conn_name} created successfully')
+                    break
+                else:
+                    logger.info('AWS IAM did not yet propagate')
+        except TimeoutExpiredError:
+            logger.error(f'Could not create connection {conn_name}')
             return False

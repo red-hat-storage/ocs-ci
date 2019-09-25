@@ -159,6 +159,10 @@ MCG_OBC_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml"
 )
 
+MCG_AWS_CREDS_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "AwsCreds.yaml"
+)
+
 CSI_RBD_POD_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pod.yaml"
 )
