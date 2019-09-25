@@ -63,7 +63,9 @@ class TestBucketIO(ManageTest):
         synccmd = (
             f"aws s3 sync s3://{constants.TEST_FILES_BUCKET} {download_dir} --no-sign-request"
         )
-        assert 'download' in awscli_pod.exec_cmd_on_pod(command=synccmd, out_yaml_format=False)
+        assert 'download' in awscli_pod.exec_cmd_on_pod(command=synccmd, out_yaml_format=False), (
+            'Failed to download test files'
+        )
 
         bucketname = None
         for bucket in bucket_factory(5):
@@ -75,4 +77,4 @@ class TestBucketIO(ManageTest):
             )
             bucketname = bucket.name
 
-        assert mcg_obj.check_data_reduction(bucketname)
+        assert mcg_obj.check_data_reduction(bucketname), 'Data reduction did not work as anticipated.'

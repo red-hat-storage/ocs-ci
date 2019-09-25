@@ -6,7 +6,6 @@ import boto3
 import requests
 from botocore.client import ClientError
 
-from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import run_mcg_cmd, TimeoutSampler
@@ -22,8 +21,8 @@ class MCG(object):
     (
         s3_resource, s3_endpoint, ocp_resource,
         mgmt_endpoint, region, access_key_id, access_key,
-        namespace, noobaa_user, noobaa_password
-    ) = (None,) * 10
+        namespace, noobaa_user, noobaa_password, noobaa_token
+    ) = (None,) * 11
 
     def __init__(self):
         """
@@ -39,7 +38,7 @@ class MCG(object):
         self.mgmt_endpoint = (
             results.get('items')[0].get('status').get('services')
             .get('serviceMgmt').get('externalDNS')[0]
-        )
+        ) + '/rpc'
         self.region = self.s3_endpoint.split('.')[1]
         creds_secret_name = (
             results.get('items')[0].get('status').get('accounts')
@@ -61,6 +60,8 @@ class MCG(object):
         self.noobaa_password = base64.b64decode(
             creds_secret_obj.get('data').get('password')
         ).decode('utf-8')
+
+        self.noobaa_token = self.retrieve_nb_token()
 
         self._ocp_resource = ocp_obj
         self.s3_resource = boto3.resource(
@@ -162,6 +163,25 @@ class MCG(object):
         """
         return bucketname in self.cli_list_all_bucket_names()
 
+    def send_rpc_query(self, api, method, params):
+        payload = {
+            'api': api,
+            'method': method,
+            'params': params,
+            'auth_token': self.noobaa_token
+        }
+        return requests.post(url=self.mgmt_endpoint, data=json.dumps(payload), verify=False)
+
+    def retrieve_nb_token(self):
+        params = {
+            'role': 'admin',
+            'system': 'noobaa',
+            'email': self.noobaa_user,
+            'password': self.noobaa_password
+        }
+
+        return self.send_rpc_query('auth_api', 'create_auth', params).json().get('reply').get('token')
+
     def check_data_reduction(self, bucketname):
         """
         Checks whether the data reduction on the MCG server works properly
@@ -172,42 +192,26 @@ class MCG(object):
             bool: True if the data reduction mechanics work, False otherwise
 
         """
-        mgmt_endpoint = self.mgmt_endpoint + '/rpc'
-
-        payload = {
-            'api': 'auth_api',
-            'method': 'create_auth',
-            'params': {
-                'role': 'admin',
-                'system': 'noobaa',
-                'email': self.noobaa_user,
-                'password': self.noobaa_password
-            }}
-
-        request_str = json.dumps(payload)
-
-        resp = requests.post(url=mgmt_endpoint, data=request_str, verify=False)
-        nb_token = resp.json().get('reply').get('token')
 
         def _check_reduction():
             payload = {
                 "api": "bucket_api",
                 "method": "read_bucket",
                 "params": {"name": bucketname},
-                "auth_token": nb_token
+                "auth_token": self.noobaa_token
             }
             request_str = json.dumps(payload)
-            resp = requests.post(url=mgmt_endpoint, data=request_str, verify=False)
+            resp = requests.post(url=self.mgmt_endpoint, data=request_str, verify=False)
             bucket_data = resp.json().get('reply').get('data').get('size')
 
             payload = {
                 "api": "bucket_api",
                 "method": "read_bucket",
                 "params": {"name": bucketname},
-                "auth_token": nb_token
+                "auth_token": self.noobaa_token
             }
             request_str = json.dumps(payload)
-            resp = requests.post(url=mgmt_endpoint, data=request_str, verify=False)
+            resp = requests.post(url=self.mgmt_endpoint, data=request_str, verify=False)
             bucket_data_reduced = resp.json().get('reply').get('data').get('size_reduced')
 
             logger.info(
@@ -231,6 +235,6 @@ class MCG(object):
                     )
         except TimeoutExpiredError:
             logger.error(
-                'Not enough data reduction - ' + str(total_size - total_reduced) + '. Something is wrong.'
+                'Not enough data reduction. Something is wrong.'
             )
             return False
