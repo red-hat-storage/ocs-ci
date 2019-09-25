@@ -205,7 +205,7 @@ class Deployment(object):
             resource_name=csv_name, kind="csv",
             namespace=self.namespace
         )
-        csv.wait_for_phase("Succeeded", 900)
+        csv.wait_for_phase("Succeeded")
         ocs_operator_storage_cluster_cr = config.DEPLOYMENT.get(
             'ocs_operator_storage_cluster_cr'
         )
@@ -226,8 +226,12 @@ class Deployment(object):
         ] = f"{device_size}Gi"
 
         if self.platform.lower() == constants.VSPHERE_PLATFORM:
-            cluster_data['spec']['monPVCTemplate']['spec']['storageClassName'] = constants.DEFAULT_SC_VSPHERE
-            deviceset_data['dataPVCTemplate']['spec']['storageClassName'] = constants.DEFAULT_SC_VSPHERE
+            cluster_data['spec']['monPVCTemplate']['spec'][
+                'storageClassName'
+            ] = constants.DEFAULT_SC_VSPHERE
+            deviceset_data['dataPVCTemplate']['spec'][
+                'storageClassName'
+            ] = constants.DEFAULT_SC_VSPHERE
 
         cluster_data['spec']['storageDeviceSets'] = [deviceset_data]
         cluster_data_yaml = tempfile.NamedTemporaryFile(

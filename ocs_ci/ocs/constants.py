@@ -106,6 +106,7 @@ DEFAULT_BLOCKPOOL = 'rbd'
 ADMIN_USER = 'admin'
 GB = 1024 ** 3
 GB2KB = 1024 ** 2
+DEFAULT_DISK_SIZE = 100
 
 # Reclaim Policy
 RECLAIM_POLICY_RETAIN = 'Retain'
@@ -322,6 +323,10 @@ WORKER_IGN = "worker.ign"
 
 # vSphere related constants
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
+VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")
+INSTALLER_IGNITION = os.path.join(VSPHERE_DIR, "machine/ignition.tf")
+INSTALLER_ROUTE53 = os.path.join(VSPHERE_DIR, "route53/main.tf")
+INSTALLER_MACHINE_CONF = os.path.join(VSPHERE_DIR, "machine/main.tf")
 VSPHERE_CONFIG_PATH = os.path.join(TOP_DIR, "conf/ocsci/vsphere_upi_vars.yaml")
 VM_DISK_TYPE = "thin"
 VM_DISK_MODE = "persistent"

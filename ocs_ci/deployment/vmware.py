@@ -2,9 +2,11 @@
 This module contains platform specific methods and classes for deployment
 on vSphere platform
 """
-import os
 import logging
+import os
+
 import yaml
+
 from .deployment import Deployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.utility.utils import (
@@ -31,13 +33,13 @@ class VSPHEREBASE(Deployment):
         This would be base for both IPI and UPI deployment
         """
         super(VSPHEREBASE, self).__init__()
-        self.region = config.ENV_DATA.get('region')
-        self.server = config.ENV_DATA.get('vsphere_server')
-        self.user = config.ENV_DATA.get('vsphere_user')
-        self.password = config.ENV_DATA.get('vsphere_password')
-        self.cluster = config.ENV_DATA.get('vsphere_cluster')
-        self.datacenter = config.ENV_DATA.get('vsphere_datacenter')
-        self.datastore = config.ENV_DATA.get('vsphere_datastore')
+        self.region = config.ENV_DATA['region']
+        self.server = config.ENV_DATA['vsphere_server']
+        self.user = config.ENV_DATA['vsphere_user']
+        self.password = config.ENV_DATA['vsphere_password']
+        self.cluster = config.ENV_DATA['vsphere_cluster']
+        self.datacenter = config.ENV_DATA['vsphere_datacenter']
+        self.datastore = config.ENV_DATA['vsphere_datastore']
         self.vsphere = VSPHEREUtil(self.server, self.user, self.password)
 
     def attach_disk(self, size=100):
@@ -83,7 +85,7 @@ class VSPHEREUPI(VSPHEREBASE):
                 constants.EXTERNAL_DIR,
                 'installer'
             )
-            self.terraform_work_dir = f"{self.upi_repo_path}/upi/vsphere/"
+            self.terraform_work_dir = constants.VSPHERE_DIR
             self.terraform = Terraform(self.terraform_work_dir)
 
         def deploy_prereq(self):
@@ -93,7 +95,7 @@ class VSPHEREUPI(VSPHEREBASE):
             super(VSPHEREUPI.OCPDeployment, self).deploy_prereq()
             # create ignitions
             self.create_ignitions()
-            self.kubeconfig = f"{self.cluster_path}/auth/kubeconfig"
+            self.kubeconfig = os.path.join(self.cluster_path, config.RUN.get('kubeconfig_location'))
 
             # git clone repo from openshift installer
             clone_repo(
@@ -101,9 +103,9 @@ class VSPHEREUPI(VSPHEREBASE):
             )
 
             # upload bootstrap ignition to public access server
-            bootstrap_path = f"{config.ENV_DATA.get('cluster_path')}/{constants.BOOTSTRAP_IGN}"
-            remote_path = (
-                f"{config.ENV_DATA.get('path_to_upload')}/"
+            bootstrap_path = os.path.join(config.ENV_DATA.get('cluster_path'), constants.BOOTSTRAP_IGN)
+            remote_path = os.path.join(
+                config.ENV_DATA.get('path_to_upload'),
                 f"{config.RUN.get('run_id')}_{constants.BOOTSTRAP_IGN}"
             )
             upload_file(
@@ -115,20 +117,33 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # generate bootstrap ignition url
             path_to_bootstrap_on_remote = remote_path.replace("/var/www/html/", "")
-            bootstrap_ignition_url = f"http://{config.ENV_DATA.get('httpd_server')}/{path_to_bootstrap_on_remote}"
+            bootstrap_ignition_url = os.path.join(
+                "http://",
+                config.ENV_DATA.get('httpd_server'),
+                path_to_bootstrap_on_remote
+            )
             logger.info(f"bootstrap_ignition_url: {bootstrap_ignition_url}")
             config.ENV_DATA['bootstrap_ignition_url'] = bootstrap_ignition_url
 
             # load master and worker ignitions to variables
-            master_ignition_path = f"{config.ENV_DATA.get('cluster_path')}/{constants.MASTER_IGN}"
+            master_ignition_path = os.path.join(
+                config.ENV_DATA.get('cluster_path'),
+                constants.MASTER_IGN
+            )
             master_ignition = read_file_as_str(f"{master_ignition_path}")
             config.ENV_DATA['control_plane_ignition'] = master_ignition
 
-            worker_ignition_path = f"{config.ENV_DATA.get('cluster_path')}/{constants.WORKER_IGN}"
+            worker_ignition_path = os.path.join(
+                config.ENV_DATA.get('cluster_path'),
+                constants.WORKER_IGN
+            )
             worker_ignition = read_file_as_str(f"{worker_ignition_path}")
             config.ENV_DATA['compute_ignition'] = worker_ignition
 
-            cluster_domain = f"{config.ENV_DATA.get('cluster_name')}.{config.ENV_DATA.get('base_domain')}"
+            cluster_domain = (
+                f"{config.ENV_DATA.get('cluster_name')}."
+                f"{config.ENV_DATA.get('base_domain')}"
+            )
             config.ENV_DATA['cluster_domain'] = cluster_domain
 
             # generate terraform variables from template
@@ -148,32 +163,30 @@ class VSPHEREUPI(VSPHEREBASE):
             self.terraform_var = self.convert_yaml2tfvars(terraform_var_yaml)
 
             # update gateway and DNS
-            installer_ignition = f"{self.upi_repo_path}/upi/vsphere/machine/ignition.tf"
             if config.ENV_DATA.get('gateway'):
                 replace_content_in_file(
-                    installer_ignition,
+                    constants.INSTALLER_IGNITION,
                     '${cidrhost(var.machine_cidr,1)}',
                     f"{config.ENV_DATA.get('gateway')}"
                 )
 
             if config.ENV_DATA.get('dns'):
                 replace_content_in_file(
-                    installer_ignition,
+                    constants.INSTALLER_IGNITION,
                     constants.INSTALLER_DEFAULT_DNS,
                     f"{config.ENV_DATA.get('dns')}"
                 )
 
             # update the zone in route
+
             if config.ENV_DATA.get('region'):
-                route53 = f"{self.upi_repo_path}/upi/vsphere/route53/main.tf"
                 def_zone = 'provider "aws" { region = "%s" } \n' % config.ENV_DATA.get('region')
-                replace_content_in_file(route53, "xyz", def_zone)
+                replace_content_in_file(constants.INSTALLER_ROUTE53, "xyz", def_zone)
 
             # increase memory
             if config.ENV_DATA.get('memory'):
-                machine_conf = f"{self.upi_repo_path}/upi/vsphere/machine/main.tf"
                 replace_content_in_file(
-                    machine_conf,
+                    constants.INSTALLER_MACHINE_CONF,
                     constants.INSTALLER_DEFAULT_MEMORY,
                     config.ENV_DATA.get('memory')
                 )
@@ -314,7 +327,7 @@ class VSPHEREUPI(VSPHEREBASE):
 
         """
         super(VSPHEREUPI, self).deploy_ocp(log_cli_level)
-        disk_size = config.ENV_DATA.get('disk_size', 100)
+        disk_size = config.ENV_DATA.get('disk_size', constants.DEFAULT_DISK_SIZE)
         self.attach_disk(disk_size)
 
     def destroy_cluster(self, log_level="DEBUG"):

@@ -1,9 +1,10 @@
 """
 This module contains the vSphere related methods
 """
-import atexit
 import logging
 import ssl
+
+import atexit
 
 from pyVmomi import vim, vmodl
 from pyVim.task import WaitForTask
