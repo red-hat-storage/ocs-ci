@@ -76,7 +76,7 @@ class TestAvailabilityZones(ManageTest):
         logger.info("Access Blocked")
 
         # Check cluster's health, need to be unhealthy at that point
-        # assert self.check_cluster_health() == 0
+        assert self.check_cluster_health() == 0
 
         # Create resources
         logger.info("Trying to create resources on un-healthy cluster")
@@ -84,6 +84,9 @@ class TestAvailabilityZones(ManageTest):
         logger.info("Resources Created")
 
         # Delete resources
+        logger.info("Trying to delete resources on un-healthy cluster")
+        self.sanity_helpers.delete_resources()
+        logger.info("Resources Deleted")
 
         # Restore access for blocked instances
         aws_obj.restore_instances_access(self.security_group_id, self.original_sgs)
