@@ -6,6 +6,7 @@ import boto3
 import requests
 from botocore.client import ClientError
 
+from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import run_mcg_cmd, TimeoutSampler
