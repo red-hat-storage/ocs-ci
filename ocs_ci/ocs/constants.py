@@ -331,4 +331,4 @@ VSPHERE_CONFIG_PATH = os.path.join(TOP_DIR, "conf/ocsci/vsphere_upi_vars.yaml")
 VM_DISK_TYPE = "thin"
 VM_DISK_MODE = "persistent"
 INSTALLER_DEFAULT_MEMORY = "8192"
-INSTALLER_DEFAULT_DNS = "8.8.8.8"
+INSTALLER_DEFAULT_DNS = "1.1.1.1"

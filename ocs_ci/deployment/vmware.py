@@ -179,18 +179,9 @@ class VSPHEREUPI(VSPHEREBASE):
                 )
 
             # update the zone in route
-
             if config.ENV_DATA.get('region'):
                 def_zone = 'provider "aws" { region = "%s" } \n' % config.ENV_DATA.get('region')
                 replace_content_in_file(constants.INSTALLER_ROUTE53, "xyz", def_zone)
-
-            # increase memory
-            if config.ENV_DATA.get('memory'):
-                replace_content_in_file(
-                    constants.INSTALLER_MACHINE_CONF,
-                    constants.INSTALLER_DEFAULT_MEMORY,
-                    config.ENV_DATA.get('memory')
-                )
 
         def convert_yaml2tfvars(self, yaml):
             """
