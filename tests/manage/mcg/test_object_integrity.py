@@ -29,14 +29,14 @@ class TestBucketIntegrity(ManageTest):
         # Retrieve a list of all objects on the test-objects bucket and downloads them to the pod
         awscli_pod.exec_cmd_on_pod(command=f'mkdir {original_dir} {result_dir}')
         public_s3 = boto3.resource('s3', region_name=mcg_obj.region)
-        for obj in public_s3.Bucket(constants.TEST_FILES_BUCKET).objects.filter(Prefix='smallfiles/'):
+        for obj in public_s3.Bucket(constants.TEST_FILES_BUCKET).objects.all():
             logger.info(f'Downloading {obj.key} from aws test bucket')
             awscli_pod.exec_cmd_on_pod(
                 command=f'sh -c "cd {original_dir} && '
                 f'wget https://{constants.TEST_FILES_BUCKET}.s3.'
                 f'{mcg_obj.region}.amazonaws.com/{obj.key}"'
             )
-            downloaded_files.append(obj.key.split("/")[1])
+            downloaded_files.append(obj.key)
 
         bucket_name = bucket_factory(1)[0].name
 
