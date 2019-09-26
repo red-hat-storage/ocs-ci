@@ -1077,12 +1077,19 @@ def get_testrun_name():
     """
     markers = config.RUN['cli_params'].get('-m', '').replace(" ", "-")
     us_ds = config.REPORTING.get("us_ds")
+    us_ds = "Upstream" if us_ds.upper() == "US" else "Downstream" if us_ds.upper() == "DS" else us_ds
     if config.REPORTING["polarion"].get("testrun_name"):
         testrun_name = config.REPORTING["polarion"]["testrun_name"]
     elif markers:
         testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}_{markers}"
     else:
         testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}"
+
+    # form complete testrun name that includes deployment platform and type
+    testrun_name = (
+        f"{testrun_name}-{config.ENV_DATA.get('platform').upper()}-"
+        f"{config.ENV_DATA.get('deployment_type').upper()}"
+    )
     # replace invalid character(s) by '-'
     testrun_name = testrun_name.translate(
         str.maketrans(
