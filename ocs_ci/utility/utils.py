@@ -1069,7 +1069,7 @@ def get_testrun_name():
 
     # form complete testrun name that includes deployment platform and type
     testrun_name = (
-        f"{testrun_name} - {config.ENV_DATA.get('platform').upper()}-"
+        f"{testrun_name}-{config.ENV_DATA.get('platform').upper()}-"
         f"{config.ENV_DATA.get('deployment_type').upper()}"
     )
     # replace invalid character(s) by '-'
