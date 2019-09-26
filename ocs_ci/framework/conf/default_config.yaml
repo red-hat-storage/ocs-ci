@@ -71,6 +71,7 @@ ENV_DATA:
   storage_device_sets_name: "storageDeviceSets"
   cluster_namespace: 'openshift-storage'
   monitoring_enabled: true
+  persistent-monitoring: true
   platform: 'AWS'
   deployment_type: 'ipi'
   region: 'us-east-2'
