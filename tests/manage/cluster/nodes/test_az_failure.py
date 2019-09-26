@@ -76,7 +76,7 @@ class TestAvailabilityZones(ManageTest):
         # Check cluster's health, need to be unhealthy at that point
 
         assert not self.check_cluster_health(), (
-            "Cluster is wrongly reported as healthy. " 
+            "Cluster is wrongly reported as healthy."
             "EC2 Instances {self.instances_in_az} are blocked"
         )
 
@@ -150,6 +150,6 @@ class TestAvailabilityZones(ManageTest):
             self.sanity_helpers.health_check()
             return True
         except CommandFailed as e:
-            if "Unable to connect to the server" is str(e):
+            if "Unable to connect to the server" in str(e):
                 logger.warning(f"{e}, Cluster is not healthy")
                 return False
