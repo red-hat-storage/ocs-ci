@@ -150,7 +150,7 @@ class DisruptionBase(ManageTest):
 
         # Verify pods are deleted
         for pod_obj in self.pod_objs:
-            assert pod_obj.ocp.wait_for_delete(pod_obj.name), (
+            assert pod_obj.ocp.wait_for_delete(pod_obj.name, 180), (
                 f"Pod {pod_obj.name} is not deleted"
             )
         log.info("Verified: Pods are deleted.")
