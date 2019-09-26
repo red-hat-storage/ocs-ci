@@ -13,7 +13,7 @@ from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.utility import aws
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    deployment, destroy, ignore_leftovers
+    deployment, destroy, ignore_leftovers, tier2, tier3, tier4, disruptive
 )
 from ocs_ci.utility.environment_check import (
     get_status_before_execution, get_status_after_execution
@@ -714,9 +714,11 @@ def cluster(request, log_cli_level):
 
 @pytest.fixture(scope='class')
 def environment_checker(request):
-    node = request.node
-    # List of marks for which we will ignore the leftover checker
-    marks_to_ignore = [m.mark for m in [deployment, destroy, ignore_leftovers]]
+    marks_to_ignore = [
+        deployment, destroy, ignore_leftovers,
+        tier2, tier3, tier4, disruptive
+    ]
+    marks_to_ignore = [m.mark for m in marks_to_ignore]
     for mark in node.iter_markers():
         if mark in marks_to_ignore:
             return
