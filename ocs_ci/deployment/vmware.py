@@ -183,6 +183,14 @@ class VSPHEREUPI(VSPHEREBASE):
                 def_zone = 'provider "aws" { region = "%s" } \n' % config.ENV_DATA.get('region')
                 replace_content_in_file(constants.INSTALLER_ROUTE53, "xyz", def_zone)
 
+            # increase memory
+            if config.ENV_DATA.get('memory'):
+                replace_content_in_file(
+                    constants.INSTALLER_MACHINE_CONF,
+                    '${var.memory}',
+                    config.ENV_DATA.get('memory')
+                )
+
         def convert_yaml2tfvars(self, yaml):
             """
             Converts yaml file to tfvars. It creates the tfvars with the
