@@ -1066,16 +1066,17 @@ def get_testrun_name():
         testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}_{markers}"
     else:
         testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}"
+
+    # form complete testrun name that includes deployment platform and type
+    testrun_name = (
+        f"{testrun_name} - {config.ENV_DATA.get('platform').upper()}-"
+        f"{config.ENV_DATA.get('deployment_type').upper()}"
+    )
     # replace invalid character(s) by '-'
     testrun_name = testrun_name.translate(
         str.maketrans(
             {key: '-' for key in ''' \\/.:*"<>|~!@#$?%^&'*(){}+`,=\t'''}
         )
-    )
-    # form complete testrun name that includes deployment platform and type
-    testrun_name = (
-        f"{testrun_name} - {config.ENV_DATA.get('platform').upper()}-"
-        f"{config.ENV_DATA.get('deployment_type').upper()}"
     )
     return testrun_name
 
