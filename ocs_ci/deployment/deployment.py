@@ -19,6 +19,15 @@ from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from tests import helpers
+from ocs_ci.ocs.monitoring import (
+    create_configmap_cluster_monitoring_pod,
+    validate_pvc_created_and_bound_on_monitoring_pods,
+    validate_pvc_are_mounted_on_monitoring_pods
+)
+from ocs_ci.ocs.resources.pod import (
+    get_all_pods,
+    validate_pods_are_respinned_and_running_state
+)
 
 
 logger = logging.getLogger(__name__)
@@ -379,6 +388,41 @@ class Deployment(object):
             logger.error(
                 f"MDS deployment Failed! Please check logs!"
             )
+
+        if config.ENV_DATA.get('monitoring_enabled') and config.ENV_DATA.get('persistent-monitoring'):
+            # Create a pool, secrets and sc
+            secret_obj = helpers.create_secret(interface_type=constants.CEPHBLOCKPOOL)
+            cbj_obj = helpers.create_ceph_block_pool()
+            sc_obj = helpers.create_storage_class(
+                interface_type=constants.CEPHBLOCKPOOL,
+                interface_name=cbj_obj.name,
+                secret_name=secret_obj.name
+            )
+
+            # Get the list of monitoring pods
+            pods_list = get_all_pods(
+                namespace=defaults.OCS_MONITORING_NAMESPACE,
+                selector=['prometheus', 'alertmanager']
+            )
+
+            # Create configmap cluster-monitoring-config
+            create_configmap_cluster_monitoring_pod(sc_obj.name)
+
+            # Take some time to respin the pod
+            waiting_time = 30
+            logger.info(f"Waiting {waiting_time} seconds...")
+            time.sleep(waiting_time)
+
+            # Validate the pods are respinned and in running state
+            validate_pods_are_respinned_and_running_state(
+                pods_list
+            )
+
+            # Validate the pvc is created on monitoring pods
+            validate_pvc_created_and_bound_on_monitoring_pods()
+
+            # Validate the pvc are mounted on pods
+            validate_pvc_are_mounted_on_monitoring_pods(pods_list)
 
         # Verify health of ceph cluster
         # TODO: move destroy cluster logic to new CLI usage pattern?
