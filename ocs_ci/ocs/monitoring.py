@@ -48,6 +48,7 @@ def validate_pvc_created_and_bound_on_monitoring_pods():
     logger.info("Verify pvc are created")
     pvc_list = get_all_pvcs(namespace=defaults.OCS_MONITORING_NAMESPACE)
     logger.info(f"PVC list {pvc_list}")
+
     # Check all pvc's are in bound state
     for pvc in pvc_list['items']:
         assert pvc['status']['phase'] == constants.STATUS_BOUND, (
