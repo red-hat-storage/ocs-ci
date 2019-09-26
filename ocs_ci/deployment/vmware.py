@@ -11,7 +11,8 @@ from .deployment import Deployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.utility.utils import (
     run_cmd, replace_content_in_file, wait_for_co,
-    clone_repo, upload_file, read_file_as_str
+    clone_repo, upload_file, read_file_as_str,
+    create_directory_path
 )
 from ocs_ci.framework import config
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
@@ -85,6 +86,9 @@ class VSPHEREUPI(VSPHEREBASE):
                 constants.EXTERNAL_DIR,
                 'installer'
             )
+            self.previous_dir = os.getcwd()
+            self.terraform_data_dir = os.path.join(self.cluster_path, constants.TERRAFORM_DATA_DIR)
+            create_directory_path(self.terraform_data_dir)
             self.terraform_work_dir = constants.VSPHERE_DIR
             self.terraform = Terraform(self.terraform_work_dir)
 
@@ -118,10 +122,9 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # generate bootstrap ignition url
             path_to_bootstrap_on_remote = remote_path.replace("/var/www/html/", "")
-            bootstrap_ignition_url = os.path.join(
-                "http://",
-                config.ENV_DATA.get('httpd_server'),
-                path_to_bootstrap_on_remote
+            bootstrap_ignition_url = (
+                f"http://{config.ENV_DATA.get('httpd_server')}/"
+                f"{path_to_bootstrap_on_remote}"
             )
             logger.info(f"bootstrap_ignition_url: {bootstrap_ignition_url}")
             config.ENV_DATA['bootstrap_ignition_url'] = bootstrap_ignition_url
@@ -158,7 +161,11 @@ class VSPHEREUPI(VSPHEREBASE):
                 terraform_var_template_path, config.ENV_DATA
             )
 
-            terraform_var_yaml = os.path.join(self.cluster_path, "terraform.tfvars.yaml")
+            terraform_var_yaml = os.path.join(
+                self.cluster_path,
+                constants.TERRAFORM_DATA_DIR,
+                "terraform.tfvars.yaml"
+            )
             with open(terraform_var_yaml, "w") as f:
                 f.write(terraform_config_str)
             self.terraform_var = self.convert_yaml2tfvars(terraform_var_yaml)
@@ -288,8 +295,10 @@ class VSPHEREUPI(VSPHEREBASE):
             logger.info(
                 f"Openshift-installer will be using loglevel:{log_cli_level}"
             )
+            os.chdir(self.terraform_data_dir)
             self.terraform.initialize()
             self.terraform.apply(self.terraform_var)
+            os.chdir(self.previous_dir)
             logger.info("waiting for bootstrap to complete")
             run_cmd(
                 f"{self.installer} wait-for bootstrap-complete "
@@ -297,7 +306,9 @@ class VSPHEREUPI(VSPHEREBASE):
                 f"--log-level {log_cli_level}"
             )
             logger.info("removing bootstrap node")
+            os.chdir(self.terraform_data_dir)
             self.terraform.apply(self.terraform_var, bootstrap_complete=True)
+            os.chdir(self.previous_dir)
 
             OCP.set_kubeconfig(self.kubeconfig)
             # wait for image registry to show-up
@@ -338,9 +349,20 @@ class VSPHEREUPI(VSPHEREBASE):
             log_level (str): log level openshift-installer (default: DEBUG)
 
         """
+        previous_dir = os.getcwd()
+        terraform_data_dir = os.path.join(self.cluster_path, constants.TERRAFORM_DATA_DIR)
         upi_repo_path = os.path.join(
             constants.EXTERNAL_DIR, 'installer',
         )
-        tfvars = f"{config.ENV_DATA.get('cluster_path')}/terraform.tfvars"
-        terraform = Terraform(f"{upi_repo_path}/upi/vsphere/")
+        tfvars = os.path.join(
+            config.ENV_DATA.get('cluster_path'),
+            constants.TERRAFORM_DATA_DIR,
+            constants.TERRAFORM_VARS
+        )
+        clone_repo(
+            constants.VSPHERE_INSTALLER_REPO, upi_repo_path
+        )
+        terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
+        os.chdir(terraform_data_dir)
         terraform.destroy(tfvars)
+        os.chdir(previous_dir)
