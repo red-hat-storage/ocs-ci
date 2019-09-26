@@ -110,7 +110,7 @@ def test_ceph_osd_stopped(workload_stop_ceph_osd):
         )
         # the time to wait is increased because it takes more time for osd pod
         # to be ready than for other pods
-        osd_up_wait = 240
+        osd_up_wait = 360
         api.check_alert_cleared(
             label=target_label,
             measure_end_time=workload_stop_ceph_osd.get('stop'),
