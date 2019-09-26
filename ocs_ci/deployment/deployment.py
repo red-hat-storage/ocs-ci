@@ -28,6 +28,7 @@ from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state
 )
+from ocs_ci.ocs.cluster import validate_cluster_on_pvc
 
 
 logger = logging.getLogger(__name__)
@@ -328,6 +329,9 @@ class Deployment(object):
             condition='Running', selector='app=rook-ceph-osd',
             resource_count=3, timeout=600
         )
+        # Validation for cluster on pvc
+        validate_cluster_on_pvc(label=constants.MON_APP_LABEL)
+        validate_cluster_on_pvc(label=constants.DEFAULT_DEVICESET_LABEL)
 
         if not self.ocs_operator_deployment:
             # Creatig toolbox pod
