@@ -11,6 +11,27 @@ from ocs_ci.ocs.resources import pod
 logger = logging.getLogger(__name__)
 
 
+@pytest.fixture()
+def create_pods(pod_factory, num_of_pod=3):
+    """
+    Create resources for the test
+    """
+    pod_objs = [
+        pod_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            status=constants.STATUS_RUNNING
+        ) for _ in range(num_of_pod)
+    ]
+
+    # Check for the created pvc metrics on prometheus pod
+    for pod_obj in pod_objs:
+        assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
+            f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
+        )
+
+    return pod_objs
+
+
 @pytest.mark.polarion_id("OCS-605")
 @tier4
 class TestMonitoringWhenOSDDown(E2ETest):
@@ -26,28 +47,12 @@ class TestMonitoringWhenOSDDown(E2ETest):
         """
         self.sanity_helpers = Sanity()
 
-    @pytest.fixture(autouse=True)
-    def test_fixture(self, pod_factory, num_of_pod=3):
-        """
-        Create resources for the test
-        """
-        self.pod_objs = [
-            pod_factory(
-                interface=constants.CEPHBLOCKPOOL,
-                status=constants.STATUS_RUNNING
-            ) for _ in range(num_of_pod)
-        ]
-
-        # Check for the created pvc metrics on prometheus pod
-        for pod_obj in self.pod_objs:
-            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
-                f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
-            )
-
-    def test_monitoring_when_osd_down(self, pod_factory):
+    def test_monitoring_when_osd_down(self, create_pods):
         """
         Test case to validate monitoring when osd is down
         """
+
+        pod_objs = create_pods
 
         # Get osd pods
         osd_pod_list = pod.get_osd_pods()
@@ -68,7 +73,7 @@ class TestMonitoringWhenOSDDown(E2ETest):
         )
 
         # Check for the created pvc metrics when osd is down
-        for pod_obj in self.pod_objs:
+        for pod_obj in pod_objs:
             assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
                 f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
             )
