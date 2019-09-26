@@ -3,7 +3,7 @@ import random
 
 import pytest
 
-from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import aws_platform_required
 from ocs_ci.framework.testlib import ManageTest, tier4, bugzilla
 from ocs_ci.ocs.exceptions import CommandFailed
 from tests import sanity_helpers
@@ -13,10 +13,7 @@ logger = logging.getLogger(__name__)
 
 @tier4
 @pytest.mark.polarion_id("OCS-1287")
-@pytest.mark.skipif(
-    condition=config.ENV_DATA['platform'] != 'AWS',
-    reason="Tests are not running on AWS deployed cluster"
-)
+@aws_platform_required
 @bugzilla('1754287')
 class TestAvailabilityZones(ManageTest):
     """
@@ -78,9 +75,10 @@ class TestAvailabilityZones(ManageTest):
 
         # Check cluster's health, need to be unhealthy at that point
 
-        assert not self.check_cluster_health(), \
-            "Cluster is wrongly reported as healthy. " \
+        assert not self.check_cluster_health(), (
+            "Cluster is wrongly reported as healthy. " 
             "EC2 Instances {self.instances_in_az} are blocked"
+        )
 
         # Create resources
         logger.info("Trying to create resources on un-healthy cluster")
@@ -152,5 +150,6 @@ class TestAvailabilityZones(ManageTest):
             self.sanity_helpers.health_check()
             return True
         except CommandFailed as e:
-            print(e, "Cluster is not healthy")
-            return False
+            if "Unable to connect to the server" is str(e):
+                logger.warning(f"{e}, Cluster is not healthy")
+                return False

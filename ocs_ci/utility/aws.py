@@ -465,15 +465,16 @@ class AWS(object):
 
         Returns:
             list: All security groups
+
         """
-        all_sg_group = list()
+        all_security_groups = list()
 
         security_groups_dict = self.ec2_client.describe_security_groups()
         security_groups = security_groups_dict['SecurityGroups']
         for group_object in security_groups:
-            all_sg_group.append(group_object['GroupId'])
+            all_security_groups.append(group_object['GroupId'])
 
-        return all_sg_group
+        return all_security_groups
 
     def get_security_groups_by_instance_id(self, instance_id):
         """
