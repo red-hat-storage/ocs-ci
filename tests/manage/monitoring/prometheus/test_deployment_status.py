@@ -95,6 +95,12 @@ def test_ceph_osd_stopped(workload_stop_ceph_osd):
             'error'
         ),
         (
+            constants.ALERT_DATARECOVERYTAKINGTOOLONG,
+            'Data recovery is slow',
+            ['pending'],
+            'warning'
+        ),
+        (
             constants.ALERT_CLUSTERWARNINGSTATE,
             'Storage cluster is in degraded state',
             ['pending', 'firing'],
