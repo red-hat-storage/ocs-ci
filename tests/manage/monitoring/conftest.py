@@ -118,7 +118,6 @@ def measure_operation(
         stop_time = time.time()
         info['run'] = False
         logging_thread.join()
-        logger.info(f"Alerts found during measurement: {alert_list}")
         results = {
             'start': start_time,
             'stop': stop_time,
@@ -126,6 +125,7 @@ def measure_operation(
             'metadata': metadata,
             'prometheus_alerts': alert_list
         }
+        logger.info(f"Results of measurement: {results}")
         with open(result_file, 'w') as outfile:
             logger.info(f"Dumping results of measurement into {result_file}")
             json.dump(results, outfile)
