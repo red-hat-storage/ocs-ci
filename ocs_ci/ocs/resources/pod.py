@@ -959,3 +959,20 @@ def plugin_provisioner_leader(interface, namespace=None):
     assert leader_pod, "Couldn't identify plugin provisioner leader pod."
     logger.info(f"Plugin provisioner leader pod is {leader_pod.name}")
     return leader_pod
+
+
+def get_operator_pods(operator_label=constants.OPERATOR_LABEL, namespace=None):
+    """
+    Fetches info about rook-ceph-operator pods in the cluster
+
+    Args:
+        operator_label (str): Label associated with rook-ceph-operator pod
+        namespace (str): Namespace in which ceph cluster lives
+
+    Returns:
+        list : of rook-ceph-operator pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    operators = get_pods_having_label(operator_label, namespace)
+    operator_pods = [Pod(**operator) for operator in operators]
+    return operator_pods
