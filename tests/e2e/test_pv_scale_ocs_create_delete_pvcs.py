@@ -8,8 +8,8 @@ import logging
 import pytest
 import random
 import time
+import threading
 
-from concurrent.futures import ThreadPoolExecutor
 from tests import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
@@ -46,28 +46,42 @@ class BasePvcPodCreateDelete(E2ETest):
         )
         # Appending all the pvc obj to base case param for cleanup and evaluation
         self.all_pvc_obj.extend(cephfs_pvcs + rbd_pvcs)
+
         # Create pods with above pvc list
         cephfs_pods = helpers.create_pods_parallel(
             cephfs_pvcs, self.namespace, constants.CEPHFS_INTERFACE
         )
-        rbd_rwo_pods = list()
-        # TODO: RBD RWX pod creation
+        rbd_rwo_pvc, rbd_rwx_pvc = ([] for i in range(2))
         for pvc_obj in rbd_pvcs:
-            if not pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWX:
-                rbd_rwo_pods.append(pvc_obj)
-        rbd_pods = helpers.create_pods_parallel(
-            rbd_rwo_pods, self.namespace, constants.CEPHBLOCKPOOL
+            if pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWX:
+                rbd_rwx_pvc.append(pvc_obj)
+            else:
+                rbd_rwo_pvc.append(pvc_obj)
+        rbd_rwo_pods = helpers.create_pods_parallel(
+            rbd_rwo_pvc, self.namespace, constants.CEPHBLOCKPOOL
+        )
+        rbd_rwx_pods = helpers.create_pods_parallel(
+            rbd_rwx_pvc, self.namespace, constants.CEPHBLOCKPOOL,
+            raw_block_pv=True
         )
         temp_pod_objs = list()
-        temp_pod_objs.extend(cephfs_pods + rbd_pods)
+        temp_pod_objs.extend(cephfs_pods + rbd_rwo_pods)
         # Appending all the pod obj to base case param for cleanup and evaluation
-        self.all_pod_obj.extend(temp_pod_objs)
+        self.all_pod_obj.extend(temp_pod_objs + rbd_rwx_pods)
 
         # IO will start based on TC requirement
         if start_io:
-            with ThreadPoolExecutor() as executor:
-                for pod_obj in temp_pod_objs:
-                    executor.submit(pod_obj.run_io('fs', size='512M'))
+            threads = list()
+            for pod_obj in temp_pod_objs:
+                process = threading.Thread(target=pod_obj.run_io, args=('fs', '512M',))
+                process.start()
+                threads.append(process)
+            for pod_obj in rbd_rwx_pods:
+                process = threading.Thread(target=pod_obj.run_io, args=('block', '512M',))
+                process.start()
+                threads.append(process)
+            for process in threads:
+                process.join()
 
     def delete_pvc_pod(self):
         """
@@ -138,41 +152,47 @@ class TestPVSTOcsCreateDeletePVCsWithAndWithoutIO(BasePvcPodCreateDelete):
         self.rbd_sc_obj = storageclass_factory(interface=constants.CEPHBLOCKPOOL)
         self.cephfs_sc_obj = storageclass_factory(interface=constants.CEPHFILESYSTEM)
 
+    # TODO: Skipping memory leak fixture call in test function because of bz 1750328
     def test_pv_scale_out_create_delete_pvcs_with_and_without_io(
-        self, memory_leak_function, namespace, storageclass, setup_fixture, start_io
+        self, namespace, storageclass, setup_fixture, start_io
     ):
-        self.pvc_count_each_itr = 10
-        self.scale_pod_count = 120
-        self.size = '10Gi'
+        pvc_count_each_itr = 10
+        scale_pod_count = 120
+        size = '10Gi'
         test_run_time = 180
         self.all_pvc_obj, self.all_pod_obj = ([] for i in range(2))
         self.delete_pod_count = 0
 
         # Identify median memory value for each worker node
-        median_dict = helpers.get_memory_leak_median_value()
-        log.info(f"Median dict values for memory leak {median_dict}")
+        # TODO: Skipping memory leak median calculate because of bz 1750328
+        # median_dict = helpers.get_memory_leak_median_value()
+        # log.info(f"Median dict values for memory leak {median_dict}")
 
         # First Iteration call to create PVC and POD
-        self.create_pvc_pod(self.rbd_sc_obj, self.cephfs_sc_obj, self.pvc_count_each_itr,
-                            self.size, start_io)
+        self.create_pvc_pod(self.rbd_sc_obj, self.cephfs_sc_obj, pvc_count_each_itr, size, start_io)
 
         # Continue to iterate till the scale pvc limit is reached
         # Also continue to perform create and delete of pod, pvc in parallel
         while True:
-            if self.scale_pod_count <= len(self.all_pod_obj):
-                log.info(f"Created {self.scale_pod_count} pvc and pods")
+            if scale_pod_count <= len(self.all_pod_obj):
+                log.info(f"Created {scale_pod_count} pvc and pods")
                 break
             else:
-                with ThreadPoolExecutor() as executor:
-                    log.info(f"Create {self.pvc_count_each_itr} and "
-                             f"in parallel delete {self.delete_pod_count} "
-                             f"pods & pvc")
-                    thread_list = [self.delete_pvc_pod(), self.create_pvc_pod(
-                        self.rbd_sc_obj, self.cephfs_sc_obj, self.pvc_count_each_itr,
-                        self.size, start_io)]
-                    for thread in thread_list:
-                        executor.submit(thread)
+                log.info(
+                    f"Create {pvc_count_each_itr} and in parallel delete {self.delete_pod_count}"
+                    " pods & pvc"
+                )
+                thread1 = threading.Thread(target=self.delete_pvc_pod, args=())
+                thread2 = threading.Thread(target=self.create_pvc_pod, args=(
+                    self.rbd_sc_obj, self.cephfs_sc_obj, pvc_count_each_itr, size, start_io
+                )
+                )
+                thread1.start()
+                thread2.start()
+            thread1.join()
+            thread2.join()
 
         # Added sleep for test case run time and for capturing memory leak after scale
         time.sleep(test_run_time)
-        helpers.memory_leak_analysis(median_dict)
+        # TODO: Skipping memory leak analysis because of bz 1750328
+        # helpers.memory_leak_analysis(median_dict)
