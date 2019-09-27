@@ -18,8 +18,8 @@ import ocs_ci.ocs.constants as constant
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
-from ocs_ci.ocs import ocp, constants
-from ocs_ci.ocs import exceptions
+from ocs_ci.ocs import ocp, constants, defaults, exceptions
+from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 
 logger = logging.getLogger(__name__)
 
@@ -423,4 +423,100 @@ class CephCluster(object):
         self.used_space = used_in_gb
         raise UnexpectedBehaviour(
             f"In Rados df, Used size is varying"
+        )
 
+
+def validate_cluster_on_pvc(label):
+    """
+    Validate creation of PVCs for MON and OSD pods.
+    Also validate that those PVCs are attached to the OCS pods
+
+    Args:
+        label(string): Label for MON or OSD PVCs
+
+    Raises:
+         AssertionError: If PVC is not mounted on one or more OCS pods
+
+    """
+    # Get the PVCs for selected label (MON/OSD)
+    ocs_pvc_obj = get_all_pvc_objs(
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE, selector=label
+    )
+
+    # Check all pvc's are in bound state
+    for pvc_obj in ocs_pvc_obj:
+        assert pvc_obj.status == constants.STATUS_BOUND, (
+            f"PVC {pvc_obj.name} is not Bound"
+        )
+        logger.info(f"PVC {pvc_obj.name} is in Bound state")
+
+    # Get OCS pod names based on selected label
+    if label == constants.MON_APP_LABEL:
+        ocs_pod_obj = pod.get_mon_pods(
+            mon_label=label, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        )
+    if label == constants.DEFAULT_DEVICESET_LABEL:
+        ocs_pod_obj = pod.get_osd_pods(
+            osd_label=constants.OSD_APP_LABEL,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        )
+
+    # Create a pvc list for requested label
+    pvc_list = []
+    for pvc_obj in ocs_pvc_obj:
+        pvc_list.append(pvc_obj.name)
+
+    # Check if PVC is mounted on designated OCS pod
+    # loop over all PVCs in the pvc_list
+    # Each mon and osd pod is expected to have only one Claim attached
+    claim_found = True
+    all_backed_by_pvc = True
+    for pod_obj in ocs_pod_obj:
+        pod_volumes = pod_obj.get().get('spec').get('volumes')
+        claim_spec_exists = False
+        for volumes in pod_volumes:
+            pvc = volumes.get('persistentVolumeClaim')
+            if pvc:
+                claim_name = pvc.get('claimName')
+                claim_spec_exists = True
+                backed_by_pvc = False
+                if claim_name in pvc_list:
+                    logger.info(
+                        f"OCS pod {pod_obj.name} is backed by PVC {claim_name}"
+                    )
+                    # If backed by PVC, set backed_by_pvc = True
+                    backed_by_pvc = True
+
+                    # Check if Mon PVC is mounted as /var/lib/ceph/mon/ceph-x
+                    if label == constants.MON_APP_LABEL:
+                        mount_point = pod_obj.exec_cmd_on_pod(command="df -kh")
+                        assert "/var/lib/ceph/mon/ceph" in mount_point, (
+                            f"pvc is not mounted on pod {pod_obj.name}"
+                        )
+                        logger.info(
+                            f"PVC {claim_name} is mounted"
+                            f" on pod {pod_obj.name}"
+                        )
+        if not backed_by_pvc:
+            logger.error(f"{pod_obj.name} is not backed by designated PVC ")
+            all_backed_by_pvc = False
+
+        # If no PVC is mounted, print error and continue checking other pods
+        if not claim_spec_exists:
+            logger.error(
+                f"No PersistentVolumeClaim spec found in "
+                f"OCS pod {pod_obj.name}"
+            )
+            claim_found = False
+
+    # Even if one OCS POD is not backed by a PVC, fail the deployment
+    assert all_backed_by_pvc, (
+        "One or more pods are not backed by a PVC "
+        "please check deployment logs"
+    )
+
+    # Even if one OCS POD as PVC spec, fail the deployment
+    assert claim_found, (
+        "Claim name doesn't exists in spec of one or more pods "
+        "please check deployment logs"
+    )
