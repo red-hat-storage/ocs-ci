@@ -24,7 +24,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_are_mounted_on_monitoring_pods
 )
 from ocs_ci.ocs.utils import (
-    create_oc_resource, apply_oc_resource, setup_ceph_toolbox
+    create_oc_resource, apply_oc_resource, setup_ceph_toolbox, collect_ocs_logs
 )
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
@@ -76,10 +76,23 @@ class Deployment(object):
                     "OCP cluster is already running, skipping installation"
                 )
             else:
-                self.deploy_ocp(log_cli_level)
+                try:
+                    self.deploy_ocp(log_cli_level)
+                except Exception:
+                    if config.REPORTING['gather_on_deploy_failure']:
+                        collect_ocs_logs('deployment', ocs=False)
+                    raise
 
         if not config.ENV_DATA['skip_ocs_deployment']:
-            self.deploy_ocs()
+            try:
+                self.deploy_ocs()
+            except Exception:
+                if config.REPORTING['gather_on_deploy_failure']:
+                    # Let's do the collections separately to guard against one
+                    # of them failing
+                    collect_ocs_logs('deployment', ocs=False)
+                    collect_ocs_logs('deployment', ocp=False)
+                raise
         else:
             logger.warning("OCS deployment will be skipped")
 
