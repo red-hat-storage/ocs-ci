@@ -440,7 +440,8 @@ def validate_cluster_on_pvc(label):
     """
     # Get the PVCs for selected label (MON/OSD)
     ocs_pvc_obj = get_all_pvc_objs(
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE, selector=label)
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE, selector=label
+    )
 
     # Check all pvc's are in bound state
     for pvc_obj in ocs_pvc_obj:
@@ -470,7 +471,6 @@ def validate_cluster_on_pvc(label):
     # Each mon and osd pod is expected to have only one Claim attached
     claim_found = True
     all_backed_by_pvc = True
-    backed_by_pvc = False
     for pod_obj in ocs_pod_obj:
         pod_volumes = pod_obj.get().get('spec').get('volumes')
         claim_spec_exists = False
@@ -497,7 +497,6 @@ def validate_cluster_on_pvc(label):
                             f"PVC {claim_name} is mounted"
                             f" on pod {pod_obj.name}"
                         )
-
         if not backed_by_pvc:
             logger.error(f"{pod_obj.name} is not backed by designated PVC ")
             all_backed_by_pvc = False
@@ -512,7 +511,7 @@ def validate_cluster_on_pvc(label):
 
     # Even if one OCS POD is not backed by a PVC, fail the deployment
     assert all_backed_by_pvc, (
-        "One or more pods are not backed by a PVC"
+        "One or more pods are not backed by a PVC "
         "please check deployment logs"
     )
 
