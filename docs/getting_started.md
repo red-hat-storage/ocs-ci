@@ -11,6 +11,24 @@
    (running oc version on terminal should display version > 3.11).
    Latest client can be downloaded from [oc-client](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/).
 
+#### AWS UPI
+There are additional prerequisites if you plan to execute AWS UPI deployments
+
+1. Install the `jq` and `awscli` system packages
+
+##### Mac OSX Users
+The system `sed` package is not compatible with the script used to install AWS
+UPI. To resolve this issue, you must install `gnu-sed`. You can do this with brew.
+
+    brew install gnu-sed
+
+In addition to this, you will need to ensure that `gnu-sed` is used instead
+of the system `sed`. To do this you will need to update your PATH accordingly.
+In your shell rc file (`~/.bashrc`, `~/.zshrc`, etc.) add the following
+line to the end of the file.
+
+    export PATH="/usr/local/opt/gnu-sed/libexec/gnubin:$PATH"
+
 ## Installing
 
 It is recommended that you use a python virtual environment to install the
