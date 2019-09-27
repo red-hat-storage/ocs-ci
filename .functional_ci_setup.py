@@ -95,9 +95,12 @@ def get_ocsci_conf():
             cluster_namespace="openshift-storage",
 
         ),
+        REPORTING=dict(
+            gather_on_deploy_failure=True,
+        )
     )
     if env.get("DOWNSTREAM") == "true":
-        conf_obj['REPORTING'] = dict(us_ds='DS')
+        conf_obj['REPORTING']['us_ds'] = 'DS'
     if env.get("OCS_OPERATOR_DEPLOYMENT") == "true":
         conf_obj['DEPLOYMENT'] = dict(
             ocs_operator_image=env['OCS_OPERATOR_IMAGE'],
