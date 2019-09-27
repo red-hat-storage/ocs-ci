@@ -11,7 +11,8 @@ from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check, run_cmd
 from ocs_ci.ocs.resources.pod import (
-    get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods, get_plugin_pods
+    get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods, get_plugin_pods,
+    get_rbdfsplugin_provisioner_pods, get_cephfsplugin_provisioner_pods
 )
 from tests.helpers import verify_volume_deleted_in_backend
 from tests import disruption_helpers
@@ -71,7 +72,11 @@ class DisruptionBase(ManageTest):
             'mds': partial(get_mds_pods), 'mon': partial(get_mon_pods),
             'mgr': partial(get_mgr_pods), 'osd': partial(get_osd_pods),
             'rbdplugin': partial(get_plugin_pods, interface=interface),
-            'cephfsplugin': partial(get_plugin_pods, interface=interface)
+            'cephfsplugin': partial(get_plugin_pods, interface=interface),
+            'cephfsplugin_provisioner': partial(
+                get_cephfsplugin_provisioner_pods
+            ),
+            'rbdplugin_provisioner': partial(get_rbdfsplugin_provisioner_pods)
         }
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=resource_to_delete)
@@ -136,9 +141,7 @@ class DisruptionBase(ManageTest):
                 get_all_pods, initial_num_of_pods
             )
             assert ret, "Wait timeout: Pods are not being deleted."
-            logging.info(
-                f"Pods deletion has started."
-            )
+            log.info(f"Pods deletion has started.")
             disruption.delete_resource()
 
         pods_deleted = pod_bulk_delete.result()
@@ -147,10 +150,10 @@ class DisruptionBase(ManageTest):
 
         # Verify pods are deleted
         for pod_obj in self.pod_objs:
-            assert pod_obj.ocp.wait_for_delete(pod_obj.name), (
+            assert pod_obj.ocp.wait_for_delete(pod_obj.name, 180), (
                 f"Pod {pod_obj.name} is not deleted"
             )
-        logging.info("Verified: Pods are deleted.")
+        log.info("Verified: Pods are deleted.")
 
         # Verify that the mount point is removed from nodes after deleting pod
         for node, pvs in node_pv_dict.items():
@@ -180,9 +183,7 @@ class DisruptionBase(ManageTest):
                 get_all_pvcs, initial_num_of_pvc
             )
             assert ret, "Wait timeout: PVCs are not being deleted."
-            logging.info(
-                f"PVCs deletion has started."
-            )
+            log.info(f"PVCs deletion has started.")
             disruption.delete_resource()
 
         pvcs_deleted = pvc_bulk_delete.result()
@@ -194,14 +195,14 @@ class DisruptionBase(ManageTest):
             assert pvc_obj.ocp.wait_for_delete(pvc_obj.name), (
                 f"PVC {pvc_obj.name} is not deleted"
             )
-        logging.info("Verified: PVCs are deleted.")
+        log.info("Verified: PVCs are deleted.")
 
         # Verify PVs are deleted
         for pv_obj in pv_objs:
-            assert pv_obj.ocp.wait_for_delete(pv_obj.name), (
+            assert pv_obj.ocp.wait_for_delete(pv_obj.name, 120), (
                 f"PV {pv_obj.name} is not deleted"
             )
-        logging.info("Verified: PVs are deleted.")
+        log.info("Verified: PVs are deleted.")
 
         # Verify PV using ceph toolbox. Image/Subvolume should be deleted.
         for pvc_name, uuid in pvc_uuid_map.items():
@@ -301,6 +302,28 @@ class DisruptionBase(ManageTest):
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pods', 'cephfsplugin'],
             marks=pytest.mark.polarion_id("OCS-1018")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'delete_pvcs', 'rbdplugin_provisioner'],
+            marks=pytest.mark.polarion_id("OCS-944")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'delete_pods', 'rbdplugin_provisioner'],
+            marks=pytest.mark.polarion_id("OCS-943")
+        ),
+        pytest.param(
+            *[
+                constants.CEPHFILESYSTEM, 'delete_pvcs',
+                'cephfsplugin_provisioner'
+            ],
+            marks=pytest.mark.polarion_id("OCS-951")
+        ),
+        pytest.param(
+            *[
+                constants.CEPHFILESYSTEM, 'delete_pods',
+                'cephfsplugin_provisioner'
+            ],
+            marks=pytest.mark.polarion_id("OCS-950")
         )
     ]
 )
