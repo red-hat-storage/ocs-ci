@@ -330,11 +330,12 @@ class Deployment(object):
             resource_count=3, timeout=600
         )
         # Validation for cluster on pvc
+        logger.info("Validate mon and OSD are backed by PVCs")
         validate_cluster_on_pvc(label=constants.MON_APP_LABEL)
         validate_cluster_on_pvc(label=constants.DEFAULT_DEVICESET_LABEL)
 
         if not self.ocs_operator_deployment:
-            # Creatig toolbox pod
+            # Creating toolbox pod
             create_oc_resource(
                 'toolbox.yaml', self.cluster_path, _templating,
                 config.ENV_DATA,
