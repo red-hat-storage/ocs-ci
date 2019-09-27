@@ -709,13 +709,15 @@ def run_must_gather(log_dir_path, image, command=None):
         )
 
 
-def collect_ocs_logs(dir_name):
+def collect_ocs_logs(dir_name, ocp=True, ocs=True):
     """
     Collects OCS logs
 
     Args:
         dir_name (str): directory name to store OCS logs. Logs will be stored
             in dir_name suffix with _ocs_logs.
+        ocp (bool): Whether to gather OCP logs
+        ocs (bool): Whether to gather OCS logs
 
     """
     log_dir_path = os.path.join(
@@ -724,11 +726,13 @@ def collect_ocs_logs(dir_name):
         f"{dir_name}_ocs_logs"
     )
 
-    run_must_gather(os.path.join(log_dir_path, 'ocs_must_gather'),
-                    ocsci_config.REPORTING['ocs_must_gather_image'])
+    if ocs:
+        run_must_gather(os.path.join(log_dir_path, 'ocs_must_gather'),
+                        ocsci_config.REPORTING['ocs_must_gather_image'])
 
-    ocp_log_dir_path = os.path.join(log_dir_path, 'ocp_must_gather')
-    ocp_must_gather_image = ocsci_config.REPORTING['ocp_must_gather_image']
-    run_must_gather(ocp_log_dir_path, ocp_must_gather_image)
-    run_must_gather(ocp_log_dir_path, ocp_must_gather_image,
-                    '/usr/bin/gather_service_logs worker')
+    if ocp:
+        ocp_log_dir_path = os.path.join(log_dir_path, 'ocp_must_gather')
+        ocp_must_gather_image = ocsci_config.REPORTING['ocp_must_gather_image']
+        run_must_gather(ocp_log_dir_path, ocp_must_gather_image)
+        run_must_gather(ocp_log_dir_path, ocp_must_gather_image,
+                        '/usr/bin/gather_service_logs worker')
