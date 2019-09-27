@@ -10,7 +10,7 @@ from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods, get_all_pods,
     get_fio_rw_iops, get_plugin_pods, get_rbdfsplugin_provisioner_pods,
-    get_cephfsplugin_provisioner_pods
+    get_cephfsplugin_provisioner_pods, get_operator_pods
 )
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from tests.helpers import (
@@ -71,6 +71,14 @@ log = logging.getLogger(__name__)
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'rbdplugin_provisioner'],
             marks=pytest.mark.polarion_id("OCS-953")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'operator'],
+            marks=pytest.mark.polarion_id("OCS-934")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'operator'],
+            marks=pytest.mark.polarion_id("OCS-930")
         )
     ]
 )
@@ -215,7 +223,8 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
             'cephfsplugin_provisioner': partial(
                 get_cephfsplugin_provisioner_pods
             ),
-            'rbdplugin_provisioner': partial(get_rbdfsplugin_provisioner_pods)
+            'rbdplugin_provisioner': partial(get_rbdfsplugin_provisioner_pods),
+            'operator': partial(get_operator_pods)
         }
 
         disruption = disruption_helpers.Disruptions()
