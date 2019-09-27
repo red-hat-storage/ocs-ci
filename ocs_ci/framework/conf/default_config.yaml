@@ -62,6 +62,7 @@ REPORTING:
   us_ds: 'US'
   ocp_must_gather_image: "quay.io/openshift/origin-must-gather"
   ocs_must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
+  gather_on_deploy_failure: true
 
 # This is the default information about environment. Will be overwritten with
 # --cluster-conf file.yaml data you will pass to the pytest.
