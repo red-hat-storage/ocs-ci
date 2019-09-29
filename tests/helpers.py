@@ -374,6 +374,30 @@ def create_storage_class(
     return create_resource(**sc_data)
 
 
+def create_mcg_storageclass(reclaim_policy=constants.RECLAIM_POLICY_DELETE, sc_name=None):
+    """
+    Create a MCG storage class
+
+    Args:
+        sc_name (str): The name of storage class to create
+        reclaim_policy (str): Type of reclaim policy. Defaults to 'Delete'
+            (eg., 'Delete', 'Retain')
+
+    Returns:
+        OCS: An OCS instance for the MCG storage class
+
+    """
+    sc_data = templating.load_yaml(constants.MCG_STORAGECLASS)
+    sc_data['metadata']['name'] = (
+        sc_name if sc_name else create_unique_resource_name(
+            f'test-mcg', 'storageclass'
+        )
+    )
+    sc_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    sc_data['reclaimPolicy'] = reclaim_policy
+    return create_resource(**sc_data)
+
+
 def create_pvc(
     sc_name, pvc_name=None, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     size=None, do_reload=True, access_mode=constants.ACCESS_MODE_RWO,

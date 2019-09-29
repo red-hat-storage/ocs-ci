@@ -165,6 +165,10 @@ MCG_OBC_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml"
 )
 
+MCG_STORAGECLASS = os.path.join(
+    TEMPLATE_MCG_DIR, "mcgstorageclass.yaml"
+)
+
 CSI_RBD_POD_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pod.yaml"
 )

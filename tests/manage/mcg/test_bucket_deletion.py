@@ -29,21 +29,23 @@ class TestBucketDeletion:
             )
 
     @noobaa_cli_required
-    def test_cli_bucket_delete(self, mcg_obj, bucket_factory):
+    def test_cli_bucket_delete(self, mcg_obj, bucket_factory, mcg_storageclass):
         """
         Test deletion of buckets using the MCG CLI
         """
-        for bucket in bucket_factory(3, 'CLI'):
+        sc_obj = mcg_storageclass()
+        for bucket in bucket_factory(3, 'CLI', sc_obj):
             bucket.delete()
             assert not mcg_obj.cli_verify_bucket_exists(bucket.name), (
                 f"Found {bucket.name} that should've been removed"
             )
 
-    def test_oc_bucket_delete(self, mcg_obj, bucket_factory):
+    def test_oc_bucket_delete(self, mcg_obj, bucket_factory, mcg_storageclass):
         """
         Test deletion of buckets using OC commands
         """
-        for bucket in bucket_factory(3, 'OC'):
+        sc_obj = mcg_storageclass()
+        for bucket in bucket_factory(3, 'OC', sc_obj):
             logger.info(f"Deleting bucket: {bucket.name}")
             bucket.delete()
             assert not mcg_obj.oc_verify_bucket_exists(bucket.name)

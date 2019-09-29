@@ -28,22 +28,24 @@ class TestBucketCreation:
         )
 
     @noobaa_cli_required
-    def test_cli_bucket_creation(self, mcg_obj, bucket_factory):
+    def test_cli_bucket_creation(self, mcg_obj, bucket_factory, mcg_storageclass):
         """
         Test bucket creation using the MCG CLI
         """
+        sc_obj = mcg_storageclass()
         assert set(
-            bucket.name for bucket in bucket_factory(3, 'CLI')
+            bucket.name for bucket in bucket_factory(3, 'CLI', sc_obj)
         ).issubset(
             mcg_obj.cli_list_all_bucket_names()
         )
 
-    def test_oc_bucket_creation(self, mcg_obj, bucket_factory):
+    def test_oc_bucket_creation(self, mcg_obj, bucket_factory, mcg_storageclass):
         """
         Test bucket creation using OC commands
         """
+        sc_obj = mcg_storageclass()
         assert set(
-            bucket.name for bucket in bucket_factory(3, 'OC')
+            bucket.name for bucket in bucket_factory(3, 'OC', sc_obj)
         ).issubset(
             mcg_obj.oc_list_all_bucket_names()
         )

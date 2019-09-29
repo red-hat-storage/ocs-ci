@@ -14,14 +14,15 @@ class MCGBucket(ABC):
     """
     Base abstract class for MCG buckets
     """
-    mcg, name = (None,) * 2
+    mcg, name, mcg_sc = (None,) * 3
 
-    def __init__(self, mcg, name):
+    def __init__(self, mcg, name, mcg_sc):
         """
         Constructor of an MCG bucket
         """
         self.mcg = mcg
         self.name = name
+        self.mcg_sc = mcg_sc
         logger.info(f"Creating bucket: {self.name}")
 
     def __hash__(self):
@@ -74,6 +75,7 @@ class OCBucket(MCGBucket):
         obc_data['metadata']['name'] = self.name
         obc_data['spec']['bucketName'] = self.name
         obc_data['metadata']['namespace'] = self.mcg.namespace
+        obc_data['spec']['storageClassName'] = self.mcg_sc.name
         create_resource(**obc_data)
 
     def internal_delete(self):
@@ -89,7 +91,7 @@ class CLIBucket(MCGBucket):
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        run_mcg_cmd(f'obc create --exact {self.name}')
+        run_mcg_cmd(f'obc create --exact {self.name} --storage-class {self.mcg_sc.name}')
 
     def internal_delete(self):
         """

@@ -67,7 +67,7 @@ def bucket_factory(request, mcg_obj):
         'cli': CLIBucket
     }
 
-    def _create_buckets(amount=1, interface='S3'):
+    def _create_buckets(amount=1, interface='S3', mcg_sc=None):
         """
         Creates and deletes all buckets that were created as part of the test
 
@@ -88,9 +88,14 @@ def bucket_factory(request, mcg_obj):
             bucket_name = create_unique_resource_name(
                 resource_description='bucket', resource_type=interface.lower()
             )
-            created_buckets.append(
-                bucketMap[interface.lower()](mcg_obj, bucket_name)
-            )
+            if interface.lower() == 'oc' or 'cli':
+                created_buckets.append(
+                    bucketMap[interface.lower()](mcg_obj, bucket_name, mcg_sc)
+                )
+            else:
+                created_buckets.append(
+                    bucketMap[interface.lower()](mcg_obj, bucket_name)
+                )
         return created_buckets
 
     def bucket_cleanup():
@@ -145,3 +150,38 @@ def awscli_pod(mcg_obj, created_pods):
     helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
     created_pods.append(awscli_pod_obj)
     return awscli_pod_obj
+
+
+@pytest.fixture()
+def mcg_storageclass(request):
+    """
+    Calling this fixture creates new MCG storage class instance.
+    """
+    instances = []
+
+    def factory(reclaim_policy=constants.RECLAIM_POLICY_DELETE, sc_name=None):
+        """
+         Args:
+            sc_name (str): Name of the storage class
+            reclaim_policy (str):
+
+        Returns:
+            object: helpers.create_mcg_storageclass instance
+
+        """
+        mcg_sc_obj = helpers.create_mcg_storageclass(reclaim_policy=reclaim_policy, sc_name=sc_name)
+        instances.append(mcg_sc_obj)
+        return mcg_sc_obj
+
+    def finalizer():
+        """
+        Deletes the MCG storage class
+        """
+        for instance in instances:
+            instance.delete()
+            instance.ocp.wait_for_delete(
+                instance.name
+            )
+
+    request.addfinalizer(finalizer)
+    return factory
