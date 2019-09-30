@@ -1,5 +1,6 @@
 import base64
 import logging
+import shlex
 
 import boto3
 from botocore.client import ClientError
@@ -8,6 +9,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import run_mcg_cmd
+
 
 logger = logging.getLogger(name=__file__)
 
@@ -111,6 +113,28 @@ class MCG(object):
             return True
         except ClientError:
             logger.info(f"{bucketname} does not exist")
+            return False
+
+    def verify_s3_object_integrity(self, original_object_path, result_object_path, awscli_pod):
+        """
+        Verifies checksum between orignial object and result object on an awscli pod
+
+        Args:
+            original_object_path (str): The Object that is uploaded to the s3 bucket
+            result_object_path (str):  The Object that is downloaded from the s3 bucket
+            awscli_pod (pod): A pod running the AWSCLI tools
+
+        Returns:
+              bool: True if checksum matches, False otherwise
+
+        """
+        md5sum = shlex.split(awscli_pod.exec_cmd_on_pod(command=f'md5sum {original_object_path} {result_object_path}'))
+        if md5sum[0] == md5sum[2]:
+            logger.info(f'Passed: MD5 comparison for {original_object_path} and {result_object_path}')
+            return True
+        else:
+            logger.error(f'Failed: MD5 comparison of {original_object_path} and {result_object_path} - '
+                         f'{md5sum[0]} ≠ {md5sum[2]}')
             return False
 
     def oc_verify_bucket_exists(self, bucketname):
