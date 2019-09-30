@@ -8,9 +8,6 @@ import time
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
-from ocs_ci.ocs.utils import (
-    create_oc_resource, apply_oc_resource, setup_ceph_toolbox
-)
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     run_cmd, ceph_health_check, is_cluster_running, get_latest_ds_olm_tag
@@ -21,6 +18,19 @@ from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from tests import helpers
+from ocs_ci.ocs.monitoring import (
+    create_configmap_cluster_monitoring_pod,
+    validate_pvc_created_and_bound_on_monitoring_pods,
+    validate_pvc_are_mounted_on_monitoring_pods
+)
+from ocs_ci.ocs.utils import (
+    create_oc_resource, apply_oc_resource, setup_ceph_toolbox
+)
+from ocs_ci.ocs.resources.pod import (
+    get_all_pods,
+    validate_pods_are_respinned_and_running_state
+)
+from ocs_ci.ocs.cluster import validate_cluster_on_pvc
 
 
 logger = logging.getLogger(__name__)
@@ -321,6 +331,10 @@ class Deployment(object):
             condition='Running', selector='app=rook-ceph-osd',
             resource_count=3, timeout=600
         )
+        # Validation for cluster on pvc
+        logger.info("Validate mon and OSD are backed by PVCs")
+        validate_cluster_on_pvc(label=constants.MON_APP_LABEL)
+        validate_cluster_on_pvc(label=constants.DEFAULT_DEVICESET_LABEL)
 
         # Creating toolbox pod
         setup_ceph_toolbox()
@@ -379,6 +393,41 @@ class Deployment(object):
                 f"MDS deployment Failed! Please check logs!"
             )
 
+        if config.ENV_DATA.get('monitoring_enabled') and config.ENV_DATA.get('persistent-monitoring'):
+            # Create a pool, secrets and sc
+            secret_obj = helpers.create_secret(interface_type=constants.CEPHBLOCKPOOL)
+            cbj_obj = helpers.create_ceph_block_pool()
+            sc_obj = helpers.create_storage_class(
+                interface_type=constants.CEPHBLOCKPOOL,
+                interface_name=cbj_obj.name,
+                secret_name=secret_obj.name
+            )
+
+            # Get the list of monitoring pods
+            pods_list = get_all_pods(
+                namespace=defaults.OCS_MONITORING_NAMESPACE,
+                selector=['prometheus', 'alertmanager']
+            )
+
+            # Create configmap cluster-monitoring-config
+            create_configmap_cluster_monitoring_pod(sc_obj.name)
+
+            # Take some time to respin the pod
+            waiting_time = 30
+            logger.info(f"Waiting {waiting_time} seconds...")
+            time.sleep(waiting_time)
+
+            # Validate the pods are respinned and in running state
+            validate_pods_are_respinned_and_running_state(
+                pods_list
+            )
+
+            # Validate the pvc is created on monitoring pods
+            validate_pvc_created_and_bound_on_monitoring_pods()
+
+            # Validate the pvc are mounted on pods
+            validate_pvc_are_mounted_on_monitoring_pods(pods_list)
+
         # Verify health of ceph cluster
         # TODO: move destroy cluster logic to new CLI usage pattern?
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
@@ -424,4 +473,3 @@ class Deployment(object):
                 f"-p {patch} "
                 f"--request-timeout=120s"
             )
-
