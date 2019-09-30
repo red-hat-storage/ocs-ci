@@ -982,7 +982,7 @@ def get_csi_versions():
         )
         desc = ocp_pod_obj.get(csi_provisioner_pod)
         for container in desc['spec']['containers']:
-            name = container['image'].split("/")[-1].split(":")[0]
+            name = container['name']
             version = container['image'].split("/")[-1].split(":")[1]
             csi_versions[name] = version
     return csi_versions
