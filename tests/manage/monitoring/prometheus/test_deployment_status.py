@@ -74,3 +74,51 @@ def test_ceph_monitor_stopped(workload_stop_ceph_mon):
             label=target_label,
             measure_end_time=workload_stop_ceph_mon.get('stop')
         )
+
+
+@tier4
+@pytest.mark.polarion_id("OCS-900")
+def test_ceph_osd_stopped(workload_stop_ceph_osd):
+    """
+    Test that there is appropriate alert related to situation when ceph osd
+    is down. Alert is cleared when osd disk is back online.
+    """
+    api = prometheus.PrometheusAPI()
+
+    # get alerts from time when manager deployment was scaled down
+    alerts = workload_stop_ceph_osd.get('prometheus_alerts')
+    for target_label, target_msg, target_states, target_severity in [
+        (
+            constants.ALERT_OSDDISKNOTRESPONDING,
+            'Disk not responding',
+            ['pending', 'firing'],
+            'error'
+        ),
+        (
+            constants.ALERT_DATARECOVERYTAKINGTOOLONG,
+            'Data recovery is slow',
+            ['pending'],
+            'warning'
+        ),
+        (
+            constants.ALERT_CLUSTERWARNINGSTATE,
+            'Storage cluster is in degraded state',
+            ['pending', 'firing'],
+            'warning'
+        )
+    ]:
+        prometheus.check_alert_list(
+            label=target_label,
+            msg=target_msg,
+            alerts=alerts,
+            states=target_states,
+            severity=target_severity
+        )
+        # the time to wait is increased because it takes more time for osd pod
+        # to be ready than for other pods
+        osd_up_wait = 360
+        api.check_alert_cleared(
+            label=target_label,
+            measure_end_time=workload_stop_ceph_osd.get('stop'),
+            time_min=osd_up_wait
+        )
