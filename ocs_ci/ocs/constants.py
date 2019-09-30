@@ -292,8 +292,10 @@ NODE_READY_SCHEDULING_DISABLED = 'Ready,SchedulingDisabled'
 
 # Alert labels
 ALERT_CLUSTERWARNINGSTATE = 'CephClusterWarningState'
+ALERT_DATARECOVERYTAKINGTOOLONG = 'CephDataRecoveryTakingTooLong'
 ALERT_MGRISABSENT = 'CephMgrIsAbsent'
 ALERT_MONQUORUMATRISK = 'CephMonQuorumAtRisk'
+ALERT_OSDDISKNOTRESPONDING = 'CephOSDDiskNotResponding'
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
