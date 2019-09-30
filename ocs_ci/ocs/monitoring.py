@@ -1,12 +1,17 @@
 import logging
 import yaml
 import json
+import time
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, PVC
-from ocs_ci.ocs.resources.pod import get_pod_obj
+from ocs_ci.ocs.resources.pod import (
+    get_pod_obj, get_all_pods,
+    validate_pods_are_respinned_and_running_state
+)
+from ocs_ci.ocs.resources.ocs import OCS
 from tests import helpers
 import ocs_ci.utility.prometheus
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
@@ -155,3 +160,99 @@ def check_ceph_health_status_metrics_on_prometheus(mgr_pod):
         [mgr_pod for health_status in ceph_health_metric.get('data').get(
             'result') if mgr_pod == health_status.get('metric').get('pod')]
     )
+
+
+def add_retention_time_on_cluster_monitoring_pod(retention='2h', wait=True):
+    """
+    Edit and add the retention time on configmap
+
+    Args:
+        retention (str): Time to delete the collected metrics on prometheus pod
+        It can be ms (milliseconds), s (seconds), m (minutes),
+        h (hours), d (days), w (weeks), or y (years). Recommended atleast 2h.
+        wait (bool): If true waits for the prometheus pod to be respin
+
+    Returns:
+         configmap (dict): On success returns configmap
+
+    """
+    wait_time = 30
+    config_map = templating.load_yaml(
+        constants.CONFIGURE_PVC_ON_MONITORING_POD
+    )
+    config = yaml.safe_load(config_map['data']['config.yaml'])
+    config['prometheusK8s']['retention'] = retention
+    config = yaml.dump(config)
+    config_map['data']['config.yaml'] = config
+    ocp_obj = OCS(**config_map)
+    ocp_obj.apply(**config_map)
+    logger.info(f"Successfully added the time {retention} on the config map")
+    if wait:
+        # Get the list of prometheus pods
+        pods_list = get_all_pods(
+            namespace=defaults.OCS_MONITORING_NAMESPACE,
+            selector=['prometheus']
+        )
+
+        logger.info(f"Waiting {wait_time} seconds...")
+        time.sleep(30)
+
+        # Validate the pvc is created on monitoring pods
+        validate_pvc_created_and_bound_on_monitoring_pods()
+
+        # Validate the pods are respinned and in running state
+        assert validate_pods_are_respinned_and_running_state(
+            pods_list
+        ), (
+            f"Pods are not respinned succesfuly {pods_list}"
+        )
+
+        # Validate the pvc are mounted on pods
+        validate_pvc_are_mounted_on_monitoring_pods(pods_list)
+
+    return config_map
+
+
+def remove_retention_time_on_cluster_monitoring_pod(config_map, wait=True):
+    """
+    Edit and remove the retention time given on configmap
+
+    Args:
+        config_map (dict): Dict of the configmap
+        wait (bool): If true waits for the prometheus pod to be respin
+
+    Returns:
+        bool: Returns true on success. Assertion error on failure
+    """
+    wait_time = 30
+    config = yaml.safe_load(config_map['data']['config.yaml'])
+    del config['prometheusK8s']['retention']
+    config = yaml.dump(config)
+    config_map['data']['config.yaml'] = config
+    ocp_obj = OCS(**config_map)
+    ocp_obj.apply(**config_map)
+    logger.info("Removed the key retention from the configmap")
+    if wait:
+        # Get the list of prometheus pods
+        pods_list = get_all_pods(
+            namespace=defaults.OCS_MONITORING_NAMESPACE,
+            selector=['prometheus']
+        )
+
+        logger.info(f"Waiting {wait_time} seconds...")
+        time.sleep(30)
+
+        # Validate the pvc is created on monitoring pods
+        validate_pvc_created_and_bound_on_monitoring_pods()
+
+        # Validate the pods are respinned and in running state
+        assert validate_pods_are_respinned_and_running_state(
+            pods_list
+        ), (
+            f"Pods are not respinned succesfuly {pods_list}"
+        )
+
+        # Validate the pvc are mounted on pods
+        validate_pvc_are_mounted_on_monitoring_pods(pods_list)
+
+    return True
