@@ -137,8 +137,8 @@ def pytest_configure(config):
             # add csi versions
             csi_versions = get_csi_versions()
             config._metadata['csi-provisioner'] = csi_versions.get('csi-provisioner')
-            config._metadata['cephfsplugin'] = csi_versions.get('cephfsplugin')
-            config._metadata['rbdplugin'] = csi_versions.get('rbdplugin')
+            config._metadata['cephfsplugin'] = csi_versions.get('csi-cephfsplugin')
+            config._metadata['rbdplugin'] = csi_versions.get('csi-rbdplugin')
         except (FileNotFoundError, CommandFailed):
             pass
 
