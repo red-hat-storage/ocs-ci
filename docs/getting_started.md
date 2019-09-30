@@ -12,6 +12,7 @@
    Latest client can be downloaded from [oc-client](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/).
 4. For vSphere based installations, [terraform](https://learn.hashicorp.com/terraform/getting-started/install.html)
    and [jq]( https://stedolan.github.io/jq/download/) should be installed ( terraform version should be 0.11.13  )
+5. To install openshift-logging on the cluster [follow](/docs/deploy_logging.md)
 
 #### AWS UPI
 There are additional prerequisites if you plan to execute AWS UPI deployments

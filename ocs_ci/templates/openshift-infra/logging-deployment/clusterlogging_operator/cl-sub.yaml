@@ -7,7 +7,5 @@ spec:
   channel: "VERSION_PLACEHOLDER"
   installPlanApproval: Automatic
   name: cluster-logging
-  source: redhat-operators
+  source: "SOURCE_PLACEHOLDER"
   sourceNamespace: openshift-marketplace
-
-

@@ -124,3 +124,7 @@ class NoInstallPlanForApproveFoundException(Exception):
 
 class NoobaaConditionException(Exception):
     pass
+
+
+class SyncImagesUnsuccessfulException(Exception):
+    pass

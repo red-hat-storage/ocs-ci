@@ -3,21 +3,25 @@ This file contains the testcases for openshift-logging
 """
 
 import logging
+import os
+import shutil
 
 import pytest
 
-from ocs_ci.ocs.resources.csv import CSV
+
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
-from ocs_ci.utility.retry import retry
 from tests import helpers
-from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
+from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers, tier1
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility import templating
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.logging.utils import pull_packages_from_quay
 
 
 logger = logging.getLogger(__name__)
@@ -32,9 +36,18 @@ def test_fixture(request):
     """
 
     def finalizer():
-        teardown()
+        teardown(update_images)
 
     request.addfinalizer(finalizer)
+
+    # Pull Packages from quay.io and update the cluster with 4.2 images
+
+    if config.ENV_DATA['logging_version'] != config.DEPLOYMENT['installer_version']:
+        logger.warning("The cluster-logging version does not match with OCP version")
+        logger.info("Pulling latest images from the registry")
+        update_images = pull_packages_from_quay()
+    else:
+        logger.info("The cluster-logging version matches with the OCP version")
 
     # Deploys elastic-search operator on the project openshift-operators-redhat
     ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
@@ -46,8 +59,10 @@ def test_fixture(request):
         yaml_file=constants.EO_RBAC_YAML, resource_name='prometheus-k8s'
     )
     logging_version = config.ENV_DATA['logging_version']
+    logging_image_registry = config.ENV_DATA['logging_image_registry']
     subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
     subscription_yaml['spec']['channel'] = logging_version
+    subscription_yaml['spec']['source'] = logging_image_registry
     helpers.create_resource(**subscription_yaml)
     assert ocp_logging_obj.get_elasticsearch_subscription()
 
@@ -58,6 +73,7 @@ def test_fixture(request):
     )
     cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
     cl_subscription['spec']['channel'] = logging_version
+    cl_subscription['spec']['source'] = logging_image_registry
     helpers.create_resource(**cl_subscription)
     assert ocp_logging_obj.get_clusterlogging_subscription()
     cluster_logging_operator = OCP(
@@ -88,10 +104,36 @@ def create_instance():
     logger.info(f'The installed CSV is {get_csv}')
 
 
-def teardown():
+def teardown(update_images):
     """
     The teardown will uninstall the openshift-logging from the cluster
     """
+
+    if not update_images:
+        cur_dir = os.getcwd()
+        file_list = ['Image_Mapping.txt', 'mirror_docker.conf', 'mirror_result.txt',
+                     'OperatorSource_CSV_Files.txt', 'OperatorSource_Images_List.txt',
+                     'OperatorSource_Images_registry_proxy.txt',
+                     'OperatorSource_Images_version.txt', 'quay.token']
+        dir_list = [
+            'tempdir'
+        ]
+        for file in file_list:
+            file = os.path.join(cur_dir, file)
+            if os.path.isfile(file):
+                os.remove(file)
+            else:
+                logger.error(f"File {file} Not found ")
+
+        for dir in dir_list:
+            dir = os.path.join(cur_dir, dir)
+            if os.path.exists(dir):
+                shutil.rmtree(dir)
+            else:
+                logger.error(f"Directory {dir} not found")
+    else:
+        logger.info("No files to delete")
+
     uninstall_cluster_logging()
 
 
@@ -155,6 +197,7 @@ class Test_openshift_logging_on_ocs(E2ETest):
 
     @pytest.mark.polarion_id("OCS-657")
     @workloads
+    @tier1
     def test_create_new_project_to_verify_logging(self, create_pvc_and_deploymentconfig_pod):
         """
         This function creates new project to verify logging in EFK stack

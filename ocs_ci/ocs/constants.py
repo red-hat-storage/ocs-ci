@@ -53,7 +53,7 @@ ROOK_EXAMPLES_DIR = os.path.join(
 ROOK_CSI_RBD_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "rbd")
 ROOK_CSI_CEPHFS_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "cephfs")
 CLEANUP_YAML = "cleanup.yaml.j2"
-
+QUAY_PULL_IMAGES_DIR = os.path.join(DATA_DIR, 'quay_pull_images')
 
 # Statuses
 STATUS_PENDING = 'Pending'

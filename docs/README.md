@@ -26,3 +26,5 @@ Rest of the information you can find in those sections
 * [Debugging](debugging.md) - useful debugging information.
 * [Unit tests](unit_tests.md) - how to run and write unit tests.
 * [Workarounds](workarounds.md) - how to manage workarounds in ocs-ci.
+* [Debugging](./debugging.md) - useful debugging information.
+* [Deploy logging](./deploy_logging.md) - information about deployment of ocp-logging in the cluster
