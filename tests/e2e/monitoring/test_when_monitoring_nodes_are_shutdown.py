@@ -45,15 +45,14 @@ class TestWhenShutdownAndRecoverOfPrometheusNode(E2ETest):
     def init_sanity(self):
         """
         Initialize Sanity instance
-
         """
         self.sanity_helpers = Sanity()
 
     @tier4
     def test_monitoring_shutdown_and_recovery_prometheus_node(self, create_pods, pod_factory):
         """
-        Test case to validate when the prometheus pod is down and
-        interaction with prometheus
+        Test case to validate whether shutdown and recovery of a
+        node where monitoring pods running has no functional impact
         """
         pod_objs = create_pods
 
@@ -90,8 +89,6 @@ class TestWhenShutdownAndRecoverOfPrometheusNode(E2ETest):
 
         # Check the node are Ready state and check cluster is health ok
         self.sanity_helpers.health_check()
-
-        # ToDo: Add prometheus health check
 
         # Check all the monitoring pods are up
         for pod_obj in monitoring_pod_obj_list:
