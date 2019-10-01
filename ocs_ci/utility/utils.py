@@ -384,7 +384,7 @@ def run_cmd(cmd, secrets=None, timeout=600, **kwargs):
             This kwarg is popped in order to not interfere with
             subprocess.run(**kwargs)
 
-            timeout (int): Timeout for the command, defaults to 600 seconds.
+        timeout (int): Timeout for the command, defaults to 600 seconds.
 
     Raises:
         CommandFailed: In case the command execution fails

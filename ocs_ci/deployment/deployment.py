@@ -234,7 +234,7 @@ class Deployment(object):
             self.get_olm_and_subscription_manifest()
         )
         self.label_and_taint_nodes()
-        run_cmd(f"oc create -f {olm_manifest}")
+        run_cmd(f"oc create -f {olm_manifest}", timeout=2400)
         catalog_source = CatalogSource(
             resource_name='ocs-catalogsource',
             namespace='openshift-marketplace',
@@ -242,6 +242,7 @@ class Deployment(object):
         # Wait for catalog source is ready
         catalog_source.wait_for_state("READY")
         run_cmd(f"oc create -f {subscription_manifest}")
+        # wait for package manifest
         package_manifest = PackageManifest(
             resource_name=defaults.OCS_OPERATOR_NAME
         )
@@ -291,7 +292,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             cluster_data, cluster_data_yaml.name
         )
-        run_cmd(f"oc create -f {cluster_data_yaml.name}")
+        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
 
     def deploy_ocs(self):
         """
