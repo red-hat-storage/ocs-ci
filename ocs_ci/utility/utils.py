@@ -373,7 +373,7 @@ def mask_secrets(plaintext, secrets):
     return plaintext
 
 
-def run_cmd(cmd, secrets=None, **kwargs):
+def run_cmd(cmd, secrets=None, timeout=600, **kwargs):
     """
     Run an arbitrary command locally
 
@@ -384,7 +384,7 @@ def run_cmd(cmd, secrets=None, **kwargs):
             This kwarg is popped in order to not interfere with
             subprocess.run(**kwargs)
 
-        timeout (int): Timeout for the command, defaults to 600 seconds.
+            timeout (int): Timeout for the command, defaults to 600 seconds.
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -397,14 +397,12 @@ def run_cmd(cmd, secrets=None, **kwargs):
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str):
         cmd = shlex.split(cmd)
-    if not kwargs.get('timeout'):
-        # set a default timeout for any command to timeout within 600 seconds
-        kwargs['timeout'] = 600
     r = subprocess.run(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         stdin=subprocess.PIPE,
+        timeout=timeout,
         **kwargs
     )
     log.debug(f"Command output: {r.stdout.decode()}")
