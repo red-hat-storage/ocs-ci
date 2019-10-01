@@ -627,9 +627,14 @@ def get_pod_name_by_pattern(pattern='client', namespace='openshift-storage'):
 
 def setup_ceph_toolbox():
     """
-    Setup ceph-toolbox based
+    Setup ceph-toolbox - also checks if toolbox exists, if it exists it
+    behaves as noop.
     """
     namespace = ocsci_config.ENV_DATA['cluster_namespace']
+    ceph_toolbox = get_pod_name_by_pattern('rook-ceph-tools', namespace)
+    if len(ceph_toolbox) == 1:
+        log.info("Ceph toolbox already exists, skipping")
+        return
     rook_operator = get_pod_name_by_pattern('rook-ceph-operator', namespace)
     out = run_cmd(
         f'oc -n {namespace} get pods {rook_operator[0]} -o yaml',
