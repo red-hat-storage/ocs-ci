@@ -1303,30 +1303,3 @@ def wait_for_co(operator):
     from ocs_ci.ocs.ocp import OCP
     ocp = OCP(kind='ClusterOperator')
     ocp.get(operator)
-
-
-def clone_repo(url, location, branch='master', to_checkout=None):
-    """
-    Clone a repository or checkout latest changes if it already exists at
-    specified location.
-
-    Args:
-        url (str): location of the repository to clone
-        location (str): path where the repository will be cloned to
-        branch (str): branch name to checkout
-        to_checkout (str): commit id or tag to checkout
-
-    """
-    if not os.path.isdir(location):
-        log.info("Cloning repository into %s", location)
-        run_cmd(f"git clone {url} {location}")
-    else:
-        log.info("Repository already cloned at %s, skipping clone", location)
-        log.info("Fetching latest changes from repository")
-        run_cmd('git fetch --all', cwd=location)
-    log.info("Checking out repository to specific branch: %s", branch)
-    run_cmd(f"git checkout {branch}", cwd=location)
-    log.info("Reset branch: %s with latest changes", branch)
-    run_cmd(f"git reset --hard origin/{branch}", cwd=location)
-    if to_checkout:
-        run_cmd(f"git checkout {to_checkout}", cwd=location)
