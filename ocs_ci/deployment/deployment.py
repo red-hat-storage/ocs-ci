@@ -8,7 +8,6 @@ import time
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
-from ocs_ci.ocs.utils import create_oc_resource, apply_oc_resource
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     run_cmd, ceph_health_check, is_cluster_running, get_latest_ds_olm_tag
@@ -23,6 +22,9 @@ from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods
+)
+from ocs_ci.ocs.utils import (
+    create_oc_resource, apply_oc_resource, setup_ceph_toolbox
 )
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
@@ -334,12 +336,9 @@ class Deployment(object):
         validate_cluster_on_pvc(label=constants.MON_APP_LABEL)
         validate_cluster_on_pvc(label=constants.DEFAULT_DEVICESET_LABEL)
 
-        if not self.ocs_operator_deployment:
-            # Creating toolbox pod
-            create_oc_resource(
-                'toolbox.yaml', self.cluster_path, _templating,
-                config.ENV_DATA,
-            )
+        # Creating toolbox pod
+        setup_ceph_toolbox()
+
         assert pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector='app=rook-ceph-tools', resource_count=1, timeout=600
