@@ -23,3 +23,4 @@ Rest of the information you can find in those sections
 * [Fixture usage](./fixture_usage.md) - information about how to write and use
   fixtures.
 * [Debugging](./debugging.md) - useful debugging information.
+* [Deploy logging](./deploy_logging.md) - information about deployment of ocp-logging in the cluster
