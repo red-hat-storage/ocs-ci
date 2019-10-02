@@ -10,6 +10,8 @@
 3. oc client binary is installed on your localhost and binary is listed in $PATH
    (running oc version on terminal should display version > 3.11).
    Latest client can be downloaded from [oc-client](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/).
+4. For vSphere based installations, [terraform](https://learn.hashicorp.com/terraform/getting-started/install.html)
+   and [jq]( https://stedolan.github.io/jq/download/) should be installed ( terraform version should be 0.11.13  )
 
 #### AWS UPI
 There are additional prerequisites if you plan to execute AWS UPI deployments

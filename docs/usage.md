@@ -100,6 +100,21 @@ repository](../bin). These tools are then available to both deployment and test
 code because `run-ci` wrapper includes the `bin` directory into `PATH`
 environment variable.
 
+#### Deployment of cluster on vSphere Platform
+
+terraform and jq is needed for deployment of OCS on vSphere platform.
+
+Change the [vsphere_upi_vars.yaml.example](../conf/ocsci/vsphere_upi_vars.yaml.example) to vsphere_upi_vars.yaml and update the values accordingly.
+Check for vsphere_upi_vars.yaml.skeleton(../conf/ocsci/vsphere_upi_vars.yaml.skeleton) for more options.
+
+After filling all the required parameters, run the following command:
+```bash
+run-ci -m deployment --ocsci-conf conf/ocsci/vsphere_upi.yaml \
+    --cluster-name kerberos_ID-ocs-deployment \
+    --cluster-path /home/my_user/my-ocs-dir tests/ \
+    --deploy
+```
+
 #### Running tests on deployed environment
 
 ```bash

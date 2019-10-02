@@ -7,6 +7,32 @@ import yaml
 
 from ocs_ci import framework
 from ocs_ci.utility import utils
+from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
+
+
+def check_config_requirements():
+    """
+    Checking if all required parameters were passed
+
+    Raises:
+        MissingRequiredConfigKeyError: In case of some required parameter is
+            not defined.
+
+    """
+    try:
+        # Check for vspehre required parameters
+        if hasattr(framework.config, 'ENV_DATA') and (
+            framework.config.ENV_DATA.get(
+                'platform', ''
+            ).lower() == "vsphere"
+        ):
+            framework.config.ENV_DATA['vsphere_user']
+            framework.config.ENV_DATA['vsphere_password']
+            framework.config.ENV_DATA['vsphere_datacenter']
+            framework.config.ENV_DATA['vsphere_cluster']
+            framework.config.ENV_DATA['vsphere_datastore']
+    except KeyError as ex:
+        raise MissingRequiredConfigKeyError(ex)
 
 
 def init_ocsci_conf(arguments=None):
@@ -39,6 +65,7 @@ def init_ocsci_conf(arguments=None):
             os.path.expanduser(framework.config.RUN['bin_dir'])
         )
         utils.add_path_to_env_path(framework.config.RUN['bin_dir'])
+    check_config_requirements()
 
 
 def main(arguments):

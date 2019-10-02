@@ -6,6 +6,7 @@ import logging
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceInUnexpectedState
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.retry import retry
 
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,7 @@ class CSV(OCP):
             )
         return False
 
+    @retry(ResourceInUnexpectedState, tries=4, delay=5, backoff=1)
     def wait_for_phase(self, phase, timeout=300, sleep=5):
         """
         Wait till phase of CSV resource is the same as required one passed in
