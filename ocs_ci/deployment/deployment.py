@@ -14,6 +14,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
 from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
@@ -158,12 +159,12 @@ class Deployment(object):
             )
             _ocp.exec_oc_cmd(command=taint_cmd)
 
-    def get_olm_manifest(self):
+    def get_olm_and_subscription_manifest(self):
         """
-        This method prepare manifest for deploy OCS operator.
+        This method prepare manifest for deploy OCS operator and subscription.
 
         Returns:
-            str: Path to olm deploy manifest
+            tuple: Path to olm deploy and subscription manifest
 
         """
         image = config.DEPLOYMENT.get('ocs_operator_image', '')
@@ -176,7 +177,8 @@ class Deployment(object):
         olm_data_generator = templating.load_yaml(
             ocs_operator_olm, multi_document=True
         )
-        yaml_data = []
+        olm_yaml_data = []
+        subscription_yaml_data = []
         cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
         # TODO: Once needed we can also set the channel for the subscription
         # from config.DEPLOYMENT.get('ocs_csv_channel')
@@ -191,24 +193,41 @@ class Deployment(object):
                 yaml_doc['spec']['image'] = (
                     f"{image}:{image_tag if image_tag else 'latest'}"
                 )
-            yaml_data.append(yaml_doc)
+            if yaml_doc.get('kind') == 'Subscription':
+                subscription_yaml_data.append(yaml_doc)
+                continue
+            olm_yaml_data.append(yaml_doc)
         olm_manifest = tempfile.NamedTemporaryFile(
             mode='w+', prefix='olm_manifest', delete=False
         )
         templating.dump_data_to_temp_yaml(
-            yaml_data, olm_manifest.name
+            olm_yaml_data, olm_manifest.name
         )
-        return olm_manifest.name
+        subscription_manifest = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='subscription_manifest', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            subscription_yaml_data, subscription_manifest.name
+        )
+        return olm_manifest.name, subscription_manifest.name
 
     def deploy_ocs_via_operator(self):
         """
         Method for deploy OCS via OCS operator
         """
         logger.info("Deployment of OCS via OCS operator")
-        olm_manifest = self.get_olm_manifest()
+        olm_manifest, subscription_manifest = (
+            self.get_olm_and_subscription_manifest()
+        )
         self.label_and_taint_nodes()
         run_cmd(f"oc create -f {olm_manifest}")
-        # wait for package manifest
+        catalog_source = CatalogSource(
+            resource_name='ocs-catalogsource',
+            namespace='openshift-marketplace',
+        )
+        # Wait for catalog source is ready
+        catalog_source.wait_for_state("READY")
+        run_cmd(f"oc create -f {subscription_manifest}")
         package_manifest = PackageManifest(
             resource_name=defaults.OCS_OPERATOR_NAME
         )
@@ -220,7 +239,7 @@ class Deployment(object):
             resource_name=csv_name, kind="csv",
             namespace=self.namespace
         )
-        csv.wait_for_phase("Succeeded")
+        csv.wait_for_phase("Succeeded", timeout=400)
         ocs_operator_storage_cluster_cr = config.DEPLOYMENT.get(
             'ocs_operator_storage_cluster_cr'
         )
