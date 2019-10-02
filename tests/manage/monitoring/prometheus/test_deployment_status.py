@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 
 @tier4
 @pytest.mark.polarion_id("OCS-1052")
-def test_ceph_manager_stopped(workload_stop_ceph_mgr):
+def test_ceph_manager_stopped(measure_stop_ceph_mgr):
     """
     Test that there is appropriate alert when ceph manager
     is unavailable and that this alert is cleared when the manager
@@ -20,7 +20,7 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
     api = prometheus.PrometheusAPI()
 
     # get alerts from time when manager deployment was scaled down
-    alerts = workload_stop_ceph_mgr.get('prometheus_alerts')
+    alerts = measure_stop_ceph_mgr.get('prometheus_alerts')
     target_label = constants.ALERT_MGRISABSENT
     target_msg = 'Storage metrics collector service not available anymore.'
     states = ['pending', 'firing']
@@ -33,13 +33,13 @@ def test_ceph_manager_stopped(workload_stop_ceph_mgr):
         severity='critical')
     api.check_alert_cleared(
         label=target_label,
-        measure_end_time=workload_stop_ceph_mgr.get('stop')
+        measure_end_time=measure_stop_ceph_mgr.get('stop')
     )
 
 
 @tier4
 @pytest.mark.polarion_id("OCS-904")
-def test_ceph_monitor_stopped(workload_stop_ceph_mon):
+def test_ceph_monitor_stopped(measure_stop_ceph_mon):
     """
     Test that there is appropriate alert related to ceph monitor quorum
     when there is even number of ceph monitors and that this alert
@@ -48,7 +48,7 @@ def test_ceph_monitor_stopped(workload_stop_ceph_mon):
     api = prometheus.PrometheusAPI()
 
     # get alerts from time when manager deployment was scaled down
-    alerts = workload_stop_ceph_mon.get('prometheus_alerts')
+    alerts = measure_stop_ceph_mon.get('prometheus_alerts')
     for target_label, target_msg, target_states, target_severity in [
         (
             constants.ALERT_MONQUORUMATRISK,
@@ -72,13 +72,13 @@ def test_ceph_monitor_stopped(workload_stop_ceph_mon):
         )
         api.check_alert_cleared(
             label=target_label,
-            measure_end_time=workload_stop_ceph_mon.get('stop')
+            measure_end_time=measure_stop_ceph_mon.get('stop')
         )
 
 
 @tier4
 @pytest.mark.polarion_id("OCS-900")
-def test_ceph_osd_stopped(workload_stop_ceph_osd):
+def test_ceph_osd_stopped(measure_stop_ceph_osd):
     """
     Test that there is appropriate alert related to situation when ceph osd
     is down. Alert is cleared when osd disk is back online.
@@ -86,7 +86,7 @@ def test_ceph_osd_stopped(workload_stop_ceph_osd):
     api = prometheus.PrometheusAPI()
 
     # get alerts from time when manager deployment was scaled down
-    alerts = workload_stop_ceph_osd.get('prometheus_alerts')
+    alerts = measure_stop_ceph_osd.get('prometheus_alerts')
     for target_label, target_msg, target_states, target_severity in [
         (
             constants.ALERT_OSDDISKNOTRESPONDING,
@@ -119,6 +119,6 @@ def test_ceph_osd_stopped(workload_stop_ceph_osd):
         osd_up_wait = 360
         api.check_alert_cleared(
             label=target_label,
-            measure_end_time=workload_stop_ceph_osd.get('stop'),
+            measure_end_time=measure_stop_ceph_osd.get('stop'),
             time_min=osd_up_wait
         )

@@ -161,7 +161,7 @@ def measurement_dir(tmp_path):
 
 
 @pytest.fixture
-def workload_stop_ceph_mgr(measurement_dir):
+def measure_stop_ceph_mgr(measurement_dir):
     """
     Downscales Ceph Manager deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -199,7 +199,7 @@ def workload_stop_ceph_mgr(measurement_dir):
         time.sleep(run_time)
         return oc.get(mgr)
 
-    test_file = os.path.join(measurement_dir, 'workload_stop_ceph_mgr.json')
+    test_file = os.path.join(measurement_dir, 'measure_stop_ceph_mgr.json')
     measured_op = measure_operation(stop_mgr, test_file)
     logger.info(f"Upscaling deployment {mgr} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
@@ -207,7 +207,7 @@ def workload_stop_ceph_mgr(measurement_dir):
 
 
 @pytest.fixture
-def workload_stop_ceph_mon(measurement_dir):
+def measure_stop_ceph_mon(measurement_dir):
     """
     Downscales Ceph Monitor deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -257,7 +257,7 @@ def workload_stop_ceph_mon(measurement_dir):
         time.sleep(run_time)
         return mons_to_stop
 
-    test_file = os.path.join(measurement_dir, 'workload_stop_ceph_mon.json')
+    test_file = os.path.join(measurement_dir, 'measure_stop_ceph_mon.json')
     measured_op = measure_operation(stop_mon, test_file)
 
     # get new list of monitors to make sure that new monitors were deployed
@@ -280,7 +280,7 @@ def workload_stop_ceph_mon(measurement_dir):
 
 
 @pytest.fixture
-def workload_stop_ceph_osd(measurement_dir):
+def measure_stop_ceph_osd(measurement_dir):
     """
     Downscales Ceph osd deployment, measures the time when it was
     downscaled and alerts that were triggered during this event.
@@ -328,7 +328,7 @@ def workload_stop_ceph_osd(measurement_dir):
         time.sleep(run_time)
         return osd_to_stop
 
-    test_file = os.path.join(measurement_dir, 'workload_stop_ceph_osd.json')
+    test_file = os.path.join(measurement_dir, 'measure_stop_ceph_osd.json')
     measured_op = measure_operation(stop_osd, test_file)
     logger.info(f"Upscaling deployment {osd_to_stop} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_to_stop}")
