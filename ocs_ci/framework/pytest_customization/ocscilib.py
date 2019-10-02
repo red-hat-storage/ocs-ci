@@ -21,6 +21,7 @@ from ocs_ci.utility.utils import (
     get_rook_version,
     get_csi_versions,
     get_testrun_name,
+    print_cofig_to_file,
 )
 from ocs_ci.ocs.utils import collect_ocs_logs
 
@@ -101,6 +102,15 @@ def pytest_configure(config):
     """
     if not (config.getoption("--help") or config.getoption("collectonly")):
         process_cluster_cli_params(config)
+        config_file = os.path.join(
+            ocsci_config.RUN['log_dir'],
+            f"run-{ocsci_config.RUN['run_id']}-config.yaml"
+        )
+        print_cofig_to_file(config_file)
+        log.info(
+            f"Dump of the consolidated config file is located here: "
+            f"{config_file}"
+        )
         # Add OCS related versions to the html report and remove extraneous metadata
         markers_arg = config.getoption('-m')
         if ocsci_config.RUN['cli_params'].get('teardown') or (

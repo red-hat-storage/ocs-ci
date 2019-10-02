@@ -7,6 +7,7 @@ import shlex
 import string
 import subprocess
 import time
+from copy import deepcopy
 from shutil import which
 
 import requests
@@ -1303,3 +1304,39 @@ def wait_for_co(operator):
     from ocs_ci.ocs.ocp import OCP
     ocp = OCP(kind='ClusterOperator')
     ocp.get(operator)
+
+
+def censore_values(data_to_censore, keys):
+    """
+    This function censores values in dictionary for passed keys
+
+    Args:
+        data_to_censore (dict): data to censore
+        keys (list): keys where to censore the values in data dictionary
+
+    """
+    for key in keys:
+        if key in data_to_censore:
+            data_to_censore[key] = '*****'
+
+
+def print_cofig_to_file(file_path):
+    """
+    Print the config to the yaml file sith censored secret values.
+
+    Args:
+        file_path (str): Path to file where to write the configuration
+
+    """
+    config_copy = deepcopy(config.to_dict())
+    if config_copy.get('ENV_DATA'):
+        censore_values(
+            config_copy['ENV_DATA'],
+            [
+                'vsphere_password',
+                'ipam_token',
+                'httpd_server_password',
+            ]
+        )
+    with open(file_path, "w+") as fs:
+        yaml.safe_dump(config_copy, fs)
