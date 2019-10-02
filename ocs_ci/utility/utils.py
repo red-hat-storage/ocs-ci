@@ -1110,11 +1110,12 @@ def ceph_health_check(namespace=None):
             (default: config.ENV_DATA['cluster_namespace'])
 
     Raises:
-        CephHealthException: If the ceph health returned is not HEALTH_OK
+        CephHealthException: If the ceph health returned is not HEALTH_OK or
+                             HEALTH_WARN
         CommandFailed: If the command to retrieve the tools pod name or the
             command to get ceph health returns a non-zero exit code
     Returns:
-        boolean: True if HEALTH_OK
+        boolean: True if HEALTH_OK or HEALTH_WARN
 
     """
     namespace = namespace or config.ENV_DATA['cluster_namespace']
@@ -1131,6 +1132,9 @@ def ceph_health_check(namespace=None):
     health = run_cmd(f"oc -n {namespace} exec {tools_pod} ceph health")
     if health.strip() == "HEALTH_OK":
         log.info("HEALTH_OK, install successful.")
+        return True
+    elif health.strip() == "HEALTH_WARN":
+        log.warn("HEALTH_WARN, install maybe-successful")
         return True
     else:
         raise CephHealthException(
