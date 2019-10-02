@@ -872,7 +872,11 @@ def email_reports():
     [recipients.append(mailid) for mailid in mailids.split(",")]
     sender = "ocs-ci@redhat.com"
     msg = MIMEMultipart('alternative')
-    msg['Subject'] = f"ocs-ci results for {get_testrun_name()} (RUN ID: {config.RUN['run_id']})"
+    msg['Subject'] = (
+        f"ocs-ci results for {get_testrun_name()} "
+        f"({get_ocs_build_number()}"
+        f"RUN ID: {config.RUN['run_id']})"
+    )
     msg['From'] = sender
     msg['To'] = ", ".join(recipients)
 
@@ -905,6 +909,41 @@ def get_cluster_version_info():
     ocp = OCP(kind="clusterversion")
     cluster_version_info = ocp.get("version")
     return cluster_version_info
+
+
+def get_ocs_operator_version():
+    """
+    Gets the ocs operator version info
+
+    Returns:
+        str: ocs operator version
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+    ocp = OCP(kind="catalogsource", namespace="openshift-marketplace")
+    for item in ocp.get().get('items'):
+        if item.get('metadata').get('name') == "ocs-catalogsource":
+            return item.get('spec').get('image')
+
+
+def get_ocs_build_number():
+    """
+    Gets the build number for ocs operator
+
+    Return:
+        str: build number for ocs operator version
+
+    """
+    build_num = ""
+    if config.REPORTING['us_ds'] == 'DS':
+        build_info = get_ocs_operator_version().split(':')[1]
+        try:
+            bld = build_info.split("-")[1].split(".")[0]
+            build_num = f"BUILD ID:{bld} "
+        except IndexError:
+            logging.warning("No version info found for OCS operator")
+            build_num = f"BUILD ID:{build_info} "
+    return build_num
 
 
 def get_cluster_version():

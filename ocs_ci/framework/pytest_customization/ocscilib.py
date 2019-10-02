@@ -22,6 +22,7 @@ from ocs_ci.utility.utils import (
     get_rook_version,
     get_csi_versions,
     get_testrun_name,
+    get_ocs_operator_version,
 )
 from ocs_ci.ocs.utils import collect_ocs_logs
 
@@ -151,6 +152,12 @@ def pytest_configure(config):
             config._metadata['csi-provisioner'] = csi_versions.get('csi-provisioner')
             config._metadata['cephfsplugin'] = csi_versions.get('csi-cephfsplugin')
             config._metadata['rbdplugin'] = csi_versions.get('csi-rbdplugin')
+
+            # add ocs operator version
+            if ocsci_config.REPORTING['us_ds'] == 'DS':
+                config._metadata['OCS operator'] =  (
+                    get_ocs_operator_version().split(':')[1]
+                )
         except (FileNotFoundError, CommandFailed):
             pass
 
