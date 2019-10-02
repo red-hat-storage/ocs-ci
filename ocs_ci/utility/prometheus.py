@@ -19,6 +19,7 @@ def check_alert_list(
     alerts,
     states,
     severity="warning"
+    ignore_more_occurences=False
 ):
     """
     Check list of alerts that there are alerts with requested label and
@@ -30,6 +31,9 @@ def check_alert_list(
         msg (str): Alert message
         alerts (list): List of alerts to check
         states (list): List of states to check, order is important
+        ignore_more_occurences (bool): If true then there is checkced only
+            occurence of alert with requested label, message and state but
+            it is not checked if there is more of occurences than one.
     """
 
     target_alerts = [
@@ -40,6 +44,17 @@ def check_alert_list(
     ]
 
     logger.info(f"Checking properties of found {label} alerts")
+    if ignore_more_occurences:
+        for state in states:
+            delete = False
+            for key, alert in enumerate(target_alerts):
+                if alert.get('state') == state:
+                    if delete:
+                        d_msg = f"Ignoring {alert} as alert already appeared."
+                        logger.debug(d_msg)
+                        target_alerts.pop(key)
+                    else:
+                        delete = True
     assert_msg = (
         f"Incorrect number of {label} alerts ({len(target_alerts)} "
         f"instead of {len(states)})"
