@@ -87,24 +87,27 @@ def test_ceph_osd_stopped(measure_stop_ceph_osd):
 
     # get alerts from time when manager deployment was scaled down
     alerts = measure_stop_ceph_osd.get('prometheus_alerts')
-    for target_label, target_msg, target_states, target_severity in [
+    for target_label, target_msg, target_states, target_severity, ignore in [
         (
             constants.ALERT_OSDDISKNOTRESPONDING,
             'Disk not responding',
             ['pending', 'firing'],
-            'error'
+            'error',
+            False
         ),
         (
             constants.ALERT_DATARECOVERYTAKINGTOOLONG,
             'Data recovery is slow',
             ['pending'],
-            'warning'
+            'warning',
+            True
         ),
         (
             constants.ALERT_CLUSTERWARNINGSTATE,
             'Storage cluster is in degraded state',
             ['pending', 'firing'],
-            'warning'
+            'warning',
+            False
         )
     ]:
         prometheus.check_alert_list(
@@ -112,7 +115,8 @@ def test_ceph_osd_stopped(measure_stop_ceph_osd):
             msg=target_msg,
             alerts=alerts,
             states=target_states,
-            severity=target_severity
+            severity=target_severity,
+            ignore_more_occurences=ignore
         )
         # the time to wait is increased because it takes more time for osd pod
         # to be ready than for other pods
