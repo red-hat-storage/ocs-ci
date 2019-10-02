@@ -25,6 +25,7 @@ from email.mime.text import MIMEText
 from ocs_ci.ocs import constants
 from ocs_ci.utility.retry import retry
 from bs4 import BeautifulSoup
+from paramiko import SSHClient, AutoAddPolicy
 
 log = logging.getLogger(__name__)
 
@@ -1221,3 +1222,84 @@ def check_if_executable_in_path(exec_name):
 
     """
     return which(exec_name) is not None
+
+
+def upload_file(server, localpath, remotepath, user=None, password=None):
+    """
+    Upload a file to remote server
+
+    Args:
+        server (str): Name of the server to upload
+        localpath (str): Local file to upload
+        remotepath (str): Target path on the remote server. filename should be included
+        user (str): User to use for the remote connection
+
+    """
+    if not user:
+        user = 'root'
+
+    ssh = SSHClient()
+    ssh.set_missing_host_key_policy(
+        AutoAddPolicy())
+    ssh.connect(hostname=server, username=user, password=password)
+    sftp = ssh.open_sftp()
+    log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
+    sftp.put(localpath, remotepath)
+    sftp.close()
+    ssh.close()
+
+
+def read_file_as_str(filepath):
+    """
+    Reads the file content
+
+    Args:
+        filepath (str): File to read
+
+    Returns:
+        str : File contents in string
+
+    """
+    with open(rf"{filepath}") as fd:
+        content = fd.read()
+    return content
+
+
+def replace_content_in_file(file, old, new):
+    """
+    Replaces contents in file, if old value is not found, it adds
+    new value to the file
+
+    Args:
+        file (str): Name of the file in which contents will be replaced
+        old (str): Data to search for
+        new (str): Data to replace the old value
+
+    """
+    # Read the file
+    with open(rf"{file}", 'r') as fd:
+        file_data = fd.read()
+
+    # Replace/add the new data
+    if old in file_data:
+        file_data = file_data.replace(old, new)
+    else:
+        file_data = new + file_data
+
+    # Write the file out again
+    with open(rf"{file}", 'w') as fd:
+        fd.write(file_data)
+
+
+@retry((CommandFailed), tries=100, delay=10, backoff=1)
+def wait_for_co(operator):
+    """
+    Waits for ClusterOperator to created
+
+    Args:
+        operator (str): Name of the ClusterOperator
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+    ocp = OCP(kind='ClusterOperator')
+    ocp.get(operator)

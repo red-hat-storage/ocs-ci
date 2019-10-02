@@ -1,0 +1,28 @@
+---
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  # aws region
+  region: 'us-east-2'
+  base_domain: 'qe.rh-ocs.com'
+  # vsphere details
+  vsphere_server: 'vcenter-ocsqe.scl.lab.tlv.redhat.com'
+  vsphere_user: '<user>'
+  vsphere_password: '<pwd>'
+  vsphere_cluster: '<cluster>'
+  vsphere_datacenter: '<data center>'
+  vsphere_datastore: '<data store>'
+  machine_cidr: '<machine_cidr>'
+  ipam: '139.178.89.254'
+  ipam_token: '<token>'
+  # use vm_network if you are using separate VLAN
+  vm_network: 'VLAN_172'
+  vm_template: 'rhcos-410.8.20190520.1'
+  gateway: '<gateway>'
+  dns: '<dns>'
+  httpd_server: 'server_name'
+  path_to_upload: '/var/www/html/ocs4qe'
+  httpd_server_user: 'ocs4qe'
+  httpd_server_password: '<password for httpd server>'
+  extra_disks: '1'
+  disk_size: '60'
