@@ -1,0 +1,6 @@
+---
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  worker_replicas: 4
+  master_replicas: 3
