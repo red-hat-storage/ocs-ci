@@ -163,6 +163,14 @@ MCG_AWS_CREDS_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "AwsCreds.yaml"
 )
 
+MCG_BACKINGSTORE_SECRET_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "BackingStoreSecret.yaml"
+)
+
+MCG_BACKINGSTORE_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "BackingStore.yaml"
+)
+
 CSI_RBD_POD_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pod.yaml"
 )

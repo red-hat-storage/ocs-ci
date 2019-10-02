@@ -67,11 +67,20 @@ class MCG(object):
 
         self.noobaa_token = self.retrieve_nb_token()
 
+        self.aws_access_key_id, self.aws_access_key = self.request_aws_credentials()
+
         self._ocp_resource = ocp_obj
+
         self.s3_resource = boto3.resource(
             's3', verify=False, endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
+        )
+
+        self.aws_s3_resource = boto3.resource(
+            's3', verify=False, endpoint_url="https://s3.amazonaws.com",
+            aws_access_key_id=self.aws_access_key_id,
+            aws_secret_access_key=self.aws_access_key
         )
 
     def s3_list_all_bucket_names(self):
@@ -282,19 +291,17 @@ class MCG(object):
             ).decode('utf-8')
         )
 
-    def create_new_connection(self, conn_name=None):
+    def create_new_aws_connection(self, conn_name=None):
         if conn_name is None:
-            conn_name = create_unique_resource_name('backstorebucket', 'awsbucket')
-
-        access_id, access_key = self.request_aws_credentials()
+            conn_name = create_unique_resource_name('awsconnection', 'mcgconn')
 
         params = {
             "auth_method": "AWS_V4",
             "endpoint": "https://s3.amazonaws.com",
             "endpoint_type": "AWS",
-            "identity": access_id,
+            "identity": self.aws_access_key_id,
             "name": conn_name,
-            "secret": access_key
+            "secret": self.aws_access_key
         }
 
         try:
@@ -309,3 +316,36 @@ class MCG(object):
         except TimeoutExpiredError:
             logger.error(f'Could not create connection {conn_name}')
             return False
+
+    def create_new_backingstore_bucket(self, name, region):
+        if name is None:
+            name = create_unique_resource_name('backingstorebucket', 'awsbucket')
+        if region is None:
+            region = self.region
+
+        self.aws_s3_resource.create_bucket(
+            Bucket=name,
+            CreateBucketConfiguration={
+                'LocationConstraint': region
+            }
+        )
+
+    def create_aws_backingstore_secret(self, name):
+        bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
+        bs_secret_data['metadata']['name'] += f'-{name}'
+        bs_secret_data['metadata']['namespace'] = self.namespace
+        bs_secret_data['data']['AWS_ACCESS_KEY_ID'] = base64.urlsafe_b64encode(
+            self.aws_access_key_id.encode('UTF-8')
+        ).decode('ascii')
+        bs_secret_data['data']['AWS_SECRET_ACCESS_KEY'] = base64.urlsafe_b64encode(
+            self.aws_access_key.encode('UTF-8')
+        ).decode('ascii')
+        return create_resource(**bs_secret_data)
+
+    def create_oc_aws_backingstore(self, name, targetbucket, secretname, region):
+        bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+        bs_data['metadata']['name'] += f'-{name}'
+        bs_data['spec']['awsS3']['secret']['name'] = secretname
+        bs_data['spec']['awsS3']['targetBucket'] = targetbucket
+        bs_data['spec']['awsS3']['region'] = region
+        return create_resource(**bs_data)

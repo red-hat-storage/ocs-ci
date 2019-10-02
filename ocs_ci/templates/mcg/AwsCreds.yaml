@@ -16,12 +16,4 @@ spec:
       - effect: Allow
         action:
           - s3:*
-        resource: "arn:aws:s3:::BUCKET"
-      - effect: Allow
-        action:
-          - s3:*
-        resource: "arn:aws:s3:::BUCKET/*"
-      - effect: Allow
-        action:
-          - s3:ListAllMyBuckets
         resource: "*"
