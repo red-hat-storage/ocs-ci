@@ -459,6 +459,23 @@ class AWS(object):
         volumes = instance.volumes.all()
         return [vol for vol in volumes]
 
+    def get_all_security_groups(self):
+        """
+        Get all security groups in AWS region
+
+        Returns:
+            list: All security groups
+
+        """
+        all_security_groups = list()
+
+        security_groups_dict = self.ec2_client.describe_security_groups()
+        security_groups = security_groups_dict['SecurityGroups']
+        for group_object in security_groups:
+            all_security_groups.append(group_object['GroupId'])
+
+        return all_security_groups
+
     def get_security_groups_by_instance_id(self, instance_id):
         """
         Get all attached security groups of ec2 instance
