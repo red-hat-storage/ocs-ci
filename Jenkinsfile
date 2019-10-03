@@ -95,7 +95,7 @@ pipeline {
       steps {
         sh """
         source ./venv/bin/activate
-        run-ci -m tier1 --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --self-contained-html --html=${env.WORKSPACE}/logs/report.html --junit-xml=${env.WORKSPACE}/logs/junit.xml --collect-logs ${env.EMAIL_ARG}
+        run-ci -m tier1 --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --self-contained-html --html=${env.WORKSPACE}/logs/report.html --junit-xml=${env.WORKSPACE}/logs/junit.xml --collect-logs --bugzilla ${env.EMAIL_ARG}
         """
       }
     }
