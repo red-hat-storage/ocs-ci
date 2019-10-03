@@ -65,7 +65,13 @@ class MCG(object):
             creds_secret_obj.get('data').get('password')
         ).decode('utf-8')
 
-        self.noobaa_token = self.retrieve_nb_token()
+        self.noobaa_token = self.send_rpc_query(
+            'auth_api', 'create_auth', params={
+                'role': 'admin',
+                'system': 'noobaa',
+                'email': self.noobaa_user,
+                'password': self.noobaa_password
+            }).json().get('reply').get('token')
 
         self.aws_access_key_id, self.aws_access_key = self.request_aws_credentials()
 
@@ -177,6 +183,18 @@ class MCG(object):
         return bucketname in self.cli_list_all_bucket_names()
 
     def send_rpc_query(self, api, method, params):
+        """
+        Templates and sends an RPC query to the MCG mgmt endpoint
+
+        Args:
+            api: The name of the API to use
+            method: The method to use inside the API
+            params: A dictionary containing the command payload
+
+        Returns:
+            The server's response
+
+        """
         payload = {
             'api': api,
             'method': method,
@@ -184,16 +202,6 @@ class MCG(object):
             'auth_token': self.noobaa_token
         }
         return requests.post(url=self.mgmt_endpoint, data=json.dumps(payload), verify=False)
-
-    def retrieve_nb_token(self):
-        params = {
-            'role': 'admin',
-            'system': 'noobaa',
-            'email': self.noobaa_user,
-            'password': self.noobaa_password
-        }
-
-        return self.send_rpc_query('auth_api', 'create_auth', params).json().get('reply').get('token')
 
     def check_data_reduction(self, bucketname):
         """
@@ -206,7 +214,7 @@ class MCG(object):
 
         """
 
-        def _check_reduction():
+        def _retrieve_reduction_data():
             payload = {
                 "api": "bucket_api",
                 "method": "read_bucket",
@@ -234,7 +242,7 @@ class MCG(object):
             return bucket_data, bucket_data_reduced
 
         try:
-            for total_size, total_reduced in TimeoutSampler(120, 5, _check_reduction):
+            for total_size, total_reduced in TimeoutSampler(120, 5, _retrieve_reduction_data):
                 if total_size - total_reduced > 80000000:
                     logger.info(
                         'Data reduced:' + str(total_size - total_reduced)
