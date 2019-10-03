@@ -333,3 +333,6 @@ TERRAFORM_VARS = "terraform.tfvars"
 VM_DISK_TYPE = "thin"
 VM_DISK_MODE = "persistent"
 INSTALLER_DEFAULT_DNS = "1.1.1.1"
+
+# Config related constants
+config_keys_patterns_to_censor = ['passw', 'token', 'secret']
