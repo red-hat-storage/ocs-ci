@@ -1306,7 +1306,7 @@ def wait_for_co(operator):
     ocp.get(operator)
 
 
-def censor_values(data_to_censor, keys=None):
+def censor_values(data_to_censor):
     """
     This function censor values in dictionary keys that match pattern defined
     in config_keys_patterns_to_censor in constants.

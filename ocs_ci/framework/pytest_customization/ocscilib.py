@@ -102,9 +102,11 @@ def pytest_configure(config):
     """
     if not (config.getoption("--help") or config.getoption("collectonly")):
         process_cluster_cli_params(config)
-        config_file = os.path.join(
-            ocsci_config.RUN['log_dir'],
-            f"run-{ocsci_config.RUN['run_id']}-config.yaml"
+        config_file = os.path.expanduser(
+            os.path.join(
+                ocsci_config.RUN['log_dir'],
+                f"run-{ocsci_config.RUN['run_id']}-config.yaml",
+            )
         )
         dump_config_to_file(config_file)
         log.info(
