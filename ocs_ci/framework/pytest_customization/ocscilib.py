@@ -16,12 +16,12 @@ from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework.exceptions import ClusterPathNotProvidedError
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import (
+    dump_config_to_file,
     get_cluster_version,
     get_ceph_version,
     get_rook_version,
     get_csi_versions,
     get_testrun_name,
-    print_cofig_to_file,
 )
 from ocs_ci.ocs.utils import collect_ocs_logs
 
@@ -106,7 +106,7 @@ def pytest_configure(config):
             ocsci_config.RUN['log_dir'],
             f"run-{ocsci_config.RUN['run_id']}-config.yaml"
         )
-        print_cofig_to_file(config_file)
+        dump_config_to_file(config_file)
         log.info(
             f"Dump of the consolidated config file is located here: "
             f"{config_file}"

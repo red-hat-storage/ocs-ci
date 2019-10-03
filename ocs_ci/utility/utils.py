@@ -1306,37 +1306,31 @@ def wait_for_co(operator):
     ocp.get(operator)
 
 
-def censore_values(data_to_censore, keys):
+def censor_values(data_to_censor, keys=None):
     """
-    This function censores values in dictionary for passed keys
+    This function censor values in dictionary keys that match pattern defined
+    in config_keys_patterns_to_censor in constants.
 
     Args:
-        data_to_censore (dict): data to censore
-        keys (list): keys where to censore the values in data dictionary
+        data_to_censor (dict): Data to censor.
 
     """
-    for key in keys:
-        if key in data_to_censore:
-            data_to_censore[key] = '*****'
+    for key in data_to_censor:
+        for pattern in constants.config_keys_patterns_to_censor:
+            if pattern in key:
+                data_to_censor[key] = '*' * 5
 
 
-def print_cofig_to_file(file_path):
+def dump_config_to_file(file_path):
     """
-    Print the config to the yaml file sith censored secret values.
+    Dump the config to the yaml file with censored secret values.
 
     Args:
-        file_path (str): Path to file where to write the configuration
+        file_path (str): Path to file where to write the configuration.
 
     """
     config_copy = deepcopy(config.to_dict())
-    if config_copy.get('ENV_DATA'):
-        censore_values(
-            config_copy['ENV_DATA'],
-            [
-                'vsphere_password',
-                'ipam_token',
-                'httpd_server_password',
-            ]
-        )
+    for key in config_copy:
+        censor_values(config_copy[key])
     with open(file_path, "w+") as fs:
         yaml.safe_dump(config_copy, fs)
