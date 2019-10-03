@@ -156,7 +156,7 @@ def load_yaml(file, multi_document=False):
         return loader(get_url_content(file))
     else:
         with open(file, 'r') as fs:
-            return loader(fs)
+            return loader(fs.read())
 
 
 def get_n_document_from_yaml(yaml_generator, index=0):
