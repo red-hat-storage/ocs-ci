@@ -18,7 +18,7 @@ def check_alert_list(
     msg,
     alerts,
     states,
-    severity="warning"
+    severity="warning",
     ignore_more_occurences=False
 ):
     """
