@@ -867,6 +867,8 @@ def email_reports():
     Email results of test run
 
     """
+    build_id = get_ocs_build_number()
+    build_str = f"BUILD ID: {build_id} " if build_id else ""
     mailids = config.RUN['cli_params']['email']
     recipients = []
     [recipients.append(mailid) for mailid in mailids.split(",")]
@@ -874,7 +876,7 @@ def email_reports():
     msg = MIMEMultipart('alternative')
     msg['Subject'] = (
         f"ocs-ci results for {get_testrun_name()} "
-        f"({get_ocs_build_number()}"
+        f"({build_str}"
         f"RUN ID: {config.RUN['run_id']})"
     )
     msg['From'] = sender
@@ -911,21 +913,6 @@ def get_cluster_version_info():
     return cluster_version_info
 
 
-def get_ocs_operator_version():
-    """
-    Gets the ocs operator version info
-
-    Returns:
-        str: ocs operator version
-
-    """
-    from ocs_ci.ocs.ocp import OCP
-    ocp = OCP(kind="catalogsource", namespace="openshift-marketplace")
-    for item in ocp.get().get('items'):
-        if item.get('metadata').get('name') == "ocs-catalogsource":
-            return item.get('spec').get('image')
-
-
 def get_ocs_build_number():
     """
     Gets the build number for ocs operator
@@ -934,15 +921,19 @@ def get_ocs_build_number():
         str: build number for ocs operator version
 
     """
+    from ocs_ci.ocs.resources.catalog_source import CatalogSource
+    from ocs_ci.ocs.constants import OPERATOR_CATALOG_SOURCE_NAME
     build_num = ""
+    ocs_catalog = CatalogSource(
+        resource_name=OPERATOR_CATALOG_SOURCE_NAME,
+        resource_namespace="openshift-marketplace"
+    )
     if config.REPORTING['us_ds'] == 'DS':
-        build_info = get_ocs_operator_version().split(':')[1]
+        build_info = ocs_catalog.get_image_name()
         try:
-            bld = build_info.split("-")[1].split(".")[0]
-            build_num = f"BUILD ID:{bld} "
+            return build_info.split("-")[1].split(".")[0]
         except IndexError:
             logging.warning("No version info found for OCS operator")
-            build_num = f"BUILD ID:{build_info} "
     return build_num
 
 

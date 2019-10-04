@@ -22,9 +22,9 @@ from ocs_ci.utility.utils import (
     get_rook_version,
     get_csi_versions,
     get_testrun_name,
-    get_ocs_operator_version,
 )
 from ocs_ci.ocs.utils import collect_ocs_logs
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
 
 __all__ = [
     "pytest_addoption",
@@ -154,9 +154,13 @@ def pytest_configure(config):
             config._metadata['rbdplugin'] = csi_versions.get('csi-rbdplugin')
 
             # add ocs operator version
+            ocs_catalog = CatalogSource(
+                resource_name="ocs-catalogsource",
+                resource_namespace="openshift-marketplace"
+            )
             if ocsci_config.REPORTING['us_ds'] == 'DS':
-                config._metadata['OCS operator'] =  (
-                    get_ocs_operator_version().split(':')[1]
+                config._metadata['OCS operator'] = (
+                    ocs_catalog.get_image_name()
                 )
         except (FileNotFoundError, CommandFailed):
             pass
