@@ -259,6 +259,15 @@ class Deployment(object):
             'storage'
         ] = f"{device_size}Gi"
 
+        # Allow lower instance requests and limits for OCS deployment
+        if config.DEPLOYMENT.get('allow_lower_instance_requirements'):
+            deviceset_data["resources"] = {
+                {
+                    resource: {'Requests': None, 'Limits': None} for resource
+                    in ['mon', 'mds', 'rgw', 'mgr', 'noobaa']
+                }
+            }
+
         if self.platform.lower() == constants.VSPHERE_PLATFORM:
             cluster_data['spec']['monPVCTemplate']['spec'][
                 'storageClassName'
