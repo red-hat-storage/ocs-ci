@@ -491,9 +491,9 @@ class Deployment(object):
 
     def add_node(self):
         """
-        Implement platform specif add_node in child class
+        Implement platform-specific add_node in child class
         """
-        raise NotImplementedError("add node functionality node implemented")
+        raise NotImplementedError("add node functionality not implemented")
 
     def patch_default_sc_to_non_default(self):
         """
