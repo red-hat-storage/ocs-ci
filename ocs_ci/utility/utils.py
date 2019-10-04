@@ -926,7 +926,7 @@ def get_ocs_build_number():
     build_num = ""
     ocs_catalog = CatalogSource(
         resource_name=OPERATOR_CATALOG_SOURCE_NAME,
-        resource_namespace="openshift-marketplace"
+        namespace="openshift-marketplace"
     )
     if config.REPORTING['us_ds'] == 'DS':
         build_info = ocs_catalog.get_image_name()
