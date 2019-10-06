@@ -3,6 +3,7 @@ apiVersion: noobaa.io/v1alpha1
 kind: BackingStore
 metadata:
   name: backing-store
+  namespace: openshift-storage
   labels:
     app: noobaa
   finalizers:
