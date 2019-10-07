@@ -40,10 +40,10 @@ more details.
 1) connect to the node by:
 
     ```console
-    ssh -i ~/.ssh/libra.pem -t -o StrictHostKeyChecking=no -o ProxyCommand='ssh -A -i ~/.ssh/libra.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -W %h:%p core@$(oc get service --all-namespaces -l run=ssh-bastion -o jsonpath="{.items[0].status.loadBalancer.ingress[0].hostname}")' core@10.0.130.69 "sudo -i"
+    ssh -i ~/.ssh/openshift-dev.pem -t -o StrictHostKeyChecking=no -o ProxyCommand='ssh -A -i ~/.ssh/openshift-dev.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -W %h:%p core@$(oc get service --all-namespaces -l run=ssh-bastion -o jsonpath="{.items[0].status.loadBalancer.ingress[0].hostname}")' core@10.0.130.69 "sudo -i"
     ```
 
-    > in case you didn’t use the same location of libra.pem key or you used different one during OCP deployment you have to change the path to the other one.
+    > in case you didn’t use the same location of openshift-dev.pem key or you used different one during OCP deployment you have to change the path to the other one.
 
 ## OC debug
 
