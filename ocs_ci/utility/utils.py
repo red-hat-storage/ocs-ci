@@ -25,6 +25,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from ocs_ci.ocs import constants
 from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.constants import OPERATOR_CATALOG_SOURCE_NAME
 from bs4 import BeautifulSoup
 from paramiko import SSHClient, AutoAddPolicy
 
@@ -922,7 +923,7 @@ def get_ocs_build_number():
 
     """
     from ocs_ci.ocs.resources.catalog_source import CatalogSource
-    from ocs_ci.ocs.constants import OPERATOR_CATALOG_SOURCE_NAME
+
     build_num = ""
     ocs_catalog = CatalogSource(
         resource_name=OPERATOR_CATALOG_SOURCE_NAME,

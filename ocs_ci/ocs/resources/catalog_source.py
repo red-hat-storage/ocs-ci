@@ -35,6 +35,14 @@ class CatalogSource(OCP):
         )
 
     def get_image_name(self):
+        """
+        Fetch image name from catalog source resource
+
+        Returns:
+            image info (str): especially version info extracted from image
+                name
+
+        """
         self.check_name_is_specified()
         try:
             data = self.get()
