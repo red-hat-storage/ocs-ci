@@ -51,6 +51,7 @@ DEPLOYMENT:
   ocs_operator_deployment: True
   ssh_key: "~/.ssh/libra.pub"
   force_deploy_multiple_clusters: False
+  allow_lower_instance_requirements: true
 
 # Section for reporting configuration
 REPORTING:

@@ -5,6 +5,7 @@ platforms like AWS, VMWare, Baremetal etc.
 import logging
 import tempfile
 import time
+from copy import deepcopy
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
@@ -258,6 +259,15 @@ class Deployment(object):
         deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
             'storage'
         ] = f"{device_size}Gi"
+
+        # Allow lower instance requests and limits for OCS deployment
+        if config.DEPLOYMENT.get('allow_lower_instance_requirements'):
+            none_resources = {'Requests': None, 'Limits': None}
+            deviceset_data["resources"] = deepcopy(none_resources)
+            cluster_data['spec']['resources'] = {
+                resource: deepcopy(none_resources) for resource
+                in ['mon', 'mds', 'rgw', 'mgr', 'noobaa']
+            }
 
         if self.platform.lower() == constants.VSPHERE_PLATFORM:
             cluster_data['spec']['monPVCTemplate']['spec'][
