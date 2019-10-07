@@ -86,17 +86,17 @@ to the nodes via known ssh key for QE and engineering.
 To setup the shared public ssh key for your deployment you have to follow
 these steps:
 
-Download private libra ssh key from secret location.
+Download private openshift-dev ssh key from secret location to
+`~/.ssh/openshift-dev.pem`.
 
 ```console
-wget https://secret.url.of.our.key -O ~/.ssh/libra.pem
-chmod 600 ~/.ssh/libra.pem
-ssh-keygen -y -f ~/.ssh/libra.pem > ~/.ssh/libra.pub
+chmod 600 ~/.ssh/openshift-dev.pem
+ssh-keygen -y -f ~/.ssh/openshift-dev.pem > ~/.ssh/openshift-dev.pub
 ```
 
 Ask people on ocs-qe mailing list or chat room if you don't know where to find the
-secret URL for libra key. Or look for this mail thread:
-`SSH key deployed on our nodes` where the URL was mentioned.
+secret URL for openshift-dev key. Or look for this mail thread:
+`Libra ssh key replaced by openshift-dev key` where the URL was mentioned.
 
 If you would like to use a different path, you can overwrite it in the custom
 config file under the DEPLOYMENT section with this key and value:
