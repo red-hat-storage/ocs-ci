@@ -720,6 +720,16 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True):
         ocs (bool): Whether to gather OCS logs
 
     """
+    if not (
+        'KUBECONFIG' in os.environ
+        or os.path.exists(os.path.expanduser('~/.kube/config'))
+    ):
+        log.warn(
+            "Cannot find $KUBECONFIG or ~/.kube/config; "
+            "skipping log collection"
+        )
+        return
+
     log_dir_path = os.path.join(
         os.path.expanduser(ocsci_config.RUN['log_dir']),
         f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",
