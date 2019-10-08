@@ -108,6 +108,9 @@ MOUNT_POINT = '/var/lib/www/html'
 OCP_QE_MISC_REPO = (
     "http://git.host.prod.eng.bos.redhat.com/git/openshift-misc.git"
 )
+
+OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
+
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
 DEFAULT_SECRET = 'rook-ceph-csi'
