@@ -19,7 +19,7 @@ class CatalogSource(OCP):
     """
 
     def __init__(
-        self, resource_name="", namespace="", *args, **kwargs
+        self, resource_name="", namespace=None, *args, **kwargs
     ):
         """
         Initializer function for CatalogSource class
