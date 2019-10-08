@@ -933,7 +933,7 @@ def get_ocs_build_number():
         build_info = ocs_catalog.get_image_name()
         try:
             return build_info.split("-")[1].split(".")[0]
-        except IndexError:
+        except (IndexError, AttributeError):
             logging.warning("No version info found for OCS operator")
     return build_num
 
