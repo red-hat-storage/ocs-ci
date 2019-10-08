@@ -83,7 +83,12 @@ def get_ocs_version():
                     container['name'],
                     pod['metadata']['name'],
                     container['image'])
-            for cs in pod['status']['containerStatuses']:
+            cs_items = pod['status'].get('containerStatuses')
+            if cs_items is None:
+                pod_name = pod['metadata']['name']
+                logger.warning(f'pod {pod_name} has no containerStatuses')
+                continue
+            for cs in cs_items:
                 ns_dict.setdefault(cs['image'], set()).add(cs['imageID'])
         image_dict.setdefault(ns, ns_dict)
 
