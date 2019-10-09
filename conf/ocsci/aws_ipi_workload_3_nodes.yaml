@@ -11,4 +11,4 @@ ENV_DATA:
   master_replicas: 3
   worker_replicas: 6
   ocs_operator_nodes_to_label: 3
-  ocs_operator_nodes_to_tain: 3
+  ocs_operator_nodes_to_taint: 3
