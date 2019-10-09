@@ -123,7 +123,7 @@ class Deployment(object):
         if not worker_nodes:
             raise UnavailableResourceException("No worker node found!")
         to_label = config.DEPLOYMENT.get('ocs_operator_nodes_to_label', 3)
-        to_taint = config.DEPLOYMENT.get('ocs_operator_nodes_to_tain', 0)
+        to_taint = config.DEPLOYMENT.get('ocs_operator_nodes_to_taint', 0)
         worker_count = len(worker_nodes)
         if worker_count < to_label or worker_count < to_taint:
             logger.info(f"All nodes: {nodes}")
