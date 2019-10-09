@@ -47,7 +47,7 @@ DEPLOYMENT:
   ocs_operator_nodes_to_label: 3
   # This is described as a WA for minimal configuration 3/3 worker/master
   # nodes. See: https://github.com/openshift/ocs-operator
-  ocs_operator_nodes_to_tain: 0
+  ocs_operator_nodes_to_taint: 0
   ocs_operator_deployment: True
   ssh_key: "~/.ssh/openshift-dev.pub"
   force_deploy_multiple_clusters: False
