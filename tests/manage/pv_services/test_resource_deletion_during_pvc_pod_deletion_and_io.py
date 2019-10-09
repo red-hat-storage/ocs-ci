@@ -355,7 +355,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         # Verify pods are deleted
         for pod_obj in pods_to_delete:
-            pod_obj.ocp.wait_for_delete(pod_obj.name, 180)
+            pod_obj.ocp.wait_for_delete(pod_obj.name, 300)
         log.info("Verified: Pods are deleted.")
 
         # Verify that the mount point is removed from nodes after deleting pod
