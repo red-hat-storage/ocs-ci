@@ -38,6 +38,7 @@ setup(
         # https://github.com/eanxgeek/pytest_marker_bugzilla/issues/43
         'pytest_marker_bugzilla>=0.9.1.dev6',
         'pyvmomi',
+        'pyhcl',
     ],
     entry_points={
         'console_scripts': [

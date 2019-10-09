@@ -2,6 +2,7 @@
 This module contains platform specific methods and classes for deployment
 on vSphere platform
 """
+import hcl
 import logging
 import os
 
@@ -16,7 +17,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.framework import config
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
-from ocs_ci.utility.templating import load_yaml, Templating
+from ocs_ci.utility.templating import load_yaml, Templating, dump_data_to_json
 from ocs_ci.ocs import constants
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.ocs.openshift_ops import OCP
@@ -198,6 +199,19 @@ class VSPHEREUPI(VSPHEREBASE):
                     config.ENV_DATA.get('memory')
                 )
 
+            # increase CPUs
+            worker_num_cpus = config.ENV_DATA.get('worker_num_cpus')
+            master_num_cpus = config.ENV_DATA.get('master_num_cpus')
+            if worker_num_cpus or master_num_cpus:
+                with open(constants.VSPHERE_MAIN, 'r') as fd:
+                    obj = hcl.load(fd)
+                    if worker_num_cpus:
+                        obj['module']['compute']['num_cpu'] = worker_num_cpus
+                    if master_num_cpus:
+                        obj['module']['control_plane']['num_cpu'] = master_num_cpus
+                dump_data_to_json(obj, f"{constants.VSPHERE_MAIN}.json")
+                os.rename(constants.VSPHERE_MAIN, f"{constants.VSPHERE_MAIN}.backup")
+
         def convert_yaml2tfvars(self, yaml):
             """
             Converts yaml file to tfvars. It creates the tfvars with the
@@ -362,6 +376,11 @@ class VSPHEREUPI(VSPHEREBASE):
         clone_repo(
             constants.VSPHERE_INSTALLER_REPO, upi_repo_path
         )
+        if (
+                os.path.exists(f"{constants.VSPHERE_MAIN}.backup")
+                and os.path.exists(f"{constants.VSPHERE_MAIN}.json")
+        ):
+            os.rename(f"{constants.VSPHERE_MAIN}.json", f"{constants.VSPHERE_MAIN}.json.backup")
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
         terraform.destroy(tfvars)
