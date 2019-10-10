@@ -24,6 +24,8 @@ from ocs_ci.utility.utils import (
     get_testrun_name,
 )
 from ocs_ci.ocs.utils import collect_ocs_logs
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.constants import OPERATOR_CATALOG_SOURCE_NAME
 
 __all__ = [
     "pytest_addoption",
@@ -151,6 +153,16 @@ def pytest_configure(config):
             config._metadata['csi-provisioner'] = csi_versions.get('csi-provisioner')
             config._metadata['cephfsplugin'] = csi_versions.get('csi-cephfsplugin')
             config._metadata['rbdplugin'] = csi_versions.get('csi-rbdplugin')
+
+            # add ocs operator version
+            ocs_catalog = CatalogSource(
+                resource_name=OPERATOR_CATALOG_SOURCE_NAME,
+                namespace="openshift-marketplace"
+            )
+            if ocsci_config.REPORTING['us_ds'] == 'DS':
+                config._metadata['OCS operator'] = (
+                    ocs_catalog.get_image_name()
+                )
         except (FileNotFoundError, CommandFailed):
             pass
 
