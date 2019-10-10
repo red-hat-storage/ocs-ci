@@ -474,12 +474,12 @@ def validate_cluster_on_pvc(label):
     for pod_obj in ocs_pod_obj:
         pod_volumes = pod_obj.get().get('spec').get('volumes')
         claim_spec_exists = False
+        backed_by_pvc = False
         for volumes in pod_volumes:
             pvc = volumes.get('persistentVolumeClaim')
             if pvc:
                 claim_name = pvc.get('claimName')
                 claim_spec_exists = True
-                backed_by_pvc = False
                 if claim_name in pvc_list:
                     logger.info(
                         f"OCS pod {pod_obj.name} is backed by PVC {claim_name}"
