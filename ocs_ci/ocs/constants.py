@@ -15,6 +15,7 @@ TOP_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 TEMPLATE_DIR = os.path.join(TOP_DIR, "ocs_ci", "templates")
+EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
 TEMPLATE_CSI_RBD_DIR = os.path.join(TEMPLATE_CSI_DIR, "rbd")
@@ -94,12 +95,18 @@ OPENSHIFT_OPERATORS_REDHAT_NAMESPACE = "openshift-operators-redhat"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
 MOUNT_POINT = '/var/lib/www/html'
+OCP_QE_MISC_REPO = (
+    "http://git.host.prod.eng.bos.redhat.com/git/openshift-misc.git"
+)
+UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
 DEFAULT_SECRET = 'rook-ceph-csi'
 DEFAULT_BLOCKPOOL = 'rbd'
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
 GB = 1024 ** 3
+GB2KB = 1024 ** 2
+DEFAULT_DISK_SIZE = 100
 
 # Reclaim Policy
 RECLAIM_POLICY_RETAIN = 'Retain'
@@ -116,6 +123,7 @@ MDS_APP_LABEL = "app=rook-ceph-mds"
 TOOL_APP_LABEL = "app=rook-ceph-tools"
 MGR_APP_LABEL = "app=rook-ceph-mgr"
 OSD_APP_LABEL = "app=rook-ceph-osd"
+OPERATOR_LABEL = "app=rook-ceph-operator"
 CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = "app=csi-cephfsplugin-provisioner"
 CSI_RBDPLUGIN_PROVISIONER_LABEL = "app=csi-rbdplugin-provisioner"
 CSI_CEPHFSPLUGIN_LABEL = "app=csi-cephfsplugin"
@@ -298,8 +306,10 @@ NODE_READY_SCHEDULING_DISABLED = 'Ready,SchedulingDisabled'
 
 # Alert labels
 ALERT_CLUSTERWARNINGSTATE = 'CephClusterWarningState'
+ALERT_DATARECOVERYTAKINGTOOLONG = 'CephDataRecoveryTakingTooLong'
 ALERT_MGRISABSENT = 'CephMgrIsAbsent'
 ALERT_MONQUORUMATRISK = 'CephMonQuorumAtRisk'
+ALERT_OSDDISKNOTRESPONDING = 'CephOSDDiskNotResponding'
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -317,3 +327,24 @@ VSPHERE_PLATFORM = 'vsphere'
 # Default SC based on platforms
 DEFAULT_SC_AWS = "gp2"
 DEFAULT_SC_VSPHERE = "thin"
+
+# ignition files
+BOOTSTRAP_IGN = "bootstrap.ign"
+MASTER_IGN = "master.ign"
+WORKER_IGN = "worker.ign"
+
+# vSphere related constants
+VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
+VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")
+INSTALLER_IGNITION = os.path.join(VSPHERE_DIR, "machine/ignition.tf")
+INSTALLER_ROUTE53 = os.path.join(VSPHERE_DIR, "route53/main.tf")
+INSTALLER_MACHINE_CONF = os.path.join(VSPHERE_DIR, "machine/main.tf")
+VSPHERE_CONFIG_PATH = os.path.join(TOP_DIR, "conf/ocsci/vsphere_upi_vars.yaml")
+TERRAFORM_DATA_DIR = "terraform_data"
+TERRAFORM_VARS = "terraform.tfvars"
+VM_DISK_TYPE = "thin"
+VM_DISK_MODE = "persistent"
+INSTALLER_DEFAULT_DNS = "1.1.1.1"
+
+# Config related constants
+config_keys_patterns_to_censor = ['passw', 'token', 'secret']

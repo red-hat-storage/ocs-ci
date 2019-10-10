@@ -44,6 +44,14 @@ def measure_operation(
     Returns:
         dict: contains information about `start` and `stop` time of given
             function and its `result` and provided `metadata`
+            Example:
+            {
+                'start': 1569827653.1903834,
+                'stop': 1569828313.6469617,
+                'result': 'rook-ceph-osd-2',
+                'metadata': {'status': 'success'},
+                'prometheus_alerts': [{'labels': ...}, {...}, ...]
+            }
     """
     def prometheus_log(info, alert_list):
         """
@@ -118,7 +126,6 @@ def measure_operation(
         stop_time = time.time()
         info['run'] = False
         logging_thread.join()
-        logger.info(f"Alerts found during measurement: {alert_list}")
         results = {
             'start': start_time,
             'stop': stop_time,
@@ -126,6 +133,7 @@ def measure_operation(
             'metadata': metadata,
             'prometheus_alerts': alert_list
         }
+        logger.info(f"Results of measurement: {results}")
         with open(result_file, 'w') as outfile:
             logger.info(f"Dumping results of measurement into {result_file}")
             json.dump(results, outfile)
@@ -161,7 +169,7 @@ def measurement_dir(tmp_path):
 
 
 @pytest.fixture
-def workload_stop_ceph_mgr(measurement_dir):
+def measure_stop_ceph_mgr(measurement_dir):
     """
     Downscales Ceph Manager deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -199,7 +207,7 @@ def workload_stop_ceph_mgr(measurement_dir):
         time.sleep(run_time)
         return oc.get(mgr)
 
-    test_file = os.path.join(measurement_dir, 'workload_stop_ceph_mgr.json')
+    test_file = os.path.join(measurement_dir, 'measure_stop_ceph_mgr.json')
     measured_op = measure_operation(stop_mgr, test_file)
     logger.info(f"Upscaling deployment {mgr} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
@@ -207,7 +215,7 @@ def workload_stop_ceph_mgr(measurement_dir):
 
 
 @pytest.fixture
-def workload_stop_ceph_mon(measurement_dir):
+def measure_stop_ceph_mon(measurement_dir):
     """
     Downscales Ceph Monitor deployment, measures the time when it was
     downscaled and monitors alerts that were triggered during this event.
@@ -257,7 +265,7 @@ def workload_stop_ceph_mon(measurement_dir):
         time.sleep(run_time)
         return mons_to_stop
 
-    test_file = os.path.join(measurement_dir, 'workload_stop_ceph_mon.json')
+    test_file = os.path.join(measurement_dir, 'measure_stop_ceph_mon.json')
     measured_op = measure_operation(stop_mon, test_file)
 
     # get new list of monitors to make sure that new monitors were deployed
@@ -275,5 +283,62 @@ def workload_stop_ceph_mon(measurement_dir):
             oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mon}")
         msg = f"Downscaled monitors {mons_to_stop} were not replaced"
         assert check_old_mons_deleted, msg
+
+    return measured_op
+
+
+@pytest.fixture
+def measure_stop_ceph_osd(measurement_dir):
+    """
+    Downscales Ceph osd deployment, measures the time when it was
+    downscaled and alerts that were triggered during this event.
+
+    Returns:
+        dict: Contains information about `start` and `stop` time for stopping
+            Ceph osd pod
+    """
+    oc = ocp.OCP(
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA.get('cluster_namespace')
+    )
+    osd_deployments = oc.get(selector=constants.OSD_APP_LABEL).get('items')
+    osds = [
+        deployment.get('metadata').get('name')
+        for deployment in osd_deployments
+    ]
+
+    # get osd deployments to stop, leave even number of osd
+    osd_to_stop = osds[-1]
+    logger.info(f"osd disks to stop: {osd_to_stop}")
+    logger.info(f"osd disks left to run: {osds[:-1]}")
+
+    def stop_osd():
+        """
+        Downscale Ceph osd deployments for 11 minutes. First 1 minutes
+        the alert CephOSDDiskNotResponding should be in 'Pending'.
+        After 1 minute the alert turns into 'Firing' state.
+        This configuration of osd can be observed in ceph-mixins which
+        is used in the project:
+            https://github.com/ceph/ceph-mixins/blob/d22afe8c0da34490cb77e52a202eefcf4f62a869/config.libsonnet#L21
+        There should be also CephClusterWarningState alert that takes 10
+        minutest to be firing.
+
+        Returns:
+            str: Names of downscaled deployments
+        """
+        # run_time of operation
+        run_time = 60 * 11
+        nonlocal oc
+        nonlocal osd_to_stop
+        logger.info(f"Downscaling deployment {osd_to_stop} to 0")
+        oc.exec_oc_cmd(f"scale --replicas=0 deployment/{osd_to_stop}")
+        logger.info(f"Waiting for {run_time} seconds")
+        time.sleep(run_time)
+        return osd_to_stop
+
+    test_file = os.path.join(measurement_dir, 'measure_stop_ceph_osd.json')
+    measured_op = measure_operation(stop_osd, test_file)
+    logger.info(f"Upscaling deployment {osd_to_stop} back to 1")
+    oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_to_stop}")
 
     return measured_op

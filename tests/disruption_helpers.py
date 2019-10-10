@@ -55,6 +55,9 @@ class Disruptions:
             )]
             self.selector = constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
             resource_count = len(pod.get_rbdfsplugin_provisioner_pods())
+        if self.resource == 'operator':
+            self.resource_obj = pod.get_operator_pods()
+            self.selector = constants.OPERATOR_LABEL
 
         self.resource_count = resource_count or len(self.resource_obj)
 

@@ -5,20 +5,34 @@ platforms like AWS, VMWare, Baremetal etc.
 import logging
 import tempfile
 import time
+from copy import deepcopy
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
-from ocs_ci.ocs.utils import create_oc_resource, apply_oc_resource
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     run_cmd, ceph_health_check, is_cluster_running, get_latest_ds_olm_tag
 )
 from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
 from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from tests import helpers
+from ocs_ci.ocs.monitoring import (
+    create_configmap_cluster_monitoring_pod,
+    validate_pvc_created_and_bound_on_monitoring_pods,
+    validate_pvc_are_mounted_on_monitoring_pods
+)
+from ocs_ci.ocs.utils import (
+    create_oc_resource, apply_oc_resource, setup_ceph_toolbox, collect_ocs_logs
+)
+from ocs_ci.ocs.resources.pod import (
+    get_all_pods,
+    validate_pods_are_respinned_and_running_state
+)
+from ocs_ci.ocs.cluster import validate_cluster_on_pvc
 
 
 logger = logging.getLogger(__name__)
@@ -64,10 +78,23 @@ class Deployment(object):
                     "OCP cluster is already running, skipping installation"
                 )
             else:
-                self.deploy_ocp(log_cli_level)
+                try:
+                    self.deploy_ocp(log_cli_level)
+                except Exception:
+                    if config.REPORTING['gather_on_deploy_failure']:
+                        collect_ocs_logs('deployment', ocs=False)
+                    raise
 
         if not config.ENV_DATA['skip_ocs_deployment']:
-            self.deploy_ocs()
+            try:
+                self.deploy_ocs()
+            except Exception:
+                if config.REPORTING['gather_on_deploy_failure']:
+                    # Let's do the collections separately to guard against one
+                    # of them failing
+                    collect_ocs_logs('deployment', ocs=False)
+                    collect_ocs_logs('deployment', ocp=False)
+                raise
         else:
             logger.warning("OCS deployment will be skipped")
 
@@ -96,7 +123,7 @@ class Deployment(object):
         if not worker_nodes:
             raise UnavailableResourceException("No worker node found!")
         to_label = config.DEPLOYMENT.get('ocs_operator_nodes_to_label', 3)
-        to_taint = config.DEPLOYMENT.get('ocs_operator_nodes_to_tain', 0)
+        to_taint = config.DEPLOYMENT.get('ocs_operator_nodes_to_taint', 0)
         worker_count = len(worker_nodes)
         if worker_count < to_label or worker_count < to_taint:
             logger.info(f"All nodes: {nodes}")
@@ -133,12 +160,12 @@ class Deployment(object):
             )
             _ocp.exec_oc_cmd(command=taint_cmd)
 
-    def get_olm_manifest(self):
+    def get_olm_and_subscription_manifest(self):
         """
-        This method prepare manifest for deploy OCS operator.
+        This method prepare manifest for deploy OCS operator and subscription.
 
         Returns:
-            str: Path to olm deploy manifest
+            tuple: Path to olm deploy and subscription manifest
 
         """
         image = config.DEPLOYMENT.get('ocs_operator_image', '')
@@ -151,7 +178,8 @@ class Deployment(object):
         olm_data_generator = templating.load_yaml(
             ocs_operator_olm, multi_document=True
         )
-        yaml_data = []
+        olm_yaml_data = []
+        subscription_yaml_data = []
         cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
         # TODO: Once needed we can also set the channel for the subscription
         # from config.DEPLOYMENT.get('ocs_csv_channel')
@@ -166,24 +194,41 @@ class Deployment(object):
                 yaml_doc['spec']['image'] = (
                     f"{image}:{image_tag if image_tag else 'latest'}"
                 )
-            yaml_data.append(yaml_doc)
+            if yaml_doc.get('kind') == 'Subscription':
+                subscription_yaml_data.append(yaml_doc)
+                continue
+            olm_yaml_data.append(yaml_doc)
         olm_manifest = tempfile.NamedTemporaryFile(
             mode='w+', prefix='olm_manifest', delete=False
         )
         templating.dump_data_to_temp_yaml(
-            yaml_data, olm_manifest.name
+            olm_yaml_data, olm_manifest.name
         )
-        return olm_manifest.name
+        subscription_manifest = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='subscription_manifest', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            subscription_yaml_data, subscription_manifest.name
+        )
+        return olm_manifest.name, subscription_manifest.name
 
     def deploy_ocs_via_operator(self):
         """
         Method for deploy OCS via OCS operator
         """
         logger.info("Deployment of OCS via OCS operator")
-        olm_manifest = self.get_olm_manifest()
+        olm_manifest, subscription_manifest = (
+            self.get_olm_and_subscription_manifest()
+        )
         self.label_and_taint_nodes()
         run_cmd(f"oc create -f {olm_manifest}")
-        # wait for package manifest
+        catalog_source = CatalogSource(
+            resource_name='ocs-catalogsource',
+            namespace='openshift-marketplace',
+        )
+        # Wait for catalog source is ready
+        catalog_source.wait_for_state("READY")
+        run_cmd(f"oc create -f {subscription_manifest}")
         package_manifest = PackageManifest(
             resource_name=defaults.OCS_OPERATOR_NAME
         )
@@ -195,7 +240,7 @@ class Deployment(object):
             resource_name=csv_name, kind="csv",
             namespace=self.namespace
         )
-        csv.wait_for_phase("Succeeded")
+        csv.wait_for_phase("Succeeded", timeout=400)
         ocs_operator_storage_cluster_cr = config.DEPLOYMENT.get(
             'ocs_operator_storage_cluster_cr'
         )
@@ -214,6 +259,24 @@ class Deployment(object):
         deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
             'storage'
         ] = f"{device_size}Gi"
+
+        # Allow lower instance requests and limits for OCS deployment
+        if config.DEPLOYMENT.get('allow_lower_instance_requirements'):
+            none_resources = {'Requests': None, 'Limits': None}
+            deviceset_data["resources"] = deepcopy(none_resources)
+            cluster_data['spec']['resources'] = {
+                resource: deepcopy(none_resources) for resource
+                in ['mon', 'mds', 'rgw', 'mgr', 'noobaa']
+            }
+
+        if self.platform.lower() == constants.VSPHERE_PLATFORM:
+            cluster_data['spec']['monPVCTemplate']['spec'][
+                'storageClassName'
+            ] = constants.DEFAULT_SC_VSPHERE
+            deviceset_data['dataPVCTemplate']['spec'][
+                'storageClassName'
+            ] = constants.DEFAULT_SC_VSPHERE
+
         cluster_data['spec']['storageDeviceSets'] = [deviceset_data]
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode='w+', prefix='cluster_storage', delete=False
@@ -319,13 +382,14 @@ class Deployment(object):
             condition='Running', selector='app=rook-ceph-osd',
             resource_count=3, timeout=600
         )
+        # Validation for cluster on pvc
+        logger.info("Validate mon and OSD are backed by PVCs")
+        validate_cluster_on_pvc(label=constants.MON_APP_LABEL)
+        validate_cluster_on_pvc(label=constants.DEFAULT_DEVICESET_LABEL)
 
-        if not self.ocs_operator_deployment:
-            # Creatig toolbox pod
-            create_oc_resource(
-                'toolbox.yaml', self.cluster_path, _templating,
-                config.ENV_DATA,
-            )
+        # Creating toolbox pod
+        setup_ceph_toolbox()
+
         assert pod.wait_for_resource(
             condition=constants.STATUS_RUNNING,
             selector='app=rook-ceph-tools', resource_count=1, timeout=600
@@ -380,6 +444,41 @@ class Deployment(object):
                 f"MDS deployment Failed! Please check logs!"
             )
 
+        if config.ENV_DATA.get('monitoring_enabled') and config.ENV_DATA.get('persistent-monitoring'):
+            # Create a pool, secrets and sc
+            secret_obj = helpers.create_secret(interface_type=constants.CEPHBLOCKPOOL)
+            cbj_obj = helpers.create_ceph_block_pool()
+            sc_obj = helpers.create_storage_class(
+                interface_type=constants.CEPHBLOCKPOOL,
+                interface_name=cbj_obj.name,
+                secret_name=secret_obj.name
+            )
+
+            # Get the list of monitoring pods
+            pods_list = get_all_pods(
+                namespace=defaults.OCS_MONITORING_NAMESPACE,
+                selector=['prometheus', 'alertmanager']
+            )
+
+            # Create configmap cluster-monitoring-config
+            create_configmap_cluster_monitoring_pod(sc_obj.name)
+
+            # Take some time to respin the pod
+            waiting_time = 30
+            logger.info(f"Waiting {waiting_time} seconds...")
+            time.sleep(waiting_time)
+
+            # Validate the pods are respinned and in running state
+            validate_pods_are_respinned_and_running_state(
+                pods_list
+            )
+
+            # Validate the pvc is created on monitoring pods
+            validate_pvc_created_and_bound_on_monitoring_pods()
+
+            # Validate the pvc are mounted on pods
+            validate_pvc_are_mounted_on_monitoring_pods(pods_list)
+
         # Verify health of ceph cluster
         # TODO: move destroy cluster logic to new CLI usage pattern?
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
@@ -402,9 +501,9 @@ class Deployment(object):
 
     def add_node(self):
         """
-        Implement platform specif add_node in child class
+        Implement platform-specific add_node in child class
         """
-        raise NotImplementedError("add node functionality node implemented")
+        raise NotImplementedError("add node functionality not implemented")
 
     def patch_default_sc_to_non_default(self):
         """

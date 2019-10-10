@@ -2,27 +2,32 @@
 This module contains platform specific methods and classes for deployment
 on AWS platform
 """
-import os
-import logging
 import json
+import logging
+import os
+import shutil
 import traceback
+from subprocess import Popen, PIPE
 
-from .deployment import Deployment
+import boto3
+from botocore.exceptions import ClientError
+
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
-from ocs_ci.utility.utils import run_cmd
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults, constants
+from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.ocs.exceptions import SameNamePrefixClusterAlreadyExistsException
 
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import run_cmd, clone_repo
+from .deployment import Deployment
 
 logger = logging.getLogger(__name__)
 
 
-# As of now only IPI
-# TODO: Introduce UPI once we have proper doc
-__all__ = ['AWSIPI']
+__all__ = ['AWSIPI', 'AWSUPI']
 
 
 class AWSBase(Deployment):
@@ -67,11 +72,7 @@ class AWSBase(Deployment):
         Args:
             size (int): Size of volume in GB (default: 100)
         """
-        tfvars_file = "terraform.tfvars.json"
-        with open(os.path.join(self.cluster_path, tfvars_file)) as f:
-            tfvars = json.load(f)
-
-        cluster_id = tfvars['cluster_id']
+        cluster_id = get_infra_id(self.cluster_path)
         worker_pattern = f'{cluster_id}-worker*'
         logger.info(f'Worker pattern: {worker_pattern}')
         self.create_ebs_volumes(worker_pattern, size)
@@ -102,6 +103,22 @@ class AWSBase(Deployment):
             )
             return True
         return False
+
+    def destroy_volumes(self):
+        try:
+            # Retrieve cluster name and AWS region from metadata
+            cluster_name = get_cluster_name(self.cluster_path)
+            # Find and delete volumes
+            volume_pattern = f"{cluster_name}*"
+            logger.debug(f"Finding volumes with pattern: {volume_pattern}")
+            volumes = self.aws.get_volumes_by_name_pattern(volume_pattern)
+            logger.debug(f"Found volumes: \n {volumes}")
+            for volume in volumes:
+                self.aws.detach_and_delete_volume(
+                    self.aws.ec2_resource.Volume(volume['id'])
+                )
+        except Exception:
+            logger.error(traceback.format_exc())
 
 
 class AWSIPI(AWSBase):
@@ -166,18 +183,241 @@ class AWSIPI(AWSBase):
             log_level (str): log level openshift-installer (default: DEBUG)
         """
         super(AWSIPI, self).destroy_cluster(log_level)
+        self.destroy_volumes()
 
-        try:
-            # Retrieve cluster name and AWS region from metadata
-            cluster_name = self.ocp_deployment.metadata.get("clusterName")
-            # Find and delete volumes
-            volume_pattern = f"{cluster_name}*"
-            logger.debug(f"Finding volumes with pattern: {volume_pattern}")
-            volumes = self.aws.get_volumes_by_name_pattern(volume_pattern)
-            logger.debug(f"Found volumes: \n {volumes}")
-            for volume in volumes:
-                self.aws.detach_and_delete_volume(
-                    self.aws.ec2_resource.Volume(volume['id'])
+
+class AWSUPI(AWSBase):
+    """
+    A class to handle AWS UPI specific deployment
+    """
+    def __init__(self):
+        self.name = self.__class__.__name__
+        super(AWSUPI, self).__init__()
+
+    class OCPDeployment(BaseOCPDeployment):
+        def __init__(self):
+            super(AWSUPI.OCPDeployment, self).__init__()
+            upi_repo_name = f'openshift-misc-{config.RUN["run_id"]}'
+            self.upi_repo_path = os.path.join(
+                constants.EXTERNAL_DIR, upi_repo_name,
+            )
+
+            self.upi_script_path = os.path.join(
+                self.upi_repo_path,
+                'v3-launch-templates/functionality-testing'
+                '/aos-4_2/hosts/'
+            )
+
+        def deploy_prereq(self):
+            """
+            Overriding deploy_prereq from parent. Perform all necessary
+            prerequisites for AWSUPI here.
+            """
+            super(AWSUPI.OCPDeployment, self).deploy_prereq()
+
+            # setup necessary env variables
+            upi_env_vars = {
+                'INSTANCE_NAME_PREFIX': config.ENV_DATA['cluster_name'],
+                'AWS_REGION': config.ENV_DATA['region'],
+                'rhcos_ami': config.ENV_DATA['rhcos_ami'],
+                'route53_domain_name': config.ENV_DATA['base_domain'],
+                'vm_type_masters': config.ENV_DATA['master_instance_type'],
+                'vm_type_workers': config.ENV_DATA['worker_instance_type'],
+                'num_workers': str(config.ENV_DATA['worker_replicas'])
+            }
+            for key, value in upi_env_vars.items():
+                os.environ[key] = value
+
+            # ensure environment variables have been set correctly
+            for key, value in upi_env_vars.items():
+                assert os.getenv(key) == value, f"{os.getenv(key)} != {value}"
+
+            # git clone repo from openshift-qe repo
+            clone_repo(
+                constants.OCP_QE_MISC_REPO, self.upi_repo_path
+            )
+
+            # Sym link install-dir to cluster_path
+            install_dir = os.path.join(self.upi_script_path, "install-dir")
+            absolute_cluster_path = os.path.abspath(self.cluster_path)
+            logger.info(
+                "Sym linking %s to %s", install_dir, absolute_cluster_path
+            )
+            os.symlink(absolute_cluster_path, install_dir)
+
+            # NOT A CLEAN APPROACH: copy openshift-install and oc binary to
+            # script path because upi script expects it to be present in
+            # script dir
+            bindir = os.path.abspath(os.path.expanduser(config.RUN['bin_dir']))
+            shutil.copy2(
+                os.path.join(bindir, 'openshift-install'),
+                self.upi_script_path,
+            )
+            shutil.copy2(
+                os.path.join(bindir, 'oc'), self.upi_script_path
+            )
+
+        def deploy(self, log_cli_level='DEBUG'):
+            """
+            Exact deployment will happen here
+
+            Args:
+                log_cli_level (str): openshift installer's log level
+                    (default: "DEBUG")
+            """
+            logger.info("Deploying OCP cluster")
+            logger.info(
+                f"Openshift-installer will be using loglevel:{log_cli_level}"
+            )
+
+            # Invoke UPI on AWS install script
+            cidir = os.getcwd()
+            logger.info("Changing CWD")
+            try:
+                os.chdir(self.upi_script_path)
+            except OSError:
+                logger.exception(
+                    f"Failed to change CWD to {self.upi_script_path} "
                 )
-        except Exception:
-            logger.error(traceback.format_exc())
+            logger.info(f"CWD changed to {self.upi_script_path}")
+
+            with open(f"./{constants.UPI_INSTALL_SCRIPT}", "r") as fd:
+                buf = fd.read()
+            data = buf.replace("openshift-qe-upi", "ocs-qe-upi")
+            with open(f"./{constants.UPI_INSTALL_SCRIPT}", "w") as fd:
+                fd.write(data)
+
+            logger.info("Executing UPI install script")
+            proc = Popen(
+                [os.path.join(
+                    self.upi_script_path, constants.UPI_INSTALL_SCRIPT
+                )],
+                stdout=PIPE, stderr=PIPE
+            )
+            stdout, stderr = proc.communicate()
+
+            # Change dir back to ocs-ci dir
+            os.chdir(cidir)
+
+            if proc.returncode:
+                logger.error(stderr)
+                raise exceptions.CommandFailed("upi install script failed")
+            logger.info(stdout)
+
+            self.test_cluster()
+
+            # Delete openshift-misc repository
+            logger.info(
+                "Removing openshift-misc directory located at %s",
+                self.upi_repo_path
+            )
+            shutil.rmtree(self.upi_repo_path)
+
+    def deploy_ocp(self, log_cli_level='DEBUG'):
+        """
+        OCP deployment specific to AWS UPI
+
+        Args:
+             log_cli_level (str): openshift installer's log level
+                (default: 'DEBUG')
+        """
+        super(AWSUPI, self).deploy_ocp(log_cli_level)
+        if not self.ocs_operator_deployment:
+            volume_size = int(
+                config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
+            )
+            self.add_volume(volume_size)
+
+    def destroy_cluster(self, log_level="DEBUG"):
+        """
+        Destroy OCP cluster for AWS UPI
+
+        Args:
+            log_level (str): log level for openshift-installer (
+                default:DEBUG)
+        """
+        cluster_name = get_cluster_name(self.cluster_path)
+        # Destroy extra volumes
+        self.destroy_volumes()
+
+        # Create cloudformation client
+        cf = boto3.client('cloudformation')
+
+        # Delete master, bootstrap, security group, and worker stacks
+        suffixes = ['ma', 'bs', 'sg']
+        # TODO: read in num_workers in a better way
+        num_workers = int(os.environ.get('num_workers', 3))
+        for i in range(num_workers - 1, -1, -1):
+            suffixes.insert(0, f'no{i}')
+        stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
+        for stack_name in stack_names:
+            logger.info("Destroying stack: %s", stack_name)
+            cf.delete_stack(StackName=stack_name)
+            verify_stack_deleted(stack_name)
+
+        # Call openshift-installer destroy cluster
+        super(AWSUPI, self).destroy_cluster(log_level)
+
+        # Delete inf and vpc stacks
+        suffixes = ['inf', 'vpc']
+        stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
+        for stack_name in stack_names:
+            logger.info("Destroying stack: %s", stack_name)
+            cf.delete_stack(StackName=stack_name)
+            verify_stack_deleted(stack_name)
+
+
+def get_infra_id(cluster_path):
+    """
+    Get infraID from metadata.json in given cluster_path
+
+    Args:
+        cluster_path: path to cluster install directory
+
+    Returns:
+        str: metadata.json['infraID']
+
+    """
+    metadata_file = os.path.join(cluster_path, "metadata.json")
+    with open(metadata_file) as f:
+        metadata = json.load(f)
+    return metadata["infraID"]
+
+
+def get_cluster_name(cluster_path):
+    """
+    Get clusterName from metadata.json in given cluster_path
+
+    Args:
+        cluster_path: path to cluster install directory
+
+    Returns:
+        str: metadata.json['clusterName']
+
+    """
+    metadata_file = os.path.join(cluster_path, "metadata.json")
+    with open(metadata_file) as f:
+        metadata = json.load(f)
+    return metadata["clusterName"]
+
+
+class StackStatusError(Exception):
+    pass
+
+
+@retry(StackStatusError, tries=12, delay=30, backoff=1)
+def verify_stack_deleted(stack_name):
+    try:
+        cf = boto3.client('cloudformation')
+        result = cf.describe_stacks(StackName=stack_name)
+        stacks = result['Stacks']
+        for stack in stacks:
+            status = stack['StackStatus']
+            raise StackStatusError(
+                f'{stack_name} not deleted yet, current status: {status}.'
+            )
+    except ClientError as e:
+        assert f"Stack with id {stack_name} does not exist" in str(e)
+        logger.info(
+            "Received expected ClientError, stack successfully deleted"
+        )
