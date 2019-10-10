@@ -1,3 +1,4 @@
+import json
 import logging
 from jinja2 import Environment, FileSystemLoader, Template
 import yaml
@@ -200,3 +201,16 @@ def dump_data_to_temp_yaml(data, temp_yaml):
         yaml_file.write(yaml_data)
     logger.info(yaml_data)
     return yaml_data
+
+
+def dump_data_to_json(data, json_file):
+    """
+    Dump data to json file
+
+    Args:
+        data (dict): dictionary with data to dump to the json file.
+        json_file (str): file path to json file
+
+    """
+    with open(json_file, 'w') as fd:
+        json.dump(data, fd)
