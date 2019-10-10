@@ -209,6 +209,8 @@ class VSPHEREUPI(VSPHEREBASE):
                         obj['module']['compute']['num_cpu'] = worker_num_cpus
                     if master_num_cpus:
                         obj['module']['control_plane']['num_cpu'] = master_num_cpus
+                # Dump data to json file since hcl module
+                # doesn't support dumping of data in HCL format
                 dump_data_to_json(obj, f"{constants.VSPHERE_MAIN}.json")
                 os.rename(constants.VSPHERE_MAIN, f"{constants.VSPHERE_MAIN}.backup")
 
@@ -377,8 +379,8 @@ class VSPHEREUPI(VSPHEREBASE):
             constants.VSPHERE_INSTALLER_REPO, upi_repo_path
         )
         if (
-                os.path.exists(f"{constants.VSPHERE_MAIN}.backup")
-                and os.path.exists(f"{constants.VSPHERE_MAIN}.json")
+            os.path.exists(f"{constants.VSPHERE_MAIN}.backup")
+            and os.path.exists(f"{constants.VSPHERE_MAIN}.json")
         ):
             os.rename(f"{constants.VSPHERE_MAIN}.json", f"{constants.VSPHERE_MAIN}.json.backup")
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
