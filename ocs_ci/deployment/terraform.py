@@ -16,9 +16,14 @@ class Terraform(object):
     def __init__(self, path):
         self.path = path
 
-    def initialize(self, upgrade=None):
+    def initialize(self, upgrade=False):
         """
         Initialize a working directory containing Terraform configuration files
+
+        Args:
+            upgrade (boolean): True in case installing modules needs upgrade from
+                previously-downloaded objects, False otherwise
+
         """
         logger.info("Initializing terraform work directory")
         if upgrade:
