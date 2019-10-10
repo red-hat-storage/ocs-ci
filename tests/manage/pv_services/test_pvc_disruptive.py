@@ -145,6 +145,30 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'run_io', 'cephfsplugin_provisioner'],
             marks=pytest.mark.polarion_id("OCS-949")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'create_pvc', 'operator'],
+            marks=pytest.mark.polarion_id("OCS-927")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'create_pod', 'operator'],
+            marks=pytest.mark.polarion_id("OCS-925")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'run_io', 'operator'],
+            marks=pytest.mark.polarion_id("OCS-928")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'create_pvc', 'operator'],
+            marks=pytest.mark.polarion_id("OCS-937")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'create_pod', 'operator'],
+            marks=pytest.mark.polarion_id("OCS-936")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'run_io', 'operator'],
+            marks=pytest.mark.polarion_id("OCS-938")
         )
     ]
 )
@@ -233,7 +257,8 @@ class TestPVCDisruption(ManageTest):
             ),
             'rbdplugin_provisioner': partial(
                 pod.get_rbdfsplugin_provisioner_pods
-            )
+            ),
+            'operator': partial(pod.get_operator_pods)
         }
 
         # Get number of pods of type 'resource_to_delete'
