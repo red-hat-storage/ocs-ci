@@ -70,7 +70,8 @@ class MCG(object):
                 'system': 'noobaa',
                 'email': self.noobaa_user,
                 'password': self.noobaa_password
-            }).json().get('reply').get('token')
+            }
+        ).json().get('reply').get('token')
 
         self._ocp_resource = ocp_obj
         self.s3_resource = boto3.resource(
@@ -250,8 +251,6 @@ class MCG(object):
             logger.info(
                 'Overall bytes stored: ' + str(bucket_data) + '. Amount reduced: ' + str(bucket_data_reduced)
             )
-
-            return bucket_data, bucket_data_reduced
 
         try:
             for total_size, total_reduced in TimeoutSampler(120, 5, _retrieve_reduction_data):
