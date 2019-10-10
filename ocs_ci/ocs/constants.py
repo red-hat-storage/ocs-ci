@@ -328,6 +328,7 @@ INSTALLER_IGNITION = os.path.join(VSPHERE_DIR, "machine/ignition.tf")
 INSTALLER_ROUTE53 = os.path.join(VSPHERE_DIR, "route53/main.tf")
 INSTALLER_MACHINE_CONF = os.path.join(VSPHERE_DIR, "machine/main.tf")
 VSPHERE_CONFIG_PATH = os.path.join(TOP_DIR, "conf/ocsci/vsphere_upi_vars.yaml")
+VSPHERE_MAIN = os.path.join(VSPHERE_DIR, "main.tf")
 TERRAFORM_DATA_DIR = "terraform_data"
 TERRAFORM_VARS = "terraform.tfvars"
 VM_DISK_TYPE = "thin"
