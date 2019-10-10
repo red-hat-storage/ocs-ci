@@ -3,7 +3,7 @@ import logging
 import boto3
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import aws_platform_required
+from ocs_ci.framework.pytest_customization.marks import aws_platform_required, filter_insecure_request_warning
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import constants
 from tests.helpers import craft_s3_command
@@ -11,6 +11,7 @@ from tests.helpers import craft_s3_command
 logger = logging.getLogger(__name__)
 
 
+@filter_insecure_request_warning
 @aws_platform_required
 @tier1
 class TestBucketIO(ManageTest):
@@ -42,7 +43,7 @@ class TestBucketIO(ManageTest):
             copycommand = f"cp {obj_name} {full_object_path}"
             assert 'Completed' in awscli_pod.exec_cmd_on_pod(
                 command=craft_s3_command(mcg_obj, copycommand), out_yaml_format=False,
-                secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.endpoint]
+                secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
             )
             uploaded_objects.append(full_object_path)
 
@@ -51,3 +52,29 @@ class TestBucketIO(ManageTest):
         ).issubset(
             obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(bucketname)
         )
+
+    def test_data_reduction(self, mcg_obj, awscli_pod, bucket_factory):
+        """
+        Test data reduction mechanics
+
+        """
+        # TODO: Privatize test bucket
+        download_dir = '/aws/downloaded'
+        synccmd = (
+            f"aws s3 sync s3://{constants.TEST_FILES_BUCKET} {download_dir} --no-sign-request"
+        )
+        assert 'download' in awscli_pod.exec_cmd_on_pod(command=synccmd, out_yaml_format=False), (
+            'Failed to download test files'
+        )
+
+        bucketname = None
+        for bucket in bucket_factory(5):
+            synccmd = f'sync {download_dir} s3://{bucket.name}'
+            awscli_pod.exec_cmd_on_pod(
+                command=craft_s3_command(mcg_obj, synccmd),
+                out_yaml_format=False,
+                secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+            )
+            bucketname = bucket.name
+
+        assert mcg_obj.check_data_reduction(bucketname), 'Data reduction did not work as anticipated.'
