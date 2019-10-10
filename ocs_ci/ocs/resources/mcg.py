@@ -252,6 +252,8 @@ class MCG(object):
                 'Overall bytes stored: ' + str(bucket_data) + '. Amount reduced: ' + str(bucket_data_reduced)
             )
 
+            return bucket_data, bucket_data_reduced
+
         try:
             for total_size, total_reduced in TimeoutSampler(120, 5, _retrieve_reduction_data):
                 if total_size - total_reduced > 80000000:
