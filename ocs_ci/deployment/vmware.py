@@ -364,5 +364,6 @@ class VSPHEREUPI(VSPHEREBASE):
         )
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
+        terraform.initialize(upgrade=True)
         terraform.destroy(tfvars)
         os.chdir(previous_dir)

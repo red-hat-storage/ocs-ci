@@ -16,12 +16,16 @@ class Terraform(object):
     def __init__(self, path):
         self.path = path
 
-    def initialize(self):
+    def initialize(self, upgrade=None):
         """
         Initialize a working directory containing Terraform configuration files
         """
         logger.info("Initializing terraform work directory")
-        run_cmd(f"terraform init {self.path}")
+        if upgrade:
+            cmd = f"terraform init -upgrade {self.path}"
+        else:
+            cmd = f"terraform init {self.path}"
+        run_cmd(cmd)
 
     def apply(self, tfvars, bootstrap_complete=False):
         """
