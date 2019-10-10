@@ -266,7 +266,9 @@ class Deployment(object):
             deviceset_data["resources"] = deepcopy(none_resources)
             cluster_data['spec']['resources'] = {
                 resource: deepcopy(none_resources) for resource
-                in ['mon', 'mds', 'rgw', 'mgr', 'noobaa']
+                in [
+                    'mon', 'mds', 'rgw', 'mgr', 'noobaa-core', 'noobaa-db',
+                ]
             }
 
         if self.platform.lower() == constants.VSPHERE_PLATFORM:
