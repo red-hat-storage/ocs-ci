@@ -19,6 +19,7 @@ from ocs_ci.ocs import workload
 from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
@@ -335,6 +336,8 @@ def get_ceph_tools_pod():
     ocp_pod_obj = OCP(
         kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
     )
+    # setup ceph_toolbox pod if the cluster has been setup by some other CI
+    setup_ceph_toolbox()
     ct_pod_items = ocp_pod_obj.get(
         selector='app=rook-ceph-tools'
     )['items']
