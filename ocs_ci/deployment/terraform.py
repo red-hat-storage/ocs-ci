@@ -21,7 +21,7 @@ class Terraform(object):
         Initialize a working directory containing Terraform configuration files
 
         Args:
-            upgrade (boolean): True in case installing modules needs upgrade from
+            upgrade (bool): True in case installing modules needs upgrade from
                 previously-downloaded objects, False otherwise
 
         """
