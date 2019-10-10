@@ -375,10 +375,18 @@ class MCG(object):
         ).decode('ascii')
         return create_resource(**bs_secret_data)
 
-    def create_oc_aws_backingstore(self, name, targetbucket, secretname, region):
+    def oc_create_aws_backingstore(self, name, targetbucket, secretname, region):
         bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
         bs_data['metadata']['name'] += f'-{name}'
         bs_data['spec']['awsS3']['secret']['name'] = secretname
         bs_data['spec']['awsS3']['targetBucket'] = targetbucket
         bs_data['spec']['awsS3']['region'] = region
         return create_resource(**bs_data)
+
+    def oc_create_bucketclass(self, name):
+        bc_data = templating.load_yaml(constants.MCG_BUCKETCLASS_YAML)
+        bc_data['metadata']['name'] = name
+        tiers = bc_data['spec']['placementPolicy']['tiers'][0]
+        tiers['backingStores'] = ['delet-dis', 'noobaa-default-backing-store']
+        tiers['placement'] = 'spread'
+        return create_resource(**bc_data)

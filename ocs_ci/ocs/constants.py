@@ -179,6 +179,10 @@ MCG_BACKINGSTORE_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "BackingStore.yaml"
 )
 
+MCG_BUCKETCLASS_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "BucketClass.yaml"
+)
+
 CSI_RBD_POD_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pod.yaml"
 )
