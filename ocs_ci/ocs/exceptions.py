@@ -82,5 +82,13 @@ class ResourceInUnexpectedState(Exception):
     pass
 
 
+class VMMaxDisksReachedException(Exception):
+    pass
+
+
 class SameNamePrefixClusterAlreadyExistsException(Exception):
+    pass
+
+
+class MissingRequiredConfigKeyError(Exception):
     pass

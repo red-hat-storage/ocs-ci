@@ -7,6 +7,7 @@ import shlex
 import string
 import subprocess
 import time
+from copy import deepcopy
 from shutil import which
 
 import requests
@@ -25,6 +26,7 @@ from email.mime.text import MIMEText
 from ocs_ci.ocs import constants
 from ocs_ci.utility.retry import retry
 from bs4 import BeautifulSoup
+from paramiko import SSHClient, AutoAddPolicy
 
 log = logging.getLogger(__name__)
 
@@ -982,7 +984,7 @@ def get_csi_versions():
         )
         desc = ocp_pod_obj.get(csi_provisioner_pod)
         for container in desc['spec']['containers']:
-            name = container['image'].split("/")[-1].split(":")[0]
+            name = container['name']
             version = container['image'].split("/")[-1].split(":")[1]
             csi_versions[name] = version
     return csi_versions
@@ -1077,12 +1079,19 @@ def get_testrun_name():
     """
     markers = config.RUN['cli_params'].get('-m', '').replace(" ", "-")
     us_ds = config.REPORTING.get("us_ds")
+    us_ds = "Upstream" if us_ds.upper() == "US" else "Downstream" if us_ds.upper() == "DS" else us_ds
     if config.REPORTING["polarion"].get("testrun_name"):
         testrun_name = config.REPORTING["polarion"]["testrun_name"]
     elif markers:
         testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}_{markers}"
     else:
         testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}"
+
+    # form complete testrun name that includes deployment platform and type
+    testrun_name = (
+        f"{testrun_name}-{config.ENV_DATA.get('platform').upper()}-"
+        f"{config.ENV_DATA.get('deployment_type').upper()}"
+    )
     # replace invalid character(s) by '-'
     testrun_name = testrun_name.translate(
         str.maketrans(
@@ -1158,6 +1167,32 @@ def get_rook_repo(branch='master', to_checkout=None):
         run_cmd(f"git checkout {to_checkout}", cwd=cwd)
 
 
+def clone_repo(url, location, branch='master', to_checkout=None):
+    """
+    Clone a repository or checkout latest changes if it already exists at
+        specified location.
+
+    Args:
+        url (str): location of the repository to clone
+        location (str): path where the repository will be cloned to
+        branch (str): branch name to checkout
+        to_checkout (str): commit id or tag to checkout
+    """
+    if not os.path.isdir(location):
+        log.info("Cloning repository into %s", location)
+        run_cmd(f"git clone {url} {location}")
+    else:
+        log.info("Repository already cloned at %s, skipping clone", location)
+        log.info("Fetching latest changes from repository")
+        run_cmd('git fetch --all', cwd=location)
+    log.info("Checking out repository to specific branch: %s", branch)
+    run_cmd(f"git checkout {branch}", cwd=location)
+    log.info("Reset branch: %s with latest changes", branch)
+    run_cmd(f"git reset --hard origin/{branch}", cwd=location)
+    if to_checkout:
+        run_cmd(f"git checkout {to_checkout}", cwd=location)
+
+
 def get_latest_ds_olm_tag():
     """
     This function returns latest tag of OCS downstream registry
@@ -1188,3 +1223,114 @@ def check_if_executable_in_path(exec_name):
 
     """
     return which(exec_name) is not None
+
+
+def upload_file(server, localpath, remotepath, user=None, password=None):
+    """
+    Upload a file to remote server
+
+    Args:
+        server (str): Name of the server to upload
+        localpath (str): Local file to upload
+        remotepath (str): Target path on the remote server. filename should be included
+        user (str): User to use for the remote connection
+
+    """
+    if not user:
+        user = 'root'
+
+    ssh = SSHClient()
+    ssh.set_missing_host_key_policy(
+        AutoAddPolicy())
+    ssh.connect(hostname=server, username=user, password=password)
+    sftp = ssh.open_sftp()
+    log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
+    sftp.put(localpath, remotepath)
+    sftp.close()
+    ssh.close()
+
+
+def read_file_as_str(filepath):
+    """
+    Reads the file content
+
+    Args:
+        filepath (str): File to read
+
+    Returns:
+        str : File contents in string
+
+    """
+    with open(rf"{filepath}") as fd:
+        content = fd.read()
+    return content
+
+
+def replace_content_in_file(file, old, new):
+    """
+    Replaces contents in file, if old value is not found, it adds
+    new value to the file
+
+    Args:
+        file (str): Name of the file in which contents will be replaced
+        old (str): Data to search for
+        new (str): Data to replace the old value
+
+    """
+    # Read the file
+    with open(rf"{file}", 'r') as fd:
+        file_data = fd.read()
+
+    # Replace/add the new data
+    if old in file_data:
+        file_data = file_data.replace(old, new)
+    else:
+        file_data = new + file_data
+
+    # Write the file out again
+    with open(rf"{file}", 'w') as fd:
+        fd.write(file_data)
+
+
+@retry((CommandFailed), tries=100, delay=10, backoff=1)
+def wait_for_co(operator):
+    """
+    Waits for ClusterOperator to created
+
+    Args:
+        operator (str): Name of the ClusterOperator
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+    ocp = OCP(kind='ClusterOperator')
+    ocp.get(operator)
+
+
+def censor_values(data_to_censor):
+    """
+    This function censor values in dictionary keys that match pattern defined
+    in config_keys_patterns_to_censor in constants.
+
+    Args:
+        data_to_censor (dict): Data to censor.
+
+    """
+    for key in data_to_censor:
+        for pattern in constants.config_keys_patterns_to_censor:
+            if pattern in key:
+                data_to_censor[key] = '*' * 5
+
+
+def dump_config_to_file(file_path):
+    """
+    Dump the config to the yaml file with censored secret values.
+
+    Args:
+        file_path (str): Path to file where to write the configuration.
+
+    """
+    config_copy = deepcopy(config.to_dict())
+    for key in config_copy:
+        censor_values(config_copy[key])
+    with open(file_path, "w+") as fs:
+        yaml.safe_dump(config_copy, fs)

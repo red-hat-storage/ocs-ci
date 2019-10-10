@@ -15,14 +15,17 @@ from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
 
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.openstack import CephVMNode
 from ocs_ci.ocs.parallel import parallel
-from ocs_ci.utility.utils import create_directory_path
+from ocs_ci.utility.utils import create_directory_path, run_cmd
+from ocs_ci.ocs import constants
 from ocs_ci.framework import config as ocsci_config
+from ocs_ci.utility import templating
 
 log = logging.getLogger(__name__)
 
@@ -622,6 +625,28 @@ def get_pod_name_by_pattern(pattern='client', namespace='openshift-storage'):
     return pod_list
 
 
+def setup_ceph_toolbox():
+    """
+    Setup ceph-toolbox - also checks if toolbox exists, if it exists it
+    behaves as noop.
+    """
+    namespace = ocsci_config.ENV_DATA['cluster_namespace']
+    ceph_toolbox = get_pod_name_by_pattern('rook-ceph-tools', namespace)
+    if len(ceph_toolbox) == 1:
+        log.info("Ceph toolbox already exists, skipping")
+        return
+    rook_operator = get_pod_name_by_pattern('rook-ceph-operator', namespace)
+    out = run_cmd(
+        f'oc -n {namespace} get pods {rook_operator[0]} -o yaml',
+    )
+    version = yaml.safe_load(out)
+    rook_version = version['spec']['containers'][0]['image']
+    tool_box_data = templating.load_yaml(constants.TOOL_POD_YAML)
+    tool_box_data['spec']['template']['spec']['containers'][0]['image'] = rook_version
+    rook_toolbox = OCS(**tool_box_data)
+    rook_toolbox.create()
+
+
 def apply_oc_resource(
     template_name,
     cluster_path,
@@ -689,26 +714,40 @@ def run_must_gather(log_dir_path, image, command=None):
         )
 
 
-def collect_ocs_logs(dir_name):
+def collect_ocs_logs(dir_name, ocp=True, ocs=True):
     """
     Collects OCS logs
 
     Args:
         dir_name (str): directory name to store OCS logs. Logs will be stored
             in dir_name suffix with _ocs_logs.
+        ocp (bool): Whether to gather OCP logs
+        ocs (bool): Whether to gather OCS logs
 
     """
+    if not (
+        'KUBECONFIG' in os.environ
+        or os.path.exists(os.path.expanduser('~/.kube/config'))
+    ):
+        log.warn(
+            "Cannot find $KUBECONFIG or ~/.kube/config; "
+            "skipping log collection"
+        )
+        return
+
     log_dir_path = os.path.join(
         os.path.expanduser(ocsci_config.RUN['log_dir']),
         f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",
         f"{dir_name}_ocs_logs"
     )
 
-    run_must_gather(os.path.join(log_dir_path, 'ocs_must_gather'),
-                    ocsci_config.REPORTING['ocs_must_gather_image'])
+    if ocs:
+        run_must_gather(os.path.join(log_dir_path, 'ocs_must_gather'),
+                        ocsci_config.REPORTING['ocs_must_gather_image'])
 
-    ocp_log_dir_path = os.path.join(log_dir_path, 'ocp_must_gather')
-    ocp_must_gather_image = ocsci_config.REPORTING['ocp_must_gather_image']
-    run_must_gather(ocp_log_dir_path, ocp_must_gather_image)
-    run_must_gather(ocp_log_dir_path, ocp_must_gather_image,
-                    '/usr/bin/gather_service_logs worker')
+    if ocp:
+        ocp_log_dir_path = os.path.join(log_dir_path, 'ocp_must_gather')
+        ocp_must_gather_image = ocsci_config.REPORTING['ocp_must_gather_image']
+        run_must_gather(ocp_log_dir_path, ocp_must_gather_image)
+        run_must_gather(ocp_log_dir_path, ocp_must_gather_image,
+                        '/usr/bin/gather_service_logs worker')

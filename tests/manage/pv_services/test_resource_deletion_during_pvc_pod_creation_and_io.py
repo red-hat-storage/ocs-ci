@@ -7,7 +7,8 @@ from ocs_ci.framework.testlib import ManageTest, tier4
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods, get_plugin_pods,
-    get_rbdfsplugin_provisioner_pods, get_cephfsplugin_provisioner_pods
+    get_rbdfsplugin_provisioner_pods, get_cephfsplugin_provisioner_pods,
+    get_operator_pods
 )
 from ocs_ci.utility.utils import TimeoutSampler
 from tests import helpers, disruption_helpers
@@ -64,6 +65,14 @@ log = logging.getLogger(__name__)
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'rbdplugin_provisioner'],
             marks=pytest.mark.polarion_id("OCS-945")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'operator'],
+            marks=pytest.mark.polarion_id("OCS-933")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'operator'],
+            marks=pytest.mark.polarion_id("OCS-929")
         )
     ]
 )
@@ -182,7 +191,8 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
             'rbdplugin': partial(get_plugin_pods, interface=interface),
             'cephfsplugin': partial(get_plugin_pods, interface=interface),
             'cephfsplugin_provisioner': partial(get_cephfsplugin_provisioner_pods),
-            'rbdplugin_provisioner': partial(get_rbdfsplugin_provisioner_pods)
+            'rbdplugin_provisioner': partial(get_rbdfsplugin_provisioner_pods),
+            'operator': partial(get_operator_pods)
         }
 
         executor = ThreadPoolExecutor(max_workers=len(io_pods))
