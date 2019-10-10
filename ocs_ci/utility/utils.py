@@ -25,6 +25,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from ocs_ci.ocs import constants
 from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.constants import OPERATOR_CATALOG_SOURCE_NAME
 from bs4 import BeautifulSoup
 from paramiko import SSHClient, AutoAddPolicy
 
@@ -867,12 +868,18 @@ def email_reports():
     Email results of test run
 
     """
+    build_id = get_ocs_build_number()
+    build_str = f"BUILD ID: {build_id} " if build_id else ""
     mailids = config.RUN['cli_params']['email']
     recipients = []
     [recipients.append(mailid) for mailid in mailids.split(",")]
     sender = "ocs-ci@redhat.com"
     msg = MIMEMultipart('alternative')
-    msg['Subject'] = f"ocs-ci results for {get_testrun_name()} (RUN ID: {config.RUN['run_id']})"
+    msg['Subject'] = (
+        f"ocs-ci results for {get_testrun_name()} "
+        f"({build_str}"
+        f"RUN ID: {config.RUN['run_id']})"
+    )
     msg['From'] = sender
     msg['To'] = ", ".join(recipients)
 
@@ -905,6 +912,30 @@ def get_cluster_version_info():
     ocp = OCP(kind="clusterversion")
     cluster_version_info = ocp.get("version")
     return cluster_version_info
+
+
+def get_ocs_build_number():
+    """
+    Gets the build number for ocs operator
+
+    Return:
+        str: build number for ocs operator version
+
+    """
+    from ocs_ci.ocs.resources.catalog_source import CatalogSource
+
+    build_num = ""
+    ocs_catalog = CatalogSource(
+        resource_name=OPERATOR_CATALOG_SOURCE_NAME,
+        namespace="openshift-marketplace"
+    )
+    if config.REPORTING['us_ds'] == 'DS':
+        build_info = ocs_catalog.get_image_name()
+        try:
+            return build_info.split("-")[1].split(".")[0]
+        except (IndexError, AttributeError):
+            logging.warning("No version info found for OCS operator")
+    return build_num
 
 
 def get_cluster_version():
