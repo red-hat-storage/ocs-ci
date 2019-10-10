@@ -43,7 +43,7 @@ def uploaded_objects(request, mcg_obj, awscli_pod):
             logger.info(f'Deleting object {uploaded_filename}')
             awscli_pod.exec_cmd_on_pod(
                 command=craft_s3_command(mcg_obj, "rm " + uploaded_filename),
-                secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.endpoint]
+                secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
             )
 
     request.addfinalizer(object_cleanup)
