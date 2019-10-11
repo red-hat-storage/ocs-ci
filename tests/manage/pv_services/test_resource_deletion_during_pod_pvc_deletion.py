@@ -12,7 +12,8 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check, run_cmd
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods, get_plugin_pods,
-    get_rbdfsplugin_provisioner_pods, get_cephfsplugin_provisioner_pods
+    get_rbdfsplugin_provisioner_pods, get_cephfsplugin_provisioner_pods,
+    get_operator_pods
 )
 from tests.helpers import verify_volume_deleted_in_backend
 from tests import disruption_helpers
@@ -76,7 +77,8 @@ class DisruptionBase(ManageTest):
             'cephfsplugin_provisioner': partial(
                 get_cephfsplugin_provisioner_pods
             ),
-            'rbdplugin_provisioner': partial(get_rbdfsplugin_provisioner_pods)
+            'rbdplugin_provisioner': partial(get_rbdfsplugin_provisioner_pods),
+            'operator': partial(get_operator_pods)
         }
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=resource_to_delete)
@@ -324,6 +326,22 @@ class DisruptionBase(ManageTest):
                 'cephfsplugin_provisioner'
             ],
             marks=pytest.mark.polarion_id("OCS-950")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'delete_pvcs', 'operator'],
+            marks=pytest.mark.polarion_id("OCS-932")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'delete_pods', 'operator'],
+            marks=pytest.mark.polarion_id("OCS-931")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'operator'],
+            marks=pytest.mark.polarion_id("OCS-926")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'delete_pods', 'operator'],
+            marks=pytest.mark.polarion_id("OCS-935")
         )
     ]
 )
