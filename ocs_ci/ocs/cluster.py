@@ -438,19 +438,7 @@ def validate_cluster_on_pvc(label):
          AssertionError: If PVC is not mounted on one or more OCS pods
 
     """
-    # Get the PVCs for selected label (MON/OSD)
-    ocs_pvc_obj = get_all_pvc_objs(
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE, selector=label
-    )
-
-    # Check all pvc's are in bound state
-    for pvc_obj in ocs_pvc_obj:
-        assert pvc_obj.status == constants.STATUS_BOUND, (
-            f"PVC {pvc_obj.name} is not Bound"
-        )
-        logger.info(f"PVC {pvc_obj.name} is in Bound state")
-
-    # Get OCS pod names based on selected label
+    # Get OCS pods based on selected label
     if label == constants.MON_APP_LABEL:
         ocs_pod_obj = pod.get_mon_pods(
             mon_label=label, namespace=defaults.ROOK_CLUSTER_NAMESPACE
@@ -460,6 +448,27 @@ def validate_cluster_on_pvc(label):
             osd_label=constants.OSD_APP_LABEL,
             namespace=defaults.ROOK_CLUSTER_NAMESPACE
         )
+
+    # Get the PVCs for selected label (MON/OSD)
+    if label == constants.DEFAULT_DEVICESET_LABEL:
+        ocs_pvc_obj = []
+        for num in range(len(ocs_pod_obj)):
+            pvc_obj = get_all_pvc_objs(
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+                selector=f'{label}-{num}'
+            )
+            ocs_pvc_obj.extend(pvc_obj)
+    else:
+        ocs_pvc_obj = get_all_pvc_objs(
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE, selector=label
+        )
+
+    # Check all pvc's are in bound state
+    for pvc_obj in ocs_pvc_obj:
+        assert pvc_obj.status == constants.STATUS_BOUND, (
+            f"PVC {pvc_obj.name} is not Bound"
+        )
+        logger.info(f"PVC {pvc_obj.name} is in Bound state")
 
     # Create a pvc list for requested label
     pvc_list = []
