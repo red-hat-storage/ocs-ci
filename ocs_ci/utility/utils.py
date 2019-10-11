@@ -23,7 +23,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.framework import config
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.constants import OPERATOR_CATALOG_SOURCE_NAME
 from bs4 import BeautifulSoup
@@ -427,41 +427,6 @@ def run_mcg_cmd(cmd, namespace=None):
     """
     namespace = namespace if namespace else config.ENV_DATA['cluster_namespace']
     return run_cmd(f'noobaa -n {namespace} ' + cmd)
-
-
-def run_debug_cmd(node, cmd_list):
-    """
-    Function to run command on nodes using oc debug
-
-    Args:
-        node (str): Node name where the command to be executed
-        cmd_list (list): List of commands eg: ['cmd1', 'cmd2']
-
-    Returns:
-        out (str): Returns output of the executed command/commands
-
-    Raises:
-        CommandFailed: When failure in command execution
-    """
-    # Appending one empty value in list for string manipulation
-    cmd_list.append(' ')
-    cmd = " || echo 'cmd failed';".join(cmd_list)
-    debug_cmd = f"debug nodes/{node} -- chroot /host /bin/bash -c \"{cmd}\""
-    oc = ocp.OCP(
-        namespace=config.ENV_DATA['cluster_namespace']
-    )
-    with open("/tmp/node_output.txt", "w+") as temp:
-        temp.write(str(oc.exec_oc_cmd(
-            command=debug_cmd, out_yaml_format=False
-        )))
-        temp.seek(0)
-        out = temp.read()
-    if out.__contains__('cmd failed'):
-        logging.error(f"{debug_cmd} \n {out}")
-        raise CommandFailed
-    else:
-        logging.info(f"{debug_cmd} \n {out}")
-        return out
 
 
 def download_file(url, filename):
