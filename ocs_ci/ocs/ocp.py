@@ -115,7 +115,7 @@ class OCP(object):
             oc_cmd += f"--kubeconfig {kubeconfig} "
 
         oc_cmd += command
-        out = run_cmd(cmd=oc_cmd, secrets=secrets, timeout, **kwargs)
+        out = run_cmd(cmd=oc_cmd, secrets=secrets, timeout=timeout, **kwargs)
 
         try:
             if out.startswith('hints = '):
