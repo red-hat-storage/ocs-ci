@@ -168,7 +168,7 @@ class Deployment(object):
             tuple: Path to olm deploy and subscription manifest
 
         """
-        image = config.DEPLOYMENT.get('ocs_operator_image', '')
+        image = config.DEPLOYMENT.get('ocs_registry_image', '')
         image_and_tag = image.split(':')
         image = image_and_tag[0]
         image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
