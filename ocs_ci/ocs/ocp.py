@@ -122,12 +122,13 @@ class OCP(object):
         """
         # Appending one empty value in list for string manipulation
         cmd_list.append(' ')
-        cmd = " || echo 'CMD FAILED';".join(cmd_list)
+        err_msg = 'CMD FAILED'
+        cmd = f" || echo '{err_msg}';".join(cmd_list)
         debug_cmd = f"debug nodes/{node} -- chroot /host /bin/bash -c \"{cmd}\""
         out = str(self.exec_oc_cmd(
             command=debug_cmd, out_yaml_format=False
         ))
-        if out.__contains__('CMD FAILED'):
+        if err_msg in out:
             logging.error(f"{debug_cmd} \n {out}")
             raise CommandFailed
         else:
