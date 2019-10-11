@@ -129,10 +129,8 @@ class OCP(object):
             command=debug_cmd, out_yaml_format=False
         ))
         if err_msg in out:
-            logging.error(f"{debug_cmd} \n {out}")
             raise CommandFailed
         else:
-            logging.info(f"{debug_cmd} \n {out}")
             return out
 
     def get(
