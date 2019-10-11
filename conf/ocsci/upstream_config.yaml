@@ -17,4 +17,4 @@ DEPLOYMENT:
   ocs_operator_storage_cluster_cr: "https://raw.githubusercontent.com/openshift/ocs-operator/master/deploy/crds/ocs_v1_storagecluster_cr.yaml"
   ocs_operator_olm: "https://raw.githubusercontent.com/openshift/ocs-operator/master/deploy/deploy-with-olm.yaml"
   # you can overwrite the image for ocs operator catalog souce by following parameter:
-  # ocs_operator_image: "quay.io/ocs-dev/ocs-registry:latest"
+  # ocs_registry_image: "quay.io/ocs-dev/ocs-registry:latest"

@@ -103,7 +103,7 @@ def get_ocsci_conf():
         conf_obj['REPORTING']['us_ds'] = 'DS'
     if env.get("OCS_OPERATOR_DEPLOYMENT") == "true":
         conf_obj['DEPLOYMENT'] = dict(
-            ocs_operator_image=env['OCS_REGISTRY_IMAGE'],
+            ocs_registry_image=env['OCS_REGISTRY_IMAGE'],
             ocs_operator_deployment=True,
             ocs_operator_storage_cluster_cr="http://pkgs.devel.redhat.com/cgit/containers/ocs-registry/plain/ocs_v1_storagecluster_cr.yaml?h=ocs-4.2-rhel-8",
             ocs_operator_olm="http://pkgs.devel.redhat.com/cgit/containers/ocs-registry/plain/deploy-with-olm.yaml?h=ocs-4.2-rhel-8",
