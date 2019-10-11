@@ -1104,7 +1104,7 @@ def wait_for_resource_count_change(
     """
     try:
         for sample in TimeoutSampler(
-            timeout, interval, func_to_use, namespace, func_kwargs
+            timeout, interval, func_to_use, namespace, **func_kwargs
         ):
             if func_to_use == pod.get_all_pods:
                 current_num = len(sample)
