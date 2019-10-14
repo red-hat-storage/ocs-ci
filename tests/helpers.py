@@ -20,6 +20,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
+from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
@@ -768,6 +769,20 @@ def get_worker_nodes():
     return worker_nodes_list
 
 
+def get_master_nodes():
+    """
+    Fetches all master nodes.
+
+    Returns:
+        list: List of names of worker nodes
+    """
+    label = 'node-role.kubernetes.io/master'
+    ocp_node_obj = ocp.OCP(kind=constants.NODE)
+    nodes = ocp_node_obj.get(selector=label).get('items')
+    master_nodes_list = [node.get('metadata').get('name') for node in nodes]
+    return master_nodes_list
+
+
 def get_start_creation_time(interface, pvc_name):
     """
     Get the starting creation time of a PVC based on provisioner logs
@@ -1352,3 +1367,50 @@ def get_memory_leak_median_value():
             raise UnexpectedBehaviour
         median_dict[f"{worker}"] = statistics.median(memory_leak_data)
     return median_dict
+
+
+def refresh_oc_login_connection(user=None, password=None):
+    """
+    Function to refresh oc user login
+    Default login using kubeadmin user and password
+
+    Args:
+        user (str): Username to login
+        password (str): Password to login
+    """
+    user = user or config.RUN['username']
+    if not password:
+        filename = os.path.join(
+            config.ENV_DATA['cluster_path'],
+            config.RUN['password_location']
+        )
+        with open(filename) as f:
+            password = f.read()
+    ocs_obj = ocp.OCP()
+    ocs_obj.login(user=user, password=password)
+
+
+def rsync_kubeconf_to_node(node):
+    """
+    Function to copy kubeconfig to OCP node
+    """
+    # ocp_obj = ocp.OCP()
+    filename = os.path.join(
+        config.ENV_DATA['cluster_path'],
+        config.RUN['kubeconfig_location']
+    )
+    str_split = filename.split('/')
+    str_split = str_split[:-1]
+    file_path = '/'.join(str_split)
+    master_list = get_master_nodes()
+    ocp_obj = ocp.OCP()
+    check_auth = 'auth'
+    check_conf = 'kubeconfig'
+    if check_auth not in ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=['ls /home/core/']):
+        ocp.rsync(
+            src=file_path, dst='/home/core/', node=node, dst_node=True
+        )
+    elif check_conf not in ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=['ls /home/core/auth']):
+        ocp.rsync(
+            src=file_path, dst='/home/core/', node=node, dst_node=True
+        )
