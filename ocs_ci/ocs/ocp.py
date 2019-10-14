@@ -518,7 +518,7 @@ def rsync(src, dst, node, dst_node=True, extra_params=""):
     dst_node parameter. By default the rsync is from local to the node.
 
     Args:
-        src (str): Source path of file/folder to rsync.
+        src (str): Source path of folder to rsync.
         dst (str): Destination path where to rsync.
         node (str): Node to/from copy.
         dst_node (bool): True if the destination (dst) is the node, False
