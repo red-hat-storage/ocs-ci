@@ -28,11 +28,14 @@ TEMPLATE_SMALLFILE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "smallfile")
 TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
 TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
+TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(
+    TEMPLATE_DIR, "openshift-infra/"
+)
 TEMPLATE_CONFIGURE_PVC_MONITORING_POD = os.path.join(
-    TEMPLATE_DIR, "openshift-infra/monitoring/"
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "monitoring/"
 )
 TEMPLATE_DEPLOYMENT_LOGGING = os.path.join(
-    TEMPLATE_DIR, "openshift-infra/logging-deployment"
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "logging-deployment"
 )
 TEMPLATE_DEPLOYMENT_EO = os.path.join(
     TEMPLATE_DEPLOYMENT_LOGGING, "elasticsearch_operator"
@@ -272,6 +275,11 @@ FIO_IO_PARAMS_YAML = os.path.join(
 )
 FIO_IO_RW_PARAMS_YAML = os.path.join(
     TEMPLATE_FIO_DIR, "workload_io_rw.yaml"
+)
+
+# Openshift infra yamls:
+RSYNC_POD_YAML = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "rsync-pod.yaml"
 )
 
 # constants
