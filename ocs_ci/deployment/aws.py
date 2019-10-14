@@ -107,7 +107,7 @@ class AWSBase(Deployment):
     def destroy_volumes(self):
         try:
             # Retrieve cluster name and AWS region from metadata
-            cluster_name = get_cluster_name(self.cluster_path)
+            cluster_name = self.ocp_deployment.metadata.get('clusterName')
             # Find and delete volumes
             volume_pattern = f"{cluster_name}*"
             logger.debug(f"Finding volumes with pattern: {volume_pattern}")
