@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 @libtest
-def test_main():
+def test_pod_exec():
     tools_pod = pod.get_ceph_tools_pod()
     cmd = "ceph osd df"
 
