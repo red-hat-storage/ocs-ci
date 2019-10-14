@@ -1393,6 +1393,9 @@ def refresh_oc_login_connection(user=None, password=None):
 def rsync_kubeconf_to_node(node):
     """
     Function to copy kubeconfig to OCP node
+
+    Args:
+        node (str): OCP node to copy kubeconfig if not present
     """
     # ocp_obj = ocp.OCP()
     filename = os.path.join(

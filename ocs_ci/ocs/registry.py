@@ -258,7 +258,7 @@ def image_list_all():
     Function to list the images in the podman registry
 
     Returns:
-        list_cmd_output
+        image_list_output (str): Images present in cluster
     """
     cmd_list = get_oc_podman_login_cmd()
     cmd_list.append(f"podman image list --format json")
