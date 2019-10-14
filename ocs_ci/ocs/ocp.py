@@ -109,6 +109,33 @@ class OCP(object):
             return yaml.safe_load(out)
         return out
 
+    def exec_oc_debug_cmd(self, node, cmd_list):
+        """
+        Function to execute "oc debug" command on OCP node
+
+        Args:
+            node (str): Node name where the command to be executed
+            cmd_list (list): List of commands eg: ['cmd1', 'cmd2']
+
+        Returns:
+            out (str): Returns output of the executed command/commands
+
+        Raises:
+            CommandFailed: When failure in command execution
+        """
+        # Appending one empty value in list for string manipulation
+        cmd_list.append(' ')
+        err_msg = 'CMD FAILED'
+        cmd = f" || echo '{err_msg}';".join(cmd_list)
+        debug_cmd = f"debug nodes/{node} -- chroot /host /bin/bash -c \"{cmd}\""
+        out = str(self.exec_oc_cmd(
+            command=debug_cmd, out_yaml_format=False
+        ))
+        if err_msg in out:
+            raise CommandFailed
+        else:
+            return out
+
     def get(
         self, resource_name='', out_yaml_format=True, selector=None,
         all_namespaces=False
