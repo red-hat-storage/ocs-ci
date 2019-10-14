@@ -50,7 +50,7 @@ def get_typed_nodes(node_type='worker', num_of_nodes=None):
 
     typed_nodes = [
         n for n in nodes if node_type in n.get().get('metadata')
-        .get('annotations').get('machine.openshift.io/machine')
+        .get('annotations').get('machineconfiguration.openshift.io/currentConfig')
     ]
     if num_of_nodes:
         typed_nodes = typed_nodes[:num_of_nodes]
@@ -148,3 +148,44 @@ def drain_nodes(node_names):
         f"adm drain {node_names_str} --force=true --ignore-daemonsets "
         f"--delete-local-data"
     )
+
+
+def get_typed_worker_nodes(os_id="rhcos"):
+    """
+    Get worker nodes with specific OS
+
+    Args:
+        os_id (str): OS type like rhcos, RHEL etc...
+
+    Returns:
+        list: list of worker nodes instances having specified os
+
+    """
+    worker_nodes = get_typed_nodes(node_type='worker')
+    return [
+        node for node in worker_nodes
+        if node.get().get('metadata').get('labels').get('node.openshift.io/os_id') == os_id
+    ]
+
+
+def remove_nodes(nodes):
+    """
+    Remove the nodes from cluster
+
+    Args:
+        nodes (list): list of node instances to remove from cluster
+
+    """
+    ocp = OCP(kind='node')
+    node_names = [node.get().get('metadata').get('name') for node in nodes]
+    node_names_str = ' '.join(node_names)
+
+    # unschedule node
+    unschedule_nodes(node_names)
+
+    # Drain all the pods from the node
+    drain_nodes(node_names)
+
+    # delete the nodes
+    log.info(f"Deleting nodes {node_names_str}")
+    ocp.exec_oc_cmd(f"delete nodes {node_names_str}")
