@@ -34,6 +34,10 @@ TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(
 TEMPLATE_CONFIGURE_PVC_MONITORING_POD = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "monitoring/"
 )
+TEMPLATE_COUCHBASE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase")
+TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(
+    TEMPLATE_COUCHBASE_DIR, "server"
+)
 TEMPLATE_DEPLOYMENT_LOGGING = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "logging-deployment"
 )
@@ -214,6 +218,38 @@ PGSQL_STATEFULSET_YAML = os.path.join(
 
 PGSQL_BENCHMARK_YAML = os.path.join(
     TEMPLATE_PGSQL_DIR, "PGSQL_Benchmark.yaml"
+)
+
+COUCHBASE_ADMISSION_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admission.yaml"
+)
+
+COUCHBASE_CRD_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "crd.yaml"
+)
+
+COUCHBASE_OPERATOR_ROLE = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "operator_role.yaml"
+)
+
+COUCHBASE_CLUSTER_ROLE_USER = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "cluster_role_user.yaml"
+)
+
+COUCHBASE_OPERATOR_DEPLOYMENT = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "operator_deployment.yaml"
+)
+
+COUCHBASE_SECRET = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "secret.yaml"
+)
+
+COUCHBASE_START_COUCHBASE = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "start_couchbase.yaml"
+)
+
+YCSB_BENCHMARK_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_DIR, "COUCHBASE_ycsb_load.yaml"
 )
 
 SMALLFILE_BENCHMARK_YAML = os.path.join(

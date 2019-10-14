@@ -1,7 +1,8 @@
-
 """
 RipSaw Class to run various workloads and scale tests
 """
+import os
+import subprocess
 import logging
 import tempfile
 
@@ -41,10 +42,14 @@ class RipSaw(object):
             run_cmd('oc apply -f my_custom_bench')
         """
         self.args = kwargs
-        self.repo = self.args.get('repo', 'https://github.com/cloud-bulldozer/ripsaw')
+        self.repo = self.args.get(
+            'repo', 'https://github.com/cloud-bulldozer/ripsaw'
+        )
         self.branch = self.args.get('branch', 'master')
         self.namespace = self.args.get('namespace', 'my-ripsaw')
         self.pgsql_is_setup = False
+        self.couchbase_is_setup = False
+        self.v_namespace = 'my-ripsaw'
         self.ocp = OCP()
         self.ns_obj = OCP(kind='namespace')
         self.pod_obj = OCP(kind='pod')
@@ -88,7 +93,12 @@ class RipSaw(object):
         self.dir += '/ripsaw'
         run(f'oc apply -f deploy', shell=True, check=True, cwd=self.dir)
         run(f'oc apply -f {crd}', shell=True, check=True, cwd=self.dir)
-        run(f'oc apply -f {self.operator}', shell=True, check=True, cwd=self.dir)
+        run(
+            f'oc apply -f {self.operator}',
+            shell=True,
+            check=True,
+            cwd=self.dir
+        )
 
     def setup_postgresql(self):
         """
@@ -120,15 +130,168 @@ class RipSaw(object):
             raise cf
         self.pgsql_is_setup = True
 
+
+    def create_oc_user(self, name, password='default'):
+        """
+        Create an openshift user
+
+        Args:
+            name (str): Oc user name to be created
+            password (str): password for user
+        """
+        users_htpasswd = os.path.expanduser('~/users.htpasswd')
+        if os.path.exists(users_htpasswd):
+            copt = ''
+        else:
+            copt = '-c'
+        htpass_cmd = f"htpasswd -B {copt} -b {users_htpasswd} {name} {password}"
+        try:
+            subprocess.run(htpass_cmd.split())
+        except FileNotFoundError:
+            get_it = 'sudo yum install httpd-tools -y'
+            subprocess.run(get_it.split())
+            subprocess.run(htpass_cmd.split())
+        return name
+
+
+    def setup_couchbase(self):
+        """
+        Deploy Couchbase server
+        """
+        try:
+            developer = self.create_oc_user('developer')
+            cb_admission = templating.load_yaml(
+                constants.COUCHBASE_ADMISSION_YAML,
+                multi_document=True
+            )
+            cb_crd = templating.load_yaml(
+                constants.COUCHBASE_CRD_YAML
+            )
+            cb_operator_role = templating.load_yaml(
+                constants.COUCHBASE_OPERATOR_ROLE
+            )
+            cb_cluster_role_user = templating.load_yaml(
+                constants.COUCHBASE_CLUSTER_ROLE_USER
+            )
+            cb_operator_deployment = templating.load_yaml(
+                constants.COUCHBASE_OPERATOR_DEPLOYMENT
+            )
+            cb_secret = templating.load_yaml(
+                constants.COUCHBASE_SECRET
+            )
+            cb_start_couchbase = templating.load_yaml(
+                constants.COUCHBASE_START_COUCHBASE
+            )
+            self.admiss = []
+            for admiss in cb_admission:
+                temp_admiss = OCS(**admiss)
+                temp_admiss.create()
+                self.admiss.append(temp_admiss)
+            run(
+                f'oc login -u system:admin',
+                shell=True,
+                check=True,
+                cwd=self.dir
+            )
+            #run(
+            #    f'oc new-project {self.v_namespace}',
+            #    shell=True,
+            #    check=True,
+            #    cwd=self.dir
+            #)
+            self.cb_crd = OCS(**cb_crd)
+            self.cb_crd.create()
+            # NEEDS WORK -- Real logins are not used here.
+            # Should this be replaced by using the qe-test-pull-secret.yaml ?
+            run(
+                f'oc create secret docker-registry rh-catalog '
+                f'--docker-server=registry.connect.redhat.com '
+                f'--docker-username=wusui '
+                f'--docker-password=aardvark '
+                f'--docker-email=wusui@redhat.com',
+                shell=True,
+                check=True,
+                cwd=self.dir
+            )
+            self.cb_operator_role = OCS(**cb_operator_role)
+            self.cb_operator_role.create()
+            run(
+                f'oc create serviceaccount couchbase-operator '
+                f'--namespace {self.v_namespace}',
+                shell=True,
+                check=True,
+                cwd=self.dir
+            )
+            run(
+                f'oc secrets add serviceaccount/couchbase-operator '
+                f'secrets/rh-catalog --for=pull',
+                shell=True,
+                check=True,
+                cwd=self.dir
+            )
+            run(
+                f'oc secrets add serviceaccount/default '
+                f'secrets/rh-catalog --for=pull',
+                shell=True,
+                check=True,
+                cwd=self.dir
+            )
+            run(
+                f'oc create rolebinding couchbase-operator-rolebinding '
+                f'--role couchbase-operator --serviceaccount '
+                f'{self.v_namespace}:couchbase-operator '
+                f'--namespace {self.v_namespace}',
+                shell=True,
+                check=True,
+                cwd=self.dir
+            )
+            self.cb_cluster_role_user = OCS(**cb_cluster_role_user)
+            self.cb_cluster_role_user.create()
+            run(
+                f'oc create rolebinding '
+                f'couchbasecluster-{developer}-rolebinding '
+                f'--clusterrole couchbasecluster '
+                f'--user {developer}',
+                shell=True,
+                check=True,
+                cwd=self.dir
+            )
+            self.cb_operator_deployment = OCS(**cb_operator_deployment)
+            self.cb_operator_deployment.create()
+            self.cb_secret = OCS(**cb_secret)
+            self.cb_secret.create()
+            self.cb_start_couchbase = OCS(**cb_start_couchbase)
+            self.cb_start_couchbase.create()
+            self.pod_obj.wait_for_resource(
+                condition='Running',
+                selector='app=couchbase',
+                timeout=240
+            )
+        except (CommandFailed, CalledProcessError) as cf:
+            log.error('Failed during setup of Couchbase server')
+            raise cf
+        self.couchbase_is_setup = True
+
     def cleanup(self):
-        run(f'oc delete -f {self.crd}', shell=True, cwd=self.dir)
-        run(f'oc delete -f {self.operator}', shell=True, cwd=self.dir)
-        run(f'oc delete -f deploy', shell=True, cwd=self.dir)
-        run_cmd(f'oc delete project {self.namespace}')
+        if not self.couchbase_is_setup:
+            run(f'oc delete -f {self.crd}', shell=True, cwd=self.dir)
+            run(f'oc delete -f {self.operator}', shell=True, cwd=self.dir)
+            run(f'oc delete -f deploy', shell=True, cwd=self.dir)
+            run_cmd(f'oc delete project {self.namespace}')
         # Reset namespace to default
         switch_to_default_rook_cluster_project()
         if self.pgsql_is_setup:
             self.pgsql_sset.delete()
             self.pgsql_cmap.delete()
             self.pgsql_service.delete()
+        if self.couchbase_is_setup:
+            self.cb_start_couchbase.delete()
+            self.cb_secret.delete()
+            self.cb_operator_deployment.delete()
+            self.cb_cluster_role_user.delete()
+            self.cb_operator_role.delete()
+            self.cb_crd.delete()
+            run_cmd(f'oc delete project {self.v_namespace}')
+            for entry in self.admiss:
+                entry.delete()
         self.ns_obj.wait_for_delete(resource_name=self.namespace)

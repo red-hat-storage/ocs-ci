@@ -1068,6 +1068,21 @@ def parse_pgsql_logs(data):
 
     return list_data
 
+def parse_couchbase_logs(data):
+    """
+    Extract data from Couchbase logs
+    """
+    text = data.split('\n')
+    retv = {}
+    retv['errors'] = []
+    for line in text:
+        if 'Exception:' in line:
+            retv['errors'].append(line.strip())
+        if '[OVERALL], Throughput' in line:
+            fields = line.split()
+            retv['throughput'] = fields[-1]
+    return retv
+
 
 def create_directory_path(path):
     """

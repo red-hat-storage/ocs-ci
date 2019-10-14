@@ -1,0 +1,21 @@
+apiVersion: ripsaw.cloudbulldozer.io/v1alpha1
+kind: Benchmark
+metadata:
+  name: ycsb-couchbase-benchmark
+  namespace: my-ripsaw
+spec:
+  workload:
+    name: ycsb
+    args:
+      infra: couchbase
+      driver: couchbase2
+      recordcount: 100
+      operationcount: 100
+      requestdistribution: uniform
+      workloads:
+        - workloada
+        - workloadb
+        - workloadc
+      options_load: '-p couchbase.host="cb-example-0000.cb-example.default.svc.cluster.local" -p couchbase.password="password"'
+      options_run: '-p couchbase.host="cb-example-0000.cb-project.default.svc.cluster.local" -p couchbase.password="password" -threads 10 -target 100'
+
