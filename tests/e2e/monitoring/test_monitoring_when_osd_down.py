@@ -60,7 +60,7 @@ class TestMonitoringWhenOSDDown(E2ETest):
         # Make one of the osd down(first one)
         ocp_obj = ocp.OCP(kind=constants.DEPLOYMENT, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
 
-        params = {'spec': {'replicas': 0}}
+        params = '{"spec": {"replicas": 0}}'
         name = osd_pod_list[0].get().get('metadata').get('name')
         assert ocp_obj.patch(resource_name=name[:-17], params=params), (
             f"Failed to change the replica count of osd {name} to 0"
@@ -79,7 +79,7 @@ class TestMonitoringWhenOSDDown(E2ETest):
             )
 
         # Make osd up which was down
-        params = {'spec': {'replicas': 1}}
+        params = '{"spec": {"replicas": 1}}'
         assert ocp_obj.patch(resource_name=name[:-17], params=params), (
             f"Failed to change the replica count of osd {name} to 1"
         )
