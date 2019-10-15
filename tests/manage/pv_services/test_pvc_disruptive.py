@@ -243,7 +243,7 @@ class TestPVCDisruption(ManageTest):
             pod_obj = pod_factory(
                 interface=interface, pvc=pvc_obj, status="",
                 pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
-                )
+            )
             pod_objs.append(pod_obj)
 
         return pod_objs
