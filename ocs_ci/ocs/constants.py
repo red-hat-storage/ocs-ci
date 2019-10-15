@@ -73,6 +73,8 @@ POD = "Pod"
 ROUTE = "Route"
 NODE = "Node"
 DEPLOYMENTCONFIG = "deploymentconfig"
+CONFIG = "Config"
+
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
 ROLE = 'Role'
@@ -95,6 +97,8 @@ ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
 OPENSHIFT_LOGGING_NAMESPACE = "openshift-logging"
 OPENSHIFT_OPERATORS_REDHAT_NAMESPACE = "openshift-operators-redhat"
+OPENSHIFT_IMAGE_REGISTRY_NAMESPACE = "openshift-image-registry"
+OPENSHIFT_INGRESS_NAMESPACE = "openshift-ingress"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
 MOUNT_POINT = '/var/lib/www/html'
@@ -105,6 +109,10 @@ UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
 DEFAULT_SECRET = 'rook-ceph-csi'
 DEFAULT_BLOCKPOOL = 'rbd'
+DEFAULT_SC_CEPHFS = "rook-ceph-cephfs"
+DEFAULT_ROUTE_CRT = "router-certs-default"
+IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
+
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
 GB = 1024 ** 3

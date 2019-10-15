@@ -14,7 +14,7 @@ from ocs_ci.utility.utils import (
     run_cmd, ceph_health_check, is_cluster_running, get_latest_ds_olm_tag
 )
 from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
-from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.ocs import OCS
@@ -479,6 +479,9 @@ class Deployment(object):
 
             # Validate the pvc are mounted on pods
             validate_pvc_are_mounted_on_monitoring_pods(pods_list)
+
+        # Change registry backend to OCS CEPHFS RWX PVC
+        registry.change_registry_backend_to_ocs()
 
         # Verify health of ceph cluster
         # TODO: move destroy cluster logic to new CLI usage pattern?
