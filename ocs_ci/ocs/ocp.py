@@ -244,14 +244,17 @@ class OCP(object):
     def patch(self, resource_name, params, type='json'):
         """
         Applies changes to resources
+
         Args:
             resource_name (str): Name of the resource
-            params (dict): Changes to be added to the resource
+            params (str): Changes to be added to the resource
             type (str): Type of the operation
+
         Returns:
             bool: True in case if changes are applied. False otherwise
+
         """
-        params = "\'" + params + "\'"
+        params = "\'" + f"{params}" + "\'"
         command = f"patch {self.kind} {resource_name} -n {self.namespace} -p {params} --type {type}"
         log.info(f"Command: {command}")
         result = self.exec_oc_cmd(command)

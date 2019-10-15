@@ -774,7 +774,8 @@ def get_master_nodes():
     Fetches all master nodes.
 
     Returns:
-        list: List of names of worker nodes
+        list: List of names of master nodes
+
     """
     label = 'node-role.kubernetes.io/master'
     ocp_node_obj = ocp.OCP(kind=constants.NODE)
@@ -1377,6 +1378,7 @@ def refresh_oc_login_connection(user=None, password=None):
     Args:
         user (str): Username to login
         password (str): Password to login
+
     """
     user = user or config.RUN['username']
     if not password:
@@ -1396,6 +1398,7 @@ def rsync_kubeconf_to_node(node):
 
     Args:
         node (str): OCP node to copy kubeconfig if not present
+
     """
     # ocp_obj = ocp.OCP()
     filename = os.path.join(
@@ -1409,11 +1412,12 @@ def rsync_kubeconf_to_node(node):
     ocp_obj = ocp.OCP()
     check_auth = 'auth'
     check_conf = 'kubeconfig'
-    if check_auth not in ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=['ls /home/core/']):
+    node_path = '/home/core/'
+    if check_auth not in ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=[f"ls {node_path}"]):
         ocp.rsync(
-            src=file_path, dst='/home/core/', node=node, dst_node=True
+            src=file_path, dst=f"{node_path}", node=node, dst_node=True
         )
-    elif check_conf not in ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=['ls /home/core/auth']):
+    elif check_conf not in ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=[f"ls {node_path}auth"]):
         ocp.rsync(
-            src=file_path, dst='/home/core/', node=node, dst_node=True
+            src=file_path, dst=f"{node_path}", node=node, dst_node=True
         )

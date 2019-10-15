@@ -20,6 +20,7 @@ def change_registry_backend_to_ocs():
 
     Raises:
         AssertionError: When failure in change of registry backend to OCS
+
     """
     pv_obj = helpers.create_pvc(
         sc_name=constants.DEFAULT_SC_CEPHFS, pvc_name='registry-cephfs-rwx-pvc',
@@ -47,18 +48,17 @@ def get_registry_pod_obj():
     Function to get registry pod obj
 
     Returns:
-        pod_obj (obj): Registry pod obj
+        pod_obj (list): List of Registry pod objs
 
     Raises:
         UnexpectedBehaviour: When image-registry pod is not present.
+
     """
     # Sometimes when there is a update in config crd, there will be 2 registry pods
     # i.e. old pod will be terminated and new pod will be up based on new crd
     # so below loop waits till old pod terminates
     wait_time = 30
-    iteration = 0
-    while True:
-        iteration += 1
+    for iteration in range(10):
         pod_data = pod.get_pods_having_label(
             label='docker-registry=default', namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
         )
@@ -67,7 +67,7 @@ def get_registry_pod_obj():
             break
         elif len(pod_obj) == 0:
             raise UnexpectedBehaviour("Image-registry pod not present")
-        elif iteration > 6:
+        elif iteration > 5:
             raise UnexpectedBehaviour("Waited for 3 mins Image-registry pod is not in Running state")
         else:
             logger.info(f"Waiting for 30 sec's for registry pod to be up iteration {iteration}")
@@ -81,6 +81,7 @@ def get_oc_podman_login_cmd():
 
     Returns:
         cmd_list (list): List of cmd for oc/podman login
+
     """
     user = config.RUN['username']
     filename = os.path.join(
@@ -109,6 +110,7 @@ def validate_pvc_mount_on_registry_pod():
 
     Raises:
         AssertionError: When PVC mount not present in the registry pod
+
     """
     pod_obj = get_registry_pod_obj()
     mount_point = pod_obj[0].exec_cmd_on_pod(command="mount")
@@ -124,26 +126,13 @@ def validate_registry_pod_status():
     helpers.wait_for_resource_state(pod_obj[0], state=constants.STATUS_RUNNING)
 
 
-def validate_all_image_registry_pod_status():
-    """
-    Function to validate all image-registry pod status
-    """
-    pass
-
-
-def validate_data_at_backend():
-    """
-    Function to validate image_push data from ceph
-    """
-    pass
-
-
 def get_registry_pvc():
     """
     Function to get registry pvc
 
     Returns:
         pvc_name (str): Returns name of the OCS pvc backed for registry
+
     """
     pod_obj = get_registry_pod_obj()
     return pod.get_pvc_name(pod_obj)
@@ -155,6 +144,7 @@ def get_default_route_name():
 
     Returns:
         route_name (str): Returns default route name
+
     """
     ocp_obj = ocp.OCP()
     route_cmd = f"get route -n {constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE} -o yaml"
@@ -172,10 +162,12 @@ def add_role_to_user(role_type, user):
 
     Raises:
         AssertionError: When failure in adding new role to user
+
     """
     ocp_obj = ocp.OCP()
-    role_cmd = f"policy add-role-to-user {role_type} {user} -n {constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE}"
-    assert ocp_obj.exec_oc_cmd(command=role_cmd), f"Adding role failed"
+    role_cmd = f"policy add-role-to-user {role_type} {user} " \
+               f"-n {constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE}"
+    assert ocp_obj.exec_oc_cmd(command=role_cmd), 'Adding role failed'
     logger.info(f"Role_type {role_type} added to the user {user}")
 
 
@@ -186,6 +178,7 @@ def enable_route_and_create_ca_for_registry_access():
 
     Raises:
         AssertionError: When failure in enabling registry default route
+
     """
     ocp_obj = ocp.OCP(
         kind=constants.CONFIG, namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
@@ -196,7 +189,8 @@ def enable_route_and_create_ca_for_registry_access():
     ), f"Registry pod defaultRoute enable is not success"
     logger.info(f"Enabled defaultRoute to true")
     ocp_obj = ocp.OCP()
-    crt_cmd = f"get secret {constants.DEFAULT_ROUTE_CRT} -n {constants.OPENSHIFT_INGRESS_NAMESPACE} -o yaml"
+    crt_cmd = f"get secret {constants.DEFAULT_ROUTE_CRT} " \
+              f"-n {constants.OPENSHIFT_INGRESS_NAMESPACE} -o yaml"
     crt_dict = ocp_obj.exec_oc_cmd(command=crt_cmd)
     crt = crt_dict.get('data').get('tls.crt')
     route = get_default_route_name()
@@ -219,6 +213,7 @@ def image_pull(image_url):
 
     Args:
         image_url (str): Image url container image repo link
+
     """
     cmd_list = get_oc_podman_login_cmd()
     cmd_list.append(f"podman pull {image_url}")
@@ -237,6 +232,7 @@ def image_push(image_url, namespace):
 
     Returns:
         registry_path (str): Uploaded image path
+
     """
     cmd_list = get_oc_podman_login_cmd()
     route = get_default_route_name()
@@ -259,6 +255,7 @@ def image_list_all():
 
     Returns:
         image_list_output (str): Images present in cluster
+
     """
     cmd_list = get_oc_podman_login_cmd()
     cmd_list.append(f"podman image list --format json")
@@ -273,6 +270,7 @@ def image_rm(registry_path):
 
     Args:
         registry_path (str): Image registry path
+
     """
     cmd_list = get_oc_podman_login_cmd()
     cmd_list.append(f"podman rm {registry_path}")
