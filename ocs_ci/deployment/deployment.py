@@ -384,10 +384,9 @@ class Deployment(object):
             condition='Running', selector='app=rook-ceph-osd',
             resource_count=3, timeout=600
         )
-        # Validation for cluster on pvc
-        logger.info("Validate mon and OSD are backed by PVCs")
-        validate_cluster_on_pvc(label=constants.MON_APP_LABEL)
-        validate_cluster_on_pvc(label=constants.DEFAULT_DEVICESET_LABEL)
+
+        # validate ceph mon/osd volumes are backed by pvc
+        validate_cluster_on_pvc()
 
         # Creating toolbox pod
         setup_ceph_toolbox()
