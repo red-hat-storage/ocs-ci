@@ -600,7 +600,11 @@ def create_oc_resource(
     occli.create(cfg_file)
 
 
-def get_pod_name_by_pattern(pattern='client', namespace='openshift-storage'):
+def get_pod_name_by_pattern(
+    pattern='client',
+    namespace=None,
+    filter=None,
+):
     """
     In a given namespace find names of the pods that match
     the given pattern
@@ -608,17 +612,21 @@ def get_pod_name_by_pattern(pattern='client', namespace='openshift-storage'):
     Args:
         pattern (str): name of the pod with given pattern
         namespace (str): Namespace value
+        filter (str): pod name to filter from the list
 
     Returns:
         pod_list (list): List of pod names matching the pattern
 
     """
+    namespace = namespace if namespace else ocsci_config.ENV_DATA['cluster_namespace']
     ocp_obj = OCP(kind='pod', namespace=namespace)
     pod_names = ocp_obj.exec_oc_cmd('get pods -o name', out_yaml_format=False)
     pod_names = pod_names.split('\n')
     pod_list = []
     for name in pod_names:
-        if re.search(pattern, name):
+        if filter is not None and re.search(filter, name):
+            log.info(f'Pod name filtered {name}')
+        elif re.search(pattern, name):
             (_, name) = name.split('/')
             log.info(f'pod name match found appending {name}')
             pod_list.append(name)
