@@ -323,6 +323,7 @@ def pvc_factory_fixture(
         access_mode=constants.ACCESS_MODE_RWO,
         custom_data=None,
         status=constants.STATUS_BOUND,
+        volume_mode=None
     ):
         """
         Args:
@@ -342,6 +343,8 @@ def pvc_factory_fixture(
                 are not used but reference is set if provided.
             status (str): If provided then factory waits for object to reach
                 desired state.
+            volume_mode (str): Volume mode for PVC.
+                eg: volume_mode='Block' to create rbd `block` type volume
 
         Returns:
             object: helpers.create_pvc instance.
@@ -375,7 +378,8 @@ def pvc_factory_fixture(
                 namespace=project.namespace,
                 size=pvc_size,
                 do_reload=False,
-                access_mode=access_mode
+                access_mode=access_mode,
+                volume_mode=volume_mode
             )
             assert pvc_obj, "Failed to create PVC"
 
@@ -384,6 +388,7 @@ def pvc_factory_fixture(
         pvc_obj.storageclass = storageclass
         pvc_obj.project = project
         pvc_obj.access_mode = access_mode
+        pvc_obj.volume_mode = volume_mode
         instances.append(pvc_obj)
 
         return pvc_obj
@@ -435,6 +440,8 @@ def pod_factory_fixture(request, pvc_factory):
         pvc=None,
         custom_data=None,
         status=constants.STATUS_RUNNING,
+        pod_dict_path=None,
+        raw_block_pv=False
     ):
         """
         Args:
@@ -447,6 +454,9 @@ def pod_factory_fixture(request, pvc_factory):
                 is set if provided.
             status (str): If provided then factory waits for object to reach
                 desired state.
+            pod_dict_path (str): YAML path for the pod.
+            raw_block_pv (bool): True for creating raw block pv based pod,
+                False otherwise.
 
         Returns:
             object: helpers.create_pvc instance.
@@ -460,6 +470,8 @@ def pod_factory_fixture(request, pvc_factory):
                 pvc_name=pvc.name,
                 namespace=pvc.namespace,
                 interface_type=interface,
+                pod_dict_path=pod_dict_path,
+                raw_block_pv=raw_block_pv
             )
             assert pod_obj, "Failed to create PVC"
         instances.append(pod_obj)
@@ -930,8 +942,11 @@ def multi_pvc_factory_fixture(
             size (int): The requested size for the PVC
             access_modes (list): List of access modes. One of the access modes
                 will be chosen for creating each PVC. If not specified,
-                ReadWriteOnce will be selected for all PVCs.
-                eg: ['ReadWriteOnce', 'ReadOnlyMany', 'ReadWriteMany']
+                ReadWriteOnce will be selected for all PVCs. To specify
+                volume mode, append volume mode in the access mode name
+                separated by '-'.
+                eg: ['ReadWriteOnce', 'ReadOnlyMany', 'ReadWriteMany',
+                'ReadWriteMany-Block']
             access_modes_selection (str): Decides how to select accessMode for
                 each PVC from the options given in 'access_modes' list.
                 Values are 'select_random', 'distribute_random'
@@ -995,13 +1010,18 @@ def multi_pvc_factory_fixture(
             random.shuffle(access_modes_list)
 
         for access_mode in access_modes_list:
+            if '-' in access_mode:
+                access_mode, volume_mode = access_mode.split('-')
+            else:
+                volume_mode = ''
             pvc_obj = pvc_factory(
                 interface=interface,
                 project=project,
                 storageclass=storageclass,
                 size=size,
                 access_mode=access_mode,
-                status=status_tmp
+                status=status_tmp,
+                volume_mode=volume_mode
             )
             pvc_list.append(pvc_obj)
             pvc_obj.project = project
