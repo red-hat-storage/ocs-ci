@@ -1405,9 +1405,7 @@ def rsync_kubeconf_to_node(node):
         config.ENV_DATA['cluster_path'],
         config.RUN['kubeconfig_location']
     )
-    str_split = filename.split('/')
-    str_split = str_split[:-1]
-    file_path = '/'.join(str_split)
+    file_path = os.path.dirname(filename)
     master_list = get_master_nodes()
     ocp_obj = ocp.OCP()
     check_auth = 'auth'
