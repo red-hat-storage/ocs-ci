@@ -388,7 +388,6 @@ def pvc_factory_fixture(
         pvc_obj.storageclass = storageclass
         pvc_obj.project = project
         pvc_obj.access_mode = access_mode
-        pvc_obj.volume_mode = volume_mode
         instances.append(pvc_obj)
 
         return pvc_obj

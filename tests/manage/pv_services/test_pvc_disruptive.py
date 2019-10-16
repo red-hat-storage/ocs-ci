@@ -228,7 +228,8 @@ class TestPVCDisruption(ManageTest):
 
         # Create one pod using each RWO PVC and two pods using each RWX PVC
         for pvc_obj in pvc_objs:
-            if pvc_obj.volume_mode:
+            pvc_info = pvc_obj.get()
+            if pvc_info['spec']['volumeMode'] == 'Block':
                 pod_dict = constants.CSI_RBD_RAW_BLOCK_POD_YAML
                 raw_block_pv = True
             else:
@@ -356,7 +357,8 @@ class TestPVCDisruption(ManageTest):
         # Do setup on pods for running IO
         logger.info("Setting up pods for running IO.")
         for pod_obj in pod_objs:
-            if pod_obj.pvc.volume_mode:
+            pvc_info = pod_obj.pvc.get()
+            if pvc_info['spec']['volumeMode'] == 'Block':
                 storage_type = 'block'
             else:
                 storage_type = 'fs'
@@ -377,7 +379,8 @@ class TestPVCDisruption(ManageTest):
 
         # Start IO on each pod
         for pod_obj in pod_objs:
-            if pod_obj.pvc.volume_mode:
+            pvc_info = pod_obj.pvc.get()
+            if pvc_info['spec']['volumeMode'] == 'Block':
                 storage_type = 'block'
             else:
                 storage_type = 'fs'
@@ -421,7 +424,8 @@ class TestPVCDisruption(ManageTest):
 
         # Run IO on each of the new pods
         for pod_obj in pod_objs:
-            if pod_obj.pvc.volume_mode:
+            pvc_info = pod_obj.pvc.get()
+            if pvc_info['spec']['volumeMode'] == 'Block':
                 storage_type = 'block'
             else:
                 storage_type = 'fs'
