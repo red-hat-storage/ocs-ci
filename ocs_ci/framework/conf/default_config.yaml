@@ -32,6 +32,9 @@ RUN:
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
 DEPLOYMENT:
+  # OCP url download template can be overwritten by parameter ocp_url_template.
+  # We are exposing version, file_name and os_type. Example below:
+  # ocp_url_template: "https://openshift-release-artifacts.svc.ci.openshift.org/{version}/{file_name}-{os_type}-{version}.tar.gz"
   # if the installer version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version. You can also use the
   # specific build version like: "4.2.0-0.nightly-2019-08-06-195545"
