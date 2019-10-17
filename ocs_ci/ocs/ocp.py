@@ -289,7 +289,7 @@ class OCP(object):
         if type:
             command = f"patch {self.kind} {resource_name} -n {self.namespace} -p {params} --type {type}"
         else:
-            command = f"patch {self.kind} {resource_name} -n {self.namespace} -p {params}""
+            command = f"patch {self.kind} {resource_name} -n {self.namespace} -p {params}"
         log.info(f"Command: {command}")
         result = self.exec_oc_cmd(command)
         if 'patched' in result:

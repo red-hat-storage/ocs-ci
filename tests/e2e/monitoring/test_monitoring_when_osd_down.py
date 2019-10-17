@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants, ocp, defaults
-from ocs_ci.framework.testlib import tier4, E2ETest
+from ocs_ci.framework.testlib import tier4, E2ETest, ignore_leftovers
 from tests.sanity_helpers import Sanity
 from ocs_ci.ocs.monitoring import check_pvcdata_collected_on_prometheus
 from ocs_ci.ocs.resources import pod
@@ -32,6 +32,7 @@ def create_pods(pod_factory, num_of_pod=3):
     return pod_objs
 
 
+@ignore_leftovers
 @pytest.mark.polarion_id("OCS-605")
 @tier4
 class TestMonitoringWhenOSDDown(E2ETest):
