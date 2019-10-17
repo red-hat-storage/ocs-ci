@@ -279,6 +279,11 @@ class Deployment(object):
                 'storageClassName'
             ] = constants.DEFAULT_SC_VSPHERE
 
+        # Enable host network if enabled in config (this require all the
+        # rules to be enabled on underlaying platform).
+        if config.DEPLOYMENT.get('host_network'):
+            cluster_data['spec']['hostNetwork'] = True
+
         cluster_data['spec']['storageDeviceSets'] = [deviceset_data]
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode='w+', prefix='cluster_storage', delete=False

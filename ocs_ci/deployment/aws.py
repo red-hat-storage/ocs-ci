@@ -77,6 +77,81 @@ class AWSBase(Deployment):
         logger.info(f'Worker pattern: {worker_pattern}')
         self.create_ebs_volumes(worker_pattern, size)
 
+    def host_network_update(self):
+        """
+        Update security group rules for HostNetwork
+        """
+        cluster_id = get_infra_id(self.cluster_path)
+        worker_pattern = f'{cluster_id}-worker*'
+        worker_instances = self.aws.get_instances_by_name_pattern(
+            worker_pattern
+        )
+        security_groups = worker_instances[0]['security_groups']
+        sg_id = security_groups[0]['GroupId']
+        security_group = self.aws.ec2_resource.SecurityGroup(sg_id)
+        # The ports are not 100 % clear yet. Taken from doc:
+        # https://docs.google.com/document/d/1c23ooTkW7cdbHNRbCTztprVU6leDqJxcvFZ1ZvK2qtU/edit#
+        security_group.authorize_ingress(
+            DryRun=False,
+            IpPermissions=[
+                {
+                    'FromPort': 6800,
+                    'ToPort': 7300,
+                    'IpProtocol': 'tcp',
+                    'UserIdGroupPairs': [
+                        {
+                            'Description': 'Ceph OSDs',
+                            'GroupId': sg_id,
+                        },
+                    ],
+                },
+                {
+                    'FromPort': 3300,
+                    'ToPort': 3300,
+                    'IpProtocol': 'tcp',
+                    'UserIdGroupPairs': [
+                        {
+                            'Description': 'Ceph MONs rule1',
+                            'GroupId': sg_id,
+                        },
+                    ],
+                },
+                {
+                    'FromPort': 6789,
+                    'ToPort': 6789,
+                    'IpProtocol': 'tcp',
+                    'UserIdGroupPairs': [
+                        {
+                            'Description': 'Ceph MONs rule2',
+                            'GroupId': sg_id,
+                        },
+                    ],
+                },
+                {
+                    'FromPort': 8443,
+                    'ToPort': 8443,
+                    'IpProtocol': 'tcp',
+                    'UserIdGroupPairs': [
+                        {
+                            'Description': 'Ceph Dashboard rule1',
+                            'GroupId': sg_id,
+                        },
+                    ],
+                },
+                {
+                    'FromPort': 8080,
+                    'ToPort': 8080,
+                    'IpProtocol': 'tcp',
+                    'UserIdGroupPairs': [
+                        {
+                            'Description': 'Ceph Dashboard rule2',
+                            'GroupId': sg_id,
+                        },
+                    ],
+                },
+            ]
+        )
+
     def add_node(self):
         # TODO: Implement later
         super(AWSBase, self).add_node()
@@ -169,6 +244,8 @@ class AWSIPI(AWSBase):
                     f"Please destroy the existing cluster for a new cluster deployment"
                 )
         super(AWSIPI, self).deploy_ocp(log_cli_level)
+        if config.DEPLOYMENT['host_network']:
+            self.host_network_update()
         if not self.ocs_operator_deployment:
             volume_size = int(
                 config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
@@ -322,6 +399,8 @@ class AWSUPI(AWSBase):
                 (default: 'DEBUG')
         """
         super(AWSUPI, self).deploy_ocp(log_cli_level)
+        if config.DEPLOYMENT['host_network']:
+            self.host_network_update()
         if not self.ocs_operator_deployment:
             volume_size = int(
                 config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
