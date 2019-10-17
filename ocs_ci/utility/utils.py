@@ -618,9 +618,15 @@ def get_openshift_mirror_url(file_name, version):
         os_type = "linux"
     else:
         raise UnsupportedOSType
-    url = (
-        f"https://openshift-release-artifacts.svc.ci.openshift.org/"
-        f"{version}/{file_name}-{os_type}-{version}.tar.gz"
+    url_template = config.DEPLOYMENT.get(
+        'ocp_url_template',
+        "https://openshift-release-artifacts.svc.ci.openshift.org/"
+        "{version}/{file_name}-{os_type}-{version}.tar.gz"
+    )
+    url = url_template.format(
+        version=version,
+        file_name=file_name,
+        os_type=os_type,
     )
     sample = TimeoutSampler(
         timeout=60, sleep=5, func=ensure_nightly_build_availability,
