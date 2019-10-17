@@ -85,6 +85,8 @@ class AWS(object):
         * id: id of instance
         * avz: Availability Zone
         * name: The value of Tag Name if define otherwise None
+        * vpc_id: VPC ID
+        * security_groups: Security groups of the instance
 
         Args:
             pattern (str): Pattern of tag name like:
@@ -115,6 +117,8 @@ class AWS(object):
                 id=id,
                 avz=avz,
                 name=name,
+                vpc_id=instance['VpcId'],
+                security_groups=instance.get('SecurityGroups', []),
             )
             instances.append(instance_data)
         logger.debug("All found instances: %s", instances)
