@@ -6,11 +6,12 @@ import pytest
 import logging
 
 from tests import helpers
+from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.ocs import constants
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
-from ocs_ci.framework.testlib import E2ETest, tier1
+from ocs_ci.framework.testlib import E2ETest, tier1, ignore_leftovers
 from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,18 @@ def test_fixture(request):
     # Check the health of the cluster-logging
     assert ocp_logging_obj.check_health_of_clusterlogging()
 
+    csv_obj = CSV(
+        kind=constants.CLUSTER_SERVICE_VERSION, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
+
+    get_version = csv_obj.get(out_yaml_format=True)
+    for i in range(len(get_version['items'])):
+        if '4.2.0' in get_version['items'][i]['metadata']['name']:
+            logger.info("The version of operators is 4.2.0")
+            logger.info(get_version['items'][i]['metadata']['name'])
+        else:
+            logger.error("The version is not 4.2.0")
+
 
 def teardown(cbp_obj, sc_obj):
     """
@@ -75,6 +88,7 @@ def teardown(cbp_obj, sc_obj):
 @pytest.mark.usefixtures(
     test_fixture.__name__
 )
+@ignore_leftovers
 class Test_openshift_logging_on_ocs(E2ETest):
     """
     The class contains tests to verify openshift-logging backed by OCS.
@@ -106,25 +120,13 @@ class Test_openshift_logging_on_ocs(E2ETest):
         helpers.wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
         return pod_obj, pvc_obj
 
-    @pytest.mark.polarion_id("OCS-657")
-    @tier1
-    @retry(ModuleNotFoundError, 6, 300, 3)
-    def test_create_new_project_to_verify_logging(self, create_pvc_and_deploymentconfig_pod):
+    @retry(ModuleNotFoundError, 10, 200, 3)
+    def validate_project_exists(self, pvc_obj):
         """
-        This function creates new project to verify logging in EFK stack
-        1. Creates new project
-        2. Creates PVC
-        3. Creates Deployment pod in the new_project and run-io on the app pod
-        4. Logs into the EFK stack and check for new_project
-        5. And checks for the file_count in the new_project in EFK stack
+        This function checks whether the new project exists in the
+        EFK stack
         """
 
-        pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
-
-        # Running IO on the app_pod
-        pod_obj.run_io(storage_type='fs', size=8000)
-
-        # Searching for new_project in EFK stack
         pod_list = get_all_pods(namespace='openshift-logging')
         elasticsearch_pod = [
             pod.name for pod in pod_list if pod.name.startswith('elasticsearch')
@@ -140,3 +142,22 @@ class Test_openshift_logging_on_ocs(E2ETest):
             logger.info("The new project exists in the EFK stack")
         else:
             raise ModuleNotFoundError
+
+    @pytest.mark.polarion_id("OCS-657")
+    @tier1
+    def test_create_new_project_to_verify_logging(self, create_pvc_and_deploymentconfig_pod):
+        """
+        This function creates new project to verify logging in EFK stack
+        1. Creates new project
+        2. Creates PVC
+        3. Creates Deployment pod in the new_project and run-io on the app pod
+        4. Logs into the EFK stack and check for new_project
+        5. And checks for the file_count in the new_project in EFK stack
+        """
+
+        pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
+
+        # Running IO on the app_pod
+        pod_obj.run_io(storage_type='fs', size=8000)
+
+        self.validate_project_exists(pvc_obj)
