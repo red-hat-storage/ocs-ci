@@ -1198,7 +1198,7 @@ def get_rook_repo(branch='master', to_checkout=None):
         run_cmd("git fetch --all", cwd=cwd)
     log.info(f"Checkout rook repository to specific branch: {branch}")
     run_cmd(f"git checkout {branch}", cwd=cwd)
-    log.info(f"Reset branch: {branch} with latet changes")
+    log.info(f"Reset branch: {branch} with latest changes")
     run_cmd(f"git reset --hard origin/{branch}", cwd=cwd)
     if to_checkout:
         run_cmd(f"git checkout {to_checkout}", cwd=cwd)
