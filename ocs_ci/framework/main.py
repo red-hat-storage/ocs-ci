@@ -20,7 +20,7 @@ def check_config_requirements():
 
     """
     try:
-        # Check for vspehre required parameters
+        # Check for vSphere required parameters
         if hasattr(framework.config, 'ENV_DATA') and (
             framework.config.ENV_DATA.get(
                 'platform', ''
