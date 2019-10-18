@@ -117,7 +117,7 @@ class AWS(object):
                 id=id,
                 avz=avz,
                 name=name,
-                vpc_id=instance['VpcId'],
+                vpc_id=instance.get('VpcId'),
                 security_groups=instance.get('SecurityGroups', []),
             )
             instances.append(instance_data)
