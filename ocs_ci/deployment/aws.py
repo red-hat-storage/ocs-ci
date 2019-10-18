@@ -244,7 +244,7 @@ class AWSIPI(AWSBase):
                     f"Please destroy the existing cluster for a new cluster deployment"
                 )
         super(AWSIPI, self).deploy_ocp(log_cli_level)
-        if config.DEPLOYMENT['host_network']:
+        if config.DEPLOYMENT.get('host_network'):
             self.host_network_update()
         if not self.ocs_operator_deployment:
             volume_size = int(
@@ -399,7 +399,7 @@ class AWSUPI(AWSBase):
                 (default: 'DEBUG')
         """
         super(AWSUPI, self).deploy_ocp(log_cli_level)
-        if config.DEPLOYMENT['host_network']:
+        if config.DEPLOYMENT.get('host_network'):
             self.host_network_update()
         if not self.ocs_operator_deployment:
             volume_size = int(
