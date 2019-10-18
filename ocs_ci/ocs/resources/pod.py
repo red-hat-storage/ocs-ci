@@ -422,40 +422,27 @@ def get_ceph_tools_pod():
     return ceph_pod
 
 
-def get_rbd_provisioner_pod():
+def get_csi_provisioner_pod(interface):
     """
-    Get the RBD provisioner pod
-
+    Get the provisioner pod based on interface
     Returns:
-        Pod object: The RBD provisioner pod object
+        Pod object: The provisioner pod object based on iterface
     """
     ocp_pod_obj = OCP(
         kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
     )
-    rbd_provision_pod_items = ocp_pod_obj.get(
-        selector='app=csi-rbdplugin-provisioner'
+    selector = 'app=csi-rbdplugin-provisioner' \
+        if interface == constants.CEPHBLOCKPOOL \
+        else 'app=csi-cephfsplugin-provisioner'
+    provision_pod_items = ocp_pod_obj.get(
+        selector=selector
     )['items']
-    assert rbd_provision_pod_items, "No RBD provisioner pod found"
-    ceph_pod = Pod(**rbd_provision_pod_items[0])
-    return ceph_pod
-
-
-def get_cephfs_provisioner_pod():
-    """
-    Get the cephfs provisioner pod
-
-    Returns:
-        Pod object: The cephfs provisioner pod object
-    """
-    ocp_pod_obj = OCP(
-        kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
+    assert provision_pod_items, f"No {interface} provisioner pod found"
+    provisioner_pod = (
+        Pod(**provision_pod_items[0]).name,
+        Pod(**provision_pod_items[1]).name
     )
-    cephfs_provision_pod_items = ocp_pod_obj.get(
-        selector='app=csi-cephfsplugin-provisioner'
-    )['items']
-    assert cephfs_provision_pod_items, "No cephfs provisioner pod found"
-    ceph_pod = Pod(**cephfs_provision_pod_items[0])
-    return ceph_pod
+    return provisioner_pod
 
 
 def list_ceph_images(pool_name='rbd'):

@@ -828,13 +828,11 @@ def get_start_creation_time(interface, pvc_name):
     """
     format = '%H:%M:%S.%f'
     # Get the correct provisioner pod based on the interface
-    if interface == constants.CEPHBLOCKPOOL:
-        pod_name = pod.get_rbd_provisioner_pod().name
-    else:
-        pod_name = pod.get_cephfs_provisioner_pod().name
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    # get the logs from the csi-provisioner containers
+    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
+    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
 
-    # get the logs from the csi-provisioner container
-    logs = pod.get_pod_logs(pod_name, 'csi-provisioner')
     logs = logs.split("\n")
     # Extract the starting time for the PVC provisioning
     start = [
@@ -858,13 +856,11 @@ def get_end_creation_time(interface, pvc_name):
     """
     format = '%H:%M:%S.%f'
     # Get the correct provisioner pod based on the interface
-    if interface == constants.CEPHBLOCKPOOL:
-        pod_name = pod.get_rbd_provisioner_pod().name
-    else:
-        pod_name = pod.get_cephfs_provisioner_pod().name
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    # get the logs from the csi-provisioner containers
+    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
+    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
 
-    # get the logs from the csi-provisioner container
-    logs = pod.get_pod_logs(pod_name, 'csi-provisioner')
     logs = logs.split("\n")
     # Extract the starting time for the PVC provisioning
     end = [
