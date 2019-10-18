@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import ocp, constants, defaults
-from ocs_ci.framework.testlib import tier4, E2ETest
+from ocs_ci.framework.testlib import tier4, E2ETest, ignore_leftovers
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import aws
 from tests.sanity_helpers import Sanity
@@ -33,6 +33,7 @@ def wait_to_update_mgrpod_info_prometheus_pod():
     logger.info("Ceph health status metrics is updated")
 
 
+@ignore_leftovers
 @pytest.mark.polarion_id("OCS-710")
 @tier4
 class TestRebootNodeWhereMgrRunningAndInteractionWithPrometheus(E2ETest):
