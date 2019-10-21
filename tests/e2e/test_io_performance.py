@@ -12,7 +12,7 @@ from ocs_ci.framework.testlib import (
 logger = logging.getLogger(__name__)
 
 
-@google_api_required
+# @google_api_required
 @performance
 class TestIOPerformance(ManageTest):
     """
@@ -35,27 +35,52 @@ class TestIOPerformance(ManageTest):
 
     @pytest.mark.parametrize(
         argnames=[
-            "size", "io_direction", "jobs",
+            "size", "io_direction", "bs", "jobs",
             "runtime", "depth", "sheet_index"
         ],
         argvalues=[
             pytest.param(
-                *['1GB', 'rw', 1, 60, 4, 1],
+                *['1000GB', 'rw', '4k', 1, 1200, 4, 4],
                 marks=pytest.mark.polarion_id("OCS-676")
             ),
             pytest.param(
-                *['1GB', 'rw', 6, 60, 16, 2],
+                *['1000GB', 'rw', '4k', 4, 600, 8, 5],
                 marks=pytest.mark.polarion_id("OCS-677")
             ),
             pytest.param(
-                *['1GB', 'rw', 12, 60, 32, 3],
+                *['1000GB', 'rw', '4k', 8, 600, 8, 6],
                 marks=pytest.mark.polarion_id("OCS-678")
             ),
+            pytest.param(
+                *['1000GB', 'ro', '4k', 1, 1200, 8, 7]
+            ),
+            pytest.param(
+                *['1000GB', 'wo', '4k', 1, 1200, 8, 8]
+            ),
+            pytest.param(
+                *['1000GB', 'rw', '32k', 1, 1200, 8, 4]
+            ),
+            pytest.param(
+                *['1000GB', 'ro', '32k', 1, 1200, 8, 7]
+            ),
+            pytest.param(
+                *['1000GB', 'wo', '32k', 1, 1200, 8, 8]
+            ),
+            pytest.param(
+                *['1000GB', 'rw', '4m', 1, 1200, 8, 10]
+            ),
+            pytest.param(
+                *['1000GB', 'ro', '4m', 1, 1200, 8, 11]
+            ),
+            pytest.param(
+                *['1000GB', 'wo', '4m', 1, 1200, 8, 12]
+            ),
+
         ]
     )
     @pytest.mark.usefixtures(base_setup.__name__)
     def test_run_io(
-        self, size, io_direction, jobs, runtime, depth, sheet_index
+        self, size, io_direction, bs, jobs, runtime, depth, sheet_index
     ):
         """
         Test IO
@@ -75,5 +100,5 @@ class TestIOPerformance(ManageTest):
         writes = fio_result.get('jobs')[0].get('write').get('iops')
         logging.info(f"Read: {reads}")
         logging.info(f"Write: {writes}")
-        g_sheet = GoogleSpreadSheetAPI("OCS FIO", sheet_index)
-        g_sheet.insert_row([self.interface, reads, writes], 2)
+        # g_sheet = GoogleSpreadSheetAPI("OCS FIO", sheet_index)
+        # g_sheet.insert_row([self.interface, reads, writes], 2)

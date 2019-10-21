@@ -3,6 +3,7 @@ This module contains platform specific methods and classes for deployment
 on vSphere platform
 """
 import json
+import hcl
 import logging
 import os
 import time

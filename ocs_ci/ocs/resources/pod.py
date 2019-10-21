@@ -25,7 +25,7 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd, check_timeout_reached
 
 logger = logging.getLogger(__name__)
-FIO_TIMEOUT = 600
+FIO_TIMEOUT = 4800
 
 TEXT_CONTENT = (
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
@@ -241,7 +241,7 @@ class Pod(OCS):
         self.wl_setup_done = True
 
     def run_io(
-        self, storage_type, size, io_direction='rw', rw_ratio=75,
+        self, storage_type, size, io_direction='rw', bs='4k', rw_ratio=75,
         jobs=1, runtime=60, depth=4, rate='16k', rate_process='poisson', fio_filename=None
     ):
         """
@@ -258,6 +258,8 @@ class Pod(OCS):
             size (str): Size in MB, e.g. '200M'
             io_direction (str): Determines the operation:
                 'ro', 'wo', 'rw' (default: 'rw')
+            bs (str): Size of IO block
+                '4k', '8k,16k', '4m' etc (check FIO documentation for details)
             rw_ratio (int): Determines the reads and writes using a
                 <rw_ratio>%/100-<rw_ratio>%
                 (e.g. the default is 75 which means it is 75%/25% which
@@ -284,6 +286,7 @@ class Pod(OCS):
         self.io_params['runtime'] = runtime
         size = size if isinstance(size, str) else f"{size}G"
         self.io_params['size'] = size
+        self.io_params['bs'] = bs
         if fio_filename:
             self.io_params['filename'] = fio_filename
         self.io_params['iodepth'] = depth
