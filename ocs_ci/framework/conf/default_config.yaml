@@ -86,6 +86,22 @@ ENV_DATA:
   worker_replicas: 3
   skip_ocp_deployment: false
   skip_ocs_deployment: false
+  logging_version: '4.2'
+  # --------------------------------------------------------------------------
+  # Following parameters are not used when deploy via operator and will removed
+  # soon as part of cleanup: https://projects.engineering.redhat.com/browse/OCSQE-73
+  # Do not change to specific version like v14.2.1-20190430 if not needed
+  # cause we don't need to update it each time new 14.x version is released
+  # but only once when move to new version like v15.
+  ceph_image: 'quay.io/rhceph-dev/rhceph-4.0-rhel-8:latest'
+  rook_image: 'quay.io/rhceph-dev/rook:latest'
+  # DS CSI sidecars images mentioned in https://jira.coreos.com/browse/RHSTOR-150
+  rook_csi_registrar_image: 'quay.io/openshift/origin-csi-node-driver-registrar:4.2'
+  rook_csi_provisioner_image: 'quay.io/openshift/origin-csi-external-provisioner:4.2'
+  rook_csi_snapshotter_image: 'quay.io/openshift/origin-csi-external-snapshotter:4.2'
+  rook_csi_attacher_image: 'quay.io/openshift/origin-csi-external-attacher:4.2'
+  # End of the unused parameters for operator deployment
+  # --------------------------------------------------------------------------
   # uncomment to use custom directory for storing measurement data related to
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'

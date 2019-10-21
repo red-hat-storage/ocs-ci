@@ -1,3 +1,4 @@
+
 """
 This module deploys the openshift-logging on the cluster
 EFK stack
@@ -111,7 +112,7 @@ def set_rbac(yaml_file, resource_name):
     return True
 
 
-def create_elasticsearch_subscription(yaml_file):
+def get_elasticsearch_subscription():
     """
     Creation of Subscription for the namespace
     to subscribe a Namespace to an Operator.
@@ -132,9 +133,6 @@ def create_elasticsearch_subscription(yaml_file):
     es_subscription = ocp.OCP(
         kind=constants.SUBSCRIPTION, namespace='openshift-operators-redhat'
     )
-
-    subscription = es_subscription.create(yaml_file, out_yaml_format=True)
-    logger.info(subscription)
     subscription_info = es_subscription.get(out_yaml_format=True)
     if subscription_info:
         logger.info("The Subscription is created successfully")
@@ -177,7 +175,7 @@ def create_clusterlogging_operator_group(yaml_file):
     return True
 
 
-def create_clusterlogging_subscription(yaml_file):
+def get_clusterlogging_subscription():
     """
     Creation of subscription for clusterlogging to subscribe
     a namespace to an operator
@@ -198,10 +196,6 @@ def create_clusterlogging_subscription(yaml_file):
     clusterlogging_subscription = ocp.OCP(
         kind=constants.SUBSCRIPTION, namespace='openshift-logging'
     )
-    subscription = clusterlogging_subscription.create(
-        yaml_file, out_yaml_format=True
-    )
-    logger.info(subscription)
     subscription_info = clusterlogging_subscription.get(
         resource_name='cluster-logging', out_yaml_format=True
     )
@@ -295,6 +289,6 @@ def check_health_of_clusterlogging():
     if status_check['status'] == 'green':
         logger.info("Cluster logging is in Healthy state & Ready to use")
     else:
-        raise UnexpectedBehaviour
         logger.error("Cluster logging is in Bad state")
+        raise UnexpectedBehaviour
     return pod_list

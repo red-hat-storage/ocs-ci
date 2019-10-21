@@ -1,3 +1,4 @@
+
 """
 This file contains the testcases for openshift-logging
 """
@@ -6,19 +7,23 @@ import pytest
 import logging
 
 from tests import helpers
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.framework.testlib import E2ETest, tier1, ignore_leftovers
 from ocs_ci.utility.retry import retry
+from ocs_ci.framework import config
+from ocs_ci.utility import templating
 
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='class')
-def test_fixture(request):
+@pytest.fixture()
+def test_fixture(request, storageclass_factory):
     """
     Setup and teardown
     * The setup will deploy openshift-logging in the cluster
@@ -26,7 +31,7 @@ def test_fixture(request):
     """
 
     def finalizer():
-        teardown(cbp_obj, sc_obj)
+        teardown()
 
     request.addfinalizer(finalizer)
 
@@ -39,26 +44,39 @@ def test_fixture(request):
     assert ocp_logging_obj.set_rbac(
         yaml_file=constants.EO_RBAC_YAML, resource_name='prometheus-k8s'
     )
-    assert ocp_logging_obj.create_elasticsearch_subscription(constants.EO_SUB_YAML)
+
+    logging_version = config.ENV_DATA['logging_version']
+    subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
+    subscription_yaml['spec']['channel'] = logging_version
+    helpers.create_resource(**subscription_yaml)
+    assert ocp_logging_obj.get_elasticsearch_subscription()
 
     # Deploys cluster-logging operator on the project openshift-logging
     ocp_logging_obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
     assert ocp_logging_obj.create_clusterlogging_operator_group(
         yaml_file=constants.CL_OG_YAML
     )
-    assert ocp_logging_obj.create_clusterlogging_subscription(
-        yaml_file=constants.CL_SUB_YAML
+    cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
+    cl_subscription['spec']['channel'] = logging_version
+    helpers.create_resource(**cl_subscription)
+    assert ocp_logging_obj.get_clusterlogging_subscription()
+    cluster_logging_operator = OCP(
+        kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
+    logger.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
+    sc_obj = storageclass_factory()
+    create_instance(sc_obj.name)
 
-    # Creates storage class
-    cbp_obj = helpers.create_ceph_block_pool()
-    sc_obj = helpers.create_storage_class(
-        interface_type=constants.CEPHBLOCKPOOL,
-        interface_name=cbp_obj.name,
-        secret_name=constants.DEFAULT_SECRET,
-        reclaim_policy="Delete"
-    )
-    assert ocp_logging_obj.create_instance_in_clusterlogging(sc_name=sc_obj.name)
+
+@retry(CommandFailed, 10, 10, 3)
+def create_instance(sc_obj):
+    """
+    The function is used to create instance for
+    cluster-logging
+    """
+
+    # Create instance
+    assert ocp_logging_obj.create_instance_in_clusterlogging(sc_name=sc_obj)
 
     # Check the health of the cluster-logging
     assert ocp_logging_obj.check_health_of_clusterlogging()
@@ -67,21 +85,15 @@ def test_fixture(request):
         kind=constants.CLUSTER_SERVICE_VERSION, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
 
-    get_version = csv_obj.get(out_yaml_format=True)
-    for i in range(len(get_version['items'])):
-        if '4.2.0' in get_version['items'][i]['metadata']['name']:
-            logger.info("The version of operators is 4.2.0")
-            logger.info(get_version['items'][i]['metadata']['name'])
-        else:
-            logger.error("The version is not 4.2.0")
+    # Get the CSV installed
+    get_csv = csv_obj.get(out_yaml_format=True)
+    logger.info(f'The installed CSV is {get_csv}')
 
 
-def teardown(cbp_obj, sc_obj):
+def teardown():
     """
     The teardown will uninstall the openshift-logging from the cluster
     """
-    cbp_obj.delete()
-    sc_obj.delete()
     uninstall_cluster_logging()
 
 
@@ -158,6 +170,6 @@ class Test_openshift_logging_on_ocs(E2ETest):
         pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
 
         # Running IO on the app_pod
-        pod_obj.run_io(storage_type='fs', size=8000)
+        pod_obj.run_io(storage_type='fs', size=6000)
 
         self.validate_project_exists(pvc_obj)
