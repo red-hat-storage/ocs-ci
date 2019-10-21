@@ -81,7 +81,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
     This class consists of tests which verifies resource deletion during
     multiple operations - pods creation, PVC creation and IO
     """
-    num_of_pvcs = 10
+    num_of_pvcs = 12
     pvc_size = 5
 
     @pytest.fixture()
@@ -92,6 +92,17 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         access_modes = [constants.ACCESS_MODE_RWO]
         if interface == constants.CEPHFILESYSTEM:
             access_modes.append(constants.ACCESS_MODE_RWX)
+
+        # Modify access_modes list to create rbd `block` type volume with
+        # RWX access mode. RWX is not supported in filesystem type rbd
+        if interface == constants.CEPHBLOCKPOOL:
+            access_modes.extend(
+                [
+                    f'{constants.ACCESS_MODE_RWO}-Block',
+                    f'{constants.ACCESS_MODE_RWX}-Block'
+                ]
+            )
+
         pvc_objs = multi_pvc_factory(
             interface=interface,
             project=None,
@@ -102,6 +113,12 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
             num_of_pvc=self.num_of_pvcs,
             wait_each=False
         )
+
+        # Set volume mode on PVC objects
+        for pvc_obj in pvc_objs:
+            pvc_info = pvc_obj.get()
+            setattr(pvc_obj, 'volume_mode', pvc_info['spec']['volumeMode'])
+
         rwo_pvcs = [pvc_obj for pvc_obj in pvc_objs if (
             pvc_obj.access_mode == constants.ACCESS_MODE_RWO
         )]
@@ -112,29 +129,29 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         num_of_rwo_pvc = len(rwo_pvcs)
         num_of_rwx_pvc = len(rwx_pvcs)
 
-        log.info(f"Created {num_of_rwo_pvc} RWO PVCs.")
+        block_rwo_pvcs = []
+        for pvc_obj in rwo_pvcs[:]:
+            if pvc_obj.volume_mode == 'Block':
+                block_rwo_pvcs.append(pvc_obj)
+                rwo_pvcs.remove(pvc_obj)
+
+        log.info(
+            f"Created {num_of_rwo_pvc} RWO PVCs in which "
+            f"{len(block_rwo_pvcs)} are rbd block type."
+        )
         log.info(f"Created {num_of_rwx_pvc} RWX PVCs.")
 
-        # Select 5 PVCs for IO pods
-        if rwx_pvcs:
-            pvc_objs_for_io_pods = rwo_pvcs[0:3] + rwx_pvcs[0:2]
-            pvc_objs_new_pods = rwo_pvcs[3:] + rwx_pvcs[2:]
+        # Select 6 PVCs for IO pods
+        if block_rwo_pvcs:
+            pvc_objs_for_io_pods = rwo_pvcs[0:2] + rwx_pvcs[0:2] + block_rwo_pvcs[0:2]
+            pvc_objs_new_pods = rwo_pvcs[2:] + rwx_pvcs[2:] + block_rwo_pvcs[2:]
         else:
-            pvc_objs_for_io_pods = rwo_pvcs[0:5]
-            pvc_objs_new_pods = rwo_pvcs[5:]
-
-        io_pods = []
+            pvc_objs_for_io_pods = rwo_pvcs[0:3] + rwx_pvcs[0:3]
+            pvc_objs_new_pods = rwo_pvcs[3:] + rwx_pvcs[3:]
 
         # Create one pod using each RWO PVC and two pods using each RWX PVC
         # for running IO
-        for pvc_obj in pvc_objs_for_io_pods:
-            if pvc_obj.access_mode == constants.ACCESS_MODE_RWX:
-                pod_obj = pod_factory(
-                    interface=interface, pvc=pvc_obj, status=""
-                )
-                io_pods.append(pod_obj)
-            pod_obj = pod_factory(interface=interface, pvc=pvc_obj, status="")
-            io_pods.append(pod_obj)
+        io_pods = self.pods_creation(pvc_objs_for_io_pods, pod_factory, interface)
 
         # Wait for pods to be in Running state
         for pod_obj in io_pods:
@@ -162,12 +179,22 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
 
         # Create one pod using each RWO PVC and two pods using each RWX PVC
         for pvc_obj in pvc_objs:
+            if pvc_obj.volume_mode == 'Block':
+                pod_dict = constants.CSI_RBD_RAW_BLOCK_POD_YAML
+                raw_block_pv = True
+            else:
+                raw_block_pv = False
+                pod_dict = ''
             if pvc_obj.access_mode == constants.ACCESS_MODE_RWX:
                 pod_obj = pod_factory(
-                    interface=interface, pvc=pvc_obj, status=""
+                    interface=interface, pvc=pvc_obj, status="",
+                    pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
                 )
                 pod_objs.append(pod_obj)
-            pod_obj = pod_factory(interface=interface, pvc=pvc_obj, status="")
+            pod_obj = pod_factory(
+                interface=interface, pvc=pvc_obj, status="",
+                pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
+            )
             pod_objs.append(pod_obj)
 
         return pod_objs
@@ -206,7 +233,11 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         # Do setup for running IO on pods
         log.info("Setting up pods for running IO")
         for pod_obj in io_pods:
-            executor.submit(pod_obj.workload_setup, storage_type='fs')
+            if pod_obj.pvc.volume_mode == 'Block':
+                storage_type = 'block'
+            else:
+                storage_type = 'fs'
+            executor.submit(pod_obj.workload_setup, storage_type=storage_type)
 
         # Wait for setup on pods to complete
         for pod_obj in io_pods:
@@ -240,8 +271,12 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
         # Start IO on each pod
         log.info("Start IO on pods")
         for pod_obj in io_pods:
+            if pod_obj.pvc.volume_mode == 'Block':
+                storage_type = 'block'
+            else:
+                storage_type = 'fs'
             pod_obj.run_io(
-                storage_type='fs', size='1G', runtime=10,
+                storage_type=storage_type, size='1G', runtime=10,
                 fio_filename=f'{pod_obj.name}_io_file1'
             )
         log.info("IO started on all pods.")
@@ -335,6 +370,11 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
             "the pods"
         )
 
+        # Set volume mode on PVC objects
+        for pvc_obj in pvc_objs_new:
+            pvc_info = pvc_obj.get()
+            setattr(pvc_obj, 'volume_mode', pvc_info['spec']['volumeMode'])
+
         # Verify that PVCs are reusable by creating new pods
         all_pvc_objs = pvc_objs + pvc_objs_new
         pod_objs_re = self.pods_creation(all_pvc_objs, pod_factory, interface)
@@ -349,8 +389,12 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
 
         # Run IO on each of the newly created pods
         for pod_obj in pod_objs_re:
+            if pod_obj.pvc.volume_mode == 'Block':
+                storage_type = 'block'
+            else:
+                storage_type = 'fs'
             pod_obj.run_io(
-                storage_type='fs', size='1G', runtime=10,
+                storage_type=storage_type, size='1G', runtime=10,
                 fio_filename=f'{pod_obj.name}_io_file2'
             )
 
