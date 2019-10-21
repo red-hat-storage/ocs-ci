@@ -72,7 +72,7 @@ REPORTING:
 # --cluster-conf file.yaml data you will pass to the pytest.
 ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
-  storage_cluster_name: 'rook-ceph'
+  storage_cluster_name: 'openshift-storage'
   storage_device_sets_name: "storageDeviceSets"
   cluster_namespace: 'openshift-storage'
   monitoring_enabled: true
