@@ -70,10 +70,10 @@ def ocs_install_verification():
         selector=constants.OPERATOR_LABEL,
         timeout=timeout
     )
-    # nooba
+    # noobaa
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector=constants.NOOBA_APP_LABEL,
+        selector=constants.NOOBAA_APP_LABEL,
         resource_count=2,
         timeout=timeout
     )

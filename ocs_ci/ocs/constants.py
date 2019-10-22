@@ -144,7 +144,7 @@ CSI_CEPHFSPLUGIN_LABEL = "app=csi-cephfsplugin"
 CSI_RBDPLUGIN_LABEL = "app=csi-rbdplugin"
 OCS_OPERATOR_LABEL = "name=ocs-operator"
 LOCAL_STORAGE_OPERATOR_LABEL = "name=local-storage-operator"
-NOOBA_APP_LABEL = "app=noobaa"
+NOOBAA_APP_LABEL = "app=noobaa"
 DEFAULT_DEVICESET_PVC_NAME = "example-deviceset"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 
