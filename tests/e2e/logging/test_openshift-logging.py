@@ -1,4 +1,3 @@
-
 """
 This file contains the testcases for openshift-logging
 """
