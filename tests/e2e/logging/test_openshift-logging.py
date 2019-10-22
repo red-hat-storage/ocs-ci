@@ -6,17 +6,17 @@ This file contains the testcases for openshift-logging
 import pytest
 import logging
 
-from tests import helpers
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.csv import CSV
-from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.framework import config
+from tests import helpers
+from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.framework.testlib import E2ETest, tier1, ignore_leftovers
 from ocs_ci.utility.retry import retry
-from ocs_ci.framework import config
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 
 logger = logging.getLogger(__name__)
