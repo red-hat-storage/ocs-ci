@@ -29,7 +29,6 @@ def ocs_install_verification():
     Perform steps necessary to verify a successful OCS installation
     """
     namespace = config.ENV_DATA['cluster_namespace']
-    storage_cluster_name = config.ENV_DATA['storage_cluster_name']
 
     # Verify cluster is running
     assert is_cluster_running(config.ENV_DATA['cluster_path'])
@@ -62,79 +61,79 @@ def ocs_install_verification():
     # ocs-operator
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector='name=ocs-operator',
+        selector=constants.OCS_OPERATOR_LABEL,
         timeout=timeout
     )
-    # storagecluster-operator
+    # rook-ceph-operator
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector=f'app={storage_cluster_name}-operator',
+        selector=constants.OPERATOR_LABEL,
         timeout=timeout
     )
     # nooba
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector='app=noobaa',
+        selector=constants.NOOBA_APP_LABEL,
         resource_count=2,
         timeout=timeout
     )
     # local-storage-operator
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector='name=local-storage-operator',
+        selector=constants.LOCAL_STORAGE_OPERATOR_LABEL,
         timeout=timeout
     )
     # mons
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector=f'app={storage_cluster_name}-mon',
+        selector=constants.MON_APP_LABEL,
         resource_count=3,
         timeout=timeout
     )
     # csi-cephfsplugin
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector='app=csi-cephfsplugin',
+        selector=constants.CSI_CEPHFSPLUGIN_LABEL,
         resource_count=3
     )
     # csi-cephfsplugin-provisioner
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector='app=csi-cephfsplugin-provisioner',
+        selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
         resource_count=2,
         timeout=timeout
     )
     # csi-rbdplugin
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector='app=csi-rbdplugin',
+        selector=constants.CSI_RBDPLUGIN_LABEL,
         resource_count=3,
         timeout=timeout
     )
     # csi-rbdplugin-profisioner
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector='app=csi-rbdplugin-provisioner',
+        selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
         resource_count=2,
         timeout=timeout
     )
     # osds
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector=f'app={storage_cluster_name}-osd',
+        selector=constants.OSD_APP_LABEL,
         resource_count=3,
         timeout=timeout
     )
     # mgr
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector=f'app={storage_cluster_name}-mgr',
+        selector=constants.MGR_APP_LABEL,
         timeout=timeout
     )
     # mds
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector=f'app={storage_cluster_name}-mds',
+        selector=constants.MDS_APP_LABEL,
         resource_count=2,
         timeout=timeout
     )
@@ -143,6 +142,7 @@ def ocs_install_verification():
     storage_class = ocp.OCP(
         kind=constants.STORAGECLASS, namespace=namespace
     )
+    storage_cluster_name = config.ENV_DATA['storage_cluster_name']
     required_storage_classes = {
         f'{storage_cluster_name}-cephfs',
         f'{storage_cluster_name}-ceph-rbd'
