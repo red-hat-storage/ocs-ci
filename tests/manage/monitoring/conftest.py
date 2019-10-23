@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import pytest
-import re
+import subprocess
 import threading
 import tempfile
 import time
@@ -363,28 +363,48 @@ def create_dummy_osd(deployment):
         kind=constants.DEPLOYMENT,
         namespace=config.ENV_DATA.get('cluster_namespace')
     )
-    osd_data = oc.describe(deployment)
-    osd_name = helpers.create_unique_resource_name('dummy', 'osd')
-    osd_data['metadata']['name'] = osd_name
+    osd_data = oc.get(deployment)
+    dummy_deployment = helpers.create_unique_resource_name('dummy', 'osd')
+    osd_data['metadata']['name'] = dummy_deployment
 
-    original_osd_args = osd_data.get('spec').get('containers')[0].get('args')
-    osd_data['spec']['containers'][0]['args'] = []
-    osd_data['spec']['containers'][0]['command'] = [
+    osd_containers = osd_data.get('spec').get('template').get('spec').get(
+        'containers'
+    )
+    # get osd container spec
+    original_osd_args = osd_containers[0].get('args')
+    osd_data['spec']['template']['spec']['containers'][0]['args'] = []
+    osd_data['spec']['template']['spec']['containers'][0]['command'] = [
         '/bin/bash',
         '-c',
         'sleep infinity'
     ]
     osd_file = tempfile.NamedTemporaryFile(
-        mode='w+', prefix=osd_name, delete=False
+        mode='w+', prefix=dummy_deployment, delete=False
     )
-    with open(osd_file, "w") as temp:
-        yaml.dump(data, temp)
-    oc.create(osd_file)
-    osd_list = pod.get_osd_pods()
-    dummy_pod = [pod if dummy_osd in pod.name for pod in osd_list][0]
-    ceph_init_cmd = '/rook/tini' + ' '.join(original_osd_args)
-    dummy_pod.exec_cmd_on_pod(ceph_init_cmd)
+    with open(osd_file.name, "w") as temp:
+        yaml.dump(osd_data, temp)
+    oc.create(osd_file.name)
 
+    # downscale the original deployment and start dummy deployment instead
+    oc.exec_oc_cmd(f"scale --replicas=0 deployment/{deployment}")
+    oc.exec_oc_cmd(f"scale --replicas=1 deployment/{dummy_deployment}")
+
+    osd_list = pod.get_osd_pods()
+    dummy_pod = [pod for pod in osd_list if dummy_deployment in pod.name][0]
+    helpers.wait_for_resource_state(
+        resource=dummy_pod,
+        state=constants.STATUS_RUNNING,
+        timeout=60
+    )
+    ceph_init_cmd = '/rook/tini' + ' ' + ' '.join(original_osd_args)
+    try:
+        logger.info('Following command should expire after 7 seconds')
+        dummy_pod.exec_cmd_on_pod(ceph_init_cmd, timeout=7)
+    except subprocess.TimeoutExpired as e:
+        logger.info('Killing /rook/tini process')
+        dummy_pod.exec_bash_cmd_on_pod(
+            "kill $(ps aux | grep '[/]rook/tini' | awk '{print $2}')"
+        )
 
     return dummy_deployment, dummy_pod
 
@@ -405,29 +425,24 @@ def measure_corrupt_pg(measurement_dir):
         namespace=config.ENV_DATA.get('cluster_namespace')
     )
     osd_deployments = oc.get(selector=constants.OSD_APP_LABEL).get('items')
-    osd_deployment = deployments[0].get('metadata').get('name')
+    osd_deployment = osd_deployments[0].get('metadata').get('name')
     ct_pod = pod.get_ceph_tools_pod()
     pool_name = helpers.create_unique_resource_name('corrupted', 'pool')
     ceph_pool = ct_pod.exec_ceph_cmd(
         f"ceph osd pool create {pool_name} 1 1"
     )
     logger.info('Setting osd noout flag')
-    ceph_pool = ct_pod.exec_ceph_cmd('ceph osd set noout')
+    ct_pod.exec_ceph_cmd('ceph osd set noout')
     logger.info(ceph_pool)
-    assert ceph_pool
     logger.info(f"Put object into {pool_name}")
     pool_object = 'test_object'
     ct_pod.exec_ceph_cmd(f"rados -p {pool_name} put {pool_object} /etc/passwd")
     logger.info(f"Looking for Placement Group with {pool_object} object")
-    pg_cmd = ct_pod.exec_ceph_cmd(f"ceph osd map {pool_name} {pool_object}")
-    pg_re = 'pg [0-9]+\.[0-9a-z]+ \(([0-9]+\.[0-9])\)'
-    pg = re.findall(pg_re, pg_cmd)[0]
+    pg = ct_pod.exec_ceph_cmd(f"ceph osd map {pool_name} {pool_object}")['pgid']
     logger.info(f"Found Placement Group: {pg}")
 
-    oc.exec_oc_cmd(f"scale --replicas=0 deployment/{osd_deployment}")
     dummy_deployment, dummy_pod = create_dummy_osd(osd_deployment)
 
-    oc.exec_oc_cmd(f"scale --replicas=1 deployment/{dummy_deployment}")
 
     def corrupt_pg():
         """
@@ -444,29 +459,30 @@ def measure_corrupt_pg(measurement_dir):
             str: Names of downscaled deployments
         """
         # run_time of operation
-        run_time = 60 * 1
+        run_time = 60 * 3
         nonlocal oc
         nonlocal pool_name
+        nonlocal pool_object
         nonlocal dummy_pod
         nonlocal pg
         nonlocal osd_deployment
 
         logger.info(f"Corrupting {pg} PG on {osd_deployment}")
         dummy_pod.exec_bash_cmd_on_pod(
-                f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
-                f"{osd_deployment.split('-')[-1]} --pgid {pg} set-bytes"
-                f" /etc/shadow --no-mon-config"
+            f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
+            f"{osd_deployment.split('-')[-1]} --pgid {pg} {pool_object} "
+            f"set-bytes /etc/shadow --no-mon-config"
         )
+        logger.info('Unsetting osd noout flag')
+        ceph_pool = ct_pod.exec_ceph_cmd('ceph osd unset noout')
+        oc.exec_oc_cmd(f"scale --replicas=0 deployment/{dummy_deployment}")
+        oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_deployment}")
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
         return pool_name
 
     test_file = os.path.join(measurement_dir, 'measure_corrupt_pg.json')
     measured_op = measure_operation(corrupt_pg, test_file)
-    logger.info('Unsetting osd noout flag')
-    oc.exec_oc_cmd(f"scale --replicas=0 deployment/{dummy_deployment}")
-    oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_deployment}")
-    ceph_pool = ct_pod.exec_ceph_cmd('ceph osd unset noout')
     logger.info(f"Deleting pool {pool_name}")
     ct_pod.exec_ceph_cmd(
         f"ceph osd pool delete {pool_name} {pool_name} "
@@ -474,7 +490,7 @@ def measure_corrupt_pg(measurement_dir):
     )
     logger.info(f"Checking that pool {pool_name} is deleted")
 
-    logger.info(f"Deleting deployment {pool_name}")
-    dummy_deployment.delete()
+    logger.info(f"Deleting deployment {dummy_deployment}")
+    oc.delete(resource_name=dummy_deployment)
 
     return measured_op
