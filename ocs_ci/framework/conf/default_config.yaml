@@ -60,6 +60,7 @@ DEPLOYMENT:
 REPORTING:
   email:
     address: "ocs-ci@redhat.com"
+    smtp_server: "localhost"
   polarion:
     project_id: "OpenShiftContainerStorage"
   # Upstream: 'US' or Downstream: 'DS', used only for reporting (Test Run Name)
