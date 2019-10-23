@@ -86,7 +86,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
     """
     Delete ceph/rook pod while deletion of PVCs, pods and IO are progressing
     """
-    num_of_pvcs = 25
+    num_of_pvcs = 30
     pvc_size = 3
 
     @pytest.fixture()
@@ -99,6 +99,17 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         access_modes = [constants.ACCESS_MODE_RWO]
         if interface == constants.CEPHFILESYSTEM:
             access_modes.append(constants.ACCESS_MODE_RWX)
+
+        # Modify access_modes list to create rbd `block` type volume with
+        # RWX access mode. RWX is not supported in filesystem type rbd
+        if interface == constants.CEPHBLOCKPOOL:
+            access_modes.extend(
+                [
+                    f'{constants.ACCESS_MODE_RWO}-Block',
+                    f'{constants.ACCESS_MODE_RWX}-Block'
+                ]
+            )
+
         pvc_objs = multi_pvc_factory(
             interface=interface,
             project=None,
@@ -116,12 +127,23 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         # Create one pod using each RWO PVC and two pods using each RWX PVC
         for pvc_obj in pvc_objs:
+            pvc_info = pvc_obj.get()
+            if pvc_info['spec']['volumeMode'] == 'Block':
+                pod_dict = constants.CSI_RBD_RAW_BLOCK_POD_YAML
+                raw_block_pv = True
+            else:
+                raw_block_pv = False
+                pod_dict = ''
             if pvc_obj.access_mode == constants.ACCESS_MODE_RWX:
                 pod_obj = pod_factory(
-                    interface=interface, pvc=pvc_obj, status=""
+                    interface=interface, pvc=pvc_obj, status="",
+                    pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
                 )
                 rwx_pod_objs.append(pod_obj)
-            pod_obj = pod_factory(interface=interface, pvc=pvc_obj, status="")
+            pod_obj = pod_factory(
+                interface=interface, pvc=pvc_obj, status="",
+                pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
+            )
             pod_objs.append(pod_obj)
 
         # Wait for pods to be in Running state
@@ -149,12 +171,17 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         # Start IO on each pod. RWX PVC will be used on two pods. So split the
         # size accordingly
         for pod_obj in pod_objs:
+            pvc_info = pod_obj.pvc.get()
+            if pvc_info['spec']['volumeMode'] == 'Block':
+                storage_type = 'block'
+            else:
+                storage_type = 'fs'
             if pod_obj.pvc.access_mode == constants.ACCESS_MODE_RWX:
                 io_size = int((self.pvc_size - 1) / 2)
             else:
                 io_size = self.pvc_size - 1
             pod_obj.run_io(
-                storage_type='fs', size=f'{io_size}G', runtime=30,
+                storage_type=storage_type, size=f'{io_size}G', runtime=30,
                 fio_filename=f'{pod_obj.name}_io'
             )
 
@@ -273,7 +300,12 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         # Do setup on pods for running IO
         log.info("Setting up pods for running IO.")
         for pod_obj in pod_objs + rwx_pod_objs:
-            executor.submit(pod_obj.workload_setup, storage_type='fs')
+            pvc_info = pod_obj.pvc.get()
+            if pvc_info['spec']['volumeMode'] == 'Block':
+                storage_type = 'block'
+            else:
+                storage_type = 'fs'
+            executor.submit(pod_obj.workload_setup, storage_type=storage_type)
 
         # Wait for setup on pods to complete
         for pod_obj in pod_objs + rwx_pod_objs:
