@@ -60,7 +60,7 @@ noobaa_cli_required = pytest.mark.skipif(
 )
 
 aws_platform_required = pytest.mark.skipif(
-    config.ENV_DATA['platform'] != 'AWS',
+    config.ENV_DATA['platform'].lower() != 'aws',
     reason="Tests are not running on AWS deployed cluster"
 )
 
