@@ -15,8 +15,8 @@ spec:
           cpu: "600m"
           memory: "4Gi"
       storage:
-        storageClassName: "gp2"
-        size: "200G"
+        storageClassName: "rook-ceph-ceph-rbd"
+        size: "100G"
       redundancyPolicy: "SingleRedundancy"
   visualization:
     type: "kibana"

@@ -2,27 +2,28 @@
 This file contains the testcases for openshift-logging
 """
 
-import pytest
 import logging
+import pytest
 
 from ocs_ci.ocs.resources.csv import CSV
-from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
-from tests import helpers
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
+from ocs_ci.utility.retry import retry
+from tests import helpers
+from ocs_ci.framework.testlib import E2ETest, tier1, ignore_leftovers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
-from ocs_ci.framework.testlib import E2ETest, tier1, ignore_leftovers
-from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
+
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.fixture()
-def test_fixture(request, storageclass_factory):
+def test_fixture(request):
     """
     Setup and teardown
     * The setup will deploy openshift-logging in the cluster
@@ -50,7 +51,7 @@ def test_fixture(request, storageclass_factory):
     helpers.create_resource(**subscription_yaml)
     assert ocp_logging_obj.get_elasticsearch_subscription()
 
-    # Deploys cluster-logging operator on the project openshift-logging
+    # Deploys cluster-logging operator on the project openshift-loggingno nee
     ocp_logging_obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
     assert ocp_logging_obj.create_clusterlogging_operator_group(
         yaml_file=constants.CL_OG_YAML
@@ -63,19 +64,19 @@ def test_fixture(request, storageclass_factory):
         kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
     logger.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
-    sc_obj = storageclass_factory()
-    create_instance(sc_obj.name)
+
+    create_instance()
 
 
 @retry(CommandFailed, 10, 10, 3)
-def create_instance(sc_obj):
+def create_instance():
     """
     The function is used to create instance for
     cluster-logging
     """
 
     # Create instance
-    assert ocp_logging_obj.create_instance_in_clusterlogging(sc_name=sc_obj)
+    assert ocp_logging_obj.create_instance_in_clusterlogging()
 
     # Check the health of the cluster-logging
     assert ocp_logging_obj.check_health_of_clusterlogging()
