@@ -3,7 +3,7 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import deployment, destroy
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.utility.utils import is_cluster_running
+from ocs_ci.utility.utils import is_cluster_running, ceph_health_check
 
 log = logging.getLogger(__name__)
 
@@ -28,12 +28,14 @@ def ocs_install_verification():
     """
     Perform steps necessary to verify a successful OCS installation
     """
+    log.info("Verifying OCS installation")
     namespace = config.ENV_DATA['cluster_namespace']
 
     # Verify cluster is running
     assert is_cluster_running(config.ENV_DATA['cluster_path'])
 
     # Verify OCS Operator and Local Storage Operator in Succeeded phase
+    log.info("Verifying OCS and Local Storage Operators")
     csv = ocp.OCP(kind='csv', namespace=namespace)
     csvs = csv.get()
     for item in csvs['items']:
@@ -44,6 +46,7 @@ def ocs_install_verification():
         )
 
     # Verify OCS Cluster Service (ocs-storagecluster) is Ready
+    log.info("Verifying OCS Cluster service")
     storage_cluster = ocp.OCP(kind='StorageCluster', namespace=namespace)
     storage_clusters = storage_cluster.get()
     for item in storage_clusters['items']:
@@ -54,6 +57,7 @@ def ocs_install_verification():
         )
 
     # Verify pods in running state and proper counts
+    log.info("Verifying pod states and counts")
     pod = ocp.OCP(
         kind=constants.POD, namespace=namespace
     )
@@ -94,7 +98,8 @@ def ocs_install_verification():
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
         selector=constants.CSI_CEPHFSPLUGIN_LABEL,
-        resource_count=3
+        resource_count=3,
+        timeout=timeout
     )
     # csi-cephfsplugin-provisioner
     assert pod.wait_for_resource(
@@ -138,7 +143,12 @@ def ocs_install_verification():
         timeout=timeout
     )
 
+    # Verify ceph health
+    log.info("Verifying ceph health")
+    assert ceph_health_check(namespace=namespace)
+
     # Verify StorageClasses (1 ceph-fs, 1 ceph-rbd)
+    log.info("Verifying storage classes")
     storage_class = ocp.OCP(
         kind=constants.STORAGECLASS, namespace=namespace
     )
