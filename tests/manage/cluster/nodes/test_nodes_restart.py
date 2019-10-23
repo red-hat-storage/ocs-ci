@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.framework.testlib import tier4, ignore_leftovers, ManageTest, aws_platform_required
 from ocs_ci.ocs import constants
 from ocs_ci.utility import aws

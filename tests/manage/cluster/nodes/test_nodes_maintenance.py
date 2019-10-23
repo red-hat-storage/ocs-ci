@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
 from ocs_ci.utility import aws
 from ocs_ci.framework.testlib import tier1, tier2, ManageTest, bugzilla, aws_platform_required
