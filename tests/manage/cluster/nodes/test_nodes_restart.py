@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier4, ignore_leftovers, ManageTest
+from ocs_ci.framework.testlib import tier4, ignore_leftovers, ManageTest, aws_platform_required
 from ocs_ci.ocs import constants
 from ocs_ci.utility import aws
 from ocs_ci.ocs.resources import pod
@@ -13,10 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @tier4
-@pytest.mark.skipif(
-    condition=config.ENV_DATA['platform'] != 'AWS',
-    reason="Tests are not running on AWS deployed cluster"
-)
+@aws_platform_required
 @ignore_leftovers
 class TestNodesRestart(ManageTest):
     """
