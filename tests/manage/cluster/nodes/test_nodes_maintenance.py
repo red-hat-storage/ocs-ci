@@ -1,10 +1,9 @@
 import logging
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
 from ocs_ci.utility import aws
-from ocs_ci.framework.testlib import tier1, tier2, ManageTest, bugzilla
+from ocs_ci.framework.testlib import tier1, tier2, ManageTest, bugzilla, aws_platform_required
 
 from tests.sanity_helpers import Sanity
 
@@ -82,10 +81,7 @@ class TestNodesMaintenance(ManageTest):
         self.sanity_helpers.health_check()
 
     @tier2
-    @pytest.mark.skipif(
-        condition=config.ENV_DATA['platform'] != 'AWS',
-        reason="Tests are not running on AWS deployed cluster"
-    )
+    @aws_platform_required
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
