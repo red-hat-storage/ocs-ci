@@ -453,19 +453,20 @@ def measure_corrupt_pg(measurement_dir):
         is used in the project:
             https://github.com/ceph/ceph-mixins/blob/d22afe8c0da34490cb77e52a202eefcf4f62a869/config.libsonnet#L23
         There should be also CephClusterErrorState alert that takes 10
-        minutest to be firing.
+        minutest to start firing.
 
         Returns:
-            str: Names of downscaled deployments
+            str: Name of corrupted deployment
         """
         # run_time of operation
-        run_time = 60 * 3
+        run_time = 60 * 11
         nonlocal oc
         nonlocal pool_name
         nonlocal pool_object
         nonlocal dummy_pod
         nonlocal pg
         nonlocal osd_deployment
+        nonlocal dummy_deployment
 
         logger.info(f"Corrupting {pg} PG on {osd_deployment}")
         dummy_pod.exec_bash_cmd_on_pod(
@@ -479,7 +480,7 @@ def measure_corrupt_pg(measurement_dir):
         oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_deployment}")
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
-        return pool_name
+        return osd_deployment
 
     test_file = os.path.join(measurement_dir, 'measure_corrupt_pg.json')
     measured_op = measure_operation(corrupt_pg, test_file)
