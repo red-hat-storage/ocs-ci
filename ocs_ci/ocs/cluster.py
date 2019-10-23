@@ -460,7 +460,7 @@ def validate_cluster_on_pvc():
     )
     for ceph_pod in mon_pods + osd_pods:
         out = run_cmd(f'oc -n {ns} get pods {ceph_pod} -o yaml')
-        out_yaml = yaml.load(out)
+        out_yaml = yaml.safe_load(out)
         for vol in out_yaml['spec']['volumes']:
             if vol.get('persistentVolumeClaim'):
                 claimName = vol.get('persistentVolumeClaim').get('claimName')
