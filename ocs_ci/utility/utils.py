@@ -897,7 +897,7 @@ def email_reports():
     part1 = MIMEText(soup, 'html')
     msg.attach(part1)
     try:
-        s = smtplib.SMTP('localhost')
+        s = smtplib.SMTP(config.REPORTING['email']['smtp_server'])
         s.sendmail(sender, recipients, msg.as_string())
         s.quit()
         log.info(f"Results have been emailed to {recipients}")
