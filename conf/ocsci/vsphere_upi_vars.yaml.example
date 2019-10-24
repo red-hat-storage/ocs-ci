@@ -25,4 +25,4 @@ ENV_DATA:
   httpd_server_user: 'ocs4qe'
   httpd_server_password: '<password for httpd server>'
   extra_disks: '1'
-  disk_size: '60'
+  device_size: '60'

@@ -274,12 +274,6 @@ class Deployment(object):
             deviceset_data['dataPVCTemplate']['spec'][
                 'storageClassName'
             ] = constants.DEFAULT_SC_VSPHERE
-            disk_size = int(
-                config.ENV_DATA.get('disk_size', constants.DEFAULT_DISK_SIZE)
-            )
-            deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
-                'storage'
-            ] = f"{disk_size}Gi"
 
         # Enable host network if enabled in config (this require all the
         # rules to be enabled on underlaying platform).
