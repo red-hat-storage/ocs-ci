@@ -428,12 +428,11 @@ def measure_corrupt_pg(measurement_dir):
     osd_deployment = osd_deployments[0].get('metadata').get('name')
     ct_pod = pod.get_ceph_tools_pod()
     pool_name = helpers.create_unique_resource_name('corrupted', 'pool')
-    ceph_pool = ct_pod.exec_ceph_cmd(
+    ct_pod.exec_ceph_cmd(
         f"ceph osd pool create {pool_name} 1 1"
     )
     logger.info('Setting osd noout flag')
     ct_pod.exec_ceph_cmd('ceph osd set noout')
-    logger.info(ceph_pool)
     logger.info(f"Put object into {pool_name}")
     pool_object = 'test_object'
     ct_pod.exec_ceph_cmd(f"rados -p {pool_name} put {pool_object} /etc/passwd")
@@ -446,7 +445,7 @@ def measure_corrupt_pg(measurement_dir):
 
     def corrupt_pg():
         """
-        Corrupt PG on one OSD in Ceph pool for 11 minutes and measure it.
+        Corrupt PG on one OSD in Ceph pool for 12 minutes and measure it.
         There should be only CephPGRepairTakingTooLong Pending alert as
         it takes 2 hours for it to become Firing.
         This configuration of alert can be observed in ceph-mixins which
@@ -459,7 +458,7 @@ def measure_corrupt_pg(measurement_dir):
             str: Name of corrupted deployment
         """
         # run_time of operation
-        run_time = 60 * 11
+        run_time = 60 * 12
         nonlocal oc
         nonlocal pool_name
         nonlocal pool_object
@@ -475,7 +474,8 @@ def measure_corrupt_pg(measurement_dir):
             f"set-bytes /etc/shadow --no-mon-config"
         )
         logger.info('Unsetting osd noout flag')
-        ceph_pool = ct_pod.exec_ceph_cmd('ceph osd unset noout')
+        ct_pod.exec_ceph_cmd('ceph osd unset noout')
+        ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pg}")
         oc.exec_oc_cmd(f"scale --replicas=0 deployment/{dummy_deployment}")
         oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_deployment}")
         logger.info(f"Waiting for {run_time} seconds")
