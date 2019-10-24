@@ -359,6 +359,12 @@ class TestDeleteResourceDuringPodPvcDeletion(DisruptionBase):
         access_modes = [constants.ACCESS_MODE_RWO]
         if interface == constants.CEPHFILESYSTEM:
             access_modes.append(constants.ACCESS_MODE_RWX)
+
+        # Modify access_modes list to create rbd `block` type volume with
+        # RWX access mode. RWX is not supported in filesystem type rbd
+        if interface == constants.CEPHBLOCKPOOL:
+            access_modes.append(f'{constants.ACCESS_MODE_RWX}-Block')
+
         pvc_objs = multi_pvc_factory(
             interface=interface,
             project=None,
@@ -374,15 +380,24 @@ class TestDeleteResourceDuringPodPvcDeletion(DisruptionBase):
 
         # Create one pod using each RWO PVC and two pods using each RWX PVC
         for pvc_obj in pvc_objs:
+            pvc_info = pvc_obj.get()
+            if pvc_info['spec']['volumeMode'] == 'Block':
+                pod_dict = constants.CSI_RBD_RAW_BLOCK_POD_YAML
+                raw_block_pv = True
+            else:
+                raw_block_pv = False
+                pod_dict = ''
             if pvc_obj.access_mode == constants.ACCESS_MODE_RWX:
                 pod_obj = pod_factory(
                     interface=interface, pvc=pvc_obj,
-                    status=constants.STATUS_RUNNING
+                    status=constants.STATUS_RUNNING, pod_dict_path=pod_dict,
+                    raw_block_pv=raw_block_pv
                 )
                 pod_objs.append(pod_obj)
             pod_obj = pod_factory(
                 interface=interface, pvc=pvc_obj,
-                status=constants.STATUS_RUNNING
+                status=constants.STATUS_RUNNING, pod_dict_path=pod_dict,
+                raw_block_pv=raw_block_pv
             )
             pod_objs.append(pod_obj)
 
