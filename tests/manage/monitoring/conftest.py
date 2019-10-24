@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import pytest
-import subprocess
+from subprocess import TimeoutExpired
 import threading
 import tempfile
 import time
@@ -400,7 +400,7 @@ def create_dummy_osd(deployment):
     try:
         logger.info('Following command should expire after 7 seconds')
         dummy_pod.exec_cmd_on_pod(ceph_init_cmd, timeout=7)
-    except subprocess.TimeoutExpired as e:
+    except TimeoutExpired:
         logger.info('Killing /rook/tini process')
         dummy_pod.exec_bash_cmd_on_pod(
             "kill $(ps aux | grep '[/]rook/tini' | awk '{print $2}')"
@@ -441,7 +441,6 @@ def measure_corrupt_pg(measurement_dir):
     logger.info(f"Found Placement Group: {pg}")
 
     dummy_deployment, dummy_pod = create_dummy_osd(osd_deployment)
-
 
     def corrupt_pg():
         """
