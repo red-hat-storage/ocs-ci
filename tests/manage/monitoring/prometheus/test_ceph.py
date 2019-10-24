@@ -5,8 +5,8 @@ from ocs_ci.framework.testlib import tier4
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
 
-
 log = logging.getLogger(__name__)
+
 
 @tier4
 @pytest.mark.polarion_id("OCS-903")
@@ -19,6 +19,7 @@ def test_corrupt_pg_alerts(measure_corrupt_pg):
     """
     api = prometheus.PrometheusAPI()
 
+    alerts = measure_corrupt_pg.get('prometheus_alerts')
     for target_label, target_msg, target_states, target_severity in [
         (
             constants.ALERT_PGREPAIRTAKINGTOOLONG,
@@ -30,7 +31,7 @@ def test_corrupt_pg_alerts(measure_corrupt_pg):
             constants.ALERT_CLUSTERERRORSTATE,
             'Storage cluster is in error state',
             ['pending', 'firing'],
-            'critical'
+            'error'
         )
     ]:
         prometheus.check_alert_list(
@@ -40,7 +41,11 @@ def test_corrupt_pg_alerts(measure_corrupt_pg):
             states=target_states,
             severity=target_severity
         )
+        # the time to wait is increased because it takes more time for Ceph
+        # cluster to resolve its issues
+        pg_wait = 360
         api.check_alert_cleared(
             label=target_label,
-            measure_end_time=measure_corrupt_pg.get('stop')
+            measure_end_time=measure_corrupt_pg.get('stop'),
+            time_min=pg_wait
         )
