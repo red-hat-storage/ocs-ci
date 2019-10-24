@@ -22,7 +22,7 @@ setup(
         'paramiko==2.4.2',
         'pyyaml>=4.2b1',
         'jinja2==2.10.1',
-        'kubernetes==9.0.0',
+        'kubernetes',
         'openshift',
         'boto3',
         'munch',
