@@ -16,7 +16,11 @@ def test_deployment():
     deploy = config.RUN['cli_params'].get('deploy')
     teardown = config.RUN['cli_params'].get('teardown')
     if not teardown or deploy:
-        ocs_install_verification()
+        if config.ENV_DATA['skip_ocs_deployment']:
+            # Verify cluster is running
+            assert is_cluster_running(config.ENV_DATA['cluster_path'])
+        else:
+            ocs_install_verification()
 
     if teardown:
         log.info(
