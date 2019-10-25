@@ -3,7 +3,7 @@ import pytest
 import random
 
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier1, acceptance
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from tests import helpers
@@ -19,6 +19,7 @@ class TestPvcAssignPodNode(ManageTest):
     OCS-1258 - CephFS: Assign nodeName to a POD using RWX PVC
     """
 
+    @acceptance
     @tier1
     @pytest.mark.parametrize(
         argnames=["interface"],
@@ -74,6 +75,7 @@ class TestPvcAssignPodNode(ManageTest):
         pod_obj.run_io(storage_type='fs', size='512M', runtime=30)
         pod.get_fio_rw_iops(pod_obj)
 
+    @acceptance
     @tier1
     @pytest.mark.polarion_id("OCS-1258")
     def test_rwx_pvc_assign_pod_node(self, pvc_factory, teardown_factory):
