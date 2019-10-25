@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier1, tier3
+from ocs_ci.framework.testlib import ManageTest, tier1, tier3, acceptance
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import pod
@@ -127,6 +127,7 @@ class BaseDynamicPvc(ManageTest):
             self.sc_obj.delete()
 
 
+@acceptance
 @tier1
 @pytest.mark.usefixtures(
     create_ceph_block_pool.__name__,
@@ -282,6 +283,7 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
 
         self.dynamic_pvc_base(interface_type, reclaim_policy)
 
+    @acceptance
     @tier1
     @pytest.mark.bugzilla("1750916")
     @pytest.mark.bugzilla("1751866")
