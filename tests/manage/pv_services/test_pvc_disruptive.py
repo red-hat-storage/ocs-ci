@@ -275,7 +275,7 @@ class TestPVCDisruption(ManageTest):
         # Get number of pods of type 'resource_to_delete'
         num_of_resource_to_delete = len(pod_functions[resource_to_delete]())
 
-        num_of_pvc = 6
+        num_of_pvc = 12
         namespace = self.proj_obj.namespace
 
         # Fetch the number of Pods and PVCs
@@ -295,7 +295,12 @@ class TestPVCDisruption(ManageTest):
         # Modify access_modes list to create rbd `block` type volume with
         # RWX access mode. RWX is not supported in non-block type rbd
         if interface == constants.CEPHBLOCKPOOL:
-            access_modes.append(f'{constants.ACCESS_MODE_RWX}-Block')
+            access_modes.extend(
+                [
+                    f'{constants.ACCESS_MODE_RWO}-Block',
+                    f'{constants.ACCESS_MODE_RWX}-Block'
+                ]
+            )
 
         # Start creation of PVCs
         bulk_pvc_create = executor.submit(
