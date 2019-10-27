@@ -25,7 +25,7 @@ class DisruptionBase(ManageTest):
     """
     Base class for disruptive operations
     """
-    num_of_pvcs = 10
+    num_of_pvcs = 12
     pvc_size = 3
 
     def verify_resource_deletion(self, func_to_use, previous_num):
@@ -363,7 +363,12 @@ class TestDeleteResourceDuringPodPvcDeletion(DisruptionBase):
         # Modify access_modes list to create rbd `block` type volume with
         # RWX access mode. RWX is not supported in filesystem type rbd
         if interface == constants.CEPHBLOCKPOOL:
-            access_modes.append(f'{constants.ACCESS_MODE_RWX}-Block')
+            access_modes.extend(
+                [
+                    f'{constants.ACCESS_MODE_RWO}-Block',
+                    f'{constants.ACCESS_MODE_RWX}-Block'
+                ]
+            )
 
         pvc_objs = multi_pvc_factory(
             interface=interface,
