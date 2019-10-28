@@ -1,11 +1,11 @@
 import os
 import logging
+import time
 
 import pytest
 
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import openshift_ops, ocp
-from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.utils import collect_ocs_logs
 
 logger = logging.getLogger(__name__)
@@ -28,15 +28,21 @@ class TestMustGather(ManageTest):
     def teardown(self, request):
 
         def finalizer():
-            must_gather_pods = pod.get_all_pods(selector=['app=must-gather'])
+            must_gather_pods = self.ocs.get_pods(label_selector='app=must-gather')
             logger.info(f"must_gather_pods: {must_gather_pods} ")
             if must_gather_pods:
                 for pod_to_del in must_gather_pods:
                     self.ocp_obj.wait_for_delete(resource_name=pod_to_del)
+                    logger.info(f"deleted pods: {pod_to_del}")
+                    time.sleep(3)
 
         request.addfinalizer(finalizer)
 
     def test_must_gather(self):
+        """
+        Tests functionality of: oc adm must-gather
+
+        """
 
         # Make logs root directory
         logger.info("Creating logs Directory")
@@ -55,8 +61,6 @@ class TestMustGather(ManageTest):
         logger.info(f"Logs: {logs}")
         logger.info(f"pods list: {pods}")
         assert set(sorted(logs)) == set(sorted(pods))
-
-        # Verify logs file are not empty
 
     def make_directory(self):
         """
@@ -103,7 +107,7 @@ class TestMustGather(ManageTest):
 
         """
 
-        pods = (self.ocs.get_pods(namespace='openshift-storage'))
+        pods = self.ocs.get_pods(namespace='openshift-storage')
         pods_list = list()
         for a_pod in pods:
             if "example" not in a_pod:
