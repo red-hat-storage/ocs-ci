@@ -3,15 +3,15 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier4
-from ocs_ci.ocs import openshift_ops
+from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.ocs import openshift_ops, ocp
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.utils import collect_ocs_logs
 
 logger = logging.getLogger(__name__)
 
 
-@tier4
+@tier1
 @pytest.mark.polarion_id("OCS-1583")
 class TestMustGather(ManageTest):
 
@@ -22,6 +22,7 @@ class TestMustGather(ManageTest):
         """
 
         self.ocs = openshift_ops.OCP()
+        self.ocp_obj = ocp.OCP()
 
     @pytest.fixture(autouse=True)
     def teardown(self, request):
@@ -29,6 +30,9 @@ class TestMustGather(ManageTest):
         def finalizer():
             must_gather_pods = pod.get_all_pods(selector=['app=must-gather'])
             logger.info(f"must_gather_pods: {must_gather_pods} ")
+            if must_gather_pods:
+                for pod_to_del in must_gather_pods:
+                    self.ocp_obj.wait_for_delete(resource_name=pod_to_del)
 
         request.addfinalizer(finalizer)
 
@@ -56,7 +60,6 @@ class TestMustGather(ManageTest):
 
     def make_directory(self):
         """
-
         Check if directory to store must gather logs already exist
         and use new directory if so.
 
@@ -74,7 +77,6 @@ class TestMustGather(ManageTest):
 
     def get_log_directories(self, directory):
         """
-
         Get list of subdirectories contains openshift-storage pod's logs
 
         Args:
@@ -94,7 +96,6 @@ class TestMustGather(ManageTest):
 
     def get_ocs_pods(self):
         """
-
         Get list of openshift-storage pods
 
         Returns:
@@ -104,8 +105,8 @@ class TestMustGather(ManageTest):
 
         pods = (self.ocs.get_pods(namespace='openshift-storage'))
         pods_list = list()
-        for pod in pods:
-            if "example" not in pod:
-                pods_list.append(pod)
+        for a_pod in pods:
+            if "example" not in a_pod:
+                pods_list.append(a_pod)
 
         return pods_list
