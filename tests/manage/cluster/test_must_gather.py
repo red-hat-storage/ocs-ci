@@ -47,7 +47,7 @@ class TestMustGather(ManageTest):
         # Make logs root directory
         logger.info("Creating logs Directory")
         directory = self.make_directory()
-        logger.info(f"Creating {directory} - Done!")
+        logger.info(f"Creating {directory}_ocs_logs - Done!")
 
         # Collect OCS logs
         logger.info("Collecting Logs")
@@ -128,8 +128,7 @@ class TestMustGather(ManageTest):
             if dir_name[-4:] == "pods":
                 return dir_name
 
-            else:
-                logger.info("could not find \'pods\' directory")
+            logger.info("could not find \'pods\' directory")
 
     def search_log_files(self, directory):
         pods_dir = self.locate_pods_directory(directory)
