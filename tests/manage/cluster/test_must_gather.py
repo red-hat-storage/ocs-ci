@@ -5,6 +5,7 @@ import pytest
 
 from ocs_ci.framework.testlib import ManageTest, tier4
 from ocs_ci.ocs import openshift_ops
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.utils import collect_ocs_logs
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,15 @@ class TestMustGather(ManageTest):
         """
 
         self.ocs = openshift_ops.OCP()
+
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+
+        def finalizer():
+            must_gather_pods = pod.get_all_pods(selector=['app=must-gather'])
+            logger.info(f"must_gather_pods: {must_gather_pods} ")
+
+        request.addfinalizer(finalizer)
 
     def test_must_gather(self):
 
