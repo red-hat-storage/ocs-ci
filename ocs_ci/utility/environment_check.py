@@ -73,7 +73,10 @@ def compare_dicts(before, after):
     return [added, removed]
 
 
-def assign_get_values(env_status_dict, key, kind=None):
+def assign_get_values(
+    env_status_dict, key, kind=None,
+    exclude_namespaces=('openshift-marketplace',)
+):
     """
     Assigning kind status into env_status_dict
 
@@ -82,8 +85,15 @@ def assign_get_values(env_status_dict, key, kind=None):
             copy.deepcopy(ENV_STATUS_DICT)
         key (str): Name of the resource
         kind (OCP obj): OCP object for a resource
+        exclude_namespaces (list): List of namespaces to ignore
     """
-    env_status_dict[key] = kind.get(all_namespaces=True)['items']
+    items = kind.get(all_namespaces=True)['items']
+    items = [
+        item for item in items if (
+            item.get('metadata').get('namespace') not in exclude_namespaces
+        )
+    ]
+    env_status_dict[key] = items
 
 
 def get_environment_status(env_dict):
