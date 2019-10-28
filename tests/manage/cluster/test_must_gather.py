@@ -62,6 +62,9 @@ class TestMustGather(ManageTest):
         logger.info(f"pods list: {pods}")
         assert set(sorted(logs)) == set(sorted(pods))
 
+        # 2nd test: Verify logs file are not empty
+        self.search_log_files(directory)
+
     def make_directory(self):
         """
         Check if directory to store must gather logs already exist
@@ -90,11 +93,8 @@ class TestMustGather(ManageTest):
             list: Subdirectories of "pods" directory
 
         """
-        list_dir = list()
-        for dir_name, subdir_list, files_list in os.walk(directory + "_ocs_logs"):
-            if dir_name[-4:] == "pods":
-                list_dir = os.listdir(dir_name)
-                break
+        dir_name = self.locate_pods_directory(directory)
+        list_dir = os.listdir(dir_name)
 
         return list_dir
 
@@ -114,3 +114,23 @@ class TestMustGather(ManageTest):
                 pods_list.append(a_pod)
 
         return pods_list
+
+    def locate_pods_directory(self, root_directory):
+        """
+
+        Args:
+            root_directory: (str):
+
+        Returns:
+
+        """
+        for dir_name, subdir_list, files_list in os.walk(root_directory + "_ocs_logs"):
+            if dir_name[-4:] == "pods":
+                return dir_name
+
+            else:
+                logger.info("could not find \'pods\' directory")
+
+    def search_log_files(self, directory):
+        pods_dir = self.locate_pods_directory(directory)
+        logger.info(f"pods dir {pods_dir}")
