@@ -128,8 +128,14 @@ class TestMustGather(ManageTest):
             if dir_name[-4:] == "pods":
                 return dir_name
 
-            logger.info("could not find \'pods\' directory")
+        logger.info("could not find \'pods\' directory")
 
     def search_log_files(self, directory):
         pods_dir = self.locate_pods_directory(directory)
         logger.info(f"pods dir {pods_dir}")
+
+    def check_file_size(self,log_file):
+        assert os.path.getsize(log_file) > 0
+
+
+
