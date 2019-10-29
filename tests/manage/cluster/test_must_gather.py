@@ -178,6 +178,3 @@ class TestMustGather(ManageTest):
             else:
                 logger.info(f"log file {log_file} empty!")
                 return False
-
-
-
