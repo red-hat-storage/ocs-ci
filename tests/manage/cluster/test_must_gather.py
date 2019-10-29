@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla
 from ocs_ci.ocs import openshift_ops, ocp
 from ocs_ci.ocs.utils import collect_ocs_logs
 
@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 @tier1
 @pytest.mark.polarion_id("OCS-1583")
+@bugzilla('1766646')
 class TestMustGather(ManageTest):
 
     @pytest.fixture(autouse=True)
