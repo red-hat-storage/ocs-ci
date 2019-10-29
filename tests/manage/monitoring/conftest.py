@@ -2,11 +2,8 @@ import json
 import logging
 import os
 import pytest
-from subprocess import TimeoutExpired
 import threading
-import tempfile
 import time
-import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
@@ -349,66 +346,6 @@ def measure_stop_ceph_osd(measurement_dir):
     return measured_op
 
 
-def create_dummy_osd(deployment):
-    """
-    Replace one of OSD pods with pod that contains all data from original
-    OSD but doesn't run osd daemon. This can be used e.g. for direct acccess
-    to Ceph Placement Groups.
-
-    Returns:
-        list: first item is dummy deployment object, second item is dummy pod
-            object
-    """
-    oc = ocp.OCP(
-        kind=constants.DEPLOYMENT,
-        namespace=config.ENV_DATA.get('cluster_namespace')
-    )
-    osd_data = oc.get(deployment)
-    dummy_deployment = helpers.create_unique_resource_name('dummy', 'osd')
-    osd_data['metadata']['name'] = dummy_deployment
-
-    osd_containers = osd_data.get('spec').get('template').get('spec').get(
-        'containers'
-    )
-    # get osd container spec
-    original_osd_args = osd_containers[0].get('args')
-    osd_data['spec']['template']['spec']['containers'][0]['args'] = []
-    osd_data['spec']['template']['spec']['containers'][0]['command'] = [
-        '/bin/bash',
-        '-c',
-        'sleep infinity'
-    ]
-    osd_file = tempfile.NamedTemporaryFile(
-        mode='w+', prefix=dummy_deployment, delete=False
-    )
-    with open(osd_file.name, "w") as temp:
-        yaml.dump(osd_data, temp)
-    oc.create(osd_file.name)
-
-    # downscale the original deployment and start dummy deployment instead
-    oc.exec_oc_cmd(f"scale --replicas=0 deployment/{deployment}")
-    oc.exec_oc_cmd(f"scale --replicas=1 deployment/{dummy_deployment}")
-
-    osd_list = pod.get_osd_pods()
-    dummy_pod = [pod for pod in osd_list if dummy_deployment in pod.name][0]
-    helpers.wait_for_resource_state(
-        resource=dummy_pod,
-        state=constants.STATUS_RUNNING,
-        timeout=60
-    )
-    ceph_init_cmd = '/rook/tini' + ' ' + ' '.join(original_osd_args)
-    try:
-        logger.info('Following command should expire after 7 seconds')
-        dummy_pod.exec_cmd_on_pod(ceph_init_cmd, timeout=7)
-    except TimeoutExpired:
-        logger.info('Killing /rook/tini process')
-        dummy_pod.exec_bash_cmd_on_pod(
-            "kill $(ps aux | grep '[/]rook/tini' | awk '{print $2}')"
-        )
-
-    return dummy_deployment, dummy_pod
-
-
 @pytest.fixture
 def measure_corrupt_pg(measurement_dir):
     """
@@ -440,7 +377,7 @@ def measure_corrupt_pg(measurement_dir):
     pg = ct_pod.exec_ceph_cmd(f"ceph osd map {pool_name} {pool_object}")['pgid']
     logger.info(f"Found Placement Group: {pg}")
 
-    dummy_deployment, dummy_pod = create_dummy_osd(osd_deployment)
+    dummy_deployment, dummy_pod = helpers.create_dummy_osd(osd_deployment)
 
     def corrupt_pg():
         """
