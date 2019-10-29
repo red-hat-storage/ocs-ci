@@ -60,10 +60,17 @@ class TestMustGather(ManageTest):
         pods = self.get_ocs_pods()
         logger.info(f"Logs: {logs}")
         logger.info(f"pods list: {pods}")
-        assert set(sorted(logs)) == set(sorted(pods))
+        assert set(sorted(logs)) == set(sorted(pods)), (
+            "List of openshift-storage pods are not equal to list of logs directories"
+            f"list of pods: {pods}"
+            f"list of log directories: {logs}"
+        )
 
         # 2nd test: Verify logs file are not empty
-        self.search_log_files(directory)
+        logs_dir_list = self.search_log_files(directory)
+        assert self.check_file_size(logs_dir_list), (
+            "One or more log file are empty"
+        )
 
     def make_directory(self):
         """
@@ -117,11 +124,13 @@ class TestMustGather(ManageTest):
 
     def locate_pods_directory(self, root_directory):
         """
+        Find full path of 'pods' subdirectory
 
         Args:
-            root_directory: (str):
+            root_directory: (str): location of must gather logs
 
         Returns:
+            str: Full path of 'pods' subdirectory, if exist
 
         """
         for dir_name, subdir_list, files_list in os.walk(root_directory + "_ocs_logs"):
@@ -131,11 +140,43 @@ class TestMustGather(ManageTest):
         logger.info("could not find \'pods\' directory")
 
     def search_log_files(self, directory):
-        pods_dir = self.locate_pods_directory(directory)
-        logger.info(f"pods dir {pods_dir}")
+        """
 
-    def check_file_size(self,log_file):
-        assert os.path.getsize(log_file) > 0
+        Args:
+            directory: (str): location of must gather logs
+
+        Returns:
+            list: list contain full path of each "logs" subdirectory
+
+        """
+        pods_dir = self.locate_pods_directory(directory)
+        logger.info(f"pods dir: {pods_dir}")
+        logs_dir_list = list()
+        for dir_name, subdir_list, files_list in os.walk(pods_dir):
+            if dir_name[-4:] == "logs":
+                logs_dir_list.append(dir_name)
+
+        return logs_dir_list
+
+    def check_file_size(self, logs_dir_list):
+        """
+        Check if log file "current.log" is empty or not
+
+        Args:
+            logs_dir_list: (list): Contain full path of each "logs" subdirectory
+
+        Returns:
+            bool: False - if one or more log file is empty
+
+        """
+        for log_dir in logs_dir_list:
+            log_file = log_dir + "/current.log"
+            if os.path.getsize(log_file) > 0:
+                logger.info(f"file {log_file} size: {os.path.getsize(log_file)}")
+
+            else:
+                logger.info(f"log file {log_file} empty!")
+                return False
 
 
 
