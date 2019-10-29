@@ -60,7 +60,11 @@ class TestMustGather(ManageTest):
         pods = self.get_ocs_pods()
         logger.info(f"Logs: {logs}")
         logger.info(f"pods list: {pods}")
-        assert set(sorted(logs)) == set(sorted(pods))
+        assert set(sorted(logs)) == set(sorted(pods)), (
+            "List of openshift-storage pods are not equal to list of logs directories"
+            f"list of pods: {pods}"
+            f"list of log directories: {logs}"
+        )
 
     def make_directory(self):
         """
