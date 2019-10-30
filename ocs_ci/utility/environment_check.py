@@ -85,7 +85,7 @@ def assign_get_values(
             copy.deepcopy(ENV_STATUS_DICT)
         key (str): Name of the resource
         kind (OCP obj): OCP object for a resource
-        exclude_namespaces (list): List of namespaces to ignore
+        exclude_namespaces (list or tuple): List/tuple of namespaces to ignore
     """
     items = kind.get(all_namespaces=True)['items']
     items = [
