@@ -11,13 +11,6 @@ parameters:
 
     # Ceph pool into which the RBD image shall be created
     pool: rbd
-
-    # RBD image format. Defaults to "2".
-    imageFormat: "2"
-
-    # RBD image features. Available for imageFormat: "2". CSI RBD currently supports only `layering` feature.
-    imageFeatures: layering
-
     # The secrets have to contain Ceph admin credentials.
     csi.storage.k8s.io/provisioner-secret-name: csi-rbd-secret
     csi.storage.k8s.io/provisioner-secret-namespace: default
