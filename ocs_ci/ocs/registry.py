@@ -22,8 +22,9 @@ def change_registry_backend_to_ocs():
         AssertionError: When failure in change of registry backend to OCS
 
     """
+    sc_name = f"{config.ENV_DATA['storage_cluster_name']}-{constants.DEFAULT_SC_CEPHFS}"
     pv_obj = helpers.create_pvc(
-        sc_name=constants.DEFAULT_SC_CEPHFS, pvc_name='registry-cephfs-rwx-pvc',
+        sc_name=sc_name, pvc_name='registry-cephfs-rwx-pvc',
         namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE, size='100Gi',
         access_mode=constants.ACCESS_MODE_RWX
     )
