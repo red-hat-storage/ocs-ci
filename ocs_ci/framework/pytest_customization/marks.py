@@ -16,6 +16,9 @@ tier4 = pytest.mark.tier4(value=4)
 
 tier_marks = [tier1, tier2, tier3, tier4]
 
+# build acceptance
+acceptance = pytest.mark.acceptance
+
 # team marks
 
 e2e = pytest.mark.e2e
