@@ -2,6 +2,7 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import deployment, destroy
+from ocs_ci.ocs import defaults
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility.utils import is_cluster_running, ceph_health_check
 
@@ -162,3 +163,13 @@ def ocs_install_verification():
         item['metadata']['name'] for item in storage_classes['items']
     }
     assert required_storage_classes.issubset(storage_class_names)
+
+    # Verify OSD's are distributed
+    log.info("Verifying OSD's are distributed evenly across worker nodes")
+    ocp_pod_obj = ocp.OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    osds = ocp_pod_obj.get(selector='app=rook-ceph-osd')['items']
+    node_names = [osd['spec']['nodeName'] for osd in osds]
+    for node in node_names:
+        assert not node_names.count(node) > 1, (
+            "OSD's are not distributed evenly across worker nodes"
+        )
