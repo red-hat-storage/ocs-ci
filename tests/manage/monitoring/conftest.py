@@ -1,9 +1,16 @@
+# -*- coding: utf8 -*-
+
 import json
 import logging
 import os
-import pytest
+import subprocess
+import tempfile
+import textwrap
 import threading
 import time
+import yaml
+
+import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
@@ -92,6 +99,9 @@ def measure_operation(
         )
         with open(result_file) as open_file:
             results = json.load(open_file)
+            # indicate that we are not going to execute the workload, but
+            # just reuse measurement from earlier run
+            results['first_run'] = False
         logger.info(
             f"File {result_file} loaded. Content of file:\n{results}"
         )
@@ -124,6 +134,7 @@ def measure_operation(
         if minimal_time:
             additional_time = minimal_time - passed_time
             if additional_time > 0:
+                logger.info(f"Starting {additional_time}s sleep for the purposes of measurement.")
                 time.sleep(additional_time)
         stop_time = time.time()
         info['run'] = False
@@ -133,7 +144,8 @@ def measure_operation(
             'stop': stop_time,
             'result': result,
             'metadata': metadata,
-            'prometheus_alerts': alert_list
+            'prometheus_alerts': alert_list,
+            'first_run': True,
         }
         logger.info(f"Results of measurement: {results}")
         with open(result_file, 'w') as outfile:
@@ -430,4 +442,441 @@ def measure_corrupt_pg(measurement_dir):
     logger.info(f"Deleting deployment {dummy_deployment}")
     oc.delete(resource_name=dummy_deployment)
 
+    return measured_op
+
+#
+# IO Workloads
+#
+
+
+@pytest.fixture
+def fio_pvc_dict():
+    """
+    PVC template for fio workloads.
+    Note that all 'None' values needs to be defined before usage.
+    """
+    template = textwrap.dedent("""
+        kind: PersistentVolumeClaim
+        apiVersion: v1
+        metadata:
+          name: fio-target
+        spec:
+          storageClassName: None
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: None
+        """)
+    pvc_dict = yaml.safe_load(template)
+    return pvc_dict
+
+
+@pytest.fixture
+def fio_configmap_dict():
+    """
+    ConfigMap template for fio workloads.
+    Note that you need to add actuall configuration to workload.fio file.
+    """
+    template = textwrap.dedent("""
+        kind: ConfigMap
+        apiVersion: v1
+        metadata:
+          name: fio-config
+        data:
+          workload.fio: |
+            # here comes workload configuration
+        """)
+    cm_dict = yaml.safe_load(template)
+    return cm_dict
+
+
+@pytest.fixture
+def fio_job_dict():
+    """
+    Job template for fio workloads.
+    """
+    template = textwrap.dedent("""
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: fio
+        spec:
+          template:
+            metadata:
+              name: fio
+            spec:
+              containers:
+                - name: fio
+                  image: quay.io/johnstrunk/fs-performance:latest
+                  command:
+                    - "/usr/bin/fio"
+                    - "--output-format=json"
+                    - "/etc/fio/workload.fio"
+                  volumeMounts:
+                    - name: fio-target
+                      mountPath: /mnt/target
+                    - name: fio-config-volume
+                      mountPath: /etc/fio
+              restartPolicy: Never
+              volumes:
+                - name: fio-target
+                  persistentVolumeClaim:
+                    claimName: fio-target
+                - name: fio-config-volume
+                  configMap:
+                    name: fio-config
+        """)
+    job_dict = yaml.safe_load(template)
+    return job_dict
+
+
+def get_storageutilization_size(target_percentage, ceph_pool_name):
+    """
+    For the purpose of the workload storageutilization fixtures, get expected
+    pvc_size based on STORED and MAX AVAIL values (as reported by `ceph df`)
+    for given ceph pool and target utilization percentage.
+
+    This is only approximate, and it won't work eg. if each pool has different
+    configuration of replication.
+
+    Returns:
+        int: pvc_size for storageutilization job (in GiB, rounded)
+    """
+    # get STORED and MAX AVAIL of given ceph pool ...
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_df_dict = ct_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+    ceph_pool = None
+    ceph_total_stored = 0
+    for pool in ceph_df_dict["pools"]:
+        ceph_total_stored += pool["stats"]["stored"]
+        if pool["name"] == ceph_pool_name:
+            ceph_pool = pool
+    if ceph_pool is None:
+        logger.error((
+            f"pool {ceph_pool_name} was not found "
+            f"in output of `ceph df`: {ceph_df_dict}"))
+    # If the following assert fail, the problem is either:
+    #  - name of the pool has changed (when this happens before GA, it's
+    #    likely ocs-ci bug, after the release it's a product bug),
+    #  - pool is missing (likely a product bug)
+    # either way, the fixture can't continue ...
+    assert ceph_pool is not None, f"pool {ceph_pool_name} should exist"
+    # ... to compute PVC size (values in bytes)
+    total = ceph_pool["stats"]["max_avail"] + ceph_total_stored
+    max_avail_gi = ceph_pool['stats']['max_avail']/2**30
+    logger.info(f"MAX AVAIL of {ceph_pool_name} is {max_avail_gi} Gi")
+    target = total * target_percentage
+    to_utilize = target - ceph_total_stored
+    pvc_size = round(to_utilize/2**30) # GiB
+    logger.info((
+        f"fixture is going to request {pvc_size} Gi volume "
+        f"to reach {target/2**30} Gi of total cluster utilization, which "
+        f"is {target_percentage*100}% of the total capacity"))
+    return pvc_size
+
+
+def fio_to_dict(fio_output):
+    """"
+    Parse fio output and provide parsed dict it as a result.
+    """
+    fio_output_lines = fio_output.splitlines()
+    for line_num, line in enumerate(fio_output_lines):
+        if line == "{":
+            break
+        else:
+            logger.info(line)
+    fio_parseable_output = "\n".join(fio_output_lines[line_num:])
+    fio_report = yaml.safe_load(fio_parseable_output)
+    return fio_report
+
+
+def workload_fio_storageutilization(
+        fixture_name,
+        target_percentage,
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path,
+        ):
+    """
+    This function implements core functionality of fio storageutilization
+    workload fixture. This is necessary because we can't parametrize single
+    general fixture over multiple parameters (it would mess with test case id
+    and polarion test case tracking).
+    """
+    if fixture_name.endswith("rbd"):
+        storage_class_name = "ocs-storagecluster-ceph-rbd"
+        ceph_pool_name = "ocs-storagecluster-cephblockpool"
+    elif fixture_name.endswith("cephfs"):
+        storage_class_name = "ocs-storagecluster-cephfs"
+        ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"
+    else:
+        raise Exception("unexpected volume type, ocs-ci code is wrong")
+
+    # make sure we communicate what is going to happen
+    logger.info((
+        f"starting {fixture_name} fixture, "
+        f"using {storage_class_name} storage class "
+        f"backed by {ceph_pool_name} ceph pool"))
+
+    pvc_size = get_storageutilization_size(target_percentage, ceph_pool_name)
+
+    # For cephfs we can't use fill_fs because of BZ 1763808 (the process
+    # will get *Disk quota exceeded* error instead of *No space left on
+    # device* error).
+    # On the other hand, we can't use size={pvc_size} for rbd, as we can't
+    # write pvc_size bytes to a filesystem on a blockdevice of {pvc_size}
+    # size (obviously, some space is used by filesystem metadata).
+    if fixture_name.endswith("rbd"):
+        fio_conf = textwrap.dedent("""
+            [simple-write]
+            readwrite=write
+            buffered=1
+            blocksize=4k
+            ioengine=libaio
+            directory=/mnt/target
+            fill_fs=1
+            """)
+    else:
+        fio_conf = textwrap.dedent(f"""
+            [simple-write]
+            readwrite=write
+            buffered=1
+            blocksize=4k
+            ioengine=libaio
+            directory=/mnt/target
+            size={pvc_size}G
+            """)
+
+    # put the dicts together into yaml file of the Job
+    fio_configmap_dict["data"]["workload.fio"] = fio_conf
+    fio_pvc_dict["spec"]["storageClassName"] = storage_class_name
+    fio_pvc_dict["spec"]["resources"]["requests"]["storage"] = f"{pvc_size}Gi"
+    fio_resource = [fio_pvc_dict, fio_configmap_dict, fio_job_dict]
+
+    # dump the job description in yaml format into a temporary file
+    tf = tmp_path / f"{fixture_name}.oc.yaml"
+    tf.write_text(yaml.dump_all(fio_resource))
+
+    # how long do we let the job running while writing data to the volume
+    write_timeout = pvc_size * 30 # seconds
+    logger.info((
+        f"fixture will wait {write_timeout} seconds for the Job "
+        f"to write {pvc_size} Gi data on OCS backed volume"))
+
+    def write_data():
+        """
+        Write data via fio Job (specified in ``tf`` tmp file) to reach desired
+        utilization level, and keep this level for ``minimal_time`` seconds.
+        """
+        # TODO: change ocsci to allow this (eg. new class representing such
+        # yaml, which can be deployed or deleted in given namespace)
+        # TODO: add logging
+        oc_cmd = [
+            "oc",
+            "create",
+            "-f",
+            os.path.join(tmp_path, tf.name),
+            "-n",
+            project.namespace]
+        subprocess.run(oc_cmd, check=True)
+
+        # This is a WORKAROUND of particular ocsci design choices: I just wait
+        # for one pod in the namespace, and then ask for the pod again to get
+        # it's name (but it would be much better to just wait for the job to
+        # finish instead, then ask for a name of the successfull pod and use it
+        # to get logs ...)
+        ocp_pod = ocp.OCP(kind="Pod", namespace=project.namespace)
+        ocp_pod.wait_for_resource(
+            resource_count=1,
+            condition="Completed",
+            timeout=write_timeout,
+            sleep=30)
+        pod_data = ocp_pod.get()
+
+        # explicit list of assumptions, if these assumptions are not met, the
+        # code won't work and it either means that something went terible wrong
+        # or that the code needs to be changed
+        assert pod_data['kind'] == "List"
+        pod_dict = pod_data['items'][0]
+        assert pod_dict['kind'] == "Pod"
+        pod_name = pod_dict['metadata']['name']
+        logger.info(f"Identified pod name of the finished fio Job: {pod_name}")
+
+        fio_output = ocp_pod.exec_oc_cmd(
+            f"logs {pod_name}", out_yaml_format=False)
+
+        # parse fio output
+        fio_report = fio_to_dict(fio_output)
+
+        logger.info(fio_report)
+
+        # data which will be available to the test via:
+        # fixture_name['result']
+        result = {
+            'fio': fio_report,
+            'pvc_size': pvc_size,
+            'target_p': target_percentage,
+            'namespace': project.namespace,
+            }
+
+        return result
+
+    test_file = os.path.join(measurement_dir, f"{fixture_name}.json")
+    measured_op = measure_operation(
+        write_data, test_file, measure_after=True, minimal_time=300)
+    # we don't need to delete anything if this fixture has been already
+    # executed
+    if measured_op['first_run']:
+        logger.info("oc delete")
+        oc_cmd = [
+            "oc",
+            "delete",
+            "-f",
+            os.path.join(tmp_path, tf.name),
+            "-n",
+            project.namespace]
+        subprocess.run(oc_cmd, check=True)
+
+    return measured_op
+
+
+# Percentages used in fixtures below are based on needs of:
+# - alerting tests, which needs to cover alerts for breaching 75% and 85%
+#   utilization (see KNIP-635 and document attached there).
+# - metrics tests (KNIP-634) which would like to check lower utilizations as
+#   well
+
+
+@pytest.fixture
+def workload_storageutilization_50p_rbd(
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path):
+    target_percentage = 0.5
+    fixture_name = "workload_storageutilization_50p_rbd"
+    measured_op = workload_fio_storageutilization(
+        fixture_name,
+        target_percentage,
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path)
+    return measured_op
+
+
+@pytest.fixture
+def workload_storageutilization_75p_rbd(
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path):
+    target_percentage = 0.75
+    fixture_name = "workload_storageutilization_75p_rbd"
+    measured_op = workload_fio_storageutilization(
+        fixture_name,
+        target_percentage,
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path)
+    return measured_op
+
+
+@pytest.fixture
+def workload_storageutilization_85p_rbd(
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path):
+    target_percentage = 0.85
+    fixture_name = "workload_storageutilization_85p_rbd"
+    measured_op = workload_fio_storageutilization(
+        fixture_name,
+        target_percentage,
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path)
+    return measured_op
+
+
+@pytest.fixture
+def workload_storageutilization_50p_cephfs(
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path):
+    target_percentage = 0.5
+    fixture_name = "workload_storageutilization_50p_cephfs"
+    measured_op = workload_fio_storageutilization(
+        fixture_name,
+        target_percentage,
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path)
+    return measured_op
+
+
+@pytest.fixture
+def workload_storageutilization_75p_cephfs(
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path):
+    target_percentage = 0.75
+    fixture_name = "workload_storageutilization_75p_cephfs"
+    measured_op = workload_fio_storageutilization(
+        fixture_name,
+        target_percentage,
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path)
+    return measured_op
+
+
+@pytest.fixture
+def workload_storageutilization_85p_cephfs(
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path):
+    target_percentage = 0.85
+    fixture_name = "workload_storageutilization_85p_cephfs"
+    measured_op = workload_fio_storageutilization(
+        fixture_name,
+        target_percentage,
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path)
     return measured_op
