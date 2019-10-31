@@ -7,6 +7,7 @@ import pytest
 from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla
 from ocs_ci.ocs import openshift_ops, ocp
 from ocs_ci.ocs.utils import collect_ocs_logs
+from ocs_ci.utility.utils import ocsci_log_path
 
 logger = logging.getLogger(__name__)
 
@@ -83,10 +84,11 @@ class TestMustGather(ManageTest):
 
         """
         index = 1
-        directory = f"/tmp/mg_test{index}"
+        directory = ocsci_log_path()
+        logger.info(f"DIRECTORY: {directory}")
         while os.path.isdir(directory + "_ocs_logs"):
             index += 1
-            directory = f"/tmp/mg_test{index}"
+            directory = ocsci_log_path() + f"_{index}"
 
         return directory
 
