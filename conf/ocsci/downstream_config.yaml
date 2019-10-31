@@ -1,13 +1,5 @@
 ---
 ENV_DATA:
-  ceph_image: 'quay.io/rhceph-dev/rhceph-4.0-rhel-8:latest'
-  ceph_csi_image: 'quay.io/rhceph-dev/cephcsi:latest'
-  rook_image: 'quay.io/rhceph-dev/rook:latest'
-  # DS CSI sidecars images mentioned in https://jira.coreos.com/browse/RHSTOR-150
-  rook_csi_registrar_image: 'quay.io/openshift/origin-csi-node-driver-registrar:4.2'
-  rook_csi_provisioner_image: 'quay.io/openshift/origin-csi-external-provisioner:4.2'
-  rook_csi_snapshotter_image: 'quay.io/openshift/origin-csi-external-snapshotter:4.2'
-  rook_csi_attacher_image: 'quay.io/openshift/origin-csi-external-attacher:4.2'
   cluster_namespace: 'openshift-storage'
   worker_instance_type: 'm5.4xlarge'
 REPORTING:

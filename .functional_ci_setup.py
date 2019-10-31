@@ -110,21 +110,6 @@ def get_ocsci_conf():
         ocs_operator_olm="http://pkgs.devel.redhat.com/cgit/containers/ocs-registry/"
                          "plain/deploy-with-olm.yaml?h=ocs-4.2-rhel-8",
     )
-    # Apply image configuration if present
-    image_types = [
-        'rook',
-        'ceph',
-        'ceph_csi',
-        'rook_csi_registrar',
-        'rook_csi_provisioner',
-        'rook_csi_snapshotter',
-        'rook_csi_attacher',
-    ]
-    for image_type in image_types:
-        image_key = f"{image_type}_image"
-        image_value = env.get(image_key.upper())
-        if image_value is not None:
-            conf_obj['ENV_DATA'][image_key] = image_value
     return conf_obj
 
 
