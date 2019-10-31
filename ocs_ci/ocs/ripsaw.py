@@ -4,6 +4,7 @@ RipSaw Class to run various workloads and scale tests
 """
 import logging
 import tempfile
+import os
 
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
@@ -85,10 +86,13 @@ class RipSaw(object):
             crd (str): Name of file to apply
         """
         self.crd = crd
-        self.dir += '/ripsaw'
-        run(f'oc apply -f deploy', shell=True, check=True, cwd=self.dir)
-        run(f'oc apply -f {crd}', shell=True, check=True, cwd=self.dir)
-        run(f'oc apply -f {self.operator}', shell=True, check=True, cwd=self.dir)
+        self.dir += "/ripsaw"
+        kubeconfig = os.environ['KUBECONFIG']
+        # setting up must have parameter for the oc commands
+        command_exta_params = f'-n {self.namespace} --kubeconfig {kubeconfig}'
+        run(f'oc apply -f deploy {command_exta_params}', shell=True, check=True, cwd=self.dir)
+        run(f'oc apply -f {crd} {command_exta_params}', shell=True, check=True, cwd=self.dir)
+        run(f'oc apply -f {self.operator} {command_exta_params}', shell=True, check=True, cwd=self.dir)
 
     def setup_postgresql(self):
         """

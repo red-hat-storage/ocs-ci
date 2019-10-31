@@ -142,7 +142,8 @@ class OCP(object):
                 "The kubeconfig file %s doesn't exist!", kubeconfig_path
             )
             return False
-        os.environ['KUBECONFIG'] = kubeconfig_path
+        if 'KUBECONFIG' not in os.environ:
+            os.environ['KUBECONFIG'] = kubeconfig_path
         try:
             run_cmd("oc cluster-info")
         except CommandFailed as ex:
