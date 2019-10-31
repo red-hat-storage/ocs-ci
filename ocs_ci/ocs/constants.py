@@ -345,7 +345,7 @@ OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
 OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
 OPERATOR_CS_QUAY_API_QUERY = (
     'https://quay.io/api/v1/repository/rhceph-dev/ocs-registry/'
-    'tag/?onlyActiveTags=true&limit=2'
+    'tag/?onlyActiveTags=true&limit={tag_limit}'
 )
 
 # Platforms
@@ -385,3 +385,9 @@ OCP4_2_REPO = os.path.join(REPO_DIR, "ocp_4_2.repo")
 RHEL_POD_PACKAGES = ["openssh-clients", "openshift-ansible", "openshift-clients", "jq"]
 
 POD_UPLOADPATH = "/tmp/"
+
+# Upgrade related constants, keeping some space between, so we can add
+# additional order.
+ORDER_BEFORE_UPGRADE = 1
+ORDER_UPGRADE = 10
+ORDER_AFTER_UPGRADE = 20

@@ -53,6 +53,24 @@ class CatalogSource(OCP):
             return None
         return data['spec']['image'].split(":")[1]
 
+    def get_image_url(self):
+        """
+        Fetch image url from catalog source resource
+
+        Returns:
+            image url (str): URL of image
+
+        """
+        self.check_name_is_specified()
+        try:
+            data = self.get()
+        except CommandFailed:
+            logger.warning(
+                f"Cannot find CatalogSource object {self.resource_name}"
+            )
+            return None
+        return data['spec']['image'].split(":")[0]
+
     def check_state(self, state):
         """
         Check state of catalog source

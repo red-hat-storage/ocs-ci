@@ -182,11 +182,13 @@ class Deployment(object):
 
         """
         image = config.DEPLOYMENT.get('ocs_registry_image', '')
+        upgrade = config.DEPLOYMENT.get('upgrade', False)
         image_and_tag = image.split(':')
         image = image_and_tag[0]
         image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
         if not image_tag and config.REPORTING.get("us_ds") == 'DS':
-            image_tag = get_latest_ds_olm_tag()
+            image_tag = get_latest_ds_olm_tag(upgrade)
+        ocs_operator_olm = config.DEPLOYMENT['ocs_operator_olm']
         olm_data_generator = templating.load_yaml(
             constants.OLM_YAML, multi_document=True
         )
