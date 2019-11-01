@@ -2,7 +2,6 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import deployment, destroy
-from ocs_ci.ocs import defaults
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility.utils import is_cluster_running, ceph_health_check
 
