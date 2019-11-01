@@ -14,12 +14,11 @@ from botocore.exceptions import ClientError
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
-from ocs_ci.ocs import defaults, constants
+from ocs_ci.ocs import constants
 from ocs_ci.ocs import exceptions
+from ocs_ci.ocs.exceptions import SameNamePrefixClusterAlreadyExistsException
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.utility.aws import AWS as AWSUtil
-from ocs_ci.ocs.exceptions import SameNamePrefixClusterAlreadyExistsException
-
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd, clone_repo
 from .deployment import Deployment
@@ -246,11 +245,6 @@ class AWSIPI(AWSBase):
         super(AWSIPI, self).deploy_ocp(log_cli_level)
         if config.DEPLOYMENT.get('host_network'):
             self.host_network_update()
-        if not self.ocs_operator_deployment:
-            volume_size = int(
-                config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
-            )
-            self.add_volume(volume_size)
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -401,11 +395,6 @@ class AWSUPI(AWSBase):
         super(AWSUPI, self).deploy_ocp(log_cli_level)
         if config.DEPLOYMENT.get('host_network'):
             self.host_network_update()
-        if not self.ocs_operator_deployment:
-            volume_size = int(
-                config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
-            )
-            self.add_volume(volume_size)
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
