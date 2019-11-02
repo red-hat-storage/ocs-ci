@@ -63,7 +63,7 @@ def test_upgrade():
         namespace=namespace
     )
     log.info(
-        f"Wating for CSV {csv_name_after_upgrade} to be in succeeded state"
+        f"Waiting for CSV {csv_name_after_upgrade} to be in succeeded state"
     )
     csv.wait_for_phase("Succeeded", timeout=400)
     ocs_install_verification()

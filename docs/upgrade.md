@@ -3,14 +3,14 @@
 Currently the upgrade can be performed just between follow up downstream builds
 e.g. 171 -> 172.
 There is opened [BZ](https://bugzilla.redhat.com/show_bug.cgi?id=1767400) which
-tracking the issue which prevents us to upgrade to the latest available build.
+is tracking the issue which prevents us to upgrade to the latest available build.
 
 There is prepared config option `upgrade_to_latest` in the DEPLOYMENT section
 which can be set or will be the default value when the BZ gets resolved.
 
 ## Deployment
 
-To be able upgrade your cluster you cannot deploy the latest downstream
+To be able to upgrade your cluster you cannot deploy the latest downstream
 build, because then you won't have any next build available for upgrade.
 
 For this purpose we have this config file: [upgrade.yaml](/conf/ocsci/upgrade.yaml)
@@ -26,7 +26,7 @@ For upgrade we have few pytest marks defined [here](/ocs_ci/framework/pytest_cus
 * **after_upgrade** - mark tests which are suppose to run after upgrade
 
 Those marks has to be imported from mentioned
-[modul](/ocs_ci/framework/pytest_customization/marks.py) and your test have to
+[module](/ocs_ci/framework/pytest_customization/marks.py) and your test have to
 be decorated by those marks as we combine those mark decorators with order
 decorator used by `pytest-ordering` plugin to properly order the tests.
 
@@ -36,11 +36,18 @@ To execute the upgrade you can use this command:
 run-ci tests/
     --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir \
-    -m 'before_upgrade or upgrade or after_upgrade'
+    -m upgrade
  ```
 
-Of course if you would like to run just the upgrade and not any other tests
-before and after upgrade you can use just `-m upgrade`
+If you would like to trigger also pre/post upgrade tests run with following
+markers:
+
+```bash
+run-ci tests/
+    --cluster-name kerberos_ID-ocs-deployment \
+    --cluster-path /home/my_user/my-ocs-dir \
+    -m 'before_upgrade or upgrade or after_upgrade'
+ ```
 
 ## TODO
 

@@ -388,6 +388,6 @@ POD_UPLOADPATH = "/tmp/"
 
 # Upgrade related constants, keeping some space between, so we can add
 # additional order.
-ORDER_BEFORE_UPGRADE = 1
-ORDER_UPGRADE = 10
-ORDER_AFTER_UPGRADE = 20
+ORDER_BEFORE_UPGRADE = 10
+ORDER_UPGRADE = 20
+ORDER_AFTER_UPGRADE = 30
