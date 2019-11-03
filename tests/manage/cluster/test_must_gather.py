@@ -6,7 +6,7 @@ import pytest
 from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla
 from ocs_ci.ocs import openshift_ops, ocp
 from ocs_ci.ocs.utils import collect_ocs_logs
-from ocs_ci.utility.utils import ocsci_log_path, TimeoutSampler
+from ocs_ci.utility.utils import ocsci_log_path
 
 logger = logging.getLogger(__name__)
 
