@@ -6,7 +6,7 @@ import pytest
 from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla
 from ocs_ci.ocs import openshift_ops, ocp
 from ocs_ci.ocs.utils import collect_ocs_logs
-from ocs_ci.utility.utils import ocsci_log_path
+from ocs_ci.utility.utils import ocsci_log_path, TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -28,15 +28,32 @@ class TestMustGather(ManageTest):
     @pytest.fixture(autouse=True)
     def teardown(self, request):
 
+        def check_for_must_gather_pod():
+            must_gather_pods = self.ocs.get_pods(label_selector='app=must-gather')
+            if must_gather_pods:
+                logger.info(f"must_gather pods: {must_gather_pods}")
+                logger.info("pod still exist")
+                return True
+            else:
+                return False
+
         def finalizer():
             must_gather_pods = self.ocs.get_pods(label_selector='app=must-gather')
             logger.info(f"must_gather_pods: {must_gather_pods} ")
-
-            while must_gather_pods:
+            sample = TimeoutSampler(
+                timeout=30, sleep=3, func=check_for_must_gather_pod,
+            )
+            if sample.wait_for_func_status(result=True):
                 for must_gather_pod in must_gather_pods:
                     self.ocp_obj.wait_for_delete(resource_name=must_gather_pod)
-                    logger.info(f"deleted pods: {must_gather_pod}")
-                    must_gather_pods = self.ocs.get_pods(label_selector='app=must-gather')
+                    logger.info(f"deleted pods: {must_gather_pods}")
+
+
+            # while must_gather_pods:
+            #     for must_gather_pod in must_gather_pods:
+            #         self.ocp_obj.wait_for_delete(resource_name=must_gather_pod)
+            #         logger.info(f"deleted pods: {must_gather_pod}")
+            #         must_gather_pods = self.ocs.get_pods(label_selector='app=must-gather')
 
         request.addfinalizer(finalizer)
 
