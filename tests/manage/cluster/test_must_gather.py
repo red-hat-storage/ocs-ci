@@ -85,7 +85,6 @@ class TestMustGather(ManageTest):
         """
         index = 1
         directory = ocsci_log_path()
-        logger.info(f"DIRECTORY: {directory}")
         while os.path.isdir(directory + "_ocs_logs"):
             index += 1
             directory = ocsci_log_path() + f"_{index}"
