@@ -48,13 +48,6 @@ class TestMustGather(ManageTest):
                     self.ocp_obj.wait_for_delete(resource_name=must_gather_pod)
                     logger.info(f"deleted pods: {must_gather_pods}")
 
-
-            # while must_gather_pods:
-            #     for must_gather_pod in must_gather_pods:
-            #         self.ocp_obj.wait_for_delete(resource_name=must_gather_pod)
-            #         logger.info(f"deleted pods: {must_gather_pod}")
-            #         must_gather_pods = self.ocs.get_pods(label_selector='app=must-gather')
-
         request.addfinalizer(finalizer)
 
     def test_must_gather(self):
