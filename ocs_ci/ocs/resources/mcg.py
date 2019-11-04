@@ -38,14 +38,24 @@ class MCG(object):
         self.namespace = config.ENV_DATA['cluster_namespace']
         ocp_obj = OCP(kind='noobaa', namespace=self.namespace)
         results = ocp_obj.get()
-        self.s3_endpoint = (
-            results.get('items')[0].get('status').get('services')
-            .get('serviceS3').get('externalDNS')[0]
-        )
-        self.mgmt_endpoint = (
-            results.get('items')[0].get('status').get('services')
-            .get('serviceMgmt').get('externalDNS')[0]
-        ) + '/rpc'
+        try:
+            self.s3_endpoint = (
+                results.get('items')[0].get('status').get('services')
+                .get('serviceS3').get('externalDNS')[1]
+            )
+            self.mgmt_endpoint = (
+                results.get('items')[0].get('status').get('services')
+                .get('serviceMgmt').get('externalDNS')[1]
+            ) + '/rpc'
+        except IndexError:
+            self.s3_endpoint = (
+                results.get('items')[0].get('status').get('services')
+                .get('serviceS3').get('externalDNS')[0]
+            )
+            self.mgmt_endpoint = (
+                results.get('items')[0].get('status').get('services')
+                .get('serviceMgmt').get('externalDNS')[0]
+            ) + '/rpc'
         self.region = self.s3_endpoint.split('.')[1]
         creds_secret_name = (
             results.get('items')[0].get('status').get('accounts')
@@ -484,16 +494,16 @@ class MCG(object):
 
         # Pause
         try:
-            for desired_state in TimeoutSampler(120, 5, _check_state):
-                if desired_state:
+            for reached_state in TimeoutSampler(120, 5, _check_state):
+                if reached_state:
                     logger.info(
                         f'BackingStore {backingstore_name} reached state {desired_state}.'
                     )
+                    return True
                 else:
                     logger.info(
                         'BackingStore did not reach desired state yet.\nRetrying...'
                     )
-                return desired_state
         except TimeoutExpiredError:
             logger.error(
                 'The mirroring process did not complete in the given time frame.'
