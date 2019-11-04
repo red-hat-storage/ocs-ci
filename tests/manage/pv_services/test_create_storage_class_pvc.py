@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.framework.testlib import tier1, acceptance, ManageTest
 from tests import helpers
 
 log = logging.getLogger(__name__)
@@ -86,6 +86,7 @@ def teardown_fs():
     CEPHFS_SC_OBJ.delete()
 
 
+@acceptance
 @tier1
 class TestOSCBasics(ManageTest):
     @pytest.mark.polarion_id("OCS-336")

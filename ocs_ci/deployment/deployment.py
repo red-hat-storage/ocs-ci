@@ -9,31 +9,29 @@ from copy import deepcopy
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
-from ocs_ci.utility import templating
-from ocs_ci.utility.utils import (
-    run_cmd, ceph_health_check, is_cluster_running, get_latest_ds_olm_tag
-)
+from ocs_ci.ocs import constants, ocp, defaults, registry
+from ocs_ci.ocs.cluster import validate_cluster_on_pvc
 from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
-from ocs_ci.ocs import constants, ocp, defaults
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
-from ocs_ci.ocs.resources.csv import CSV
-from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.packagemanifest import PackageManifest
-from tests import helpers
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods
 )
-from ocs_ci.ocs.utils import (
-    create_oc_resource, apply_oc_resource, setup_ceph_toolbox, collect_ocs_logs
-)
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.resources.csv import CSV
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state
 )
-from ocs_ci.ocs.cluster import validate_cluster_on_pvc
-
+from ocs_ci.ocs.utils import (
+    setup_ceph_toolbox, collect_ocs_logs
+)
+from ocs_ci.utility import templating
+from ocs_ci.utility.utils import (
+    run_cmd, ceph_health_check, is_cluster_running, get_latest_ds_olm_tag
+)
+from tests import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +44,6 @@ class Deployment(object):
         self.platform = config.ENV_DATA['platform']
         self.ocp_deployment_type = config.ENV_DATA['deployment_type']
         self.cluster_path = config.ENV_DATA['cluster_path']
-        self.ocs_operator_deployment = config.DEPLOYMENT.get(
-            'ocs_operator_deployment', True
-        )
         self.namespace = config.ENV_DATA["cluster_namespace"]
 
     class OCPDeployment(BaseOCPDeployment):
@@ -160,7 +155,8 @@ class Deployment(object):
             )
             _ocp.exec_oc_cmd(command=taint_cmd)
 
-    def get_olm_and_subscription_manifest(self):
+    @staticmethod
+    def get_olm_and_subscription_manifest():
         """
         This method prepare manifest for deploy OCS operator and subscription.
 
@@ -168,7 +164,7 @@ class Deployment(object):
             tuple: Path to olm deploy and subscription manifest
 
         """
-        image = config.DEPLOYMENT.get('ocs_operator_image', '')
+        image = config.DEPLOYMENT.get('ocs_registry_image', '')
         image_and_tag = image.split(':')
         image = image_and_tag[0]
         image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
@@ -266,7 +262,9 @@ class Deployment(object):
             deviceset_data["resources"] = deepcopy(none_resources)
             cluster_data['spec']['resources'] = {
                 resource: deepcopy(none_resources) for resource
-                in ['mon', 'mds', 'rgw', 'mgr', 'noobaa']
+                in [
+                    'mon', 'mds', 'rgw', 'mgr', 'noobaa-core', 'noobaa-db',
+                ]
             }
 
         if self.platform.lower() == constants.VSPHERE_PLATFORM:
@@ -276,6 +274,11 @@ class Deployment(object):
             deviceset_data['dataPVCTemplate']['spec'][
                 'storageClassName'
             ] = constants.DEFAULT_SC_VSPHERE
+
+        # Enable host network if enabled in config (this require all the
+        # rules to be enabled on underlaying platform).
+        if config.DEPLOYMENT.get('host_network'):
+            cluster_data['spec']['hostNetwork'] = True
 
         cluster_data['spec']['storageDeviceSets'] = [deviceset_data]
         cluster_data_yaml = tempfile.NamedTemporaryFile(
@@ -291,8 +294,6 @@ class Deployment(object):
         Handle OCS deployment, since OCS deployment steps are common to any
         platform, implementing OCS deployment here in base class.
         """
-        _templating = templating.Templating()
-
         ceph_cluster = ocp.OCP(
             kind='CephCluster', namespace=self.namespace
         )
@@ -303,64 +304,7 @@ class Deployment(object):
         except (IndexError, CommandFailed):
             logger.info("Running OCS basic installation")
 
-        if not self.ocs_operator_deployment:
-            create_oc_resource(
-                'common.yaml', self.cluster_path, _templating, config.ENV_DATA
-            )
-            run_cmd(
-                f'oc label namespace {config.ENV_DATA["cluster_namespace"]} '
-                f'"openshift.io/cluster-monitoring=true"'
-            )
-            run_cmd(
-                f"oc policy add-role-to-user view "
-                f"system:serviceaccount:openshift-monitoring:prometheus-k8s "
-                f"-n {self.namespace}"
-            )
-            # HACK: If you would like to drop this hack, make sure that you
-            # also updated docs and write appropriate unit/integration tests
-            # for config processing.
-            if config.ENV_DATA.get('monitoring_enabled') in (
-                "true", "True", True
-            ):
-                # RBAC rules for monitoring, based on documentation change in
-                # rook:
-                # https://github.com/rook/rook/commit/1b6fe840f6ae7372a9675ba727ecc65326708aa8
-                # HACK: This should be dropped when OCS is managed by OLM
-                apply_oc_resource(
-                    'rbac.yaml',
-                    self.cluster_path,
-                    _templating,
-                    config.ENV_DATA,
-                    template_dir="monitoring"
-                )
-            # Increased to 15 seconds as 10 is not enough
-            # TODO: do the sampler function and check if resource exist
-            wait_time = 15
-            logger.info(f"Waiting {wait_time} seconds...")
-            time.sleep(wait_time)
-            create_oc_resource(
-                'operator-openshift.yaml', self.cluster_path,
-                _templating, config.ENV_DATA
-            )
-            logger.info(f"Waiting {wait_time} seconds...")
-            time.sleep(wait_time)
-            run_cmd(
-                f"oc wait --for condition=ready pod "
-                f"-l app=rook-ceph-operator "
-                f"-n {self.namespace} "
-                f"--timeout=120s"
-            )
-            run_cmd(
-                f"oc wait --for condition=ready pod "
-                f"-l app=rook-discover "
-                f"-n {self.namespace} "
-                f"--timeout=120s"
-            )
-            create_oc_resource(
-                'cluster.yaml', self.cluster_path, _templating, config.ENV_DATA
-            )
-        else:
-            self.deploy_ocs_via_operator()
+        self.deploy_ocs_via_operator()
 
         pod = ocp.OCP(
             kind=constants.POD, namespace=self.namespace
@@ -382,10 +326,9 @@ class Deployment(object):
             condition='Running', selector='app=rook-ceph-osd',
             resource_count=3, timeout=600
         )
-        # Validation for cluster on pvc
-        logger.info("Validate mon and OSD are backed by PVCs")
-        validate_cluster_on_pvc(label=constants.MON_APP_LABEL)
-        validate_cluster_on_pvc(label=constants.DEFAULT_DEVICESET_LABEL)
+
+        # validate ceph mon/osd volumes are backed by pvc
+        validate_cluster_on_pvc()
 
         # Creating toolbox pod
         setup_ceph_toolbox()
@@ -394,43 +337,6 @@ class Deployment(object):
             condition=constants.STATUS_RUNNING,
             selector='app=rook-ceph-tools', resource_count=1, timeout=600
         )
-
-        if not self.ocs_operator_deployment:
-            logger.info(f"Waiting {wait_time} seconds...")
-            time.sleep(wait_time)
-            # HACK: This should be dropped (including service-monitor.yaml and
-            # prometheus-rules.yaml files) when OCS is managed by OLM
-            if config.ENV_DATA.get('monitoring_enabled') not in (
-                "true", "True", True
-            ):
-                # HACK: skip creation of rook-ceph-mgr service monitor when
-                # monitoring is enabled (if this were not skipped, the step
-                # would fail because rook would create the service monitor at
-                # this point already)
-                create_oc_resource(
-                    "service-monitor.yaml", self.cluster_path, _templating,
-                    config.ENV_DATA
-                )
-                # HACK: skip creation of prometheus-rules, rook-ceph is
-                # concerned with it's setup now, based on clarification from
-                # Umanga Chapagain
-                create_oc_resource(
-                    "prometheus-rules.yaml", self.cluster_path, _templating,
-                    config.ENV_DATA
-                )
-            logger.info(f"Waiting {wait_time} seconds...")
-            time.sleep(wait_time)
-
-            # Create MDS pods for CephFileSystem
-            fs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
-            fs_data['metadata']['namespace'] = self.namespace
-
-            ceph_obj = OCS(**fs_data)
-            ceph_obj.create()
-            assert pod.wait_for_resource(
-                condition=constants.STATUS_RUNNING, selector='app=rook-ceph-mds',
-                resource_count=2, timeout=600
-            )
 
         # Check for CephFilesystem creation in ocp
         cfs_data = cfs.get()
@@ -478,6 +384,9 @@ class Deployment(object):
 
             # Validate the pvc are mounted on pods
             validate_pvc_are_mounted_on_monitoring_pods(pods_list)
+
+        # Change registry backend to OCS CEPHFS RWX PVC
+        registry.change_registry_backend_to_ocs()
 
         # Verify health of ceph cluster
         # TODO: move destroy cluster logic to new CLI usage pattern?

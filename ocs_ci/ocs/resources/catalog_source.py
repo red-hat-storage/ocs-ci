@@ -18,17 +18,40 @@ class CatalogSource(OCP):
     methods we need to do with it.
     """
 
-    def __init__(self, resource_name="", *args, **kwargs):
+    def __init__(
+        self, resource_name="", namespace=None, *args, **kwargs
+    ):
         """
         Initializer function for CatalogSource class
 
         Args:
             resource_name (str): Name of catalog source
+            namespace (str): Namespace to which this catalogsource belongs
 
         """
         super(CatalogSource, self).__init__(
-            resource_name=resource_name, kind='CatalogSource', *args, **kwargs
+            resource_name=resource_name, namespace=namespace,
+            kind='CatalogSource', *args, **kwargs,
         )
+
+    def get_image_name(self):
+        """
+        Fetch image name from catalog source resource
+
+        Returns:
+            image info (str): especially version info extracted from image
+                name
+
+        """
+        self.check_name_is_specified()
+        try:
+            data = self.get()
+        except CommandFailed:
+            logger.warning(
+                f"Cannot find CatalogSource object {self.resource_name}"
+            )
+            return None
+        return data['spec']['image'].split(":")[1]
 
     def check_state(self, state):
         """

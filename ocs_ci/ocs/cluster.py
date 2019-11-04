@@ -9,6 +9,7 @@ functional and proper configurations are made for interaction.
 import logging
 import base64
 import random
+import yaml
 import re
 
 import ocs_ci.ocs.resources.pod as pod
@@ -16,9 +17,10 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import ocs
 import ocs_ci.ocs.constants as constant
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, run_cmd
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
-from ocs_ci.ocs import ocp, constants, defaults, exceptions
+from ocs_ci.ocs import ocp, constants, exceptions
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 
 logger = logging.getLogger(__name__)
@@ -426,97 +428,43 @@ class CephCluster(object):
         )
 
 
-def validate_cluster_on_pvc(label):
+def validate_cluster_on_pvc():
     """
     Validate creation of PVCs for MON and OSD pods.
     Also validate that those PVCs are attached to the OCS pods
-
-    Args:
-        label(string): Label for MON or OSD PVCs
 
     Raises:
          AssertionError: If PVC is not mounted on one or more OCS pods
 
     """
     # Get the PVCs for selected label (MON/OSD)
-    ocs_pvc_obj = get_all_pvc_objs(
-        namespace=defaults.ROOK_CLUSTER_NAMESPACE, selector=label
-    )
+    ns = config.ENV_DATA['cluster_namespace']
+    ocs_pvc_obj = get_all_pvc_objs(namespace=ns)
 
     # Check all pvc's are in bound state
+
+    pvc_names = []
     for pvc_obj in ocs_pvc_obj:
-        assert pvc_obj.status == constants.STATUS_BOUND, (
-            f"PVC {pvc_obj.name} is not Bound"
-        )
-        logger.info(f"PVC {pvc_obj.name} is in Bound state")
-
-    # Get OCS pod names based on selected label
-    if label == constants.MON_APP_LABEL:
-        ocs_pod_obj = pod.get_mon_pods(
-            mon_label=label, namespace=defaults.ROOK_CLUSTER_NAMESPACE
-        )
-    if label == constants.DEFAULT_DEVICESET_LABEL:
-        ocs_pod_obj = pod.get_osd_pods(
-            osd_label=constants.OSD_APP_LABEL,
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE
-        )
-
-    # Create a pvc list for requested label
-    pvc_list = []
-    for pvc_obj in ocs_pvc_obj:
-        pvc_list.append(pvc_obj.name)
-
-    # Check if PVC is mounted on designated OCS pod
-    # loop over all PVCs in the pvc_list
-    # Each mon and osd pod is expected to have only one Claim attached
-    claim_found = True
-    all_backed_by_pvc = True
-    for pod_obj in ocs_pod_obj:
-        pod_volumes = pod_obj.get().get('spec').get('volumes')
-        claim_spec_exists = False
-        for volumes in pod_volumes:
-            pvc = volumes.get('persistentVolumeClaim')
-            if pvc:
-                claim_name = pvc.get('claimName')
-                claim_spec_exists = True
-                backed_by_pvc = False
-                if claim_name in pvc_list:
-                    logger.info(
-                        f"OCS pod {pod_obj.name} is backed by PVC {claim_name}"
-                    )
-                    # If backed by PVC, set backed_by_pvc = True
-                    backed_by_pvc = True
-
-                    # Check if Mon PVC is mounted as /var/lib/ceph/mon/ceph-x
-                    if label == constants.MON_APP_LABEL:
-                        mount_point = pod_obj.exec_cmd_on_pod(command="df -kh")
-                        assert "/var/lib/ceph/mon/ceph" in mount_point, (
-                            f"pvc is not mounted on pod {pod_obj.name}"
-                        )
-                        logger.info(
-                            f"PVC {claim_name} is mounted"
-                            f" on pod {pod_obj.name}"
-                        )
-        if not backed_by_pvc:
-            logger.error(f"{pod_obj.name} is not backed by designated PVC ")
-            all_backed_by_pvc = False
-
-        # If no PVC is mounted, print error and continue checking other pods
-        if not claim_spec_exists:
-            logger.error(
-                f"No PersistentVolumeClaim spec found in "
-                f"OCS pod {pod_obj.name}"
+        if (pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME)
+                or pvc_obj.name.startswith(constants.DEFAULT_MON_PVC_NAME)):
+            assert pvc_obj.status == constants.STATUS_BOUND, (
+                f"PVC {pvc_obj.name} is not Bound"
             )
-            claim_found = False
+            logger.info(f"PVC {pvc_obj.name} is in Bound state")
+            pvc_names.append(pvc_obj.name)
 
-    # Even if one OCS POD is not backed by a PVC, fail the deployment
-    assert all_backed_by_pvc, (
-        "One or more pods are not backed by a PVC "
-        "please check deployment logs"
+    mon_pods = get_pod_name_by_pattern('rook-ceph-mon', ns)
+    osd_pods = get_pod_name_by_pattern('rook-ceph-osd', ns, filter='prepare')
+    assert len(mon_pods) + len(osd_pods) == len(pvc_names), (
+        "Not enough PVC's available for all Ceph Pods"
     )
-
-    # Even if one OCS POD as PVC spec, fail the deployment
-    assert claim_found, (
-        "Claim name doesn't exists in spec of one or more pods "
-        "please check deployment logs"
-    )
+    for ceph_pod in mon_pods + osd_pods:
+        out = run_cmd(f'oc -n {ns} get pods {ceph_pod} -o yaml')
+        out_yaml = yaml.safe_load(out)
+        for vol in out_yaml['spec']['volumes']:
+            if vol.get('persistentVolumeClaim'):
+                claimName = vol.get('persistentVolumeClaim').get('claimName')
+                logger.info(f"{ceph_pod} backed by pvc {claimName}")
+                assert claimName in pvc_names, (
+                    "Ceph Internal Volume not backed by PVC"
+                )

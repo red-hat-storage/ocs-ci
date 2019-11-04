@@ -684,6 +684,12 @@ def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
     return osd_pods
 
 
+def get_pod_count(label, namespace=None):
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    pods = get_pods_having_label(label=label, namespace=namespace)
+    return len(pods)
+
+
 def get_cephfsplugin_provisioner_pods(
     cephfsplugin_provisioner_label=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
     namespace=None

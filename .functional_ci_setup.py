@@ -101,30 +101,15 @@ def get_ocsci_conf():
     )
     if env.get("DOWNSTREAM") == "true":
         conf_obj['REPORTING']['us_ds'] = 'DS'
-    if env.get("OCS_OPERATOR_DEPLOYMENT") == "true":
-        conf_obj['DEPLOYMENT'] = dict(
-            ocs_operator_image=env['OCS_REGISTRY_IMAGE'],
-            ocs_operator_deployment=True,
-            ocs_operator_storage_cluster_cr="http://pkgs.devel.redhat.com/cgit/containers/ocs-registry/plain/ocs_v1_storagecluster_cr.yaml?h=ocs-4.2-rhel-8",
-            ocs_operator_olm="http://pkgs.devel.redhat.com/cgit/containers/ocs-registry/plain/deploy-with-olm.yaml?h=ocs-4.2-rhel-8",
-        )
-    else:
-        conf_obj['DEPLOYMENT'] = dict(ocs_operator_deployment=False)
-    # Apply image configuration if present
-    image_types = [
-        'rook',
-        'ceph',
-        'ceph_csi',
-        'rook_csi_registrar',
-        'rook_csi_provisioner',
-        'rook_csi_snapshotter',
-        'rook_csi_attacher',
-    ]
-    for image_type in image_types:
-        image_key = f"{image_type}_image"
-        image_value = env.get(image_key.upper())
-        if image_value is not None:
-            conf_obj['ENV_DATA'][image_key] = image_value
+    if env.get("SMTP_SERVER"):
+        conf_obj['REPORTING']['email'] = dict(smtp_server=env['SMTP_SERVER'])
+    conf_obj['DEPLOYMENT'] = dict(
+        ocs_registry_image=env['OCS_REGISTRY_IMAGE'],
+        ocs_operator_storage_cluster_cr="http://pkgs.devel.redhat.com/cgit/containers/ocs-registry/plain/"
+                                        "ocs_v1_storagecluster_cr.yaml?h=ocs-4.2-rhel-8",
+        ocs_operator_olm="http://pkgs.devel.redhat.com/cgit/containers/ocs-registry/"
+                         "plain/deploy-with-olm.yaml?h=ocs-4.2-rhel-8",
+    )
     return conf_obj
 
 

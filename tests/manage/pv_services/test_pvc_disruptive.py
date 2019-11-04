@@ -145,6 +145,30 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'run_io', 'cephfsplugin_provisioner'],
             marks=pytest.mark.polarion_id("OCS-949")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'create_pvc', 'operator'],
+            marks=pytest.mark.polarion_id("OCS-927")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'create_pod', 'operator'],
+            marks=pytest.mark.polarion_id("OCS-925")
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM, 'run_io', 'operator'],
+            marks=pytest.mark.polarion_id("OCS-928")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'create_pvc', 'operator'],
+            marks=pytest.mark.polarion_id("OCS-937")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'create_pod', 'operator'],
+            marks=pytest.mark.polarion_id("OCS-936")
+        ),
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL, 'run_io', 'operator'],
+            marks=pytest.mark.polarion_id("OCS-938")
         )
     ]
 )
@@ -204,12 +228,23 @@ class TestPVCDisruption(ManageTest):
 
         # Create one pod using each RWO PVC and two pods using each RWX PVC
         for pvc_obj in pvc_objs:
+            pvc_info = pvc_obj.get()
+            if pvc_info['spec']['volumeMode'] == 'Block':
+                pod_dict = constants.CSI_RBD_RAW_BLOCK_POD_YAML
+                raw_block_pv = True
+            else:
+                raw_block_pv = False
+                pod_dict = ''
             if pvc_obj.access_mode == constants.ACCESS_MODE_RWX:
                 pod_obj = pod_factory(
-                    interface=interface, pvc=pvc_obj, status=""
+                    interface=interface, pvc=pvc_obj, status="",
+                    pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
                 )
                 pod_objs.append(pod_obj)
-            pod_obj = pod_factory(interface=interface, pvc=pvc_obj, status="")
+            pod_obj = pod_factory(
+                interface=interface, pvc=pvc_obj, status="",
+                pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
+            )
             pod_objs.append(pod_obj)
 
         return pod_objs
@@ -233,13 +268,14 @@ class TestPVCDisruption(ManageTest):
             ),
             'rbdplugin_provisioner': partial(
                 pod.get_rbdfsplugin_provisioner_pods
-            )
+            ),
+            'operator': partial(pod.get_operator_pods)
         }
 
         # Get number of pods of type 'resource_to_delete'
         num_of_resource_to_delete = len(pod_functions[resource_to_delete]())
 
-        num_of_pvc = 6
+        num_of_pvc = 12
         namespace = self.proj_obj.namespace
 
         # Fetch the number of Pods and PVCs
@@ -255,6 +291,16 @@ class TestPVCDisruption(ManageTest):
         access_modes = [constants.ACCESS_MODE_RWO]
         if interface == constants.CEPHFILESYSTEM:
             access_modes.append(constants.ACCESS_MODE_RWX)
+
+        # Modify access_modes list to create rbd `block` type volume with
+        # RWX access mode. RWX is not supported in non-block type rbd
+        if interface == constants.CEPHBLOCKPOOL:
+            access_modes.extend(
+                [
+                    f'{constants.ACCESS_MODE_RWO}-Block',
+                    f'{constants.ACCESS_MODE_RWX}-Block'
+                ]
+            )
 
         # Start creation of PVCs
         bulk_pvc_create = executor.submit(
@@ -316,7 +362,12 @@ class TestPVCDisruption(ManageTest):
         # Do setup on pods for running IO
         logger.info("Setting up pods for running IO.")
         for pod_obj in pod_objs:
-            executor.submit(pod_obj.workload_setup, storage_type='fs')
+            pvc_info = pod_obj.pvc.get()
+            if pvc_info['spec']['volumeMode'] == 'Block':
+                storage_type = 'block'
+            else:
+                storage_type = 'fs'
+            executor.submit(pod_obj.workload_setup, storage_type=storage_type)
 
         # Wait for setup on pods to complete
         for pod_obj in pod_objs:
@@ -333,8 +384,13 @@ class TestPVCDisruption(ManageTest):
 
         # Start IO on each pod
         for pod_obj in pod_objs:
+            pvc_info = pod_obj.pvc.get()
+            if pvc_info['spec']['volumeMode'] == 'Block':
+                storage_type = 'block'
+            else:
+                storage_type = 'fs'
             pod_obj.run_io(
-                storage_type='fs', size='1G', runtime=10,
+                storage_type=storage_type, size='1G', runtime=10,
                 fio_filename=f'{pod_obj.name}_io_file1'
             )
         logger.info("FIO started on all pods.")
@@ -373,8 +429,13 @@ class TestPVCDisruption(ManageTest):
 
         # Run IO on each of the new pods
         for pod_obj in pod_objs:
+            pvc_info = pod_obj.pvc.get()
+            if pvc_info['spec']['volumeMode'] == 'Block':
+                storage_type = 'block'
+            else:
+                storage_type = 'fs'
             pod_obj.run_io(
-                storage_type='fs', size='1G', runtime=10,
+                storage_type=storage_type, size='1G', runtime=10,
                 fio_filename=f'{pod_obj.name}_io_file2'
             )
 

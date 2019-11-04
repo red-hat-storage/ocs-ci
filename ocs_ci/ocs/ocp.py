@@ -1,13 +1,15 @@
 """
 General OCP object
 """
-import os
 import logging
+import os
+import re
+import shlex
+import tempfile
 import time
 import yaml
-import shlex
-import re
 
+from ocs_ci.ocs.constants import RSYNC_POD_YAML, STATUS_RUNNING
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceNameNotSpecifiedException,
@@ -15,6 +17,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
 from ocs_ci.ocs import defaults
 
 log = logging.getLogger(__name__)
@@ -105,6 +108,33 @@ class OCP(object):
         if out_yaml_format:
             return yaml.safe_load(out)
         return out
+
+    def exec_oc_debug_cmd(self, node, cmd_list):
+        """
+        Function to execute "oc debug" command on OCP node
+
+        Args:
+            node (str): Node name where the command to be executed
+            cmd_list (list): List of commands eg: ['cmd1', 'cmd2']
+
+        Returns:
+            out (str): Returns output of the executed command/commands
+
+        Raises:
+            CommandFailed: When failure in command execution
+        """
+        # Appending one empty value in list for string manipulation
+        cmd_list.append(' ')
+        err_msg = 'CMD FAILED'
+        cmd = f" || echo '{err_msg}';".join(cmd_list)
+        debug_cmd = f"debug nodes/{node} -- chroot /host /bin/bash -c \"{cmd}\""
+        out = str(self.exec_oc_cmd(
+            command=debug_cmd, out_yaml_format=False
+        ))
+        if err_msg in out:
+            raise CommandFailed
+        else:
+            return out
 
     def get(
         self, resource_name='', out_yaml_format=True, selector=None,
@@ -240,6 +270,27 @@ class OCP(object):
         """
         command = f"apply -f {yaml_file}"
         return self.exec_oc_cmd(command)
+
+    def patch(self, resource_name, params, type='json'):
+        """
+        Applies changes to resources
+
+        Args:
+            resource_name (str): Name of the resource
+            params (str): Changes to be added to the resource
+            type (str): Type of the operation
+
+        Returns:
+            bool: True in case if changes are applied. False otherwise
+
+        """
+        params = "\'" + f"{params}" + "\'"
+        command = f"patch {self.kind} {resource_name} -n {self.namespace} -p {params} --type {type}"
+        log.info(f"Command: {command}")
+        result = self.exec_oc_cmd(command)
+        if 'patched' in result:
+            return True
+        return False
 
     def add_label(self, resource_name, label):
         """
@@ -506,3 +557,41 @@ def switch_to_default_rook_cluster_project():
         bool: True on success, False otherwise
     """
     return switch_to_project(defaults.ROOK_CLUSTER_NAMESPACE)
+
+
+def rsync(src, dst, node, dst_node=True, extra_params=""):
+    """
+    This function will rsync source folder to destination path.
+    You can rsync local folder to the node or vice versa depends on
+    dst_node parameter. By default the rsync is from local to the node.
+
+    Args:
+        src (str): Source path of folder to rsync.
+        dst (str): Destination path where to rsync.
+        node (str): Node to/from copy.
+        dst_node (bool): True if the destination (dst) is the node, False
+            when dst is the local folder.
+        extra_params (str): "See: oc rsync --help for the extra params"
+
+    """
+    pod_name = f"rsync-{node.replace('.', '-')}"
+    pod_data = load_yaml(RSYNC_POD_YAML)
+    pod_data['metadata']['name'] = pod_name
+    pod_data['spec']['nodeName'] = node
+    pod = OCP(kind='pod')
+    src = src if dst_node else f"{pod_name}:/host{src}"
+    dst = f"{pod_name}:/host{dst}" if dst_node else dst
+    try:
+        with tempfile.NamedTemporaryFile() as rsync_pod_yaml:
+            dump_data_to_temp_yaml(pod_data, rsync_pod_yaml.name)
+            pod.create(yaml_file=rsync_pod_yaml.name)
+        pod.wait_for_resource(condition=STATUS_RUNNING, timeout=120)
+        rsync_cmd = f"rsync {extra_params} {src} {dst}"
+        out = pod.exec_oc_cmd(rsync_cmd)
+        log.info(f"Rsync out: {out}")
+    finally:
+        try:
+            pod.delete(resource_name=pod_name)
+        except CommandFailed:
+            log.warning(f"Pod {pod_name} wasn't successfully deleted!")
+            raise

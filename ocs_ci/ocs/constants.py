@@ -28,11 +28,14 @@ TEMPLATE_SMALLFILE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "smallfile")
 TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
 TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
+TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(
+    TEMPLATE_DIR, "openshift-infra/"
+)
 TEMPLATE_CONFIGURE_PVC_MONITORING_POD = os.path.join(
-    TEMPLATE_DIR, "openshift-infra/monitoring/"
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "monitoring/"
 )
 TEMPLATE_DEPLOYMENT_LOGGING = os.path.join(
-    TEMPLATE_DIR, "openshift-infra/logging-deployment"
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "logging-deployment"
 )
 TEMPLATE_DEPLOYMENT_EO = os.path.join(
     TEMPLATE_DEPLOYMENT_LOGGING, "elasticsearch_operator"
@@ -70,6 +73,10 @@ POD = "Pod"
 ROUTE = "Route"
 NODE = "Node"
 DEPLOYMENTCONFIG = "deploymentconfig"
+CONFIG = "Config"
+MACHINESETS = 'machinesets'
+STORAGECLUSTER = 'storagecluster'
+
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
 ROLE = 'Role'
@@ -81,6 +88,7 @@ OPERATOR_GROUP = "OperatorGroup"
 SERVICE_ACCOUNT = "Serviceaccount"
 SCC = "SecurityContextConstraints"
 PRIVILEGED = "privileged"
+CLUSTER_SERVICE_VERSION = 'csv'
 
 # Other
 SECRET = "Secret"
@@ -92,16 +100,25 @@ ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
 OPENSHIFT_LOGGING_NAMESPACE = "openshift-logging"
 OPENSHIFT_OPERATORS_REDHAT_NAMESPACE = "openshift-operators-redhat"
+OPENSHIFT_IMAGE_REGISTRY_NAMESPACE = "openshift-image-registry"
+OPENSHIFT_INGRESS_NAMESPACE = "openshift-ingress"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
 MOUNT_POINT = '/var/lib/www/html'
 OCP_QE_MISC_REPO = (
     "http://git.host.prod.eng.bos.redhat.com/git/openshift-misc.git"
 )
+
+OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
+
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
 DEFAULT_SECRET = 'rook-ceph-csi'
 DEFAULT_BLOCKPOOL = 'rbd'
+DEFAULT_SC_CEPHFS = "cephfs"
+DEFAULT_ROUTE_CRT = "router-certs-default"
+IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
+
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
 GB = 1024 ** 3
@@ -128,7 +145,12 @@ CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = "app=csi-cephfsplugin-provisioner"
 CSI_RBDPLUGIN_PROVISIONER_LABEL = "app=csi-rbdplugin-provisioner"
 CSI_CEPHFSPLUGIN_LABEL = "app=csi-cephfsplugin"
 CSI_RBDPLUGIN_LABEL = "app=csi-rbdplugin"
-DEFAULT_DEVICESET_LABEL = "ceph.rook.io/DeviceSet=example-deviceset"
+OCS_OPERATOR_LABEL = "name=ocs-operator"
+LOCAL_STORAGE_OPERATOR_LABEL = "name=local-storage-operator"
+NOOBAA_APP_LABEL = "app=noobaa"
+DEFAULT_DEVICESET_PVC_NAME = "example-deviceset"
+DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
+
 
 # YAML paths
 TOOL_POD_YAML = os.path.join(
@@ -290,6 +312,11 @@ FIO_IO_RW_PARAMS_YAML = os.path.join(
     TEMPLATE_FIO_DIR, "workload_io_rw.yaml"
 )
 
+# Openshift infra yamls:
+RSYNC_POD_YAML = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "rsync-pod.yaml"
+)
+
 # constants
 RBD_INTERFACE = 'rbd'
 CEPHFS_INTERFACE = 'cephfs'
@@ -344,6 +371,7 @@ INSTALLER_IGNITION = os.path.join(VSPHERE_DIR, "machine/ignition.tf")
 INSTALLER_ROUTE53 = os.path.join(VSPHERE_DIR, "route53/main.tf")
 INSTALLER_MACHINE_CONF = os.path.join(VSPHERE_DIR, "machine/main.tf")
 VSPHERE_CONFIG_PATH = os.path.join(TOP_DIR, "conf/ocsci/vsphere_upi_vars.yaml")
+VSPHERE_MAIN = os.path.join(VSPHERE_DIR, "main.tf")
 TERRAFORM_DATA_DIR = "terraform_data"
 TERRAFORM_VARS = "terraform.tfvars"
 VM_DISK_TYPE = "thin"

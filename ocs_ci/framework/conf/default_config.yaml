@@ -32,6 +32,9 @@ RUN:
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
 DEPLOYMENT:
+  # OCP url download template can be overwritten by parameter ocp_url_template.
+  # We are exposing version, file_name and os_type. Example below:
+  # ocp_url_template: "https://openshift-release-artifacts.svc.ci.openshift.org/{version}/{file_name}-{os_type}-{version}.tar.gz"
   # if the installer version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version. You can also use the
   # specific build version like: "4.2.0-0.nightly-2019-08-06-195545"
@@ -43,12 +46,11 @@ DEPLOYMENT:
   ocs_operator_storage_cluster_cr: "http://pkgs.devel.redhat.com/cgit/containers/ocs-registry/plain/ocs_v1_storagecluster_cr.yaml?h=ocs-4.2-rhel-8"
   ocs_operator_olm: "http://pkgs.devel.redhat.com/cgit/containers/ocs-registry/plain/deploy-with-olm.yaml?h=ocs-4.2-rhel-8"
   # you can overwrite the image for ocs operator catalog souce by following parameter:
-  # ocs_operator_image: "quay.io/rhceph-dev/ocs-registry:4.2-32.9b6c93e.master"
+  # ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:4.2-32.9b6c93e.master"
   ocs_operator_nodes_to_label: 3
   # This is described as a WA for minimal configuration 3/3 worker/master
   # nodes. See: https://github.com/openshift/ocs-operator
   ocs_operator_nodes_to_taint: 0
-  ocs_operator_deployment: True
   ssh_key: "~/.ssh/openshift-dev.pub"
   force_deploy_multiple_clusters: False
   allow_lower_instance_requirements: true
@@ -57,6 +59,7 @@ DEPLOYMENT:
 REPORTING:
   email:
     address: "ocs-ci@redhat.com"
+    smtp_server: "localhost"
   polarion:
     project_id: "OpenShiftContainerStorage"
   # Upstream: 'US' or Downstream: 'DS', used only for reporting (Test Run Name)
@@ -69,7 +72,7 @@ REPORTING:
 # --cluster-conf file.yaml data you will pass to the pytest.
 ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
-  storage_cluster_name: 'rook-ceph'
+  storage_cluster_name: 'ocs-storagecluster'
   storage_device_sets_name: "storageDeviceSets"
   cluster_namespace: 'openshift-storage'
   monitoring_enabled: true
@@ -84,21 +87,6 @@ ENV_DATA:
   worker_replicas: 3
   skip_ocp_deployment: false
   skip_ocs_deployment: false
-  # --------------------------------------------------------------------------
-  # Following parameters are not used when deploy via operator and will removed
-  # soon as part of cleanup: https://projects.engineering.redhat.com/browse/OCSQE-73
-  # Do not change to specific version like v14.2.1-20190430 if not needed
-  # cause we don't need to update it each time new 14.x version is released
-  # but only once when move to new version like v15.
-  ceph_image: 'quay.io/rhceph-dev/rhceph-4.0-rhel-8:latest'
-  rook_image: 'quay.io/rhceph-dev/rook:latest'
-  # DS CSI sidecars images mentioned in https://jira.coreos.com/browse/RHSTOR-150
-  rook_csi_registrar_image: 'quay.io/openshift/origin-csi-node-driver-registrar:4.2'
-  rook_csi_provisioner_image: 'quay.io/openshift/origin-csi-external-provisioner:4.2'
-  rook_csi_snapshotter_image: 'quay.io/openshift/origin-csi-external-snapshotter:4.2'
-  rook_csi_attacher_image: 'quay.io/openshift/origin-csi-external-attacher:4.2'
-  # End of the unused parameters for operator deployment
-  # --------------------------------------------------------------------------
   # uncomment to use custom directory for storing measurement data related to
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'

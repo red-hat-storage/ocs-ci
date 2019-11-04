@@ -22,7 +22,7 @@ setup(
         'paramiko==2.4.2',
         'pyyaml>=4.2b1',
         'jinja2==2.10.1',
-        'kubernetes==9.0.0',
+        'kubernetes',
         'openshift',
         'boto3',
         'munch',
@@ -38,6 +38,7 @@ setup(
         # https://github.com/eanxgeek/pytest_marker_bugzilla/issues/43
         'pytest_marker_bugzilla>=0.9.1.dev6',
         'pyvmomi',
+        'pyhcl',
     ],
     entry_points={
         'console_scripts': [
