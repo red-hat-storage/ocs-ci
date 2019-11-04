@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import shlex
+from time import sleep
 
 import boto3
 import requests
@@ -76,7 +77,18 @@ class MCG(object):
             }
         ).json().get('reply').get('token')
 
-        self.aws_access_key_id, self.aws_access_key = self.request_aws_credentials()
+        self.cred_req_obj = self.request_aws_credentials()
+
+        secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
+        cred_req_secret_dict = secret_ocp_obj.get(self.cred_req_obj.name)
+
+        self.aws_access_key_id = base64.b64decode(
+            cred_req_secret_dict.get('data').get('aws_access_key_id')
+        ).decode('utf-8')
+
+        self.aws_access_key = base64.b64decode(
+            cred_req_secret_dict.get('data').get('aws_secret_access_key')
+        ).decode('utf-8')
 
         self._ocp_resource = ocp_obj
 
@@ -118,6 +130,7 @@ class MCG(object):
 
         """
         obc_lst = run_mcg_cmd('obc list').split('\n')[1:-1]
+        # TODO assert the bucket passed the Pending state
         return [row.split()[1] for row in obc_lst]
 
     def s3_list_all_objects_in_bucket(self, bucketname):
@@ -294,19 +307,20 @@ class MCG(object):
         awscreds_data['spec']['secretRef']['namespace'] = self.namespace
         creds_request = create_resource(**awscreds_data)
 
-        def _retrieve_credreq_uid():
+        def _retrieve_credreq_provision_state():
             return run_cmd(
-                f"oc get credentialsrequests {creds_request.name} -o jsonpath={{.metadata.uid}}"
+                f"oc get credentialsrequests {creds_request.name} -o jsonpath={{.status.provisioned}}"
             )
 
         try:
-            for uid in TimeoutSampler(30, 5, _retrieve_credreq_uid):
-                if uid != "":
+            for provisioned_state in TimeoutSampler(30, 5, _retrieve_credreq_provision_state):
+                if provisioned_state == "true":
+                    sleep(10)
                     logger.info(f'Secret created successfully.')
                     break
                 else:
                     logger.info(
-                        f'Credentials were not yet created or could not be found. '
+                        f'Credentials were not yet provisioned or could not be found. '
                         f'Retrying...'
                     )
         except TimeoutExpiredError:
@@ -314,15 +328,7 @@ class MCG(object):
                 'Failed to create credentials'
             )
 
-        secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
-        return (
-            base64.b64decode(
-                secret_ocp_obj.get(creds_request.name).get('data').get('aws_access_key_id')
-            ).decode('utf-8'),
-            base64.b64decode(
-                secret_ocp_obj.get(creds_request.name).get('data').get('aws_secret_access_key')
-            ).decode('utf-8')
-        )
+        return creds_request
 
     def create_new_aws_connection(self, conn_name=None):
         if conn_name is None:
@@ -383,10 +389,111 @@ class MCG(object):
         bs_data['spec']['awsS3']['region'] = region
         return create_resource(**bs_data)
 
-    def oc_create_bucketclass(self, name):
+    def oc_create_bucketclass(self, name, backingstores, placement):
         bc_data = templating.load_yaml(constants.MCG_BUCKETCLASS_YAML)
         bc_data['metadata']['name'] = name
         tiers = bc_data['spec']['placementPolicy']['tiers'][0]
-        tiers['backingStores'] = ['delet-dis', 'noobaa-default-backing-store']
-        tiers['placement'] = 'spread'
+        tiers['backingStores'] = backingstores
+        tiers['placement'] = placement
         return create_resource(**bc_data)
+
+    def toggle_bucket_readwrite(self, bucketname, block=True):
+        if block:
+            bucket_policy = {
+                "Version": "2012-10-17",
+                "Id": "DenyReadWrite",
+                "Statement": [
+                    {
+                        "Effect": "Deny",
+                        "Principal": {
+                            "AWS": "*"
+                        },
+                        "Action": [
+                            "s3:GetObject",
+                            "s3:PutObject",
+                            "s3:ListBucket"
+                        ],
+                        "Resource": [
+                            f"arn:aws:s3:::{bucketname}/*",
+                            f"arn:aws:s3:::{bucketname}"
+                        ]
+                    }
+                ]
+            }
+            bucket_policy = json.dumps(bucket_policy)
+            self.aws_s3_resource.meta.client.put_bucket_policy(
+                Bucket=bucketname, Policy=bucket_policy
+            )
+        else:
+            self.aws_s3_resource.meta.client.delete_bucket_policy(
+                Bucket=bucketname
+            )
+
+    def check_if_mirroring_is_done(self, bucket_name):
+        def _check_mirroring():
+            results = []
+            obj_list = self.send_rpc_query('object_api', 'list_objects', params={
+                'bucket': bucket_name
+            }).json().get('reply').get('objects')
+
+            for written_object in obj_list:
+                object_chunks = self.send_rpc_query('object_api', 'read_object_mapping', params={
+                    'bucket': bucket_name,
+                    'key': written_object.get('key'),
+                    'obj_id': written_object.get('obj_id')
+                }).json().get('reply').get('chunks')
+
+                for object_chunk in object_chunks:
+                    mirror_blocks = object_chunk.get('frags')[0].get('blocks')
+                    mirror_nodes = [mirror_blocks[i].get('block_md').get('node') for i in range(len(mirror_blocks))]
+                    if 2 <= len(mirror_blocks) == len(set(mirror_nodes)):
+                        results.append(True)
+                    else:
+                        results.append(False)
+
+            return all(results)
+
+        # Pause
+        try:
+            for mirroring_is_complete in TimeoutSampler(120, 5, _check_mirroring):
+                if mirroring_is_complete:
+                    logger.info(
+                        'All objects mirrored successfully.'
+                    )
+                    return True
+                else:
+                    logger.info(
+                        'Mirroring process is not yet done, or has malfunctioned.\nRetrying...'
+                    )
+        except TimeoutExpiredError:
+            logger.error(
+                'The mirroring process did not complete in the given time frame.'
+            )
+            assert False
+
+    def check_backingstore_state(self, backingstore_name, desired_state):
+        def _check_state():
+            sysinfo = self.send_rpc_query('system_api', 'read_system', params={}).json()['reply']
+            for pool in sysinfo.get('pools'):
+                if pool.get('name') == backingstore_name:
+                    if pool.get('mode') == desired_state:
+                        return True
+            return False
+
+        # Pause
+        try:
+            for desired_state in TimeoutSampler(120, 5, _check_state):
+                if desired_state:
+                    logger.info(
+                        'All objects mirrored successfully.'
+                    )
+                else:
+                    logger.info(
+                        'Mirroring process is not yet done, or has malfunctioned.\nRetrying...'
+                    )
+                return desired_state
+        except TimeoutExpiredError:
+            logger.error(
+                'The mirroring process did not complete in the given time frame.'
+            )
+            assert False

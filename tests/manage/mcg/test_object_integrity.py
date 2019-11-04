@@ -18,6 +18,7 @@ class TestBucketIntegrity(ManageTest):
     """
     Test data integrity of a bucket
     """
+    @pytest.mark.filterwarnings('ignore::urllib3.exceptions.InsecureRequestWarning')
     @pytest.mark.polarion_id("OCS-1321")
     def test_check_object_integrity(self, mcg_obj, awscli_pod, bucket_factory):
         """
@@ -46,7 +47,7 @@ class TestBucketIntegrity(ManageTest):
         copy_cmd = f'cp --recursive {original_dir} {bucket_path}'
         assert 'Completed' in awscli_pod.exec_cmd_on_pod(
             command=craft_s3_command(mcg_obj, copy_cmd), out_yaml_format=False,
-            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.endpoint]
+            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
         ), 'Failed to Upload objects to MCG bucket'
 
         # Retrieve all objects from MCG bucket to result dir in Pod
@@ -54,7 +55,7 @@ class TestBucketIntegrity(ManageTest):
         retrieve_cmd = f'cp --recursive {bucket_path} {result_dir}'
         assert 'Completed' in awscli_pod.exec_cmd_on_pod(
             command=craft_s3_command(mcg_obj, retrieve_cmd), out_yaml_format=False,
-            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.endpoint]
+            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
         ), 'Failed to Download objects from MCG bucket'
 
         # Checksum is compared between original and result object

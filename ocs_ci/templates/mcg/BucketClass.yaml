@@ -10,4 +10,4 @@ spec:
     - backingStores:
       - backing-store
       - blagaga
-      placement: spread|mirror
+      placement: Spread|Mirror

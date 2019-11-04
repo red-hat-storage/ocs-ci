@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture()
-def mcg_obj():
+def mcg_obj(request):
     """
     Returns an MCG resource that's connected to the S3 endpoint
     Returns:
@@ -20,6 +20,11 @@ def mcg_obj():
 
     """
     mcg_obj = mcg.MCG()
+
+    def finalizer():
+        mcg_obj.cred_req_obj.delete()
+    request.addfinalizer(finalizer)
+
     return mcg_obj
 
 
@@ -67,7 +72,7 @@ def bucket_factory(request, mcg_obj):
         'cli': CLIBucket
     }
 
-    def _create_buckets(amount=1, interface='S3'):
+    def _create_buckets(amount=1, interface='S3', *args, **kwargs):
         """
         Creates and deletes all buckets that were created as part of the test
 
@@ -89,7 +94,7 @@ def bucket_factory(request, mcg_obj):
                 resource_description='bucket', resource_type=interface.lower()
             )
             created_buckets.append(
-                bucketMap[interface.lower()](mcg_obj, bucket_name)
+                bucketMap[interface.lower()](mcg_obj, bucket_name, *args, **kwargs)
             )
         return created_buckets
 
@@ -103,6 +108,8 @@ def bucket_factory(request, mcg_obj):
                     f"Verifying whether bucket: {bucket.name} exists after deletion"
                 )
                 assert not mcg_obj.s3_verify_bucket_exists(bucket.name)
+            else:
+                logger.info(f'Bucket {bucket.name} not found.')
 
     request.addfinalizer(bucket_cleanup)
 
