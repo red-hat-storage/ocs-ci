@@ -494,7 +494,7 @@ class MCG(object):
 
         # Pause
         try:
-            for reached_state in TimeoutSampler(120, 5, _check_state):
+            for reached_state in TimeoutSampler(180, 10, _check_state):
                 if reached_state:
                     logger.info(
                         f'BackingStore {backingstore_name} reached state {desired_state}.'
