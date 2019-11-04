@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 @tier4
 @ignore_leftovers
+@bugzilla('1768277')
 class TestNodesRestart(ManageTest):
     """
     Test ungraceful cluster shutdown
@@ -62,7 +63,6 @@ class TestNodesRestart(ManageTest):
             pytest.param(*['cephfs', 'delete_resources'], marks=pytest.mark.polarion_id("OCS-1242"))
         ]
     )
-    @bugzilla('1748001')
     def test_pv_provisioning_under_degraded_state(
         self, nodes, pvc_factory, pod_factory, interface, operation
     ):
