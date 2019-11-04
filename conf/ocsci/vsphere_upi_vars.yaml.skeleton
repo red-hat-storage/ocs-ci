@@ -26,5 +26,5 @@ ENV_DATA:
   httpd_server_user: '<user for httpd server>'
   httpd_server_password: '<password for httpd server>'
   extra_disks: '<number of disks to add for worker nodes>'
-  disk_size: '<size of disk in GB>'
+  device_size: '<size of disk in GB>'
   memory: '<memory in MB>'
