@@ -73,6 +73,7 @@ class OCBucket(MCGBucket):
             self.name = create_unique_resource_name('oc', 'obc')
         obc_data['metadata']['name'] = self.name
         obc_data['spec']['bucketName'] = self.name
+        obc_data['spec']['storageClassName'] = self.mcg.namespace + '.noobaa.io'
         obc_data['metadata']['namespace'] = self.mcg.namespace
         if 'bucketclass' in kwargs:
             obc_data['spec']['additionalConfig']['bucketclass'] = kwargs['bucketclass']

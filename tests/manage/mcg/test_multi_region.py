@@ -88,7 +88,7 @@ class TestMultiRegion:
         awscli_pod.exec_cmd_on_pod(command=f'mkdir {original_dir} {result_dir}')
         public_s3 = boto3.resource('s3', region_name=mcg_obj.region)
         for obj in public_s3.Bucket(constants.TEST_FILES_BUCKET).objects.all():
-            logger.info(f'Downloading {obj.key} from aws test bucket')
+            logger.info(f'Downloading {obj.key} from AWS test bucket')
             awscli_pod.exec_cmd_on_pod(
                 command=f'sh -c "cd {original_dir} && '
                 f'wget https://{constants.TEST_FILES_BUCKET}.s3.'
@@ -151,4 +151,4 @@ class TestMultiRegion:
         # Bring B up
         mcg_obj.toggle_bucket_readwrite(backingstore2['name'], block=False)
         # Teardown workaround for now (caused by OBC deletion hanging if OBC contains objects)
-        mcg_obj.aws_s3_resource.Bucket(bucket_name).objects.all().delete()
+        mcg_obj.s3_resource.Bucket(bucket_name).objects.all().delete()

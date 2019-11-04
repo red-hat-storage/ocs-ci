@@ -356,16 +356,16 @@ class MCG(object):
             logger.error(f'Could not create connection {conn_name}')
             return False
 
-    def create_new_backingstore_bucket(self, name, region):
-        if name is None:
-            name = create_unique_resource_name('backingstorebucket', 'awsbucket')
-        if region is None:
-            region = self.region
+    def create_new_backingstore_bucket(self, backingstore_info):
+        if backingstore_info.get('name') is None:
+            backingstore_info['name'] = create_unique_resource_name('backingstorebucket', 'awsbucket')
+        if backingstore_info.get('region') is None:
+            backingstore_info['region'] = self.region
 
         self.aws_s3_resource.create_bucket(
-            Bucket=name,
+            Bucket=backingstore_info['name'],
             CreateBucketConfiguration={
-                'LocationConstraint': region
+                'LocationConstraint': backingstore_info['region']
             }
         )
 
@@ -384,6 +384,7 @@ class MCG(object):
     def oc_create_aws_backingstore(self, name, targetbucket, secretname, region):
         bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
         bs_data['metadata']['name'] += f'-{name}'
+        bs_data['metadata']['namespace'] = self.namespace
         bs_data['spec']['awsS3']['secret']['name'] = secretname
         bs_data['spec']['awsS3']['targetBucket'] = targetbucket
         bs_data['spec']['awsS3']['region'] = region
@@ -392,6 +393,7 @@ class MCG(object):
     def oc_create_bucketclass(self, name, backingstores, placement):
         bc_data = templating.load_yaml(constants.MCG_BUCKETCLASS_YAML)
         bc_data['metadata']['name'] = name
+        bc_data['metadata']['namespace'] = self.namespace
         tiers = bc_data['spec']['placementPolicy']['tiers'][0]
         tiers['backingStores'] = backingstores
         tiers['placement'] = placement
@@ -485,11 +487,11 @@ class MCG(object):
             for desired_state in TimeoutSampler(120, 5, _check_state):
                 if desired_state:
                     logger.info(
-                        'All objects mirrored successfully.'
+                        f'BackingStore {backingstore_name} reached state {desired_state}.'
                     )
                 else:
                     logger.info(
-                        'Mirroring process is not yet done, or has malfunctioned.\nRetrying...'
+                        'BackingStore did not reach desired state yet.\nRetrying...'
                     )
                 return desired_state
         except TimeoutExpiredError:
