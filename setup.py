@@ -39,6 +39,10 @@ setup(
         'pytest_marker_bugzilla>=0.9.1.dev6',
         'pyvmomi',
         'pyhcl',
+        # issue opened for botocore
+        # https://github.com/boto/botocore/issues/1872
+        # till above issue fixed, manually pointing python-dateutil to 2.8.0
+        'python-dateutil==2.8.0',
     ],
     entry_points={
         'console_scripts': [
