@@ -3,7 +3,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1, noobaa_cli_required, aws_platform_required,
+    tier1, tier2, noobaa_cli_required, aws_platform_required,
     filter_insecure_request_warning, acceptance
 )
 
@@ -20,19 +20,34 @@ logger = logging.getLogger(__name__)
             marks=[pytest.mark.polarion_id("OCS-1298"), tier1, acceptance]
         ),
         pytest.param(
-            *[3, 'CLI'], marks=[tier1, acceptance, noobaa_cli_required]
+            *[3, 'CLI'],
+            marks=[tier1, acceptance, noobaa_cli_required,
+                   pytest.mark.polarion_id("OCS-1377")]
         ),
         pytest.param(
             *[3, 'OC'], marks=[tier1, acceptance]
         ),
         pytest.param(
-            *[10, 'S3'],
+            *[100, 'S3'], marks=[tier2, pytest.mark.polarion_id("OCS-1823")]
         ),
         pytest.param(
-            *[10, 'CLI'], marks=noobaa_cli_required
+            *[1000, 'S3'], marks=[tier2, pytest.mark.polarion_id("OCS-1824")]
         ),
         pytest.param(
-            *[10, 'OC'],
+            *[100, 'CLI'],
+            marks=[tier2, noobaa_cli_required,
+                   pytest.mark.polarion_id("OCS-1825")]
+        ),
+        pytest.param(
+            *[1000, 'CLI'],
+            marks=[tier2, noobaa_cli_required,
+                   pytest.mark.polarion_id("OCS-1828")]
+        ),
+        pytest.param(
+            *[100, 'OC'], marks=[tier2, pytest.mark.polarion_id("OCS-1826")]
+        ),
+        pytest.param(
+            *[1000, 'OC'], marks=[tier2, pytest.mark.polarion_id("OCS-1827")]
         ),
     ]
 )
