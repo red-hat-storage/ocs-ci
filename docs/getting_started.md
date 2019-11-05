@@ -47,7 +47,7 @@ necessary dependencies
     * `python3.7 -m venv <path/to/venv>`
     * `source <path/to/.venv>/bin/activate`
 
-4. Upgrade pip with `pip install --upgrade pip`
+4. Upgrade pip and setuptools with `pip install --upgrade pip setuptools`
 5. Install requirements with `pip install -r requirements.txt`
 
 ## Initial Setup
