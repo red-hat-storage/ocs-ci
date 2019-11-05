@@ -350,15 +350,10 @@ class Deployment(object):
                 f"MDS deployment Failed! Please check logs!"
             )
 
+        # Change monitoring backend to OCS
         if config.ENV_DATA.get('monitoring_enabled') and config.ENV_DATA.get('persistent-monitoring'):
-            # Create a pool, secrets and sc
-            secret_obj = helpers.create_secret(interface_type=constants.CEPHBLOCKPOOL)
-            cbj_obj = helpers.create_ceph_block_pool()
-            sc_obj = helpers.create_storage_class(
-                interface_type=constants.CEPHBLOCKPOOL,
-                interface_name=cbj_obj.name,
-                secret_name=secret_obj.name
-            )
+
+            sc_name = f"{config.ENV_DATA['storage_cluster_name']}-{constants.DEFAULT_SC_RBD}"
 
             # Get the list of monitoring pods
             pods_list = get_all_pods(
@@ -367,7 +362,7 @@ class Deployment(object):
             )
 
             # Create configmap cluster-monitoring-config
-            create_configmap_cluster_monitoring_pod(sc_obj.name)
+            create_configmap_cluster_monitoring_pod(sc_name)
 
             # Take some time to respin the pod
             waiting_time = 30
