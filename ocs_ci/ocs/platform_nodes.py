@@ -4,6 +4,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
 from ocs_ci.utility import aws
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 
@@ -17,7 +18,7 @@ class PlatformNodesFactory:
 
     """
     def __init__(self):
-        self.cls_map = {'AWS': AWSNodes, 'VMWare': VMWareNodes}
+        self.cls_map = {'aws': AWSNodes, 'vsphere': VMWareNodes}
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA['platform']
@@ -40,12 +41,12 @@ class NodesBase(object):
             "Get node by attached volume functionality is not implemented"
         )
 
-    def stop_nodes(self, nodes):
+    def stop_nodes(self, nodes, wait=True):
         raise NotImplementedError(
             "Stop nodes functionality is not implemented"
         )
 
-    def start_nodes(self, nodes):
+    def start_nodes(self, nodes, wait=True):
         raise NotImplementedError(
             "Start nodes functionality is not implemented"
         )
@@ -70,6 +71,11 @@ class NodesBase(object):
             "Wait for volume attach functionality is not implemented"
         )
 
+    def restart_nodes_teardown(self):
+        raise NotImplementedError(
+            "Restart nodes teardown functionality is not implemented"
+        )
+
 
 class VMWareNodes(NodesBase):
     """
@@ -87,12 +93,12 @@ class VMWareNodes(NodesBase):
             "implemented for VMWare"
         )
 
-    def stop_nodes(self, nodes):
+    def stop_nodes(self, nodes, wait=True):
         raise NotImplementedError(
             "Stop nodes functionality is not implemented for VMWare"
         )
 
-    def start_nodes(self, nodes):
+    def start_nodes(self, nodes, wait=True):
         raise NotImplementedError(
             "Start nodes functionality is not implemented for VMWare"
         )
@@ -115,6 +121,11 @@ class VMWareNodes(NodesBase):
     def wait_for_volume_attach(self, volume):
         raise NotImplementedError(
             "Wait for volume attach functionality is not implemented for VMWare"
+        )
+
+    def restart_nodes_teardown(self):
+        raise NotImplementedError(
+            "Restart nodes teardown functionality is not implemented for VMWare"
         )
 
 
@@ -178,33 +189,36 @@ class AWSNodes(NodesBase):
         )
         return nodes[0]
 
-    def stop_nodes(self, nodes):
+    def stop_nodes(self, nodes, wait=True):
         """
         Stop EC2 instances
 
         Args:
             nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to stop, False otherwise
+
 
         """
         instances = self.get_ec2_instances(nodes)
         assert instances, (
             f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
         )
-        self.aws.stop_ec2_instances(instances=instances, wait=True)
+        self.aws.stop_ec2_instances(instances=instances, wait=wait)
 
-    def start_nodes(self, nodes):
+    def start_nodes(self, nodes, wait=True):
         """
         Start EC2 instances
 
         Args:
             nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to start, False otherwise
 
         """
         instances = self.get_ec2_instances(nodes)
         assert instances, (
             f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
         )
-        self.aws.start_ec2_instances(instances=instances, wait=True)
+        self.aws.start_ec2_instances(instances=instances, wait=wait)
 
     def restart_nodes(self, nodes, wait=True, force=True):
         """
@@ -290,3 +304,44 @@ class AWSNodes(NodesBase):
                 f"Volume {volume.id} failed to be attached to an EC2 instance"
             )
             return False
+
+    def restart_nodes_teardown(self):
+        """
+        Make sure all EC2 instances are up. To be used in the test teardown
+
+        """
+        # Get all cluster nodes objects
+        ocp_nodes = get_node_objs()
+
+        # Get the cluster nodes ec2 instances
+        ec2_instances = self.get_ec2_instances(ocp_nodes)
+        assert ec2_instances, (
+            f"Failed to get ec2 instances for node {[n.name for n in ocp_nodes]}"
+        )
+
+        logger.info(
+            "Getting the instances that are in status 'stopping' (if there are any), "
+            "and wait for them to get to status 'stopped', "
+            "so it will be possible to start them"
+        )
+        stopping_instances = {
+            key: val for key, val in ec2_instances.items() if
+            self.aws.get_instances_status_by_id(key) == constants.INSTANCE_STOPPING
+        }
+
+        logger.info(
+            "Waiting fot the instances that are in status 'stopping' "
+            "(if there are any) to reach 'stopped'"
+        )
+        if stopping_instances:
+            for stopping_instance in stopping_instances:
+                instance = self.aws.get_ec2_instance(stopping_instance.key())
+                instance.wait_until_stopped()
+        stopped_instances = {
+            key: val for key, val in ec2_instances.items() if
+            self.aws.get_instances_status_by_id(key) == constants.INSTANCE_STOPPED
+        }
+
+        # Start the instances
+        if stopped_instances:
+            self.aws.start_ec2_instances(instances=stopped_instances, wait=True)

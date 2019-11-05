@@ -15,7 +15,7 @@ class Sanity:
     Class for cluster health and functional validations
     """
 
-    def __init__(self):
+    def __init__(self, storageclass_factory):
         """
         Initializer for Sanity class - Init CephCluster() in order to
         set the cluster status before starting the tests
@@ -23,6 +23,10 @@ class Sanity:
         self.pvc_objs = list()
         self.pod_objs = list()
         self.ceph_cluster = CephCluster()
+        self.rbd_sc = storageclass_factory()
+        self.cephfs_sc = storageclass_factory(
+            interface=constants.CEPHFILESYSTEM
+        )
 
     def health_check(self):
         """
@@ -48,8 +52,11 @@ class Sanity:
         """
         logger.info(f"Creating resources and running IO as a sanity functional validation")
 
-        for interface in [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]:
-            pvc_obj = pvc_factory(interface)
+        for interface, sc in zip(
+            [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM],
+            [self.rbd_sc, self.cephfs_sc]
+        ):
+            pvc_obj = pvc_factory(interface=interface, storageclass=sc)
             self.pvc_objs.append(pvc_obj)
             self.pod_objs.append(pod_factory(pvc=pvc_obj))
         if run_io:
