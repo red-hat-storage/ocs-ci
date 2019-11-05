@@ -115,6 +115,14 @@ class OCS(object):
             bool: True if deleted, False otherwise
 
         """
+        # Avoid accidental delete of default storageclass and secret
+        if (
+            self.name == constants.DEFAULT_STORAGECLASS_CEPHFS
+            or self.name == constants.DEFAULT_STORAGECLASS_RBD
+        ):
+            log.info(f"Attempt to delete default Secret or StorageClass")
+            return
+
         if self._is_deleted:
             log.info(
                 f"Attempt to remove resource: {self.name} which is"

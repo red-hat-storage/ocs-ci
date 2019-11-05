@@ -528,7 +528,7 @@ class Deployment(object):
         # Change monitoring backend to OCS
         if config.ENV_DATA.get('monitoring_enabled') and config.ENV_DATA.get('persistent-monitoring'):
 
-            sc_name = f"{config.ENV_DATA['storage_cluster_name']}-{constants.DEFAULT_SC_RBD}"
+            sc = helpers.default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
 
             # Get the list of monitoring pods
             pods_list = get_all_pods(
@@ -540,7 +540,7 @@ class Deployment(object):
             # storage class and telemeter server (if the url is specified in a
             # config file)
             create_configmap_cluster_monitoring_pod(
-                sc_name=sc_name,
+                sc_name=sc.name,
                 telemeter_server_url=config.ENV_DATA.get("telemeter_server_url"))
 
             # Take some time to respin the pod
