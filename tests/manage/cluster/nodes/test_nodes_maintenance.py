@@ -36,12 +36,12 @@ class TestNodesMaintenance(ManageTest):
 
     """
     @pytest.fixture(autouse=True)
-    def init_sanity(self):
+    def init_sanity(self, storageclass_factory):
         """
         Initialize Sanity instance
 
         """
-        self.sanity_helpers = Sanity()
+        self.sanity_helpers = Sanity(storageclass_factory)
 
     @tier1
     @pytest.mark.parametrize(
