@@ -187,6 +187,24 @@ patch storagecluster/{storagecluster_name} --type='json' -p='[{{"op": "replace",
     ocp.exec_oc_cmd(cmd)
     return True
 
+def add_storage_capacity(capacity, storagecluster_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Add storage capacity to the cluster
+
+    Args:
+        capacity (str): Size of the storage
+        storagecluster_name (str): Name of a storage cluster
+    Returns:
+        bool: True if commands executes successfully
+    """
+    ocp = OCP(namespace=namespace)
+    # ToDo Update patch command with pr https://github.com/red-hat-storage/ocs-ci/pull/803
+    cmd = f'''
+patch storagecluster/{storagecluster_name} --type='json' -p='[{{"op": "replace",
+"path": "/spec/storageDeviceSets/0/dataPVCTemplate/spec/resources/requests/storage", "value":{capacity}}}]'
+            '''
+    ocp.exec_oc_cmd(cmd)
+    return True
 
 def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     """
