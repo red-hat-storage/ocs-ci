@@ -19,14 +19,12 @@ class TestNodesRestart(ManageTest):
     Test ungraceful cluster shutdown
     """
     @pytest.fixture(autouse=True)
-    def init_sanity(self, storageclass_factory):
+    def init_sanity(self):
         """
         Initialize Sanity instance
 
         """
-        self.sanity_helpers = Sanity(
-            storageclass_factory=storageclass_factory
-        )
+        self.sanity_helpers = Sanity()
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
