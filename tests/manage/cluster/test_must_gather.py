@@ -27,6 +27,15 @@ class TestMustGather(ManageTest):
 
     @pytest.fixture(autouse=True)
     def teardown(self, request):
+        def check_for_must_gather_project():
+            namespaces = self.ocs.get_projects()
+            logger.info(f"namespaces: {namespaces}")
+            for project in namespaces:
+                logger.info(f"project: {project}")
+                if project[:-5] == "openshift-must-gather-":
+                    return project
+
+            return False
 
         def check_for_must_gather_pod():
             must_gather_pods = self.ocs.get_pods(label_selector='app=must-gather')
@@ -40,13 +49,20 @@ class TestMustGather(ManageTest):
         def finalizer():
             must_gather_pods = self.ocs.get_pods(label_selector='app=must-gather')
             logger.info(f"must_gather_pods: {must_gather_pods} ")
-            sample = TimeoutSampler(
+            sample_pods = TimeoutSampler(
                 timeout=30, sleep=3, func=check_for_must_gather_pod,
             )
-            if sample.wait_for_func_status(result=True):
+            sample_namespace = TimeoutSampler(
+                timeout=30, sleep=3, func=check_for_must_gather_project,
+            )
+            if sample_pods.wait_for_func_status(result=True):
                 for must_gather_pod in must_gather_pods:
                     self.ocp_obj.wait_for_delete(resource_name=must_gather_pod)
                     logger.info(f"deleted pods: {must_gather_pods}")
+            if not sample_namespace.wait_for_func_status(result=False):
+                must_gather_namespace = check_for_must_gather_project()
+                logger.info(f"namespace to delete: {must_gather_namespace}")
+                self.ocp_obj.wait_for_delete(resource_name=must_gather_namespace)
 
         request.addfinalizer(finalizer)
 
