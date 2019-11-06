@@ -62,17 +62,15 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         log.info("Creating {} CephFS PVCs".format(pvcs_num))
         # Generate a given number of CephFS PVCs, some RWO and some RWX
         rwo_rwx = cycle([constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX])
-        cephfs_pvcs = [pvc_factory(interface=constants.CEPHFILESYSTEM,
-                                   project=project_1,
-                                   storageclass=self.cephfs_sc,
-                                   access_mode=next(rwo_rwx))
-                       for i in range(0, pvcs_num)]
+        for i in range(0, pvcs_num):
+            pvc_factory(interface=constants.CEPHFILESYSTEM, project=project_1,
+                        storageclass=self.cephfs_sc, access_mode=next(rwo_rwx))
         log.info("Creating {} RBD PVCs".format(pvcs_num))
-        rbd_pvcs = multi_pvc_factory(interface=constants.CEPHBLOCKPOOL,
-                                     project=project_1,
-                                     storageclass=self.rbd_sc,
-                                     access_mode=constants.ACCESS_MODE_RWO,
-                                     num_of_pvc=pvcs_num)
+        multi_pvc_factory(interface=constants.CEPHBLOCKPOOL,
+                          project=project_1,
+                          storageclass=self.rbd_sc,
+                          access_mode=constants.ACCESS_MODE_RWO,
+                          num_of_pvc=pvcs_num)
 
         # Delete the entire Project 1 (along with all of its PVCs)
         pvs = helpers.get_all_pvs()
@@ -114,19 +112,17 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
 
         log.info("Creating a mix of {} CephFS & RBD PVCs "
                  "(each bound to an app pod)".format(2 * pvcs_num))
-        cephfs_pvcs_pods = [
+        # Create CephFS PVCs bound to an app pod
+        for pvc_obj in multi_pvc_factory(interface=constants.CEPHFILESYSTEM,
+                                         project=project_2,
+                                         num_of_pvc=pvcs_num):
             pod_factory(pvc=pvc_obj, interface=constants.CEPHFILESYSTEM)
-            for pvc_obj in multi_pvc_factory(interface=constants.CEPHFILESYSTEM,
-                                             project=project_2,
-                                             num_of_pvc=pvcs_num)
-        ]
-
-        rbd_pvcs_pods = [
+        # Create RBD PVCs bound to an app pod
+        for pvc_obj in multi_pvc_factory(interface=constants.CEPHBLOCKPOOL,
+                                         project=project_2,
+                                         num_of_pvc=pvcs_num):
             pod_factory(pvc=pvc_obj, interface=constants.CEPHBLOCKPOOL)
-            for pvc_obj in multi_pvc_factory(interface=constants.CEPHBLOCKPOOL,
-                                             project=project_2,
-                                             num_of_pvc=pvcs_num)
-        ]
+
         # Delete the entire Project 2 (along with all of its PVCs)
         pvs = helpers.get_all_pvs()
         space_used_before_deletion = self.ceph_cluster.check_ceph_used_space()
