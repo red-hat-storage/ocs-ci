@@ -354,9 +354,6 @@ class VSPHEREUPI(VSPHEREBASE):
 
         """
         super(VSPHEREUPI, self).deploy_ocp(log_cli_level)
-        if not self.ocs_operator_deployment:
-            device_size = config.ENV_DATA.get('device_size', constants.DEFAULT_DEVICE_SIZE)
-            self.attach_disk(device_size)
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
