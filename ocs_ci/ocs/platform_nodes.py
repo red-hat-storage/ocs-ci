@@ -264,7 +264,7 @@ class AWSNodes(NodesBase):
         ]
         if not volume_attachments:
             instance = self.get_ec2_instances([node])
-            assert instance, f"Failed to get the EC2 instance for node {node.name}"
+            assert instance, f"Failed to get the EC2 instance for nodes {node.name}"
             self.aws.attach_volume(volume, [*instance][0])
         else:
             logger.warning(
