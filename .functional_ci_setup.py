@@ -26,6 +26,11 @@ def parse_args():
         dest='ocsci_conf',
         action='store_false',
     )
+    parser.add_argument(
+        '--skip-bugzilla-conf',
+        dest='bugzilla_conf',
+        action='store_false',
+    )
     return parser.parse_args()
 
 
@@ -86,23 +91,25 @@ def get_ocsci_conf():
             cluster_name=f"{cluster_user}-ocs-ci-{pipeline_id}",
             region=env['AWS_REGION'],
             base_domain=env['AWS_DOMAIN'],
+            worker_instance_type='m5.4xlarge',
+            cluster_namespace="openshift-storage",
+
         ),
+        REPORTING=dict(
+            gather_on_deploy_failure=True,
+        )
     )
-    # Apply image configuration if present
-    image_types = [
-        'rook',
-        'ceph',
-        'ceph_csi',
-        'rook_csi_registrar',
-        'rook_csi_provisioner',
-        'rook_csi_snapshotter',
-        'rook_csi_attacher',
-    ]
-    for image_type in image_types:
-        image_key = f"{image_type}_image"
-        image_value = env.get(image_key.upper())
-        if image_value is not None:
-            conf_obj['ENV_DATA'][image_key] = image_value
+    if env.get("DOWNSTREAM") == "true":
+        conf_obj['REPORTING']['us_ds'] = 'DS'
+    if env.get("SMTP_SERVER"):
+        conf_obj['REPORTING']['email'] = dict(smtp_server=env['SMTP_SERVER'])
+    conf_obj['DEPLOYMENT'] = dict(
+        ocs_registry_image=env['OCS_REGISTRY_IMAGE'],
+        ocs_operator_storage_cluster_cr="http://pkgs.devel.redhat.com/cgit/containers/ocs-registry/plain/"
+                                        "ocs_v1_storagecluster_cr.yaml?h=ocs-4.2-rhel-8",
+        ocs_operator_olm="http://pkgs.devel.redhat.com/cgit/containers/ocs-registry/"
+                         "plain/deploy-with-olm.yaml?h=ocs-4.2-rhel-8",
+    )
     return conf_obj
 
 
@@ -120,6 +127,11 @@ def write_ocsci_conf():
         ocs_conf_file.write(yaml.safe_dump(ocs_conf))
 
 
+def write_bugzilla_conf():
+    with open('bugzilla.cfg', 'w') as bz_cfg_file:
+        bz_cfg_file.write(env['BUGZILLA_CFG'])
+
+
 if __name__ == "__main__":
     args = parse_args()
     if args.aws:
@@ -128,3 +140,5 @@ if __name__ == "__main__":
         write_pull_secret()
     if args.ocsci_conf:
         write_ocsci_conf()
+    if args.bugzilla_conf:
+        write_bugzilla_conf()

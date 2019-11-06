@@ -1,16 +1,23 @@
 """
 General OCP object
 """
-import os
 import logging
+import os
+import re
+import shlex
+import tempfile
 import time
 import yaml
-import shlex
-import re
 
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.constants import RSYNC_POD_YAML, STATUS_RUNNING
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ResourceNameNotSpecifiedException,
+    TimeoutExpiredError,
+)
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
 from ocs_ci.ocs import defaults
 
 log = logging.getLogger(__name__)
@@ -21,7 +28,10 @@ class OCP(object):
     A basic OCP object to run basic 'oc' commands
     """
 
-    def __init__(self, api_version='v1', kind='Service', namespace=None):
+    def __init__(
+        self, api_version='v1', kind='Service', namespace=None,
+        resource_name=''
+    ):
         """
         Initializer function
 
@@ -29,10 +39,13 @@ class OCP(object):
             api_version (str): TBD
             kind (str): TBD
             namespace (str): The name of the namespace to use
+            resource_name (str): Resource name
         """
         self._api_version = api_version
         self._kind = kind
         self._namespace = namespace
+        self._resource_name = resource_name
+        self._data = {}
 
     @property
     def api_version(self):
@@ -45,6 +58,17 @@ class OCP(object):
     @property
     def namespace(self):
         return self._namespace
+
+    @property
+    def resource_name(self):
+        return self._resource_name
+
+    @property
+    def data(self):
+        if self._data:
+            return self._data
+        self._data = self.get()
+        return self._data
 
     def exec_oc_cmd(self, command, out_yaml_format=True, secrets=None, **kwargs):
         """
@@ -85,6 +109,33 @@ class OCP(object):
             return yaml.safe_load(out)
         return out
 
+    def exec_oc_debug_cmd(self, node, cmd_list):
+        """
+        Function to execute "oc debug" command on OCP node
+
+        Args:
+            node (str): Node name where the command to be executed
+            cmd_list (list): List of commands eg: ['cmd1', 'cmd2']
+
+        Returns:
+            out (str): Returns output of the executed command/commands
+
+        Raises:
+            CommandFailed: When failure in command execution
+        """
+        # Appending one empty value in list for string manipulation
+        cmd_list.append(' ')
+        err_msg = 'CMD FAILED'
+        cmd = f" || echo '{err_msg}';".join(cmd_list)
+        debug_cmd = f"debug nodes/{node} -- chroot /host /bin/bash -c \"{cmd}\""
+        out = str(self.exec_oc_cmd(
+            command=debug_cmd, out_yaml_format=False
+        ))
+        if err_msg in out:
+            raise CommandFailed
+        else:
+            return out
+
     def get(
         self, resource_name='', out_yaml_format=True, selector=None,
         all_namespaces=False
@@ -104,11 +155,14 @@ class OCP(object):
         Returns:
             dict: Dictionary represents a returned yaml file
         """
+        resource_name = resource_name if resource_name else self.resource_name
         command = f"get {self.kind} {resource_name}"
         if all_namespaces and not self.namespace:
-            command += "-A"
+            command += " -A"
+        elif self.namespace:
+            command += f" -n {self.namespace}"
         if selector is not None:
-            command += f"--selector={selector}"
+            command += f" --selector={selector}"
         if out_yaml_format:
             command += " -o yaml"
         return self.exec_oc_cmd(command)
@@ -163,7 +217,7 @@ class OCP(object):
         if out_yaml_format:
             command += " -o yaml"
         output = self.exec_oc_cmd(command)
-        logging.debug(f"{yaml.dump(output)}")
+        log.debug(f"{yaml.dump(output)}")
         return output
 
     def delete(self, yaml_file=None, resource_name='', wait=True, force=False):
@@ -216,6 +270,27 @@ class OCP(object):
         """
         command = f"apply -f {yaml_file}"
         return self.exec_oc_cmd(command)
+
+    def patch(self, resource_name, params, type='json'):
+        """
+        Applies changes to resources
+
+        Args:
+            resource_name (str): Name of the resource
+            params (str): Changes to be added to the resource
+            type (str): Type of the operation
+
+        Returns:
+            bool: True in case if changes are applied. False otherwise
+
+        """
+        params = "\'" + f"{params}" + "\'"
+        command = f"patch {self.kind} {resource_name} -n {self.namespace} -p {params} --type {type}"
+        log.info(f"Command: {command}")
+        result = self.exec_oc_cmd(command)
+        if 'patched' in result:
+            return True
+        return False
 
     def add_label(self, resource_name, label):
         """
@@ -294,30 +369,70 @@ class OCP(object):
                 False otherwise
 
         """
-        for sample in TimeoutSampler(
-            timeout, sleep, self.get, resource_name, True, selector
-        ):
+        log.info((
+            f"Waiting for a resource(s) of kind {self._kind}"
+            f" identified by name '{resource_name}'"
+            f" and selector {selector}"
+            f" to reach desired condition {condition}"))
+        resource_name = resource_name if resource_name else self.resource_name
 
-            # Only 1 resource expected to be returned
-            if resource_name:
-                if self.get_resource_status(resource_name) == condition:
-                    return True
-            # More than 1 resources returned
-            elif sample.get('kind') == 'List':
-                in_condition = []
-                sample = sample['items']
-                for item in sample:
-                    if self.get_resource_status(
-                        item.get('metadata').get('name')
-                    ) == condition:
-                        in_condition.append(item)
-                    if resource_count:
-                        if len(in_condition) == resource_count and (
-                            len(sample) == len(in_condition)
-                        ):
-                            return True
-                    elif len(sample) == len(in_condition):
+        # actual status of the resource we are waiting for, setting it to None
+        # now prevents UnboundLocalError raised when waiting timeouts
+        actual_status = None
+
+        try:
+            for sample in TimeoutSampler(
+                timeout, sleep, self.get, resource_name, True, selector
+            ):
+
+                # Only 1 resource expected to be returned
+                if resource_name:
+                    status = self.get_resource_status(resource_name)
+                    if status == condition:
                         return True
+                    log.info((
+                        f"status of {resource_name} was {status},"
+                        f" but we were waiting for {condition}"))
+                    actual_status = status
+                # More than 1 resources returned
+                elif sample.get('kind') == 'List':
+                    in_condition = []
+                    actual_status = []
+                    sample = sample['items']
+                    for item in sample:
+                        try:
+                            item_name = item.get('metadata').get('name')
+                            status = self.get_resource_status(item_name)
+                            actual_status.append(status)
+                            if status == condition:
+                                in_condition.append(item)
+                        except CommandFailed as ex:
+                            log.info(
+                                f"Failed to get status of resource: {item_name}, "
+                                f"Error: {ex}"
+                            )
+                        if resource_count:
+                            if len(in_condition) == resource_count:
+                                return True
+                        elif len(sample) == len(in_condition):
+                            return True
+                    # preparing logging message with expected number of
+                    # resource items we are waiting for
+                    if resource_count > 0:
+                        exp_num_str = f"all {resource_count}"
+                    else:
+                        exp_num_str = "all"
+                    log.info((
+                        f"status of {resource_name} item(s) were {actual_status},"
+                        f" but we were waiting"
+                        f" for {exp_num_str} of them to be {condition}"))
+        except TimeoutExpiredError as ex:
+            log.error(f"timeout expired: {ex}")
+            log.error((
+                f"Wait for {self._kind} resource {resource_name}"
+                f" to reach desired condition {condition} failed,"
+                f" last actual status was {actual_status}"))
+            raise(ex)
 
         return False
 
@@ -391,6 +506,24 @@ class OCP(object):
 
         return resource_info[status_index]
 
+    def check_name_is_specified(self, resource_name=''):
+        """
+        Check if the name of the resource is specified in class level and
+        if not raise the exception.
+
+        Raises:
+            ResourceNameNotSpecifiedException: in case the name is not
+                specified.
+
+        """
+        resource_name = (
+            resource_name if resource_name else self.resource_name
+        )
+        if not resource_name:
+            raise ResourceNameNotSpecifiedException(
+                "Resource name has to be specified in class!"
+            )
+
 
 def switch_to_project(project_name):
     """
@@ -422,3 +555,41 @@ def switch_to_default_rook_cluster_project():
         bool: True on success, False otherwise
     """
     return switch_to_project(defaults.ROOK_CLUSTER_NAMESPACE)
+
+
+def rsync(src, dst, node, dst_node=True, extra_params=""):
+    """
+    This function will rsync source folder to destination path.
+    You can rsync local folder to the node or vice versa depends on
+    dst_node parameter. By default the rsync is from local to the node.
+
+    Args:
+        src (str): Source path of folder to rsync.
+        dst (str): Destination path where to rsync.
+        node (str): Node to/from copy.
+        dst_node (bool): True if the destination (dst) is the node, False
+            when dst is the local folder.
+        extra_params (str): "See: oc rsync --help for the extra params"
+
+    """
+    pod_name = f"rsync-{node.replace('.', '-')}"
+    pod_data = load_yaml(RSYNC_POD_YAML)
+    pod_data['metadata']['name'] = pod_name
+    pod_data['spec']['nodeName'] = node
+    pod = OCP(kind='pod')
+    src = src if dst_node else f"{pod_name}:/host{src}"
+    dst = f"{pod_name}:/host{dst}" if dst_node else dst
+    try:
+        with tempfile.NamedTemporaryFile() as rsync_pod_yaml:
+            dump_data_to_temp_yaml(pod_data, rsync_pod_yaml.name)
+            pod.create(yaml_file=rsync_pod_yaml.name)
+        pod.wait_for_resource(condition=STATUS_RUNNING, timeout=120)
+        rsync_cmd = f"rsync {extra_params} {src} {dst}"
+        out = pod.exec_oc_cmd(rsync_cmd)
+        log.info(f"Rsync out: {out}")
+    finally:
+        try:
+            pod.delete(resource_name=pod_name)
+        except CommandFailed:
+            log.warning(f"Pod {pod_name} wasn't successfully deleted!")
+            raise

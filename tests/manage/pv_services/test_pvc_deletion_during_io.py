@@ -3,44 +3,47 @@ import logging
 
 from ocs_ci.ocs import exceptions, constants
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.testlib import ManageTest, tier1
-from tests.fixtures import (
-    create_rbd_storageclass, create_rbd_pod, create_pvc, create_ceph_block_pool,
-    create_rbd_secret, create_project
-)
+from ocs_ci.framework.testlib import ManageTest, tier2
+
 
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.usefixtures(
-    create_rbd_secret.__name__,
-    create_ceph_block_pool.__name__,
-    create_rbd_storageclass.__name__,
-    create_project.__name__,
-    create_pvc.__name__,
-    create_rbd_pod.__name__,
+@tier2
+@pytest.mark.parametrize(
+    argnames=["interface"],
+    argvalues=[
+        pytest.param(constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-371")),
+        pytest.param(constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-1318"))
+    ]
 )
-@pytest.mark.polarion_id("OCS-371")
 class TestDeletePVCWhileRunningIO(ManageTest):
     """
     Delete PVC while IO is in progress
-    """
 
-    @tier1
+    """
+    pvc_obj = None
+    pod_obj = None
+
+    @pytest.fixture(autouse=True)
+    def test_setup(self, interface, pvc_factory, pod_factory):
+        """
+        Create resources for the test
+
+        """
+        self.pvc_obj = pvc_factory(interface=interface)
+        self.pod_obj = pod_factory(pvc=self.pvc_obj)
+
     def test_run_io_and_delete_pvc(self):
         """
         Delete PVC while IO is in progress
+
         """
         thread = pod.run_io_in_bg(self.pod_obj, expect_to_fail=True)
         self.pvc_obj.delete(wait=False)
-
-        # This is a workaround for bug 1715627 (replaces wait_for_resource)
-        pvc_out = self.pvc_obj.get(out_yaml_format=False)
-        assert constants.STATUS_TERMINATING in pvc_out, (
-            f"PVC {self.pvc_obj.name} "
-            f"failed to reach status {constants.STATUS_TERMINATING}"
+        self.pvc_obj.ocp.wait_for_resource(
+            condition=constants.STATUS_TERMINATING, resource_name=self.pvc_obj.name
         )
-
         thread.join(timeout=15)
 
         self.pod_obj.delete()

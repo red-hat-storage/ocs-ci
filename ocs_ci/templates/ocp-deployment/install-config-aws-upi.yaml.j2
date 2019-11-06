@@ -1,0 +1,41 @@
+apiVersion: {{ api_version | default('v1') }}
+baseDomain: {{ base_domain | default('qe.rh-ocs.com') }}
+compute:
+  - name: worker
+    platform:
+      aws:
+        type: {{ worker_instance_type | default('m4.large') }}
+{% if worker_availability_zones %}
+        zones:
+  {% for zone in worker_availability_zones %}
+        - {{ zone }}
+  {% endfor %}
+{% endif %}
+    replicas: {{ worker_replicas | default(3) }}
+controlPlane:
+  name: master
+  platform:
+    aws:
+      type: {{ master_instance_type | default('m4.xlarge') }}
+{% if master_availability_zones %}
+      zones:
+  {% for zone in master_availability_zones %}
+      - {{ zone }}
+  {% endfor %}
+{% endif %}
+  replicas: {{ master_replicas | default(3) }}
+metadata:
+  creationTimestamp: null
+  name: '{{ cluster_name }}'
+networking:
+  clusterNetwork:
+    - cidr: 10.128.0.0/14
+      hostPrefix: 23
+  machineCIDR: 10.0.0.0/16
+  networkType: OpenShiftSDN
+  serviceNetwork:
+    - 172.30.0.0/16
+platform:
+  aws:
+    region: {{ region | default('us-east-2') }}
+pullSecret: ''

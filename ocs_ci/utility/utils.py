@@ -7,7 +7,9 @@ import shlex
 import string
 import subprocess
 import time
-import traceback
+from copy import deepcopy
+from shutil import which
+
 import requests
 import yaml
 import re
@@ -16,15 +18,16 @@ import smtplib
 from ocs_ci.ocs.exceptions import CephHealthException
 from ocs_ci.ocs.exceptions import (
     CommandFailed, UnsupportedOSType, TimeoutExpiredError,
-    UnavailableBuildException,
+    TagNotFoundException, UnavailableBuildException,
 )
 from ocs_ci.framework import config
-from ocs_ci.utility.aws import AWS
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from ocs_ci.ocs import constants
 from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.constants import OPERATOR_CATALOG_SOURCE_NAME
 from bs4 import BeautifulSoup
+from paramiko import SSHClient, AutoAddPolicy
 
 log = logging.getLogger(__name__)
 
@@ -410,6 +413,22 @@ def run_cmd(cmd, secrets=None, **kwargs):
     return mask_secrets(r.stdout.decode(), secrets)
 
 
+def run_mcg_cmd(cmd, namespace=None):
+    """
+    Invokes `run_cmd` with a noobaa prefix
+
+    Args:
+        cmd: The MCG command to be run
+        namespace: The namespace to use for the command
+
+    Returns:
+        str: Stdout of the command
+
+    """
+    namespace = namespace if namespace else config.ENV_DATA['cluster_namespace']
+    return run_cmd(f'noobaa -n {namespace} ' + cmd)
+
+
 def download_file(url, filename):
     """
     Download a file from a specified url
@@ -471,54 +490,6 @@ def expose_nightly_ocp_version(version):
         version_url_content = get_url_content(latest_nightly_url)
         version_json = json.loads(version_url_content)
         return version_json['name']
-
-
-def destroy_cluster(cluster_path, log_level="DEBUG"):
-    """
-    Destroy existing cluster resources in AWS.
-
-    Args:
-        cluster_path (str): filepath to cluster directory to be destroyed
-        log_level (str): log level to set for openshift_installer
-
-    """
-    # Download installer
-    installer = get_openshift_installer()
-
-    destroy_cmd = (
-        f"{installer} destroy cluster "
-        f"--dir {cluster_path} "
-        f"--log-level {log_level}"
-    )
-
-    try:
-        cluster_path = os.path.normpath(cluster_path)
-
-        # Retrieve cluster name and aws region from metadata
-        metadata_file = os.path.join(cluster_path, "metadata.json")
-        with open(metadata_file) as f:
-            metadata = json.loads(f.read())
-        cluster_name = metadata.get("clusterName")
-        region_name = metadata.get("aws").get("region")
-
-        # Execute destroy cluster using OpenShift installer
-        log.info(f"Destroying cluster defined in {cluster_path}")
-        run_cmd(destroy_cmd)
-
-        # Find and delete volumes
-        aws = AWS(region_name)
-        volume_pattern = f"{cluster_name}*"
-        log.debug(f"Finding volumes with pattern: {volume_pattern}")
-        volumes = aws.get_volumes_by_name_pattern(volume_pattern)
-        log.debug(f"Found volumes: \n {volumes}")
-        for volume in volumes:
-            aws.detach_and_delete_volume(aws.ec2_resource.Volume(volume['id']))
-
-        # Remove installer
-        delete_file(installer)
-
-    except Exception:
-        log.error(traceback.format_exc())
 
 
 def get_openshift_installer(
@@ -647,9 +618,15 @@ def get_openshift_mirror_url(file_name, version):
         os_type = "linux"
     else:
         raise UnsupportedOSType
-    url = (
-        f"https://openshift-release-artifacts.svc.ci.openshift.org/"
-        f"{version}/{file_name}-{os_type}-{version}.tar.gz"
+    url_template = config.DEPLOYMENT.get(
+        'ocp_url_template',
+        "https://openshift-release-artifacts.svc.ci.openshift.org/"
+        "{version}/{file_name}-{os_type}-{version}.tar.gz"
+    )
+    url = url_template.format(
+        version=version,
+        file_name=file_name,
+        os_type=os_type,
     )
     sample = TimeoutSampler(
         timeout=60, sleep=5, func=ensure_nightly_build_availability,
@@ -897,12 +874,18 @@ def email_reports():
     Email results of test run
 
     """
+    build_id = get_ocs_build_number()
+    build_str = f"BUILD ID: {build_id} " if build_id else ""
     mailids = config.RUN['cli_params']['email']
     recipients = []
     [recipients.append(mailid) for mailid in mailids.split(",")]
     sender = "ocs-ci@redhat.com"
     msg = MIMEMultipart('alternative')
-    msg['Subject'] = f"ocs-ci results for {get_testrun_name()} (RUN ID: {config.RUN['run_id']})"
+    msg['Subject'] = (
+        f"ocs-ci results for {get_testrun_name()} "
+        f"({build_str}"
+        f"RUN ID: {config.RUN['run_id']})"
+    )
     msg['From'] = sender
     msg['To'] = ", ".join(recipients)
 
@@ -914,7 +897,7 @@ def email_reports():
     part1 = MIMEText(soup, 'html')
     msg.attach(part1)
     try:
-        s = smtplib.SMTP('localhost')
+        s = smtplib.SMTP(config.REPORTING['email']['smtp_server'])
         s.sendmail(sender, recipients, msg.as_string())
         s.quit()
         log.info(f"Results have been emailed to {recipients}")
@@ -935,6 +918,30 @@ def get_cluster_version_info():
     ocp = OCP(kind="clusterversion")
     cluster_version_info = ocp.get("version")
     return cluster_version_info
+
+
+def get_ocs_build_number():
+    """
+    Gets the build number for ocs operator
+
+    Return:
+        str: build number for ocs operator version
+
+    """
+    from ocs_ci.ocs.resources.catalog_source import CatalogSource
+
+    build_num = ""
+    ocs_catalog = CatalogSource(
+        resource_name=OPERATOR_CATALOG_SOURCE_NAME,
+        namespace="openshift-marketplace"
+    )
+    if config.REPORTING['us_ds'] == 'DS':
+        build_info = ocs_catalog.get_image_name()
+        try:
+            return build_info.split("-")[1].split(".")[0]
+        except (IndexError, AttributeError):
+            logging.warning("No version info found for OCS operator")
+    return build_num
 
 
 def get_cluster_version():
@@ -1014,7 +1021,7 @@ def get_csi_versions():
         )
         desc = ocp_pod_obj.get(csi_provisioner_pod)
         for container in desc['spec']['containers']:
-            name = container['image'].split("/")[-1].split(":")[0]
+            name = container['name']
             version = container['image'].split("/")[-1].split(":")[1]
             csi_versions[name] = version
     return csi_versions
@@ -1109,12 +1116,19 @@ def get_testrun_name():
     """
     markers = config.RUN['cli_params'].get('-m', '').replace(" ", "-")
     us_ds = config.REPORTING.get("us_ds")
+    us_ds = "Upstream" if us_ds.upper() == "US" else "Downstream" if us_ds.upper() == "DS" else us_ds
     if config.REPORTING["polarion"].get("testrun_name"):
         testrun_name = config.REPORTING["polarion"]["testrun_name"]
     elif markers:
         testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}_{markers}"
     else:
         testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}"
+
+    # form complete testrun name that includes deployment platform and type
+    testrun_name = (
+        f"{testrun_name}-{config.ENV_DATA.get('platform').upper()}-"
+        f"{config.ENV_DATA.get('deployment_type').upper()}"
+    )
     # replace invalid character(s) by '-'
     testrun_name = testrun_name.translate(
         str.maketrans(
@@ -1184,7 +1198,176 @@ def get_rook_repo(branch='master', to_checkout=None):
         run_cmd("git fetch --all", cwd=cwd)
     log.info(f"Checkout rook repository to specific branch: {branch}")
     run_cmd(f"git checkout {branch}", cwd=cwd)
-    log.info(f"Reset branch: {branch} with latet changes")
+    log.info(f"Reset branch: {branch} with latest changes")
     run_cmd(f"git reset --hard origin/{branch}", cwd=cwd)
     if to_checkout:
         run_cmd(f"git checkout {to_checkout}", cwd=cwd)
+
+
+def clone_repo(url, location, branch='master', to_checkout=None):
+    """
+    Clone a repository or checkout latest changes if it already exists at
+        specified location.
+
+    Args:
+        url (str): location of the repository to clone
+        location (str): path where the repository will be cloned to
+        branch (str): branch name to checkout
+        to_checkout (str): commit id or tag to checkout
+    """
+    if not os.path.isdir(location):
+        log.info("Cloning repository into %s", location)
+        run_cmd(f"git clone {url} {location}")
+    else:
+        log.info("Repository already cloned at %s, skipping clone", location)
+        log.info("Fetching latest changes from repository")
+        run_cmd('git fetch --all', cwd=location)
+    log.info("Checking out repository to specific branch: %s", branch)
+    run_cmd(f"git checkout {branch}", cwd=location)
+    log.info("Reset branch: %s with latest changes", branch)
+    run_cmd(f"git reset --hard origin/{branch}", cwd=location)
+    if to_checkout:
+        run_cmd(f"git checkout {to_checkout}", cwd=location)
+
+
+def get_latest_ds_olm_tag():
+    """
+    This function returns latest tag of OCS downstream registry
+
+    Returns:
+        str: latest tag for downstream image from quay registry
+
+    Raises:
+        TagNotFoundException: In case no tag found
+
+    """
+    _req = requests.get(constants.OPERATOR_CS_QUAY_API_QUERY)
+    req = list(filter(lambda x: x['name'] != 'latest', _req.json()['tags']))
+    if len(req) != 1:
+        raise TagNotFoundException(f"Couldn't find any tag!")
+    return req[0]['name']
+
+
+def check_if_executable_in_path(exec_name):
+    """
+    Checks whether an executable can be found in the $PATH
+
+    Args:
+        exec_name: Name of executable to look for
+
+    Returns:
+        Boolean: Whether the executable was found
+
+    """
+    return which(exec_name) is not None
+
+
+def upload_file(server, localpath, remotepath, user=None, password=None):
+    """
+    Upload a file to remote server
+
+    Args:
+        server (str): Name of the server to upload
+        localpath (str): Local file to upload
+        remotepath (str): Target path on the remote server. filename should be included
+        user (str): User to use for the remote connection
+
+    """
+    if not user:
+        user = 'root'
+
+    ssh = SSHClient()
+    ssh.set_missing_host_key_policy(
+        AutoAddPolicy())
+    ssh.connect(hostname=server, username=user, password=password)
+    sftp = ssh.open_sftp()
+    log.info(f"uploading {localpath} to {user}@{server}:{remotepath}")
+    sftp.put(localpath, remotepath)
+    sftp.close()
+    ssh.close()
+
+
+def read_file_as_str(filepath):
+    """
+    Reads the file content
+
+    Args:
+        filepath (str): File to read
+
+    Returns:
+        str : File contents in string
+
+    """
+    with open(rf"{filepath}") as fd:
+        content = fd.read()
+    return content
+
+
+def replace_content_in_file(file, old, new):
+    """
+    Replaces contents in file, if old value is not found, it adds
+    new value to the file
+
+    Args:
+        file (str): Name of the file in which contents will be replaced
+        old (str): Data to search for
+        new (str): Data to replace the old value
+
+    """
+    # Read the file
+    with open(rf"{file}", 'r') as fd:
+        file_data = fd.read()
+
+    # Replace/add the new data
+    if old in file_data:
+        file_data = file_data.replace(old, new)
+    else:
+        file_data = new + file_data
+
+    # Write the file out again
+    with open(rf"{file}", 'w') as fd:
+        fd.write(file_data)
+
+
+@retry((CommandFailed), tries=100, delay=10, backoff=1)
+def wait_for_co(operator):
+    """
+    Waits for ClusterOperator to created
+
+    Args:
+        operator (str): Name of the ClusterOperator
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+    ocp = OCP(kind='ClusterOperator')
+    ocp.get(operator)
+
+
+def censor_values(data_to_censor):
+    """
+    This function censor values in dictionary keys that match pattern defined
+    in config_keys_patterns_to_censor in constants.
+
+    Args:
+        data_to_censor (dict): Data to censor.
+
+    """
+    for key in data_to_censor:
+        for pattern in constants.config_keys_patterns_to_censor:
+            if pattern in key:
+                data_to_censor[key] = '*' * 5
+
+
+def dump_config_to_file(file_path):
+    """
+    Dump the config to the yaml file with censored secret values.
+
+    Args:
+        file_path (str): Path to file where to write the configuration.
+
+    """
+    config_copy = deepcopy(config.to_dict())
+    for key in config_copy:
+        censor_values(config_copy[key])
+    with open(file_path, "w+") as fs:
+        yaml.safe_dump(config_copy, fs)

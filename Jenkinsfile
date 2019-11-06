@@ -7,11 +7,12 @@
 //   openshift-dev-aws-access-key-id (AWS_ACCESS_KEY_ID)
 //   openshift-dev-aws-secret-access-key (AWS_SECRET_ACCESS_KEY)
 //   openshift-pull-secret (PULL_SECRET)
+//   ocs-bugzilla-cfg (BUGZILLA_CFG)
 // It may also provide these optional parameters to override the framework's
 // defaults:
-//   ROOK_IMAGE
-//   CEPH_IMAGE
+//   OCS_REGISTRY_IMAGE
 //   EMAIL
+//   UMB_MESSAGE
 pipeline {
   agent { node { label "ocs-ci" }}
   environment {
@@ -20,6 +21,7 @@ pipeline {
     AWS_ACCESS_KEY_ID = credentials('openshift-dev-aws-access-key-id')
     AWS_SECRET_ACCESS_KEY = credentials('openshift-dev-aws-secret-access-key')
     PULL_SECRET = credentials('openshift-pull-secret')
+    BUGZILLA_CFG = credentials('ocs-bugzilla-cfg')
   }
   stages {
     stage("Setup") {
@@ -62,7 +64,7 @@ pipeline {
       steps {
         sh """
         source ./venv/bin/activate
-        run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocp.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
+        run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocp.yaml --ocsci-conf=conf/ocsci/production-aws-ipi.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
         """
       }
     }
@@ -70,11 +72,11 @@ pipeline {
       steps {
         sh """
         source ./venv/bin/activate
-        run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
+        run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocs.yaml --ocsci-conf=conf/ocsci/downstream_config.yaml --ocsci-conf=conf/ocsci/production-aws-ipi.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
         """
       }
     }
-    stage("Tier 1") {
+    stage("Acceptance Tests") {
       environment {
         EMAIL_ARG = """${sh(
           returnStdout: true,
@@ -84,7 +86,7 @@ pipeline {
       steps {
         sh """
         source ./venv/bin/activate
-        run-ci -m tier1 --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --self-contained-html --html=${env.WORKSPACE}/logs/report.html --junit-xml=${env.WORKSPACE}/logs/junit.xml --collect-logs ${env.EMAIL_ARG}
+        run-ci -m acceptance --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --self-contained-html --html=${env.WORKSPACE}/logs/report.html --junit-xml=${env.WORKSPACE}/logs/junit.xml --collect-logs --bugzilla ${env.EMAIL_ARG}
         """
       }
     }
@@ -97,6 +99,36 @@ pipeline {
         run-ci -m deployment --teardown --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
         """
       junit testResults: "logs/junit.xml", keepLongStdio: false
+    }
+    success {
+      script {
+        if( env.UMB_MESSAGE in [true, 'true'] ) {
+          def registry_image = "${env.OCS_REGISTRY_IMAGE}"
+          // quay.io/rhceph-dev/ocs-registry:4.2-58.e59ca0f.master -> 4.2
+          def registry_version = registry_image.split(':')[-1].split('-')[0]
+          def properties = """
+            TOOL=ocs-ci
+            PRODUCT=ocs
+            PRODUCT_VERSION={registry_version}
+          """
+          def content_string = '''{
+            "SENDER_BUILD_NUMBER": "${BUILD_NUMBER}",
+            "OCS_REGISTRY_IMAGE": "${env.OCS_REGISTRY_IMAGE}",
+          }'''
+          def content = readJSON text: content_string
+          echo "Sending UMB message"
+          echo 'Properties: ' + properties
+          echo 'Content: ' + content.toString()
+          sendCIMessage (
+            providerName: 'Red Hat UMB',
+            overrides: [ topic: 'VirtualTopic.qe.ci.jenkins' ],
+            failOnError: false,
+            messageType: 'ProductAcceptedForReleaseTesting',
+            messageProperties: properties,
+            messageContent: content.toString()
+          )
+        }
+      }
     }
   }
 }
