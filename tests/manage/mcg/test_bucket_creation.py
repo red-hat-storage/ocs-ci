@@ -22,10 +22,11 @@ logger = logging.getLogger(__name__)
         pytest.param(
             *[3, 'CLI'],
             marks=[tier1, acceptance, noobaa_cli_required,
-                   pytest.mark.polarion_id("OCS-1377")]
+                   pytest.mark.polarion_id("OCS-1298")]
         ),
         pytest.param(
-            *[3, 'OC'], marks=[tier1, acceptance]
+            *[3, 'OC'],
+            marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1298")]
         ),
         pytest.param(
             *[100, 'S3'], marks=[tier2, pytest.mark.polarion_id("OCS-1823")]
