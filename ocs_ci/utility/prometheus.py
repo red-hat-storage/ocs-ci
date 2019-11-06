@@ -13,6 +13,68 @@ from ocs_ci.ocs.ocp import OCP
 logger = logging.getLogger(name=__file__)
 
 
+def check_alert_list(
+    label,
+    msg,
+    alerts,
+    states,
+    severity="warning",
+    ignore_more_occurences=False
+):
+    """
+    Check list of alerts that there are alerts with requested label and
+    message for each provided state. If some alert is missing then this check
+    fails.
+
+    Args:
+        label (str): Alert label
+        msg (str): Alert message
+        alerts (list): List of alerts to check
+        states (list): List of states to check, order is important
+        ignore_more_occurences (bool): If true then there is checkced only
+            occurence of alert with requested label, message and state but
+            it is not checked if there is more of occurences than one.
+    """
+
+    target_alerts = [
+        alert
+        for alert
+        in alerts
+        if alert.get('labels').get('alertname') == label
+    ]
+
+    logger.info(f"Checking properties of found {label} alerts")
+    if ignore_more_occurences:
+        for state in states:
+            delete = False
+            for key, alert in enumerate(target_alerts):
+                if alert.get('state') == state:
+                    if delete:
+                        d_msg = f"Ignoring {alert} as alert already appeared."
+                        logger.debug(d_msg)
+                        target_alerts.pop(key)
+                    else:
+                        delete = True
+    assert_msg = (
+        f"Incorrect number of {label} alerts ({len(target_alerts)} "
+        f"instead of {len(states)})"
+    )
+    assert len(target_alerts) == len(states), assert_msg
+
+    for key, state in enumerate(states):
+
+        assert_msg = 'Alert message for alert {label} is not correct'
+        assert target_alerts[key]['annotations']['message'] == msg, assert_msg
+
+        assert_msg = f"Alert {label} doesn't have {severity} severity"
+        assert target_alerts[key]['annotations']['severity_level'] == severity, assert_msg
+
+        assert_msg = f"Alert {label} is not in {state} state"
+        assert target_alerts[key]['state'] == state, assert_msg
+
+    logger.info(f"Alerts were triggered correctly during utilization")
+
+
 class PrometheusAPI(object):
     """
     This is wrapper class for Prometheus API.
@@ -86,7 +148,7 @@ class PrometheusAPI(object):
 
         Args:
             resource (str): Represents part of uri that specifies given
-                resource.
+                resource
             payload (dict): Provide parameters to GET API call.
                 e.g. for `alerts` resource this can be
                 {'silenced': False, 'inhibited': False}
@@ -115,19 +177,19 @@ class PrometheusAPI(object):
         Search for alerts that have requested name and state.
 
         Args:
-            name (str): Alert name.
-            state (str): Alert state. If provided then there are searched
+            name (str): Alert name
+            state (str): Alert state, if provided then there are searched
                 alerts with provided state. If not provided then alerts are
                 searched for absence of the alert. Loop that looks for alerts
                 is broken when there are no alerts returned from API. This
                 is done because API is not returning any alerts that are not
-                in pending or firing state.
+                in pending or firing state
             timeout (int): Number of seconds for how long the alert should
-                be searched.
-            sleep (int): Number of seconds to sleep in between alert search.
+                be searched
+            sleep (int): Number of seconds to sleep in between alert search
 
         Returns:
-            list: List of alert records.
+            list: List of alert records
         """
         while timeout > 0:
             alerts_response = self.get(
@@ -167,3 +229,31 @@ class PrometheusAPI(object):
             time.sleep(sleep)
             timeout -= sleep
         return alerts
+
+    def check_alert_cleared(self, label, measure_end_time, time_min=30):
+        """
+        Check that all alerts with provided label are cleared.
+
+        Args:
+            label (str): Alerts label
+            measure_end_time (int): Timestamp of measurement end
+            time_min (int): Number of seconds to wait for alert to be cleared
+                since measurement end
+        """
+        time_actual = time.time()
+        time_wait = int(
+            (measure_end_time + time_min) - time_actual
+        )
+        if time_wait > 0:
+            logger.info(f"Waiting for approximately {time_wait} seconds for alerts "
+                        f"to be cleared ({time_min} seconds since measurement end)")
+        else:
+            time_wait = 1
+        cleared_alerts = self.wait_for_alert(
+            name=label,
+            state=None,
+            timeout=time_wait
+        )
+        logger.info(f"Cleared alerts: {cleared_alerts}")
+        assert len(cleared_alerts) == 0, f"{label} alerts were not cleared"
+        logger.info(f"{label} alerts were cleared")

@@ -5,6 +5,7 @@ import pickle
 import re
 import time
 import traceback
+from subprocess import TimeoutExpired
 
 import yaml
 from gevent import sleep
@@ -14,13 +15,17 @@ from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
 
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.ceph import RolesContainer, CommandFailed, Ceph, CephNode
+from ocs_ci.ocs.ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.openstack import CephVMNode
 from ocs_ci.ocs.parallel import parallel
-from ocs_ci.utility.utils import create_directory_path
+from ocs_ci.utility.utils import create_directory_path, run_cmd
+from ocs_ci.ocs import constants
 from ocs_ci.framework import config as ocsci_config
+from ocs_ci.utility import templating
 
 log = logging.getLogger(__name__)
 
@@ -595,7 +600,11 @@ def create_oc_resource(
     occli.create(cfg_file)
 
 
-def get_pod_name_by_pattern(pattern='client', namespace='openshift-storage'):
+def get_pod_name_by_pattern(
+    pattern='client',
+    namespace=None,
+    filter=None,
+):
     """
     In a given namespace find names of the pods that match
     the given pattern
@@ -603,21 +612,47 @@ def get_pod_name_by_pattern(pattern='client', namespace='openshift-storage'):
     Args:
         pattern (str): name of the pod with given pattern
         namespace (str): Namespace value
+        filter (str): pod name to filter from the list
 
     Returns:
         pod_list (list): List of pod names matching the pattern
 
     """
+    namespace = namespace if namespace else ocsci_config.ENV_DATA['cluster_namespace']
     ocp_obj = OCP(kind='pod', namespace=namespace)
     pod_names = ocp_obj.exec_oc_cmd('get pods -o name', out_yaml_format=False)
     pod_names = pod_names.split('\n')
     pod_list = []
     for name in pod_names:
-        if re.search(pattern, name):
+        if filter is not None and re.search(filter, name):
+            log.info(f'Pod name filtered {name}')
+        elif re.search(pattern, name):
             (_, name) = name.split('/')
             log.info(f'pod name match found appending {name}')
             pod_list.append(name)
     return pod_list
+
+
+def setup_ceph_toolbox():
+    """
+    Setup ceph-toolbox - also checks if toolbox exists, if it exists it
+    behaves as noop.
+    """
+    namespace = ocsci_config.ENV_DATA['cluster_namespace']
+    ceph_toolbox = get_pod_name_by_pattern('rook-ceph-tools', namespace)
+    if len(ceph_toolbox) == 1:
+        log.info("Ceph toolbox already exists, skipping")
+        return
+    rook_operator = get_pod_name_by_pattern('rook-ceph-operator', namespace)
+    out = run_cmd(
+        f'oc -n {namespace} get pods {rook_operator[0]} -o yaml',
+    )
+    version = yaml.safe_load(out)
+    rook_version = version['spec']['containers'][0]['image']
+    tool_box_data = templating.load_yaml(constants.TOOL_POD_YAML)
+    tool_box_data['spec']['template']['spec']['containers'][0]['image'] = rook_version
+    rook_toolbox = OCS(**tool_box_data)
+    rook_toolbox.create()
 
 
 def apply_oc_resource(
@@ -653,28 +688,74 @@ def apply_oc_resource(
     occli.apply(cfg_file)
 
 
-def collect_ocs_logs(dir_name):
+def run_must_gather(log_dir_path, image, command=None):
+    """
+    Runs the must-gather tool against the cluster
+
+    Args:
+        log_dir_path (str): directory for dumped must-gather logs
+        image (str): must-gather image registry path
+        command (str): optional command to execute within the must-gather image
+    """
+    must_gather_timeout = ocsci_config.REPORTING.get(
+        'must_gather_timeout', 600
+    )
+
+    log.info(f"Must gather image: {image} will be used.")
+    create_directory_path(log_dir_path)
+    cmd = f"adm must-gather --image={image} --dest-dir={log_dir_path}"
+    if command:
+        cmd += f" -- {command}"
+
+    log.info(f"OCS logs will be placed in location {log_dir_path}")
+    occli = OCP()
+    try:
+        occli.exec_oc_cmd(
+            cmd, out_yaml_format=False, timeout=must_gather_timeout
+        )
+    except CommandFailed as ex:
+        log.error(f"Failed during must gather logs! Error: {ex}")
+    except TimeoutExpired as ex:
+        log.error(
+            f"Timeout {must_gather_timeout}s for must-gather reached, command"
+            f" exited with error: {ex}"
+        )
+
+
+def collect_ocs_logs(dir_name, ocp=True, ocs=True):
     """
     Collects OCS logs
 
     Args:
         dir_name (str): directory name to store OCS logs. Logs will be stored
             in dir_name suffix with _ocs_logs.
+        ocp (bool): Whether to gather OCP logs
+        ocs (bool): Whether to gather OCS logs
 
     """
+    if not (
+        'KUBECONFIG' in os.environ
+        or os.path.exists(os.path.expanduser('~/.kube/config'))
+    ):
+        log.warn(
+            "Cannot find $KUBECONFIG or ~/.kube/config; "
+            "skipping log collection"
+        )
+        return
+
     log_dir_path = os.path.join(
         os.path.expanduser(ocsci_config.RUN['log_dir']),
-        f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}"
+        f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",
+        f"{dir_name}_ocs_logs"
     )
-    must_gather_img = ocsci_config.REPORTING['must_gather_image']
-    log.info(f"Must gather image: {must_gather_img} will be used.")
-    create_directory_path(log_dir_path)
-    dir_name = f"{dir_name}_ocs_logs"
-    dump_dir = os.path.join(log_dir_path, dir_name)
-    cmd = f"adm must-gather --image={must_gather_img} --dest-dir={dump_dir}"
-    log.info(f"OCS logs will be placed in location {dump_dir}")
-    occli = OCP()
-    try:
-        occli.exec_oc_cmd(cmd, out_yaml_format=False)
-    except CommandFailed as ex:
-        log.error(f"Failed during must gather logs! Error: {ex}")
+
+    if ocs:
+        run_must_gather(os.path.join(log_dir_path, 'ocs_must_gather'),
+                        ocsci_config.REPORTING['ocs_must_gather_image'])
+
+    if ocp:
+        ocp_log_dir_path = os.path.join(log_dir_path, 'ocp_must_gather')
+        ocp_must_gather_image = ocsci_config.REPORTING['ocp_must_gather_image']
+        run_must_gather(ocp_log_dir_path, ocp_must_gather_image)
+        run_must_gather(ocp_log_dir_path, ocp_must_gather_image,
+                        '/usr/bin/gather_service_logs worker')

@@ -1,6 +1,7 @@
 import logging
 import time
 import boto3
+import random
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -84,6 +85,8 @@ class AWS(object):
         * id: id of instance
         * avz: Availability Zone
         * name: The value of Tag Name if define otherwise None
+        * vpc_id: VPC ID
+        * security_groups: Security groups of the instance
 
         Args:
             pattern (str): Pattern of tag name like:
@@ -114,6 +117,8 @@ class AWS(object):
                 id=id,
                 avz=avz,
                 name=name,
+                vpc_id=instance.get('VpcId'),
+                security_groups=instance.get('SecurityGroups', []),
             )
             instances.append(instance_data)
         logger.debug("All found instances: %s", instances)
@@ -132,6 +137,36 @@ class AWS(object):
         return self.ec2_client.describe_instances(
             InstanceIds=[instance_id],
         ).get('Reservations')[0].get('Instances')[0].get('State').get('Code')
+
+    def get_vpc_id_by_instance_id(self, instance_id):
+        """
+        Fetch vpc id out of ec2 node (EC2.Instances.vpc_id)
+
+        Args:
+            instance_id (str): ID of the instance - to get vpc id info from ec2 node
+
+        Returns:
+            str: vpc_id: The vpc id
+
+        """
+        instance = self.get_ec2_instance(instance_id)
+
+        return instance.vpc_id
+
+    def get_availability_zone_id_by_instance_id(self, instance_id):
+        """
+        Fetch availability zone out of ec2 node (EC2.Instances.placement)
+
+        Args:
+            instance_id (str): ID of the instance - to get availability zone info from ec2 node
+
+        Returns:
+            str: availability_zone: The availability zone name
+
+        """
+        instance = self.get_ec2_instance(instance_id)
+
+        return instance.placement.get('AvailabilityZone')
 
     def create_volume(
         self,
@@ -409,6 +444,7 @@ class AWS(object):
             force (bool): True for force instance stop, False otherwise
 
         """
+        logger.info(f"Restarting instances {list(instances.values())}")
         self.stop_ec2_instances(instances=instances, wait=wait, force=force)
         self.start_ec2_instances(instances=instances, wait=wait)
 
@@ -426,6 +462,172 @@ class AWS(object):
         instance = self.get_ec2_instance(instance_id)
         volumes = instance.volumes.all()
         return [vol for vol in volumes]
+
+    def get_all_security_groups(self):
+        """
+        Get all security groups in AWS region
+
+        Returns:
+            list: All security groups
+
+        """
+        all_security_groups = list()
+
+        security_groups_dict = self.ec2_client.describe_security_groups()
+        security_groups = security_groups_dict['SecurityGroups']
+        for group_object in security_groups:
+            all_security_groups.append(group_object['GroupId'])
+
+        return all_security_groups
+
+    def get_security_groups_by_instance_id(self, instance_id):
+        """
+        Get all attached security groups of ec2 instance
+
+        Args:
+            instance_id (str): Required instance to get security groups from it
+
+        Returns:
+            list: all_sg_ids: all attached security groups id.
+
+        """
+        ec2_instance = self.get_ec2_instance(instance_id)
+        all_sg_ids = [sg.get('GroupId') for sg in ec2_instance.security_groups]
+
+        return all_sg_ids
+
+    def create_security_group(self, group_name, dict_permissions, vpc_id):
+        """
+        Create security group with predefined group name and permissions
+
+        Args:
+            group_name (str): Group name (aws tag: "Group Name")
+            dict_permissions (dict): The security group's inbound/outbound permissions
+            vpc_id(str): For group to be attached
+
+        Returns:
+            str: newly created security group id
+
+        """
+        instance_response = self.ec2_client.create_security_group(
+            GroupName=group_name,
+            Description='This group created by method:aws.create_security_group',
+            VpcId=vpc_id
+        )
+
+        security_group_id = instance_response['GroupId']
+        logger.info(f'Security Group Created {security_group_id} in vpc {vpc_id}')
+
+        data = self.ec2_client.authorize_security_group_ingress(
+            GroupId=security_group_id,
+            IpPermissions=[dict_permissions]
+        )
+        logger.info(f'Ingress Successfully Set {data}')
+        return security_group_id
+
+    def append_security_group(self, security_group_id, instance_id):
+        """
+        Append security group to selected ec2 nodes
+
+        Args:
+            instance_id (str): Instances to attach security group
+            security_group_id(str): Security group to attach
+
+            print out: security group <id> added to selected nodes
+
+        """
+        ec2_instance = self.get_ec2_instance(instance_id)
+        logger.info(f"ec2_instance id is: {ec2_instance.id}")
+        all_sg_ids = [sg.get('GroupId') for sg in ec2_instance.security_groups]
+        if security_group_id not in all_sg_ids:
+            all_sg_ids.append(security_group_id)
+            ec2_instance.modify_attribute(Groups=all_sg_ids)
+
+        logger.info(f"Security Group {security_group_id} added to selected node")
+
+    def remove_security_group(self, security_group_id, instance_id):
+        """
+        Remove security group from selected ec2 instance (by instance id)
+        print out: security group <id> removed from selected nodes
+
+        Args:
+            security_group_id (str): Security group to be removed
+            instance_id (str): Instance attached with selected security group
+
+        """
+        ec2_instance = self.get_ec2_instance(instance_id)
+        logger.info(f"ec2_instance id is: {ec2_instance.id}")
+        all_sg_ids = self.get_security_groups_by_instance_id(instance_id)
+        for sg in all_sg_ids:
+            if sg == security_group_id:
+                all_sg_ids.remove(security_group_id)
+                ec2_instance.modify_attribute(Groups=all_sg_ids)
+                logger.info(f"Security Group {security_group_id} removed from selected node")
+
+    def delete_security_group(self, security_group_id):
+        """
+        Delete selected security group
+        print out: Security group <id> deleted
+
+        Args:
+            security_group_id (str): Id of selected security group
+
+        """
+        self.ec2_client.delete_security_group(GroupId=security_group_id)
+        logger.info(f"Security group {security_group_id} deleted")
+
+    def store_security_groups_for_instances(self, instances_id):
+        """
+        Stored all security groups attached to selected ec2 instances
+
+        Args:
+            instances_id (list): ec2 instance_id
+
+        Returns:
+            dict: security_group_dict: keys: blocked instances: ec2_instances ids
+                values: list of original security groups of each instance
+
+        """
+        sg_list = list()
+        for instance in instances_id:
+            sg_list.append(self.get_security_groups_by_instance_id(instance))
+
+        return dict(zip(instances_id, sg_list))
+
+    def block_instances_access(self, security_group_id, instances_id):
+        """
+        Block ec2 instances by:
+
+        - Append security group without access permissions
+        - Remove original security groups
+
+        Args:
+            security_group_id (str): security group without access permissions
+            instances_id (list): list of ec2 instances ids
+
+        """
+
+        for instance in instances_id:
+            original_sgs = self.get_security_groups_by_instance_id(instance)
+            self.append_security_group(security_group_id, instance)
+            for sg_grp in original_sgs:
+                self.remove_security_group(sg_grp, instance)
+
+    def restore_instances_access(self, security_group_id_to_remove, original_security_group_dict):
+        """
+        Restore access to instances by removing blocking security group and append original security group
+        Args:
+            security_group_id_to_remove (str):
+            original_security_group_dict (dict): keys: blocked instances: ec2 instances id
+                values: list of original security groups
+
+
+        """
+        for instance in original_security_group_dict.keys():
+            org_sg_grp_of_instance = list(original_security_group_dict.get(instance))
+            for sg in org_sg_grp_of_instance:
+                self.append_security_group(sg, instance)
+                self.remove_security_group(security_group_id_to_remove, instance)
 
 
 def get_instances_ids_and_names(instances):
@@ -445,22 +647,40 @@ def get_instances_ids_and_names(instances):
     }
 
 
-def get_data_volumes(instance_id):
+def get_data_volumes(deviceset_pvs):
     """
     Get the instance data volumes (which doesn't include root FS)
 
     Args:
-        instance_id (str): The ID of the instance
+        deviceset_pvs (list): PVC objects of the deviceset PVs
 
     Returns:
         list: ec2 Volume instances
 
     """
     aws = AWS()
-    volumes = aws.get_ec2_instance_volumes(instance_id)
 
-    # Get the data volume according to DeleteOnTermination
-    return [
-        vol for vol in volumes if vol.attachments[0]
-        .get('DeleteOnTermination') is False
+    volume_ids = [
+        'vol-' + pv.get().get('spec').get('awsElasticBlockStore')
+        .get('volumeID').partition('vol-')[-1] for pv in deviceset_pvs
     ]
+    return [aws.ec2_resource.Volume(vol_id) for vol_id in volume_ids]
+
+
+def get_vpc_id_by_node_obj(aws_obj, instances):
+    """
+    This function getting vpc id by randomly selecting instances out of user aws deployment
+
+    Args:
+        aws_obj (obj): AWS() object
+        instances (dict): cluster ec2 instances objects
+
+    Returns:
+        str: vpc_id: The vpc id
+
+    """
+
+    instance_id = random.choice(list(instances.keys()))
+    vpc_id = aws_obj.get_vpc_id_by_instance_id(instance_id)
+
+    return vpc_id

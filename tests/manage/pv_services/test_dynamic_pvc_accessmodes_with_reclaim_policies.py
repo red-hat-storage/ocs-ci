@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier1, tier3
+from ocs_ci.framework.testlib import ManageTest, tier1, tier3, acceptance
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import pod
@@ -127,6 +127,7 @@ class BaseDynamicPvc(ManageTest):
             self.sc_obj.delete()
 
 
+@acceptance
 @tier1
 @pytest.mark.usefixtures(
     create_ceph_block_pool.__name__,
@@ -143,15 +144,23 @@ class BaseDynamicPvc(ManageTest):
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, constants.RECLAIM_POLICY_DELETE],
-            marks=pytest.mark.polarion_id("OCS-533")
+            marks=[
+                pytest.mark.polarion_id("OCS-533"),
+                pytest.mark.bugzilla("1750916")]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_RETAIN],
-            marks=pytest.mark.polarion_id("OCS-525")
+            marks=[
+                pytest.mark.polarion_id("OCS-525"),
+                pytest.mark.bugzilla("1751866"),
+                pytest.mark.bugzilla("1750916")]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_DELETE],
-            marks=pytest.mark.polarion_id("OCS-526")
+            marks=[
+                pytest.mark.polarion_id("OCS-526"),
+                pytest.mark.bugzilla("1751866"),
+                pytest.mark.bugzilla("1750916")]
         )
     ]
 )
@@ -274,7 +283,10 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
 
         self.dynamic_pvc_base(interface_type, reclaim_policy)
 
+    @acceptance
     @tier1
+    @pytest.mark.bugzilla("1750916")
+    @pytest.mark.bugzilla("1751866")
     @pytest.mark.usefixtures(
         create_cephfs_secret.__name__,
         create_project.__name__

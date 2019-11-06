@@ -8,15 +8,18 @@ import os
 import re
 import yaml
 import tempfile
-from time import sleep
+import time
+import calendar
 from threading import Thread
 import base64
 
 from ocs_ci.ocs.ocp import OCP
+from tests import helpers
 from ocs_ci.ocs import workload
 from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
@@ -108,14 +111,14 @@ class Pod(OCS):
             Exception: In case of exception from FIO
         """
         try:
-            if self.fio_thread and self.fio_thread.done():
-                return yaml.safe_load(self.fio_thread.result())
-            elif self.fio_thread.running():
+            if self.fio_thread.running():
                 for sample in TimeoutSampler(
                     timeout=FIO_TIMEOUT, sleep=3, func=self.fio_thread.done
                 ):
                     if sample:
                         return yaml.safe_load(self.fio_thread.result())
+            if self.fio_thread and self.fio_thread.done():
+                return yaml.safe_load(self.fio_thread.result())
 
         except CommandFailed as ex:
             logger.exception(f"FIO failed: {ex}")
@@ -143,6 +146,20 @@ class Pod(OCS):
         rsh_cmd = f"rsh {self.name} "
         rsh_cmd += command
         return self.ocp.exec_oc_cmd(rsh_cmd, out_yaml_format, secrets=secrets, **kwargs)
+
+    def exec_bash_cmd_on_pod(self, command):
+        """
+        Execute a pure bash command on a pod via oc exec where you can use
+        bash syntaxt like &&, ||, ;, for loop and so on.
+
+        Args:
+            command (str): The command to execute on the given pod
+
+        Returns:
+            str: stdout of the command
+        """
+        cmd = f'exec {self.name} -- bash -c "{command}"'
+        return self.ocp.exec_oc_cmd(cmd, out_yaml_format=False)
 
     def get_labels(self):
         """
@@ -184,15 +201,20 @@ class Pod(OCS):
             return [item for item in out if item]
         return out
 
-    def get_mount_path(self):
+    def get_storage_path(self, storage_type='fs'):
         """
-        Get the pod volume mount path
+        Get the pod volume mount path or device path
 
         Returns:
-            str: The mount path of the volume on the pod (e.g. /var/lib/www/html/)
+            str: The mount path of the volume on the pod (e.g. /var/lib/www/html/) if storage_type is fs
+                 else device path of raw block pv
         """
         # TODO: Allow returning a path of a specified volume of a specified
         #  container
+        if storage_type == 'block':
+            return self.pod_data.get('spec').get('containers')[0].get(
+                'volumeDevices')[0].get('devicePath')
+
         return (
             self.pod_data.get(
                 'spec'
@@ -209,7 +231,7 @@ class Pod(OCS):
         """
         work_load = 'fio'
         name = f'test_workload_{work_load}'
-        path = self.get_mount_path()
+        path = self.get_storage_path(storage_type)
         # few io parameters for Fio
 
         self.wl_obj = workload.WorkLoad(
@@ -249,15 +271,16 @@ class Pod(OCS):
             self.workload_setup(storage_type=storage_type, jobs=jobs)
 
         if io_direction == 'rw':
-            self.io_params = templating.load_yaml_to_dict(
+            self.io_params = templating.load_yaml(
                 constants.FIO_IO_RW_PARAMS_YAML
             )
             self.io_params['rwmixread'] = rw_ratio
         else:
-            self.io_params = templating.load_yaml_to_dict(
+            self.io_params = templating.load_yaml(
                 constants.FIO_IO_PARAMS_YAML
             )
         self.io_params['runtime'] = runtime
+        size = size if isinstance(size, str) else f"{size}G"
         self.io_params['size'] = size
         if fio_filename:
             self.io_params['filename'] = fio_filename
@@ -280,16 +303,25 @@ class Pod(OCS):
 
 # Helper functions for Pods
 
-def get_all_pods(namespace=None):
+def get_all_pods(namespace=None, selector=None):
     """
     Get all pods in a namespace.
-    If namespace is None - get all pods
+
+    Args:
+        namespace (str): Name of the namespace
+            If namespace is None - get all pods
+        selector (list) : List of the resource selector to search with
+            Example: ['alertmanager','prometheus']
 
     Returns:
         list: List of Pod objects
+
     """
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     pods = ocp_pod_obj.get()['items']
+    if selector:
+        pods_new = [pod for pod in pods if pod['metadata']['labels'].get('app') in selector]
+        pods = pods_new
     pod_objs = [Pod(**pod) for pod in pods]
     return pod_objs
 
@@ -304,11 +336,24 @@ def get_ceph_tools_pod():
     ocp_pod_obj = OCP(
         kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
     )
+    # setup ceph_toolbox pod if the cluster has been setup by some other CI
+    setup_ceph_toolbox()
     ct_pod_items = ocp_pod_obj.get(
         selector='app=rook-ceph-tools'
     )['items']
     assert ct_pod_items, "No Ceph tools pod found"
-    ceph_pod = Pod(**ct_pod_items[0])
+
+    # In the case of node failure, the CT pod will be recreated with the old
+    # one in status Terminated. Therefore, need to filter out the Terminated pod
+    running_ct_pods = list()
+    for pod in ct_pod_items:
+        if ocp_pod_obj.get_resource_status(
+            pod.get('metadata').get('name')
+        ) == constants.STATUS_RUNNING:
+            running_ct_pods.append(pod)
+
+    assert running_ct_pods, "No running Ceph tools pod found"
+    ceph_pod = Pod(**running_ct_pods[0])
     return ceph_pod
 
 
@@ -500,7 +545,7 @@ def run_io_in_bg(pod_obj, expect_to_fail=False):
 
     thread = Thread(target=exec_run_io_cmd, args=(pod_obj, expect_to_fail,))
     thread.start()
-    sleep(2)
+    time.sleep(2)
 
     # Checking file existence
     test_file = TEST_FILE + "1"
@@ -639,6 +684,12 @@ def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
     return osd_pods
 
 
+def get_pod_count(label, namespace=None):
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    pods = get_pods_having_label(label=label, namespace=namespace)
+    return len(pods)
+
+
 def get_cephfsplugin_provisioner_pods(
     cephfsplugin_provisioner_label=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
     namespace=None
@@ -748,6 +799,35 @@ def delete_pods(pod_objs):
     """
     for pod in pod_objs:
         pod.delete()
+
+
+def validate_pods_are_respinned_and_running_state(pod_objs_list):
+    """
+    Verifies the list of the pods are respinned and in running state
+
+    Args:
+        pod_objs_list (list): List of the pods obj
+
+    Returns:
+         bool : True if the pods are respinned and running, False otherwise
+
+    """
+    for pod in pod_objs_list:
+        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING)
+
+    for pod in pod_objs_list:
+        pod_obj = pod.get()
+        start_time = pod_obj['status']['startTime']
+        ts = time.strptime(start_time, '%Y-%m-%dT%H:%M:%SZ')
+        ts = calendar.timegm(ts)
+        current_time_utc = time.time()
+        sec = current_time_utc - ts
+        if (sec / 3600) >= 1:
+            logger.error(
+                f'Pod {pod.name} is not respinned, the age of the pod is {start_time}'
+            )
+            return False
+
     return True
 
 
@@ -780,3 +860,128 @@ def verify_node_name(pod_obj, node_name):
             f"specified node: {node_name}, actual node: {actual_node}"
         )
         return False
+
+
+def get_pvc_name(pod_obj):
+    """
+    Function to get pvc_name from pod_obj
+
+    Args:
+        pod_obj (str): The pod object
+
+    Returns:
+        pvc_name (str): The pvc_name on a given pod_obj
+    """
+    return pod_obj.get().get(
+        'spec'
+    ).get('volumes')[0].get('persistentVolumeClaim').get('claimName')
+
+
+def get_used_space_on_mount_point(pod_obj):
+    """
+    Get the used space on a mount point
+
+    Args:
+        pod_obj (POD): The pod object
+
+    Returns:
+        int: Percentage represent the used space on the mount point
+
+    """
+    # Verify data's are written to mount-point
+    mount_point = pod_obj.exec_cmd_on_pod(command="df -kh")
+    mount_point = mount_point.split()
+    used_percentage = mount_point[mount_point.index(constants.MOUNT_POINT) - 1]
+    return used_percentage
+
+
+def get_plugin_pods(interface, namespace=None):
+    """
+    Fetches info of csi-cephfsplugin pods or csi-rbdplugin pods
+
+    Args:
+        interface (str): Interface type. eg: CephBlockPool, CephFileSystem
+        namespace (str): Name of cluster namespace
+
+    Returns:
+        list : csi-cephfsplugin pod objects or csi-rbdplugin pod objects
+    """
+    if interface == constants.CEPHFILESYSTEM:
+        plugin_label = constants.CSI_CEPHFSPLUGIN_LABEL
+    if interface == constants.CEPHBLOCKPOOL:
+        plugin_label = constants.CSI_RBDPLUGIN_LABEL
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    plugins_info = get_pods_having_label(plugin_label, namespace)
+    plugin_pods = [Pod(**plugin) for plugin in plugins_info]
+    return plugin_pods
+
+
+def plugin_provisioner_leader(interface, namespace=None):
+    """
+    Find csi-cephfsplugin-provisioner or csi-rbdplugin-provisioner leader pod
+
+    Args:
+        interface (str): Interface type. eg: CephBlockPool, CephFileSystem
+        namespace (str): Name of cluster namespace
+
+    Returns:
+        Pod: csi-cephfsplugin-provisioner or csi-rbdplugin-provisioner leader
+            pod
+    """
+    non_leader_msg = 'failed to acquire lease'
+    lease_acq_msg = 'successfully acquired lease'
+    lease_renew_msg = 'successfully renewed lease'
+    leader_pod = ''
+
+    if interface == constants.CEPHBLOCKPOOL:
+        pods = get_rbdfsplugin_provisioner_pods(namespace=namespace)
+    if interface == constants.CEPHFILESYSTEM:
+        pods = get_cephfsplugin_provisioner_pods(namespace=namespace)
+
+    pods_log = {}
+    for pod in pods:
+        pods_log[pod] = get_pod_logs(
+            pod_name=pod.name, container='csi-provisioner'
+        ).split('\n')
+
+    for pod, log_list in pods_log.items():
+        # Reverse the list to find last occurrence of message without
+        # iterating over all elements
+        log_list.reverse()
+        for log_msg in log_list:
+            # Check for last occurrence of leader messages.
+            # This will be the first occurrence in reversed list.
+            if (lease_renew_msg in log_msg) or (lease_acq_msg in log_msg):
+                curr_index = log_list.index(log_msg)
+                # Ensure that there is no non leader message logged after
+                # the last occurrence of leader message
+                if not any(
+                    non_leader_msg in msg for msg in log_list[:curr_index]
+                ):
+                    assert not leader_pod, (
+                        "Couldn't identify plugin provisioner leader pod by "
+                        "analysing the logs. Found more than one match."
+                    )
+                    leader_pod = pod
+                break
+
+    assert leader_pod, "Couldn't identify plugin provisioner leader pod."
+    logger.info(f"Plugin provisioner leader pod is {leader_pod.name}")
+    return leader_pod
+
+
+def get_operator_pods(operator_label=constants.OPERATOR_LABEL, namespace=None):
+    """
+    Fetches info about rook-ceph-operator pods in the cluster
+
+    Args:
+        operator_label (str): Label associated with rook-ceph-operator pod
+        namespace (str): Namespace in which ceph cluster lives
+
+    Returns:
+        list : of rook-ceph-operator pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    operators = get_pods_having_label(operator_label, namespace)
+    operator_pods = [Pod(**operator) for operator in operators]
+    return operator_pods

@@ -4,7 +4,7 @@ compute:
   - name: worker
     platform:
       aws:
-        type: {{ worker_instance_type | default('m4.large') }}
+        type: {{ worker_instance_type | default('m4.xlarge') }}
 {% if worker_availability_zones %}
         zones:
   {% for zone in worker_availability_zones %}
