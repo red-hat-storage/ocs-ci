@@ -117,6 +117,27 @@ class Deployment(object):
         ]
         if not worker_nodes:
             raise UnavailableResourceException("No worker node found!")
+        az_worker_nodes = {}
+        for node in worker_nodes:
+            az = node['metadata']['labels'].get(
+                'failure-domain.beta.kubernetes.io/zone'
+            )
+            az_node_list = az_worker_nodes.get(az, [])
+            az_node_list.append(node)
+            az_worker_nodes[az] = az_node_list
+        logger.info(f"Found worker nodes in AZ: {az_worker_nodes}")
+        distributed_worker_nodes = []
+        while az_worker_nodes:
+            for az in list(az_worker_nodes.keys()):
+                az_node_list = az_worker_nodes.get(az)
+                if az_node_list:
+                    node_name = az_node_list.pop(0)['metadata']['name']
+                    distributed_worker_nodes.append(node_name)
+                else:
+                    del az_worker_nodes[az]
+        logger.info(
+            f"Distributed worker nodes for AZ: {distributed_worker_nodes}"
+        )
         to_label = config.DEPLOYMENT.get('ocs_operator_nodes_to_label', 3)
         to_taint = config.DEPLOYMENT.get('ocs_operator_nodes_to_taint', 0)
         worker_count = len(worker_nodes)
@@ -128,9 +149,7 @@ class Deployment(object):
                 f"{to_label} or taint: {to_taint}!"
             )
 
-        workers_to_label = " ".join(
-            [node['metadata']['name'] for node in worker_nodes[:to_label]]
-        )
+        workers_to_label = " ".join(distributed_worker_nodes[:to_label])
         if workers_to_label:
             _ocp = ocp.OCP(kind='node')
             logger.info(
@@ -142,9 +161,7 @@ class Deployment(object):
             )
             _ocp.exec_oc_cmd(command=label_cmd)
 
-        workers_to_taint = " ".join(
-            [node['metadata']['name'] for node in worker_nodes[:to_taint]]
-        )
+        workers_to_taint = " ".join(distributed_worker_nodes[:to_taint])
         if workers_to_taint:
             logger.info(
                 f"Taint nodes: {workers_to_taint} with taint: "
