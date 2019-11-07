@@ -34,24 +34,17 @@ class MCG(object):
         self.namespace = config.ENV_DATA['cluster_namespace']
         ocp_obj = OCP(kind='noobaa', namespace=self.namespace)
         results = ocp_obj.get()
-        try:
-            self.s3_endpoint = (
-                results.get('items')[0].get('status').get('services')
-                .get('serviceS3').get('externalDNS')[1]
-            )
-            self.mgmt_endpoint = (
-                results.get('items')[0].get('status').get('services')
-                .get('serviceMgmt').get('externalDNS')[1]
-            ) + '/rpc'
-        except IndexError:
-            self.s3_endpoint = (
-                results.get('items')[0].get('status').get('services')
-                .get('serviceS3').get('externalDNS')[0]
-            )
-            self.mgmt_endpoint = (
-                results.get('items')[0].get('status').get('services')
-                .get('serviceMgmt').get('externalDNS')[0]
-            ) + '/rpc'
+        regioned_address_index = len(
+            results.get('items')[0].get('status').get('services').get('serviceS3').get('externalDNS')
+        ) - 1
+        self.s3_endpoint = (
+            results.get('items')[0].get('status').get('services')
+            .get('serviceS3').get('externalDNS')[regioned_address_index]
+        )
+        self.mgmt_endpoint = (
+            results.get('items')[0].get('status').get('services')
+            .get('serviceMgmt').get('externalDNS')[regioned_address_index]
+        ) + '/rpc'
         self.region = self.s3_endpoint.split('.')[1]
         creds_secret_name = (
             results.get('items')[0].get('status').get('accounts')
