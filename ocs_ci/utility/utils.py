@@ -582,7 +582,7 @@ def get_openshift_client(
         # return to the previous working directory
         os.chdir(previous_dir)
 
-    client_version = run_cmd(f"{client_binary_path} version")
+    client_version = run_cmd(f"{client_binary_path} version --client")
     log.info(f"OpenShift Client version: {client_version}")
 
     return client_binary_path
