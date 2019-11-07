@@ -2,7 +2,8 @@
 # This config file is for the upgrade purpose
 DEPLOYMENT:
   upgrade: true
-  # In the case you need to upgrade to the latest build, the following
-  # parameter has to be set. Current builds does not support that yet, see BZ:
-  # https://bugzilla.redhat.com/show_bug.cgi?id=1767400
-  # upgrade_to_latest: true
+  # In the case you don't want to upgrade to latest one buiild but just
+  # one build up you can uncomment following parameter upgrade_to_latest.
+  # This option is usefull mainly for testing op upgrade,  so we can install
+  # some older version and run upgrade multiple times till reach latest one.
+  # upgrade_to_latest: false

@@ -250,12 +250,14 @@ class Deployment(object):
         package_manifest.wait_for_resource(timeout=300)
         channel = config.DEPLOYMENT.get('ocs_csv_channel')
         csv_name = package_manifest.get_current_csv(channel=channel)
-        csv = CSV(
-            resource_name=csv_name, kind="csv",
-            namespace=self.namespace
-        )
+        csv = CSV(resource_name=csv_name, namespace=self.namespace)
         csv.wait_for_phase("Succeeded", timeout=720)
-        cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
+        ocs_operator_storage_cluster_cr = config.DEPLOYMENT.get(
+            'ocs_operator_storage_cluster_cr'
+        )
+        cluster_data = templating.load_yaml(
+            ocs_operator_storage_cluster_cr
+        )
         cluster_data['metadata']['name'] = config.ENV_DATA[
             'storage_cluster_name'
         ]

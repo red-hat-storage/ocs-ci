@@ -51,12 +51,12 @@ bugzilla = pytest.mark.bugzilla
 
 # upgrade related markers
 # Requires pytest ordering plugin installed
-order_before_upgrade = pytest.mark.run(order=ORDER_BEFORE_UPGRADE)
+order_pre_upgrade = pytest.mark.run(order=ORDER_BEFORE_UPGRADE)
 order_upgrade = pytest.mark.run(order=ORDER_UPGRADE)
-order_after_upgrade = pytest.mark.run(order=ORDER_AFTER_UPGRADE)
+order_post_upgrade = pytest.mark.run(order=ORDER_AFTER_UPGRADE)
 upgrade = compose(pytest.mark.upgrade, order_upgrade)
-before_upgrade = compose(pytest.mark.before_upgrade, order_before_upgrade)
-after_upgrade = compose(pytest.mark.after_upgrade, order_after_upgrade)
+pre_upgrade = compose(pytest.mark.pre_upgrade, order_pre_upgrade)
+post_upgrade = compose(pytest.mark.post_upgrade, order_post_upgrade)
 
 # mark the test class with marker below to ignore leftover check
 ignore_leftovers = pytest.mark.ignore_leftovers

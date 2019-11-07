@@ -391,3 +391,7 @@ POD_UPLOADPATH = "/tmp/"
 ORDER_BEFORE_UPGRADE = 10
 ORDER_UPGRADE = 20
 ORDER_AFTER_UPGRADE = 30
+
+# Deployment constants
+OCS_CSV_PREFIX = 'ocs-operator'
+LOCAL_STORAGE_CSV_PREFIX = 'local-storage-operator'

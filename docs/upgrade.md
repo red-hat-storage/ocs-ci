@@ -1,12 +1,10 @@
 # Upgrade
 
-Currently the upgrade can be performed just between follow up downstream builds
-e.g. 171 -> 172.
-There is opened [BZ](https://bugzilla.redhat.com/show_bug.cgi?id=1767400) which
-is tracking the issue which prevents us to upgrade to the latest available build.
+Upgrade can be performed to the:
 
-There is prepared config option `upgrade_to_latest` in the DEPLOYMENT section
-which can be set or will be the default value when the BZ gets resolved.
+* latest one DS build (by default)
+* next one DS build from current one - `upgrade_to_latest: false` has to be
+  set, see here: [upgrade.yaml](/conf/ocsci/upgrade.yaml) for more details.
 
 ## Deployment
 
@@ -21,9 +19,9 @@ automatically take not latest build but one before.
 
 For upgrade we have few pytest marks defined [here](/ocs_ci/framework/pytest_customization/marks.py):
 
-* **before_upgrade** - mark tests which are suppose to run before upgrade
+* **pre_upgrade** - mark tests which are suppose to run before upgrade
 * **upgrade** - this is mark for upgrade itself
-* **after_upgrade** - mark tests which are suppose to run after upgrade
+* **post_upgrade** - mark tests which are suppose to run after upgrade
 
 Those marks has to be imported from mentioned
 [module](/ocs_ci/framework/pytest_customization/marks.py) and your test have to
@@ -46,13 +44,10 @@ markers:
 run-ci tests/
     --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir \
-    -m 'before_upgrade or upgrade or after_upgrade'
+    -m 'pre_upgrade or upgrade or post_upgrade'
  ```
 
 ## TODO
 
-Once there will be 4.3 build and we will have different branch for OCS-CI we
-will need to run upgrade in two steps. First run just with `-m before_upgrade`
-from 4.2 branch if we will have such tests and then with
-`-m 'upgrade or after_upgrade'` from 4.3 (master branch) to run everything from
-proper branches designed for version of OCS.
+Once there will be 4.3 build we will need to implement the functionality to
+specify which version is going to be used for the upgrade. Like 4.2 -> 4.3.

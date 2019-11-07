@@ -7,7 +7,9 @@ import tempfile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix 
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.utility import utils
 from ocs_ci.utility import templating
 
@@ -149,23 +151,45 @@ class OCS(object):
         utils.delete_file(self.temp_yaml.name)
 
 
-def ocs_install_verification():
+def ocs_install_verification(timeout=0):
     """
     Perform steps necessary to verify a successful OCS installation
     """
     log.info("Verifying OCS installation")
     namespace = config.ENV_DATA['cluster_namespace']
 
-    # Verify OCS Operator and Local Storage Operator in Succeeded phase
-    log.info("Verifying OCS and Local Storage Operators")
-    csv = OCP(kind='csv', namespace=namespace)
-    csvs = csv.get()
-    for item in csvs['items']:
-        name = item['metadata']['name']
-        log.info("Checking status of %s", name)
-        assert item['status']['phase'] == 'Succeeded', (
-            f"Operator {name} not 'Succeeded'"
-        )
+    # Verify Local Storage CSV is in Succeeded phase
+    log.info("Verifying Local Storage CSV")
+    # There is BZ opened:
+    # https://bugzilla.redhat.com/show_bug.cgi?id=1770183
+    # which makes this check problematic as current CSV is not the currently
+    # installed.
+    local_storage_csvs = get_csvs_start_with_prefix(
+        csv_prefix=constants.LOCAL_STORAGE_CSV_PREFIX,
+        namespace=namespace,
+    )
+    assert len(local_storage_csvs) == 1, (
+        f"There are more than one local storage CSVs: {local_storage_csvs}"
+    )
+    local_storage_name = local_storage_csvs[0]['metadata']['name']
+    local_storage_csv = CSV(
+        resource_name=local_storage_name, namespace=namespace
+    )
+    local_storage_csv.wait_for_phase("Succeeded", timeout=timeout)
+    import ipdb; ipdb.set_trace()
+
+    # Verify OCS CSV is in Succeeded phase
+    log.info("verifying ocs csv")
+    ocs_package_manifest = PackageManifest(
+        resource_name=defaults.OCS_OPERATOR_NAME
+    )
+    ocs_csv_name = ocs_package_manifest.get_current_csv()
+    ocs_csv = CSV(
+        resource_name=ocs_csv_name, namespace=namespace
+    )
+    assert ocs_csv.check_phase(phase="Succeeded"), (
+        "OCS CSV is not in Succeeded phase!"
+    )
 
     # Verify OCS Cluster Service (ocs-storagecluster) is Ready
     log.info("Verifying OCS Cluster service")
@@ -183,7 +207,6 @@ def ocs_install_verification():
     pod = OCP(
         kind=constants.POD, namespace=namespace
     )
-    timeout = 0
     # ocs-operator
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,

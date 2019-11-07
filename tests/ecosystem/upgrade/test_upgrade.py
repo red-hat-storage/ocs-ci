@@ -30,40 +30,40 @@ def test_upgrade():
     )
     image_url = ocs_catalog.get_image_url()
     image_tag = ocs_catalog.get_image_name()
-    if config.DEPLOYMENT.get('upgrade_to_latest', False):
+    if config.DEPLOYMENT.get('upgrade_to_latest', True):
         new_image_tag = get_latest_ds_olm_tag()
     else:
         new_image_tag = get_next_version_available_for_upgrade(image_tag)
     cs_data = deepcopy(ocs_catalog.data)
     cs_data['spec']['image'] = ':'.join([image_url, new_image_tag])
     package_manifest = PackageManifest(resource_name=OCS_OPERATOR_NAME)
-    csv_name_before_upgrade = package_manifest.get_current_csv()
-    log.info(f"CSV name before upgrade is: {csv_name_before_upgrade}")
+    csv_name_pre_upgrade = package_manifest.get_current_csv()
+    log.info(f"CSV name before upgrade is: {csv_name_pre_upgrade}")
     with NamedTemporaryFile() as cs_yaml:
         dump_data_to_temp_yaml(cs_data, cs_yaml.name)
         ocs_catalog.apply(cs_yaml.name)
     # Wait for package manifest is ready
     package_manifest.wait_for_resource()
-    attempts = 120
+    attempts = 145
     for attempt in range(1, attempts):
         if attempts == attempt:
             raise TimeoutException("No new CSV found after upgrade!")
         log.info(f"Attempt {attempt}/{attempts} to check CSV upgraded.")
         package_manifest.reload_data()
-        csv_name_after_upgrade = package_manifest.get_current_csv()
-        if csv_name_after_upgrade == csv_name_before_upgrade:
-            log.info(f"CSV is still: {csv_name_after_upgrade}")
+        csv_name_post_upgrade = package_manifest.get_current_csv()
+        if csv_name_post_upgrade == csv_name_pre_upgrade:
+            log.info(f"CSV is still: {csv_name_post_upgrade}")
             sleep(5)
         else:
-            log.info(f"CSV now upgraded to: {csv_name_after_upgrade}")
+            log.info(f"CSV now upgraded to: {csv_name_post_upgrade}")
             break
 
     csv = CSV(
-        resource_name=csv_name_after_upgrade, kind="csv",
+        resource_name=csv_name_post_upgrade,
         namespace=namespace
     )
     log.info(
-        f"Waiting for CSV {csv_name_after_upgrade} to be in succeeded state"
+        f"Waiting for CSV {csv_name_post_upgrade} to be in succeeded state"
     )
     csv.wait_for_phase("Succeeded", timeout=400)
-    ocs_install_verification()
+    ocs_install_verification(timeout=600)
