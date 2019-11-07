@@ -22,7 +22,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
@@ -985,3 +985,17 @@ def get_operator_pods(operator_label=constants.OPERATOR_LABEL, namespace=None):
     operators = get_pods_having_label(operator_label, namespace)
     operator_pods = [Pod(**operator) for operator in operators]
     return operator_pods
+
+
+def upload_to_pod(pod_name, localpath, remotepath):
+    """
+    Upload a file to pod
+
+    Args:
+        pod_name (str): Name of the pod
+        localpath (str): Local file to upload
+        remotepath (str): Target path on the pod
+
+    """
+    cmd = f"oc cp {os.path.expanduser(localpath)} {pod_name}:{remotepath}"
+    run_cmd(cmd)

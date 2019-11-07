@@ -1371,3 +1371,26 @@ def dump_config_to_file(file_path):
         censor_values(config_copy[key])
     with open(file_path, "w+") as fs:
         yaml.safe_dump(config_copy, fs)
+
+
+def create_rhelpod(namespace, pod_name):
+    """
+    Creates the RHEL pod
+
+    Args:
+        namespace (str): Namespace to create RHEL pod
+        pod_name (str): Pod name
+
+    Returns:
+        pod: Pod instance for RHEL
+
+    """
+    # importing here to avoid dependencies
+    from tests import helpers
+    rhelpod_obj = helpers.create_pod(
+        namespace=namespace,
+        pod_name=pod_name,
+        pod_dict_path=constants.RHEL_POD_YAML
+    )
+    helpers.wait_for_resource_state(rhelpod_obj, constants.STATUS_RUNNING)
+    return rhelpod_obj
