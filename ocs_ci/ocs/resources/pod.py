@@ -300,6 +300,55 @@ class Pod(OCS):
         assert wl.setup(), "Setup up for git failed"
         wl.run()
 
+    def install_packages(self, packages):
+        """
+        Install packages in a Pod
+
+        Args:
+            packages (list): List of packages to install
+
+        """
+        if isinstance(packages, list):
+            packages = ' '.join(packages)
+
+        cmd = f"yum install {packages} -y"
+        self.exec_cmd_on_pod(cmd, False)
+
+    def copy_to_node(self, server, authkey, localpath, remotepath, user=None):
+        """
+        Upload a file from pod to server
+
+        Args:
+            server (str): Name of the server to upload
+            authkey (str): Authentication file (.pem file)
+            localpath (str): Local file in pod to upload
+            remotepath (str): Target path on the remote server
+            user (str): User name to connect to server
+
+        """
+        if not user:
+            user = "root"
+
+        cmd = f"scp -i {authkey} {localpath} {user}@{server}:{remotepath}"
+        self.exec_cmd_on_pod(cmd, False)
+
+    def exec_cmd_on_node(self, server, authkey, cmd, user=None):
+        """
+        Run command on a remote server from pod
+
+        Args:
+            server (str): Name of the server to run the command
+            authkey (str): Authentication file (.pem file)
+            cmd (str): command to run on server from pod
+            user (str): User name to connect to server
+
+        """
+        if not user:
+            user = "root"
+
+        cmd = f"ssh -i {authkey} -o \"StrictHostKeyChecking no\" {user}@{server} {cmd}"
+        self.exec_cmd_on_pod(cmd, False)
+
 
 # Helper functions for Pods
 
@@ -987,7 +1036,7 @@ def get_operator_pods(operator_label=constants.OPERATOR_LABEL, namespace=None):
     return operator_pods
 
 
-def upload_to_pod(pod_name, localpath, remotepath):
+def upload(pod_name, localpath, remotepath):
     """
     Upload a file to pod
 
