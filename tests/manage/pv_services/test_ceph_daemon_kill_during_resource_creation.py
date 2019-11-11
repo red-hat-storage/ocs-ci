@@ -221,6 +221,7 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
         executor = ThreadPoolExecutor(max_workers=(2 * num_of_pvc))
 
         disruption.set_resource(resource=resource_to_delete)
+        disruption.select_daemon()
 
         access_modes = [constants.ACCESS_MODE_RWO]
         if interface == constants.CEPHFILESYSTEM:
@@ -320,7 +321,7 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
             else:
                 storage_type = 'fs'
             pod_obj.run_io(
-                storage_type=storage_type, size='1G', runtime=10,
+                storage_type=storage_type, size='2G', runtime=30,
                 fio_filename=f'{pod_obj.name}_io_file1'
             )
         log.info("FIO started on all pods.")
