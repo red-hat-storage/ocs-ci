@@ -321,7 +321,7 @@ class Pod(OCS):
         Args:
             server (str): Name of the server to upload
             authkey (str): Authentication file (.pem file)
-            localpath (str): Local file in pod to upload
+            localpath (str): Local file/dir in pod to upload
             remotepath (str): Target path on the remote server
             user (str): User name to connect to server
 
@@ -329,7 +329,10 @@ class Pod(OCS):
         if not user:
             user = "root"
 
-        cmd = f"scp -i {authkey} {localpath} {user}@{server}:{remotepath}"
+        cmd = (
+            f"scp -i {authkey} -o \"StrictHostKeyChecking no\""
+            f" -r {localpath} {user}@{server}:{remotepath}"
+        )
         self.exec_cmd_on_pod(cmd, False)
 
     def exec_cmd_on_node(self, server, authkey, cmd, user=None):
