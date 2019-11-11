@@ -52,7 +52,7 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         self.rbd_sc = storageclass_factory(interface=constants.CEPHBLOCKPOOL)
 
     def test_delete_project_with_pvc_and_pods(
-        self, project_factory, multi_pvc_factory,
+        self, setup, project_factory, multi_pvc_factory,
         pvc_factory, pod_factory, pvcs_num
     ):
         # Start with Project 1
