@@ -314,7 +314,7 @@ class Pod(OCS):
         cmd = f"yum install {packages} -y"
         self.exec_cmd_on_pod(cmd, False)
 
-    def copy_to_node(self, server, authkey, localpath, remotepath, user=None):
+    def copy_to_server(self, server, authkey, localpath, remotepath, user=None):
         """
         Upload a file from pod to server
 

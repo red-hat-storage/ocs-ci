@@ -95,9 +95,10 @@ def wait_for_resource_state(resource, state, timeout=60):
 
 def create_pod(
     interface_type=None, pvc_name=None,
-    do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE, pod_name=None,
+    do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
-    raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1
+    raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1,
+    pod_name=None
 ):
     """
     Create a pod
@@ -114,6 +115,7 @@ def create_pod(
         raw_block_pv (bool): True for creating raw block pv based pod, False otherwise
         raw_block_device (str): raw block device for the pod
         replica_count (int): Replica count for deployment config
+        pod_name (str): Name of the pod to create
 
     Returns:
         Pod: A Pod instance

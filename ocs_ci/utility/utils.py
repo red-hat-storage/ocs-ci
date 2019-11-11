@@ -1390,7 +1390,7 @@ def create_rhelpod(namespace, pod_name):
     rhelpod_obj = helpers.create_pod(
         namespace=namespace,
         pod_name=pod_name,
-        pod_dict_path=constants.RHEL_POD_YAML
+        pod_dict_path=constants.RHEL_7_7_POD_YAML
     )
     helpers.wait_for_resource_state(rhelpod_obj, constants.STATUS_RUNNING)
     return rhelpod_obj

@@ -258,8 +258,8 @@ FEDORA_DC_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "fedora_dc.yaml"
 )
 
-RHEL_POD_YAML = os.path.join(
-    TEMPLATE_APP_POD_DIR, "rhel.yaml"
+RHEL_7_7_POD_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "rhel-7_7.yaml"
 )
 
 # Openshift-logging elasticsearch operator deployment yamls
