@@ -15,8 +15,8 @@ spec:
           cpu: "600m"
           memory: "4Gi"
       storage:
-        storageClassName: "rook-ceph-ceph-rbd"
-        size: "100G"
+        storageClassName: "ocs-storagecluster-ceph-rbd"
+        size: "200G"
       redundancyPolicy: "SingleRedundancy"
   visualization:
     type: "kibana"

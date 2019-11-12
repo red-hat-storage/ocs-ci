@@ -225,8 +225,7 @@ def create_instance_in_clusterlogging():
     num_of_master_nodes = helpers.get_master_nodes()
     nodes_in_cluster = len(num_of_worker_nodes) + len(num_of_master_nodes)
     inst_data = templating.load_yaml(constants.CL_INSTANCE_YAML)
-    inst_data['spec']['logStore']['elasticsearch']['storage']['size'] = "200Gi"
-    node_count = inst_data['spec']['logStore']['elasticsearch']['nodeCount']
+    es_node_count = inst_data['spec']['logStore']['elasticsearch']['nodeCount']
     helpers.create_resource(wait=False, **inst_data)
     oc = ocp.OCP('v1', 'ClusterLogging', 'openshift-logging')
     logging_instance = oc.get(resource_name='instance', out_yaml_format='True')
@@ -240,7 +239,7 @@ def create_instance_in_clusterlogging():
         kind=constants.POD, namespace='openshift-logging'
     )
     pod_status = pod_obj.wait_for_resource(
-        condition=constants.STATUS_RUNNING, resource_count=5 + nodes_in_cluster,
+        condition=constants.STATUS_RUNNING, resource_count=2 + es_node_count + nodes_in_cluster,
         timeout=200, sleep=5
     )
     assert pod_status, "Pods are not in Running state."
@@ -249,7 +248,7 @@ def create_instance_in_clusterlogging():
         kind=constants.PVC, namespace='openshift-logging'
     )
     pvc_status = pvc_obj.wait_for_resource(
-        condition=constants.STATUS_BOUND, resource_count=node_count,
+        condition=constants.STATUS_BOUND, resource_count=es_node_count,
         timeout=150, sleep=5
     )
     assert pvc_status, "PVCs are not in bound state."
