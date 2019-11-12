@@ -3,7 +3,7 @@ ansible_user={{ ansible_user | default('test') }}
 ansible_become={{ ansible_become | default('True') }}
 
 openshift_kubeconfig_path={{ pod_kubeconfig }}
-openshift_pull_secret_path={{ pod_pull_secret | default('True') }}
+openshift_pull_secret_path={{ pod_pull_secret }}
 
 [new_workers]
 {% for node in rhel_worker_nodes %}

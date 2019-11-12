@@ -312,7 +312,7 @@ class Pod(OCS):
             packages = ' '.join(packages)
 
         cmd = f"yum install {packages} -y"
-        self.exec_cmd_on_pod(cmd, False)
+        self.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
     def copy_to_server(self, server, authkey, localpath, remotepath, user=None):
         """
@@ -333,7 +333,7 @@ class Pod(OCS):
             f"scp -i {authkey} -o \"StrictHostKeyChecking no\""
             f" -r {localpath} {user}@{server}:{remotepath}"
         )
-        self.exec_cmd_on_pod(cmd, False)
+        self.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
     def exec_cmd_on_node(self, server, authkey, cmd, user=None):
         """
@@ -350,7 +350,7 @@ class Pod(OCS):
             user = "root"
 
         cmd = f"ssh -i {authkey} -o \"StrictHostKeyChecking no\" {user}@{server} {cmd}"
-        self.exec_cmd_on_pod(cmd, False)
+        self.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
 
 # Helper functions for Pods
