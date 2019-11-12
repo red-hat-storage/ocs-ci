@@ -240,7 +240,7 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
         # Start creation of PVCs
         bulk_pvc_create = executor.submit(
             multi_pvc_factory, interface=interface,
-            project=self.proj_obj, storageclass=self.sc_obj, size=5,
+            project=self.proj_obj, storageclass=self.sc_obj, size=8,
             access_modes=access_modes,
             access_modes_selection='distribute_random',
             status=constants.STATUS_BOUND, num_of_pvc=num_of_pvc,
