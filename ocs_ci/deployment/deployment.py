@@ -187,9 +187,8 @@ class Deployment(object):
         image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
         if not image_tag and config.REPORTING.get("us_ds") == 'DS':
             image_tag = get_latest_ds_olm_tag()
-        ocs_operator_olm = config.DEPLOYMENT['ocs_operator_olm']
         olm_data_generator = templating.load_yaml(
-            ocs_operator_olm, multi_document=True
+            constants.OLM_YAML, multi_document=True
         )
         olm_yaml_data = []
         subscription_yaml_data = []
@@ -202,8 +201,8 @@ class Deployment(object):
                 and yaml_doc['metadata']['name'] == cs_name
             )
             if change_cs_condition:
-                image_from_spec = yaml_doc['spec']['image']
-                image = image if image else image_from_spec.split(':')[0]
+                default_image = config.DEPLOYMENT['default_ocs_registry_image']
+                image = image if image else default_image.split(':')[0]
                 yaml_doc['spec']['image'] = (
                     f"{image}:{image_tag if image_tag else 'latest'}"
                 )
@@ -254,18 +253,11 @@ class Deployment(object):
             namespace=self.namespace
         )
         csv.wait_for_phase("Succeeded", timeout=400)
-        ocs_operator_storage_cluster_cr = config.DEPLOYMENT.get(
-            'ocs_operator_storage_cluster_cr'
-        )
-        cluster_data = templating.load_yaml(
-            ocs_operator_storage_cluster_cr
-        )
+        cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
         cluster_data['metadata']['name'] = config.ENV_DATA[
             'storage_cluster_name'
         ]
-        deviceset_data = templating.load_yaml(
-            constants.DEVICESET_YAML
-        )
+        deviceset_data = cluster_data['spec']['storageDeviceSets'][0]
         device_size = int(
             config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
         )
@@ -285,9 +277,6 @@ class Deployment(object):
             }
 
         if self.platform.lower() == constants.VSPHERE_PLATFORM:
-            cluster_data['spec']['monPVCTemplate']['spec'][
-                'storageClassName'
-            ] = constants.DEFAULT_SC_VSPHERE
             deviceset_data['dataPVCTemplate']['spec'][
                 'storageClassName'
             ] = constants.DEFAULT_SC_VSPHERE
