@@ -15,6 +15,7 @@ TOP_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 TEMPLATE_DIR = os.path.join(TOP_DIR, "ocs_ci", "templates")
+REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
@@ -118,6 +119,7 @@ DEFAULT_BLOCKPOOL = 'rbd'
 DEFAULT_SC_RBD = 'ceph-rbd'
 DEFAULT_SC_CEPHFS = "cephfs"
 DEFAULT_ROUTE_CRT = "router-certs-default"
+DEFAULT_NAMESPACE = "default"
 IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
 
 # encoded value of 'admin'
@@ -256,6 +258,10 @@ FEDORA_DC_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "fedora_dc.yaml"
 )
 
+RHEL_7_7_POD_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "rhel-7_7.yaml"
+)
+
 # Openshift-logging elasticsearch operator deployment yamls
 EO_NAMESPACE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_EO, "eo-project.yaml"
@@ -367,3 +373,11 @@ INSTALLER_DEFAULT_DNS = "1.1.1.1"
 
 # Config related constants
 config_keys_patterns_to_censor = ['passw', 'token', 'secret']
+
+# repos
+OCP4_2_REPO = os.path.join(REPO_DIR, "ocp_4_2.repo")
+
+# packages
+RHEL_POD_PACKAGES = ["openssh-clients", "openshift-ansible", "openshift-clients", "jq"]
+
+POD_UPLOADPATH = "/tmp/"

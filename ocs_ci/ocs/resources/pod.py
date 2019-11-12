@@ -22,7 +22,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
@@ -299,6 +299,58 @@ class Pod(OCS):
         )
         assert wl.setup(), "Setup up for git failed"
         wl.run()
+
+    def install_packages(self, packages):
+        """
+        Install packages in a Pod
+
+        Args:
+            packages (list): List of packages to install
+
+        """
+        if isinstance(packages, list):
+            packages = ' '.join(packages)
+
+        cmd = f"yum install {packages} -y"
+        self.exec_cmd_on_pod(cmd, out_yaml_format=False)
+
+    def copy_to_server(self, server, authkey, localpath, remotepath, user=None):
+        """
+        Upload a file from pod to server
+
+        Args:
+            server (str): Name of the server to upload
+            authkey (str): Authentication file (.pem file)
+            localpath (str): Local file/dir in pod to upload
+            remotepath (str): Target path on the remote server
+            user (str): User name to connect to server
+
+        """
+        if not user:
+            user = "root"
+
+        cmd = (
+            f"scp -i {authkey} -o \"StrictHostKeyChecking no\""
+            f" -r {localpath} {user}@{server}:{remotepath}"
+        )
+        self.exec_cmd_on_pod(cmd, out_yaml_format=False)
+
+    def exec_cmd_on_node(self, server, authkey, cmd, user=None):
+        """
+        Run command on a remote server from pod
+
+        Args:
+            server (str): Name of the server to run the command
+            authkey (str): Authentication file (.pem file)
+            cmd (str): command to run on server from pod
+            user (str): User name to connect to server
+
+        """
+        if not user:
+            user = "root"
+
+        cmd = f"ssh -i {authkey} -o \"StrictHostKeyChecking no\" {user}@{server} {cmd}"
+        self.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
 
 # Helper functions for Pods
@@ -985,3 +1037,17 @@ def get_operator_pods(operator_label=constants.OPERATOR_LABEL, namespace=None):
     operators = get_pods_having_label(operator_label, namespace)
     operator_pods = [Pod(**operator) for operator in operators]
     return operator_pods
+
+
+def upload(pod_name, localpath, remotepath):
+    """
+    Upload a file to pod
+
+    Args:
+        pod_name (str): Name of the pod
+        localpath (str): Local file to upload
+        remotepath (str): Target path on the pod
+
+    """
+    cmd = f"oc cp {os.path.expanduser(localpath)} {pod_name}:{remotepath}"
+    run_cmd(cmd)

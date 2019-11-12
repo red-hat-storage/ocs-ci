@@ -97,7 +97,8 @@ def create_pod(
     interface_type=None, pvc_name=None,
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
-    raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1
+    raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1,
+    pod_name=None
 ):
     """
     Create a pod
@@ -114,6 +115,7 @@ def create_pod(
         raw_block_pv (bool): True for creating raw block pv based pod, False otherwise
         raw_block_device (str): raw block device for the pod
         replica_count (int): Replica count for deployment config
+        pod_name (str): Name of the pod to create
 
     Returns:
         Pod: A Pod instance
@@ -130,9 +132,10 @@ def create_pod(
     if dc_deployment:
         pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
     pod_data = templating.load_yaml(pod_dict)
-    pod_name = create_unique_resource_name(
-        f'test-{interface}', 'pod'
-    )
+    if not pod_name:
+        pod_name = create_unique_resource_name(
+            f'test-{interface}', 'pod'
+        )
     pod_data['metadata']['name'] = pod_name
     pod_data['metadata']['namespace'] = namespace
     if dc_deployment:
