@@ -1,0 +1,7 @@
+---
+ENV_DATA:
+  platform: 'aws'
+  worker_availability_zones:
+    - 'us-east-2a'
+  master_availability_zones:
+    - 'us-east-2a'
