@@ -151,7 +151,7 @@ CSI_RBDPLUGIN_LABEL = "app=csi-rbdplugin"
 OCS_OPERATOR_LABEL = "name=ocs-operator"
 LOCAL_STORAGE_OPERATOR_LABEL = "name=local-storage-operator"
 NOOBAA_APP_LABEL = "app=noobaa"
-DEFAULT_DEVICESET_PVC_NAME = "example-deviceset"
+DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 
 
@@ -277,8 +277,12 @@ EO_SUB_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_EO, "eo-sub.yaml"
 )
 
-DEVICESET_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "deviceset.yaml"
+OLM_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "deploy-with-olm.yaml"
+)
+
+STORAGE_CLUSTER_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
 )
 
 # Openshift-logging clusterlogging operator deployment yamls
