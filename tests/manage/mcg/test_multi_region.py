@@ -2,14 +2,14 @@ import logging
 from itertools import chain
 from random import randrange
 
-import boto3
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     tier1, aws_platform_required, filter_insecure_request_warning
 )
 from ocs_ci.ocs import constants
-from tests.helpers import create_unique_resource_name, craft_s3_command
+from ocs_ci.ocs.constants import BS_AUTH_FAILED, BS_OPTIMAL
+from tests.helpers import create_unique_resource_name
 from tests.manage.mcg.helpers import retrieve_test_objects_to_pod, sync_object_directory
 
 logger = logging.getLogger(__name__)
@@ -101,7 +101,7 @@ class TestMultiRegion:
 
         # Bring bucket A down
         mcg_obj.toggle_bucket_readwrite(backingstore1['name'])
-        mcg_obj.check_backingstore_state('backing-store-' + backingstore1['name'], 'AUTH_FAILED')
+        mcg_obj.check_backingstore_state('backing-store-' + backingstore1['name'], BS_AUTH_FAILED)
 
         # Verify integrity of B
         # Retrieve all objects from MCG bucket to result dir in Pod
@@ -122,8 +122,8 @@ class TestMultiRegion:
         mcg_obj.toggle_bucket_readwrite(backingstore2['name'])
         logger.info('Freeing bucket A')
         mcg_obj.toggle_bucket_readwrite(backingstore1['name'], block=False)
-        mcg_obj.check_backingstore_state('backing-store-' + backingstore1['name'], 'OPTIMAL')
-        mcg_obj.check_backingstore_state('backing-store-' + backingstore2['name'], 'AUTH_FAILED')
+        mcg_obj.check_backingstore_state('backing-store-' + backingstore1['name'], BS_OPTIMAL)
+        mcg_obj.check_backingstore_state('backing-store-' + backingstore2['name'], BS_AUTH_FAILED)
 
         # Verify integrity of A
         # Retrieve all objects from MCG bucket to result dir in Pod

@@ -62,6 +62,10 @@ STATUS_BOUND = 'Bound'
 STATUS_RELEASED = 'Released'
 STATUS_COMPLETED = 'Completed'
 
+# NooBaa statuses
+BS_AUTH_FAILED = 'AUTH_FAILED'
+BS_OPTIMAL = 'OPTIMAL'
+
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"

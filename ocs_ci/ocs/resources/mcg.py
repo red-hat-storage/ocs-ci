@@ -251,7 +251,6 @@ class MCG(object):
             bool: True if the data reduction mechanics work, False otherwise
 
         """
-
         def _retrieve_reduction_data():
             payload = {
                 "api": "bucket_api",
@@ -299,6 +298,13 @@ class MCG(object):
             return False
 
     def request_aws_credentials(self):
+        """
+        Uses a CredentialsRequest CR to create an AWS IAM that allows the program
+        to interact with S3
+
+        Returns:
+            OCS: The CredentialsRequest resource
+        """
         awscreds_data = templating.load_yaml(constants.MCG_AWS_CREDS_YAML)
         req_name = create_unique_resource_name('awscredreq', 'credentialsrequests')
         awscreds_data['metadata']['name'] = req_name
@@ -331,6 +337,16 @@ class MCG(object):
         return creds_request
 
     def create_new_aws_connection(self, conn_name=None):
+        """
+        Creates a new NooBaa connection to an AWS backend
+
+        Args:
+            conn_name: The connection name to be used
+
+        Returns:
+            bool: False if the connection creation failed
+
+        """
         if conn_name is None:
             conn_name = create_unique_resource_name('awsconnection', 'mcgconn')
 
@@ -357,6 +373,14 @@ class MCG(object):
             return False
 
     def create_new_backingstore_bucket(self, backingstore_info):
+        """
+        Creates an S3 target bucket for NooBaa to use as a backing store
+
+        Args:
+            backingstore_info: A tuple containing the BS information
+                               to be used in its creation.
+
+        """
         if backingstore_info.get('name') is None:
             backingstore_info['name'] = create_unique_resource_name('backingstorebucket', 'awsbucket')
 
@@ -371,6 +395,15 @@ class MCG(object):
             )
 
     def create_aws_backingstore_secret(self, name):
+        """
+        Creates a secret for NooBaa's backingstore
+        Args:
+            name: The name to be given to the secret
+
+        Returns:
+            OCS: The secret resource
+
+        """
         bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
         bs_secret_data['metadata']['name'] += f'-{name}'
         bs_secret_data['metadata']['namespace'] = self.namespace
@@ -383,6 +416,18 @@ class MCG(object):
         return create_resource(**bs_secret_data)
 
     def oc_create_aws_backingstore(self, name, targetbucket, secretname, region):
+        """
+        Creates a new NooBaa backing store
+        Args:
+            name: The name to be given to the backing store
+            targetbucket: The S3 target bucket to connect to
+            secretname: The secret to use for authentication
+            region: The target bucket's region
+
+        Returns:
+            OCS: The backingstore resource
+
+        """
         bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
         bs_data['metadata']['name'] += f'-{name}'
         bs_data['metadata']['namespace'] = self.namespace
@@ -392,6 +437,17 @@ class MCG(object):
         return create_resource(**bs_data)
 
     def oc_create_bucketclass(self, name, backingstores, placement):
+        """
+        Creates a new NooBaa bucket class
+        Args:
+            name: The name to be given to the bucket class
+            backingstores: The backing stores to use as part of the policy
+            placement: The placement policy to be used - Mirror | Spread
+
+        Returns:
+            OCS: The bucket class resource
+
+        """
         bc_data = templating.load_yaml(constants.MCG_BUCKETCLASS_YAML)
         bc_data['metadata']['name'] = name
         bc_data['metadata']['namespace'] = self.namespace
@@ -401,6 +457,13 @@ class MCG(object):
         return create_resource(**bc_data)
 
     def toggle_bucket_readwrite(self, bucketname, block=True):
+        """
+
+        Args:
+            bucketname: The name of the bucket that should be manipulated
+            block: Whether to block RW or un-block. True | False
+
+        """
         if block:
             bucket_policy = {
                 "Version": "2012-10-17",
@@ -433,6 +496,17 @@ class MCG(object):
             )
 
     def check_if_mirroring_is_done(self, bucket_name):
+        """
+        Check whether all object chunks in a bucket
+        are mirrored across all backing stores.
+
+        Args:
+            bucket_name: The name of the bucket that should be checked
+
+        Returns:
+            bool: Whether mirroring finished successfully
+
+        """
         def _check_mirroring():
             results = []
             obj_list = self.send_rpc_query('object_api', 'list_objects', params={
@@ -456,7 +530,6 @@ class MCG(object):
 
             return all(results)
 
-        # Pause
         try:
             for mirroring_is_complete in TimeoutSampler(120, 5, _check_mirroring):
                 if mirroring_is_complete:
@@ -475,6 +548,16 @@ class MCG(object):
             assert False
 
     def check_backingstore_state(self, backingstore_name, desired_state):
+        """
+        Checks whether the backing store reached a specific state
+        Args:
+            backingstore_name: Name of the backing store to be checked
+            desired_state: The desired state of the backing store
+
+        Returns:
+            bool: Whether the backing store has reached the desired state
+
+        """
         def _check_state():
             sysinfo = self.send_rpc_query('system_api', 'read_system', params={}).json()['reply']
             for pool in sysinfo.get('pools'):
@@ -483,7 +566,6 @@ class MCG(object):
                         return True
             return False
 
-        # Pause
         try:
             for reached_state in TimeoutSampler(180, 10, _check_state):
                 if reached_state:
