@@ -10,5 +10,5 @@ spec:
     tiers:
     - backingStores:
       - backing-store
-      - blagaga
+      - backing-store
       placement: Spread|Mirror
