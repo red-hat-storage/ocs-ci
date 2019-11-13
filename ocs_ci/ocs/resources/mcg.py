@@ -365,7 +365,7 @@ class MCG(object):
             ):
                 if 'error' not in resp.text:
                     logger.info(f'Connection {conn_name} created successfully')
-                    break
+                    return True
                 else:
                     logger.info('AWS IAM did not yet propagate')
         except TimeoutExpiredError:
@@ -378,7 +378,7 @@ class MCG(object):
 
         Args:
             backingstore_info: A tuple containing the BS information
-                               to be used in its creation.
+            to be used in its creation.
 
         """
         if backingstore_info.get('name') is None:
