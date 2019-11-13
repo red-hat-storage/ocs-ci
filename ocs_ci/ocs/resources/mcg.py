@@ -359,15 +359,16 @@ class MCG(object):
     def create_new_backingstore_bucket(self, backingstore_info):
         if backingstore_info.get('name') is None:
             backingstore_info['name'] = create_unique_resource_name('backingstorebucket', 'awsbucket')
-        if backingstore_info.get('region') is None:
-            backingstore_info['region'] = self.region
 
-        self.aws_s3_resource.create_bucket(
-            Bucket=backingstore_info['name'],
-            CreateBucketConfiguration={
-                'LocationConstraint': backingstore_info['region']
-            }
-        )
+        if backingstore_info.get('region') is None:
+            self.aws_s3_resource.create_bucket(Bucket=backingstore_info['name'])
+        else:
+            self.aws_s3_resource.create_bucket(
+                Bucket=backingstore_info['name'],
+                CreateBucketConfiguration={
+                    'LocationConstraint': backingstore_info['region']
+                }
+            )
 
     def create_aws_backingstore_secret(self, name):
         bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)

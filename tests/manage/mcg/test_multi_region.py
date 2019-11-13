@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import constants
 from tests.helpers import create_unique_resource_name, craft_s3_command
+from tests.manage.mcg.helpers import retrieve_test_objects_to_pod, sync_object_directory
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,8 @@ class TestMultiRegion:
             [] for _ in range(4)
         )
 
-        def finalizer():
+        # Cleans up all resources that were created for the test
+        def resource_cleanup():
             for resource in chain(bs_secrets, bucketclasses):
                 resource.delete()
 
@@ -39,7 +41,7 @@ class TestMultiRegion:
                 mcg_obj.aws_s3_resource.Bucket(aws_bucket).objects.all().delete()
                 mcg_obj.aws_s3_resource.Bucket(aws_bucket).delete()
 
-        request.addfinalizer(finalizer)
+        request.addfinalizer(resource_cleanup)
 
         return aws_buckets, bs_secrets, bs_objs, bucketclasses
 
@@ -49,8 +51,10 @@ class TestMultiRegion:
         Test bucket creation using the S3 SDK
         """
         # Setup
-        # Todo: add region and amount randomalization
+        # Todo: add region and amount parametrization - note that `us-east-1` will cause an error
+        # Todo: as it is the default region. If usage of `us-east-1` needs to be tested, keep the 'region' field out.
         aws_buckets, backingstore_secrets, backingstore_objects, bucketclasses = resources
+        # Define backing stores
         backingstore1 = {
             'name': create_unique_resource_name(resource_description='testbs', resource_type='s3bucket'),
             'region': f'us-west-{randrange(1, 3)}'
@@ -59,13 +63,14 @@ class TestMultiRegion:
             'name': create_unique_resource_name(resource_description='testbs', resource_type='s3bucket'),
             'region': f'us-east-2'
         }
+        # Create target buckets for them
         mcg_obj.create_new_backingstore_bucket(backingstore1)
         mcg_obj.create_new_backingstore_bucket(backingstore2)
         aws_buckets.extend((backingstore1['name'], backingstore2['name']))
-
+        # Create a backing store secret
         backingstore_secret = mcg_obj.create_aws_backingstore_secret(backingstore1['name'] + 'secret')
         backingstore_secrets.append(backingstore_secret)
-
+        # Create AWS-backed backing stores on NooBaa
         backingstore_obj_1 = mcg_obj.oc_create_aws_backingstore(
             backingstore1['name'], backingstore1['name'], backingstore_secret.name, backingstore1['region']
         )
@@ -73,38 +78,24 @@ class TestMultiRegion:
             backingstore2['name'], backingstore2['name'], backingstore_secret.name, backingstore2['region']
         )
         backingstore_objects.extend((backingstore_obj_1, backingstore_obj_2))
-
+        # Create a new mirror bucketclass that'll use all the backing stores we created
         bucketclass = mcg_obj.oc_create_bucketclass(
-            'testbc', [backingstore_obj_1.name, backingstore_obj_2.name], 'Mirror'
+            create_unique_resource_name(resource_description='testbc', resource_type='bucketclass'),
+            [backingstore.name for backingstore in backingstore_objects], 'Mirror'
         )
         bucketclasses.append(bucketclass)
-        mirrored_bucket = bucket_factory(1, 'OC', bucketclass=bucketclass.name)[0]
+        # Create a NooBucket that'll use the bucket class in order to test the mirroring policy
+        bucket_name = bucket_factory(1, 'OC', bucketclass=bucketclass.name)[0].name
 
-        # IO
-        downloaded_files = []
-        original_dir = "/aws/original"
-        result_dir = "/aws/result"
-        # Retrieve a list of all objects on the test-objects bucket and downloads them to the pod
-        awscli_pod.exec_cmd_on_pod(command=f'mkdir {original_dir} {result_dir}')
-        public_s3 = boto3.resource('s3', region_name=mcg_obj.region)
-        for obj in public_s3.Bucket(constants.TEST_FILES_BUCKET).objects.all():
-            logger.info(f'Downloading {obj.key} from AWS test bucket')
-            awscli_pod.exec_cmd_on_pod(
-                command=f'sh -c "cd {original_dir} && '
-                f'wget https://{constants.TEST_FILES_BUCKET}.s3.'
-                f'{mcg_obj.region}.amazonaws.com/{obj.key}"'
-            )
-            downloaded_files.append(obj.key)
-
-        bucket_name = mirrored_bucket.name
+        # Download test objects from the public bucket
+        downloaded_objs = retrieve_test_objects_to_pod(awscli_pod, '/aws/original/')
 
         logger.info(f'Uploading all pod objects to MCG bucket')
-        bucket_path = f's3://{bucket_name}'
-        copy_cmd = f'cp --recursive {original_dir} {bucket_path}'
-        assert 'Completed' in awscli_pod.exec_cmd_on_pod(
-            command=craft_s3_command(mcg_obj, copy_cmd), out_yaml_format=False,
-            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
-        ), 'Failed to Upload objects to MCG bucket'
+        local_testobjs_dir_path = '/aws/original'
+        local_temp_path = '/aws/temp'
+        mcg_bucket_path = f's3://{bucket_name}'
+
+        sync_object_directory(awscli_pod, 's3://' + constants.TEST_FILES_BUCKET, local_testobjs_dir_path)
 
         mcg_obj.check_if_mirroring_is_done(bucket_name)
 
@@ -114,19 +105,18 @@ class TestMultiRegion:
 
         # Verify integrity of B
         # Retrieve all objects from MCG bucket to result dir in Pod
-        logger.info(f'Downloading all objects from MCG bucket to awscli pod')
-        retrieve_cmd = f'cp --recursive {bucket_path} {result_dir}'
-        assert 'Completed' in awscli_pod.exec_cmd_on_pod(
-            command=craft_s3_command(mcg_obj, retrieve_cmd), out_yaml_format=False,
-            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
-        ), 'Failed to Download objects from MCG bucket'
+        sync_object_directory(awscli_pod, mcg_bucket_path, local_temp_path)
+
         # Checksum is compared between original and result object
-        for obj in downloaded_files:
+        for obj in downloaded_objs:
             assert mcg_obj.verify_s3_object_integrity(
-                original_object_path=f'{original_dir}/{obj}',
-                result_object_path=f'{result_dir}/{obj}', awscli_pod=awscli_pod
+                original_object_path=f'{local_testobjs_dir_path}/{obj}',
+                result_object_path=f'{local_temp_path}/{obj}', awscli_pod=awscli_pod
             ), 'Checksum comparision between original and result object failed'
-        awscli_pod.exec_cmd_on_pod(command=f'sh -c \"rm -rf {result_dir}/*\"')
+
+        # Clean up the temp dir
+        awscli_pod.exec_cmd_on_pod(command=f'sh -c \"rm -rf {local_temp_path}/*\"')
+
         # Bring B down, bring A up
         logger.info('Blocking bucket B')
         mcg_obj.toggle_bucket_readwrite(backingstore2['name'])
@@ -134,19 +124,16 @@ class TestMultiRegion:
         mcg_obj.toggle_bucket_readwrite(backingstore1['name'], block=False)
         mcg_obj.check_backingstore_state('backing-store-' + backingstore1['name'], 'OPTIMAL')
         mcg_obj.check_backingstore_state('backing-store-' + backingstore2['name'], 'AUTH_FAILED')
+
         # Verify integrity of A
         # Retrieve all objects from MCG bucket to result dir in Pod
-        logger.info(f'Downloading all objects from MCG bucket to awscli pod')
-        retrieve_cmd = f'cp --recursive {bucket_path} {result_dir}'
-        assert 'Completed' in awscli_pod.exec_cmd_on_pod(
-            command=craft_s3_command(mcg_obj, retrieve_cmd), out_yaml_format=False,
-            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
-        ), 'Failed to Download objects from MCG bucket'
+        sync_object_directory(awscli_pod, mcg_bucket_path, local_temp_path)
+
         # Checksum is compared between original and result object
-        for obj in downloaded_files:
+        for obj in downloaded_objs:
             assert mcg_obj.verify_s3_object_integrity(
-                original_object_path=f'{original_dir}/{obj}',
-                result_object_path=f'{result_dir}/{obj}', awscli_pod=awscli_pod
+                original_object_path=f'{local_testobjs_dir_path}/{obj}',
+                result_object_path=f'{local_temp_path}/{obj}', awscli_pod=awscli_pod
             ), 'Checksum comparision between original and result object failed'
         # Bring B up
         mcg_obj.toggle_bucket_readwrite(backingstore2['name'], block=False)
