@@ -27,59 +27,59 @@ log = logging.getLogger(__name__)
     argvalues=[
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'delete_pvcs', 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-922")
+            marks=pytest.mark.polarion_id("OCS-1134")
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'delete_pods', 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-923")
+            marks=pytest.mark.polarion_id("OCS-1133")
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'delete_pvcs', 'mon'],
-            marks=pytest.mark.polarion_id("OCS-914")
+            marks=pytest.mark.polarion_id("OCS-1120")
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'delete_pods', 'mon'],
-            marks=pytest.mark.polarion_id("OCS-911")
+            marks=pytest.mark.polarion_id("OCS-1119")
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'delete_pvcs', 'osd'],
-            marks=pytest.mark.polarion_id("OCS-912")
+            marks=pytest.mark.polarion_id("OCS-1127")
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'delete_pods', 'osd'],
-            marks=pytest.mark.polarion_id("OCS-913")
+            marks=pytest.mark.polarion_id("OCS-1126")
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-920")
+            marks=pytest.mark.polarion_id("OCS-1105")
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pods', 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-915")
+            marks=pytest.mark.polarion_id("OCS-1104")
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'mon'],
-            marks=pytest.mark.polarion_id("OCS-918")
+            marks=pytest.mark.polarion_id("OCS-1091")
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pods', 'mon'],
-            marks=pytest.mark.polarion_id("OCS-919")
+            marks=pytest.mark.polarion_id("OCS-1090")
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'osd'],
-            marks=pytest.mark.polarion_id("OCS-924")
+            marks=pytest.mark.polarion_id("OCS-1098")
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pods', 'osd'],
-            marks=pytest.mark.polarion_id("OCS-917")
+            marks=pytest.mark.polarion_id("OCS-1097")
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'mds'],
-            marks=pytest.mark.polarion_id("OCS-916")
+            marks=pytest.mark.polarion_id("OCS-1112")
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pods', 'mds'],
-            marks=pytest.mark.polarion_id("OCS-921")
+            marks=pytest.mark.polarion_id("OCS-1111")
         )
     ]
 )
@@ -270,7 +270,7 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
                 get_all_pods, initial_num_of_pods
             )
             assert ret, "Wait timeout: Pods are not being deleted."
-            log.info(f"Pods deletion has started.")
+            log.info("Pods deletion has started.")
             disruption.kill_daemon()
 
         pods_deleted = pod_bulk_delete.result()
@@ -295,7 +295,7 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
                 )
         log.info(
             "Verified: mount points are removed from nodes after deleting "
-            "the pods"
+            "the pods."
         )
 
         # Fetch image uuid associated with PVCs
@@ -312,7 +312,7 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
                 get_all_pvcs, initial_num_of_pvc
             )
             assert ret, "Wait timeout: PVCs are not being deleted."
-            log.info(f"PVCs deletion has started.")
+            log.info("PVCs deletion has started.")
             disruption.kill_daemon()
 
         pvcs_deleted = pvc_bulk_delete.result()
