@@ -15,6 +15,7 @@ TOP_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 TEMPLATE_DIR = os.path.join(TOP_DIR, "ocs_ci", "templates")
+REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
@@ -119,15 +120,17 @@ UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
 DEFAULT_SECRET = 'rook-ceph-csi'
 DEFAULT_BLOCKPOOL = 'rbd'
+DEFAULT_SC_RBD = 'ceph-rbd'
 DEFAULT_SC_CEPHFS = "cephfs"
 DEFAULT_ROUTE_CRT = "router-certs-default"
+DEFAULT_NAMESPACE = "default"
 IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
 
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
 GB = 1024 ** 3
 GB2KB = 1024 ** 2
-DEFAULT_DISK_SIZE = 100
+DEFAULT_DEVICE_SIZE = 100
 
 # Reclaim Policy
 RECLAIM_POLICY_RETAIN = 'Retain'
@@ -152,7 +155,7 @@ CSI_RBDPLUGIN_LABEL = "app=csi-rbdplugin"
 OCS_OPERATOR_LABEL = "name=ocs-operator"
 LOCAL_STORAGE_OPERATOR_LABEL = "name=local-storage-operator"
 NOOBAA_APP_LABEL = "app=noobaa"
-DEFAULT_DEVICESET_PVC_NAME = "example-deviceset"
+DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 
 
@@ -275,6 +278,10 @@ FEDORA_DC_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "fedora_dc.yaml"
 )
 
+RHEL_7_7_POD_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "rhel-7_7.yaml"
+)
+
 # Openshift-logging elasticsearch operator deployment yamls
 EO_NAMESPACE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_EO, "eo-project.yaml"
@@ -290,8 +297,12 @@ EO_SUB_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_EO, "eo-sub.yaml"
 )
 
-DEVICESET_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "deviceset.yaml"
+OLM_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "deploy-with-olm.yaml"
+)
+
+STORAGE_CLUSTER_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
 )
 
 # Openshift-logging clusterlogging operator deployment yamls
@@ -340,11 +351,13 @@ NODE_NOT_READY = 'NotReady'
 NODE_READY_SCHEDULING_DISABLED = 'Ready,SchedulingDisabled'
 
 # Alert labels
+ALERT_CLUSTERERRORSTATE = 'CephClusterErrorState'
 ALERT_CLUSTERWARNINGSTATE = 'CephClusterWarningState'
 ALERT_DATARECOVERYTAKINGTOOLONG = 'CephDataRecoveryTakingTooLong'
 ALERT_MGRISABSENT = 'CephMgrIsAbsent'
 ALERT_MONQUORUMATRISK = 'CephMonQuorumAtRisk'
 ALERT_OSDDISKNOTRESPONDING = 'CephOSDDiskNotResponding'
+ALERT_PGREPAIRTAKINGTOOLONG = 'CephPGRepairTakingTooLong'
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -384,3 +397,11 @@ INSTALLER_DEFAULT_DNS = "1.1.1.1"
 
 # Config related constants
 config_keys_patterns_to_censor = ['passw', 'token', 'secret']
+
+# repos
+OCP4_2_REPO = os.path.join(REPO_DIR, "ocp_4_2.repo")
+
+# packages
+RHEL_POD_PACKAGES = ["openssh-clients", "openshift-ansible", "openshift-clients", "jq"]
+
+POD_UPLOADPATH = "/tmp/"

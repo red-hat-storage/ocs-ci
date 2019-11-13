@@ -7,7 +7,9 @@ import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.prometheus import PrometheusAPI
+from tests import helpers
 
 
 logger = logging.getLogger(__name__)
@@ -340,5 +342,92 @@ def measure_stop_ceph_osd(measurement_dir):
     measured_op = measure_operation(stop_osd, test_file)
     logger.info(f"Upscaling deployment {osd_to_stop} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_to_stop}")
+
+    return measured_op
+
+
+@pytest.fixture
+def measure_corrupt_pg(measurement_dir):
+    """
+    Create Ceph pool and corrupt Placement Group on one of OSDs, measures the
+    time when it was corrupted and records alerts that were triggered during
+    this event.
+
+    Returns:
+        dict: Contains information about `start` and `stop` time for
+        corrupting Ceph Placement Group
+    """
+    oc = ocp.OCP(
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA.get('cluster_namespace')
+    )
+    osd_deployments = oc.get(selector=constants.OSD_APP_LABEL).get('items')
+    osd_deployment = osd_deployments[0].get('metadata').get('name')
+    ct_pod = pod.get_ceph_tools_pod()
+    pool_name = helpers.create_unique_resource_name('corrupted', 'pool')
+    ct_pod.exec_ceph_cmd(
+        f"ceph osd pool create {pool_name} 1 1"
+    )
+    logger.info('Setting osd noout flag')
+    ct_pod.exec_ceph_cmd('ceph osd set noout')
+    logger.info(f"Put object into {pool_name}")
+    pool_object = 'test_object'
+    ct_pod.exec_ceph_cmd(f"rados -p {pool_name} put {pool_object} /etc/passwd")
+    logger.info(f"Looking for Placement Group with {pool_object} object")
+    pg = ct_pod.exec_ceph_cmd(f"ceph osd map {pool_name} {pool_object}")['pgid']
+    logger.info(f"Found Placement Group: {pg}")
+
+    dummy_deployment, dummy_pod = helpers.create_dummy_osd(osd_deployment)
+
+    def corrupt_pg():
+        """
+        Corrupt PG on one OSD in Ceph pool for 12 minutes and measure it.
+        There should be only CephPGRepairTakingTooLong Pending alert as
+        it takes 2 hours for it to become Firing.
+        This configuration of alert can be observed in ceph-mixins which
+        is used in the project:
+            https://github.com/ceph/ceph-mixins/blob/d22afe8c0da34490cb77e52a202eefcf4f62a869/config.libsonnet#L23
+        There should be also CephClusterErrorState alert that takes 10
+        minutest to start firing.
+
+        Returns:
+            str: Name of corrupted deployment
+        """
+        # run_time of operation
+        run_time = 60 * 12
+        nonlocal oc
+        nonlocal pool_name
+        nonlocal pool_object
+        nonlocal dummy_pod
+        nonlocal pg
+        nonlocal osd_deployment
+        nonlocal dummy_deployment
+
+        logger.info(f"Corrupting {pg} PG on {osd_deployment}")
+        dummy_pod.exec_bash_cmd_on_pod(
+            f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
+            f"{osd_deployment.split('-')[-1]} --pgid {pg} {pool_object} "
+            f"set-bytes /etc/shadow --no-mon-config"
+        )
+        logger.info('Unsetting osd noout flag')
+        ct_pod.exec_ceph_cmd('ceph osd unset noout')
+        ct_pod.exec_ceph_cmd(f"ceph pg deep-scrub {pg}")
+        oc.exec_oc_cmd(f"scale --replicas=0 deployment/{dummy_deployment}")
+        oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_deployment}")
+        logger.info(f"Waiting for {run_time} seconds")
+        time.sleep(run_time)
+        return osd_deployment
+
+    test_file = os.path.join(measurement_dir, 'measure_corrupt_pg.json')
+    measured_op = measure_operation(corrupt_pg, test_file)
+    logger.info(f"Deleting pool {pool_name}")
+    ct_pod.exec_ceph_cmd(
+        f"ceph osd pool delete {pool_name} {pool_name} "
+        f"--yes-i-really-really-mean-it"
+    )
+    logger.info(f"Checking that pool {pool_name} is deleted")
+
+    logger.info(f"Deleting deployment {dummy_deployment}")
+    oc.delete(resource_name=dummy_deployment)
 
     return measured_op

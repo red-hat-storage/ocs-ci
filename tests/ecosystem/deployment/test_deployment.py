@@ -162,3 +162,13 @@ def ocs_install_verification():
         item['metadata']['name'] for item in storage_classes['items']
     }
     assert required_storage_classes.issubset(storage_class_names)
+
+    # Verify OSD's are distributed
+    log.info("Verifying OSD's are distributed evenly across worker nodes")
+    ocp_pod_obj = ocp.OCP(kind=constants.POD, namespace=namespace)
+    osds = ocp_pod_obj.get(selector=constants.OSD_APP_LABEL)['items']
+    node_names = [osd['spec']['nodeName'] for osd in osds]
+    for node in node_names:
+        assert not node_names.count(node) > 1, (
+            "OSD's are not distributed evenly across worker nodes"
+        )

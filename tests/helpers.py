@@ -6,7 +6,10 @@ import re
 import datetime
 import statistics
 import os
+from subprocess import TimeoutExpired
+import tempfile
 import time
+import yaml
 
 from ocs_ci.ocs.ocp import OCP
 
@@ -94,7 +97,8 @@ def create_pod(
     interface_type=None, pvc_name=None,
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
-    raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1
+    raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1,
+    pod_name=None
 ):
     """
     Create a pod
@@ -111,6 +115,7 @@ def create_pod(
         raw_block_pv (bool): True for creating raw block pv based pod, False otherwise
         raw_block_device (str): raw block device for the pod
         replica_count (int): Replica count for deployment config
+        pod_name (str): Name of the pod to create
 
     Returns:
         Pod: A Pod instance
@@ -127,9 +132,10 @@ def create_pod(
     if dc_deployment:
         pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
     pod_data = templating.load_yaml(pod_dict)
-    pod_name = create_unique_resource_name(
-        f'test-{interface}', 'pod'
-    )
+    if not pod_name:
+        pod_name = create_unique_resource_name(
+            f'test-{interface}', 'pod'
+        )
     pod_data['metadata']['name'] = pod_name
     pod_data['metadata']['namespace'] = namespace
     if dc_deployment:
@@ -1419,3 +1425,69 @@ def rsync_kubeconf_to_node(node):
         ocp.rsync(
             src=file_path, dst=f"{node_path}", node=node, dst_node=True
         )
+
+
+def create_dummy_osd(deployment):
+    """
+    Replace one of OSD pods with pod that contains all data from original
+    OSD but doesn't run osd daemon. This can be used e.g. for direct acccess
+    to Ceph Placement Groups.
+
+    Args:
+        deployment (str): Name of deployment to use
+
+    Returns:
+        list: first item is dummy deployment object, second item is dummy pod
+            object
+    """
+    oc = OCP(
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA.get('cluster_namespace')
+    )
+    osd_data = oc.get(deployment)
+    dummy_deployment = create_unique_resource_name('dummy', 'osd')
+    osd_data['metadata']['name'] = dummy_deployment
+
+    osd_containers = osd_data.get('spec').get('template').get('spec').get(
+        'containers'
+    )
+    # get osd container spec
+    original_osd_args = osd_containers[0].get('args')
+    osd_data['spec']['template']['spec']['containers'][0]['args'] = []
+    osd_data['spec']['template']['spec']['containers'][0]['command'] = [
+        '/bin/bash',
+        '-c',
+        'sleep infinity'
+    ]
+    osd_file = tempfile.NamedTemporaryFile(
+        mode='w+', prefix=dummy_deployment, delete=False
+    )
+    with open(osd_file.name, "w") as temp:
+        yaml.dump(osd_data, temp)
+    oc.create(osd_file.name)
+
+    # downscale the original deployment and start dummy deployment instead
+    oc.exec_oc_cmd(f"scale --replicas=0 deployment/{deployment}")
+    oc.exec_oc_cmd(f"scale --replicas=1 deployment/{dummy_deployment}")
+
+    osd_list = pod.get_osd_pods()
+    dummy_pod = [pod for pod in osd_list if dummy_deployment in pod.name][0]
+    wait_for_resource_state(
+        resource=dummy_pod,
+        state=constants.STATUS_RUNNING,
+        timeout=60
+    )
+    ceph_init_cmd = '/rook/tini' + ' ' + ' '.join(original_osd_args)
+    try:
+        logger.info('Following command should expire after 7 seconds')
+        dummy_pod.exec_cmd_on_pod(ceph_init_cmd, timeout=7)
+    except TimeoutExpired:
+        logger.info('Killing /rook/tini process')
+        try:
+            dummy_pod.exec_bash_cmd_on_pod(
+                "kill $(ps aux | grep '[/]rook/tini' | awk '{print $2}')"
+            )
+        except CommandFailed:
+            pass
+
+    return dummy_deployment, dummy_pod

@@ -117,6 +117,27 @@ class Deployment(object):
         ]
         if not worker_nodes:
             raise UnavailableResourceException("No worker node found!")
+        az_worker_nodes = {}
+        for node in worker_nodes:
+            az = node['metadata']['labels'].get(
+                'failure-domain.beta.kubernetes.io/zone'
+            )
+            az_node_list = az_worker_nodes.get(az, [])
+            az_node_list.append(node)
+            az_worker_nodes[az] = az_node_list
+        logger.info(f"Found worker nodes in AZ: {az_worker_nodes}")
+        distributed_worker_nodes = []
+        while az_worker_nodes:
+            for az in list(az_worker_nodes.keys()):
+                az_node_list = az_worker_nodes.get(az)
+                if az_node_list:
+                    node_name = az_node_list.pop(0)['metadata']['name']
+                    distributed_worker_nodes.append(node_name)
+                else:
+                    del az_worker_nodes[az]
+        logger.info(
+            f"Distributed worker nodes for AZ: {distributed_worker_nodes}"
+        )
         to_label = config.DEPLOYMENT.get('ocs_operator_nodes_to_label', 3)
         to_taint = config.DEPLOYMENT.get('ocs_operator_nodes_to_taint', 0)
         worker_count = len(worker_nodes)
@@ -128,9 +149,7 @@ class Deployment(object):
                 f"{to_label} or taint: {to_taint}!"
             )
 
-        workers_to_label = " ".join(
-            [node['metadata']['name'] for node in worker_nodes[:to_label]]
-        )
+        workers_to_label = " ".join(distributed_worker_nodes[:to_label])
         if workers_to_label:
             _ocp = ocp.OCP(kind='node')
             logger.info(
@@ -142,9 +161,7 @@ class Deployment(object):
             )
             _ocp.exec_oc_cmd(command=label_cmd)
 
-        workers_to_taint = " ".join(
-            [node['metadata']['name'] for node in worker_nodes[:to_taint]]
-        )
+        workers_to_taint = " ".join(distributed_worker_nodes[:to_taint])
         if workers_to_taint:
             logger.info(
                 f"Taint nodes: {workers_to_taint} with taint: "
@@ -170,9 +187,8 @@ class Deployment(object):
         image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
         if not image_tag and config.REPORTING.get("us_ds") == 'DS':
             image_tag = get_latest_ds_olm_tag()
-        ocs_operator_olm = config.DEPLOYMENT['ocs_operator_olm']
         olm_data_generator = templating.load_yaml(
-            ocs_operator_olm, multi_document=True
+            constants.OLM_YAML, multi_document=True
         )
         olm_yaml_data = []
         subscription_yaml_data = []
@@ -185,8 +201,8 @@ class Deployment(object):
                 and yaml_doc['metadata']['name'] == cs_name
             )
             if change_cs_condition:
-                image_from_spec = yaml_doc['spec']['image']
-                image = image if image else image_from_spec.split(':')[0]
+                default_image = config.DEPLOYMENT['default_ocs_registry_image']
+                image = image if image else default_image.split(':')[0]
                 yaml_doc['spec']['image'] = (
                     f"{image}:{image_tag if image_tag else 'latest'}"
                 )
@@ -237,18 +253,11 @@ class Deployment(object):
             namespace=self.namespace
         )
         csv.wait_for_phase("Succeeded", timeout=400)
-        ocs_operator_storage_cluster_cr = config.DEPLOYMENT.get(
-            'ocs_operator_storage_cluster_cr'
-        )
-        cluster_data = templating.load_yaml(
-            ocs_operator_storage_cluster_cr
-        )
+        cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
         cluster_data['metadata']['name'] = config.ENV_DATA[
             'storage_cluster_name'
         ]
-        deviceset_data = templating.load_yaml(
-            constants.DEVICESET_YAML
-        )
+        deviceset_data = cluster_data['spec']['storageDeviceSets'][0]
         device_size = int(
             config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE)
         )
@@ -268,9 +277,6 @@ class Deployment(object):
             }
 
         if self.platform.lower() == constants.VSPHERE_PLATFORM:
-            cluster_data['spec']['monPVCTemplate']['spec'][
-                'storageClassName'
-            ] = constants.DEFAULT_SC_VSPHERE
             deviceset_data['dataPVCTemplate']['spec'][
                 'storageClassName'
             ] = constants.DEFAULT_SC_VSPHERE
@@ -350,15 +356,10 @@ class Deployment(object):
                 f"MDS deployment Failed! Please check logs!"
             )
 
+        # Change monitoring backend to OCS
         if config.ENV_DATA.get('monitoring_enabled') and config.ENV_DATA.get('persistent-monitoring'):
-            # Create a pool, secrets and sc
-            secret_obj = helpers.create_secret(interface_type=constants.CEPHBLOCKPOOL)
-            cbj_obj = helpers.create_ceph_block_pool()
-            sc_obj = helpers.create_storage_class(
-                interface_type=constants.CEPHBLOCKPOOL,
-                interface_name=cbj_obj.name,
-                secret_name=secret_obj.name
-            )
+
+            sc_name = f"{config.ENV_DATA['storage_cluster_name']}-{constants.DEFAULT_SC_RBD}"
 
             # Get the list of monitoring pods
             pods_list = get_all_pods(
@@ -367,7 +368,7 @@ class Deployment(object):
             )
 
             # Create configmap cluster-monitoring-config
-            create_configmap_cluster_monitoring_pod(sc_obj.name)
+            create_configmap_cluster_monitoring_pod(sc_name)
 
             # Take some time to respin the pod
             waiting_time = 30

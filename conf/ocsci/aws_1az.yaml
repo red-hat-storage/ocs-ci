@@ -1,0 +1,9 @@
+# This config is for setup cluster in 1 Availability Zone for AWS-IPI
+# This config doesn't work with AWS-UPI https://github.com/red-hat-storage/ocs-ci/issues/991
+---
+ENV_DATA:
+  platform: 'aws'
+  worker_availability_zones:
+    - 'us-east-2a'
+  master_availability_zones:
+    - 'us-east-2a'
