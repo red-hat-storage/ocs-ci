@@ -245,14 +245,14 @@ class Deployment(object):
             resource_name=defaults.OCS_OPERATOR_NAME
         )
         # Wait for package manifest is ready
-        package_manifest.wait_for_resource()
+        package_manifest.wait_for_resource(timeout=300)
         channel = config.DEPLOYMENT.get('ocs_csv_channel')
         csv_name = package_manifest.get_current_csv(channel=channel)
         csv = CSV(
             resource_name=csv_name, kind="csv",
             namespace=self.namespace
         )
-        csv.wait_for_phase("Succeeded", timeout=400)
+        csv.wait_for_phase("Succeeded", timeout=720)
         cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
         cluster_data['metadata']['name'] = config.ENV_DATA[
             'storage_cluster_name'
