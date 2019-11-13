@@ -38,24 +38,14 @@ class MCG(object):
         self.namespace = config.ENV_DATA['cluster_namespace']
         ocp_obj = OCP(kind='noobaa', namespace=self.namespace)
         results = ocp_obj.get()
-        try:
-            self.s3_endpoint = (
-                results.get('items')[0].get('status').get('services')
-                .get('serviceS3').get('externalDNS')[1]
-            )
-            self.mgmt_endpoint = (
-                results.get('items')[0].get('status').get('services')
-                .get('serviceMgmt').get('externalDNS')[1]
-            ) + '/rpc'
-        except IndexError:
-            self.s3_endpoint = (
-                results.get('items')[0].get('status').get('services')
-                .get('serviceS3').get('externalDNS')[0]
-            )
-            self.mgmt_endpoint = (
-                results.get('items')[0].get('status').get('services')
-                .get('serviceMgmt').get('externalDNS')[0]
-            ) + '/rpc'
+        self.s3_endpoint = (
+            results.get('items')[0].get('status').get('services')
+            .get('serviceS3').get('externalDNS')[-1]
+        )
+        self.mgmt_endpoint = (
+            results.get('items')[0].get('status').get('services')
+            .get('serviceMgmt').get('externalDNS')[-1]
+        ) + '/rpc'
         self.region = self.s3_endpoint.split('.')[1]
         creds_secret_name = (
             results.get('items')[0].get('status').get('accounts')
@@ -475,11 +465,11 @@ class MCG(object):
                     return True
                 else:
                     logger.info(
-                        'Mirroring process is not yet done, or has malfunctioned.\nRetrying...'
+                        'Waiting for the mirroring process to finish...'
                     )
         except TimeoutExpiredError:
             logger.error(
-                'The mirroring process did not complete in the given time frame.'
+                'The mirroring process did not complete within the time limit.'
             )
             assert False
 
@@ -502,10 +492,10 @@ class MCG(object):
                     return True
                 else:
                     logger.info(
-                        'BackingStore did not reach desired state yet.\nRetrying...'
+                        f'Waiting for BackingStore {backingstore_name} to reach state {desired_state}...'
                     )
         except TimeoutExpiredError:
             logger.error(
-                'The mirroring process did not complete in the given time frame.'
+                'The BackingStore did not reach the desired state within the time limit.'
             )
             assert False
