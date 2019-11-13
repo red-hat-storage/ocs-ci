@@ -11,6 +11,7 @@ from subprocess import Popen, PIPE
 
 import boto3
 from botocore.exceptions import ClientError
+import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
@@ -22,6 +23,12 @@ from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd, clone_repo
 from .deployment import Deployment
+from tests import helpers
+from ocs_ci.ocs.resources import pod
+from ocs_ci.utility import templating
+from ocs_ci.utility import utils
+from ocs_ci.utility.templating import generate_yaml_from_jinja2_template_with_data
+from ocs_ci.ocs import ocp
 
 logger = logging.getLogger(__name__)
 
@@ -439,6 +446,301 @@ class AWSUPI(AWSBase):
             logger.info("Destroying stack: %s", stack_name)
             cf.delete_stack(StackName=stack_name)
             verify_stack_deleted(stack_name)
+
+
+class AWSUPIRHELWORKERS(AWSUPI):
+    """
+    A class to handle AWS UPI with RHEL worker nodes
+    """
+    def __init__(self):
+        self.name = self.__class__.__name__
+        super(AWSUPIRHELWORKERS, self).__init__()
+        self.worker_vpc = None
+        self.worker_iam_role = None
+        self.worker_subnet = None
+        self.worker_security_group = None
+        self.worker_tag = None
+        self.cf = None
+        self.cluster_name = get_cluster_name(self.cluster_path)
+        # A dict for holding instance Name to instance object mapping
+        self.rhel_worker_list = {}
+
+    def deploy_cluster(self, log_cli_level='DEBUG'):
+        """
+        Deploy cluster overridden function from parent
+
+        Args:
+            log_cli_level (str): log level
+        """
+        if config.ENV_DATA['skip_ocp_deployment']:
+            super(AWSUPIRHELWORKERS, self).deploy_cluster(log_cli_level)
+        else:
+            prev_ocs_flag = config.ENV_DATA['skip_ocs_deployment']
+            # deploy only OCP
+            config.ENV_DATA['skip_ocs_deployment'] = 'true'
+            super(AWSUPIRHELWORKERS, self).deploy_cluster(log_cli_level)
+            self.add_rhel_workers()
+            config.ENV_DATA['skip_ocs_deployment'] = prev_ocs_flag
+            config.ENV_DATA['skip_ocp_deployment'] = 'true'
+            super(AWSUPIRHELWORKERS, self).deploy_cluster(log_cli_level)
+            config.ENV_DATA['skip_ocp_deployment'] = 'false'
+
+    def get_worker_resource_id(self, resource):
+        """
+        Get the resource ID
+
+        Args:
+            resource (dict): a dictionary of stack resource
+
+        Returns:
+            resource_id (str): ID of worker stack resource
+        """
+        return resource['StackResourceSummaries'][0]['PhysicalResourceId']
+
+    def gather_worker_data(self):
+        """
+        Gather various info like vpc, iam role, subnet,security group,
+        cluster tag from existing RHCOS workers
+        """
+        suffix = 'no0'
+        self.cf = boto3.client('cloudformation')
+        stack_name = f'{self.cluster_name}-{suffix}'
+        resource = self.cf.list_stack_resources(StackName=stack_name)
+        worker_id = self.get_worker_resource_id(resource)
+        ec2 = boto3.resource('ec2')
+        worker_instance = ec2.Instance(worker_id)
+
+        self.worker_vpc = worker_instance.vpc.id
+        self.worker_subnet = worker_instance.subnet.id
+        self.worker_security_group = worker_instance.security_groups
+        self.worker_iam_role = worker_instance.iam_instance_profile
+        self.worker_tag = self.get_kube_tag(worker_instance.tags)
+
+    def get_kube_tag(self, tags):
+        for each in tags:
+            if 'kubernetes' in each['Key']:
+                return each['Key'], each['Value']
+
+    def create_rhel_instance(self):
+        num_workers = int(os.environ.get('num_workers', 3))
+        for i in range(num_workers):
+            client = boto3.client('ec2', region_name=config.ENV_DATA['region'])
+            response = client.run_instances(
+                BlockDeviceMappings=[
+                    {
+                        'DeviceName': '/dev/xvda',
+                        'Ebs': {
+
+                            'DeleteOnTermination': True,
+                            'VolumeSize': 50,
+                            'VolumeType': 'gp2'
+                        },
+                    },
+                ],
+                ImageId=config.ENV_DATA['rhel_worker_ami'],
+                SubnetId=self.worker_subnet,
+                InstanceType=config.ENV_DATA['RHEL_INSTANCE_TYPE'],
+                MaxCount=num_workers,
+                MinCount=num_workers,
+                Monitoring={
+                    'Enabled': False
+                },
+                SecurityGroupIds=[
+                    self.worker_security_group[0]['GroupId'],
+                ],
+                KeyName='openshift-dev'
+            )
+            inst_id = response['Instances'][0]['InstanceId']
+            worker_ec2 = boto3.resource('ec2')
+            worker_instance = worker_ec2.Instance(inst_id)
+            worker_instance.wait_until_running()
+            worker_name = f'{self.cluster_name}-RHEL-WORKER-{i}'
+            self.rhel_worker_list[worker_name] = worker_instance
+            worker_ec2.create_tags(
+                Resources=[inst_id],
+                Tags=[
+                    {'Key': 'Name', 'Value': f'{worker_name}'},
+                    {'Key': self.worker_tag[0], 'Value': self.worker_tag[1]}
+                ]
+            )
+            del self.worker_iam_role['Id']
+            client.associate_iam_instance_profile(
+                IamInstanceProfile=self.worker_iam_role,
+                InstanceId=inst_id,
+            )
+
+    def run_ansible_playbook(self, rhel_host_list):
+        """
+        Bring up a helper pod (RHEL) to run openshift-ansible
+        playbook
+        """
+        rhel_pod_name = "rhel-ansible"
+        rhel_pod_obj = utils.create_rhelpod(
+            constants.DEFAULT_NAMESPACE, rhel_pod_name
+        )
+
+        # copy openshift-dev.pem to RHEL ansible pod
+        pem_src_path = "~/.ssh/openshift-dev.pem"
+        pem_dst_path = "/openshift-dev.pem"
+        pod.upload(rhel_pod_obj, pem_src_path, pem_dst_path)
+        repo_dst_path = "/etc/yum.repos.d/"
+        repo_file = os.path.basename(constants.OCP4_2_REPO)
+        pod.upload(
+            rhel_pod_obj, constants.OCP4_2_REPO, repo_dst_path
+        )
+        # distribute repo file to all RHEL workers
+        hosts = [inst.private_dns_name for node, inst in
+                 self.rhel_worker_list.items()]
+        for host in hosts:
+            rhel_pod_obj.copy_to_node(
+                host, pem_dst_path, f'{repo_dst_path}/{repo_file}',
+                repo_dst_path
+            )
+        # copy the .pem file for our internal repo on all nodes
+        # including ansible pod
+        # get it from URL
+        mirror_pem_file = "ops-mirror.pem"
+        tmp_path = f"/tmp/{mirror_pem_file}"
+        utils.download_file(
+            constants.INTERNAL_MIRROR_PEM_URL, tmp_path
+        )
+        dst = "/etc/pki/ca-trust/source/anchors/"
+        pod.upload(rhel_pod_obj, tmp_path, dst)
+        for host in hosts:
+            rhel_pod_obj.copy_to_node(
+               host, f'{dst}/{mirror_pem_file}', dst
+            )
+        # copy kubeconfig to pod
+        kubeconfig = os.path.join(
+            self.cluster_path, config.RUN.get('kubeconfig_location')
+        )
+        pod.upload(rhel_pod_obj, kubeconfig, "/")
+        host_file = self.build_ansible_hosts(hosts)
+        pod.upload(rhel_pod_obj, host_file, "/")
+        # install pod packages
+        rhel_pod_obj.install_packages(constants.RHEL_POD_PACKAGES)
+        # run ansible
+        openshift_ansible_path = "/usr/share/ansible/openshift-ansible"
+        cmd = (
+                f"ansible-playbook -i /{host_file} --private-key={pem_dst_path}"
+                f"{openshift_ansible_path}/playbooks/scaleup.yml"
+        )
+
+        rhel_pod_obj.exec_cmd_on_pod(cmd)
+        self.verify_nodes_added(hosts)
+        # remove rhcos workers
+        self.remove_rhcos_workers()
+
+    def remove_rhcos_workers(self):
+        """
+        After RHEL workers are added remove rhcos workers from the cluster
+
+        Raise:
+            FailedToRemoveNodeException: if rhcos removal is failed
+        """
+        rhcos_workers = self.get_rhcos_workers()
+        for node in rhcos_workers:
+            cordon = f"oc adm cordon {node}"
+            run_cmd(cordon)
+            drain = (f"oc adm drain {node} --force --delete-local-data "
+                    f"--ignore-daemonsets")
+            run_cmd(drain)
+            delete = f"oc delete nodes {node}"
+            run_cmd(delete)
+        if len(self.get_rhcos_workers()):
+            raise exceptions.FailedToAddNodeException()
+
+    def get_rhcos_workers(self):
+        """
+        Returns a list of rhcos worker names
+
+        rhcos_workers (list): list of rhcos worker nodes
+        """
+        rhcos_workers = []
+        ocp_obj = ocp.OCP(kind='node')
+        node_info = ocp_obj.get()
+        for each in node_info['items']:
+            if((each['metadata']['labels']['node.openshift.io/os_id'])=='rhcos'
+                and
+                'node-role.kubernetes.io/worker' in
+                    each['metadata']['labels']
+            ):
+                for every in each['status']['addresses']:
+                    if every['type']=='Hostname':
+                        rhcos_workers.append(every['address'])
+        return rhcos_workers
+
+    def verify_nodes_added(self, hosts):
+        """
+        Verify RHEL workers are added
+
+        Args:
+             hosts (list): list of aws private hostnames
+
+        Returns:
+            diff_list (list): hosts which are present in 'hosts' list but
+            not in oc get nodes. If diff_list is null then all the nodes are
+            added
+        """
+        ocp_obj = ocp.OCP(kind='node')
+        node_info = ocp_obj.get()
+        for host in hosts:
+            for entry in node_info['items']:
+                for each in entry['status']['addresses']:
+                    if each['type'] == 'Hostname':
+                        if each['address'] in hosts:
+                            if not self.get_ready_status(each):
+                                raise exceptions.FailedToAddNodeException()
+
+    def get_ready_status(self, node_ent):
+        for cond in node_ent['status']['conditions']:
+            if cond['type']=='Ready':
+                if not cond['status']=="True":
+                    raise exceptions.FailedToAddNodeException
+
+    def build_ansible_hosts(self, hosts):
+        """
+        Build the ansible hosts file from jinja template
+
+        Args:
+            hosts (list): list of private host names
+
+        Returns:
+            path (str): path of the ansible file created
+
+        """
+        ansible_host_file = dict()
+        ansible_host_file['ansible_user'] = 'root'
+        ansible_host_file['ansible_become'] = 'True'
+        ansible_host_file['openshift_kubeconfig_path'] = '/kubeconfig'
+        ansible_host_file['rhel_worker_nodes'] = hosts
+
+        data = generate_yaml_from_jinja2_template_with_data(
+            self.template_path,
+            **ansible_host_file,
+        )
+        logging.debug("Ansible hosts file:", **data)
+        ansible_conf = yaml.safe_dump(data)
+        host_file_path = "/tmp/hosts"
+        with open(host_file_path, 'w') as f:
+            f.write(ansible_conf)
+        return host_file_path
+
+    def copy_repo_file(self, pod_obj):
+        repo_path = "openshift.repo"
+        dst_path = "/etc/yum.repos.d/"
+        helpers.copy_file_to_pod(pod_obj, repo_path, dst_path)
+
+    def add_rhel_workers(self):
+        """
+        Add RHEL worker nodes to the existing cluster
+        """
+        self.gather_worker_data()
+        self.create_rhel_instance()
+        self.run_ansible_playbook()
+
+    def destroy_cluster(self, log_level="DEBUG"):
+        super(AWSUPIRHELWORKERS, self).destroy_cluster()
 
 
 def get_infra_id(cluster_path):
