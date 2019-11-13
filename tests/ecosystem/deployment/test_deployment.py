@@ -78,7 +78,7 @@ def ocs_install_verification():
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
         selector=constants.NOOBAA_APP_LABEL,
-        resource_count=2,
+        resource_count=1,
         timeout=timeout
     )
     # local-storage-operator
