@@ -92,3 +92,11 @@ class SameNamePrefixClusterAlreadyExistsException(Exception):
 
 class MissingRequiredConfigKeyError(Exception):
     pass
+
+
+class FailedToAddNodeException(Exception):
+    pass
+
+
+class FailedToRemoveNodeException(Exception):
+    pass
