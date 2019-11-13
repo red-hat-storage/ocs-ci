@@ -4,7 +4,8 @@ Upgrade can be performed to the:
 
 * latest one DS build (by default)
 * next one DS build from current one - `upgrade_to_latest: false` has to be
-  set, see here: [upgrade.yaml](/conf/ocsci/upgrade.yaml) for more details.
+  set, see here: [upgrade_to_next_build.yaml](/conf/ocsci/upgrade_to_next_build.yaml)
+  for more details.
 
 ## Deployment
 
@@ -35,7 +36,7 @@ run-ci tests/
     --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir \
     -m upgrade
- ```
+```
 
 If you would like to trigger also pre/post upgrade tests run with following
 markers:
@@ -45,7 +46,11 @@ run-ci tests/
     --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir \
     -m 'pre_upgrade or upgrade or post_upgrade'
- ```
+```
+
+In the case you would like to upgrade just to the one following DS build and not
+to the latest one, please pass `conf/ocsci/upgrade_to_next_build.yaml`
+configuration file to the upgrade execution.
 
 ## TODO
 

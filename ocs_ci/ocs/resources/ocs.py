@@ -8,7 +8,7 @@ import tempfile
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix 
+from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.utility import utils
 from ocs_ci.utility import templating
@@ -176,7 +176,6 @@ def ocs_install_verification(timeout=0):
         resource_name=local_storage_name, namespace=namespace
     )
     local_storage_csv.wait_for_phase("Succeeded", timeout=timeout)
-    import ipdb; ipdb.set_trace()
 
     # Verify OCS CSV is in Succeeded phase
     log.info("verifying ocs csv")
@@ -310,7 +309,7 @@ def ocs_install_verification(timeout=0):
 
     # Verify OSD's are distributed
     log.info("Verifying OSD's are distributed evenly across worker nodes")
-    ocp_pod_obj = ocp.OCP(kind=constants.POD, namespace=namespace)
+    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     osds = ocp_pod_obj.get(selector=constants.OSD_APP_LABEL)['items']
     node_names = [osd['spec']['nodeName'] for osd in osds]
     for node in node_names:

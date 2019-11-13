@@ -3,7 +3,6 @@ CSV related functionalities
 """
 import logging
 
-from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceInUnexpectedState
 from ocs_ci.utility.utils import TimeoutSampler

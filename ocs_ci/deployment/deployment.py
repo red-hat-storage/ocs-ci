@@ -188,7 +188,6 @@ class Deployment(object):
         image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
         if not image_tag and config.REPORTING.get("us_ds") == 'DS':
             image_tag = get_latest_ds_olm_tag(upgrade)
-        ocs_operator_olm = config.DEPLOYMENT['ocs_operator_olm']
         olm_data_generator = templating.load_yaml(
             constants.OLM_YAML, multi_document=True
         )
@@ -252,12 +251,7 @@ class Deployment(object):
         csv_name = package_manifest.get_current_csv(channel=channel)
         csv = CSV(resource_name=csv_name, namespace=self.namespace)
         csv.wait_for_phase("Succeeded", timeout=720)
-        ocs_operator_storage_cluster_cr = config.DEPLOYMENT.get(
-            'ocs_operator_storage_cluster_cr'
-        )
-        cluster_data = templating.load_yaml(
-            ocs_operator_storage_cluster_cr
-        )
+        cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
         cluster_data['metadata']['name'] = config.ENV_DATA[
             'storage_cluster_name'
         ]
