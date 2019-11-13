@@ -32,35 +32,60 @@ RUN:
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
 DEPLOYMENT:
+  # OCP url download template can be overwritten by parameter ocp_url_template.
+  # We are exposing version, file_name and os_type. Example below:
+  # ocp_url_template: "https://openshift-release-artifacts.svc.ci.openshift.org/{version}/{file_name}-{os_type}-{version}.tar.gz"
   # if the installer version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version. You can also use the
   # specific build version like: "4.2.0-0.nightly-2019-08-06-195545"
   installer_version: "4.2.0-0.nightly"
   force_download_installer: True
   force_download_client: True
+  # You can overwrite csv channel version by following parameter
+  # ocs_csv_channel: "alpha"
+  # you can overwrite the image for ocs operator catalog source by following parameter:
+  # ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:4.2-32.9b6c93e.master"
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest"
+  ocs_operator_nodes_to_label: 3
+  # This is described as a WA for minimal configuration 3/3 worker/master
+  # nodes. See: https://github.com/openshift/ocs-operator
+  ocs_operator_nodes_to_taint: 0
+  ssh_key: "~/.ssh/openshift-dev.pub"
+  force_deploy_multiple_clusters: False
+  allow_lower_instance_requirements: true
 
 # Section for reporting configuration
 REPORTING:
   email:
     address: "ocs-ci@redhat.com"
+    smtp_server: "localhost"
   polarion:
     project_id: "OpenShiftContainerStorage"
   # Upstream: 'US' or Downstream: 'DS', used only for reporting (Test Run Name)
-  us_ds: 'US'
-  must_gather_image: "quay.io/ocs-dev/ocs-must-gather"
+  us_ds: 'DS'
+  ocp_must_gather_image: "quay.io/openshift/origin-must-gather"
+  ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
+  gather_on_deploy_failure: true
 
 # This is the default information about environment. Will be overwritten with
 # --cluster-conf file.yaml data you will pass to the pytest.
 ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
+  storage_cluster_name: 'ocs-storagecluster'
+  storage_device_sets_name: "storageDeviceSets"
   cluster_namespace: 'openshift-storage'
+  monitoring_enabled: true
+  persistent-monitoring: true
   platform: 'AWS'
   deployment_type: 'ipi'
   region: 'us-east-2'
+  base_domain: 'qe.rh-ocs.com'
+  master_instance_type: 'm4.xlarge'
+  worker_instance_type: 'm4.xlarge'
+  master_replicas: 3
+  worker_replicas: 3
   skip_ocp_deployment: false
   skip_ocs_deployment: false
-  # Do not change to specific version like v14.2.1-20190430 if not needed
-  # cause we don't need to update it each time new 14.x version is released
-  # but only once when move to new version like v15.
-  ceph_image: 'ceph/ceph:v14.2.2-20190722'
-  rook_image: 'rook/ceph:master'
+  # uncomment to use custom directory for storing measurement data related to
+  # monitoring tests, otherwise generate temporary directory for each test run
+  # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'

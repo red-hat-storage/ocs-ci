@@ -7,6 +7,7 @@ import tempfile
 
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import switch_to_default_rook_cluster_project
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from subprocess import run, CalledProcessError
@@ -94,13 +95,13 @@ class RipSaw(object):
         Deploy postgres sql server
         """
         try:
-            pgsql_service = templating.load_yaml_to_dict(
+            pgsql_service = templating.load_yaml(
                 constants.PGSQL_SERVICE_YAML
             )
-            pgsql_cmap = templating.load_yaml_to_dict(
+            pgsql_cmap = templating.load_yaml(
                 constants.PGSQL_CONFIGMAP_YAML
             )
-            pgsql_sset = templating.load_yaml_to_dict(
+            pgsql_sset = templating.load_yaml(
                 constants.PGSQL_STATEFULSET_YAML
             )
             self.pgsql_service = OCS(**pgsql_service)
@@ -124,6 +125,8 @@ class RipSaw(object):
         run(f'oc delete -f {self.operator}', shell=True, cwd=self.dir)
         run(f'oc delete -f deploy', shell=True, cwd=self.dir)
         run_cmd(f'oc delete project {self.namespace}')
+        # Reset namespace to default
+        switch_to_default_rook_cluster_project()
         if self.pgsql_is_setup:
             self.pgsql_sset.delete()
             self.pgsql_cmap.delete()

@@ -16,6 +16,7 @@ from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework.exceptions import ClusterPathNotProvidedError
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import (
+    dump_config_to_file,
     get_cluster_version,
     get_ceph_version,
     get_rook_version,
@@ -23,6 +24,8 @@ from ocs_ci.utility.utils import (
     get_testrun_name,
 )
 from ocs_ci.ocs.utils import collect_ocs_logs
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.constants import OPERATOR_CATALOG_SOURCE_NAME
 
 __all__ = [
     "pytest_addoption",
@@ -38,6 +41,7 @@ def pytest_addoption(parser):
     parser.addoption(
         '--ocsci-conf',
         dest='ocsci_conf',
+        action="append",
         help="Path to config file of OCS CI",
     )
     parser.addoption(
@@ -100,6 +104,17 @@ def pytest_configure(config):
     """
     if not (config.getoption("--help") or config.getoption("collectonly")):
         process_cluster_cli_params(config)
+        config_file = os.path.expanduser(
+            os.path.join(
+                ocsci_config.RUN['log_dir'],
+                f"run-{ocsci_config.RUN['run_id']}-config.yaml",
+            )
+        )
+        dump_config_to_file(config_file)
+        log.info(
+            f"Dump of the consolidated config file is located here: "
+            f"{config_file}"
+        )
         # Add OCS related versions to the html report and remove extraneous metadata
         markers_arg = config.getoption('-m')
         if ocsci_config.RUN['cli_params'].get('teardown') or (
@@ -136,8 +151,18 @@ def pytest_configure(config):
             # add csi versions
             csi_versions = get_csi_versions()
             config._metadata['csi-provisioner'] = csi_versions.get('csi-provisioner')
-            config._metadata['cephfsplugin'] = csi_versions.get('cephfsplugin')
-            config._metadata['rbdplugin'] = csi_versions.get('rbdplugin')
+            config._metadata['cephfsplugin'] = csi_versions.get('csi-cephfsplugin')
+            config._metadata['rbdplugin'] = csi_versions.get('csi-rbdplugin')
+
+            # add ocs operator version
+            ocs_catalog = CatalogSource(
+                resource_name=OPERATOR_CATALOG_SOURCE_NAME,
+                namespace="openshift-marketplace"
+            )
+            if ocsci_config.REPORTING['us_ds'] == 'DS':
+                config._metadata['OCS operator'] = (
+                    ocs_catalog.get_image_name()
+                )
         except (FileNotFoundError, CommandFailed):
             pass
 

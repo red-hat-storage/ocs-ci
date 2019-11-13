@@ -22,7 +22,7 @@ setup(
         'paramiko==2.4.2',
         'pyyaml>=4.2b1',
         'jinja2==2.10.1',
-        'kubernetes==9.0.0',
+        'kubernetes',
         'openshift',
         'boto3',
         'munch',
@@ -36,7 +36,13 @@ setup(
         'oauth2client',
         # issue opened for pytest_marker_bugzilla here:
         # https://github.com/eanxgeek/pytest_marker_bugzilla/issues/43
-        'pytest_marker_bugzilla==0.9.1.dev2'
+        'pytest_marker_bugzilla>=0.9.1.dev6',
+        'pyvmomi',
+        'pyhcl',
+        # issue opened for botocore
+        # https://github.com/boto/botocore/issues/1872
+        # till above issue fixed, manually pointing python-dateutil to 2.8.0
+        'python-dateutil==2.8.0',
     ],
     entry_points={
         'console_scripts': [

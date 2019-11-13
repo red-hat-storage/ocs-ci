@@ -92,10 +92,14 @@ def create_rbd_storageclass(request):
 
     request.addfinalizer(finalizer)
 
+    if not hasattr(class_instance, 'reclaim_policy'):
+        class_instance.reclaim_policy = constants.RECLAIM_POLICY_DELETE
+
     class_instance.sc_obj = helpers.create_storage_class(
         interface_type=constants.CEPHBLOCKPOOL,
         interface_name=class_instance.cbp_obj.name,
         secret_name=class_instance.rbd_secret_obj.name,
+        reclaim_policy=class_instance.reclaim_policy
     )
     assert class_instance.sc_obj, "Failed to create storage class"
 
@@ -298,7 +302,8 @@ def create_dc_pods(request):
     class_instance.dc_pod_objs = [
         helpers.create_pod(
             interface_type=class_instance.interface, pvc_name=pvc_obj.name, do_reload=False,
-            namespace=class_instance.namespace, sa_name=class_instance.sa_obj.name, dc_deployment=True
+            namespace=class_instance.namespace, sa_name=class_instance.sa_obj.name, dc_deployment=True,
+            replica_count=class_instance.replica_count
         ) for pvc_obj in class_instance.pvc_objs
     ]
 
