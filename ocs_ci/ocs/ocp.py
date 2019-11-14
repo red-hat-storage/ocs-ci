@@ -12,13 +12,16 @@ import yaml
 from ocs_ci.ocs.constants import RSYNC_POD_YAML, STATUS_RUNNING
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    ResourceInUnexpectedState,
     ResourceNameNotSpecifiedException,
     TimeoutExpiredError,
 )
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
 from ocs_ci.ocs import defaults
+
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +30,10 @@ class OCP(object):
     """
     A basic OCP object to run basic 'oc' commands
     """
+
+    # If the resource has the phase in its metadata, set this _has_phase
+    # class member to True in the child class.
+    _has_phase = False
 
     def __init__(
         self, api_version='v1', kind='Service', namespace=None,
@@ -528,6 +535,87 @@ class OCP(object):
         if not resource_name:
             raise ResourceNameNotSpecifiedException(
                 "Resource name has to be specified in class!"
+            )
+
+    def check_function_supported(self, support_var):
+        """
+        Check if the resource supports the functionality based on the
+        support_var.
+
+        Args:
+            support_var (bool): True if functionality is supported, False
+                otherwise.
+
+        Raises:
+            NotSupportedFunctionError: If support_var == False
+
+        """
+        if not support_var:
+            raise ResourceNameNotSpecifiedException(
+                "Resource name doesn't support this functionality!"
+            )
+
+    def check_phase(self, phase):
+        """
+        Check phase of resource
+
+        Args:
+            phase (str): Phase of resource object
+
+        Returns:
+            bool: True if phase of object is the same as passed one, False
+                otherwise.
+
+        Raises:
+            NotSupportedFunctionError: If resource doesn't have phase!
+
+        """
+        self.check_function_supported(self._has_phase)
+        self.check_name_is_specified()
+        try:
+            data = self.get()
+        except CommandFailed:
+            log.info(f"Cannot find resource object {self.resource_name}")
+            return False
+        try:
+            current_phase = data['status']['phase']
+            log.info(
+                f"Resource {self.resource_name} is in phase: {current_phase}!"
+            )
+            return current_phase == phase
+        except KeyError:
+            log.info(
+                f"Problem while reading phase status of resource "
+                f"{self.resource_name}, data: {data}"
+            )
+        return False
+
+    @retry(ResourceInUnexpectedState, tries=4, delay=5, backoff=1)
+    def wait_for_phase(self, phase, timeout=300, sleep=5):
+        """
+        Wait till phase of resource is the same as required one passed in
+        the phase parameter.
+
+        Args:
+            phase (str): Desired phase of resource object
+            timeout (int): Timeout in seconds to wait for desired phase
+            sleep (int): Time in seconds to sleep between attempts
+
+        Raises:
+            ResourceInUnexpectedState: In case the resource is not in expected
+                phase.
+            NotSupportedFunctionError: If resource doesn't have phase!
+
+        """
+        self.check_function_supported(self._has_phase)
+        self.check_name_is_specified()
+        sampler = TimeoutSampler(
+            timeout, sleep, self.check_phase, phase=phase
+        )
+        if not sampler.wait_for_func_status(True):
+            raise ResourceInUnexpectedState(
+                f"Resource: {self.resource_name} is not in expected phase: "
+                f"{phase}"
             )
 
 
