@@ -86,7 +86,8 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         log.info("Project 1 deleted successfully.")
         project_deletion_time = time.time() - project_deletion_start_time
         log.info(
-            "Project 1 deletion time: {} seconds".format(project_deletion_time))
+            "Project 1 deletion time: {} seconds".format(project_deletion_time)
+    )
         # PVs delete might still be running, check until all PVs are deleted
         # Check time between first PV delete and last PV delete
         time_between_pvcs_deletion_success = 0
