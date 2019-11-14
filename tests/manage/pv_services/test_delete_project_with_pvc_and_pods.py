@@ -75,7 +75,8 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         # Delete the entire Project 1 (along with all of its PVCs)
         pvs = helpers.get_all_pvs()
         used_before_deletion = self.ceph_cluster.check_ceph_pool_used_space(
-            self.ceph_cluster.cluster_name)
+            self.ceph_cluster.cluster_name
+    )
         project_deletion_start_time = time.time()
         ocp.switch_to_default_rook_cluster_project()
         log.info("Deleting Project 1")
