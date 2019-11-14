@@ -7,7 +7,7 @@ import time
 import pytest
 from itertools import cycle
 
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.resources.ocs import OCS
@@ -16,7 +16,6 @@ from tests import helpers
 log = logging.getLogger(__name__)
 
 
-@tier1
 @pytest.mark.polarion_id("OCS-278")
 @pytest.mark.parametrize(
     argnames=["pvcs_num"],
@@ -59,13 +58,13 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         log.info("Creating Project")
         project_1 = project_factory()
 
-        log.info("Creating {} CephFS PVCs".format(pvcs_num))
+        log.info(f"Creating {pvcs_num} CephFS PVCs")
         # Generate a given number of CephFS PVCs, some RWO and some RWX
         rwo_rwx = cycle([constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX])
         for i in range(0, pvcs_num):
             pvc_factory(interface=constants.CEPHFILESYSTEM, project=project_1,
                         storageclass=self.cephfs_sc, access_mode=next(rwo_rwx))
-        log.info("Creating {} RBD PVCs".format(pvcs_num))
+        log.info(f"Creating {pvcs_num} RBD PVCs")
         multi_pvc_factory(interface=constants.CEPHBLOCKPOOL,
                           project=project_1,
                           storageclass=self.rbd_sc,
@@ -76,7 +75,7 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         pvs = helpers.get_all_pvs()
         used_before_deletion = self.ceph_cluster.check_ceph_pool_used_space(
             self.ceph_cluster.cluster_name
-    )
+        )
         project_deletion_start_time = time.time()
         ocp.switch_to_default_rook_cluster_project()
         log.info("Deleting Project 1")
@@ -85,27 +84,27 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         project_1.wait_for_delete(resource_name=project_1.namespace)
         log.info("Project 1 deleted successfully.")
         project_deletion_time = time.time() - project_deletion_start_time
-        log.info(
-            "Project 1 deletion time: {} seconds".format(project_deletion_time)
-    )
+        log.info(f"Project 1 deletion time: {project_deletion_time} seconds")
         # PVs delete might still be running, check until all PVs are deleted
         # Check time between first PV delete and last PV delete
-        time_between_pvcs_deletion_success = 0
-        # Also check delete time per each PV
-        individual_pv_delete_times = []
+        pv_deletion_start_time = time.time()
         for pv in pvs:
             pv_start_time = time.time()
             pv_name = pv.backed_pv
             pv.ocp.wait_for_delete(pv_name)
             helpers.validate_pv_delete(pv_name)
+            # Also check delete time per each PV
             pv_delete_time = time.time() - pv_start_time
-            individual_pv_delete_times.append({pv_name: pv_delete_time})
-            time_between_pvcs_deletion_success += pv_delete_time
-        log.info("{} seconds between first and last PVC deletion".format(
-            time_between_pvcs_deletion_success))
+            log.info(f"{pv_name} took {pv_delete_time} seconds to delete")
+        pv_deletion_total_time = time.time() - pv_deletion_start_time
+        log.info(
+            f"{pv_deletion_total_time} "
+            f"seconds between first and last PVC deletion"
+        )
         # Verify space has been reclaimed
         used_after_deletion = self.ceph_cluster.check_ceph_pool_used_space(
-            self.ceph_cluster.cluster_name)
+            self.ceph_cluster.cluster_name
+        )
         log.info("Verifying space has been reclaimed...")
         assert used_after_deletion < used_before_deletion, (
             f"Space hasn't been reclaimed after PVs deletion."
@@ -118,8 +117,8 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         log.info("Creating Project 2")
         project_2 = project_factory()
 
-        log.info("Creating a mix of {} CephFS & RBD PVCs "
-                 "(each bound to an app pod)".format(2 * pvcs_num))
+        log.info(f"Creating a mix of {2 * pvcs_num} CephFS & RBD PVCs "
+                 "(each bound to an app pod)")
         # Create CephFS PVCs bound to an app pod
         for pvc_obj in multi_pvc_factory(interface=constants.CEPHFILESYSTEM,
                                          project=project_2,
@@ -134,7 +133,8 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         # Delete the entire Project 2 (along with all of its PVCs)
         pvs = helpers.get_all_pvs()
         used_before_deletion = self.ceph_cluster.check_ceph_pool_used_space(
-            self.ceph_cluster.cluster_name)
+            self.ceph_cluster.cluster_name
+        )
         start_time = time.time()
         # Switch back to default project
         ocp.switch_to_default_rook_cluster_project()
@@ -144,26 +144,27 @@ class TestDeleteProjectWithPVCAndPods(ManageTest):
         project_2.wait_for_delete(resource_name=project_2.namespace)
         log.info("Project 2 deleted successfully.")
         project_deletion_time = time.time() - start_time
-        log.info(
-            "Project 2 deletion time: {} seconds".format(project_deletion_time))
+        log.info(f"Project 2 deletion time: {project_deletion_time} seconds")
         # PVs delete might still be running, check until all PVs are deleted
         # Check time between first PV delete and last PV delete
-        time_between_pvcs_deletion_success = 0
-        # Also check delete time per each PV
-        individual_pv_delete_times = []
+        pv_deletion_start_time = time.time()
         for pv in pvs:
             pv_start_time = time.time()
             pv_name = pv.backed_pv
             pv.ocp.wait_for_delete(pv_name)
             helpers.validate_pv_delete(pv_name)
             pv_delete_time = time.time() - pv_start_time
-            individual_pv_delete_times.append({pv_name: pv_delete_time})
-            time_between_pvcs_deletion_success += pv_delete_time
-        log.info("{} seconds between first and last PVC deletion".format(
-            time_between_pvcs_deletion_success))
+            # Also check delete time per each PV
+            log.info(f"{pv_name} took {pv_delete_time} seconds to delete")
+        pv_deletion_total_time = time.time() - pv_deletion_start_time
+        log.info(
+            f"{pv_deletion_total_time} "
+            f"seconds between first and last PVC deletion"
+        )
         # Verify space has been reclaimed
         used_after_deletion = self.ceph_cluster.check_ceph_pool_used_space(
-            self.ceph_cluster.cluster_name)
+            self.ceph_cluster.cluster_name
+        )
         log.info("Verifying space has been reclaimed...")
         assert used_after_deletion < used_before_deletion, (
             f"Space hasn't been reclaimed after PVs deletion."
