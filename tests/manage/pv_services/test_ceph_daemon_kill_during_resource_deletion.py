@@ -188,7 +188,7 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
         setup_base
     ):
         """
-        Delete ceph/rook pod while deletion of PVCs/pods is progressing
+        Kill 'resource_name' daemon while deletion of PVCs/pods is progressing
         """
         pvc_objs, self.pod_objs = setup_base
         sc_obj = pvc_objs[0].storageclass
