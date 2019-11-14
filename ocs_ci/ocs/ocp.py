@@ -70,6 +70,12 @@ class OCP(object):
         self._data = self.get()
         return self._data
 
+    def reload_data(self):
+        """
+        Reloading data of OCP object
+        """
+        self._data = self.get()
+
     def exec_oc_cmd(self, command, out_yaml_format=True, secrets=None, **kwargs):
         """
         Executing 'oc' command

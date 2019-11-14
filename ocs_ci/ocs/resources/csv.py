@@ -27,7 +27,7 @@ class CSV(OCP):
 
         """
         super(CSV, self).__init__(
-            resource_name=resource_name, *args, **kwargs
+            resource_name=resource_name, kind='csv', *args, **kwargs
         )
 
     def check_phase(self, phase):
@@ -83,3 +83,21 @@ class CSV(OCP):
             raise ResourceInUnexpectedState(
                 f"CSV: {self.resource_name} is not in expected phase: {phase}"
             )
+
+
+def get_csvs_start_with_prefix(csv_prefix, namespace):
+    """
+    Get CSVs start with prefix
+
+    Args:
+        csv_prefix (str): prefix from name
+        namespace (str): namespace of CSV
+
+    Returns:
+        list: found CSVs
+
+    """
+
+    csvs = CSV(namespace=namespace)
+    csv_list = csvs.get()['items']
+    return [csv for csv in csv_list if csv_prefix in csv['metadata']['name']]

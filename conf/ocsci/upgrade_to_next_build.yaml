@@ -1,0 +1,7 @@
+---
+# This config file is for the upgrade to the next one DS build follownig the
+# current installed build. Mainly used for testing upgrades, so you can install
+# some older version and then run upgrade one by one version.
+DEPLOYMENT:
+  upgrade: true
+  upgrade_to_latest: false
