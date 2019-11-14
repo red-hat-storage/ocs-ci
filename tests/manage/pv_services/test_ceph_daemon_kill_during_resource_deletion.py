@@ -353,7 +353,7 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
         final_num_of_resource_pods = len(pod_functions[resource_name]())
         assert final_num_of_resource_pods == num_of_resource_pods, (
             f"Total number of {resource_name} pods is not matching with "
-            f"initial value. Total number of pods before deleting a pod: "
+            f"initial value. Total number of pods before daemon kill: "
             f"{num_of_resource_pods}. Total number of pods present now: "
             f"{final_num_of_resource_pods}"
         )
