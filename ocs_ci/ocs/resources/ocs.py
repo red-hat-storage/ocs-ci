@@ -154,6 +154,11 @@ class OCS(object):
 def ocs_install_verification(timeout=0):
     """
     Perform steps necessary to verify a successful OCS installation
+
+    Args:
+        timeout (int): Number of seconds for timeout which will be used in the
+            checks used in this function.
+
     """
     log.info("Verifying OCS installation")
     namespace = config.ENV_DATA['cluster_namespace']

@@ -1235,6 +1235,10 @@ def get_latest_ds_olm_tag(upgrade=False):
     This function returns latest tag of OCS downstream registry or one before
     latest if upgrade parameter is True
 
+    Args:
+        upgrade (str): If True then it returns one version of the build before
+            the latest.
+
     Returns:
         str: latest tag for downstream image from quay registry
 
@@ -1266,6 +1270,10 @@ def get_latest_ds_olm_tag(upgrade=False):
 def get_next_version_available_for_upgrade(current_tag):
     """
     This function returns the tag built after the current_version
+
+    Args:
+        current_tag (str): Current build tag from which to search the next one
+            build tag.
 
     Returns:
         str: tag for downstream image from quay registry built after
