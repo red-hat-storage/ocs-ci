@@ -332,6 +332,9 @@ RSYNC_POD_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "rsync-pod.yaml"
 )
 
+ANSIBLE_INVENTORY_YAML = os.path.join(
+    "ocp-deployment", "inventory.yaml.j2"
+)
 # constants
 RBD_INTERFACE = 'rbd'
 CEPHFS_INTERFACE = 'cephfs'
