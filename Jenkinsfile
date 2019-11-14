@@ -102,10 +102,13 @@ pipeline {
     }
     success {
       script {
+        def registry_image = "${env.OCS_REGISTRY_IMAGE}"
+        // quay.io/rhceph-dev/ocs-registry:4.2-58.e59ca0f.master -> 4.2-58.e59ca0f.master
+        def registry_tag = registry_image.split(':')[-1]
+        // tag ocs-registry container as 'latest-stable'
+        build job: 'quay-tag-image', parameters: [string(name: "IMAGE_URL", value: "quay.io/rhceph-dev/ocs-registry"), string(name: "CURRENT_TAG", value: "${registry_tag}"), string(name: "NEW_TAG", value: "latest-stable")]
         if( env.UMB_MESSAGE in [true, 'true'] ) {
-          def registry_image = "${env.OCS_REGISTRY_IMAGE}"
-          // quay.io/rhceph-dev/ocs-registry:4.2-58.e59ca0f.master -> 4.2
-          def registry_version = registry_image.split(':')[-1].split('-')[0]
+          def registry_version = registry_tag.split('-')[0]
           def properties = """
             TOOL=ocs-ci
             PRODUCT=ocs
