@@ -1230,9 +1230,14 @@ def clone_repo(url, location, branch='master', to_checkout=None):
         run_cmd(f"git checkout {to_checkout}", cwd=location)
 
 
-def get_latest_ds_olm_tag():
+def get_latest_ds_olm_tag(upgrade=False):
     """
-    This function returns latest tag of OCS downstream registry
+    This function returns latest tag of OCS downstream registry or one before
+    latest if upgrade parameter is True
+
+    Args:
+        upgrade (str): If True then it returns one version of the build before
+            the latest.
 
     Returns:
         str: latest tag for downstream image from quay registry
@@ -1241,11 +1246,58 @@ def get_latest_ds_olm_tag():
         TagNotFoundException: In case no tag found
 
     """
-    _req = requests.get(constants.OPERATOR_CS_QUAY_API_QUERY)
-    req = list(filter(lambda x: x['name'] != 'latest', _req.json()['tags']))
-    if len(req) != 1:
-        raise TagNotFoundException(f"Couldn't find any tag!")
-    return req[0]['name']
+    _req = requests.get(
+        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=3)
+    )
+    latest_image = None
+    tags = _req.json()['tags']
+    for tag in tags:
+        if tag['name'] == 'latest':
+            latest_image = tag['image_id']
+            break
+    if not latest_image:
+        raise TagNotFoundException(f"Couldn't find latest tag!")
+    for tag in tags:
+        if not upgrade:
+            if tag['name'] != 'latest' and tag['image_id'] == latest_image:
+                return tag['name']
+        if upgrade:
+            if tag['name'] != 'latest' and tag['image_id'] != latest_image:
+                return tag['name']
+    raise TagNotFoundException(f"Couldn't find any desired tag!")
+
+
+def get_next_version_available_for_upgrade(current_tag):
+    """
+    This function returns the tag built after the current_version
+
+    Args:
+        current_tag (str): Current build tag from which to search the next one
+            build tag.
+
+    Returns:
+        str: tag for downstream image from quay registry built after
+            the current_tag.
+
+    Raises:
+        TagNotFoundException: In case no tag suitable for upgrade found
+
+    """
+    req = requests.get(
+        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=100)
+    )
+    if current_tag == 'latest':
+        return 'latest'
+    tags = req.json()['tags']
+    for index, tag in enumerate(tags):
+        if tag['name'] == current_tag:
+            if index < 2:
+                raise TagNotFoundException(f"Couldn't find tag for upgrade!")
+            if tags[index - 1]['name'] != 'latest':
+                return tags[index - 1]['name']
+            else:
+                return tags[index - 2]['name']
+    raise TagNotFoundException(f"Couldn't find any tag!")
 
 
 def check_if_executable_in_path(exec_name):

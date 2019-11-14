@@ -4,6 +4,13 @@ all related hooks/plugins to markers.
 """
 import os
 import pytest
+from funcy import compose
+
+from ocs_ci.ocs.constants import (
+    ORDER_AFTER_UPGRADE,
+    ORDER_BEFORE_UPGRADE,
+    ORDER_UPGRADE,
+)
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import check_if_executable_in_path
 
@@ -39,9 +46,17 @@ performance = pytest.mark.performance
 scale = pytest.mark.scale
 deployment = pytest.mark.deployment
 destroy = pytest.mark.destroy
-upgrade = pytest.mark.upgrade
 polarion_id = pytest.mark.polarion_id
 bugzilla = pytest.mark.bugzilla
+
+# upgrade related markers
+# Requires pytest ordering plugin installed
+order_pre_upgrade = pytest.mark.run(order=ORDER_BEFORE_UPGRADE)
+order_upgrade = pytest.mark.run(order=ORDER_UPGRADE)
+order_post_upgrade = pytest.mark.run(order=ORDER_AFTER_UPGRADE)
+upgrade = compose(pytest.mark.upgrade, order_upgrade)
+pre_upgrade = compose(pytest.mark.pre_upgrade, order_pre_upgrade)
+post_upgrade = compose(pytest.mark.post_upgrade, order_post_upgrade)
 
 # mark the test class with marker below to ignore leftover check
 ignore_leftovers = pytest.mark.ignore_leftovers
