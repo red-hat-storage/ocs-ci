@@ -36,11 +36,11 @@ class MCG(object):
         results = ocp_obj.get()
         self.s3_endpoint = (
             results.get('items')[0].get('status').get('services')
-            .get('serviceS3').get('externalDNS')[0]
+            .get('serviceS3').get('externalDNS')[-1]
         )
         self.mgmt_endpoint = (
             results.get('items')[0].get('status').get('services')
-            .get('serviceMgmt').get('externalDNS')[0]
+            .get('serviceMgmt').get('externalDNS')[-1]
         ) + '/rpc'
         self.region = self.s3_endpoint.split('.')[1]
         creds_secret_name = (
