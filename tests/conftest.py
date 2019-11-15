@@ -258,7 +258,7 @@ def storageclass_factory_fixture(
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
 def project_factory_class(request):
     return project_factory_fixture(request)
 
