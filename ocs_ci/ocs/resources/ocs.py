@@ -213,9 +213,7 @@ def ocs_install_verification(timeout=600):
             f"Check if StorageCluster: {local_storage_name} is in"
             f"Succeeded phase"
         )
-        storage_cluster.wait_for_phase(
-            phase='Ready', timeout=timeout
-        ), f"StorageCluster {storage_cluster_name} not 'Ready'"
+        storage_cluster.wait_for_phase(phase='Ready', timeout=timeout)
 
     # Verify pods in running state and proper counts
     log.info("Verifying pod states and counts")

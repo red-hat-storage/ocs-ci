@@ -12,6 +12,7 @@ import yaml
 from ocs_ci.ocs.constants import RSYNC_POD_YAML, STATUS_RUNNING
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    NotSupportedFunctionError,
     ResourceInUnexpectedState,
     ResourceNameNotSpecifiedException,
     TimeoutExpiredError,
@@ -551,7 +552,7 @@ class OCP(object):
 
         """
         if not support_var:
-            raise ResourceNameNotSpecifiedException(
+            raise NotSupportedFunctionError(
                 "Resource name doesn't support this functionality!"
             )
 
@@ -568,6 +569,8 @@ class OCP(object):
 
         Raises:
             NotSupportedFunctionError: If resource doesn't have phase!
+            ResourceNameNotSpecifiedException: in case the name is not
+                specified.
 
         """
         self.check_function_supported(self._has_phase)
@@ -605,6 +608,8 @@ class OCP(object):
             ResourceInUnexpectedState: In case the resource is not in expected
                 phase.
             NotSupportedFunctionError: If resource doesn't have phase!
+            ResourceNameNotSpecifiedException: in case the name is not
+                specified.
 
         """
         self.check_function_supported(self._has_phase)
