@@ -19,7 +19,10 @@ log = logging.getLogger(__name__)
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM],
-            marks=pytest.mark.polarion_id("OCS-1179")
+            marks=[
+                pytest.mark.polarion_id("OCS-1179"),
+                pytest.mark.bugzilla("1772990")
+            ]
         )
     ]
 )

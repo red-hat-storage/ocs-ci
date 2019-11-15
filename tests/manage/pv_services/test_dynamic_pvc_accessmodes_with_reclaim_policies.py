@@ -153,14 +153,18 @@ class BaseDynamicPvc(ManageTest):
             marks=[
                 pytest.mark.polarion_id("OCS-525"),
                 pytest.mark.bugzilla("1751866"),
-                pytest.mark.bugzilla("1750916")]
+                pytest.mark.bugzilla("1750916"),
+                pytest.mark.bugzilla("1772990")
+            ]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_DELETE],
             marks=[
                 pytest.mark.polarion_id("OCS-526"),
                 pytest.mark.bugzilla("1751866"),
-                pytest.mark.bugzilla("1750916")]
+                pytest.mark.bugzilla("1750916"),
+                pytest.mark.bugzilla("1772990")
+            ]
         )
     ]
 )
@@ -179,7 +183,7 @@ class TestRWODynamicPvc(BaseDynamicPvc):
 
     access_mode = constants.ACCESS_MODE_RWO
     storage_type = 'fs'
-    expected_pod_failure = 'Multi-Attach error for volume'
+    expected_pod_failure = 'MountVolume.MountDevice failed for volume'
 
     @pytest.fixture()
     def setup_base(self, request, interface_type, reclaim_policy):
