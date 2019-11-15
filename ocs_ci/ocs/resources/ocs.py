@@ -10,6 +10,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility import utils
 from ocs_ci.utility import templating
 
@@ -151,7 +152,7 @@ class OCS(object):
         utils.delete_file(self.temp_yaml.name)
 
 
-def ocs_install_verification(timeout=0):
+def ocs_install_verification(timeout=600):
     """
     Perform steps necessary to verify a successful OCS installation
 
@@ -177,6 +178,10 @@ def ocs_install_verification(timeout=0):
         f"There are more than one local storage CSVs: {local_storage_csvs}"
     )
     local_storage_name = local_storage_csvs[0]['metadata']['name']
+    log.info(
+        f"Check if local storage operator: {local_storage_name} is in"
+        f"Succeeded phase"
+    )
     local_storage_csv = CSV(
         resource_name=local_storage_name, namespace=namespace
     )
@@ -191,20 +196,24 @@ def ocs_install_verification(timeout=0):
     ocs_csv = CSV(
         resource_name=ocs_csv_name, namespace=namespace
     )
-    assert ocs_csv.check_phase(phase="Succeeded"), (
-        "OCS CSV is not in Succeeded phase!"
-    )
+    log.info(f"Check if OCS operator: {ocs_csv_name} is in Succeeded phase.")
+    ocs_csv.wait_for_phase(phase="Succeeded", timeout=timeout)
 
     # Verify OCS Cluster Service (ocs-storagecluster) is Ready
     log.info("Verifying OCS Cluster service")
-    storage_cluster = OCP(kind='StorageCluster', namespace=namespace)
-    storage_clusters = storage_cluster.get()
-    for item in storage_clusters['items']:
-        name = item['metadata']['name']
-        log.info("Checking status of %s", name)
-        assert item['status']['phase'] == 'Ready', (
-            f"StorageCluster {name} not 'Ready'"
+    storage_clusters = StorageCluster(namespace=namespace)
+    for item in storage_clusters.get()['items']:
+
+        storage_cluster_name = item['metadata']['name']
+        storage_cluster = StorageCluster(
+            resource_name=storage_cluster_name, namespace=namespace
         )
+        log.info("Checking status of %s", storage_cluster_name)
+        log.info(
+            f"Check if StorageCluster: {local_storage_name} is in"
+            f"Succeeded phase"
+        )
+        storage_cluster.wait_for_phase(phase='Ready', timeout=timeout)
 
     # Verify pods in running state and proper counts
     log.info("Verifying pod states and counts")

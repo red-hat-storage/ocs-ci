@@ -92,3 +92,7 @@ class SameNamePrefixClusterAlreadyExistsException(Exception):
 
 class MissingRequiredConfigKeyError(Exception):
     pass
+
+
+class NotSupportedFunctionError(Exception):
+    pass
