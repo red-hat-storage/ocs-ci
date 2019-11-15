@@ -1,6 +1,5 @@
 import logging
 import pytest
-import threading
 
 from ocs_ci.framework.pytest_customization.marks import (
     order_pre_upgrade, order_post_upgrade
@@ -9,30 +8,6 @@ from ocs_ci.ocs import constants
 
 log = logging.getLogger(__name__)
 
-
-@pytest.fixture(scale='session')
-def pre_upgrade_pods(pod_factory):
-    """
-    Generate pods for tests before upgrade is executed.
-
-    Returns:
-        list: List of pods with RBD and CephFS interface
-    """
-    rbd_pods = [pod_factory(constants.CEPHBLOCKPOOL) for _ in range(2)]
-    cephfs_pods = [pod_factory(constants.CEPHFILESYSTEM) for _ in range(2)]
-    return rbd_pods + cephfs_pods
-
-@pytest.fixture()
-def post_upgrade_pods(pod_factory):
-    """
-    Generate pods for tests.
-
-    Returns:
-        list: List of pods with RBD and CephFS interface
-    """
-    rbd_pods = [pod_factory(constants.CEPHBLOCKPOOL) for _ in range(2)]
-    cephfs_pods = [pod_factory(constants.CEPHFILESYSTEM) for _ in range(2)]
-    return rbd_pods + cephfs_pods
 
 @order_pre_upgrade
 def test_pre_upgrade_pods(pre_upgrade_pods):
