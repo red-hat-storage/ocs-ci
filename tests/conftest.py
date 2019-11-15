@@ -53,6 +53,11 @@ def secret_factory_class(request):
     return secret_factory_fixture(request)
 
 
+@pytest.fixture(scope='session')
+def secret_factory_session(request):
+    return secret_factory_fixture(request)
+
+
 @pytest.fixture(scope='function')
 def secret_factory(request):
     return secret_factory_fixture(request)
@@ -95,6 +100,11 @@ def secret_factory_fixture(request):
 
 @pytest.fixture(scope='class')
 def ceph_pool_factory_class(request):
+    return ceph_pool_factory_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def ceph_pool_factory_session(request):
     return ceph_pool_factory_fixture(request)
 
 
@@ -148,6 +158,19 @@ def storageclass_factory_class(
         request,
         ceph_pool_factory_class,
         secret_factory_class
+    )
+
+
+@pytest.fixture(scope='session')
+def storageclass_factory_session(
+    request,
+    ceph_pool_factory_session,
+    secret_factory_session
+):
+    return storageclass_factory_fixture(
+        request,
+        ceph_pool_factory_session,
+        secret_factory_session
     )
 
 
@@ -240,6 +263,11 @@ def project_factory_class(request):
     return project_factory_fixture(request)
 
 
+@pytest.fixture(scope='session')
+def project_factory_session(request):
+    return project_factory_fixture(request)
+
+
 @pytest.fixture()
 def project_factory(request):
     return project_factory_fixture(request)
@@ -285,6 +313,19 @@ def pvc_factory_class(
         request,
         storageclass_factory_class,
         project_factory_class
+    )
+
+
+@pytest.fixture(scope='session')
+def pvc_factory_session(
+    request,
+    storageclass_factory_session,
+    project_factory_session
+):
+    return pvc_factory_fixture(
+        request,
+        storageclass_factory_session,
+        project_factory_session
     )
 
 
@@ -422,6 +463,11 @@ def pod_factory_class(request, pvc_factory_class):
     return pod_factory_fixture(request, pvc_factory_class)
 
 
+@pytest.fixture(scope='session')
+def pod_factory_session(request, pvc_factory_session):
+    return pod_factory_fixture(request, pvc_factory_session)
+
+
 @pytest.fixture(scope='function')
 def pod_factory(request, pvc_factory):
     return pod_factory_fixture(request, pvc_factory)
@@ -497,6 +543,11 @@ def pod_factory_fixture(request, pvc_factory):
 
 @pytest.fixture(scope='class')
 def teardown_factory_class(request):
+    return teardown_factory_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def teardown_factory_session(request):
     return teardown_factory_fixture(request)
 
 
@@ -891,6 +942,19 @@ def multi_pvc_factory_class(
         storageclass_factory_class,
         project_factory_class,
         pvc_factory_class
+    )
+
+
+@pytest.fixture(scope='session')
+def multi_pvc_factory_session(
+    storageclass_factory_session,
+    project_factory_session,
+    pvc_factory_session
+):
+    return multi_pvc_factory_fixture(
+        storageclass_factory_session,
+        project_factory_session,
+        pvc_factory_session
     )
 
 
