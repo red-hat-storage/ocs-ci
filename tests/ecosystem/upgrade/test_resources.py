@@ -5,7 +5,6 @@ from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers, order_pre_upgrade, order_post_upgrade
 )
-from ocs_ci.ocs import constants
 
 log = logging.getLogger(__name__)
 

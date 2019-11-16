@@ -2,7 +2,6 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from tests import helpers
 
 log = logging.getLogger(__name__)
 
