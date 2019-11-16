@@ -460,7 +460,7 @@ class AWSUPIRHELWORKERS(AWSUPI):
         self.worker_security_group = None
         self.worker_tag = None
         self.cf = None
-        self.cluster_name = get_cluster_name(self.cluster_path)
+        self.cluster_name = config.ENV_DATA['cluster_name']
         # A dict for holding instance Name to instance object mapping
         self.rhel_worker_list = {}
         self.rhel_worker_user = "ec2-user"
@@ -478,7 +478,7 @@ class AWSUPIRHELWORKERS(AWSUPI):
             prev_ocs_flag = config.ENV_DATA['skip_ocs_deployment']
             # deploy only OCP
             config.ENV_DATA['skip_ocs_deployment'] = 'true'
-            #super(AWSUPIRHELWORKERS, self).deploy_cluster(log_cli_level)
+            super(AWSUPIRHELWORKERS, self).deploy_cluster(log_cli_level)
             self.add_rhel_workers()
             config.ENV_DATA['skip_ocs_deployment'] = prev_ocs_flag
             config.ENV_DATA['skip_ocp_deployment'] = 'true'
@@ -502,7 +502,7 @@ class AWSUPIRHELWORKERS(AWSUPI):
         Gather various info like vpc, iam role, subnet,security group,
         cluster tag from existing RHCOS workers
         """
-        suffix = 'no1'
+        suffix = 'no0'
         self.cf = boto3.client('cloudformation')
         stack_name = f'{self.cluster_name}-{suffix}'
         resource = self.cf.list_stack_resources(StackName=stack_name)
@@ -524,7 +524,9 @@ class AWSUPIRHELWORKERS(AWSUPI):
 
     def create_rhel_instance(self):
         num_workers = int(os.environ.get('num_workers', 3))
+        logging.info(f"Creating {num_workers} RHEL workers")
         for i in range(num_workers):
+            logging.info(f"Creating {i+1}/{num_workers} worker")
             client = boto3.client('ec2', region_name=config.ENV_DATA['region'])
             response = client.run_instances(
                 BlockDeviceMappings=[
@@ -605,19 +607,19 @@ class AWSUPIRHELWORKERS(AWSUPI):
         hosts = [inst.private_dns_name for node, inst in
                  self.rhel_worker_list.items()]
         for host in hosts:
+            disable = "sudo yum-config-manager --disable \*"
+            rhel_pod_obj.exec_cmd_on_node(
+                host, pem_dst_path, disable, user=self.rhel_worker_user
+            )
             rhel_pod_obj.copy_to_server(
                 host, pem_dst_path, f'{repo_dst_path}/{repo_file}',
                 f'/tmp/{repo_file}', user=self.rhel_worker_user
             )
             rhel_pod_obj.exec_cmd_on_node(
                 host, pem_dst_path,
-                f'sudo mv /tmp/{repo_file} {repo_dst_path}'
+                f'sudo mv /tmp/{repo_file} {repo_dst_path}',
+                user=self.rhel_worker_user
             )
-#            rhel_pod_obj.exec_cmd_on_pod(f"chmod 777 {repo_dst_path}/{
-            #            repo_file}")
-#            rhel_pod_obj.exec_cmd_on_node(
-#                host, pem_dst_path, f'sudo chmod 777 {dst}'
-#            )
             rhel_pod_obj.copy_to_server(
                 host, pem_dst_path, f'{dst}/{mirror_pem_file}',
                 f'/tmp/{mirror_pem_file}',
@@ -625,7 +627,8 @@ class AWSUPIRHELWORKERS(AWSUPI):
             )
             rhel_pod_obj.exec_cmd_on_node(
                 host, pem_dst_path,
-                f'sudo mv /tmp/{mirror_pem_file} {dst}'
+                f'sudo mv /tmp/{mirror_pem_file} {dst}',
+                user=self.rhel_worker_user
             )
         # copy kubeconfig to pod
         kubeconfig = os.path.join(
@@ -649,7 +652,7 @@ class AWSUPIRHELWORKERS(AWSUPI):
             f"{openshift_ansible_path}/playbooks/scaleup.yml"
         )
 
-        rhel_pod_obj.exec_cmd_on_pod(cmd)
+        rhel_pod_obj.exec_cmd_on_pod(cmd, out_yaml_format=False)
         self.verify_nodes_added(hosts)
         # remove rhcos workers
         self.remove_rhcos_workers()
@@ -673,13 +676,14 @@ class AWSUPIRHELWORKERS(AWSUPI):
             delete = f"oc delete nodes {node}"
             run_cmd(delete)
         if len(self.get_rhcos_workers()):
-            raise exceptions.FailedToAddNodeException()
+            raise exceptions.FailedToRemoveNodeException()
 
     def get_rhcos_workers(self):
         """
         Returns a list of rhcos worker names
 
-        rhcos_workers (list): list of rhcos worker nodes
+        Returns:
+            rhcos_workers (list): list of rhcos worker nodes
         """
         rhcos_workers = []
         ocp_obj = ocp.OCP(kind='node')
@@ -702,11 +706,11 @@ class AWSUPIRHELWORKERS(AWSUPI):
         Args:
              hosts (list): list of aws private hostnames
 
-        Returns:
-            diff_list (list): hosts which are present in 'hosts' list but
-            not in oc get nodes. If diff_list is null then all the nodes are
-            added
+        Raises:
+            FailedToAddNodeException: if node addition failed
+
         """
+        timeout = 600
         ocp_obj = ocp.OCP(kind='node')
         node_info = ocp_obj.get()
         for host in hosts:
@@ -714,14 +718,37 @@ class AWSUPIRHELWORKERS(AWSUPI):
                 for each in entry['status']['addresses']:
                     if each['type'] == 'Hostname':
                         if each['address'] in hosts:
-                            if not self.get_ready_status(each):
-                                raise exceptions.FailedToAddNodeException()
+                            logging.info(
+                                f"Checking status for {each['address']}"
+                            )
+                            sample = utils.TimeoutSampler(
+                                timeout, 3,
+                                self.get_ready_status, entry
+                            )
+                            try:
+                                assert sample.wait_for_func_status(result=True)
+                            except AssertionError:
+                                raise \
+                                    exceptions.FailedToAddNodeException(
+                                        "Failed to add RHEL node")
 
     def get_ready_status(self, node_ent):
+        """
+        Get the node 'Ready' status
+
+        Args:
+            node_ent (dict): Node info which includes details
+
+        Returns:
+            bool: True if node is Ready else False
+
+        """
         for cond in node_ent['status']['conditions']:
             if cond['type'] == 'Ready':
                 if not cond['status'] == "True":
-                    raise exceptions.FailedToAddNodeException
+                    return False
+                else:
+                    return True
 
     def build_ansible_inventory(self, hosts):
         """
@@ -742,7 +769,6 @@ class AWSUPIRHELWORKERS(AWSUPI):
         ansible_host_file['pod_kubeconfig'] = '/kubeconfig'
         ansible_host_file['pod_pull_secret'] = '/tmp/pull-secret'
         ansible_host_file['rhel_worker_nodes'] = hosts
-
 
         logging.info(ansible_host_file)
         data = _templating.render_template(
