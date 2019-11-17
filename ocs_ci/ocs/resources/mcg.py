@@ -46,7 +46,7 @@ class MCG(object):
             results.get('items')[0].get('status').get('services')
             .get('serviceMgmt').get('externalDNS')[-1]
         ) + '/rpc'
-        self.region = self.s3_endpoint.split('.')[1]
+        self.region = config.ENV_DATA['region']
         creds_secret_name = (
             results.get('items')[0].get('status').get('accounts')
             .get('admin').get('secretRef').get('name')
