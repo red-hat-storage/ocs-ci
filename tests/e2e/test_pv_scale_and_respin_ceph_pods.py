@@ -109,16 +109,16 @@ class BasePvcCreateRespinCephPods(E2ETest):
     argnames="resource_to_delete",
     argvalues=[
         pytest.param(
-            *['mgr'], marks=[pytest.mark.polarion_id("OCS-766"), pytest.mark.bugzilla("1768031")]
+            *['mgr'], marks=pytest.mark.polarion_id("OCS-766")
         ),
         pytest.param(
-            *['mon'], marks=[pytest.mark.polarion_id("OCS-764"), pytest.mark.bugzilla("1768031")]
+            *['mon'], marks=pytest.mark.polarion_id("OCS-764")
         ),
         pytest.param(
-            *['osd'], marks=[pytest.mark.polarion_id("OCS-765"), pytest.mark.bugzilla("1768031")]
+            *['osd'], marks=pytest.mark.polarion_id("OCS-765")
         ),
         pytest.param(
-            *['mds'], marks=[pytest.mark.polarion_id("OCS-613"), pytest.mark.bugzilla("1768031")]
+            *['mds'], marks=pytest.mark.polarion_id("OCS-613")
         )
     ]
 )
