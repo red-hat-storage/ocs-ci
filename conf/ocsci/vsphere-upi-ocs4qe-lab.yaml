@@ -1,0 +1,8 @@
+---
+# This config will provide the 12 vCPU's to VM.
+# We are restricting to 12 due to hardware limitation in the lab
+DEPLOYMENT:
+  allow_lower_instance_requirements: true
+ENV_DATA:
+  worker_num_cpus: '12'
+  master_num_cpus: '4'

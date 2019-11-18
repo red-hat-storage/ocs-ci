@@ -1,6 +1,8 @@
 ---
+# This config will provide the production values for vSphere platform
 DEPLOYMENT:
   allow_lower_instance_requirements: false
 ENV_DATA:
-  worker_num_cpus: '12'
+  worker_num_cpus: '16'
   master_num_cpus: '4'
+  memory: '65536'
