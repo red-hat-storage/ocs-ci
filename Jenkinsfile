@@ -112,12 +112,12 @@ pipeline {
           def properties = """
             TOOL=ocs-ci
             PRODUCT=ocs
-            PRODUCT_VERSION={registry_version}
+            PRODUCT_VERSION=${registry_version}
           """
-          def content_string = '''{
+          def content_string = """{
             "SENDER_BUILD_NUMBER": "${BUILD_NUMBER}",
             "OCS_REGISTRY_IMAGE": "${env.OCS_REGISTRY_IMAGE}",
-          }'''
+          }"""
           def content = readJSON text: content_string
           echo "Sending UMB message"
           echo 'Properties: ' + properties
