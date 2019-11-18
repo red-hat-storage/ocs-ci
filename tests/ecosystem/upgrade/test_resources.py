@@ -29,7 +29,7 @@ def test_pod_io(
     """
     log.info(f"Pods created before upgrade: {pre_upgrade_pods}")
     log.info(f"Pods created after upgrade: {post_upgrade_pods}")
-    pods = pre_upgrade_pods post_upgrade_pods
+    pods = pre_upgrade_pods + post_upgrade_pods
 
     # Run IOs on all pods
     with ThreadPoolExecutor() as executor:
