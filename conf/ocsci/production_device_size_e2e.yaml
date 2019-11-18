@@ -1,0 +1,5 @@
+---
+#This config file holds the disk size in GB for production.
+#This device size is to be used for all performance and scale testing.
+ENV_DATA:
+  device_size: '2048'
