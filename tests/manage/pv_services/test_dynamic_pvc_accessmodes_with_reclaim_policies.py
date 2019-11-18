@@ -143,7 +143,7 @@ class BaseDynamicPvc(ManageTest):
             marks=[
                 pytest.mark.polarion_id("OCS-530"),
                 pytest.mark.bugzilla("1772990")
-                ]
+            ]
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, constants.RECLAIM_POLICY_DELETE],
