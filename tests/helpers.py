@@ -10,6 +10,7 @@ from subprocess import TimeoutExpired
 import tempfile
 import time
 import yaml
+import threading
 
 from ocs_ci.ocs.ocp import OCP
 
@@ -1270,9 +1271,14 @@ def delete_objs_parallel(obj_list):
         bool: True if obj deleted else False
 
     """
-    with ThreadPoolExecutor() as p:
-        for obj in obj_list:
-            p.submit(obj.delete)
+    threads = list()
+    for obj in obj_list:
+        process = threading.Thread(target=obj.delete)
+        process.start()
+        threads.append(process)
+    for process in threads:
+        process.join()
+
     return True
 
 

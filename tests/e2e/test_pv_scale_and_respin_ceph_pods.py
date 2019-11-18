@@ -12,7 +12,7 @@ import time
 from tests import helpers, disruption_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.testlib import scale, E2ETest
+from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
 
 log = logging.getLogger(__name__)
 
@@ -104,6 +104,7 @@ class BasePvcCreateRespinCephPods(E2ETest):
 
 
 @scale
+@ignore_leftovers
 @pytest.mark.parametrize(
     argnames="resource_to_delete",
     argvalues=[
