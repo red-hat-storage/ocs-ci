@@ -188,7 +188,7 @@ class TestRWODynamicPvc(BaseDynamicPvc):
 
     access_mode = constants.ACCESS_MODE_RWO
     storage_type = 'fs'
-    expected_pod_failure = 'MountVolume.MountDevice failed for volume'
+    expected_pod_failure = 'Multi-Attach error for volume'
 
     @pytest.fixture()
     def setup_base(self, request, interface_type, reclaim_policy):
