@@ -1278,7 +1278,6 @@ def delete_objs_parallel(obj_list):
         threads.append(process)
     for process in threads:
         process.join()
-
     return True
 
 
