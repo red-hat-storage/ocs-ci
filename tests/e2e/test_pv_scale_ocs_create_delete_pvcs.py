@@ -121,7 +121,7 @@ class BasePvcPodCreateDelete(E2ETest):
             *[False], marks=pytest.mark.polarion_id("OCS-682")
         ),
         pytest.param(
-            *[True], marks=pytest.mark.polarion_id("OCS-679")
+            *[True], marks=[pytest.mark.polarion_id("OCS-679"), pytest.mark.bugzilla("1768031")]
         )
     ]
 )
