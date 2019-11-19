@@ -28,7 +28,7 @@ def schedule_nodes(request):
     request.addfinalizer(finalizer)
 
 
-@bugzilla('1744204')
+@bugzilla('1769667')
 class TestNodesMaintenance(ManageTest):
     """
     Test basic flows of maintenance (unschedule and drain) and
