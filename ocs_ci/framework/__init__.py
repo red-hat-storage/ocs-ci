@@ -77,22 +77,23 @@ def merge_dict(orig: dict, new: dict) -> dict:
         new  (dict): The object which is the source of the update
 
     Example:
-    orig = {
-        'dict': {'one': 1, 'two': 2},
-        'list': [1, 2],
-        'string': 's',
-    }
-    new = {
-        'dict': {'one': 'one', 'three': 3},
-        'list': [0],
-        'string': 'x',
-    }
-    merge_dict(orig, new) ->
-    {
-        'dict': {'one': 'one', 'two': 2, 'three': 3}
-        'list': [0],
-        'string', 'x',
-    }
+        orig = {\
+            'dict': {'one': 1, 'two': 2},\
+            'list': [1, 2],\
+            'string': 's',\
+        }\
+        new = {\
+            'dict': {'one': 'one', 'three': 3},\
+            'list': [0],\
+            'string': 'x',\
+        }\
+        merge_dict(orig, new) ->\
+        {\
+            'dict': {'one': 'one', 'two': 2, 'three': 3}\
+            'list': [0],\
+            'string', 'x',\
+        }
+
     """
     for k, v in new.items():
         if isinstance(orig, collections.Mapping):

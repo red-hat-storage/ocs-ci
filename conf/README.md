@@ -3,51 +3,34 @@
 In this directory we store all the configuration for cluster and OCSCI config
 files.
 
-During the execution we are loading different config files with different
-sections (DEFAULTS, ENV_DATA, RUN, etc).
-We are using [jinja2](http://jinja.pocoo.org/docs/2.10/templates/#variables)
-template's variables which you can reuse among different configs from
-DEFAULT and different sections.
+During the execution we are loading different config files passed by
+--ocsci-conf parameter which we merge together. The last one passed config file
+overwrite previous file.
 
-This gives us the ability to easily reuse variables from context of the
-yaml file itself.
+Each of config files can contain different sections (DEFAULTS, ENV_DATA, RUN, etc).
 
 For more information please read the rest of the documentation.
 
-
 ## OCS CI Config
 
-## defaults file
-* [defaults.py](../ocs_ci/ocs/defaults.py) - this is main defaults file which is
-  a python file, All default values should reside here.
-
 We moved most of the OCSCI framework related config under
-[ocsci folder](./ocsci/). * In the future we will have more config files in
-this folder which you can reuse.:
+[ocsci folder](https://github.com/red-hat-storage/ocs-ci/tree/master/conf/ocsci/).
 
+You can pass those config files by `--ocsci-conf` parameter.
 
-## Cluster config
+## Custom config
 
 If you would like to overwrite cluster default data you can create file
-similar to [this example](./examples/ocs_basic_install.yml). Example shown
-overwrites below ENV data:
+similar to
+[this example](https://github.com/red-hat-storage/ocs-ci/tree/master/conf/ocs_basic_install.yml).
+Example shown overwrites below ENV data:
 
 * `platform` - currently we support only AWS, but in future we will cover
     more.
-* `worker_replicas` - number of replicas of worker.
-* `rook_image` - which rook image can be used.
-* and many more - look at the deployment templates under
-    [../templates/ocs-deployment/](../ocs_ci/templates/ocs-deployment/) and you can
-    see the variables in templates. In the deploment we are using ENV_DATA
-    section as data for rendering the templates which allow us to add new
-    values just in config and we don't have to also update the code on all
-    places to take specific variable.
+* `worker_replicas` - number of replicas of worker nodes.
+* `master_replicas` - number of replicas of master nodes.
 
-If you define cluster config you have to put all the data under `ENV_DATA`
-section like in the mentioned example. Actually you can add another section as
-well but in cluster config file we recommend to define just `ENV_DATA` section
-or one more additional section which is `DEFAULTS` for propagation those
-defaults among all configs as well.
+TODO: We have to document all possible parameters!
 
 ### Sections in our configs
 
@@ -100,4 +83,4 @@ Lower number == higher priority
 3) **ocsci config file** - ocsci related config passed by `--ocsci-conf`
     parameter.
 4) **default configuration** - default values and the lowest priority. You can
-    see [default config here](../ocs_ci/framework/conf/default_config.yaml).
+    see [default config here](https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/conf/default_config.yaml).

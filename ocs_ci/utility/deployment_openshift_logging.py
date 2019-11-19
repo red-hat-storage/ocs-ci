@@ -52,8 +52,8 @@ def create_elasticsearch_operator_group(yaml_file, resource_name):
             successfully, false otherwise
 
     Example:
-        create_elasticsearch_operator_group(
-            constants.EO_OG_YAML, 'openshift-operators-redhat'
+        create_elasticsearch_operator_group(\
+            constants.EO_OG_YAML, 'openshift-operators-redhat'\
         )
 
     """
@@ -264,10 +264,9 @@ def create_instance_in_clusterlogging(sc_name=None):
 def check_health_of_clusterlogging():
     """
     * Checks for ElasticSearch, curator, fluentd and kibana pods in
-    openshift-logging namespace
-
+        openshift-logging namespace
     * And check for the health of cluster logging, If status is green then the
-    cluster is healthy,if status is red then health is bad
+        cluster is healthy,if status is red then health is bad
 
     Returns:
         list: Gives all the pods that are present in the namespace

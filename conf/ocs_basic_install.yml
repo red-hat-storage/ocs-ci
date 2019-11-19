@@ -1,10 +1,7 @@
 ---
 # This is example of the config for deployment which allows you to overwrite
-# the default values from templates.
+# the default values.
 ENV_DATA:
-  # take a look at deployment templates variables, here you is the place you
-  # can overwrite all the vars you want.
   platform: 'aws'
   worker_replicas: 3  # here you can define diff number of workers
   master_replicas: 3
-  rook_image: "rook/ceph:master" # you can overwrite default rook image

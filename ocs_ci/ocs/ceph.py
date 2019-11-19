@@ -474,37 +474,37 @@ class Ceph(object):
 
         Returns:
             dict: osd metadata like:
-                 {
-                    "id": 8,
-                    "arch": "x86_64",
-                    "back_addr": "172.16.115.29:6801/1672",
-                    "back_iface": "eth0",
-                    "backend_filestore_dev_node": "vdd",
-                    "backend_filestore_partition_path": "/dev/vdd1",
-                    "ceph_version": "ceph version 12.2.5-42.el7cp (82d52d7efa6edec70f6a0fc306f40b89265535fb) luminous
-                            (stable)",
-                    "cpu": "Intel(R) Xeon(R) CPU E5-2690 v3 @ 2.60GHz",
-                    "default_device_class": "hdd",
-                    "distro": "rhel",
-                    "distro_description": "Red Hat Enterprise Linux",
-                    "distro_version": "7.5",
-                    "filestore_backend": "xfs",
-                    "filestore_f_type": "0x58465342",
-                    "front_addr": "172.16.115.29:6800/1672",
-                    "front_iface": "eth0",
-                    "hb_back_addr": "172.16.115.29:6802/1672",
-                    "hb_front_addr": "172.16.115.29:6803/1672",
-                    "hostname": "ceph-shmohan-1537910194970-node2-osd",
-                    "journal_rotational": "1",
-                    "kernel_description": "#1 SMP Wed Mar 21 18:14:51 EDT 2018",
-                    "kernel_version": "3.10.0-862.el7.x86_64",
-                    "mem_swap_kb": "0",
-                    "mem_total_kb": "3880928",
-                    "os": "Linux",
-                    "osd_data": "/var/lib/ceph/osd/ceph-8",
-                    "osd_journal": "/var/lib/ceph/osd/ceph-8/journal",
-                    "osd_objectstore": "filestore",
-                    "rotational": "1"
+                 {\
+                    "id": 8,\
+                    "arch": "x86_64",\
+                    "back_addr": "172.16.115.29:6801/1672",\
+                    "back_iface": "eth0",\
+                    "backend_filestore_dev_node": "vdd",\
+                    "backend_filestore_partition_path": "/dev/vdd1",\
+                    "ceph_version": "ceph version 12.2.5-42.el7cp (82d52d7efa6edec70f6a0fc306f40b89265535fb) luminous\
+                            (stable)",\
+                    "cpu": "Intel(R) Xeon(R) CPU E5-2690 v3 @ 2.60GHz",\
+                    "default_device_class": "hdd",\
+                    "distro": "rhel",\
+                    "distro_description": "Red Hat Enterprise Linux",\
+                    "distro_version": "7.5",\
+                    "filestore_backend": "xfs",\
+                    "filestore_f_type": "0x58465342",\
+                    "front_addr": "172.16.115.29:6800/1672",\
+                    "front_iface": "eth0",\
+                    "hb_back_addr": "172.16.115.29:6802/1672",\
+                    "hb_front_addr": "172.16.115.29:6803/1672",\
+                    "hostname": "ceph-shmohan-1537910194970-node2-osd",\
+                    "journal_rotational": "1",\
+                    "kernel_description": "#1 SMP Wed Mar 21 18:14:51 EDT 2018",\
+                    "kernel_version": "3.10.0-862.el7.x86_64",\
+                    "mem_swap_kb": "0",\
+                    "mem_total_kb": "3880928",\
+                    "os": "Linux",\
+                    "osd_data": "/var/lib/ceph/osd/ceph-8",\
+                    "osd_journal": "/var/lib/ceph/osd/ceph-8/journal",\
+                    "osd_objectstore": "filestore",\
+                    "rotational": "1"\
                  }
 
         """
@@ -1088,11 +1088,12 @@ class CephNode(object):
         """
         execute a command on the vm
         eg: self.exec_cmd(cmd='uptime')
-            or
-            self.exec_cmd(cmd='background_cmd', check_ec=False)
+        or
+        self.exec_cmd(cmd='background_cmd', check_ec=False)
 
         Attributes:
-        check_ec: False will run the command and not wait for exit code
+            check_ec (bool): False will run the command and not wait for exit
+                code
 
         """
 

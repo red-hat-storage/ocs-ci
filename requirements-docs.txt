@@ -1,0 +1,5 @@
+sphinx
+sphinx-autopackagesummary
+sphinx_rtd_theme
+recommonmark
+-e .

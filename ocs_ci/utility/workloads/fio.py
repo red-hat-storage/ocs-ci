@@ -3,7 +3,7 @@ This module implements all the functionalities required for setting up and
 running Fio workloads on the pods.
 
 This module implements few functions
-setup(): for setting up fio utility on the pod and any necessary
+setup(): for setting up fio utility on the pod and any necessary\
     environmental params.
 run(): for running fio on pod on specified mount point
 
