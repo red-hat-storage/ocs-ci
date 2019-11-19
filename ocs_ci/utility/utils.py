@@ -373,7 +373,7 @@ def mask_secrets(plaintext, secrets):
     return plaintext
 
 
-def run_cmd(cmd, secrets=None, **kwargs):
+def run_cmd(cmd, secrets=None, timeout=600, **kwargs):
     """
     Run an arbitrary command locally
 
@@ -383,6 +383,8 @@ def run_cmd(cmd, secrets=None, **kwargs):
         secrets (list): A list of secrets to be masked with asterisks
             This kwarg is popped in order to not interfere with
             subprocess.run(**kwargs)
+
+        timeout (int): Timeout for the command, defaults to 600 seconds.
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -400,6 +402,7 @@ def run_cmd(cmd, secrets=None, **kwargs):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         stdin=subprocess.PIPE,
+        timeout=timeout,
         **kwargs
     )
     log.debug(f"Command output: {r.stdout.decode()}")
