@@ -51,6 +51,7 @@ DEPLOYMENT:
   # nodes. See: https://github.com/openshift/ocs-operator
   ocs_operator_nodes_to_taint: 0
   ssh_key: "~/.ssh/openshift-dev.pub"
+  ssh_key_private: "~/.ssh/openshift-dev.pem"
   force_deploy_multiple_clusters: False
   allow_lower_instance_requirements: true
 

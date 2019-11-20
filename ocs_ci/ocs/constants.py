@@ -451,3 +451,8 @@ SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scale
 # labels
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
+
+# Rep mapping
+REPO_MAPPING = {
+    '4.2.0': OCP4_2_REPO
+}

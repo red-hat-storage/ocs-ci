@@ -5,6 +5,7 @@ on vSphere platform
 import json
 import logging
 import os
+import time
 
 import hcl
 import yaml
@@ -59,6 +60,7 @@ class VSPHEREBASE(Deployment):
             constants.EXTERNAL_DIR,
             'openshift-misc'
         )
+        self.wait_time = 90
 
     def attach_disk(self, size=100):
         """
@@ -137,10 +139,11 @@ class VSPHEREBASE(Deployment):
 
         # Install OCP on rhel nodes
         rhel_install = OCPINSTALLRHEL(rhel_worker_nodes)
-        rhel_install.upload_helpers()
-        rhel_install.install_packages_in_pod(constants.RHEL_POD_PACKAGES)
         rhel_install.prepare_rhel_nodes()
         rhel_install.execute_ansible_playbook()
+
+        # Giving some time to settle down the new nodes
+        time.sleep(self.wait_time)
 
         # wait for nodes to be in READY state
         wait_for_nodes_status(timeout=300)
@@ -185,8 +188,8 @@ class VSPHEREBASE(Deployment):
         scale-up repo
         """
         # remove access and secret key from constants.SCALEUP_VSPHERE_MAIN
-        access_key = "access_key       = \"${var.aws_access_key}\""
-        secret_key = "secret_key       = \"${var.aws_secret_key}\""
+        access_key = 'access_key       = "${var.aws_access_key}"'
+        secret_key = 'secret_key       = "${var.aws_secret_key}"'
         replace_content_in_file(
             constants.SCALEUP_VSPHERE_MAIN,
             f"{access_key}",
@@ -199,8 +202,8 @@ class VSPHEREBASE(Deployment):
         )
 
         # remove access and secret key from constants.SCALEUP_VSPHERE_ROUTE53
-        route53_access_key = "access_key = \"${var.access_key}\""
-        route53_secret_key = "secret_key = \"${var.secret_key}\""
+        route53_access_key = 'access_key = "${var.access_key}"'
+        route53_secret_key = 'secret_key = "${var.secret_key}"'
         replace_content_in_file(
             constants.SCALEUP_VSPHERE_ROUTE53,
             f"{route53_access_key}",
@@ -506,6 +509,25 @@ class VSPHEREUPI(VSPHEREBASE):
 
         """
         previous_dir = os.getcwd()
+
+        # check whether cluster has scale-up nodes
+        scale_up_terraform_data_dir = os.path.join(
+            self.cluster_path,
+            constants.TERRAFORM_DATA_DIR,
+            constants.SCALEUP_TERRAFORM_DATA_DIR
+        )
+        scale_up_terraform_var = os.path.join(
+            scale_up_terraform_data_dir,
+            "scale_up_terraform.tfvars"
+        )
+        if os.path.exists(scale_up_terraform_var):
+            os.chdir(scale_up_terraform_data_dir)
+            self.destroy_scaleup_nodes(
+                scale_up_terraform_data_dir,
+                scale_up_terraform_var
+            )
+            os.chdir(previous_dir)
+
         terraform_data_dir = os.path.join(self.cluster_path, constants.TERRAFORM_DATA_DIR)
         upi_repo_path = os.path.join(
             constants.EXTERNAL_DIR, 'installer',
@@ -528,3 +550,30 @@ class VSPHEREUPI(VSPHEREBASE):
         terraform.initialize(upgrade=True)
         terraform.destroy(tfvars)
         os.chdir(previous_dir)
+
+    def destroy_scaleup_nodes(self, scale_up_terraform_data_dir, scale_up_terraform_var):
+        """
+        Destroy the scale-up nodes
+
+        Args:
+            scale_up_terraform_data_dir (str): Path to scale-up terraform
+                data directory
+            scale_up_terraform_var (str): Path to scale-up
+                terraform.tfvars file
+
+        """
+        clone_repo(
+            constants.VSPHERE_SCALEUP_REPO, self.upi_scale_up_repo_path
+        )
+        # modify scale-up repo
+        self.modify_scaleup_repo()
+
+        terraform_scale_up = Terraform(
+            os.path.join(
+                self.upi_scale_up_repo_path,
+                "v4-testing-misc/v4-scaleup/vsphere/"
+            )
+        )
+        os.chdir(scale_up_terraform_data_dir)
+        terraform_scale_up.initialize(upgrade=True)
+        terraform_scale_up.destroy(scale_up_terraform_var)
