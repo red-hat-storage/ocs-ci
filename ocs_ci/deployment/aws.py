@@ -464,6 +464,9 @@ class AWSUPIRHELWORKERS(AWSUPI):
         # A dict for holding instance Name to instance object mapping
         self.rhel_worker_list = {}
         self.rhel_worker_user = "ec2-user"
+        self.client = boto3.client(
+            'ec2', region_name=config.ENV_DATA['region']
+        )
 
     def deploy_cluster(self, log_cli_level='DEBUG'):
         """
@@ -509,7 +512,6 @@ class AWSUPIRHELWORKERS(AWSUPI):
         worker_id = self.get_worker_resource_id(resource)
         ec2 = boto3.resource('ec2')
         worker_instance = ec2.Instance(worker_id)
-
         self.worker_vpc = worker_instance.vpc.id
         self.worker_subnet = worker_instance.subnet.id
         self.worker_security_group = worker_instance.security_groups
@@ -523,19 +525,19 @@ class AWSUPIRHELWORKERS(AWSUPI):
                 return each['Key'], each['Value']
 
     def create_rhel_instance(self):
+        cluster_id = get_infra_id(self.cluster_path)
         num_workers = int(os.environ.get('num_workers', 3))
         logging.info(f"Creating {num_workers} RHEL workers")
         for i in range(num_workers):
             logging.info(f"Creating {i+1}/{num_workers} worker")
-            client = boto3.client('ec2', region_name=config.ENV_DATA['region'])
-            response = client.run_instances(
+            response = self.client.run_instances(
                 BlockDeviceMappings=[
                     {
                         'DeviceName': '/dev/xvda',
                         'Ebs': {
 
                             'DeleteOnTermination': True,
-                            'VolumeSize': 50,
+                            'VolumeSize': 10,
                             'VolumeType': 'gp2'
                         },
                     },
@@ -543,8 +545,8 @@ class AWSUPIRHELWORKERS(AWSUPI):
                 ImageId=config.ENV_DATA['rhel_worker_ami'],
                 SubnetId=self.worker_subnet,
                 InstanceType=config.ENV_DATA['RHEL_INSTANCE_TYPE'],
-                MaxCount=num_workers,
-                MinCount=num_workers,
+                MaxCount=1,
+                MinCount=1,
                 Monitoring={
                     'Enabled': False
                 },
@@ -557,7 +559,7 @@ class AWSUPIRHELWORKERS(AWSUPI):
             worker_ec2 = boto3.resource('ec2')
             worker_instance = worker_ec2.Instance(inst_id)
             worker_instance.wait_until_running()
-            worker_name = f'{self.cluster_name}-RHEL-WORKER-{i}'
+            worker_name = f'{cluster_id}-rhel-worker-{i}'
             self.rhel_worker_list[worker_name] = worker_instance
             worker_ec2.create_tags(
                 Resources=[inst_id],
@@ -567,7 +569,7 @@ class AWSUPIRHELWORKERS(AWSUPI):
                 ]
             )
             logging.info(self.worker_iam_role)
-            client.associate_iam_instance_profile(
+            self.client.associate_iam_instance_profile(
                 IamInstanceProfile=self.worker_iam_role,
                 InstanceId=inst_id,
             )
@@ -594,13 +596,12 @@ class AWSUPIRHELWORKERS(AWSUPI):
         # copy the .pem file for our internal repo on all nodes
         # including ansible pod
         # get it from URL
-        mirror_pem_file = "ops-mirror.pem"
-        tmp_path = f"/tmp/{mirror_pem_file}"
-        utils.download_file(
-            constants.INTERNAL_MIRROR_PEM_URL, tmp_path
+        mirror_pem_file_path = os.path.join(
+            constants.DATA_DIR,
+            constants.INTERNAL_MIRROR_PEM_FILE
         )
         dst = "/etc/pki/ca-trust/source/anchors/"
-        pod.upload(rhel_pod_obj.name, tmp_path, dst)
+        pod.upload(rhel_pod_obj.name, mirror_pem_file_path, dst)
         # Install scp on pod
         rhel_pod_obj.install_packages("openssh-clients")
         # distribute repo file to all RHEL workers
@@ -621,13 +622,14 @@ class AWSUPIRHELWORKERS(AWSUPI):
                 user=self.rhel_worker_user
             )
             rhel_pod_obj.copy_to_server(
-                host, pem_dst_path, f'{dst}/{mirror_pem_file}',
-                f'/tmp/{mirror_pem_file}',
+                host, pem_dst_path,
+                f'{dst}/{constants.INTERNAL_MIRROR_PEM_FILE}',
+                f'/tmp/{constants.INTERNAL_MIRROR_PEM_FILE}',
                 user=self.rhel_worker_user,
             )
             rhel_pod_obj.exec_cmd_on_node(
                 host, pem_dst_path,
-                f'sudo mv /tmp/{mirror_pem_file} {dst}',
+                f'sudo mv /tmp/{constants.INTERNAL_MIRROR_PEM_FILE} {dst}',
                 user=self.rhel_worker_user
             )
         # copy kubeconfig to pod
@@ -713,7 +715,7 @@ class AWSUPIRHELWORKERS(AWSUPI):
         timeout = 600
         ocp_obj = ocp.OCP(kind='node')
         node_info = ocp_obj.get()
-        for host in hosts:
+        for i in range(len(hosts)):
             for entry in node_info['items']:
                 for each in entry['status']['addresses']:
                     if each['type'] == 'Hostname':
@@ -765,7 +767,7 @@ class AWSUPIRHELWORKERS(AWSUPI):
         ansible_host_file = dict()
         ansible_host_file['ansible_user'] = 'ec2-user'
         ansible_host_file['ansible_become'] = 'True'
-        ansible_host_file['ansible_python_interpreter'] = 'auto_silent'
+        # ansible_host_file['ansible_python_interpreter'] = 'auto_silent'
         ansible_host_file['pod_kubeconfig'] = '/kubeconfig'
         ansible_host_file['pod_pull_secret'] = '/tmp/pull-secret'
         ansible_host_file['rhel_worker_nodes'] = hosts
@@ -794,7 +796,62 @@ class AWSUPIRHELWORKERS(AWSUPI):
         self.create_rhel_instance()
         self.run_ansible_playbook()
 
+    def get_rhel_worker_instances(self):
+        """
+        Get list of rhel worker instance IDs
+
+        Returns:
+            rhel_instances (list): list of instance IDs of rhel workers
+        """
+        rhel_workers = []
+        worker_filter = [{
+            'Name': 'tag:Name', 'Values': ['*rhel-worker*']
+        }]
+
+        response = self.client.describe_instances(Filters=worker_filter)
+        for worker in response['Reservations']:
+            rhel_workers.append(worker['Instances'][0]['InstanceId'])
+        return rhel_workers
+
+    def terminate_rhel_workers(self, worker_list):
+        """
+        Terminate the RHEL worker instances
+
+        Args:
+            worker_list (list): Instance IDs of rhel workers
+
+        Raises:
+            FailedToDeleteInstance (Exception): if failed to terminate
+        """
+        logging.info(f"Terminating RHEL workers {worker_list}")
+        # Do a dry run of instance termination
+        try:
+            self.client.terminate_instances(
+                InstanceIds=worker_list,
+                DryRun=True,
+            )
+        except self.client.exceptions.ClientError as err:
+            if "DryRunOperation" in str(err):
+                logging.info("Instances can be deleted")
+            else:
+                logging.error("Some of the Instances can't be deleted")
+                raise exceptions.FailedToDeleteInstance()
+
+        # Actual termination call here
+        self.client.terminate_instances(
+            InstanceIds=worker_list,
+            DryRun=False,
+        )
+        try:
+            waiter = self.client.get_waiter('instance_terminated')
+            waiter.wait(InstanceIds=worker_list)
+            logging.info("Instances are terminated")
+        except self.client.exceptions.WaiterError as ex:
+            logging.error(f"Failed to terminate instances {ex}")
+            raise exceptions.FailedToDeleteInstance()
+
     def destroy_cluster(self, log_level="DEBUG"):
+        self.terminate_rhel_workers(self.get_rhel_worker_instances())
         super(AWSUPIRHELWORKERS, self).destroy_cluster()
 
 
