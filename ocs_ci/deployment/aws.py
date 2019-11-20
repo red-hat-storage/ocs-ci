@@ -11,7 +11,6 @@ from subprocess import Popen, PIPE
 
 import boto3
 from botocore.exceptions import ClientError
-import yaml
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
@@ -627,7 +626,7 @@ class AWSUPIRHELWORKERS(AWSUPI):
         hosts = [inst.private_dns_name for node, inst in
                  self.rhel_worker_list.items()]
         for host in hosts:
-            disable = "sudo yum-config-manager --disable \*"
+            disable = "sudo yum-config-manager --disable *"
             rhel_pod_obj.exec_cmd_on_node(
                 host, pem_dst_path, disable, user=self.rhel_worker_user
             )
