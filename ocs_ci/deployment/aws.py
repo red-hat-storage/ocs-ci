@@ -463,7 +463,7 @@ class AWSUPIRHELWORKERS(AWSUPI):
         self.cluster_name = config.ENV_DATA['cluster_name']
         # A dict for holding instance Name to instance object mapping
         self.rhel_worker_list = {}
-        self.rhel_worker_user = "ec2-user"
+        self.rhel_worker_user = constants.EC2_USER
         self.client = boto3.client(
             'ec2', region_name=config.ENV_DATA['region']
         )
@@ -520,11 +520,30 @@ class AWSUPIRHELWORKERS(AWSUPI):
         del self.worker_iam_role['Id']
 
     def get_kube_tag(self, tags):
+        """
+        Fetch kubernets.io tag from worker instance
+
+        Args:
+            tags (dict): AWS tags from existing worker
+
+        Returns:
+            tuple: key looks like
+                "kubernetes.io/cluster/<cluster-name>" and value looks like
+                "share" OR "owned"
+
+        """
         for each in tags:
             if 'kubernetes' in each['Key']:
                 return each['Key'], each['Value']
 
     def create_rhel_instance(self):
+        """
+        This function does the following:
+        1. Create RHEL worker instances, copy required AWS tags from existing
+        2. worker instances to new RHEL instances
+        3. Copy  IAM role from existing worker to new RHEL workers
+
+        """
         cluster_id = get_infra_id(self.cluster_path)
         num_workers = int(os.environ.get('num_workers', 3))
         logging.info(f"Creating {num_workers} RHEL workers")
