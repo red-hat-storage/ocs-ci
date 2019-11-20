@@ -28,7 +28,6 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import utils
 from ocs_ci.utility import templating
 from ocs_ci.ocs import ocp
-import pdb
 
 logger = logging.getLogger(__name__)
 
@@ -324,10 +323,6 @@ class AWSUPI(AWSBase):
                 "Sym linking %s to %s", install_dir, absolute_cluster_path
             )
             os.symlink(absolute_cluster_path, install_dir)
-            logger.info(absolute_cluster_path)
-            logger.info('----------------------')
-            logger.info(install_dir)
-            pdb.set_trace()
             # NOT A CLEAN APPROACH: copy openshift-install and oc binary to
             # script path because upi script expects it to be present in
             # script dir
