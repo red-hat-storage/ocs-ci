@@ -319,7 +319,8 @@ class VSPHEREUPI(VSPHEREBASE):
             run_cmd(
                 f"{self.installer} wait-for bootstrap-complete "
                 f"--dir {self.cluster_path} "
-                f"--log-level {log_cli_level}"
+                f"--log-level {log_cli_level}",
+                timeout=3600
             )
             logger.info("removing bootstrap node")
             os.chdir(self.terraform_data_dir)
@@ -339,7 +340,8 @@ class VSPHEREUPI(VSPHEREBASE):
             run_cmd(
                 f"{self.installer} wait-for install-complete "
                 f"--dir {self.cluster_path} "
-                f"--log-level {log_cli_level}"
+                f"--log-level {log_cli_level}",
+                timeout=1800
             )
 
             self.test_cluster()
