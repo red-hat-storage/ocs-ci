@@ -16,6 +16,9 @@
 * Run the `tox` command locally before submitting the patch to github to see if
     you are passing the tests we are running in Travis CI.
 * It is better to submit small changes in core libraries to avoid regression.
+* Make sure you sign-off your commits with `git commit -s`
+  [Developer Certificate of Origin (DCO)](https://github.com/probot/dco#how-it-works)
+  is enabled which means all PRs will be checked for the submitter GitHub account.
 * If the change is still Work In Progress (WIP), please add WIP to the name of
     PR which indicates that patch is not ready for the  merge yet. We have
     installed this [application WIP](https://github.com/marketplace/wip). This
