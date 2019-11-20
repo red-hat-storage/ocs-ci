@@ -1,5 +1,7 @@
-import logging
 import copy
+import logging
+
+from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
@@ -189,3 +191,31 @@ def remove_nodes(nodes):
     # delete the nodes
     log.info(f"Deleting nodes {node_names_str}")
     ocp.exec_oc_cmd(f"delete nodes {node_names_str}")
+
+
+def get_node_ips(node_type='worker'):
+    """
+    Gets the node public IP
+
+    Args:
+        node_type (str): The node type (e.g. worker, master)
+
+    Returns:
+        list: Node IP's
+
+    """
+    ocp = OCP(kind=constants.NODE)
+    if node_type == 'worker':
+        nodes = ocp.get(selector=constants.WORKER_LABEL).get('items')
+    if node_type == 'master:':
+        nodes = ocp.get(selector=constants.MASTER_LABEL).get('items')
+
+    if config.ENV_DATA['platform'].lower() == constants.AWS_PLATFORM:
+        raise NotImplementedError
+    elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
+        return [
+            each['address'] for node in nodes
+            for each in node['status']['addresses'] if each['type'] == "ExternalIP"
+        ]
+    else:
+        raise NotImplementedError
