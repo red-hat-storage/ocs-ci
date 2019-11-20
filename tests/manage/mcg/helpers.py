@@ -24,7 +24,12 @@ def retrieve_test_objects_to_pod(podobj, target_dir):
 def sync_object_directory(podobj, src, target, mcg_obj=None):
     logger.info(f'Syncing all objects and directories from {src} to {target}')
     retrieve_cmd = f'cp --recursive {src} {target}'
-    assert 'Completed' in podobj.exec_cmd_on_pod(
+    if mcg_obj:
+        secrets = [mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+    else:
+        secrets = None
+    podobj.exec_cmd_on_pod(
         command=craft_s3_command(mcg_obj, retrieve_cmd), out_yaml_format=False,
-        secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+        secrets=secrets
     ), 'Failed to sync objects'
+    # Todo: check that all objects were synced successfully

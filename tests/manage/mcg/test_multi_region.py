@@ -105,7 +105,7 @@ class TestMultiRegion:
 
         # Verify integrity of B
         # Retrieve all objects from MCG bucket to result dir in Pod
-        sync_object_directory(awscli_pod, mcg_bucket_path, local_temp_path)
+        sync_object_directory(awscli_pod, mcg_bucket_path, local_temp_path, mcg_obj)
 
         # Checksum is compared between original and result object
         for obj in downloaded_objs:
@@ -127,7 +127,7 @@ class TestMultiRegion:
 
         # Verify integrity of A
         # Retrieve all objects from MCG bucket to result dir in Pod
-        sync_object_directory(awscli_pod, mcg_bucket_path, local_temp_path)
+        sync_object_directory(awscli_pod, mcg_bucket_path, local_temp_path, mcg_obj)
 
         # Checksum is compared between original and result object
         for obj in downloaded_objs:
