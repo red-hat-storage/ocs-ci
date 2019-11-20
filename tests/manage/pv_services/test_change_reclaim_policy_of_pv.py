@@ -40,7 +40,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
     """
     pvc_objs = None
     pod_objs = None
-    executor = ThreadPoolExecutor(max_workers=10)
+    executor = ThreadPoolExecutor(max_workers=1)
 
     @pytest.fixture(autouse=True)
     def setup(self, interface, multi_pvc_factory, pod_factory):
