@@ -15,6 +15,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.utility.prometheus import PrometheusAPI
 from tests import helpers
 
@@ -654,11 +655,8 @@ def workload_fio_storageutilization(
     fio_configmap_dict["data"]["workload.fio"] = fio_conf
     fio_pvc_dict["spec"]["storageClassName"] = storage_class_name
     fio_pvc_dict["spec"]["resources"]["requests"]["storage"] = f"{pvc_size}Gi"
-    fio_resource = [fio_pvc_dict, fio_configmap_dict, fio_job_dict]
-
-    # dump the job description in yaml format into a temporary file
-    tf = tmp_path / f"{fixture_name}.oc.yaml"
-    tf.write_text(yaml.dump_all(fio_resource))
+    fio_objs = [fio_pvc_dict, fio_configmap_dict, fio_job_dict]
+    fio_job_file = ObjectConfFile(fixture_name, fio_objs, project, tmp_path)
 
     # how long do we let the job running while writing data to the volume
     write_timeout = pvc_size * 30 # seconds
@@ -671,17 +669,8 @@ def workload_fio_storageutilization(
         Write data via fio Job (specified in ``tf`` tmp file) to reach desired
         utilization level, and keep this level for ``minimal_time`` seconds.
         """
-        # TODO: change ocsci to allow this (eg. new class representing such
-        # yaml, which can be deployed or deleted in given namespace)
-        # TODO: add logging
-        oc_cmd = [
-            "oc",
-            "create",
-            "-f",
-            os.path.join(tmp_path, tf.name),
-            "-n",
-            project.namespace]
-        subprocess.run(oc_cmd, check=True)
+        # deploy the fio Job to the cluster
+        fio_job_file.create()
 
         # This is a WORKAROUND of particular ocsci design choices: I just wait
         # for one pod in the namespace, and then ask for the pod again to get
@@ -730,15 +719,9 @@ def workload_fio_storageutilization(
     # we don't need to delete anything if this fixture has been already
     # executed
     if measured_op['first_run']:
-        logger.info("oc delete")
-        oc_cmd = [
-            "oc",
-            "delete",
-            "-f",
-            os.path.join(tmp_path, tf.name),
-            "-n",
-            project.namespace]
-        subprocess.run(oc_cmd, check=True)
+        # make sure we communicate what is going to happen
+        logger.info(f"going to delete {fixture_name} Job")
+        fio_job_file.delete()
 
     return measured_op
 
