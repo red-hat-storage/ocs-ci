@@ -28,6 +28,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import utils
 from ocs_ci.utility import templating
 from ocs_ci.ocs import ocp
+import pdb
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +206,7 @@ class AWSIPI(AWSBase):
     """
     A class to handle AWS IPI specific deployment
     """
+
     def __init__(self):
         self.name = self.__class__.__name__
         super(AWSIPI, self).__init__()
@@ -267,6 +269,7 @@ class AWSUPI(AWSBase):
     """
     A class to handle AWS UPI specific deployment
     """
+
     def __init__(self):
         self.name = self.__class__.__name__
         super(AWSUPI, self).__init__()
@@ -321,7 +324,10 @@ class AWSUPI(AWSBase):
                 "Sym linking %s to %s", install_dir, absolute_cluster_path
             )
             os.symlink(absolute_cluster_path, install_dir)
-
+            logger.info(absolute_cluster_path)
+            logger.info('----------------------')
+            logger.info(install_dir)
+            pdb.set_trace()
             # NOT A CLEAN APPROACH: copy openshift-install and oc binary to
             # script path because upi script expects it to be present in
             # script dir
@@ -445,6 +451,7 @@ class AWSUPIRHELWORKERS(AWSUPI):
     """
     A class to handle AWS UPI with RHEL worker nodes
     """
+
     def __init__(self):
         self.name = self.__class__.__name__
         super(AWSUPIRHELWORKERS, self).__init__()
@@ -491,12 +498,11 @@ class AWSUPIRHELWORKERS(AWSUPI):
         """
         return resource['StackResourceSummaries'][0]['PhysicalResourceId']
 
-    def gather_worker_data(self):
+    def gather_worker_data(self, suffix):
         """
         Gather various info like vpc, iam role, subnet,security group,
         cluster tag from existing RHCOS workers
         """
-        suffix = 'no0'
         self.cf = boto3.client('cloudformation')
         stack_name = f'{self.cluster_name}-{suffix}'
         resource = self.cf.list_stack_resources(StackName=stack_name)
@@ -520,6 +526,7 @@ class AWSUPIRHELWORKERS(AWSUPI):
         num_workers = int(os.environ.get('num_workers', 3))
         logging.info(f"Creating {num_workers} RHEL workers")
         for i in range(num_workers):
+            self.gather_worker_data(f'no{i}')
             logging.info(f"Creating {i+1}/{num_workers} worker")
             client = boto3.client('ec2', region_name=config.ENV_DATA['region'])
             response = client.run_instances(
@@ -537,8 +544,8 @@ class AWSUPIRHELWORKERS(AWSUPI):
                 ImageId=config.ENV_DATA['rhel_worker_ami'],
                 SubnetId=self.worker_subnet,
                 InstanceType=config.ENV_DATA['RHEL_INSTANCE_TYPE'],
-                MaxCount=num_workers,
-                MinCount=num_workers,
+                MaxCount=1,
+                MinCount=1,
                 Monitoring={
                     'Enabled': False
                 },
@@ -685,8 +692,8 @@ class AWSUPIRHELWORKERS(AWSUPI):
         for each in node_info['items']:
             labels = each['metadata']['labels']
             if(
-                labels['node.openshift.io/os_id'] == 'rhcos'
-                and 'node-role.kubernetes.io/worker' in labels
+                labels['node.openshift.io/os_id'] == 'rhcos' and
+                'node-role.kubernetes.io/worker' in labels
             ):
                 for every in each['status']['addresses']:
                     if every['type'] == 'Hostname':
@@ -784,7 +791,6 @@ class AWSUPIRHELWORKERS(AWSUPI):
         """
         Add RHEL worker nodes to the existing cluster
         """
-        self.gather_worker_data()
         self.create_rhel_instance()
         self.run_ansible_playbook()
 
