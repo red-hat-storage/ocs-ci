@@ -127,7 +127,9 @@ class Pod(OCS):
             logger.exception(f"Found Exception: {ex}")
             raise
 
-    def exec_cmd_on_pod(self, command, out_yaml_format=True, secrets=None, **kwargs):
+    def exec_cmd_on_pod(
+        self, command, out_yaml_format=True, secrets=None, timeout=600, **kwargs
+    ):
         """
         Execute a command on a pod (e.g. oc rsh)
 
@@ -139,13 +141,16 @@ class Pod(OCS):
             secrets (list): A list of secrets to be masked with asterisks
                 This kwarg is popped in order to not interfere with
                 subprocess.run(**kwargs)
+            timeout (int): timeout for the exec_oc_cmd, defaults to 600 seconds
 
         Returns:
             Munch Obj: This object represents a returned yaml file
         """
         rsh_cmd = f"rsh {self.name} "
         rsh_cmd += command
-        return self.ocp.exec_oc_cmd(rsh_cmd, out_yaml_format, secrets=secrets, **kwargs)
+        return self.ocp.exec_oc_cmd(
+            rsh_cmd, out_yaml_format, secrets=secrets, timeout=timeout, **kwargs
+        )
 
     def exec_bash_cmd_on_pod(self, command):
         """
