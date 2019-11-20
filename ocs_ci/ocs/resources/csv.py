@@ -1,15 +1,7 @@
 """
 CSV related functionalities
 """
-import logging
-
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceInUnexpectedState
-from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.utility.retry import retry
-
-
-logger = logging.getLogger(__name__)
 
 
 class CSV(OCP):
@@ -17,6 +9,8 @@ class CSV(OCP):
     This class represent ClusterServiceVersion (CSV) and contains all related
     methods we need to do with CSV.
     """
+
+    _has_phase = True
 
     def __init__(self, resource_name="", *args, **kwargs):
         """
@@ -27,59 +21,23 @@ class CSV(OCP):
 
         """
         super(CSV, self).__init__(
-            resource_name=resource_name, *args, **kwargs
+            resource_name=resource_name, kind='csv', *args, **kwargs
         )
 
-    def check_phase(self, phase):
-        """
-        Check phase of CSV resource
 
-        Args:
-            phase (str): Phase of CSV object
+def get_csvs_start_with_prefix(csv_prefix, namespace):
+    """
+    Get CSVs start with prefix
 
-        Returns:
-            bool: True if phase of object is the same as passed one, False
-                otherwise.
+    Args:
+        csv_prefix (str): prefix from name
+        namespace (str): namespace of CSV
 
-        """
-        self.check_name_is_specified()
-        try:
-            data = self.get()
-        except CommandFailed:
-            logger.info(f"Cannot find CSV object {self.resource_name}")
-            return False
-        try:
-            current_phase = data['status']['phase']
-            logger.info(f"CSV {self.resource_name} is in phase: {current_phase}!")
-            return current_phase == phase
-        except KeyError:
-            logger.info(
-                f"Problem while reading phase status of CSV "
-                f"{self.resource_name}, data: {data}"
-            )
-        return False
+    Returns:
+        list: found CSVs
 
-    @retry(ResourceInUnexpectedState, tries=4, delay=5, backoff=1)
-    def wait_for_phase(self, phase, timeout=300, sleep=5):
-        """
-        Wait till phase of CSV resource is the same as required one passed in
-        the phase parameter.
+    """
 
-        Args:
-            phase (str): Desired phase of CSV object
-            timeout (int): Timeout in seconds to wait for desired phase
-            sleep (int): Time in seconds to sleep between attempts
-
-        Raises:
-            ResourceInUnexpectedState: In case the CSV is not in expected
-                phase.
-
-        """
-        self.check_name_is_specified()
-        sampler = TimeoutSampler(
-            timeout, sleep, self.check_phase, phase=phase
-        )
-        if not sampler.wait_for_func_status(True):
-            raise ResourceInUnexpectedState(
-                f"CSV: {self.resource_name} is not in expected phase: {phase}"
-            )
+    csvs = CSV(namespace=namespace)
+    csv_list = csvs.get()['items']
+    return [csv for csv in csv_list if csv_prefix in csv['metadata']['name']]

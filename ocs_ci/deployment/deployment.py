@@ -182,11 +182,12 @@ class Deployment(object):
 
         """
         image = config.DEPLOYMENT.get('ocs_registry_image', '')
+        upgrade = config.DEPLOYMENT.get('upgrade', False)
         image_and_tag = image.split(':')
         image = image_and_tag[0]
         image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
         if not image_tag and config.REPORTING.get("us_ds") == 'DS':
-            image_tag = get_latest_ds_olm_tag()
+            image_tag = get_latest_ds_olm_tag(upgrade)
         olm_data_generator = templating.load_yaml(
             constants.OLM_YAML, multi_document=True
         )
@@ -233,7 +234,7 @@ class Deployment(object):
             self.get_olm_and_subscription_manifest()
         )
         self.label_and_taint_nodes()
-        run_cmd(f"oc create -f {olm_manifest}")
+        run_cmd(f"oc create -f {olm_manifest}", timeout=2400)
         catalog_source = CatalogSource(
             resource_name='ocs-catalogsource',
             namespace='openshift-marketplace',
@@ -241,18 +242,16 @@ class Deployment(object):
         # Wait for catalog source is ready
         catalog_source.wait_for_state("READY")
         run_cmd(f"oc create -f {subscription_manifest}")
+        # wait for package manifest
         package_manifest = PackageManifest(
             resource_name=defaults.OCS_OPERATOR_NAME
         )
         # Wait for package manifest is ready
-        package_manifest.wait_for_resource()
+        package_manifest.wait_for_resource(timeout=300)
         channel = config.DEPLOYMENT.get('ocs_csv_channel')
         csv_name = package_manifest.get_current_csv(channel=channel)
-        csv = CSV(
-            resource_name=csv_name, kind="csv",
-            namespace=self.namespace
-        )
-        csv.wait_for_phase("Succeeded", timeout=400)
+        csv = CSV(resource_name=csv_name, namespace=self.namespace)
+        csv.wait_for_phase("Succeeded", timeout=720)
         cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
         cluster_data['metadata']['name'] = config.ENV_DATA[
             'storage_cluster_name'
@@ -293,7 +292,7 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             cluster_data, cluster_data_yaml.name
         )
-        run_cmd(f"oc create -f {cluster_data_yaml.name}")
+        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
 
     def deploy_ocs(self):
         """

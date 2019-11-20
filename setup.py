@@ -43,6 +43,8 @@ setup(
         # https://github.com/boto/botocore/issues/1872
         # till above issue fixed, manually pointing python-dateutil to 2.8.0
         'python-dateutil==2.8.0',
+        'pytest-ordering',
+        'funcy',
     ],
     entry_points={
         'console_scripts': [

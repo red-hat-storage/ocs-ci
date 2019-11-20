@@ -222,7 +222,8 @@ class AWSIPI(AWSBase):
             run_cmd(
                 f"{self.installer} create cluster "
                 f"--dir {self.cluster_path} "
-                f"--log-level {log_cli_level}"
+                f"--log-level {log_cli_level}",
+                timeout=3600
             )
             self.test_cluster()
 

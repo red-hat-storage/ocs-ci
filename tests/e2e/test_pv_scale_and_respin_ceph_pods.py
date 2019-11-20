@@ -12,7 +12,7 @@ import time
 from tests import helpers, disruption_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.testlib import scale, E2ETest
+from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
 
 log = logging.getLogger(__name__)
 
@@ -104,20 +104,21 @@ class BasePvcCreateRespinCephPods(E2ETest):
 
 
 @scale
+@ignore_leftovers
 @pytest.mark.parametrize(
     argnames="resource_to_delete",
     argvalues=[
         pytest.param(
-            *['mgr'], marks=pytest.mark.polarion_id("OCS-766")
+            *['mgr'], marks=[pytest.mark.polarion_id("OCS-766"), pytest.mark.bugzilla("1768031")]
         ),
         pytest.param(
-            *['mon'], marks=pytest.mark.polarion_id("OCS-764")
+            *['mon'], marks=[pytest.mark.polarion_id("OCS-764"), pytest.mark.bugzilla("1768031")]
         ),
         pytest.param(
-            *['osd'], marks=pytest.mark.polarion_id("OCS-765")
+            *['osd'], marks=[pytest.mark.polarion_id("OCS-765"), pytest.mark.bugzilla("1768031")]
         ),
         pytest.param(
-            *['mds'], marks=pytest.mark.polarion_id("OCS-613")
+            *['mds'], marks=[pytest.mark.polarion_id("OCS-613"), pytest.mark.bugzilla("1768031")]
         )
     ]
 )

@@ -17,6 +17,7 @@ Rest of the information you can find in those sections
 * [Getting started](./getting_started.md) - Getting started with our testing framework
     OCS-CI.
 * [Usage](./usage.md) - information about usage of OCS-CI framework.
+* [Upgrade](./upgrade.md) - information about upgrade of OCS with OCS-CI framework.
 * [Config files](../conf/README.md) - information about all our config files.
 * [Results](./results.md) - information about results publishing.
 * [Writing tests](./writing_tests.md) - information about how to write tests.

@@ -1,0 +1,7 @@
+---
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+ENV_DATA:
+  platform: 'aws'
+  deployment_type: 'upi'
+  worker_instance_type: 'm5.4xlarge'

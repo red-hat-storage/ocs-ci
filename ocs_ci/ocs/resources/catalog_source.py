@@ -53,6 +53,24 @@ class CatalogSource(OCP):
             return None
         return data['spec']['image'].split(":")[1]
 
+    def get_image_url(self):
+        """
+        Fetch image url from catalog source resource
+
+        Returns:
+            image url (str): URL of image
+
+        """
+        self.check_name_is_specified()
+        try:
+            data = self.get()
+        except CommandFailed:
+            logger.warning(
+                f"Cannot find CatalogSource object {self.resource_name}"
+            )
+            return None
+        return data['spec']['image'].split(":")[0]
+
     def check_state(self, state):
         """
         Check state of catalog source
@@ -90,7 +108,7 @@ class CatalogSource(OCP):
         return False
 
     @retry(ResourceInUnexpectedState, tries=4, delay=5, backoff=1)
-    def wait_for_state(self, state, timeout=300, sleep=5):
+    def wait_for_state(self, state, timeout=480, sleep=5):
         """
         Wait till state of catalog source resource is the same as required one
         passed in the state parameter.
