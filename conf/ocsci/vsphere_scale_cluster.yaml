@@ -6,5 +6,4 @@ ENV_DATA:
   rhel_template: 'rhel77_ocs4qe'
   rhel_worker_prefix: 'rhel1'
   rhel_user: 'test'
-  ops_mirror_pem_file_location: 'http://<server>/ops-mirror.pem'
   mixed_cluster: False

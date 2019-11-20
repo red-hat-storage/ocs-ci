@@ -65,7 +65,7 @@ class Terraform(object):
         Args:
             tfstate (str): path to terraform.tfstate file
             module (str): module to extract
-            json_format (bool): True if output wants to format as json
+            json_format (bool): True if format output as json
 
         Returns:
             str: output from tfstate
