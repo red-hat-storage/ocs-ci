@@ -104,3 +104,12 @@ class NonUpgradedImagesFoundError(Exception):
 
 class UnexpectedVolumeType(Exception):
     pass
+
+
+class FailedToAddNodeException(Exception):
+    pass
+
+
+class FailedToRemoveNodeException(Exception):
+    pass
+
