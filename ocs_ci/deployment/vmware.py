@@ -17,6 +17,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import (
     get_node_ips, wait_for_nodes_status,
+    get_typed_worker_nodes, remove_nodes,
 )
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility.templating import Templating, dump_data_to_json
@@ -482,6 +483,19 @@ class VSPHEREUPI(VSPHEREBASE):
         if config.ENV_DATA.get('scale_up'):
             logger.info("Adding extra nodes to cluster")
             self.add_nodes()
+
+        # remove RHCOS compute nodes
+        if (
+                config.ENV_DATA.get('scale_up')
+                and not config.ENV_DATA.get('mixed_cluster')
+        ):
+            rhcos_nodes = get_typed_worker_nodes()
+            logger.info(
+                f"RHCOS compute nodes to delete: "
+                f"{[node.name for node in rhcos_nodes]}"
+            )
+            logger.info("Removing RHCOS compute nodes from a cluster")
+            remove_nodes(rhcos_nodes)
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
