@@ -1,0 +1,10 @@
+---
+# This configuration contains the scaling of nodes in the cluster
+ENV_DATA:
+  scale_up: True
+  nodes_scaleup_count: '3'
+  rhel_template: 'rhel77_ocs4qe'
+  rhel_worker_prefix: 'rhel1'
+  rhel_user: 'test'
+  ops_mirror_pem_file_location: 'http://<server>/ops-mirror.pem'
+  mixed_cluster: False

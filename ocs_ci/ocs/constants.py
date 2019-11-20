@@ -386,6 +386,7 @@ WORKER_IGN = "worker.ign"
 
 # vSphere related constants
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
+VSPHERE_SCALEUP_REPO = "https://code.engineering.redhat.com/gerrit/openshift-misc"
 VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")
 INSTALLER_IGNITION = os.path.join(VSPHERE_DIR, "machine/ignition.tf")
 INSTALLER_ROUTE53 = os.path.join(VSPHERE_DIR, "route53/main.tf")
@@ -393,6 +394,15 @@ INSTALLER_MACHINE_CONF = os.path.join(VSPHERE_DIR, "machine/main.tf")
 VSPHERE_CONFIG_PATH = os.path.join(TOP_DIR, "conf/ocsci/vsphere_upi_vars.yaml")
 VSPHERE_MAIN = os.path.join(VSPHERE_DIR, "main.tf")
 TERRAFORM_DATA_DIR = "terraform_data"
+SCALEUP_TERRAFORM_DATA_DIR = "scaleup_terraform_data"
+SCALEUP_VSPHERE_DIR = os.path.join(
+    EXTERNAL_DIR,
+    "openshift-misc/v4-testing-misc/v4-scaleup/vsphere/"
+)
+SCALEUP_VSPHERE_MAIN = os.path.join(SCALEUP_VSPHERE_DIR, "main.tf")
+SCALEUP_VSPHERE_VARIABLES = os.path.join(SCALEUP_VSPHERE_DIR, "variables.tf")
+SCALEUP_VSPHERE_ROUTE53 = os.path.join(SCALEUP_VSPHERE_DIR, "route53/vsphere-rhel-dns.tf")
+SCALEUP_VSPHERE_ROUTE53_VARIABLES = os.path.join(SCALEUP_VSPHERE_DIR, "route53/variables.tf")
 TERRAFORM_VARS = "terraform.tfvars"
 VM_DISK_TYPE = "thin"
 VM_DISK_MODE = "persistent"
@@ -407,7 +417,10 @@ OCP4_2_REPO = os.path.join(REPO_DIR, "ocp_4_2.repo")
 # packages
 RHEL_POD_PACKAGES = ["openssh-clients", "openshift-ansible", "openshift-clients", "jq"]
 
-POD_UPLOADPATH = "/tmp/"
+# common locations
+POD_UPLOADPATH = RHEL_TMP_PATH = "/tmp/"
+YUM_REPOS_PATH = "/etc/yum.repos.d/"
+PEM_PATH = "/etc/pki/ca-trust/source/anchors/"
 
 # Upgrade related constants, keeping some space between, so we can add
 # additional order.
@@ -421,3 +434,20 @@ LOCAL_STORAGE_CSV_PREFIX = 'local-storage-operator'
 LATEST_TAGS = ('latest', 'latest-stable')
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
+
+# Inventory
+INVENTORY_TEMPLATE = "inventory.yaml.j2"
+INVENTORY_FILE = "inventory.yaml"
+
+# users
+VM_RHEL_USER = "test"
+
+# PEM
+OCP_PEM = "ops-mirror.pem"
+
+# playbooks
+SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scaleup.yml"
+
+# labels
+MASTER_LABEL = "node-role.kubernetes.io/master"
+WORKER_LABEL = "node-role.kubernetes.io/worker"
