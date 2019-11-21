@@ -51,8 +51,10 @@ class TestMultiRegion:
         Test bucket creation using the S3 SDK
         """
         # Setup
-        # Todo: add region and amount parametrization - note that `us-east-1` will cause an error
-        # Todo: as it is the default region. If usage of `us-east-1` needs to be tested, keep the 'region' field out.
+        # Todo:
+        #  add region and amount parametrization - note that `us-east-1` will cause an error
+        #  as it is the default region. If usage of `us-east-1` needs to be tested, keep the 'region' field out.
+
         aws_buckets, backingstore_secrets, backingstore_objects, bucketclasses = resources
         # Define backing stores
         backingstore1 = {
