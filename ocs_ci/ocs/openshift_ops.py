@@ -18,7 +18,7 @@ class OCP(object):
 
     """
     def __init__(self):
-
+        config.load_kube_config(config_file=os.getenv('KUBECONFIG'))
         k8s_client = config.new_client_from_config()
         dyn_client = DynamicClient(k8s_client)
 
