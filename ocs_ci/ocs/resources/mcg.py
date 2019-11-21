@@ -458,6 +458,7 @@ class MCG(object):
 
     def toggle_bucket_readwrite(self, bucketname, block=True):
         """
+        Allows to toggle a bucket's IO using a bucket policy
 
         Args:
             bucketname: The name of the bucket that should be manipulated
@@ -522,7 +523,10 @@ class MCG(object):
 
                 for object_chunk in object_chunks:
                     mirror_blocks = object_chunk.get('frags')[0].get('blocks')
-                    mirror_nodes = [mirror_blocks[i].get('block_md').get('node') for i in range(len(mirror_blocks))]
+                    mirror_nodes = [
+                        mirror_blocks[i].get('block_md').get('node')
+                        for i in range(len(mirror_blocks))
+                    ]
                     if 2 <= len(mirror_blocks) == len(set(mirror_nodes)):
                         results.append(True)
                     else:
