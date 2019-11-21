@@ -13,9 +13,9 @@ def retrieve_test_objects_to_pod(podobj, target_dir):
     for obj in public_s3.Bucket(constants.TEST_FILES_BUCKET).objects.all():
         logger.info(f'Downloading {obj.key} from AWS test bucket')
         podobj.exec_cmd_on_pod(
-            command=f'sh -c "cd {target_dir} && '
+            command=f'sh -c "'
                     f'wget https://{constants.TEST_FILES_BUCKET}'
-                    f'.s3.amazonaws.com/{obj.key}"'
+                    f'.s3.amazonaws.com/{obj.key} -O {target_dir}"'
         )
         downloaded_objects.append(obj.key)
     return downloaded_objects

@@ -97,6 +97,9 @@ class TestMultiRegion:
 
         sync_object_directory(awscli_pod, 's3://' + constants.TEST_FILES_BUCKET, local_testobjs_dir_path)
 
+        # Upload test objects to the NooBucket
+        sync_object_directory(awscli_pod, local_testobjs_dir_path, mcg_bucket_path, mcg_obj)
+
         mcg_obj.check_if_mirroring_is_done(bucket_name)
 
         # Bring bucket A down
