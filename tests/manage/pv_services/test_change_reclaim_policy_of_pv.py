@@ -40,13 +40,23 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
     """
     pvc_objs = None
     pod_objs = None
+    sc_obj = None
     executor = ThreadPoolExecutor(max_workers=1)
 
     @pytest.fixture(autouse=True)
-    def setup(self, interface, multi_pvc_factory, pod_factory):
+    def setup(
+        self, interface, reclaim_policy, storageclass_factory,
+        multi_pvc_factory, pod_factory
+    ):
         """
         Create pvc and pod
         """
+        # Create storage class
+        self.sc_obj = storageclass_factory(
+            interface=interface,
+            reclaim_policy=reclaim_policy
+        )
+
         # Create PVCs
         self.pvc_objs = multi_pvc_factory(
             interface=interface,
@@ -126,7 +136,6 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
         """
         This test case tests update of reclaim policy of PV
         """
-        sc_obj = self.pvc_objs[0].storageclass
         reclaim_policy_to = 'Delete' if reclaim_policy == 'Retain' else (
             'Retain'
         )
@@ -281,7 +290,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
             if interface == constants.CEPHBLOCKPOOL:
                 ret = verify_volume_deleted_in_backend(
                     interface=interface, image_uuid=uuid,
-                    pool_name=sc_obj.ceph_pool.name
+                    pool_name=self.sc_obj.ceph_pool.name
                 )
             if interface == constants.CEPHFILESYSTEM:
                 ret = verify_volume_deleted_in_backend(
