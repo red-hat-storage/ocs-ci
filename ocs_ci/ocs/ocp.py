@@ -99,7 +99,7 @@ class OCP(object):
 
             secrets (list): A list of secrets to be masked with asterisks
                 This kwarg is popped in order to not interfere with
-                subprocess.run(**kwargs)
+                subprocess.run(``**kwargs``)
 
             timeout (int): timeout for the oc_cmd, defaults to 600 seconds
 

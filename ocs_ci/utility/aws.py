@@ -613,12 +613,17 @@ class AWS(object):
             for sg_grp in original_sgs:
                 self.remove_security_group(sg_grp, instance)
 
-    def restore_instances_access(self, security_group_id_to_remove, original_security_group_dict):
+    def restore_instances_access(
+        self, security_group_id_to_remove, original_security_group_dict
+    ):
         """
-        Restore access to instances by removing blocking security group and append original security group
+        Restore access to instances by removing blocking security group and
+        append original security group.
+
         Args:
-            security_group_id_to_remove (str):
-            original_security_group_dict (dict): keys: blocked instances: ec2 instances id
+            security_group_id_to_remove (str): id of the security group
+            original_security_group_dict (dict): dict with:
+                keys: blocked instances: ec2 instances id
                 values: list of original security groups
 
 

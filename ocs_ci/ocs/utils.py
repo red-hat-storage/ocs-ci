@@ -195,16 +195,17 @@ def check_ceph_healthly(ceph_mon, num_osds, num_mons, mon_container=None, timeou
     Function to check ceph is in healthy state
 
     Args:
-       ceph_mon: monitor node
-       num_osds: number of osds in cluster
-       num_mons: number of mons in cluster
-       mon_container: monitor container name if monitor is placed in the container
-       timeout: 300 seconds(default) max time to check
-         if cluster is not healthy within timeout period
-                return 1
+        ceph_mon (CephNode): monitor node
+        num_osds (int): number of osds in cluster
+        num_mons (int): number of mons in cluster
+        mon_container (str): monitor container name if monitor is placed in
+            the container
+        timeout: 300 seconds(default) max time to check if cluster is not
+            healthy within timeout period return 1
 
     Returns:
-       return 0 when ceph is in healthy state, else 1
+        int: returns 0 when ceph is in healthy state otherwise returns 1
+
     """
 
     timeout = datetime.timedelta(seconds=timeout)
