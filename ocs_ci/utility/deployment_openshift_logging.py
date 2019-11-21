@@ -51,9 +51,10 @@ def create_elasticsearch_operator_group(yaml_file, resource_name):
         bool: True if operator group for elastic search is created
             successfully, false otherwise
 
-    Example:
-        create_elasticsearch_operator_group(\
-            constants.EO_OG_YAML, 'openshift-operators-redhat'\
+    Example::
+
+        create_elasticsearch_operator_group(
+            constants.EO_OG_YAML, 'openshift-operators-redhat'
         )
 
     """

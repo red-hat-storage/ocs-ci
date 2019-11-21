@@ -2,11 +2,12 @@
 This module implements all the functionalities required for setting up and
 running "Jenkins" like workloads on the pods.
 
-This module implements few functions
-setup(): for setting up git utility on the pod and any necessary\
-    environmental params.
-run(): for running 'git clone' on pod to simulate a working environment for\
-    a developer
+This module implements few functions::
+
+    setup(): for setting up git utility on the pod and any necessary
+        environmental params.
+    run(): for running 'git clone' on pod to simulate a working environment for
+        a developer
 
 Note: The above mentioned functions will be invoked from Workload.setup()
 and Workload.run() methods along with user provided parameters.

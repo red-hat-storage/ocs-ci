@@ -6,7 +6,7 @@ and other supported platforms. The framework is based on CephCI
 
 ## Automatically generated documentation
 
-We have now pirmary documentation available at
+We have now primary documentation available at
 [readthedocs.io](https://ocs-ci.readthedocs.io/en/latest/)
 
 Documentation is structured and available under docs directory

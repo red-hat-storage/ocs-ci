@@ -1,7 +1,7 @@
 Welcome to OCS-CI's documentation!
 ==================================
 
-This is a documentation of the OCSCI_ project.
+This is a documentation for the OCS-CI_ project.
 OCS-CI is a testing framework based on pytest to test Red Hat OCS features
 and functionality using AWS and other supported platforms.
 
@@ -51,4 +51,4 @@ Indices and tables
 * :ref:`search`
 
 
-.. _OCSCI: https://github.com/red-hat-storage/ocs-ci
+.. _OCS-CI: https://github.com/red-hat-storage/ocs-ci

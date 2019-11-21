@@ -7,7 +7,7 @@ During the execution we are loading different config files passed by
 --ocsci-conf parameter which we merge together. The last one passed config file
 overwrite previous file.
 
-Each of config files can contain different sections (DEFAULTS, ENV_DATA, RUN, etc).
+Each config file can contain different sections (DEFAULTS, ENV_DATA, RUN, etc).
 
 For more information please read the rest of the documentation.
 
