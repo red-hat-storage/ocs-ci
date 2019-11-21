@@ -61,7 +61,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
         self.pvc_objs = multi_pvc_factory(
             interface=interface,
             project=None,
-            storageclass=None,
+            storageclass=self.sc_obj,
             size=5,
             status=constants.STATUS_BOUND,
             num_of_pvc=10,
