@@ -126,6 +126,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
         """
         This test case tests update of reclaim policy of PV
         """
+        sc_obj = self.pvc_objs[0].storageclass
         reclaim_policy_to = 'Delete' if reclaim_policy == 'Retain' else (
             'Retain'
         )
@@ -280,7 +281,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
             if interface == constants.CEPHBLOCKPOOL:
                 ret = verify_volume_deleted_in_backend(
                     interface=interface, image_uuid=uuid,
-                    pool_name=self.sc_obj.ceph_pool.name
+                    pool_name=sc_obj.ceph_pool.name
                 )
             if interface == constants.CEPHFILESYSTEM:
                 ret = verify_volume_deleted_in_backend(
