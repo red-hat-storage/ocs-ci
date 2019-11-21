@@ -49,7 +49,7 @@ class MCG(object):
 
         creds_secret_name = (
             results.get('items')[0].get('status').get('accounts')
-                .get('admin').get('secretRef').get('name')
+            .get('admin').get('secretRef').get('name')
         )
         secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
         creds_secret_obj = secret_ocp_obj.get(creds_secret_name)
