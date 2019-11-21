@@ -41,7 +41,8 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
     pvc_objs = None
     pod_objs = None
     sc_obj = None
-    executor = ThreadPoolExecutor(max_workers=1)
+    num_of_pvc = 10
+    executor = ThreadPoolExecutor(max_workers=num_of_pvc)
 
     @pytest.fixture(autouse=True)
     def setup(
@@ -64,7 +65,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
             storageclass=self.sc_obj,
             size=5,
             status=constants.STATUS_BOUND,
-            num_of_pvc=10,
+            num_of_pvc=self.num_of_pvc,
             wait_each=False
         )
 
