@@ -473,7 +473,8 @@ class Ceph(object):
             client(CephObject): Client with keyring and ceph-common
 
         Returns:
-            dict: osd metadata like:
+            dict: osd metadata like::
+
                  {
                     "id": 8,
                     "arch": "x86_64",
@@ -1088,11 +1089,12 @@ class CephNode(object):
         """
         execute a command on the vm
         eg: self.exec_cmd(cmd='uptime')
-            or
-            self.exec_cmd(cmd='background_cmd', check_ec=False)
+        or
+        self.exec_cmd(cmd='background_cmd', check_ec=False)
 
         Attributes:
-        check_ec: False will run the command and not wait for exit code
+            check_ec (bool): False will run the command and not wait for exit
+                code
 
         """
 

@@ -32,7 +32,7 @@
     Currently we are using the CODEOWNERS file which should auto assign
     [top level reviewers](https://github.com/orgs/red-hat-storage/teams/top-level-reviewers/members).
      If you feel ownership of some package/module, please add yourself to this
-    file [CODEOWNERS](../.github/CODEOWNERS) following conventions from
+    file [CODEOWNERS](https://github.com/red-hat-storage/ocs-ci/tree/master/.github/CODEOWNERS) following conventions from
     comments or [documentation](https://help.github.com/en/articles/about-code-owners).
 * Thumbs up, LGTM indicates that change looks OK, but change needs to be
     approved  from github by at least 2 project maintainers before merge.

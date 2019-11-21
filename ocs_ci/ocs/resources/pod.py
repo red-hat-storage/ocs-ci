@@ -140,7 +140,7 @@ class Pod(OCS):
 
             secrets (list): A list of secrets to be masked with asterisks
                 This kwarg is popped in order to not interfere with
-                subprocess.run(**kwargs)
+                subprocess.run(``**kwargs``)
             timeout (int): timeout for the exec_oc_cmd, defaults to 600 seconds
 
         Returns:
@@ -836,7 +836,7 @@ def get_pod_node(pod_obj):
         pod_obj (OCS): The pod object
 
     Returns:
-        OCP: The node object
+        ocs_ci.ocs.ocp.OCP: The node object
 
     """
     node_name = pod_obj.get().get('spec').get('nodeName')
