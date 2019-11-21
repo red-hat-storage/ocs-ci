@@ -69,8 +69,8 @@ def init_ocsci_conf(arguments=None):
     check_config_requirements()
 
 
-def main():
-    arguments = sys.argv[1:]
+def main(argv=None):
+    arguments = argv or sys.argv[1:]
     init_ocsci_conf(arguments)
     pytest_logs_dir = utils.ocsci_log_path()
     utils.create_directory_path(framework.config.RUN['log_dir'])
