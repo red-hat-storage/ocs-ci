@@ -143,12 +143,8 @@ class TestMustGather(ManageTest):
         """
 
         pods = self.ocs.get_pods(namespace='openshift-storage')
-        pods_list = list()
-        for a_pod in pods:
-            if "example" not in a_pod:
-                pods_list.append(a_pod)
 
-        return pods_list
+        return pods
 
     def locate_pods_directory(self, root_directory):
         """
