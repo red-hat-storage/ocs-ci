@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 import time
 
 import pytest
@@ -68,7 +69,8 @@ def init_ocsci_conf(arguments=None):
     check_config_requirements()
 
 
-def main(arguments):
+def main():
+    arguments = sys.argv[1:]
     init_ocsci_conf(arguments)
     pytest_logs_dir = utils.ocsci_log_path()
     utils.create_directory_path(framework.config.RUN['log_dir'])
