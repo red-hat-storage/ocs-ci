@@ -1,4 +1,6 @@
 import logging
+from itertools import chain
+from random import randrange
 
 import pytest
 
@@ -152,3 +154,70 @@ def awscli_pod(mcg_obj, created_pods):
     helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
     created_pods.append(awscli_pod_obj)
     return awscli_pod_obj
+
+
+@pytest.fixture()
+def multiregion_resources(request, mcg_obj):
+    bs_objs, bs_secrets, bucketclasses, aws_buckets = (
+        [] for _ in range(4)
+    )
+
+    # Cleans up all resources that were created for the test
+    def resource_cleanup():
+        for resource in chain(bs_secrets, bucketclasses):
+            resource.delete()
+
+        for backingstore in bs_objs:
+            backingstore.delete()
+            mcg_obj.send_rpc_query('pool_api', 'delete_pool', {'name': backingstore.name})
+
+        for aws_bucket in aws_buckets:
+            mcg_obj.aws_s3_resource.Bucket(aws_bucket).objects.all().delete()
+            mcg_obj.aws_s3_resource.Bucket(aws_bucket).delete()
+
+    request.addfinalizer(resource_cleanup)
+
+    return aws_buckets, bs_secrets, bs_objs, bucketclasses
+
+
+@pytest.fixture()
+def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
+    # Setup
+    # Todo:
+    #  add region and amount parametrization - note that `us-east-1` will cause an error
+    #  as it is the default region. If usage of `us-east-1` needs to be tested, keep the 'region' field out.
+    aws_buckets, backingstore_secrets, backingstore_objects, bucketclasses = multiregion_resources
+    # Define backing stores
+    backingstore1 = {
+        'name': create_unique_resource_name(resource_description='testbs', resource_type='s3bucket'),
+        'region': f'us-west-{randrange(1, 3)}'
+    }
+    backingstore2 = {
+        'name': create_unique_resource_name(resource_description='testbs', resource_type='s3bucket'),
+        'region': f'us-east-2'
+    }
+    # Create target buckets for them
+    mcg_obj.create_new_backingstore_bucket(backingstore1)
+    mcg_obj.create_new_backingstore_bucket(backingstore2)
+    aws_buckets.extend((backingstore1['name'], backingstore2['name']))
+    # Create a backing store secret
+    backingstore_secret = mcg_obj.create_aws_backingstore_secret(backingstore1['name'] + 'secret')
+    backingstore_secrets.append(backingstore_secret)
+    # Create AWS-backed backing stores on NooBaa
+    backingstore_obj_1 = mcg_obj.oc_create_aws_backingstore(
+        backingstore1['name'], backingstore1['name'], backingstore_secret.name, backingstore1['region']
+    )
+    backingstore_obj_2 = mcg_obj.oc_create_aws_backingstore(
+        backingstore2['name'], backingstore2['name'], backingstore_secret.name, backingstore2['region']
+    )
+    backingstore_objects.extend((backingstore_obj_1, backingstore_obj_2))
+    # Create a new mirror bucketclass that'll use all the backing stores we created
+    bucketclass = mcg_obj.oc_create_bucketclass(
+        create_unique_resource_name(resource_description='testbc', resource_type='bucketclass'),
+        [backingstore.name for backingstore in backingstore_objects], 'Mirror'
+    )
+    bucketclasses.append(bucketclass)
+    # Create a NooBucket that'll use the bucket class in order to test the mirroring policy
+    bucket_name = bucket_factory(1, 'OC', bucketclass=bucketclass.name)[0].name
+
+    return bucket_name, backingstore1, backingstore2

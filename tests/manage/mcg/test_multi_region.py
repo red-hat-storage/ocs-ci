@@ -1,15 +1,14 @@
 import logging
-from itertools import chain
-from random import randrange
 
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1, aws_platform_required, filter_insecure_request_warning
-)
+    tier1, aws_platform_required,
+    filter_insecure_request_warning, tier2)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_AUTH_FAILED, BS_OPTIMAL
-from tests.helpers import create_unique_resource_name
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.utility.utils import TimeoutSampler
 from tests.manage.mcg.helpers import retrieve_test_objects_to_pod, sync_object_directory
 
 logger = logging.getLogger(__name__)
@@ -17,77 +16,59 @@ logger = logging.getLogger(__name__)
 
 @filter_insecure_request_warning
 @aws_platform_required
-@tier1
 class TestMultiRegion:
     """
     Test the multi region functionality
     """
-    @pytest.fixture()
-    def resources(self, request, mcg_obj):
-        bs_objs, bs_secrets, bucketclasses, aws_buckets = (
-            [] for _ in range(4)
-        )
 
-        # Cleans up all resources that were created for the test
-        def resource_cleanup():
-            for resource in chain(bs_secrets, bucketclasses):
-                resource.delete()
-
-            for backingstore in bs_objs:
-                backingstore.delete()
-                mcg_obj.send_rpc_query('pool_api', 'delete_pool', {'name': backingstore.name})
-
-            for aws_bucket in aws_buckets:
-                mcg_obj.aws_s3_resource.Bucket(aws_bucket).objects.all().delete()
-                mcg_obj.aws_s3_resource.Bucket(aws_bucket).delete()
-
-        request.addfinalizer(resource_cleanup)
-
-        return aws_buckets, bs_secrets, bs_objs, bucketclasses
-
-    @pytest.mark.polarion_id("OCS-1298")
-    def test_multiregion_mirror(self, mcg_obj, awscli_pod, resources, bucket_factory):
+    @tier1
+    @pytest.mark.polarion_id("OCS-1599")
+    def test_multiregion_bucket_creation(self, mcg_obj, multiregion_mirror_setup):
         """
         Test bucket creation using the S3 SDK
         """
-        # Setup
-        # Todo:
-        #  add region and amount parametrization - note that `us-east-1` will cause an error
-        #  as it is the default region. If usage of `us-east-1` needs to be tested, keep the 'region' field out.
 
-        aws_buckets, backingstore_secrets, backingstore_objects, bucketclasses = resources
-        # Define backing stores
-        backingstore1 = {
-            'name': create_unique_resource_name(resource_description='testbs', resource_type='s3bucket'),
-            'region': f'us-west-{randrange(1, 3)}'
-        }
-        backingstore2 = {
-            'name': create_unique_resource_name(resource_description='testbs', resource_type='s3bucket'),
-            'region': f'us-east-2'
-        }
-        # Create target buckets for them
-        mcg_obj.create_new_backingstore_bucket(backingstore1)
-        mcg_obj.create_new_backingstore_bucket(backingstore2)
-        aws_buckets.extend((backingstore1['name'], backingstore2['name']))
-        # Create a backing store secret
-        backingstore_secret = mcg_obj.create_aws_backingstore_secret(backingstore1['name'] + 'secret')
-        backingstore_secrets.append(backingstore_secret)
-        # Create AWS-backed backing stores on NooBaa
-        backingstore_obj_1 = mcg_obj.oc_create_aws_backingstore(
-            backingstore1['name'], backingstore1['name'], backingstore_secret.name, backingstore1['region']
-        )
-        backingstore_obj_2 = mcg_obj.oc_create_aws_backingstore(
-            backingstore2['name'], backingstore2['name'], backingstore_secret.name, backingstore2['region']
-        )
-        backingstore_objects.extend((backingstore_obj_1, backingstore_obj_2))
-        # Create a new mirror bucketclass that'll use all the backing stores we created
-        bucketclass = mcg_obj.oc_create_bucketclass(
-            create_unique_resource_name(resource_description='testbc', resource_type='bucketclass'),
-            [backingstore.name for backingstore in backingstore_objects], 'Mirror'
-        )
-        bucketclasses.append(bucketclass)
-        # Create a NooBucket that'll use the bucket class in order to test the mirroring policy
-        bucket_name = bucket_factory(1, 'OC', bucketclass=bucketclass.name)[0].name
+        mirrored_bucket_name = multiregion_mirror_setup[0]
+        system_bucket, mirror_tier_name, mirror_attached_pools = (None,) * 3
+
+        # Make sure that the bucket is up and running
+        try:
+            for resp in TimeoutSampler(
+                30, 3, mcg_obj.s3_list_all_bucket_names
+            ):
+                if mirrored_bucket_name in resp:
+                    break
+                else:
+                    logger.info(f'Did not yet find mirrored bucket {mirrored_bucket_name}')
+        except TimeoutExpiredError:
+            logger.error(f'Could not find bucket {mirrored_bucket_name}')
+            assert False
+
+        # Retrieve the NooBaa system information
+        system_state = mcg_obj.send_rpc_query('system_api', 'read_system').json().get('reply')
+
+        # Retrieve the correct bucket's tier name
+        for bucket in system_state.get('buckets'):
+            if bucket.get('name') == mirrored_bucket_name:
+                mirror_tier_name = bucket.get('tiering').get('tiers')[0].get('tier')
+                break
+
+        # Retrieved the pools attached to the tier
+        for tier in system_state.get('tiers'):
+            if tier.get('name') == mirror_tier_name:
+                mirror_attached_pools = tier.get('attached_pools')
+                break
+
+        assert len(mirror_attached_pools) == 2
+
+    @tier2
+    @pytest.mark.polarion_id("OCS-1784")
+    def test_multiregion_multiregion_mirror(self, mcg_obj, awscli_pod, multiregion_mirror_setup):
+        """
+        Test bucket creation using the S3 SDK
+        """
+
+        bucket_name, backingstore1, backingstore2 = multiregion_mirror_setup
 
         # Download test objects from the public bucket
         downloaded_objs = retrieve_test_objects_to_pod(awscli_pod, '/aws/original/')
@@ -142,5 +123,7 @@ class TestMultiRegion:
             ), 'Checksum comparision between original and result object failed'
         # Bring B up
         mcg_obj.toggle_bucket_readwrite(backingstore2['name'], block=False)
+        mcg_obj.check_backingstore_state('backing-store-' + backingstore2['name'], BS_OPTIMAL)
+
         # Teardown workaround for now (caused by OBC deletion hanging if OBC contains objects)
         mcg_obj.s3_resource.Bucket(bucket_name).objects.all().delete()

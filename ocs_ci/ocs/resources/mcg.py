@@ -13,9 +13,8 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_mcg_cmd, TimeoutSampler, run_cmd
+from ocs_ci.utility.utils import run_mcg_cmd, TimeoutSampler
 from tests.helpers import create_unique_resource_name, create_resource
-
 
 logger = logging.getLogger(name=__file__)
 
@@ -47,9 +46,10 @@ class MCG(object):
             .get('serviceMgmt').get('externalDNS')[-1]
         ) + '/rpc'
         self.region = config.ENV_DATA['region']
+
         creds_secret_name = (
             results.get('items')[0].get('status').get('accounts')
-            .get('admin').get('secretRef').get('name')
+                .get('admin').get('secretRef').get('name')
         )
         secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
         creds_secret_obj = secret_ocp_obj.get(creds_secret_name)
@@ -77,18 +77,11 @@ class MCG(object):
             }
         ).json().get('reply').get('token')
 
-        self.cred_req_obj = self.request_aws_credentials()
-
-        secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
-        cred_req_secret_dict = secret_ocp_obj.get(self.cred_req_obj.name)
-
-        self.aws_access_key_id = base64.b64decode(
-            cred_req_secret_dict.get('data').get('aws_access_key_id')
-        ).decode('utf-8')
-
-        self.aws_access_key = base64.b64decode(
-            cred_req_secret_dict.get('data').get('aws_secret_access_key')
-        ).decode('utf-8')
+        (
+            self.cred_req_obj,
+            self.aws_access_key_id,
+            self.aws_access_key
+        ) = self.request_aws_credentials()
 
         self._ocp_resource = ocp_obj
 
@@ -110,7 +103,7 @@ class MCG(object):
             list: A list of all bucket names
 
         """
-        return [bucket.name for bucket in self.s3_resource.buckets.all()]
+        return {bucket.name for bucket in self.s3_resource.buckets.all()}
 
     def oc_list_all_bucket_names(self):
         """
@@ -119,9 +112,9 @@ class MCG(object):
 
         """
         all_obcs_in_namespace = OCP(namespace=self.namespace, kind='obc').get().get('items')
-        return [bucket.get('spec').get('bucketName')
+        return {bucket.get('spec').get('bucketName')
                 for bucket
-                in all_obcs_in_namespace]
+                in all_obcs_in_namespace}
 
     def cli_list_all_bucket_names(self):
         """
@@ -131,14 +124,14 @@ class MCG(object):
         """
         obc_lst = run_mcg_cmd('obc list').split('\n')[1:-1]
         # TODO assert the bucket passed the Pending state
-        return [row.split()[1] for row in obc_lst]
+        return {row.split()[1] for row in obc_lst}
 
     def s3_list_all_objects_in_bucket(self, bucketname):
         """
         Returns:
             list: A list of all bucket objects
         """
-        return [obj for obj in self.s3_resource.Bucket(bucketname).objects.all()]
+        return {obj for obj in self.s3_resource.Bucket(bucketname).objects.all()}
 
     def s3_get_all_buckets(self):
         """
@@ -146,7 +139,7 @@ class MCG(object):
             list: A list of all s3.Bucket objects
 
         """
-        return [bucket for bucket in self.s3_resource.buckets.all()]
+        return {bucket for bucket in self.s3_resource.buckets.all()}
 
     def s3_verify_bucket_exists(self, bucketname):
         """
@@ -220,7 +213,7 @@ class MCG(object):
         """
         return bucketname in self.cli_list_all_bucket_names()
 
-    def send_rpc_query(self, api, method, params):
+    def send_rpc_query(self, api, method, params=None):
         """
         Templates and sends an RPC query to the MCG mgmt endpoint
 
@@ -251,6 +244,7 @@ class MCG(object):
             bool: True if the data reduction mechanics work, False otherwise
 
         """
+
         def _retrieve_reduction_data():
             payload = {
                 "api": "bucket_api",
@@ -295,7 +289,7 @@ class MCG(object):
             logger.error(
                 'Not enough data reduction. Something is wrong.'
             )
-            return False
+            assert False
 
     def request_aws_credentials(self):
         """
@@ -311,30 +305,49 @@ class MCG(object):
         awscreds_data['metadata']['namespace'] = self.namespace
         awscreds_data['spec']['secretRef']['name'] = req_name
         awscreds_data['spec']['secretRef']['namespace'] = self.namespace
-        creds_request = create_resource(**awscreds_data)
 
-        def _retrieve_credreq_provision_state():
-            return run_cmd(
-                f"oc get credentialsrequests {creds_request.name} -o jsonpath={{.status.provisioned}}"
-            )
+        creds_request = create_resource(**awscreds_data)
+        sleep(5)
+
+        secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
+        cred_req_secret_dict = secret_ocp_obj.get(creds_request.name)
+
+        aws_access_key_id = base64.b64decode(
+            cred_req_secret_dict.get('data').get('aws_access_key_id')
+        ).decode('utf-8')
+
+        aws_access_key = base64.b64decode(
+            cred_req_secret_dict.get('data').get('aws_secret_access_key')
+        ).decode('utf-8')
+
+        def _check_aws_credentials():
+            try:
+                s3_res = boto3.resource(
+                    's3', verify=False, endpoint_url="https://s3.amazonaws.com",
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_access_key
+                )
+                if s3_res.create_bucket(Bucket='noobaa-test-creds-verification'):
+                    return s3_res
+
+            except ClientError:
+                logger.info('Credentials are still not active. Retrying...')
+                return None
 
         try:
-            for provisioned_state in TimeoutSampler(30, 5, _retrieve_credreq_provision_state):
-                if provisioned_state == "true":
-                    sleep(10)
-                    logger.info(f'Secret created successfully.')
+            for s3_resource in TimeoutSampler(40, 5, _check_aws_credentials):
+                if s3_resource is not None:
+                    logger.info('AWS credentials created successfully.')
+                    s3_resource.Bucket('noobaa-test-creds-verification').delete()
                     break
-                else:
-                    logger.info(
-                        f'Credentials were not yet provisioned or could not be found. '
-                        f'Retrying...'
-                    )
+
         except TimeoutExpiredError:
             logger.error(
                 'Failed to create credentials'
             )
+            assert False
 
-        return creds_request
+        return creds_request, aws_access_key_id, aws_access_key
 
     def create_new_aws_connection(self, conn_name=None):
         """
@@ -370,7 +383,7 @@ class MCG(object):
                     logger.info('AWS IAM did not yet propagate')
         except TimeoutExpiredError:
             logger.error(f'Could not create connection {conn_name}')
-            return False
+            assert False
 
     def create_new_backingstore_bucket(self, backingstore_info):
         """
@@ -508,6 +521,7 @@ class MCG(object):
             bool: Whether mirroring finished successfully
 
         """
+
         def _check_mirroring():
             results = []
             obj_list = self.send_rpc_query('object_api', 'list_objects', params={
@@ -562,6 +576,7 @@ class MCG(object):
             bool: Whether the backing store has reached the desired state
 
         """
+
         def _check_state():
             sysinfo = self.send_rpc_query('system_api', 'read_system', params={}).json()['reply']
             for pool in sysinfo.get('pools'):
