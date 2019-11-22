@@ -476,7 +476,7 @@ def fio_pvc_dict():
 def fio_configmap_dict():
     """
     ConfigMap template for fio workloads.
-    Note that you need to add actuall configuration to workload.fio file.
+    Note that you need to add actual configuration to workload.fio file.
     """
     template = textwrap.dedent("""
         kind: ConfigMap
@@ -533,7 +533,7 @@ def fio_job_dict():
 
 def get_storageutilization_size(target_percentage, ceph_pool_name):
     """
-    For the purpose of the workload storageutilization fixtures, get expected
+    For the purpose of the workload storage utilization fixtures, get expected
     pvc_size based on STORED and MAX AVAIL values (as reported by `ceph df`)
     for given ceph pool and target utilization percentage.
 
@@ -541,7 +541,7 @@ def get_storageutilization_size(target_percentage, ceph_pool_name):
     configuration of replication.
 
     Returns:
-        int: pvc_size for storageutilization job (in GiB, rounded)
+        int: pvc_size for storage utilization job (in GiB, rounded)
     """
     # get STORED and MAX AVAIL of given ceph pool ...
     ct_pod = pod.get_ceph_tools_pod()
@@ -568,7 +568,7 @@ def get_storageutilization_size(target_percentage, ceph_pool_name):
     logger.info(f"MAX AVAIL of {ceph_pool_name} is {max_avail_gi} Gi")
     target = total * target_percentage
     to_utilize = target - ceph_total_stored
-    pvc_size = round(to_utilize/2**30) # GiB
+    pvc_size = round(to_utilize/2**30)  # GiB
     logger.info((
         f"fixture is going to request {pvc_size} Gi volume "
         f"to reach {target/2**30} Gi of total cluster utilization, which "
@@ -602,7 +602,7 @@ def workload_fio_storageutilization(
         tmp_path,
         ):
     """
-    This function implements core functionality of fio storageutilization
+    This function implements core functionality of fio storage utilization
     workload fixture. This is necessary because we can't parametrize single
     general fixture over multiple parameters (it would mess with test case id
     and polarion test case tracking).
@@ -628,7 +628,7 @@ def workload_fio_storageutilization(
     # will get *Disk quota exceeded* error instead of *No space left on
     # device* error).
     # On the other hand, we can't use size={pvc_size} for rbd, as we can't
-    # write pvc_size bytes to a filesystem on a blockdevice of {pvc_size}
+    # write pvc_size bytes to a filesystem on a block device of {pvc_size}
     # size (obviously, some space is used by filesystem metadata).
     if fixture_name.endswith("rbd"):
         fio_conf = textwrap.dedent("""
@@ -659,7 +659,7 @@ def workload_fio_storageutilization(
     fio_job_file = ObjectConfFile(fixture_name, fio_objs, project, tmp_path)
 
     # how long do we let the job running while writing data to the volume
-    write_timeout = pvc_size * 30 # seconds
+    write_timeout = pvc_size * 30  # seconds
     logger.info((
         f"fixture will wait {write_timeout} seconds for the Job "
         f"to write {pvc_size} Gi data on OCS backed volume"))
@@ -675,7 +675,7 @@ def workload_fio_storageutilization(
         # This is a WORKAROUND of particular ocsci design choices: I just wait
         # for one pod in the namespace, and then ask for the pod again to get
         # it's name (but it would be much better to just wait for the job to
-        # finish instead, then ask for a name of the successfull pod and use it
+        # finish instead, then ask for a name of the successful pod and use it
         # to get logs ...)
         ocp_pod = ocp.OCP(kind="Pod", namespace=project.namespace)
         ocp_pod.wait_for_resource(
@@ -686,8 +686,8 @@ def workload_fio_storageutilization(
         pod_data = ocp_pod.get()
 
         # explicit list of assumptions, if these assumptions are not met, the
-        # code won't work and it either means that something went terible wrong
-        # or that the code needs to be changed
+        # code won't work and it either means that something went terrible
+        # wrong or that the code needs to be changed
         assert pod_data['kind'] == "List"
         pod_dict = pod_data['items'][0]
         assert pod_dict['kind'] == "Pod"

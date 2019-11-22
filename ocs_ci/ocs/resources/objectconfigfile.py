@@ -2,7 +2,7 @@
 """
 Representation of general Kubernetes/OpenShift objects config file.
 
-This alows one to work with multiple objects of different kind at once, as
+This allows one to work with multiple objects of different kind at once, as
 explained in `Imperative Management of Kubernetes Objects Using Configuration
 Files
 <https://kubernetes.io/docs/tasks/manage-kubernetes-objects/imperative-config/>`_.
@@ -85,7 +85,7 @@ class ObjectConfFile():
 
     def create(self, namespace=None):
         """
-        Run ``oc create`` on in this ojbect file.
+        Run ``oc create`` on in this object file.
 
         Args:
             namespace (str): name of the namespace where to deploy, overriding
@@ -96,7 +96,7 @@ class ObjectConfFile():
 
     def delete(self, namespace=None):
         """
-        Run ``oc delete`` on in this ojbect file.
+        Run ``oc delete`` on in this object file.
 
         Args:
             namespace (str): name of the namespace where to deploy, overriding
@@ -107,7 +107,7 @@ class ObjectConfFile():
 
     def get(self, namespace=None):
         """
-        Run ``oc get`` on in this ojbect file.
+        Run ``oc get`` on in this object file.
 
         Args:
             namespace (str): name of the namespace where to deploy, overriding
