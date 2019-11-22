@@ -39,6 +39,7 @@ def create_pods(interface, pvc_factory, pod_factory, count):
     ]
     return pods
 
+
 @pytest.fixture(scope='session')
 def pre_upgrade_pods(request, pvc_factory_session, pod_factory_session):
     """
