@@ -3,8 +3,6 @@
 import json
 import logging
 import os
-import subprocess
-import tempfile
 import textwrap
 import threading
 import time
@@ -564,11 +562,11 @@ def get_storageutilization_size(target_percentage, ceph_pool_name):
     assert ceph_pool is not None, f"pool {ceph_pool_name} should exist"
     # ... to compute PVC size (values in bytes)
     total = ceph_pool["stats"]["max_avail"] + ceph_total_stored
-    max_avail_gi = ceph_pool['stats']['max_avail']/2**30
+    max_avail_gi = ceph_pool['stats']['max_avail'] / 2**30
     logger.info(f"MAX AVAIL of {ceph_pool_name} is {max_avail_gi} Gi")
     target = total * target_percentage
     to_utilize = target - ceph_total_stored
-    pvc_size = round(to_utilize/2**30)  # GiB
+    pvc_size = round(to_utilize / 2**30)  # GiB
     logger.info((
         f"fixture is going to request {pvc_size} Gi volume "
         f"to reach {target/2**30} Gi of total cluster utilization, which "
@@ -600,7 +598,7 @@ def workload_fio_storageutilization(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        ):
+):
     """
     This function implements core functionality of fio storage utilization
     workload fixture. This is necessary because we can't parametrize single
@@ -708,8 +706,7 @@ def workload_fio_storageutilization(
             'fio': fio_report,
             'pvc_size': pvc_size,
             'target_p': target_percentage,
-            'namespace': project.namespace,
-            }
+            'namespace': project.namespace}
 
         return result
 
