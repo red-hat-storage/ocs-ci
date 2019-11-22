@@ -6,6 +6,13 @@ This allows one to work with multiple objects of different kind at once, as
 explained in `Imperative Management of Kubernetes Objects Using Configuration
 Files
 <https://kubernetes.io/docs/tasks/manage-kubernetes-objects/imperative-config/>`_.
+
+Usage:
+    First you prepare list of dictionaries of k8s objects such as Deployment or
+    PVC which describes your workload/project to be deployed in OCP. Then
+    create instance of ``ObjectConfFile`` class with the list to be able to
+    create the resource in the cluster (to run it), or delete it later when
+    it's no longer needed.
 """
 
 
@@ -28,14 +35,6 @@ class ObjectConfFile():
     Methods of this class implements `Imperative Management of Kubernetes
     Objects Using Configuration Files
     <https://kubernetes.io/docs/tasks/manage-kubernetes-objects/imperative-config/>`_.
-
-    Usage
-    -----
-    First you prepare list of dictionaries of k8s objects such as Deployment or
-    PVC which describes your workload/project to be deployed in OCP. Then
-    create instance of this class with the list to be able to create the
-    resource in the cluster (to run it), or delete it later when it's no longer
-    needed.
     """
 
     def __init__(self, name, obj_dict_list, project, tmp_path):
