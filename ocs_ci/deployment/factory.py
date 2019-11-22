@@ -2,7 +2,7 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import exceptions
-from .aws import AWSIPI, AWSUPI, AWSUPIRHELWORKERS
+from .aws import AWSIPI, AWSUPI
 from .vmware import VSPHEREUPI
 
 logger = logging.getLogger(__name__)
@@ -16,9 +16,7 @@ class DeploymentFactory(object):
         # A map all existing deployments and respective classes
         # should be put here
         self.cls_map = {
-            'aws_ipi': AWSIPI, 'aws_upi': AWSUPI,
-            'vsphere_upi': VSPHEREUPI,
-            'aws_upi_rhel_workers': AWSUPIRHELWORKERS
+            'aws_ipi': AWSIPI, 'aws_upi': AWSUPI, 'vsphere_upi': VSPHEREUPI,
         }
 
     def get_deployment(self):

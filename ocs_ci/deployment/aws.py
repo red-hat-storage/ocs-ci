@@ -22,7 +22,6 @@ from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd, clone_repo
 from .deployment import Deployment
-from tests import helpers
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import utils
 from ocs_ci.utility import templating
@@ -271,6 +270,22 @@ class AWSUPI(AWSBase):
         self.name = self.__class__.__name__
         super(AWSUPI, self).__init__()
 
+        if config.ENV_DATA['rhel_workers']:
+            self.worker_vpc = None
+            self.worker_iam_role = None
+            self.worker_subnet = None
+            self.worker_security_group = None
+            self.worker_tag = None
+            self.cf = None
+            self.cluster_name = config.ENV_DATA['cluster_name']
+            # A dict for holding instance Name to instance object mapping
+            self.rhel_worker_list = {}
+            self.rhel_worker_user = constants.EC2_USER
+            self.client = boto3.client(
+                'ec2', region_name=config.ENV_DATA['region']
+            )
+            self.cf = boto3.client('cloudformation')
+
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
             super(AWSUPI.OCPDeployment, self).__init__()
@@ -407,85 +422,26 @@ class AWSUPI(AWSBase):
         if config.DEPLOYMENT.get('host_network'):
             self.host_network_update()
 
-    def destroy_cluster(self, log_level="DEBUG"):
-        """
-        Destroy OCP cluster for AWS UPI
-
-        Args:
-            log_level (str): log level for openshift-installer (
-                default:DEBUG)
-        """
-        cluster_name = get_cluster_name(self.cluster_path)
-        # Destroy extra volumes
-        self.destroy_volumes()
-
-        # Create cloudformation client
-        cf = boto3.client('cloudformation')
-
-        # Delete master, bootstrap, security group, and worker stacks
-        suffixes = ['ma', 'bs', 'sg']
-        # TODO: read in num_workers in a better way
-        num_workers = int(os.environ.get('num_workers', 3))
-        for i in range(num_workers - 1, -1, -1):
-            suffixes.insert(0, f'no{i}')
-        stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
-        for stack_name in stack_names:
-            logger.info("Destroying stack: %s", stack_name)
-            cf.delete_stack(StackName=stack_name)
-            verify_stack_deleted(stack_name)
-
-        # Call openshift-installer destroy cluster
-        super(AWSUPI, self).destroy_cluster(log_level)
-
-        # Delete inf and vpc stacks
-        suffixes = ['inf', 'vpc']
-        stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
-        for stack_name in stack_names:
-            logger.info("Destroying stack: %s", stack_name)
-            cf.delete_stack(StackName=stack_name)
-            verify_stack_deleted(stack_name)
-
-
-class AWSUPIRHELWORKERS(AWSUPI):
-    """
-    A class to handle AWS UPI with RHEL worker nodes
-    """
-    def __init__(self):
-        self.name = self.__class__.__name__
-        super(AWSUPIRHELWORKERS, self).__init__()
-        self.worker_vpc = None
-        self.worker_iam_role = None
-        self.worker_subnet = None
-        self.worker_security_group = None
-        self.worker_tag = None
-        self.cf = None
-        self.cluster_name = config.ENV_DATA['cluster_name']
-        # A dict for holding instance Name to instance object mapping
-        self.rhel_worker_list = {}
-        self.rhel_worker_user = constants.EC2_USER
-        self.client = boto3.client(
-            'ec2', region_name=config.ENV_DATA['region']
-        )
-
-    def deploy_cluster(self, log_cli_level='DEBUG'):
-        """
-        Deploy cluster overridden function from parent
-
-        Args:
-            log_cli_level (str): log level
-        """
-        if config.ENV_DATA['skip_ocp_deployment']:
-            super(AWSUPIRHELWORKERS, self).deploy_cluster(log_cli_level)
-        else:
-            prev_ocs_flag = config.ENV_DATA['skip_ocs_deployment']
-            # deploy only OCP
-            config.ENV_DATA['skip_ocs_deployment'] = 'true'
-            super(AWSUPIRHELWORKERS, self).deploy_cluster(log_cli_level)
+        if config.ENV_DATA['rhel_workers']:
             self.add_rhel_workers()
-            config.ENV_DATA['skip_ocs_deployment'] = prev_ocs_flag
-            config.ENV_DATA['skip_ocp_deployment'] = 'true'
-            super(AWSUPIRHELWORKERS, self).deploy_cluster(log_cli_level)
-            config.ENV_DATA['skip_ocp_deployment'] = 'false'
+
+    def gather_worker_data(self):
+        """
+        Gather various info like vpc, iam role, subnet,security group,
+        cluster tag from existing RHCOS workers
+        """
+        suffix = 'no0'
+        stack_name = f'{self.cluster_name}-{suffix}'
+        resource = self.cf.list_stack_resources(StackName=stack_name)
+        worker_id = self.get_worker_resource_id(resource)
+        ec2 = boto3.resource('ec2')
+        worker_instance = ec2.Instance(worker_id)
+        self.worker_vpc = worker_instance.vpc.id
+        self.worker_subnet = worker_instance.subnet.id
+        self.worker_security_group = worker_instance.security_groups
+        self.worker_iam_role = worker_instance.iam_instance_profile
+        self.worker_tag = self.get_kube_tag(worker_instance.tags)
+        del self.worker_iam_role['Id']
 
     def get_worker_resource_id(self, resource):
         """
@@ -498,25 +454,6 @@ class AWSUPIRHELWORKERS(AWSUPI):
             resource_id (str): ID of worker stack resource
         """
         return resource['StackResourceSummaries'][0]['PhysicalResourceId']
-
-    def gather_worker_data(self):
-        """
-        Gather various info like vpc, iam role, subnet,security group,
-        cluster tag from existing RHCOS workers
-        """
-        suffix = 'no0'
-        self.cf = boto3.client('cloudformation')
-        stack_name = f'{self.cluster_name}-{suffix}'
-        resource = self.cf.list_stack_resources(StackName=stack_name)
-        worker_id = self.get_worker_resource_id(resource)
-        ec2 = boto3.resource('ec2')
-        worker_instance = ec2.Instance(worker_id)
-        self.worker_vpc = worker_instance.vpc.id
-        self.worker_subnet = worker_instance.subnet.id
-        self.worker_security_group = worker_instance.security_groups
-        self.worker_iam_role = worker_instance.iam_instance_profile
-        self.worker_tag = self.get_kube_tag(worker_instance.tags)
-        del self.worker_iam_role['Id']
 
     def get_kube_tag(self, tags):
         """
@@ -547,7 +484,7 @@ class AWSUPIRHELWORKERS(AWSUPI):
         num_workers = int(os.environ.get('num_workers', 3))
         logging.info(f"Creating {num_workers} RHEL workers")
         for i in range(num_workers):
-            logging.info(f"Creating {i+1}/{num_workers} worker")
+            logging.info(f"Creating {i + 1}/{num_workers} worker")
             response = self.client.run_instances(
                 BlockDeviceMappings=[
                     {
@@ -710,7 +647,7 @@ class AWSUPIRHELWORKERS(AWSUPI):
         node_info = ocp_obj.get()
         for each in node_info['items']:
             labels = each['metadata']['labels']
-            if(
+            if (
                 labels['node.openshift.io/os_id'] == 'rhcos'
                 and 'node-role.kubernetes.io/worker' in labels
             ):
@@ -748,9 +685,9 @@ class AWSUPIRHELWORKERS(AWSUPI):
                             try:
                                 assert sample.wait_for_func_status(result=True)
                             except AssertionError:
-                                raise \
-                                    exceptions.FailedToAddNodeException(
-                                        "Failed to add RHEL node")
+                                raise exceptions.FailedToAddNodeException(
+                                    "Failed to add RHEL node"
+                                )
 
     def get_ready_status(self, node_ent):
         """
@@ -785,7 +722,6 @@ class AWSUPIRHELWORKERS(AWSUPI):
         ansible_host_file = dict()
         ansible_host_file['ansible_user'] = 'ec2-user'
         ansible_host_file['ansible_become'] = 'True'
-        # ansible_host_file['ansible_python_interpreter'] = 'auto_silent'
         ansible_host_file['pod_kubeconfig'] = '/kubeconfig'
         ansible_host_file['pod_pull_secret'] = '/tmp/pull-secret'
         ansible_host_file['rhel_worker_nodes'] = hosts
@@ -800,11 +736,6 @@ class AWSUPIRHELWORKERS(AWSUPI):
         with open(host_file_path, 'w') as f:
             f.write(data)
         return host_file_path
-
-    def copy_repo_file(self, pod_obj):
-        repo_path = "openshift.repo"
-        dst_path = "/etc/yum.repos.d/"
-        helpers.copy_file_to_pod(pod_obj, repo_path, dst_path)
 
     def add_rhel_workers(self):
         """
@@ -869,8 +800,44 @@ class AWSUPIRHELWORKERS(AWSUPI):
             raise exceptions.FailedToDeleteInstance()
 
     def destroy_cluster(self, log_level="DEBUG"):
-        self.terminate_rhel_workers(self.get_rhel_worker_instances())
-        super(AWSUPIRHELWORKERS, self).destroy_cluster()
+        """
+        Destroy OCP cluster for AWS UPI
+
+        Args:
+            log_level (str): log level for openshift-installer (
+                default:DEBUG)
+        """
+        cluster_name = get_cluster_name(self.cluster_path)
+        if config.ENV_DATA['rhel_workers']:
+            self.terminate_rhel_workers(self.get_rhel_worker_instances())
+        # Destroy extra volumes
+        self.destroy_volumes()
+
+        # Create cloudformation client
+        cf = boto3.client('cloudformation')
+
+        # Delete master, bootstrap, security group, and worker stacks
+        suffixes = ['ma', 'bs', 'sg']
+        # TODO: read in num_workers in a better way
+        num_workers = int(os.environ.get('num_workers', 3))
+        for i in range(num_workers - 1, -1, -1):
+            suffixes.insert(0, f'no{i}')
+        stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
+        for stack_name in stack_names:
+            logger.info("Destroying stack: %s", stack_name)
+            cf.delete_stack(StackName=stack_name)
+            verify_stack_deleted(stack_name)
+
+        # Call openshift-installer destroy cluster
+        super(AWSUPI, self).destroy_cluster(log_level)
+
+        # Delete inf and vpc stacks
+        suffixes = ['inf', 'vpc']
+        stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
+        for stack_name in stack_names:
+            logger.info("Destroying stack: %s", stack_name)
+            cf.delete_stack(StackName=stack_name)
+            verify_stack_deleted(stack_name)
 
 
 def get_infra_id(cluster_path):
