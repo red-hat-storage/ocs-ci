@@ -246,7 +246,7 @@ def storageclass_factory_fixture(
 
     def finalizer():
         """
-        Delete the Ceph block pool
+        Delete the storageclass
         """
         for instance in instances:
             instance.delete()
@@ -292,7 +292,7 @@ def project_factory_fixture(request):
 
     def finalizer():
         """
-        Delete the Ceph block pool
+        Delete the project
         """
         for instance in instances:
             ocp.switch_to_default_rook_cluster_project()
