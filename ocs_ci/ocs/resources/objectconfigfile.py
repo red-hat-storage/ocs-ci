@@ -59,6 +59,11 @@ class ObjectConfFile():
     def _run_command(self, command, namespace, out_yaml_format=False):
         """
         Run given oc command on this object file.
+
+        Args:
+            command (str): either ``create``, ``delete`` or ``get``
+            namespace (str): name of the namespace for oc command
+            out_yaml_format (bool): use oc yaml output format
         """
         if namespace is None:
             namespace = self.project.namespace

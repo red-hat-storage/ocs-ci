@@ -678,7 +678,7 @@ def workload_fio_storageutilization(
         ocp_pod = ocp.OCP(kind="Pod", namespace=project.namespace)
         ocp_pod.wait_for_resource(
             resource_count=1,
-            condition="Completed",
+            condition=constants.STATUS_COMPLETED,
             timeout=write_timeout,
             sleep=30)
         pod_data = ocp_pod.get()
