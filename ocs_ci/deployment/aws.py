@@ -538,6 +538,7 @@ class AWSUPI(AWSBase):
         rhel_pod_obj = utils.create_rhelpod(
             constants.DEFAULT_NAMESPACE, rhel_pod_name
         )
+        timeout = 4000  # For ansible-playbook
 
         # copy openshift-dev.pem to RHEL ansible pod
         pem_src_path = "~/.ssh/openshift-dev.pem"
@@ -609,7 +610,9 @@ class AWSUPI(AWSBase):
             f"{openshift_ansible_path}/playbooks/scaleup.yml"
         )
 
-        rhel_pod_obj.exec_cmd_on_pod(cmd, out_yaml_format=False)
+        rhel_pod_obj.exec_cmd_on_pod(
+            cmd, out_yaml_format=False, timeout=timeout
+        )
         self.verify_nodes_added(hosts)
         # remove rhcos workers
         self.remove_rhcos_workers()
