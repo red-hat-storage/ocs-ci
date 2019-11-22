@@ -13,6 +13,7 @@ from ocs_ci.ocs.constants import RSYNC_POD_YAML, STATUS_RUNNING
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     NotSupportedFunctionError,
+    NonUpgradedImagesFoundError,
     ResourceInUnexpectedState,
     ResourceNameNotSpecifiedException,
     TimeoutExpiredError,
@@ -696,3 +697,70 @@ def rsync(src, dst, node, dst_node=True, extra_params=""):
         except CommandFailed:
             log.warning(f"Pod {pod_name} wasn't successfully deleted!")
             raise
+
+
+def get_images(data, images=None):
+    """
+    Get the images from the ocp object like pod, CSV and so on.
+
+    Args:
+        data (dict): Yaml data from the object.
+        images (dict): Dict where to put the images (doesn't have to be set!).
+
+    Returns:
+        dict: Images dict like: {'image_name': 'image.url.to:tag', ...}
+    """
+    if images is None:
+        images = dict()
+    data_type = type(data)
+    if data_type not in (dict, list):
+        return images
+    elif data_type == dict:
+        # Check if we have those keys: 'name' and 'value' in the data dict.
+        # If yes and the value ends with '_IMAGE' we found the image.
+        if set(("name", "value")) <= data.keys() and (
+            type(data["name"]) == str and data["name"].endswith("_IMAGE")
+        ):
+            image_name = data["name"].rstrip('_IMAGE').lower()
+            image = data['value']
+            images[image_name] = image
+        else:
+            for key, value in data.items():
+                value_type = type(value)
+                if value_type in (dict, list):
+                    get_images(value, images)
+                elif value_type == str and key == "image":
+                    image_name = data.get('name')
+                    if image_name:
+                        images[image_name] = value
+    elif data_type == list:
+        for item in data:
+            get_images(item, images)
+    return images
+
+
+def verify_images_upgraded(old_images, object_data):
+    """
+    Verify that all images in ocp object are upgraded.
+
+    Args:
+       old_images (set): Set with old images.
+       object_data (dict): OCP object yaml data.
+
+    Raises:
+        NonUpgradedImagesFoundError: In case the images weren't upgraded.
+
+    """
+    current_images = get_images(object_data)
+    not_upgraded_images = [
+        image for image in current_images.values() if image in old_images
+    ]
+    name = object_data['metadata']['name']
+    if not_upgraded_images:
+        raise NonUpgradedImagesFoundError(
+            f"Images: {not_upgraded_images} weren't upgraded in: {name}!"
+        )
+    log.info(
+        f"All the images: {current_images} were successfully upgraded in: "
+        f"{name}!"
+    )

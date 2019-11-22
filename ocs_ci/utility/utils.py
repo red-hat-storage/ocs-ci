@@ -15,10 +15,14 @@ import yaml
 import re
 import smtplib
 
-from ocs_ci.ocs.exceptions import CephHealthException
 from ocs_ci.ocs.exceptions import (
-    CommandFailed, UnsupportedOSType, TimeoutExpiredError,
-    TagNotFoundException, UnavailableBuildException,
+    CephHealthException,
+    CommandFailed,
+    TagNotFoundException,
+    TimeoutException,
+    TimeoutExpiredError,
+    UnavailableBuildException,
+    UnsupportedOSType,
 )
 from ocs_ci.framework import config
 from email.mime.multipart import MIMEMultipart
@@ -1454,3 +1458,24 @@ def create_rhelpod(namespace, pod_name):
     )
     helpers.wait_for_resource_state(rhelpod_obj, constants.STATUS_RUNNING)
     return rhelpod_obj
+
+
+def check_timeout_reached(start_time, timeout, err_msg=None):
+    """
+    Check if timeout reached and if so raise the exception.
+
+    Args:
+        start_time (time): Star time of the operation.
+        timeout (int): Timeout in seconds.
+        err_msg (str): Error message for the exception.
+
+    Raises:
+        TimeoutException: In case the timeout reached.
+
+    """
+    msg = f"Timeout {timeout} reached!"
+    if err_msg:
+        msg += " Error: {err_msg}"
+
+    if timeout < (time.time() - start_time):
+        raise TimeoutException(msg)
