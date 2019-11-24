@@ -5,7 +5,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import (
     drain_nodes, schedule_nodes, get_typed_nodes, wait_for_nodes_status, get_node_objs
 )
-from ocs_ci.utility import aws
 from ocs_ci.framework.testlib import tier1, tier2, ManageTest, bugzilla, aws_platform_required
 
 from tests.sanity_helpers import Sanity
