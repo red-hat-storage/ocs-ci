@@ -30,7 +30,7 @@ def schedule_nodes_teardown(request):
     request.addfinalizer(finalizer)
 
 
-@bugzilla('1769667')
+@bugzilla('1769350')
 class TestNodesMaintenance(ManageTest):
     """
     Test basic flows of maintenance (unschedule and drain) and
