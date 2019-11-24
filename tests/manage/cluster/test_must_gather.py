@@ -4,7 +4,7 @@ import re   # This is part of workaround for BZ-1766646, to be removed when fixe
 
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla
+from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import openshift_ops, ocp
 from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.utility.utils import ocsci_log_path, TimeoutSampler
