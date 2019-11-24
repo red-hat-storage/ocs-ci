@@ -198,7 +198,7 @@ class TestMustGather(ManageTest):
             re.compile(r'.*rook-ceph-osd-prepare-ocs-deviceset.*blkdevmapper'),
             re.compile(r'.*rook-ceph-osd-\d-.*blkdevmapper'),
             re.compile(r'.*rook-ceph-drain-canary-.*sleep')
-            ]
+        ]
         for log_dir in logs_dir_list:
             log_file = log_dir + "/current.log"
             if os.path.getsize(log_file) > 0:
