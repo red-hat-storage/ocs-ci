@@ -187,6 +187,7 @@ patch storagecluster/{storagecluster_name} --type='json' -p='[{{"op": "replace",
     ocp.exec_oc_cmd(cmd)
     return True
 
+
 def add_storage_capacity(capacity, storagecluster_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     """
     Add storage capacity to the cluster
@@ -205,6 +206,7 @@ patch storagecluster/{storagecluster_name} --type='json' -p='[{{"op": "replace",
             '''
     ocp.exec_oc_cmd(cmd)
     return True
+
 
 def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     """
