@@ -113,21 +113,14 @@ class PVC(OCS):
     @property
     def reclaim_policy(self):
         """
-        Returns the reclaim policy of pvc in namespace
+        Get the reclaim policy of PV associated with the PVC
 
         Returns:
-            str: Reclaim policy Reclaim or Delete
+            str: Reclaim policy. eg: Reclaim, Delete
         """
-
-        data = dict()
-        data['api_version'] = self.api_version
-        data['kind'] = 'StorageClass'
-        data['metadata'] = {
-            'name': self.backed_sc, 'namespace': self.namespace
-        }
-        sc_obj = OCS(**data)
-        sc_obj.reload()
-        return sc_obj.get().get('reclaimPolicy')
+        return self.backed_pv_obj.get().get('spec').get(
+            'persistentVolumeReclaimPolicy'
+        )
 
     def resize_pvc(self, new_size, verify=False):
         """
