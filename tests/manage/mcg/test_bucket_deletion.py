@@ -1,6 +1,6 @@
 import logging
 
-import boto3
+import timeit
 import botocore
 import pytest
 
@@ -8,12 +8,12 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1, noobaa_cli_required, acceptance,
     filter_insecure_request_warning
 )
-from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.utility.utils import run_mcg_cmd
-from tests.helpers import craft_s3_command, create_unique_resource_name
+from tests.helpers import create_unique_resource_name
+from tests.manage.mcg import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -101,30 +101,13 @@ class TestBucketDeletion:
         try:
             bucket = bucket_map[interface.lower()](mcg_obj, bucketname)
 
-            downloaded_files = []
             logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
             logger.info(f"aws region is {mcg_obj.region}")
-            public_s3 = boto3.resource('s3', region_name=mcg_obj.region)
-            for obj in public_s3.Bucket(constants.TEST_FILES_BUCKET
-                                        ).objects.all():
-                # Download test object(s)
-                logger.info(f'Downloading {obj.key}')
-                cmd = f'wget https://{constants.TEST_FILES_BUCKET}'
-                cmd += f'.s3.{mcg_obj.region}.amazonaws.com/{obj.key}'
-                awscli_pod.exec_cmd_on_pod(command=cmd)
-                downloaded_files.append(obj.key)
-
-            # Write all downloaded objects to the new bucket
-            logger.info(f'Writing objects to bucket')
-            for obj_name in downloaded_files:
-                full_object_path = f"s3://{bucketname}/{obj_name}"
-                copycommand = f"cp {obj_name} {full_object_path}"
-                assert 'Completed' in awscli_pod.exec_cmd_on_pod(
-                    command=craft_s3_command(mcg_obj, copycommand),
-                    out_yaml_format=False,
-                    secrets=[mcg_obj.access_key_id, mcg_obj.access_key,
-                             mcg_obj.s3_endpoint]
-                )
+            data_dir = '/data'
+            full_object_path = f"s3://{bucketname}"
+            helpers.retrieve_test_objects_to_pod(awscli_pod, data_dir)
+            helpers.sync_object_directory(awscli_pod, data_dir,
+                                          full_object_path, mcg_obj)
 
             logger.info(f"Deleting bucket: {bucketname}")
             if interface == "S3":
@@ -191,3 +174,43 @@ class TestBucketDeletion:
                                                             "OBC with cli")
         logger.info(f"Delete non-exist OBC {name} failed as "
                     "expected")
+
+    @pytest.mark.bugzilla("1753109")
+    @pytest.mark.polarion_id("OCS-1924")
+    @tier3
+    def test_s3_bucket_delete_1t_objects(self, mcg_obj, awscli_pod):
+        """
+        Test with deletion of bucket has 1T objects stored in.
+        """
+        bucketname = create_unique_resource_name(
+            resource_description='bucket', resource_type='s3')
+        try:
+            bucket = S3Bucket(mcg_obj, bucketname)
+            logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
+            logger.info(f"aws region is {mcg_obj.region}")
+            data_dir = '/data'
+            helpers.retrieve_test_objects_to_pod(awscli_pod, data_dir)
+
+            # Sync downloaded objects dir to the new bucket, sync to 3175
+            # virtual dirs. With each dir around 315MB, and 3175 dirs will
+            # reach targed 1TB data.
+            logger.info(f'Writing objects to bucket')
+            for i in range(3175):
+                full_object_path = f"s3://{bucketname}/{i}/"
+                helpers.sync_object_directory(awscli_pod, data_dir,
+                                              full_object_path, mcg_obj)
+
+            # Delete bucket content use aws rm with --recursive option.
+            # The object_versions.delete function does not work with objects
+            # exceeds 1000.
+            start = timeit.default_timer()
+            helpers.rm_object_recursive(awscli_pod, bucketname, mcg_obj)
+            bucket.delete()
+            stop = timeit.default_timer()
+            gap = (stop - start) // 60 % 60
+            if gap > 10:
+                assert False, "Failed to delete s3 bucket within 10 minutes"
+        finally:
+            if mcg_obj.s3_verify_bucket_exists(bucketname):
+                helpers.rm_object_recursive(awscli_pod, bucketname, mcg_obj)
+                mcg_obj.s3_resource.Bucket(bucketname).delete()

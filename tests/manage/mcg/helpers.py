@@ -55,3 +55,25 @@ def sync_object_directory(podobj, src, target, mcg_obj=None):
         secrets=secrets
     ), 'Failed to sync objects'
     # Todo: check that all objects were synced successfully
+
+
+def rm_object_recursive(podobj, target, mcg_obj, option=''):
+    """
+    Remove bucket objects with --recursive option
+
+    Args:
+        podobj  (OCS): The pod on which to execute the commands and download
+                       the objects to
+        target (str): Fully qualified bucket target path
+        mcg_obj (MCG, optional): The MCG object to use in case the target or
+                                 source are in an MCG
+        option (str): Extra s3 remove command option
+
+    """
+    rm_command = f"rm s3://{target} --recursive {option}"
+    podobj.exec_cmd_on_pod(
+        command=craft_s3_command(mcg_obj, rm_command),
+        out_yaml_format=False,
+        secrets=[mcg_obj.access_key_id, mcg_obj.access_key,
+                 mcg_obj.s3_endpoint]
+        )
