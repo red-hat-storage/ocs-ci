@@ -100,3 +100,7 @@ class NotSupportedFunctionError(Exception):
 
 class NonUpgradedImagesFoundError(Exception):
     pass
+
+
+class UnexpectedVolumeType(Exception):
+    pass
