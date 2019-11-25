@@ -452,6 +452,7 @@ class AWSUPI(AWSBase):
 
         Returns:
             resource_id (str): ID of worker stack resource
+
         """
         return resource['StackResourceSummaries'][0]['PhysicalResourceId']
 
@@ -734,7 +735,7 @@ class AWSUPI(AWSBase):
             constants.ANSIBLE_INVENTORY_YAML,
             ansible_host_file,
         )
-        logging.debug("Ansible hosts file:", data)
+        logging.debug("Ansible hosts file:%s", data)
         host_file_path = "/tmp/hosts"
         with open(host_file_path, 'w') as f:
             f.write(data)

@@ -4,11 +4,4 @@ ENV_DATA:
   rhel_workers: true
   rhcos_ami: 'ami-06c85f9d106577272'
   rhel_worker_ami: 'ami-073251e3a0e36cebb' # RHEL7.7 as of now
-  # This repo is just for reference
-  OCP_INTERNAL_REPO_LATEST: 'https://mirror.openshift.com/enterprise/all/4.2/latest/RH7-RHAOS-4.2/x86_64/os/'
-  # Use this repo for now
-  OCP_INTERNAL_REPO: 'https://mirror.openshift.com/enterprise/all/4.2/v4.2.0-201910111801_2019-10-11.2/RH7-RHAOS-4.2/x86_64/os/'
-  ANSIBLE_REPO: 'https://mirror.openshift.com/enterprise/reposync/4.2/rhel-7-server-ansible-2.8-rpms/'
-  RHEL_SERVER_REPO: 'https://mirror.openshift.com/enterprise/reposync/4.2/rhel-server-rpms/'
-  RHEL_SERVER_EXTRAS: 'https://mirror.openshift.com/enterprise/reposync/4.2/rhel-server-extras-rpms/'
   RHEL_INSTANCE_TYPE: 'm5.4xlarge'
