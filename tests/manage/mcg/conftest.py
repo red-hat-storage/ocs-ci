@@ -101,7 +101,7 @@ def bucket_factory(request, mcg_obj):
         return created_buckets
 
     def bucket_cleanup():
-        all_existing_buckets = mcg_obj.s3_list_all_bucket_names()
+        all_existing_buckets = mcg_obj.s3_get_all_bucket_names()
         for bucket in created_buckets:
             if bucket.name in all_existing_buckets:
                 logger.info(f'Cleaning up bucket {bucket.name}')

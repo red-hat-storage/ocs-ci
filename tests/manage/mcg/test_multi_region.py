@@ -34,7 +34,7 @@ class TestMultiRegion:
         # Make sure that the bucket is up and running
         try:
             for resp in TimeoutSampler(
-                30, 3, mcg_obj.s3_list_all_bucket_names
+                30, 3, mcg_obj.s3_get_all_bucket_names
             ):
                 if mirrored_bucket_name in resp:
                     break
@@ -59,13 +59,13 @@ class TestMultiRegion:
                 mirror_attached_pools = tier.get('attached_pools')
                 break
 
-        assert len(mirror_attached_pools) == 2
+        assert len(mirror_attached_pools) == 2, "Multiregion bucket did not have two backingstores attached"
 
     @tier2
     @pytest.mark.polarion_id("OCS-1784")
-    def test_multiregion_multiregion_mirror(self, mcg_obj, awscli_pod, multiregion_mirror_setup):
+    def test_multiregion_mirror(self, mcg_obj, awscli_pod, multiregion_mirror_setup):
         """
-        Test bucket creation using the S3 SDK
+        Test multi-region bucket creation using the S3 SDK
         """
 
         bucket_name, backingstore1, backingstore2 = multiregion_mirror_setup

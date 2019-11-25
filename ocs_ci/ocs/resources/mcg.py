@@ -97,18 +97,18 @@ class MCG(object):
             aws_secret_access_key=self.aws_access_key
         )
 
-    def s3_list_all_bucket_names(self):
+    def s3_get_all_bucket_names(self):
         """
         Returns:
-            list: A list of all bucket names
+            set: A set of all bucket names
 
         """
         return {bucket.name for bucket in self.s3_resource.buckets.all()}
 
-    def oc_list_all_bucket_names(self):
+    def oc_get_all_bucket_names(self):
         """
         Returns:
-            list: A list of all bucket names
+            set: A set of all bucket names
 
         """
         all_obcs_in_namespace = OCP(namespace=self.namespace, kind='obc').get().get('items')
@@ -116,10 +116,10 @@ class MCG(object):
                 for bucket
                 in all_obcs_in_namespace}
 
-    def cli_list_all_bucket_names(self):
+    def cli_get_all_bucket_names(self):
         """
         Returns:
-            list: A list of all bucket names
+            set: A set of all bucket names
 
         """
         obc_lst = run_mcg_cmd('obc list').split('\n')[1:-1]
@@ -211,7 +211,7 @@ class MCG(object):
               bool: True if bucket exists, False otherwise
 
         """
-        return bucketname in self.cli_list_all_bucket_names()
+        return bucketname in self.cli_get_all_bucket_names()
 
     def send_rpc_query(self, api, method, params=None):
         """
