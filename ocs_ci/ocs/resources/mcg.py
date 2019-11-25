@@ -327,18 +327,18 @@ class MCG(object):
                     aws_access_key_id=aws_access_key_id,
                     aws_secret_access_key=aws_access_key
                 )
-                if s3_res.create_bucket(Bucket='noobaa-test-creds-verification'):
-                    return s3_res
+                test_bucket = s3_res.create_bucket(Bucket='noobaa-test-creds-verification')
+                test_bucket.delete()
+                return True
 
             except ClientError:
                 logger.info('Credentials are still not active. Retrying...')
-                return None
+                return False
 
         try:
-            for s3_resource in TimeoutSampler(40, 5, _check_aws_credentials):
-                if s3_resource is not None:
+            for api_test_result in TimeoutSampler(40, 5, _check_aws_credentials):
+                if api_test_result:
                     logger.info('AWS credentials created successfully.')
-                    s3_resource.Bucket('noobaa-test-creds-verification').delete()
                     break
 
         except TimeoutExpiredError:
@@ -549,7 +549,7 @@ class MCG(object):
             return all(results)
 
         try:
-            for mirroring_is_complete in TimeoutSampler(120, 5, _check_mirroring):
+            for mirroring_is_complete in TimeoutSampler(140, 5, _check_mirroring):
                 if mirroring_is_complete:
                     logger.info(
                         'All objects mirrored successfully.'
