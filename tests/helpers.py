@@ -1588,7 +1588,7 @@ def create_dummy_osd(deployment):
     except TimeoutExpired:
         logger.info('Killing /rook/tini process')
         try:
-            dummy_pod.exec_bash_cmd_on_pod(
+            dummy_pod.exec_sh_cmd_on_pod(
                 "kill $(ps aux | grep '[/]rook/tini' | awk '{print $2}')"
             )
         except CommandFailed:
