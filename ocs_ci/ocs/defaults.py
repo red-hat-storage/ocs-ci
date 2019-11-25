@@ -30,7 +30,7 @@ TEMP_YAML = os.path.join(constants.TEMPLATE_DIR, "temp.yaml")
 PROMETHEUS_ROUTE = 'prometheus-k8s'
 
 # Default device size in Gigs
-DEVICE_SIZE = 100
+DEVICE_SIZE = 340
 
 MARKETPLACE_NAMESPACE = "openshift-marketplace"
 OCS_OPERATOR_NAME = "ocs-operator"
