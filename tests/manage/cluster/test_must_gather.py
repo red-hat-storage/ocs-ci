@@ -1,9 +1,10 @@
 import os
 import logging
+import re   # This is part of workaround for BZ-1766646, to be removed when fixed
 
 import pytest
 
-from ocs_ci.framework.testlib import ManageTest, tier1, bugzilla
+from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.ocs import openshift_ops, ocp
 from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.utility.utils import ocsci_log_path, TimeoutSampler
@@ -13,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 @tier1
 @pytest.mark.polarion_id("OCS-1583")
-@bugzilla('1766646')
 class TestMustGather(ManageTest):
 
     @pytest.fixture(autouse=True)
@@ -193,11 +193,22 @@ class TestMustGather(ManageTest):
             bool: False - if one or more log file is empty
 
         """
+        # Workaround for BZ-1766646 Beginning:
+        known_missing_logs = [
+            re.compile(r'.*rook-ceph-osd-prepare-ocs-deviceset.*blkdevmapper'),
+            re.compile(r'.*rook-ceph-osd-\d-.*blkdevmapper'),
+            re.compile(r'.*rook-ceph-drain-canary-.*sleep')
+        ]
         for log_dir in logs_dir_list:
             log_file = log_dir + "/current.log"
             if os.path.getsize(log_file) > 0:
                 logger.info(f"file {log_file} size: {os.path.getsize(log_file)}")
 
+            elif any(regex.match(log_file) for regex in known_missing_logs):
+                logger.info(f"known issue: {log_file} is an empty log!")
+
             else:
                 logger.info(f"log file {log_file} empty!")
                 return False
+
+        return True
