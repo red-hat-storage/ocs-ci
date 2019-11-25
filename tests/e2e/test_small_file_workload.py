@@ -61,19 +61,19 @@ class TestSmallFileWorkload(E2ETest):
         log.info("Running SmallFile bench")
         sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
 
-        '''
+        """
             Setting up the parameters for this test
-        '''
+        """
         sf_data['spec']['workload']['args']['file_size'] = file_size
         sf_data['spec']['workload']['args']['files'] = files
         sf_data['spec']['workload']['args']['threads'] = threads
         sf_data['spec']['workload']['args']['samples'] = samples
-        ''' Calculating the size of the volume that need to be test, it should be at least twice in the size then the
+        """ Calculating the size of the volume that need to be test, it should be at least twice in the size then the
              size of the files, and at least 100Gi.
              since the file_size is in Kb and the vol_size need to be in Gb, more calculation is needed.
-        '''
+        """
         vol_size = int(files * threads * file_size * 3)
-        vol_size = int(vol_size / 1024 / 1024)
+        vol_size = int(vol_size / constants.GB2KB)
         if vol_size < 100:
             vol_size = 100
         sf_data['spec']['workload']['args']['storagesize'] = f"{vol_size}Gi"
