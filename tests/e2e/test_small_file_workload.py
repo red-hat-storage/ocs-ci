@@ -41,8 +41,17 @@ class TestSmallFileWorkload(E2ETest):
     used to quickly measure performance for a variety of metadata-intensive
     workloads
     """
+
+    @pytest.mark.parametrize(
+        argnames=["file_size", "files", "threads", "samples"],
+        argvalues=[
+            pytest.param(*[4, 50000, 4, 1], ),
+            pytest.param(*[16, 50000, 4, 1], ),
+            pytest.param(*[16, 200000, 4, 1], ),
+        ]
+    )
     @pytest.mark.polarion_id("OCS-1295")
-    def test_smallfile_workload(self, ripsaw):
+    def test_smallfile_workload(self, ripsaw, file_size, files, threads, samples):
         """
         Run SmallFile Workload
         """
@@ -51,6 +60,24 @@ class TestSmallFileWorkload(E2ETest):
 
         log.info("Running SmallFile bench")
         sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
+
+        '''
+            Setting up the parameters for this test
+        '''
+        sf_data['spec']['workload']['args']['file_size'] = file_size
+        sf_data['spec']['workload']['args']['files'] = files
+        sf_data['spec']['workload']['args']['threads'] = threads
+        sf_data['spec']['workload']['args']['samples'] = samples
+        ''' Calculating the size of the volume that need to be test, it should be at least twice in the size then the
+             size of the files, and at least 100Gi.
+             since the file_size is in Kb and the vol_size need to be in Gb, more calculation is needed.
+        '''
+        vol_size = int(files * threads * file_size * 3)
+        vol_size = int(vol_size / 1024 / 1024)
+        if vol_size < 100:
+            vol_size = 100
+        sf_data['spec']['workload']['args']['storagesize'] = f"{vol_size}Gi"
+
         sf_obj = OCS(**sf_data)
         sf_obj.create()
         # wait for benchmark pods to get created - takes a while
