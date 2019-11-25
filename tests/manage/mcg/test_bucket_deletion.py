@@ -50,16 +50,6 @@ class TestBucketDeletion:
                 marks=[tier2, pytest.mark.polarion_id("OCS-1866")]
             ),
             pytest.param(
-                *[100, 'CLI'],
-                marks=[tier2, noobaa_cli_required,
-                       pytest.mark.polarion_id("OCS-1865")]
-            ),
-            pytest.param(
-                *[1000, 'CLI'],
-                marks=[tier2, noobaa_cli_required,
-                       pytest.mark.polarion_id("OCS-1866")]
-            ),
-            pytest.param(
                 *[100, 'OC'],
                 marks=[tier2, pytest.mark.polarion_id("OCS-1865")]
             ),
