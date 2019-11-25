@@ -12,6 +12,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.exceptions import UnexpectedVolumeType
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.utility.prometheus import PrometheusAPI
@@ -590,14 +591,14 @@ def fio_to_dict(fio_output):
 
 
 def workload_fio_storageutilization(
-        fixture_name,
-        target_percentage,
-        project,
-        fio_pvc_dict,
-        fio_job_dict,
-        fio_configmap_dict,
-        measurement_dir,
-        tmp_path,
+    fixture_name,
+    target_percentage,
+    project,
+    fio_pvc_dict,
+    fio_job_dict,
+    fio_configmap_dict,
+    measurement_dir,
+    tmp_path,
 ):
     """
     This function implements core functionality of fio storage utilization
@@ -612,7 +613,8 @@ def workload_fio_storageutilization(
         storage_class_name = "ocs-storagecluster-cephfs"
         ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"
     else:
-        raise Exception("unexpected volume type, ocs-ci code is wrong")
+        raise UnexpectedVolumeType(
+            "unexpected volume type, ocs-ci code is wrong")
 
     # make sure we communicate what is going to happen
     logger.info((
@@ -657,6 +659,7 @@ def workload_fio_storageutilization(
     fio_job_file = ObjectConfFile(fixture_name, fio_objs, project, tmp_path)
 
     # how long do we let the job running while writing data to the volume
+    # TODO: increase this value or make it configurable
     write_timeout = pvc_size * 30  # seconds
     logger.info((
         f"fixture will wait {write_timeout} seconds for the Job "

@@ -24,7 +24,7 @@ import yaml
 from ocs_ci.utility.utils import run_cmd
 
 
-LOGGER = logging.getLogger(name=__file__)
+logger = logging.getLogger(name=__file__)
 
 
 class ObjectConfFile():
@@ -40,11 +40,11 @@ class ObjectConfFile():
     def __init__(self, name, obj_dict_list, project, tmp_path):
         """
         Args:
-            name (str): name of this object config file
-            obj_dict_list (list): list of dictionaries with k8s objects
+            name (str): Name of this object config file
+            obj_dict_list (list): List of dictionaries with k8s objects
             project (ocp.OCP): Instance of :class:`ocp.OCP` of ``Project``
                 kind, specifying namespace where the object will be deployed.
-            tmp_path (pathlib.Path): directory where a temporary yaml file will
+            tmp_path (pathlib.Path): Directory where a temporary yaml file will
                 be created. In test context, use pytest fixture `tmp_path`_.
 
         .. _`tmp_path`: https://docs.pytest.org/en/latest/tmpdir.html#the-tmp-path-fixture
@@ -61,17 +61,17 @@ class ObjectConfFile():
         Run given oc command on this object file.
 
         Args:
-            command (str): either ``create``, ``delete`` or ``get``
-            namespace (str): name of the namespace for oc command
-            out_yaml_format (bool): use oc yaml output format
+            command (str): Either ``create``, ``delete`` or ``get``
+            namespace (str): Name of the namespace for oc command
+            out_yaml_format (bool): Use oc yaml output format
         """
         if namespace is None:
             namespace = self.project.namespace
-        LOGGER.info((
+        logger.info((
             f"going to run oc {command} "
             f"on {self.name} object config yaml file "
             f"in namespace {namespace}"))
-        LOGGER.debug(self.yaml_file.read_text())
+        logger.debug(self.yaml_file.read_text())
         oc_cmd = [
             "oc",
             "--kubeconfig",
@@ -92,7 +92,7 @@ class ObjectConfFile():
         Run ``oc create`` on in this object file.
 
         Args:
-            namespace (str): name of the namespace where to deploy, overriding
+            namespace (str): Name of the namespace where to deploy, overriding
             self.project.namespace value (in a similar way how you can specify
             any value to ``-n`` option of ``oc create``.
         """
@@ -103,7 +103,7 @@ class ObjectConfFile():
         Run ``oc delete`` on in this object file.
 
         Args:
-            namespace (str): name of the namespace where to deploy, overriding
+            namespace (str): Name of the namespace where to deploy, overriding
             self.project.namespace value (in a similar way how you can specify
             any value to ``-n`` option of ``oc delete``.
         """
@@ -114,7 +114,7 @@ class ObjectConfFile():
         Run ``oc get`` on in this object file.
 
         Args:
-            namespace (str): name of the namespace where to deploy, overriding
+            namespace (str): Name of the namespace where to deploy, overriding
             self.project.namespace value (in a similar way how you can specify
             any value to ``-n`` option of ``oc get``.
         """

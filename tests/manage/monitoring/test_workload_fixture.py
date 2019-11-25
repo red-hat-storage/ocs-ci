@@ -11,16 +11,16 @@ this:
 
 .. code-block:: console
 
-    (venv) [ocsqe@localhost ocs-ci]$ run-ci --cluster-path ~/data/cluster tests/manage/monitoring/test_workload_fixture.py -vvv --pdb
+    (venv) [ocsqe@localhost ocs-ci]$ run-ci --cluster-path /home/my_user/my-ocs-dir tests/manage/monitoring/test_workload_fixture.py -vvv --pdb
 
 For the purpose of test case automation development, you can also rerun the
 tests using the measurement data from previous test run. To do this, you
 need to create the following ``reuse-workload.yaml`` config file:
 
-.. code-block:: console
+.. code-block:: yaml
     ---
     ENV_DATA:
-      measurement_dir: /home/ocsqe/data/measurement_results
+      measurement_dir: /home/my_user/my-ocs-dir/measurement_results
 
 And then pass it to ``run-ci`` via ``--cluster-conf reuse-workload.yaml``
 option. Value of ``measurement_dir`` specifies the path where a measurement
@@ -34,7 +34,7 @@ following line if you forgot to redefine it in the 1st run::
 
     2019-11-22 15:11:54,002 - INFO - tests.manage.monitoring.conftest.measurement_dir.178 - Measurement dir /tmp/pytest-of-ocsqe/pytest-1/measurement_results do  esn't exist. Creating it.
 
-But note that it's better to copy it out out ``/tmp`` directory tree somewhere
+But note that it's better to copy it out of ``/tmp`` directory tree somewhere
 else first to prevent loosing it.
 """
 
