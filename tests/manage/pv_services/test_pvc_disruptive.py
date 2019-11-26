@@ -187,43 +187,6 @@ class TestPVCDisruption(ManageTest):
         self.sc_obj = storageclass_factory(interface=interface)
         self.proj_obj = project_factory()
 
-    def pods_creation(self, pvc_objs, pod_factory, interface):
-        """
-        Create pods
-
-        Args:
-            pvc_objs (list): List of ocs_ci.ocs.resources.pvc.PVC instances
-            pvc_objs (function): Function to be used for creating pods
-            interface (int): Interface type
-
-        Returns:
-            list: list of Pod objects
-        """
-        pod_objs = []
-
-        # Create one pod using each RWO PVC and two pods using each RWX PVC
-        for pvc_obj in pvc_objs:
-            pvc_info = pvc_obj.get()
-            if pvc_info['spec']['volumeMode'] == 'Block':
-                pod_dict = constants.CSI_RBD_RAW_BLOCK_POD_YAML
-                raw_block_pv = True
-            else:
-                raw_block_pv = False
-                pod_dict = ''
-            if pvc_obj.access_mode == constants.ACCESS_MODE_RWX:
-                pod_obj = pod_factory(
-                    interface=interface, pvc=pvc_obj, status="",
-                    pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
-                )
-                pod_objs.append(pod_obj)
-            pod_obj = pod_factory(
-                interface=interface, pvc=pvc_obj, status="",
-                pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
-            )
-            pod_objs.append(pod_obj)
-
-        return pod_objs
-
     def test_pvc_disruptive(
         self, interface, operation_to_disrupt, resource_to_delete,
         multi_pvc_factory, pod_factory
@@ -310,7 +273,7 @@ class TestPVCDisruption(ManageTest):
 
         # Start creating pods
         bulk_pod_create = executor.submit(
-            self.pods_creation, pvc_objs, pod_factory, interface
+            helpers.create_pods, pvc_objs, pod_factory, interface, 2
         )
 
         if operation_to_disrupt == 'create_pod':
@@ -389,10 +352,7 @@ class TestPVCDisruption(ManageTest):
             pod_obj.ocp.wait_for_delete(pod_obj.name)
 
         # Verify that PVCs are reusable by creating new pods
-        create_pods = executor.submit(
-            self.pods_creation, pvc_objs, pod_factory, interface
-        )
-        pod_objs = create_pods.result()
+        pod_objs = helpers.create_pods(pvc_objs, pod_factory, interface, 2)
 
         # Verify new pods are Running
         for pod_obj in pod_objs:
