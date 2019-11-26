@@ -474,6 +474,8 @@ def check_file_existence(pod_obj, file_path):
         bool: True if the file exist, False otherwise
     """
     ret = pod_obj.exec_cmd_on_pod(f"bash -c \"find {file_path}\"")
+    if not ret:
+        return False
     if re.search(file_path, ret):
         return True
     return False
