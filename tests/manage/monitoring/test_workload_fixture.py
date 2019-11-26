@@ -32,7 +32,7 @@ from the previous run.
 You can also locate path of measurement dir by searching pytest logs for the
 following line if you forgot to redefine it in the 1st run::
 
-    Measurement dir /tmp/pytest-of-ocsqe/pytest-1/measurement_results do  esn't exist. Creating it.
+    Measurement dir /tmp/pytest-of-ocsqe/pytest-1/measurement_results doesn't exist. Creating it.
 
 But note that it's better to copy it out of ``/tmp`` directory tree somewhere
 else first to prevent loosing it.
