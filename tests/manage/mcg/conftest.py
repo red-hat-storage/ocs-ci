@@ -1,8 +1,10 @@
 import logging
 from itertools import chain
 from random import randrange
+from time import sleep
 
 import pytest
+from botocore.exceptions import ClientError
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import mcg
@@ -171,9 +173,16 @@ def multiregion_resources(request, mcg_obj):
             backingstore.delete()
             mcg_obj.send_rpc_query('pool_api', 'delete_pool', {'name': backingstore.name})
 
-        for aws_bucket in aws_buckets:
-            mcg_obj.aws_s3_resource.Bucket(aws_bucket).objects.all().delete()
-            mcg_obj.aws_s3_resource.Bucket(aws_bucket).delete()
+        for aws_bucket_name in aws_buckets:
+            mcg_obj.toggle_bucket_readwrite(aws_bucket_name, block=False)
+            for _ in range(10):
+                try:
+                    mcg_obj.aws_s3_resource.Bucket(aws_bucket_name).objects.all().delete()
+                    mcg_obj.aws_s3_resource.Bucket(aws_bucket_name).delete()
+                    break
+                except ClientError:
+                    logger.info(f'Deletion of bucket {aws_bucket_name} failed. Retrying...')
+                    sleep(3)
 
     request.addfinalizer(resource_cleanup)
 

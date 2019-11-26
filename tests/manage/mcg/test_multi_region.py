@@ -124,6 +124,3 @@ class TestMultiRegion:
         # Bring B up
         mcg_obj.toggle_bucket_readwrite(backingstore2['name'], block=False)
         mcg_obj.check_backingstore_state('backing-store-' + backingstore2['name'], BS_OPTIMAL)
-
-        # Teardown workaround for now (caused by OBC deletion hanging if OBC contains objects)
-        mcg_obj.s3_resource.Bucket(bucket_name).objects.all().delete()

@@ -471,7 +471,7 @@ class MCG(object):
 
     def toggle_bucket_readwrite(self, bucketname, block=True):
         """
-        Allows to toggle a bucket's IO using a bucket policy
+        Toggles a bucket's IO using a bucket policy
 
         Args:
             bucketname: The name of the bucket that should be manipulated
