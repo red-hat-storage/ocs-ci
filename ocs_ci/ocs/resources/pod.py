@@ -292,6 +292,7 @@ class Pod(OCS):
         self.io_params['iodepth'] = depth
         self.io_params['rate'] = rate
         self.io_params['rate_process'] = rate_process
+        self.io_params['timeout'] = runtime + 600
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
     def run_git_clone(self):

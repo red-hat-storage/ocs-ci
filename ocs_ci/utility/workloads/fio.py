@@ -70,6 +70,7 @@ def run(**kwargs):
     io_pod = kwargs.pop('pod')
     st_type = kwargs.pop('type')
     path = kwargs.pop('path')
+    timeout = kwargs.get('timeout', 3600)
 
     fio_cmd = "fio"
     args = ""
@@ -86,4 +87,4 @@ def run(**kwargs):
     fio_cmd += " --output-format=json"
     log.info(f"Running cmd: {fio_cmd}")
 
-    return io_pod.exec_cmd_on_pod(fio_cmd, out_yaml_format=False)
+    return io_pod.exec_cmd_on_pod(fio_cmd, timeout=timeout, out_yaml_format=False)
