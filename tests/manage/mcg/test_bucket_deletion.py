@@ -51,11 +51,11 @@ class TestBucketDeletion:
             ),
             pytest.param(
                 *[100, 'OC'],
-                marks=[tier2, pytest.mark.polarion_id("OCS-1865")]
+                marks=[tier2, pytest.mark.polarion_id("OCS-1915")]
             ),
             pytest.param(
                 *[1000, 'OC'],
-                marks=[tier2, pytest.mark.polarion_id("OCS-1866")]
+                marks=[tier2, pytest.mark.polarion_id("OCS-1916")]
             ),
         ]
     )
@@ -80,7 +80,7 @@ class TestBucketDeletion:
             pytest.param(
                 *['CLI'],
                 marks=[tier1, noobaa_cli_required,
-                       pytest.mark.polarion_id("OCS-1868")]
+                       pytest.mark.polarion_id("OCS-1917")]
             ),
             pytest.param(
                 *['OC'],
