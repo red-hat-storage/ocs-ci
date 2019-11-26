@@ -19,6 +19,10 @@ spec:
       containers:
       - name: fedora
         image: fedora
+        resources:
+          limits:
+            memory: "500Mi"
+            cpu: "150m"
         command: ["/bin/bash", "-ce", "tail -f /dev/null" ]
         imagePullPolicy: IfNotPresent
         securityContext:
