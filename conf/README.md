@@ -59,13 +59,13 @@ higher priority).
 ## Example of accessing config/default data
 
 ```python
-from ocsci import config
-from ocs import defaults
+from ocs_ci.framework import config
+from ocs_ci.ocs import defaults
 
 # From you code you can access those data like
 
-Taking data from ENV_DATA will always use right cluster_namespace passed via
-`--ocsci-conf` config file or default one defined in `default_config.yaml`.
+# Taking data from ENV_DATA will always use right cluster_namespace passed via
+# `--ocsci-conf` config file or default one defined in `default_config.yaml`.
 function_which_taking_namespace(namespace=config.ENV_DATA['cluster_namespace'])
 
 # Defaults data you can access like in this example:
