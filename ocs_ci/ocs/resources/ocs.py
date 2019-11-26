@@ -8,7 +8,7 @@ import tempfile
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
+from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility import utils
@@ -164,29 +164,6 @@ def ocs_install_verification(timeout=600):
     log.info("Verifying OCS installation")
     namespace = config.ENV_DATA['cluster_namespace']
 
-    # Verify Local Storage CSV is in Succeeded phase
-    log.info("Verifying Local Storage CSV")
-    # There is BZ opened:
-    # https://bugzilla.redhat.com/show_bug.cgi?id=1770183
-    # which makes this check problematic as current CSV is not the currently
-    # installed.
-    local_storage_csvs = get_csvs_start_with_prefix(
-        csv_prefix=constants.LOCAL_STORAGE_CSV_PREFIX,
-        namespace=namespace,
-    )
-    assert len(local_storage_csvs) == 1, (
-        f"There are more than one local storage CSVs: {local_storage_csvs}"
-    )
-    local_storage_name = local_storage_csvs[0]['metadata']['name']
-    log.info(
-        f"Check if local storage operator: {local_storage_name} is in"
-        f"Succeeded phase"
-    )
-    local_storage_csv = CSV(
-        resource_name=local_storage_name, namespace=namespace
-    )
-    local_storage_csv.wait_for_phase("Succeeded", timeout=timeout)
-
     # Verify OCS CSV is in Succeeded phase
     log.info("verifying ocs csv")
     ocs_package_manifest = PackageManifest(
@@ -210,7 +187,7 @@ def ocs_install_verification(timeout=600):
         )
         log.info("Checking status of %s", storage_cluster_name)
         log.info(
-            f"Check if StorageCluster: {local_storage_name} is in"
+            f"Check if StorageCluster: {storage_cluster_name} is in"
             f"Succeeded phase"
         )
         storage_cluster.wait_for_phase(phase='Ready', timeout=timeout)
@@ -237,12 +214,6 @@ def ocs_install_verification(timeout=600):
         condition=constants.STATUS_RUNNING,
         selector=constants.NOOBAA_APP_LABEL,
         resource_count=2,
-        timeout=timeout
-    )
-    # local-storage-operator
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.LOCAL_STORAGE_OPERATOR_LABEL,
         timeout=timeout
     )
     # mons
