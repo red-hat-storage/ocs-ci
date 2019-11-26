@@ -11,7 +11,7 @@ this:
 
 .. code-block:: console
 
-    (venv) [ocsqe@localhost ocs-ci]$ run-ci --cluster-path /home/my_user/my-ocs-dir tests/manage/monitoring/test_workload_fixture.py -vvv --pdb
+    $ run-ci --cluster-path /home/my_user/my-ocs-dir tests/manage/monitoring/test_workload_fixture.py -vvv --pdb
 
 For the purpose of test case automation development, you can also rerun the
 tests using the measurement data from previous test run. To do this, you
@@ -32,7 +32,7 @@ from the previous run.
 You can also locate path of measurement dir by searching pytest logs for the
 following line if you forgot to redefine it in the 1st run::
 
-    2019-11-22 15:11:54,002 - INFO - tests.manage.monitoring.conftest.measurement_dir.178 - Measurement dir /tmp/pytest-of-ocsqe/pytest-1/measurement_results do  esn't exist. Creating it.
+    Measurement dir /tmp/pytest-of-ocsqe/pytest-1/measurement_results do  esn't exist. Creating it.
 
 But note that it's better to copy it out of ``/tmp`` directory tree somewhere
 else first to prevent loosing it.
