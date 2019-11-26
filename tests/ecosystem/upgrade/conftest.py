@@ -21,7 +21,16 @@ def create_pods(interface, pvc_factory, pod_factory, count):
     Return:
         list: List of generated pods
     """
-    sc_name = f"{config.ENV_DATA['storage_cluster_name']}-{constants.DEFAULT_SC_RBD}"
+    # TODO(fbalak): Use proper constants after
+    # https://github.com/red-hat-storage/ocs-ci/issues/1056
+    # is resolved
+    if interface == constants.CEPHBLOCKPOOL:
+        sc_name = "ocs-storagecluster-ceph-rbd"
+    elif interface == constants.CEPHFILESYSTEM:
+        sc_name = "ocs-storagecluster-cephfs"
+    else:
+        raise AttributeError(f"Interface '{interface}' is invalid")
+
     metadata = {'name': sc_name}
     sc = resources.ocs.OCS(
         kind=constants.STORAGECLASS,
@@ -55,7 +64,7 @@ def pre_upgrade_pods(request, pvc_factory_session, pod_factory_session):
         count=25
     )
     cephfs_pods = create_pods(
-        interface=constants.STORAGECLASS,
+        interface=constants.CEPHFILESYSTEM,
         pvc_factory=pvc_factory_session,
         pod_factory=pod_factory_session,
         count=25
@@ -78,7 +87,7 @@ def post_upgrade_pods(pvc_factory, pod_factory):
         count=2
     )
     cephfs_pods = create_pods(
-        interface=constants.STORAGECLASS,
+        interface=constants.CEPHFILESYSTEM,
         pvc_factory=pvc_factory,
         pod_factory=pod_factory,
         count=2
