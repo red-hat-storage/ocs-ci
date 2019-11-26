@@ -26,8 +26,7 @@ def check_pod_vanished(pod_names):
 def uninstall_cluster_logging():
     """
     Function to uninstall cluster-logging from the cluster
-    * Deletes the project "openshift-logging"
-        and "openshift-operators-redhat"
+    Deletes the project "openshift-logging" and "openshift-operators-redhat"
     """
     # Validating the pods before deleting the instance
     pod_list = get_all_pods(namespace=constants.OPENSHIFT_LOGGING_NAMESPACE)

@@ -370,7 +370,7 @@ class Deployment(object):
             create_configmap_cluster_monitoring_pod(sc_name)
 
             # Take some time to respin the pod
-            waiting_time = 30
+            waiting_time = 45
             logger.info(f"Waiting {waiting_time} seconds...")
             time.sleep(waiting_time)
 

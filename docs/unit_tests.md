@@ -5,7 +5,7 @@ including our pytest plugins.
 
 We are using [pytest](https://docs.pytest.org/en/latest/) framework
 and test execution is handled via [tox](https://tox.readthedocs.io/), as
-configured in [tox.ini](../tox.ini) config file.
+configured in [tox.ini](https://github.com/red-hat-storage/ocs-ci/tree/master/tox.ini) config file.
 
 The tests are executed in [Travis CI](https://travis-ci.org/red-hat-storage/ocs-ci)
 for each pull request created for this repository.

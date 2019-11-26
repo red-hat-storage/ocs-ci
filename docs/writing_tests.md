@@ -9,11 +9,11 @@ a lot!
 ## Pytest marks
 
 We have predefined some of pytest marks you can use to decorate your tests.
-You can find them defined in [pytest.ini](../pytest.ini) where we inform
+You can find them defined in [pytest.ini](https://github.com/red-hat-storage/ocs-ci/tree/master/pytest.ini) where we inform
 pytest about those marks.
 
 We have markers defined in pytest_customization package under
-[marks.py](../ocs_ci/framework/pytest_customization/marks.py) plugin. From your tests you
+[marks.py](https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/pytest_customization/marks.py) plugin. From your tests you
 can import directly from `ocsci.testlib` module with this statement:
 `from ocsci.testlib import tier1` for example.
 
@@ -44,7 +44,7 @@ look at the
 
 ## Base test classes for teams
 
-Those are located in [testlib.py](../ocs_ci/framework/testlib.py) which you can also
+Those are located in [testlib.py](https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/testlib.py) which you can also
 import from `ocsci.testlib` module with statement:
 `from ocsci.testlib import manage` which is base test class for manage team.
 

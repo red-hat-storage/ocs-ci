@@ -307,7 +307,8 @@ def pinned_dir_io(clients, mds_fail_over, num_of_files, range1, range2):
 def custom_ceph_config(suite_config, custom_config, custom_config_file):
     """
     Combines and returns custom configuration overrides for ceph.
-    Hierarchy is as follows:
+    Hierarchy is as follows::
+
         custom_config > custom_config_file > suite_config
 
     Args:
@@ -382,7 +383,7 @@ def run_cmd(cmd, secrets=None, timeout=600, **kwargs):
 
         secrets (list): A list of secrets to be masked with asterisks
             This kwarg is popped in order to not interfere with
-            subprocess.run(**kwargs)
+            subprocess.run(``**kwargs``)
 
         timeout (int): Timeout for the command, defaults to 600 seconds.
 
@@ -740,13 +741,15 @@ class TimeoutSampler(object):
         Args:
             result (bool): Expected result from func.
 
-        Examples:
+        Examples::
+
             sample = TimeoutSampler(
                 timeout=60, sleep=1, func=some_func, func_arg1="1",
                 func_arg2="2"
             )
             if not sample.wait_for_func_status(result=True):
                 raise Exception
+
         """
         try:
             for res in self:
@@ -1039,11 +1042,13 @@ def parse_pgsql_logs(data):
         data (str): log data from pgsql bench run
 
     Returns:
-        list_data (list): data digestable by scripts with below
-                        format
-            eg: ( with only one item in the list)
-            [{'num_clients': '2', 'num_threads': '7', 'latency_avg': '7',
-             'lat_stddev': '0', 'tps_incl': '234', 'tps_excl': '243'}]
+        list_data (list): data digestable by scripts with below format
+            e.g. ( with only one item in the list)::
+
+                [
+                    {'num_clients': '2', 'num_threads': '7', 'latency_avg': '7',
+                    'lat_stddev': '0', 'tps_incl': '234', 'tps_excl': '243'}
+                ]
 
     """
 
