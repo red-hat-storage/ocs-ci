@@ -8,14 +8,16 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
 from ocs_ci.ocs.resources.pod import get_all_pods
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check, run_cmd
+from ocs_ci.utility.utils import ceph_health_check, run_cmd
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods, get_plugin_pods,
     get_rbdfsplugin_provisioner_pods, get_cephfsplugin_provisioner_pods,
-    get_operator_pods
+    get_operator_pods, delete_pods
 )
-from tests.helpers import verify_volume_deleted_in_backend
+from tests.helpers import (
+    verify_volume_deleted_in_backend,
+    wait_for_resource_count_change
+)
 from tests import disruption_helpers
 
 log = logging.getLogger(__name__)
@@ -150,39 +152,6 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
         log.info(f"Created {len(pod_objs)} pods.")
         return pvc_objs, pod_objs
 
-    def verify_resource_deletion(self, func_to_use, previous_num):
-        """
-        Wait for resource deletion to start
-
-        Args:
-            func_to_use (function): Function to be used to fetch resource info
-            previous_num (int): Previous number of resources
-
-        Returns:
-            bool: True if resource deletion has started.
-                  False in case of timeout.
-        """
-        try:
-            for sample in TimeoutSampler(
-                30, 0.01, func_to_use, self.namespace
-            ):
-                if func_to_use == get_all_pvcs:
-                    current_num = len(sample['items'])
-                else:
-                    current_num = len(sample)
-                if current_num < previous_num:
-                    return True
-        except TimeoutExpiredError:
-            return False
-
-    def delete_pods(self):
-        """
-        Delete pods
-        """
-        for pod_obj in self.pod_objs:
-            pod_obj.delete(wait=False)
-        return True
-
     def test_ceph_daemon_kill_during_pod_pvc_deletion(
         self, interface, operation_to_disrupt, resource_name,
         setup_base
@@ -263,19 +232,19 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
         disruption.select_daemon()
 
         # Start deleting pods
-        pod_bulk_delete = executor.submit(self.delete_pods)
+        pod_bulk_delete = executor.submit(
+            delete_pods, self.pod_objs, wait=False
+        )
 
         if operation_to_disrupt == 'delete_pods':
-            ret = self.verify_resource_deletion(
-                get_all_pods, initial_num_of_pods
+            ret = wait_for_resource_count_change(
+                get_all_pods, initial_num_of_pods, self.namespace, 'decrease'
             )
             assert ret, "Wait timeout: Pods are not being deleted."
             log.info("Pods deletion has started.")
             disruption.kill_daemon()
 
-        pods_deleted = pod_bulk_delete.result()
-
-        assert pods_deleted, "Deletion of pods failed."
+        pod_bulk_delete.result()
 
         # Verify pods are deleted
         for pod_obj in self.pod_objs:
@@ -308,8 +277,8 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
         pvc_bulk_delete = executor.submit(delete_pvcs, pvc_objs)
 
         if operation_to_disrupt == 'delete_pvcs':
-            ret = self.verify_resource_deletion(
-                get_all_pvcs, initial_num_of_pvc
+            ret = wait_for_resource_count_change(
+                get_all_pvcs, initial_num_of_pvc, self.namespace, 'decrease'
             )
             assert ret, "Wait timeout: PVCs are not being deleted."
             log.info("PVCs deletion has started.")

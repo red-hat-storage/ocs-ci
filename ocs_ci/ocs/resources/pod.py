@@ -843,15 +843,14 @@ def get_pod_node(pod_obj):
     return node.get_node_objs(node_names=node_name)[0]
 
 
-def delete_pods(pod_objs):
+def delete_pods(pod_objs, wait=True):
     """
     Deletes list of the pod objects
 
     Args:
         pod_objs (list): List of the pod objects to be deleted
-
-    Returns:
-        bool: True if deletion is successful
+        wait (bool): Determines if the delete command should wait for
+            completion
 
     """
     for pod in pod_objs:

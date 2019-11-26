@@ -8,7 +8,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from tests import helpers, disruption_helpers
 
@@ -121,30 +120,6 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
         self.sc_obj = storageclass_factory(interface=interface)
         self.proj_obj = project_factory()
 
-    def verify_resource_creation(self, func_to_use, previous_num, namespace):
-        """
-        Wait for new resources to be created.
-
-        Args:
-            func_to_use (function): Function to be used to fetch resource info
-            previous_num (int): Previous number of resources
-            namespace (str): The namespace to look in
-
-        Returns:
-            bool: True if resource creation has started.
-                  False in case of timeout.
-        """
-        try:
-            for sample in TimeoutSampler(10, 1, func_to_use, namespace):
-                if func_to_use == get_all_pvcs:
-                    current_num = len(sample['items'])
-                else:
-                    current_num = len(sample)
-                if current_num > previous_num:
-                    return True
-        except TimeoutExpiredError:
-            return False
-
     def pods_creation(self, pvc_objs, pod_factory, interface):
         """
         Create pods
@@ -249,8 +224,8 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
 
         if operation_to_disrupt == 'create_pvc':
             # Ensure PVCs are being created before deleting the resource
-            ret = self.verify_resource_creation(
-                get_all_pvcs, initial_num_of_pvc, namespace
+            ret = helpers.wait_for_resource_count_change(
+                get_all_pvcs, initial_num_of_pvc, namespace, 'increase'
             )
             assert ret, "Wait timeout: PVCs are not being created."
             log.info("PVCs creation has started.")
@@ -273,8 +248,8 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
 
         if operation_to_disrupt == 'create_pod':
             # Ensure that pods are being created before deleting the resource
-            ret = self.verify_resource_creation(
-                pod.get_all_pods, initial_num_of_pods, namespace
+            ret = helpers.wait_for_resource_count_change(
+                pod.get_all_pods, initial_num_of_pods, namespace, 'increase'
             )
             assert ret, "Wait timeout: Pods are not being created."
             log.info(f"Pods creation has started.")
