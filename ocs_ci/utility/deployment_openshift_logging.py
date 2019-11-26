@@ -221,9 +221,9 @@ def create_instance_in_clusterlogging():
             values, storage class and size details etc.
 
     """
-    num_of_worker_nodes = helpers.get_worker_nodes()
-    num_of_master_nodes = helpers.get_master_nodes()
-    nodes_in_cluster = len(num_of_worker_nodes) + len(num_of_master_nodes)
+    num_of_worker_nodes = len(helpers.get_worker_nodes())
+    num_of_master_nodes = len(helpers.get_master_nodes())
+    nodes_in_cluster = num_of_worker_nodes + num_of_master_nodes
     inst_data = templating.load_yaml(constants.CL_INSTANCE_YAML)
     es_node_count = inst_data['spec']['logStore']['elasticsearch']['nodeCount']
     helpers.create_resource(wait=False, **inst_data)

@@ -3,6 +3,7 @@ This file contains the testcases for openshift-logging
 """
 
 import logging
+
 import pytest
 
 from ocs_ci.ocs.resources.csv import CSV
@@ -44,7 +45,6 @@ def test_fixture(request):
     assert ocp_logging_obj.set_rbac(
         yaml_file=constants.EO_RBAC_YAML, resource_name='prometheus-k8s'
     )
-
     logging_version = config.ENV_DATA['logging_version']
     subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
     subscription_yaml['spec']['channel'] = logging_version
@@ -81,9 +81,7 @@ def create_instance():
     # Check the health of the cluster-logging
     assert ocp_logging_obj.check_health_of_clusterlogging()
 
-    csv_obj = CSV(
-        kind=constants.CLUSTER_SERVICE_VERSION, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
-    )
+    csv_obj = CSV(namespace=constants.OPENSHIFT_LOGGING_NAMESPACE)
 
     # Get the CSV installed
     get_csv = csv_obj.get(out_yaml_format=True)
