@@ -15,9 +15,9 @@ spec:
           cpu: "600m"
           memory: "4Gi"
       storage:
-        storageClassName: "gp2"
+        storageClassName: "ocs-storagecluster-ceph-rbd"
         size: "200G"
-      redundancyPolicy: "SingleRedundancy"
+      redundancyPolicy: "FullRedundancy"
   visualization:
     type: "kibana"
     kibana:
@@ -25,7 +25,7 @@ spec:
   curation:
     type: "curator"
     curator:
-      schedule: "30 3 * * *"
+      schedule: "* * 1 * *"
   collection:
     logs:
       type: "fluentd"
