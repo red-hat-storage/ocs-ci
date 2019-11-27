@@ -13,6 +13,7 @@ def create_pods(
     storageclass,
     count,
     access_mode,
+    volume_mode=None
 ):
     """
     Create pods for upgrade testing. pvc_factory and pod_factory have to be
@@ -26,23 +27,25 @@ def create_pods(
         count (int): Number of pods to create
         access_mode (str): ReadWriteOnce, ReadOnlyMany or ReadWriteMany.
             This decides the access mode to be used for the PVC
+        volume_mode (str): Volume mode for rbd RWO PVC
 
     Return:
         list: List of generated pods
     """
     log.info(
         f"Creating {count} pods via {interface} using {access_mode}"
-        f" access mode and {sc_name} storageclass")
+        f" access mode and {storageclass.name} storageclass")
     pvcs = [
         pvc_factory(
             storageclass=storageclass,
             access_mode=access_mode,
+            volume_mode=volume_mode
         ) for _ in range(count)
     ]
     pods = [
         pod_factory(
             interface=interface,
-            pvc=pvc
+            pvc=pvc,
         ) for pvc in pvcs
     ]
     return pods
@@ -101,23 +104,25 @@ def pre_upgrade_pods(
         constants.RECLAIM_POLICY_DELETE,
         constants.RECLAIM_POLICY_RETAIN
     ):
-        for access_mode in [
-            constants.ACCESS_MODE_RWO,
-        ]:
+        for volume_mode in (
+            constants.VOLUME_MODE_BLOCK,
+            constants.VOLUME_MODE_FILESYSTEM
+        ):
             rbd_pods = create_pods(
                 interface=constants.CEPHBLOCKPOOL,
                 pvc_factory=pvc_factory_session,
                 pod_factory=pod_factory_session,
                 storageclass=default_storageclasses.get(reclaim_policy)[0],
                 count=1,
-                access_mode=access_mode,
+                access_mode=constants.ACCESS_MODE_RWO,
+                volume_mode=volume_mode,
             )
             pods.extend(rbd_pods)
 
-        for access_mode in [
+        for access_mode in (
             constants.ACCESS_MODE_RWO,
             constants.ACCESS_MODE_RWX
-        ]:
+        ):
             cephfs_pods = create_pods(
                 interface=constants.CEPHFILESYSTEM,
                 pvc_factory=pvc_factory_session,
@@ -144,23 +149,22 @@ def post_upgrade_pods(pvc_factory, pod_factory, default_storageclasses):
         constants.RECLAIM_POLICY_DELETE,
         constants.RECLAIM_POLICY_RETAIN
     ):
-        for access_mode in [
-            constants.ACCESS_MODE_RWO,
-        ]:
+        for volume_mode in ('block', 'filesystem'):
             rbd_pods = create_pods(
                 interface=constants.CEPHBLOCKPOOL,
                 pvc_factory=pvc_factory,
                 pod_factory=pod_factory,
                 storageclass=default_storageclasses.get(reclaim_policy)[0],
                 count=1,
-                access_mode=access_mode,
+                access_mode=constants.ACCESS_MODE_RWO,
+                volume_mode=volume_mode,
             )
             pods.extend(rbd_pods)
 
-        for access_mode in [
+        for access_mode in (
             constants.ACCESS_MODE_RWO,
             constants.ACCESS_MODE_RWX
-        ]:
+        ):
             cephfs_pods = create_pods(
                 interface=constants.CEPHFILESYSTEM,
                 pvc_factory=pvc_factory,
