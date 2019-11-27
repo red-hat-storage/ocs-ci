@@ -535,13 +535,13 @@ def teardown_factory_fixture(request):
         """
         for instance in instances[::-1]:
             if not instance.is_deleted:
+                reclaim_policy = instance.reclaim_policy if instance.kind == constants.PVC else None
                 instance.delete()
                 instance.ocp.wait_for_delete(
                     instance.name
                 )
-                if instance.kind == constants.PVC:
-                    if instance.reclaim_policy == constants.RECLAIM_POLICY_DELETE:
-                        helpers.validate_pv_delete(instance.backed_pv)
+                if reclaim_policy == constants.RECLAIM_POLICY_DELETE:
+                    helpers.validate_pv_delete(instance.backed_pv)
     request.addfinalizer(finalizer)
     return factory
 
