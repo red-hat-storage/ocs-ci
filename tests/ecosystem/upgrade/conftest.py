@@ -6,7 +6,7 @@ from ocs_ci.ocs import constants, resources
 log = logging.getLogger(__name__)
 
 
-def create_pods(interface, pvc_factory, pod_factory, count):
+def create_pods(interface, pvc_factory, pod_factory, count, access_mode):
     """
     Create pods for upgrade testing. pvc_factory and pod_factory have to be
     in the same scope.
@@ -16,6 +16,8 @@ def create_pods(interface, pvc_factory, pod_factory, count):
         pvc_factory (function): Function for creating PVCs
         pod_factory (function): Function for creating pods
         count (int): Number of pods to create
+        access_mode (str): ReadWriteOnce, ReadOnlyMany or ReadWriteMany.
+            This decides the access mode to be used for the PVC.
 
     Return:
         list: List of generated pods
@@ -30,6 +32,9 @@ def create_pods(interface, pvc_factory, pod_factory, count):
     else:
         raise AttributeError(f"Interface '{interface}' is invalid")
 
+    log.info(
+        f"Creating {count} pods via {interface} using {access_mode}"
+        f" access mode and {sc_name} storageclass")
     metadata = {'name': sc_name}
     sc = resources.ocs.OCS(
         kind=constants.STORAGECLASS,
@@ -37,7 +42,10 @@ def create_pods(interface, pvc_factory, pod_factory, count):
     )
     sc.reload()
     pvcs = [
-        pvc_factory(storageclass=sc) for _ in range(count)
+        pvc_factory(
+            storageclass=sc,
+            access_mode=access_mode
+        ) for _ in range(count)
     ]
     pods = [
         pod_factory(
@@ -56,19 +64,33 @@ def pre_upgrade_pods(request, pvc_factory_session, pod_factory_session):
     Returns:
         list: List of pods with RBD interface
     """
-    rbd_pods = create_pods(
-        interface=constants.CEPHBLOCKPOOL,
-        pvc_factory=pvc_factory_session,
-        pod_factory=pod_factory_session,
-        count=25
-    )
-    cephfs_pods = create_pods(
-        interface=constants.CEPHFILESYSTEM,
-        pvc_factory=pvc_factory_session,
-        pod_factory=pod_factory_session,
-        count=25
-    )
-    return rbd_pods + cephfs_pods
+    pods = []
+    for access_mode in [
+        constants.ACCESS_MODE_RWO,
+    ]:
+        rbd_pods = create_pods(
+            interface=constants.CEPHBLOCKPOOL,
+            pvc_factory=pvc_factory_session,
+            pod_factory=pod_factory_session,
+            count=20,
+            access_mode=access_mode
+        )
+        pods.extend(rbd_pods)
+
+    for access_mode in [
+        constants.ACCESS_MODE_RWO,
+        constants.ACCESS_MODE_RWX
+    ]:
+        cephfs_pods = create_pods(
+            interface=constants.CEPHFILESYSTEM,
+            pvc_factory=pvc_factory_session,
+            pod_factory=pod_factory_session,
+            count=20,
+            access_mode=access_mode
+        )
+        pods.extend(cephfs_pods)
+
+    return pods
 
 
 @pytest.fixture
@@ -79,16 +101,30 @@ def post_upgrade_pods(pvc_factory, pod_factory):
     Returns:
         list: List of pods with RBD and CephFS interface
     """
-    rbd_pods = create_pods(
-        interface=constants.CEPHBLOCKPOOL,
-        pvc_factory=pvc_factory,
-        pod_factory=pod_factory,
-        count=2
-    )
-    cephfs_pods = create_pods(
-        interface=constants.CEPHFILESYSTEM,
-        pvc_factory=pvc_factory,
-        pod_factory=pod_factory,
-        count=2
-    )
-    return rbd_pods + cephfs_pods
+    pods = []
+    for access_mode in [
+        constants.ACCESS_MODE_RWO,
+    ]:
+        rbd_pods = create_pods(
+            interface=constants.CEPHBLOCKPOOL,
+            pvc_factory=pvc_factory,
+            pod_factory=pod_factory,
+            count=1,
+            access_mode=access_mode
+        )
+        pods.extend(rbd_pods)
+
+    for access_mode in [
+        constants.ACCESS_MODE_RWO,
+        constants.ACCESS_MODE_RWX
+    ]:
+        cephfs_pods = create_pods(
+            interface=constants.CEPHFILESYSTEM,
+            pvc_factory=pvc_factory,
+            pod_factory=pod_factory,
+            count=1,
+            access_mode=access_mode
+        )
+        pods.extend(cephfs_pods)
+
+    return pods
