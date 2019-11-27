@@ -256,7 +256,7 @@ def create_instance_in_clusterlogging():
     return logging_instance
 
 
-@retry((CommandFailed, UnexpectedBehaviour), 10, 60, 2)
+@retry((CommandFailed, UnexpectedBehaviour), tries=10, delay=60, backoff=2)
 def check_health_of_clusterlogging():
     """
     * Checks for ElasticSearch, curator, fluentd and kibana pods in

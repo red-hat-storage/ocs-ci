@@ -68,7 +68,7 @@ def test_fixture(request):
     create_instance()
 
 
-@retry(CommandFailed, 10, 10, 3)
+@retry(CommandFailed, tries=10, delay=10, backoff=3)
 def create_instance():
     """
     The function is used to create instance for
@@ -130,7 +130,7 @@ class Test_openshift_logging_on_ocs(E2ETest):
         helpers.wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
         return pod_obj, pvc_obj
 
-    @retry(ModuleNotFoundError, 10, 200, 3)
+    @retry(ModuleNotFoundError, tries=10, delay=200, backoff=3)
     def validate_project_exists(self, pvc_obj):
         """
         This function checks whether the new project exists in the
