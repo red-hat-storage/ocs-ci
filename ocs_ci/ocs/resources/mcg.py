@@ -255,7 +255,7 @@ class MCG(object):
             return bucket_data, bucket_data_reduced
 
         try:
-            for total_size, total_reduced in TimeoutSampler(120, 5, _retrieve_reduction_data):
+            for total_size, total_reduced in TimeoutSampler(140, 5, _retrieve_reduction_data):
                 if total_size - total_reduced > 80000000:
                     logger.info(
                         'Data reduced:' + str(total_size - total_reduced)
