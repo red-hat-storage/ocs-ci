@@ -713,9 +713,7 @@ def get_images(data, images=None):
     if images is None:
         images = dict()
     data_type = type(data)
-    if data_type not in (dict, list):
-        return images
-    elif data_type == dict:
+    if data_type == dict:
         # Check if we have those keys: 'name' and 'value' in the data dict.
         # If yes and the value ends with '_IMAGE' we found the image.
         if set(("name", "value")) <= data.keys() and (
@@ -752,9 +750,9 @@ def verify_images_upgraded(old_images, object_data):
 
     """
     current_images = get_images(object_data)
-    not_upgraded_images = [
-        image for image in current_images.values() if image in old_images
-    ]
+    not_upgraded_images = set(
+        [image for image in current_images.values() if image in old_images]
+    )
     name = object_data['metadata']['name']
     if not_upgraded_images:
         raise NonUpgradedImagesFoundError(

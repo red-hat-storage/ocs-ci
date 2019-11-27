@@ -8,12 +8,14 @@ from ocs_ci.framework.testlib import upgrade
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
 from ocs_ci.ocs.exceptions import TimeoutException
+from ocs_ci.ocs.node import get_typed_nodes
 from ocs_ci.ocs.ocp import get_images
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.ocs import ocs_install_verification
 from ocs_ci.ocs.resources.pod import verify_pods_upgraded
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility.utils import (
     get_latest_ds_olm_tag,
     get_next_version_available_for_upgrade,
@@ -70,20 +72,29 @@ def verify_image_versions(old_images):
         old_images (set): set with old images
 
     """
+    namespace = config.ENV_DATA['cluster_namespace']
+    number_of_worker_nodes = len(get_typed_nodes())
+    storage_cluster = StorageCluster(
+        resource_name=config.ENV_DATA['storage_cluster_name'],
+        namespace=namespace
+    )
+    osd_count = storage_cluster.data['spec']['storageDeviceSets'][0]['count']
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
     verify_pods_upgraded(
         old_images, selector=constants.NOOBAA_APP_LABEL, count=2
     )
     verify_pods_upgraded(
-        old_images, selector=constants.CSI_CEPHFSPLUGIN_LABEL, count=3
+        old_images, selector=constants.CSI_CEPHFSPLUGIN_LABEL,
+        count=number_of_worker_nodes,
     )
     verify_pods_upgraded(
         old_images, selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
         count=2
     )
     verify_pods_upgraded(
-        old_images, selector=constants.CSI_RBDPLUGIN_LABEL, count=3
+        old_images, selector=constants.CSI_RBDPLUGIN_LABEL,
+        count=number_of_worker_nodes,
     )
     verify_pods_upgraded(
         old_images, selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
@@ -91,7 +102,9 @@ def verify_image_versions(old_images):
     )
     verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
     verify_pods_upgraded(old_images, selector=constants.MON_APP_LABEL, count=3)
-    verify_pods_upgraded(old_images, selector=constants.OSD_APP_LABEL, count=3)
+    verify_pods_upgraded(
+        old_images, selector=constants.OSD_APP_LABEL, count=osd_count
+    )
     verify_pods_upgraded(old_images, selector=constants.MDS_APP_LABEL, count=2)
 
 
@@ -150,4 +163,4 @@ def test_upgrade():
         pre_upgrade_images, post_upgrade_images
     )
     verify_image_versions(old_images)
-    ocs_install_verification(timeout=600)
+    ocs_install_verification(timeout=600, skip_osd_distribution_check=True)
