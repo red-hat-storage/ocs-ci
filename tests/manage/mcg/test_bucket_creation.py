@@ -5,7 +5,8 @@ import botocore
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1, tier2, tier3, noobaa_cli_required, filter_insecure_request_warning, acceptance
+    tier1, tier2, tier3, noobaa_cli_required,
+    filter_insecure_request_warning, acceptance
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
