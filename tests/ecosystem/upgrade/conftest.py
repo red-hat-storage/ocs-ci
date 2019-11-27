@@ -30,20 +30,9 @@ def create_pods(
     Return:
         list: List of generated pods
     """
-    # TODO(fbalak): Use proper constants after
-    # https://github.com/red-hat-storage/ocs-ci/issues/1056
-    # is resolved
-    if interface == constants.CEPHBLOCKPOOL:
-        sc_name = 'ocs-storagecluster-ceph-rbd'
-    elif interface == constants.CEPHFILESYSTEM:
-        sc_name = 'ocs-storagecluster-cephfs'
-    else:
-        raise AttributeError(f"Interface '{interface}' is invalid")
-
     log.info(
         f"Creating {count} pods via {interface} using {access_mode}"
         f" access mode and {sc_name} storageclass")
-    metadata = {'name': sc_name}
     pvcs = [
         pvc_factory(
             storageclass=storageclass,
@@ -70,6 +59,10 @@ def default_storageclasses(request, teardown_factory_session):
         constants.RECLAIM_POLICY_DELETE: [],
         constants.RECLAIM_POLICY_RETAIN: []
     }
+
+    # TODO(fbalak): Use proper constants after
+    # https://github.com/red-hat-storage/ocs-ci/issues/1056
+    # is resolved
     for sc_name in (
         'ocs-storagecluster-ceph-rbd',
         'ocs-storagecluster-cephfs'
