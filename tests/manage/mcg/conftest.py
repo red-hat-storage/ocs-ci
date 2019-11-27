@@ -174,7 +174,7 @@ def multiregion_resources(request, mcg_obj):
             mcg_obj.send_rpc_query('pool_api', 'delete_pool', {'name': backingstore.name})
 
         for aws_bucket_name in aws_buckets:
-            mcg_obj.toggle_bucket_readwrite(aws_bucket_name, block=False)
+            mcg_obj.toggle_aws_bucket_readwrite(aws_bucket_name, block=False)
             for _ in range(10):
                 try:
                     mcg_obj.aws_s3_resource.Bucket(aws_bucket_name).objects.all().delete()
@@ -206,8 +206,8 @@ def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
         'region': f'us-east-2'
     }
     # Create target buckets for them
-    mcg_obj.create_new_backingstore_bucket(backingstore1)
-    mcg_obj.create_new_backingstore_bucket(backingstore2)
+    mcg_obj.create_new_backingstore_aws_bucket(backingstore1)
+    mcg_obj.create_new_backingstore_aws_bucket(backingstore2)
     aws_buckets.extend((backingstore1['name'], backingstore2['name']))
     # Create a backing store secret
     backingstore_secret = mcg_obj.create_aws_backingstore_secret(backingstore1['name'] + 'secret')

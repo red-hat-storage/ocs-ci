@@ -86,7 +86,7 @@ class TestMultiRegion:
         mcg_obj.check_if_mirroring_is_done(bucket_name)
 
         # Bring bucket A down
-        mcg_obj.toggle_bucket_readwrite(backingstore1['name'])
+        mcg_obj.toggle_aws_bucket_readwrite(backingstore1['name'])
         mcg_obj.check_backingstore_state('backing-store-' + backingstore1['name'], BS_AUTH_FAILED)
 
         # Verify integrity of B
@@ -105,9 +105,9 @@ class TestMultiRegion:
 
         # Bring B down, bring A up
         logger.info('Blocking bucket B')
-        mcg_obj.toggle_bucket_readwrite(backingstore2['name'])
+        mcg_obj.toggle_aws_bucket_readwrite(backingstore2['name'])
         logger.info('Freeing bucket A')
-        mcg_obj.toggle_bucket_readwrite(backingstore1['name'], block=False)
+        mcg_obj.toggle_aws_bucket_readwrite(backingstore1['name'], block=False)
         mcg_obj.check_backingstore_state('backing-store-' + backingstore1['name'], BS_OPTIMAL)
         mcg_obj.check_backingstore_state('backing-store-' + backingstore2['name'], BS_AUTH_FAILED)
 
@@ -122,5 +122,5 @@ class TestMultiRegion:
                 result_object_path=f'{local_temp_path}/{obj}', awscli_pod=awscli_pod
             ), 'Checksum comparision between original and result object failed'
         # Bring B up
-        mcg_obj.toggle_bucket_readwrite(backingstore2['name'], block=False)
+        mcg_obj.toggle_aws_bucket_readwrite(backingstore2['name'], block=False)
         mcg_obj.check_backingstore_state('backing-store-' + backingstore2['name'], BS_OPTIMAL)

@@ -385,7 +385,7 @@ class MCG(object):
             logger.error(f'Could not create connection {conn_name}')
             assert False
 
-    def create_new_backingstore_bucket(self, backingstore_info):
+    def create_new_backingstore_aws_bucket(self, backingstore_info):
         """
         Creates an S3 target bucket for NooBaa to use as a backing store
 
@@ -469,7 +469,7 @@ class MCG(object):
         tiers['placement'] = placement
         return create_resource(**bc_data)
 
-    def toggle_bucket_readwrite(self, bucketname, block=True):
+    def toggle_aws_bucket_readwrite(self, bucketname, block=True):
         """
         Toggles a bucket's IO using a bucket policy
 
