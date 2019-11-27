@@ -291,18 +291,23 @@ class AWSUPI(AWSBase):
             upi_env_vars = {
                 'INSTANCE_NAME_PREFIX': config.ENV_DATA['cluster_name'],
                 'AWS_REGION': config.ENV_DATA['region'],
-                'rhcos_ami': config.ENV_DATA['rhcos_ami'],
+                'rhcos_ami': config.ENV_DATA.get('rhcos_ami'),
                 'route53_domain_name': config.ENV_DATA['base_domain'],
                 'vm_type_masters': config.ENV_DATA['master_instance_type'],
                 'vm_type_workers': config.ENV_DATA['worker_instance_type'],
-                'num_workers': str(config.ENV_DATA['worker_replicas'])
+                'num_workers': str(config.ENV_DATA['worker_replicas']),
+                'AVAILABILITY_ZONE_COUNT': str(config.ENV_DATA.get(
+                    'availability_zone_count', ''
+                ))
             }
             for key, value in upi_env_vars.items():
-                os.environ[key] = value
+                if value:
+                    os.environ[key] = value
 
             # ensure environment variables have been set correctly
             for key, value in upi_env_vars.items():
-                assert os.getenv(key) == value, f"{os.getenv(key)} != {value}"
+                if value:
+                    assert os.getenv(key) == value
 
             # git clone repo from openshift-qe repo
             clone_repo(
@@ -355,7 +360,7 @@ class AWSUPI(AWSBase):
 
             with open(f"./{constants.UPI_INSTALL_SCRIPT}", "r") as fd:
                 buf = fd.read()
-            data = buf.replace("openshift-qe-upi", "ocs-qe-upi")
+            data = buf.replace("openshift-qe-upi-1", "ocs-qe-upi")
             with open(f"./{constants.UPI_INSTALL_SCRIPT}", "w") as fd:
                 fd.write(data)
 
