@@ -854,7 +854,7 @@ def delete_pods(pod_objs, wait=True):
 
     """
     for pod in pod_objs:
-        pod.delete()
+        pod.delete(wait=wait)
 
 
 def validate_pods_are_respinned_and_running_state(pod_objs_list):
