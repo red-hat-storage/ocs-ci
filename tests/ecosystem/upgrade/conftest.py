@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.ocs import constants, resources
 
 log = logging.getLogger(__name__)
