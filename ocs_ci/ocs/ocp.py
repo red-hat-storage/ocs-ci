@@ -366,8 +366,8 @@ class OCP(object):
         return token
 
     def wait_for_resource(
-        self, condition, resource_name='', column='STATUS', selector=None, 
-        resource_count=0,timeout=60, sleep=3
+        self, condition, resource_name='', column='STATUS', selector=None,
+        resource_count=0, timeout=60, sleep=3
     ):
         """
         Wait for a resource to reach to a desired condition
