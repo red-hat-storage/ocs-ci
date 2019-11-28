@@ -528,7 +528,7 @@ class OCP(object):
 
         return resource_info[column_index]
 
-def get_resource_status(self, resource_name):
+    def get_resource_status(self, resource_name):
         """
         Get the resource STATUS column based on:
         'oc get <resource_kind> <resource_name>' command
