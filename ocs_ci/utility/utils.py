@@ -15,17 +15,20 @@ import yaml
 import re
 import smtplib
 
-from ocs_ci.ocs.exceptions import CephHealthException
 from ocs_ci.ocs.exceptions import (
-    CommandFailed, UnsupportedOSType, TimeoutExpiredError,
-    TagNotFoundException, UnavailableBuildException,
+    CephHealthException,
+    CommandFailed,
+    TagNotFoundException,
+    TimeoutException,
+    TimeoutExpiredError,
+    UnavailableBuildException,
+    UnsupportedOSType,
 )
 from ocs_ci.framework import config
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from ocs_ci.ocs import constants
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.constants import OPERATOR_CATALOG_SOURCE_NAME
 from bs4 import BeautifulSoup
 from paramiko import SSHClient, AutoAddPolicy
 
@@ -938,7 +941,7 @@ def get_ocs_build_number():
 
     build_num = ""
     ocs_catalog = CatalogSource(
-        resource_name=OPERATOR_CATALOG_SOURCE_NAME,
+        resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
         namespace="openshift-marketplace"
     )
     if config.REPORTING['us_ds'] == 'DS':
@@ -1238,7 +1241,7 @@ def clone_repo(url, location, branch='master', to_checkout=None):
         run_cmd(f"git checkout {to_checkout}", cwd=location)
 
 
-def get_latest_ds_olm_tag(upgrade=False):
+def get_latest_ds_olm_tag(upgrade=False, latest_tag='latest'):
     """
     This function returns latest tag of OCS downstream registry or one before
     latest if upgrade parameter is True
@@ -1246,6 +1249,7 @@ def get_latest_ds_olm_tag(upgrade=False):
     Args:
         upgrade (str): If True then it returns one version of the build before
             the latest.
+        latest_tag (str): Tag of the latest build ('latest' or 'latest-stable')
 
     Returns:
         str: latest tag for downstream image from quay registry
@@ -1255,22 +1259,34 @@ def get_latest_ds_olm_tag(upgrade=False):
 
     """
     _req = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=3)
+        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=20)
     )
     latest_image = None
     tags = _req.json()['tags']
     for tag in tags:
-        if tag['name'] == 'latest':
+        if tag['name'] == latest_tag:
             latest_image = tag['image_id']
             break
     if not latest_image:
         raise TagNotFoundException(f"Couldn't find latest tag!")
+    latest_tag_found = False
     for tag in tags:
         if not upgrade:
-            if tag['name'] != 'latest' and tag['image_id'] == latest_image:
+            if (
+                tag['name'] not in constants.LATEST_TAGS
+                and tag['image_id'] == latest_image
+            ):
                 return tag['name']
         if upgrade:
-            if tag['name'] != 'latest' and tag['image_id'] != latest_image:
+            if not latest_tag_found and tag['name'] == latest_tag:
+                latest_tag_found = True
+                continue
+            if not latest_tag_found:
+                continue
+            if (
+                tag['name'] not in constants.LATEST_TAGS
+                and tag['image_id'] != latest_image
+            ):
                 return tag['name']
     raise TagNotFoundException(f"Couldn't find any desired tag!")
 
@@ -1294,17 +1310,21 @@ def get_next_version_available_for_upgrade(current_tag):
     req = requests.get(
         constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=100)
     )
-    if current_tag == 'latest':
-        return 'latest'
+    if current_tag in constants.LATEST_TAGS:
+        return current_tag
     tags = req.json()['tags']
+    current_tag_index = None
     for index, tag in enumerate(tags):
         if tag['name'] == current_tag:
             if index < 2:
                 raise TagNotFoundException(f"Couldn't find tag for upgrade!")
-            if tags[index - 1]['name'] != 'latest':
-                return tags[index - 1]['name']
-            else:
-                return tags[index - 2]['name']
+            current_tag_index = index
+            break
+    sliced_reversed_tags = tags[:current_tag_index]
+    sliced_reversed_tags.reverse()
+    for tag in sliced_reversed_tags:
+        if tag['name'] not in constants.LATEST_TAGS:
+            return tag['name']
     raise TagNotFoundException(f"Couldn't find any tag!")
 
 
@@ -1454,3 +1474,24 @@ def create_rhelpod(namespace, pod_name):
     )
     helpers.wait_for_resource_state(rhelpod_obj, constants.STATUS_RUNNING)
     return rhelpod_obj
+
+
+def check_timeout_reached(start_time, timeout, err_msg=None):
+    """
+    Check if timeout reached and if so raise the exception.
+
+    Args:
+        start_time (time): Star time of the operation.
+        timeout (int): Timeout in seconds.
+        err_msg (str): Error message for the exception.
+
+    Raises:
+        TimeoutException: In case the timeout reached.
+
+    """
+    msg = f"Timeout {timeout} reached!"
+    if err_msg:
+        msg += " Error: {err_msg}"
+
+    if timeout < (time.time() - start_time):
+        raise TimeoutException(msg)

@@ -152,17 +152,21 @@ class OCS(object):
         utils.delete_file(self.temp_yaml.name)
 
 
-def ocs_install_verification(timeout=600):
+def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
     """
     Perform steps necessary to verify a successful OCS installation
 
     Args:
         timeout (int): Number of seconds for timeout which will be used in the
             checks used in this function.
+        skip_osd_distribution_check (bool): If true skip the check for osd
+            distribution.
 
     """
-    log.info("Verifying OCS installation")
+    from ocs_ci.ocs.node import get_typed_nodes
+    number_of_worker_nodes = len(get_typed_nodes())
     namespace = config.ENV_DATA['cluster_namespace']
+    log.info("Verifying OCS installation")
 
     # Verify OCS CSV is in Succeeded phase
     log.info("verifying ocs csv")
@@ -177,20 +181,17 @@ def ocs_install_verification(timeout=600):
     ocs_csv.wait_for_phase(phase="Succeeded", timeout=timeout)
 
     # Verify OCS Cluster Service (ocs-storagecluster) is Ready
-    log.info("Verifying OCS Cluster service")
-    storage_clusters = StorageCluster(namespace=namespace)
-    for item in storage_clusters.get()['items']:
-
-        storage_cluster_name = item['metadata']['name']
-        storage_cluster = StorageCluster(
-            resource_name=storage_cluster_name, namespace=namespace
-        )
-        log.info("Checking status of %s", storage_cluster_name)
-        log.info(
-            f"Check if StorageCluster: {storage_cluster_name} is in"
-            f"Succeeded phase"
-        )
-        storage_cluster.wait_for_phase(phase='Ready', timeout=timeout)
+    storage_cluster_name = config.ENV_DATA['storage_cluster_name']
+    log.info("Verifying status of storage cluster: %s", storage_cluster_name)
+    storage_cluster = StorageCluster(
+        resource_name=storage_cluster_name,
+        namespace=namespace,
+    )
+    log.info(
+        f"Check if StorageCluster: {storage_cluster_name} is in"
+        f"Succeeded phase"
+    )
+    storage_cluster.wait_for_phase(phase='Ready', timeout=timeout)
 
     # Verify pods in running state and proper counts
     log.info("Verifying pod states and counts")
@@ -227,7 +228,7 @@ def ocs_install_verification(timeout=600):
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
         selector=constants.CSI_CEPHFSPLUGIN_LABEL,
-        resource_count=3,
+        resource_count=number_of_worker_nodes,
         timeout=timeout
     )
     # csi-cephfsplugin-provisioner
@@ -241,7 +242,7 @@ def ocs_install_verification(timeout=600):
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
         selector=constants.CSI_RBDPLUGIN_LABEL,
-        resource_count=3,
+        resource_count=number_of_worker_nodes,
         timeout=timeout
     )
     # csi-rbdplugin-profisioner
@@ -252,10 +253,11 @@ def ocs_install_verification(timeout=600):
         timeout=timeout
     )
     # osds
+    osd_count = storage_cluster.data['spec']['storageDeviceSets'][0]['count']
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
         selector=constants.OSD_APP_LABEL,
-        resource_count=3,
+        resource_count=osd_count,
         timeout=timeout
     )
     # mgr
@@ -293,11 +295,12 @@ def ocs_install_verification(timeout=600):
     assert required_storage_classes.issubset(storage_class_names)
 
     # Verify OSD's are distributed
-    log.info("Verifying OSD's are distributed evenly across worker nodes")
-    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
-    osds = ocp_pod_obj.get(selector=constants.OSD_APP_LABEL)['items']
-    node_names = [osd['spec']['nodeName'] for osd in osds]
-    for node in node_names:
-        assert not node_names.count(node) > 1, (
-            "OSD's are not distributed evenly across worker nodes"
-        )
+    if not skip_osd_distribution_check:
+        log.info("Verifying OSD's are distributed evenly across worker nodes")
+        ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+        osds = ocp_pod_obj.get(selector=constants.OSD_APP_LABEL)['items']
+        node_names = [osd['spec']['nodeName'] for osd in osds]
+        for node in node_names:
+            assert not node_names.count(node) > 1, (
+                "OSD's are not distributed evenly across worker nodes"
+            )
