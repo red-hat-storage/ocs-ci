@@ -11,25 +11,26 @@ log = logging.getLogger(__name__)
 
 @order_pre_upgrade
 @ignore_leftovers
-def test_pre_upgrade_pods(pre_upgrade_pods):
+def test_pre_upgrade_pods(pre_upgrade_block_pods, pre_upgrade_filesystem_pods):
     """
     Confirm that there are pods created before upgrade.
     """
-    assert pre_upgrade_pods
+    assert pre_upgrade_block_pods
+    assert pre_upgrade_filesystem_pods
 
 
 @order_post_upgrade
 @pytest.mark.polarion_id("OCS-1862")
 def test_pod_io(
-    pre_upgrade_pods,
-    post_upgrade_pods
+    pre_upgrade_filesystem_pods,
+    post_upgrade_filesystem_pods
 ):
     """
     Test IO on multiple pods at the same time.
     """
-    log.info(f"Pods created before upgrade: {pre_upgrade_pods}")
-    log.info(f"Pods created after upgrade: {post_upgrade_pods}")
-    pods = pre_upgrade_pods + post_upgrade_pods
+    log.info(f"Pods created before upgrade: {pre_upgrade_filesystem_pods}")
+    log.info(f"Pods created after upgrade: {post_upgrade_filesystem_pods}")
+    pods = pre_upgrade_filesystem_pods + post_upgrade_filesystem_pods
 
     # Run IOs on all pods
     with ThreadPoolExecutor() as executor:
