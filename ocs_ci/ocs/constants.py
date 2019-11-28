@@ -63,6 +63,10 @@ STATUS_BOUND = 'Bound'
 STATUS_RELEASED = 'Released'
 STATUS_COMPLETED = 'Completed'
 
+# NooBaa statuses
+BS_AUTH_FAILED = 'AUTH_FAILED'
+BS_OPTIMAL = 'OPTIMAL'
+
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
@@ -189,6 +193,22 @@ CSI_PVC_YAML = os.path.join(
 
 MCG_OBC_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml"
+)
+
+MCG_AWS_CREDS_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "AwsCreds.yaml"
+)
+
+MCG_BACKINGSTORE_SECRET_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "BackingStoreSecret.yaml"
+)
+
+MCG_BACKINGSTORE_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "BackingStore.yaml"
+)
+
+MCG_BUCKETCLASS_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "BucketClass.yaml"
 )
 
 CSI_RBD_POD_YAML = os.path.join(
