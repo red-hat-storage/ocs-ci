@@ -5,7 +5,7 @@ from ocs_ci.ocs import node, constants
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import get_all_pods
-from ocs_ci.framework.testlib import tier4, ignore_leftovers, ManageTest
+from ocs_ci.framework.testlib import tier4, ignore_leftovers, ManageTest, aws_platform_required
 from tests.sanity_helpers import Sanity
 from tests.helpers import wait_for_resource_count_change, get_admin_key
 
@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @tier4
+@aws_platform_required
 @ignore_leftovers
 class TestDetachAttachWorkerVolume(ManageTest):
     """
