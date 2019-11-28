@@ -1090,15 +1090,21 @@ def craft_s3_command(mcg_obj, cmd):
         str: The crafted command, ready to be executed on the pod
 
     """
-    base_command = (
-        f"sh -c \"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
-        f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
-        f"AWS_DEFAULT_REGION={mcg_obj.region} "
-        f"aws s3 "
-        f"--endpoint={mcg_obj.s3_endpoint} "
-        f"--no-verify-ssl "
-    )
-    string_wrapper = "\""
+    if mcg_obj:
+        base_command = (
+            f"sh -c \"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
+            f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
+            f"AWS_DEFAULT_REGION={mcg_obj.region} "
+            f"aws s3 "
+            f"--endpoint={mcg_obj.s3_endpoint} "
+            f"--no-verify-ssl "
+        )
+        string_wrapper = "\""
+    else:
+        base_command = (
+            f"aws s3 --no-verify-ssl --no-sign-request "
+        )
+        string_wrapper = ''
 
     return f"{base_command}{cmd}{string_wrapper}"
 

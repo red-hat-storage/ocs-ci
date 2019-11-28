@@ -2,8 +2,10 @@
 apiVersion: objectbucket.io/v1alpha1
 kind: ObjectBucketClaim
 metadata:
-  name: noobaa-obc
+  name: mcg-obc
   namespace: openshift-storage
 spec:
-  storageClassName: noobaa-storage-class
+  storageClassName: openshift-storage.noobaa.io
   bucketName: noobaa-obc
+  additionalConfig:
+    bucketclass: noobaa-default-bucket-class

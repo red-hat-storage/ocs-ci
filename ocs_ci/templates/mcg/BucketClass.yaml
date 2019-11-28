@@ -1,0 +1,14 @@
+apiVersion: noobaa.io/v1alpha1
+kind: BucketClass
+metadata:
+  name: default
+  namespace: openshift-storage
+  labels:
+    app: noobaa
+spec:
+  placementPolicy:
+    tiers:
+    - backingStores:
+      - backing-store
+      - backing-store
+      placement: Spread|Mirror
