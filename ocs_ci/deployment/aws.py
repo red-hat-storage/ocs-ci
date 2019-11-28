@@ -489,11 +489,10 @@ class AWSUPI(AWSBase):
             response = self.client.run_instances(
                 BlockDeviceMappings=[
                     {
-                        'DeviceName': '/dev/xvda',
+                        'DeviceName': config.ENV_DATA['root_disk'],
                         'Ebs': {
-
                             'DeleteOnTermination': True,
-                            'VolumeSize': 10,
+                            'VolumeSize': config.ENV_DATA['root_disk_size'],
                             'VolumeType': 'gp2'
                         },
                     },
@@ -757,8 +756,9 @@ class AWSUPI(AWSBase):
             rhel_instances (list): list of instance IDs of rhel workers
         """
         rhel_workers = []
+        worker_pattern = get_infra_id(self.cluster_path) + "*rhel-worker*"
         worker_filter = [{
-            'Name': 'tag:Name', 'Values': ['*rhel-worker*']
+            'Name': 'tag:Name', 'Values': [worker_pattern]
         }]
 
         response = self.client.describe_instances(Filters=worker_filter)
@@ -789,7 +789,6 @@ class AWSUPI(AWSBase):
             else:
                 logging.error("Some of the Instances can't be deleted")
                 raise exceptions.FailedToDeleteInstance()
-
         # Actual termination call here
         self.client.terminate_instances(
             InstanceIds=worker_list,
