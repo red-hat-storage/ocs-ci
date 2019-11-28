@@ -23,16 +23,32 @@ def test_pre_upgrade_pods(pre_upgrade_block_pods, pre_upgrade_filesystem_pods):
 @pytest.mark.polarion_id("OCS-1862")
 def test_pod_io(
     pre_upgrade_filesystem_pods,
-    post_upgrade_filesystem_pods
+    post_upgrade_filesystem_pods,
+    pre_upgrade_block_pods,
+    post_upgrade_block_pods
 ):
     """
     Test IO on multiple pods at the same time.
     """
-    log.info(f"Pods created before upgrade: {pre_upgrade_filesystem_pods}")
-    log.info(f"Pods created after upgrade: {post_upgrade_filesystem_pods}")
-    pods = pre_upgrade_filesystem_pods + post_upgrade_filesystem_pods
+    log.info(
+        f"Pods using filesystem created before upgrade: "
+        f"{pre_upgrade_filesystem_pods}"
+    )
+    log.info(
+        f"Pods using filesystem created after upgrade: "
+        f"{post_upgrade_filesystem_pods}"
+    )
+    log.info(
+        f"Pods using block device created before upgrade: "
+        f"{pre_upgrade_block_pods}"
+    )
+    log.info(
+        f"Pods using block device created after upgrade: "
+        f"{post_upgrade_block_pods}"
+    )
 
-    # Run IOs on all pods
+    # Run IOs on filesystem pods
+    pods = pre_upgrade_filesystem_pods + post_upgrade_filesystem_pods
     with ThreadPoolExecutor() as executor:
         for pod in pods:
             log.info(f"Running fio on {pod.name}")
@@ -40,6 +56,26 @@ def test_pod_io(
                 pod.run_io(
                     storage_type='fs',
                     size='1GB',
+                    runtime=30,
+                )
+            )
+    for pod in pods:
+        log.info(f"Waiting for results from {pod.name}")
+        fio_result = pod.get_fio_results()
+        reads = fio_result.get('jobs')[0].get('read').get('iops')
+        writes = fio_result.get('jobs')[0].get('write').get('iops')
+        assert reads, f"There are no reads from pod {pod.name}"
+        assert writes, f"There are no writes from pod {pod.name}"
+
+    # Run IOs on block device pods
+    pods = pre_upgrade_block_pods + post_upgrade_block_pods
+    with ThreadPoolExecutor() as executor:
+        for pod in pods:
+            log.info(f"Running fio on {pod.name}")
+            executor.submit(
+                pod.run_io(
+                    storage_type='block',
+                    size='512GB',
                     runtime=30,
                 )
             )
