@@ -301,6 +301,10 @@ OLM_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "deploy-with-olm.yaml"
 )
 
+SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml"
+)
+
 STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
 )

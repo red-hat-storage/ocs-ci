@@ -19,6 +19,7 @@ from ocs_ci.ocs.monitoring import (
 )
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
+from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
@@ -192,7 +193,6 @@ class Deployment(object):
             constants.OLM_YAML, multi_document=True
         )
         olm_yaml_data = []
-        subscription_yaml_data = []
         cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
         # TODO: Once needed we can also set the channel for the subscription
         # from config.DEPLOYMENT.get('ocs_csv_channel')
@@ -207,9 +207,6 @@ class Deployment(object):
                 yaml_doc['spec']['image'] = (
                     f"{image}:{image_tag if image_tag else 'latest'}"
                 )
-            if yaml_doc.get('kind') == 'Subscription':
-                subscription_yaml_data.append(yaml_doc)
-                continue
             olm_yaml_data.append(yaml_doc)
         olm_manifest = tempfile.NamedTemporaryFile(
             mode='w+', prefix='olm_manifest', delete=False
@@ -217,6 +214,19 @@ class Deployment(object):
         templating.dump_data_to_temp_yaml(
             olm_yaml_data, olm_manifest.name
         )
+        subscription_yaml_data = templating.load_yaml(
+            constants.SUBSCRIPTION_YAML
+        )
+        subscription_plan_approval = config.DEPLOYMENT.get(
+            'subscription_plan_approval'
+        )
+        if subscription_plan_approval:
+            subscription_yaml_data['spec']['installPlanApproval'] = (
+                subscription_plan_approval
+            )
+        channel = config.DEPLOYMENT.get('ocs_csv_channel')
+        if channel:
+            subscription_yaml_data['spec']['channel'] = channel
         subscription_manifest = tempfile.NamedTemporaryFile(
             mode='w+', prefix='subscription_manifest', delete=False
         )
@@ -250,6 +260,11 @@ class Deployment(object):
         package_manifest.wait_for_resource(timeout=300)
         channel = config.DEPLOYMENT.get('ocs_csv_channel')
         csv_name = package_manifest.get_current_csv(channel=channel)
+        subscription_plan_approval = config.DEPLOYMENT.get(
+            'subscription_plan_approval'
+        )
+        if subscription_plan_approval == 'Manual':
+            wait_for_install_plan_and_approve(self.namespace)
         csv = CSV(resource_name=csv_name, namespace=self.namespace)
         csv.wait_for_phase("Succeeded", timeout=720)
         cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)

@@ -54,6 +54,8 @@ DEPLOYMENT:
   ssh_key_private: "~/.ssh/openshift-dev.pem"
   force_deploy_multiple_clusters: False
   allow_lower_instance_requirements: true
+  # For manual subscription plan (for manual approve of upgrade set bellow)
+  # subscription_plan_approval: "Manual"
 
 # Section for reporting configuration
 REPORTING:
