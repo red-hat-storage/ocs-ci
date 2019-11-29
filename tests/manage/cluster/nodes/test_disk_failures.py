@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 
 
 @tier4
-@aws_platform_required
 @ignore_leftovers
 class TestDetachAttachWorkerVolume(ManageTest):
     """
