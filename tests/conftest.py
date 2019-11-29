@@ -245,6 +245,15 @@ def project_factory(request):
     return project_factory_fixture(request)
 
 
+@pytest.fixture()
+def project(project_factory):
+    """
+    This fixture creates a single project instance.
+    """
+    project_obj = project_factory()
+    return project_obj
+
+
 def project_factory_fixture(request):
     """
     Create a new project factory.
