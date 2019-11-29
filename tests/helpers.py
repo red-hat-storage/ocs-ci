@@ -1509,6 +1509,7 @@ def get_failure_domin():
     """
     ct_pod = pod.get_ceph_tools_pod()
     out = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd crush rule dump", format='json')
+    assert out, "Failed to get cmd output"
     for crush_rule in out:
         if constants.CEPHBLOCKPOOL.lower() in crush_rule.get("rule_name"):
             for steps in crush_rule.get("steps"):
