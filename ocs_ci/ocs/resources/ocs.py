@@ -274,6 +274,15 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
         timeout=timeout
     )
 
+    # rgw check only for VmWare
+    if config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
+        assert pod.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=constants.RGW_APP_LABEL,
+            resource_count=1,
+            timeout=timeout
+        )
+
     # Verify ceph health
     log.info("Verifying ceph health")
     assert utils.ceph_health_check(namespace=namespace)

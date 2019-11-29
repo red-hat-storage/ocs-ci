@@ -106,6 +106,10 @@ def verify_image_versions(old_images):
         old_images, selector=constants.OSD_APP_LABEL, count=osd_count
     )
     verify_pods_upgraded(old_images, selector=constants.MDS_APP_LABEL, count=2)
+    if config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
+        verify_pods_upgraded(
+            old_images, selector=constants.RGW_APP_LABEL, count=1
+        )
 
 
 @upgrade
