@@ -4,6 +4,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config
 from ocs_ci.utility import aws
+from ocs_ci.utility import vsphere
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
@@ -31,6 +32,9 @@ class NodesBase(object):
     Should be inherited by specific platform classes
 
     """
+    def __init__(self):
+        self.cluster_nodes = get_node_objs()
+
     def get_data_volumes(self):
         raise NotImplementedError(
             "Get data volume functionality is not implemented"
@@ -41,17 +45,17 @@ class NodesBase(object):
             "Get node by attached volume functionality is not implemented"
         )
 
-    def stop_nodes(self, nodes, wait=True):
+    def stop_nodes(self, nodes):
         raise NotImplementedError(
             "Stop nodes functionality is not implemented"
         )
 
-    def start_nodes(self, nodes, wait=True):
+    def start_nodes(self, nodes):
         raise NotImplementedError(
             "Start nodes functionality is not implemented"
         )
 
-    def restart_nodes(self, nodes):
+    def restart_nodes(self, nodes, force=True):
         raise NotImplementedError(
             "Restart nodes functionality is not implemented"
         )
@@ -82,6 +86,33 @@ class VMWareNodes(NodesBase):
     VMWare nodes class
 
     """
+    def __init__(self):
+        super(VMWareNodes, self).__init__()
+        self.cluster_name = config.ENV_DATA.get("cluster_name")
+        self.server = config.ENV_DATA['vsphere_server']
+        self.user = config.ENV_DATA['vsphere_user']
+        self.password = config.ENV_DATA['vsphere_password']
+        self.cluster = config.ENV_DATA['vsphere_cluster']
+        self.datacenter = config.ENV_DATA['vsphere_datacenter']
+        self.vsphere = vsphere.VSPHERE(self.server, self.user, self.password)
+
+    def get_vms(self, nodes):
+        """
+        Get vSphere vm objects list
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+
+        Returns:
+            list: vSphere vm objects list
+
+        """
+        vms_in_pool = self.vsphere.get_all_vms_in_pool(
+            self.cluster_name, self.datacenter, self.cluster
+        )
+        node_names = [node.get().get('metadata').get('name') for node in nodes]
+        return [vm for vm in vms_in_pool if vm.name in node_names]
+
     def get_data_volumes(self):
         raise NotImplementedError(
             "Get data volume functionality is not implemented for VMWare"
@@ -93,20 +124,49 @@ class VMWareNodes(NodesBase):
             "implemented for VMWare"
         )
 
-    def stop_nodes(self, nodes, wait=True):
-        raise NotImplementedError(
-            "Stop nodes functionality is not implemented for VMWare"
+    def stop_nodes(self, nodes, force=True):
+        """
+        Stop vSphere VMs
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force VM stop, False otherwise
+
+        """
+        vms = self.get_vms(nodes)
+        assert vms, (
+            f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
         )
+        self.vsphere.stop_vms(vms, force=force)
 
     def start_nodes(self, nodes, wait=True):
-        raise NotImplementedError(
-            "Start nodes functionality is not implemented for VMWare"
-        )
+        """
+        Start vSphere VMs
 
-    def restart_nodes(self, nodes):
-        raise NotImplementedError(
-            "Restart nodes functionality is not implemented for VMWare"
+        Args:
+            nodes (list): The OCS objects of the nodes
+
+        """
+        vms = self.get_vms(nodes)
+        assert vms, (
+            f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
         )
+        self.vsphere.start_vms(vms)
+
+    def restart_nodes(self, nodes, force=True):
+        """
+        Restart vSphere VMs
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force VM stop, False otherwise
+
+        """
+        vms = self.get_vms(nodes)
+        assert vms, (
+            f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
+        )
+        self.vsphere.restart_vms(vms, force=force)
 
     def detach_volume(self, node):
         raise NotImplementedError(
@@ -124,9 +184,21 @@ class VMWareNodes(NodesBase):
         )
 
     def restart_nodes_teardown(self):
-        raise NotImplementedError(
-            "Restart nodes teardown functionality is not implemented for VMWare"
+        """
+        Make sure all VMs are up by the end of the test
+
+        """
+        vms = self.get_vms(self.cluster_nodes)
+        assert vms, (
+            f"Failed to get VM objects for nodes {[n.name for n in self.cluster_nodes]}"
         )
+        stopped_vms = [
+            vm for vm in vms if self.vsphere.get_vm_power_status(vm) == constants.VM_POWERED_OFF
+        ]
+        # Start the VMs
+        if stopped_vms:
+            logger.info(f"The following VMs are powered off: {stopped_vms}")
+            self.vsphere.start_vms(stopped_vms)
 
 
 class AWSNodes(NodesBase):
@@ -135,6 +207,7 @@ class AWSNodes(NodesBase):
 
     """
     def __init__(self):
+        super(AWSNodes, self).__init__()
         self.aws = aws.AWS()
 
     def get_ec2_instances(self, nodes):
@@ -310,13 +383,10 @@ class AWSNodes(NodesBase):
         Make sure all EC2 instances are up. To be used in the test teardown
 
         """
-        # Get all cluster nodes objects
-        ocp_nodes = get_node_objs()
-
         # Get the cluster nodes ec2 instances
-        ec2_instances = self.get_ec2_instances(ocp_nodes)
+        ec2_instances = self.get_ec2_instances(self.cluster_nodes)
         assert ec2_instances, (
-            f"Failed to get ec2 instances for node {[n.name for n in ocp_nodes]}"
+            f"Failed to get ec2 instances for nodes {[n.name for n in self.cluster_nodes]}"
         )
 
         logger.info(

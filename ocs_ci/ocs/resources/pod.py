@@ -396,7 +396,6 @@ def get_ceph_tools_pod():
     ocp_pod_obj = OCP(
         kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
     )
-
     ct_pod_items = ocp_pod_obj.get(
         selector='app=rook-ceph-tools'
     )['items']
@@ -406,6 +405,7 @@ def get_ceph_tools_pod():
         ct_pod_items = ocp_pod_obj.get(
             selector='app=rook-ceph-tools'
         )['items']
+
     assert ct_pod_items, "No Ceph tools pod found"
 
     # In the case of node failure, the CT pod will be recreated with the old
