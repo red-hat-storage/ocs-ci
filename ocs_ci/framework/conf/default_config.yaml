@@ -45,7 +45,7 @@ DEPLOYMENT:
   # ocs_csv_channel: "alpha"
   # you can overwrite the image for ocs operator catalog source by following parameter:
   # ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:4.2-32.9b6c93e.master"
-  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest"
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:4.2-rc1"
   ocs_operator_nodes_to_label: 3
   # This is described as a WA for minimal configuration 3/3 worker/master
   # nodes. See: https://github.com/openshift/ocs-operator
