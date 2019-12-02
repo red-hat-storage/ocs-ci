@@ -112,3 +112,7 @@ class FailedToAddNodeException(Exception):
 
 class FailedToRemoveNodeException(Exception):
     pass
+
+
+class FailedToDeleteInstance(Exception):
+    pass
