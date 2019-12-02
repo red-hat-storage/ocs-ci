@@ -76,4 +76,4 @@ def rm_object_recursive(podobj, target, mcg_obj, option=''):
         out_yaml_format=False,
         secrets=[mcg_obj.access_key_id, mcg_obj.access_key,
                  mcg_obj.s3_endpoint]
-        )
+    )
