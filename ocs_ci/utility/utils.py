@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import os
@@ -5,8 +6,10 @@ import platform
 import random
 import shlex
 import string
+import select
 import subprocess
 import time
+import timeit
 from copy import deepcopy
 from shutil import which
 
@@ -383,7 +386,6 @@ def run_cmd(cmd, secrets=None, timeout=600, **kwargs):
 
     Args:
         cmd (str): command to run
-
         secrets (list): A list of secrets to be masked with asterisks
             This kwarg is popped in order to not interfere with
             subprocess.run(``**kwargs``)
@@ -397,27 +399,43 @@ def run_cmd(cmd, secrets=None, timeout=600, **kwargs):
         (str) Decoded stdout of command
 
     """
+    full_output = io.StringIO()
     masked_cmd = mask_secrets(cmd, secrets)
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str):
         cmd = shlex.split(cmd)
-    r = subprocess.run(
+    start_time = timeit.default_timer()
+    with subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        stdin=subprocess.PIPE,
-        timeout=timeout,
+        universal_newlines=True,
         **kwargs
-    )
-    log.debug(f"Command output: {r.stdout.decode()}")
-    if r.stderr and not r.returncode:
-        log.warning(f"Command warning: {mask_secrets(r.stderr.decode(), secrets)}")
-    if r.returncode:
-        raise CommandFailed(
-            f"Error during execution of command: {masked_cmd}."
-            f"\nError is {mask_secrets(r.stderr.decode(), secrets)}"
-        )
-    return mask_secrets(r.stdout.decode(), secrets)
+    ) as p:
+        while True:
+            now = timeit.default_timer()
+            if (now - start_time) > timeout:
+                raise subprocess.TimeoutExpired(masked_cmd, timeout)
+            reads = [p.stdout.fileno(), p.stderr.fileno()]
+            ret = select.select(reads, [], [])
+            for fd in ret[0]:
+                if fd == p.stdout.fileno():
+                    read = p.stdout.readline()
+                    full_output.write(read)
+                    log.info(f"Command output: {read}")
+                if fd == p.stderr.fileno():
+                    read = p.stderr.readline()
+                    full_output.write(read)
+                    log.warning(f"Command warning: {mask_secrets(read, secrets)}")
+            if p.poll() is not None:
+                break
+
+        if p.returncode:
+            raise CommandFailed(
+                f"Error during execution of command: {masked_cmd}"
+            )
+
+    return mask_secrets(full_output.getvalue(), secrets)
 
 
 def run_mcg_cmd(cmd, namespace=None):
