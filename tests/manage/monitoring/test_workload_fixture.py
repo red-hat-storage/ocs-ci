@@ -42,7 +42,6 @@ import logging
 from datetime import datetime
 
 import pytest
-import yaml
 
 from ocs_ci.utility.prometheus import PrometheusAPI
 
@@ -83,7 +82,7 @@ def test_workload_rbd(workload_storageutilization_50p_rbd):
             values.append(value)
         assert all(value == values[0] for value in values)
         osd_stat_bytes.append(values[0])
-    assert(value == osd_stat_bytes[0] for value in osd_stat_bytes)
+    assert all(value == osd_stat_bytes[0] for value in osd_stat_bytes)
     # Compute expected value of'ceph_osd_stat_bytes_used, based on percentage
     # utilized by the fixture.
     percentage = workload_storageutilization_50p_rbd['result']['target_p']
@@ -100,7 +99,7 @@ def test_workload_rbd(workload_storageutilization_50p_rbd):
             # a demonstration after all)
             logger.info(f"{dt}: {value} B")
             # checking the value, with 10% error margin in each direction
-            assert expected_value*0.90 <= value <= expected_value*1.10
+            assert expected_value * 0.90 <= value <= expected_value * 1.10
 
 
 @pytest.mark.libtest

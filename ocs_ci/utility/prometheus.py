@@ -1,7 +1,5 @@
 import base64
-import functools
 import logging
-import operator
 import os
 import requests
 import tempfile
@@ -201,8 +199,7 @@ class PrometheusAPI(object):
             'query': query,
             'start': start,
             'end': end,
-            'step': step,
-            }
+            'step': step}
         if timeout is not None:
             query_payload['timeout'] = timeout
         # Human readable summary of the query (details are logged by get
@@ -224,7 +221,8 @@ class PrometheusAPI(object):
             sizes = []
             for metric in content["data"]["result"]:
                 sizes.append(len(metric["values"]))
-            assert all(size == sizes[0] for size in sizes)
+            msg = "Metric sample series doesn't have the same size."
+            assert all(size == sizes[0] for size in sizes), msg
             # Check that we don't have holes in the response. If this fails,
             # our Prometheus instance is missing some part of the data we are
             # asking it about. For positive test cases, this is most likely a
