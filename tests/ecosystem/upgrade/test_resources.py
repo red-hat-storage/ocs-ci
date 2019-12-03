@@ -11,12 +11,11 @@ log = logging.getLogger(__name__)
 
 @order_pre_upgrade
 @ignore_leftovers
-def test_pre_upgrade_pods(pre_upgrade_block_pods, pre_upgrade_filesystem_pods):
+def test_start_pre_upgrade_pod_io(pre_upgrade_pods_running_io):
     """
     Confirm that there are pods created before upgrade.
     """
-    assert pre_upgrade_block_pods
-    assert pre_upgrade_filesystem_pods
+    assert pre_upgrade_pods_running_io
 
 
 @order_post_upgrade
@@ -25,10 +24,12 @@ def test_pod_io(
     pre_upgrade_filesystem_pods,
     post_upgrade_filesystem_pods,
     pre_upgrade_block_pods,
-    post_upgrade_block_pods
+    post_upgrade_block_pods,
+    upgrade_fio_file
 ):
     """
-    Test IO on multiple pods at the same time.
+    Test IO on multiple pods at the same time and finish IO on pods that were
+    created before upgrade.
     """
     log.info(
         f"Pods using filesystem created before upgrade: "
@@ -47,7 +48,11 @@ def test_pod_io(
         f"{post_upgrade_block_pods}"
     )
 
+    log.warning('Stopping fio for pre upgrade pods')
+    upgrade_fio_file.write('stop')
+
     # Run IOs on filesystem pods
+    log.info('Starting fio on post upgrade fs pods')
     pods = pre_upgrade_filesystem_pods + post_upgrade_filesystem_pods
     with ThreadPoolExecutor() as executor:
         for pod in pods:
@@ -56,7 +61,7 @@ def test_pod_io(
                 pod.run_io(
                     storage_type='fs',
                     size='1GB',
-                    runtime=30,
+                    runtime=20,
                 )
             )
     for pod in pods:
@@ -68,6 +73,7 @@ def test_pod_io(
         assert writes, f"There are no writes from pod {pod.name}"
 
     # Run IOs on block device pods
+    log.info('Starting fio on post upgrade block pods')
     pods = pre_upgrade_block_pods + post_upgrade_block_pods
     with ThreadPoolExecutor() as executor:
         for pod in pods:
@@ -75,8 +81,8 @@ def test_pod_io(
             executor.submit(
                 pod.run_io(
                     storage_type='block',
-                    size='512GB',
-                    runtime=30,
+                    size='1024MB',
+                    runtime=20,
                 )
             )
     for pod in pods:

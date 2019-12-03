@@ -259,3 +259,50 @@ def post_upgrade_block_pods(
             pods.extend(rbd_pods)
 
     return pods
+
+
+@pytest.fixture(scope='session')
+def upgrade_fio_file(tmpdir):
+    """
+    File that controls the state of running fio on pods during upgrade.
+    """
+    upgrade_fio_file = tmpdir.join('upgrade_fio_status')
+    upgrade_fio_file.write('running')
+    return upgrade_fio_file
+
+
+@pytest.fixture(scope='session')
+def pre_upgrade_pods_running_io(
+    pre_upgrade_filesystem_pods,
+    pre_upgrade_block_pods,
+    upgrade_fio_file
+):
+
+    def run_fs_fio(pod):
+        log.warning(f"Running fio on fs pod {pod.name}")
+        while upgrade_fio_file.read() == 'running':
+            pod.run_io(
+                storage_type='fs',
+                size='1GB',
+            )
+            result = pod.get_fio_results()
+            assert result.get('jobs')[0].get('read').get('iops')
+            assert result.get('jobs')[0].get('write').get('iops')
+
+    def run_block_fio(pod):
+        log.warning(f"Running fio on block pod {pod.name}")
+        while upgrade_fio_file.read() == 'running':
+            pod.run_io(
+                storage_type='block',
+                size='1024MB',
+            )
+            result = pod.get_fio_results()
+            assert result.get('jobs')[0].get('read').get('iops')
+            assert result.get('jobs')[0].get('write').get('iops')
+
+    with ThreadPoolExecutor() as executor:
+        for pod in pre_upgrade_filesystem_pods:
+            executor.submit(run_fs_fio(pod))
+        for pod in pre_upgrade_block_pods:
+            executor.submit(run_block_fio(pod))
+    return pre_upgrade_filesystem_pods + pre_upgrade_block_pods
