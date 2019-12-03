@@ -49,7 +49,7 @@ def test_pod_io(
     )
 
     log.warning('Stopping fio for pre upgrade pods')
-    upgrade_fio_file.write('stop')
+    upgrade_fio_file.write_text('stop')
 
     # Run IOs on filesystem pods
     log.info('Starting fio on post upgrade fs pods')

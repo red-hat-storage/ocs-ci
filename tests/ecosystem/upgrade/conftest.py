@@ -1,8 +1,8 @@
 import logging
 
-from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.ocs import constants, resources
 import pytest
+import threading
 
 log = logging.getLogger(__name__)
 
@@ -263,12 +263,13 @@ def post_upgrade_block_pods(
 
 
 @pytest.fixture(scope='session')
-def upgrade_fio_file(tmpdir):
+def upgrade_fio_file(tmp_path_factory):
     """
     File that controls the state of running fio on pods during upgrade.
     """
-    upgrade_fio_file = tmpdir.join('upgrade_fio_status')
-    upgrade_fio_file.write('running')
+    upgrade_fio_file = tmp_path_factory.mktemp('upgrade_testing')
+    upgrade_fio_file = upgrade_fio_file.joinpath('fio_status')
+    upgrade_fio_file.write_text('running')
     return upgrade_fio_file
 
 
@@ -279,31 +280,30 @@ def pre_upgrade_pods_running_io(
     upgrade_fio_file
 ):
 
-    def run_fs_fio(pod):
-        log.warning(f"Running fio on fs pod {pod.name}")
-        while upgrade_fio_file.read() == 'running':
-            pod.run_io(
-                storage_type='fs',
-                size='1GB',
-            )
-            result = pod.get_fio_results()
-            assert result.get('jobs')[0].get('read').get('iops')
-            assert result.get('jobs')[0].get('write').get('iops')
+    def run_io_in_bg():
+        """
+        Run IO by executing FIO and deleting the file created for FIO on
+        the pod, in a while true loop. Will be running as long as
+        the upgrade_fio_file contains string 'running'.
+        """
+        while upgrade_fio_file.read_text() == 'running':
+            for pod in pre_upgrade_filesystem_pods:
+                log.warning(f"Running fio on fs pod {pod.name}")
+                pod.run_io(
+                    storage_type='fs',
+                    size='1GB'
+                )
+            for pod in pre_upgrade_block_pods:
+                log.warning(f"Running fio on block pod {pod.name}")
+                pod.run_io(
+                    storage_type='block',
+                    size='1024MB'
+                )
+            for pod in pre_upgrade_filesystem_pods + pre_upgrade_block_pods:
+                result = pod.get_fio_results()
+                assert result.get('jobs')[0].get('read').get('iops')
+                assert result.get('jobs')[0].get('write').get('iops')
 
-    def run_block_fio(pod):
-        log.warning(f"Running fio on block pod {pod.name}")
-        while upgrade_fio_file.read() == 'running':
-            pod.run_io(
-                storage_type='block',
-                size='1024MB',
-            )
-            result = pod.get_fio_results()
-            assert result.get('jobs')[0].get('read').get('iops')
-            assert result.get('jobs')[0].get('write').get('iops')
-
-    with ThreadPoolExecutor() as executor:
-        for pod in pre_upgrade_filesystem_pods:
-            executor.submit(run_fs_fio(pod))
-        for pod in pre_upgrade_block_pods:
-            executor.submit(run_block_fio(pod))
+    thread = threading.Thread(target=run_io_in_bg)
+    thread.start()
     return pre_upgrade_filesystem_pods + pre_upgrade_block_pods
