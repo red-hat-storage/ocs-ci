@@ -30,12 +30,12 @@ class TestBucketDeletion:
         argvalues=[
             pytest.param(
                 *[3, 'S3'],
-                marks=[pytest.mark.polarion_id("OCS-1299"), tier1, acceptance]
+                marks=[pytest.mark.polarion_id("OCS-1939"), tier1, acceptance]
             ),
             pytest.param(
                 *[3, 'CLI'],
                 marks=[tier1, acceptance, noobaa_cli_required,
-                       pytest.mark.polarion_id("OCS-1299")]
+                       pytest.mark.polarion_id("OCS-1940")]
             ),
             pytest.param(
                 *[3, 'OC'],
@@ -129,12 +129,12 @@ class TestBucketDeletion:
         argvalues=[
             pytest.param(
                 *['S3'],
-                marks=[pytest.mark.polarion_id("OCS-1400"), tier3]
+                marks=[pytest.mark.polarion_id("OCS-1942"), tier3]
             ),
             pytest.param(
                 *['CLI'],
                 marks=[tier3, noobaa_cli_required,
-                       pytest.mark.polarion_id("OCS-1400")]
+                       pytest.mark.polarion_id("OCS-1941")]
             ),
             pytest.param(
                 *['OC'],
