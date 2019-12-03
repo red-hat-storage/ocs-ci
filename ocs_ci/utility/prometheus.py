@@ -47,7 +47,7 @@ def check_alert_list(
     if ignore_more_occurences:
         for state in states:
             delete = False
-            for key, alert in enumerate(target_alerts):
+            for key, alert in reversed(list(enumerate(target_alerts))):
                 if alert.get('state') == state:
                     if delete:
                         d_msg = f"Ignoring {alert} as alert already appeared."
