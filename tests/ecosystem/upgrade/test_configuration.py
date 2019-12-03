@@ -46,6 +46,7 @@ def test_load_crush_map(pre_upgrade_crush_map):
 
 
 @order_post_upgrade
+@pytest.mark.polarion_id('OCS-1936')
 def test_crush_map_unchanged(pre_upgrade_crush_map):
     """
     Test that CRUSH map loaded before upgrade is the same as CRUSH map after
