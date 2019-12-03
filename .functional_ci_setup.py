@@ -73,7 +73,7 @@ def write_pull_secret():
     # base64-encoded.
     try:
         secret = base64.b64decode(secret).decode()
-    except binascii.Error:
+    except (binascii.Error, UnicodeDecodeError):
         pass
     with open(os.path.join(secret_dir, 'pull-secret'), 'w') as secret_file:
         secret_file.write(secret)
