@@ -32,9 +32,9 @@ def pre_upgrade_crush_map():
     Returns:
         str: String consisting of CRUSH map before upgrade
     """
-    crash_map = get_crush_map()
-    log.info(f"Pre upgrade CRASH map: {crash_map}")
-    return crash_map
+    crush_map = get_crush_map()
+    log.info(f"Pre upgrade CRUSH map: {crush_map}")
+    return crush_map
 
 
 @order_pre_upgrade
