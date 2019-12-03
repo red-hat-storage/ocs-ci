@@ -993,12 +993,10 @@ def interface_iterate(request):
 
 @pytest.fixture(scope='class')
 def multi_pvc_factory_class(
-    storageclass_factory_class,
     project_factory_class,
     pvc_factory_class
 ):
     return multi_pvc_factory_fixture(
-        storageclass_factory_class,
         project_factory_class,
         pvc_factory_class
     )
