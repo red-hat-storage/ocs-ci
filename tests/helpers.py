@@ -271,6 +271,7 @@ def create_ceph_block_pool(pool_name=None):
         )
     )
     cbp_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    cbp_data['spec']['failureDomain'] = get_failure_domin()
     cbp_obj = create_resource(**cbp_data)
     cbp_obj.reload()
 
@@ -1502,3 +1503,21 @@ def create_dummy_osd(deployment):
             pass
 
     return dummy_deployment, dummy_pod
+
+
+def get_failure_domin():
+    """
+    Function is used to getting failure domain of pool
+
+    Returns:
+        str: Failure domain from cephblockpool
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    out = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd crush rule dump", format='json')
+    assert out, "Failed to get cmd output"
+    for crush_rule in out:
+        if constants.CEPHBLOCKPOOL.lower() in crush_rule.get("rule_name"):
+            for steps in crush_rule.get("steps"):
+                if "type" in steps:
+                    return steps.get("type")
