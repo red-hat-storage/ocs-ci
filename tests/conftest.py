@@ -449,10 +449,21 @@ def pvc_factory_fixture(
                 )
 
         # Wait for PVs to delete
+        # If they have ReclaimPolicy set to Retain then delete them manually
         for pv_obj in pv_objs:
-            pv_obj.ocp.wait_for_delete(
-                resource_name=pv_obj.name, timeout=180
-            )
+            if pv_obj.data.get('spec').get(
+                'persistentVolumeReclaimPolicy'
+            ) == constants.RECLAIM_POLICY_RETAIN:
+                helpers.wait_for_resource_state(
+                    pv_obj,
+                    constants.STATUS_RELEASED
+                )
+                pv_obj.delete()
+                pv_obj.ocp.wait_for_delete(pv_obj.name)
+            else:
+                pv_obj.ocp.wait_for_delete(
+                    resource_name=pv_obj.name, timeout=180
+                )
 
     request.addfinalizer(finalizer)
     return factory
