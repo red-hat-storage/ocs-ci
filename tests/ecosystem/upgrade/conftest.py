@@ -1,7 +1,8 @@
 import logging
-import pytest
 
+from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.ocs import constants, resources
+import pytest
 
 log = logging.getLogger(__name__)
 
