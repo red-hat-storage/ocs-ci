@@ -144,8 +144,9 @@ def drain_nodes(node_names):
     ocp = OCP(kind='node')
     node_names_str = ' '.join(node_names)
     log.info(f'Draining nodes {node_names_str}')
+    
     ocp.exec_oc_cmd(
-        f"adm drain {node_names_str} --force=true --ignore-daemonsets "
+        command=f"adm drain {node_names_str} --force=true --ignore-daemonsets "
         f"--delete-local-data"
     )
 
