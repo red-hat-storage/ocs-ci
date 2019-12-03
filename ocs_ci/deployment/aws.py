@@ -20,10 +20,11 @@ from ocs_ci.ocs.exceptions import SameNamePrefixClusterAlreadyExistsException
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import run_cmd, clone_repo
+from ocs_ci.utility.utils import (
+    run_cmd, clone_repo, create_rhelpod, TimeoutSampler
+)
 from .deployment import Deployment
 from ocs_ci.ocs.resources import pod
-from ocs_ci.utility import utils
 from ocs_ci.utility import templating
 from ocs_ci.ocs import ocp
 
@@ -451,7 +452,7 @@ class AWSUPI(AWSBase):
             resource (dict): a dictionary of stack resource
 
         Returns:
-            resource_id (str): ID of worker stack resource
+            str: ID of worker stack resource
 
         """
         return resource['StackResourceSummaries'][0]['PhysicalResourceId']
@@ -499,7 +500,7 @@ class AWSUPI(AWSBase):
                 ],
                 ImageId=config.ENV_DATA['rhel_worker_ami'],
                 SubnetId=self.worker_subnet,
-                InstanceType=config.ENV_DATA['RHEL_INSTANCE_TYPE'],
+                InstanceType=config.ENV_DATA['rhel_worker_instance_type'],
                 MaxCount=1,
                 MinCount=1,
                 Monitoring={
@@ -535,7 +536,7 @@ class AWSUPI(AWSBase):
         playbook
         """
         rhel_pod_name = "rhel-ansible"
-        rhel_pod_obj = utils.create_rhelpod(
+        rhel_pod_obj = create_rhelpod(
             constants.DEFAULT_NAMESPACE, rhel_pod_name
         )
         timeout = 4000  # For ansible-playbook
@@ -561,31 +562,37 @@ class AWSUPI(AWSBase):
         # Install scp on pod
         rhel_pod_obj.install_packages("openssh-clients")
         # distribute repo file to all RHEL workers
-        hosts = [inst.private_dns_name for node, inst in
-                 self.rhel_worker_list.items()]
+        hosts = [
+            inst.private_dns_name for node, inst in
+            self.rhel_worker_list.items()
+        ]
         for host in hosts:
             disable = "sudo yum-config-manager --disable *"
             rhel_pod_obj.exec_cmd_on_node(
                 host, pem_dst_path, disable, user=self.rhel_worker_user
             )
             rhel_pod_obj.copy_to_server(
-                host, pem_dst_path, f'{repo_dst_path}/{repo_file}',
-                f'/tmp/{repo_file}', user=self.rhel_worker_user
+                host, pem_dst_path,
+                os.path.join(repo_dst_path, repo_file),
+                os.path.join('/tmp', repo_file),
+                user=self.rhel_worker_user
             )
             rhel_pod_obj.exec_cmd_on_node(
                 host, pem_dst_path,
-                f'sudo mv /tmp/{repo_file} {repo_dst_path}',
+                f'sudo mv {os.path.join("/tmp", repo_file)} {repo_dst_path}',
                 user=self.rhel_worker_user
             )
             rhel_pod_obj.copy_to_server(
                 host, pem_dst_path,
-                f'{dst}/{constants.INTERNAL_MIRROR_PEM_FILE}',
-                f'/tmp/{constants.INTERNAL_MIRROR_PEM_FILE}',
+                os.path.join(dst, constants.INTERNAL_MIRROR_PEM_FILE),
+                os.path.join('/tmp', constants.INTERNAL_MIRROR_PEM_FILE),
                 user=self.rhel_worker_user,
             )
             rhel_pod_obj.exec_cmd_on_node(
                 host, pem_dst_path,
-                f'sudo mv /tmp/{constants.INTERNAL_MIRROR_PEM_FILE} {dst}',
+                f'sudo mv '
+                f'{os.path.join("/tmp", constants.INTERNAL_MIRROR_PEM_FILE)} '
+                f'{dst}',
                 user=self.rhel_worker_user
             )
         # copy kubeconfig to pod
@@ -604,10 +611,10 @@ class AWSUPI(AWSBase):
         # install pod packages
         rhel_pod_obj.install_packages(constants.RHEL_POD_PACKAGES)
         # run ansible
-        openshift_ansible_path = "/usr/share/ansible/openshift-ansible"
+        openshift_ansible_path = '/usr/share/ansible/openshift-ansible'
         cmd = (
             f"ansible-playbook -i /hosts --private-key={pem_dst_path} "
-            f"{openshift_ansible_path}/playbooks/scaleup.yml"
+            f"{os.path.join(openshift_ansible_path, 'playbooks/scaleup.yml')}"
         )
 
         rhel_pod_obj.exec_cmd_on_pod(
@@ -644,6 +651,7 @@ class AWSUPI(AWSBase):
 
         Returns:
             rhcos_workers (list): list of rhcos worker nodes
+
         """
         rhcos_workers = []
         ocp_obj = ocp.OCP(kind='node')
@@ -681,7 +689,7 @@ class AWSUPI(AWSBase):
                             logging.info(
                                 f"Checking status for {each['address']}"
                             )
-                            sample = utils.TimeoutSampler(
+                            sample = TimeoutSampler(
                                 timeout, 3,
                                 self.get_ready_status, entry
                             )
@@ -718,7 +726,7 @@ class AWSUPI(AWSBase):
             hosts (list): list of private host names
 
         Returns:
-            path (str): path of the ansible file created
+            str: path of the ansible file created
 
         """
         _templating = templating.Templating()
@@ -753,7 +761,8 @@ class AWSUPI(AWSBase):
         Get list of rhel worker instance IDs
 
         Returns:
-            rhel_instances (list): list of instance IDs of rhel workers
+            list: list of instance IDs of rhel workers
+
         """
         rhel_workers = []
         worker_pattern = get_infra_id(self.cluster_path) + "*rhel-worker*"
@@ -774,7 +783,8 @@ class AWSUPI(AWSBase):
             worker_list (list): Instance IDs of rhel workers
 
         Raises:
-            FailedToDeleteInstance (Exception): if failed to terminate
+            exceptions.FailedToDeleteInstance: if failed to terminate
+
         """
         logging.info(f"Terminating RHEL workers {worker_list}")
         # Do a dry run of instance termination
