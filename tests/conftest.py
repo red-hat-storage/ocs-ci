@@ -1,8 +1,6 @@
 import logging
 import os
 import tempfile
-import time
-from datetime import datetime
 
 import pytest
 import threading
@@ -18,15 +16,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     deployment, destroy, ignore_leftovers
 )
-from ocs_ci.ocs import constants, ocp, defaults
-from ocs_ci.ocs.exceptions import CommandFailed, CephHealthException
-from ocs_ci.ocs.openshift_ops import OCP
-from ocs_ci.ocs.parallel import parallel
-from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.utils import create_oc_resource, apply_oc_resource
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
-from ocs_ci.utility import templating, system
-from ocs_ci.utility.aws import AWS
 from ocs_ci.utility.environment_check import (
     get_status_before_execution, get_status_after_execution
 )
@@ -136,45 +126,6 @@ def log_ocs_version(cluster):
     with open(file_name, "w") as file_obj:
         report_ocs_version(cluster_version, image_dict, file_obj)
     log.info("human readable ocs version info written into %s", file_name)
-
-
-@pytest.fixture(scope="session", autouse=True)
-def cluster(request):
-    log.info(f"All logs located at {log_path}")
-    log.info("Running OCS basic installation")
-    cluster_path = config.ENV_DATA['cluster_path']
-    deploy = config.RUN['cli_params']['deploy']
-    teardown = config.RUN['cli_params']['teardown']
-    # Add a finalizer to teardown the cluster after test execution is finished
-    if teardown:
-        request.addfinalizer(cluster_teardown)
-        log.info("Will teardown cluster because --teardown was provided")
-    # Test cluster access and if exist just skip the deployment.
-    if is_cluster_running(cluster_path):
-        log.info("The installation is skipped because the cluster is running")
-        return
-    elif teardown and not deploy:
-        log.info("Attempting teardown of non-accessible cluster: %s", cluster_path)
-        return
-    elif not deploy and not teardown:
-        msg = "The given cluster can not be connected to: {}. ".format(cluster_path)
-        msg += "Provide a valid --cluster-path or use --deploy to deploy a new cluster"
-        pytest.fail(msg)
-    elif not system.is_path_empty(cluster_path) and deploy:
-        msg = "The given cluster path is not empty: {}. ".format(cluster_path)
-        msg += "Provide an empty --cluster-path and --deploy to deploy a new cluster"
-        pytest.fail(msg)
-    else:
-        log.info("A testing cluster will be deployed and cluster information stored at: %s", cluster_path)
-
-    # Generate install-config from template
-    log.info("Generating install-config")
-    run_cmd(f"mkdir -p {cluster_path}")
-    pull_secret_path = os.path.join(
-        constants.TOP_DIR,
-        "data",
-        "pull-secret"
-    )
 
 
 @pytest.fixture(scope='function')

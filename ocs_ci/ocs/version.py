@@ -37,8 +37,9 @@ def get_ocs_version():
     Query OCP to get all information about OCS version.
 
     Returns:
-     * dict with ClusterVersion k8s object
-     * image_dict with information about images IDs
+      dict: ClusterVersion k8s object
+      dict: image_dict with information about images IDs
+
     """
     logger.info("collecting ocs version")
 
@@ -100,9 +101,14 @@ def get_ocs_version():
 def report_ocs_version(cluster_version, image_dict, file_obj):
     """
     Report OCS version via:
-
      * python logging
      * printing human readable version into file_obj (stdout by default)
+
+    Args:
+        cluster_version (dict): cluster version dict
+        image_dict (dict): dict of image objects
+        file_obj (object):  file object to log information
+
     """
     # log the version
     logger.info("ClusterVersion .spec.channel: %s", cluster_version["spec"]["channel"])
@@ -130,17 +136,16 @@ def report_ocs_version(cluster_version, image_dict, file_obj):
 def main():
     """
     Main fuction of version reporting command line tool.
+    used by entry point report-version from setup.py
+    to invoke this function.
 
-    Based on suggestion from
-    https://github.com/red-hat-storage/ocs-ci/issues/356
     """
     ap = argparse.ArgumentParser(
         description="report OCS version for QE purposes")
     ap.add_argument(
         "--cluster-path",
         required=True,
-        help="Path to cluster directory"
-        )
+        help="Path to cluster directory")
     ap.add_argument(
         "-l",
         "--loglevel",
