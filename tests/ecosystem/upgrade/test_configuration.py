@@ -1,8 +1,9 @@
 import logging
 
 import pytest
+
 from ocs_ci.framework.pytest_customization.marks import (
-    order_pre_upgrade, order_post_upgrade
+    pre_upgrade, post_upgrade
 )
 from ocs_ci.ocs.resources import pod
 
@@ -37,7 +38,7 @@ def pre_upgrade_crush_map():
     return crush_map
 
 
-@order_pre_upgrade
+@pre_upgrade
 def test_load_crush_map(pre_upgrade_crush_map):
     """
     Load CRUSH map.
@@ -45,7 +46,7 @@ def test_load_crush_map(pre_upgrade_crush_map):
     assert pre_upgrade_crush_map
 
 
-@order_post_upgrade
+@post_upgrade
 @pytest.mark.polarion_id('OCS-1936')
 def test_crush_map_unchanged(pre_upgrade_crush_map):
     """
