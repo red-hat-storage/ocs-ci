@@ -7,15 +7,17 @@ import yaml
 
 import pytest
 
-
+from ocs_ci.framework.pytest_customization.marks import tier3
 from ocs_ci.ocs import ocp, constants
+from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
+from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from tests import helpers
 
 
 logger = logging.getLogger(__name__)
 
 
-def get_pvc_dict(name, storage_class):
+def get_pvc_dict(name):
     """
     Creates new copy of PVC dict to tweak and use.
     """
@@ -24,9 +26,8 @@ def get_pvc_dict(name, storage_class):
         apiVersion: v1
         metadata:
           name: {name}
-          annotations:
-            volume.beta.kubernetes.io/storage-class: {storage_class}
         spec:
+          storageClassName: ocs-storagecluster-ceph-rbd
           accessModes:
            - ReadWriteOnce
           resources:
@@ -86,28 +87,17 @@ def get_deploymentconfig_dict(name, pvc_name):
     return dc_dict
 
 
-# TODO: this is a hack, move this functionality (creating a resource from a
-# dict) into OCP class
-def ocp_create(ocp_obj, resource_dict):
-    with tempfile.NamedTemporaryFile(prefix='ocs-ci') as tf:
-        resource_str = yaml.dump(resource_dict).encode()
-        tf.write(resource_str)
-        tf.file.flush()
-        ocp_obj.create(yaml_file=tf.name)
-
-
+@tier3
 @pytest.mark.polarion_id("OCS-278")
 @pytest.mark.bugzilla("1729853")
-def test_bz1729853(storageclass_factory):
+@pytest.mark.bugzilla("1716276")
+def test_bz1729853(tmp_path):
     """
     Test covers a bulk delete of CSI based rbd volumes through project delete
     leaves behind some undeleted pvs, with case reported in BZ 1716276 in mind
     (which is why this deals with RBD only).
     """
-    # create cluster wide resources: a storage classe, secret ...
-    rbd_sc = storageclass_factory(constants.CEPHBLOCKPOOL)
-
-    total_runs = 1
+    total_runs = 10
     for pn in range(1, total_runs + 1):
         namespace = f"bz-1729853-{pn:02d}"
         logger.info(
@@ -115,21 +105,24 @@ def test_bz1729853(storageclass_factory):
         project = ocp.OCP(kind='Project', namespace=namespace)
         project.new_project(namespace)
 
-        # create few PVcs in the project
         ocp_pvc = ocp.OCP(kind=constants.PVC, namespace=namespace)
         ocp_dc = ocp.OCP(kind=constants.DEPLOYMENTCONFIG, namespace=namespace)
+
+        # create few PVCs in the project
         total_vols = 100
         logger.info((
             f"now we are going to create {total_vols} "
-            "PVC and DeploymentConfig pairs"
-            f"using {rbd_sc.name}"))
+            "PVC and DeploymentConfig pairs"))
+        pvc_list = []
         for i in range(1, total_vols + 1):
             pvc_name = f"{namespace}-pvc-{i:03d}"
-            pvc_dict = get_pvc_dict(pvc_name, rbd_sc.name)
-            ocp_create(ocp_pvc, pvc_dict)
+            pvc_list.append(pvc_name)
+            pvc_dict = get_pvc_dict(pvc_name)
             dc_name = f"{namespace}-dc-{i:03d}"
             dc_dict = get_deploymentconfig_dict(dc_name, pvc_name)
-            ocp_create(ocp_dc, dc_dict)
+            ocf = ObjectConfFile(
+                f"{namespace}-{i:03d}", [pvc_dict, dc_dict], project, tmp_path)
+            ocf.create()
 
         logger.info(
             f"now we are going to wait for {total_vols} PVCs to be Bound")
@@ -137,21 +130,71 @@ def test_bz1729853(storageclass_factory):
         # reported as https://github.com/red-hat-storage/ocs-ci/issues/778
         ocp_pvc.wait_for_resource(
             condition=constants.STATUS_BOUND,
-            resource_count=100,
-            timeout=100*30)
+            resource_count=total_vols,
+            timeout=total_vols*30)
 
-        # TODO: implement this wait
-        # logger.info(
-        #     f"now we are going to wait for {total_vols} DCs to be Running")
-        # ocp_dc.wait_for_resource(
-        #     condition=constants.STATUS_RUNNING,
-        #     resource_count=100,
-        #     timeout=100*30)
+        # using https://github.com/red-hat-storage/ocs-ci/pull/1077 which
+        # fixes https://github.com/red-hat-storage/ocs-ci/issues/792
+        logger.info(
+            f"now we are going to wait for {total_vols} DCs to be Running")
+        ocp_dc.wait_for_resource(
+            condition="1",
+            column='CURRENT',
+            resource_count=total_vols,
+            timeout=total_vols*30)
 
         logger.info(f"initiating delete of project {namespace}")
         # note that this just initializes the deletion, it doesn't wait for all
-        # reousrces in the namespace to be deleted (which is exactly what we
+        # resources in the namespace to be deleted (which is exactly what we
         # need to do here)
         project.delete(resource_name=namespace)
+        logger.info(f"deletion of project {namespace} finished")
 
-        # TODO: wait, checking the status
+        # Wait for all PVCs in the test namespace to be gone
+        for pvc_name in pvc_list:
+            logger.info(f"waiting for PVC {pvc_name} to be deleted")
+            ocp_pvc.wait_for_delete(resource_name=pvc_name, timeout=180)
+        # Wait for all PVs in the test namespace to be gone as well
+        ocp_pv = ocp.OCP(kind=constants.PV, namespace=namespace)
+        for pvc_name in pvc_list:
+            logger.info(f"waiting for PV {pvc_name} to be deleted")
+            try:
+                ocp_pv.wait_for_delete(resource_name=pvc_name, timeout=180)
+            except TimeoutError:
+                msg = (
+                    "PV {pvc_name} failed to be deleted, "
+                    "we will recheck that again anyway")
+                logger.warning(msg)
+        logger.info("rechecking that PVs are gone (again) at this point")
+        pv_obj_list = ocp_pv.get(all_namespaces=True)['items']
+        # and preparing list of PVs using ocs-storagecluster-ceph-rbd for
+        # the final check
+        pv_list = []  # all PVs of ocs-storagecluster-ceph-rbd sc
+        undeleted_pv_list = []  # list of undeleted PVs created by the test
+        for pv in pv_obj_list:
+            pv_name = pv['metadata']['name']
+            if pv_name.startswith("bz-1729853"):
+                logger.error("volume {pv_name} was not deleted!")
+                undeleted_pv_list.append(pv_name)
+            sc_name = pv['spec']['storageClassName']
+            if sc_name == "ocs-storagecluster-ceph-rbd":
+                pv_list.append(pv_name)
+
+        # Now check that the number of PVs which uses RBD storage class
+        # matches ceph side via `rbd ls -p ocs-storagecluster-ceph-rbd`
+        # so that we know that the numbers in openshift and ceph match.
+        logger.info("checking that number of PVs and RBDs matches")
+        ct_pod = get_ceph_tools_pod()
+        rbd_out = ct_pod.exec_cmd_on_pod(
+            "rbd ls -p ocs-storagecluster-cephblockpool",
+            out_yaml_format=True)
+        # rbd tool doesn't have a yaml output feature
+        rbd_list = rbd_out.split(" ")
+        logger.info(f"PV list: {pv_list}")
+        logger.info(f"RBD list: {rbd_list}")
+
+        msg_leftovers = "There should be no undeleted PVs"
+        assert undeleted_pv_list == [], msg_leftovers
+
+        msg_match = "number of PVs and RBDs should match"
+        assert len(pv_list) == len(rbd_list), msg_match
