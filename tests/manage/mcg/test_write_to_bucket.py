@@ -137,13 +137,14 @@ class TestBucketIO(ManageTest):
 
         # Check total copy files amount match
         if file_type == 'large_small':
-            assert len(obj_list) == 2 * amount
+            assert len(obj_list) == 2 * amount, ("Total file amount does not "
+                                                 "match")
         else:
-            assert len(obj_list) == amount
+            assert len(obj_list) == amount, "Total file amount does not match"
 
         # Check deduplicate set is same
         test_set = set([i.split('/')[-1] for i in download_files])
-        assert test_set == set(obj_list)
+        assert test_set == set(obj_list), "File name set does not match"
 
     @pytest.mark.polarion_id("OCS-1945")
     @tier2
@@ -170,4 +171,4 @@ class TestBucketIO(ManageTest):
         obj_set = set(obj.key for obj in
                       mcg_obj.s3_list_all_objects_in_bucket(bucketname))
         test_set = set('test' + str(i + 1) for i in range(1000))
-        assert test_set == obj_set
+        assert test_set == obj_set, "File name set does not match"
