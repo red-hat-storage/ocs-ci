@@ -15,7 +15,9 @@ class DeploymentFactory(object):
     def __init__(self):
         # A map all existing deployments and respective classes
         # should be put here
-        self.cls_map = {'aws_ipi': AWSIPI, 'aws_upi': AWSUPI, 'vsphere_upi': VSPHEREUPI}
+        self.cls_map = {
+            'aws_ipi': AWSIPI, 'aws_upi': AWSUPI, 'vsphere_upi': VSPHEREUPI,
+        }
 
     def get_deployment(self):
         """
