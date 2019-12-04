@@ -3,13 +3,13 @@ import pytest
 
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.pytest_customization.marks import (
-    ignore_leftovers, order_pre_upgrade, order_post_upgrade
+    ignore_leftovers, pre_upgrade, post_upgrade
 )
 
 log = logging.getLogger(__name__)
 
 
-@order_pre_upgrade
+@pre_upgrade
 @ignore_leftovers
 def test_start_pre_upgrade_pod_io(pre_upgrade_pods_running_io):
     """
@@ -18,7 +18,7 @@ def test_start_pre_upgrade_pod_io(pre_upgrade_pods_running_io):
     assert pre_upgrade_pods_running_io
 
 
-@order_post_upgrade
+@post_upgrade
 @pytest.mark.polarion_id("OCS-1862")
 def test_pod_io(
     pre_upgrade_filesystem_pods,
