@@ -1,7 +1,8 @@
+from concurrent.futures import ThreadPoolExecutor
 import logging
+
 import pytest
 
-from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers, pre_upgrade, post_upgrade
 )
