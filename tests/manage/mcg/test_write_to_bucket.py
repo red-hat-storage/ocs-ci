@@ -157,7 +157,7 @@ class TestBucketIO(ManageTest):
         bucketname = bucket_factory(1)[0].name
         full_object_path = f"s3://{bucketname}"
 
-        # Download a 16.4GB large file
+        # Touch create 1000 empty files in pod
         awscli_pod.exec_cmd_on_pod(command=f'mkdir {data_dir}')
         command = "for i in $(seq 1 1000); do touch /data/test$i; done"
         awscli_pod.exec_sh_cmd_on_pod(
