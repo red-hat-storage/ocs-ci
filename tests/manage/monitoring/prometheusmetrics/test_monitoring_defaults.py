@@ -28,6 +28,7 @@ def test_monitoring_enabled():
     prometheus = PrometheusAPI()
 
     # ask for values of ceph_pool_stored metric
+    logger.info("Checking that ceph data are provided in OCS monitoring")
     result = prometheus.query('ceph_pool_stored')
     # check that we actually received some values
     assert len(result) > 0
@@ -35,11 +36,14 @@ def test_monitoring_enabled():
         _ , value = metric['value']
         assert int(value) >= 0
     # additional check that values makes at least some sense
+    logger.info(
+        "Checking that size of ceph_pool_stored result matches number of pools")
     ct_pod = pod.get_ceph_tools_pod()
     ceph_pools = ct_pod.exec_ceph_cmd("ceph osd pool ls")
     assert len(result) == len(ceph_pools)
 
     # again for a noobaa metric
+    logger.info("Checking that MCG/NooBaa data are provided in OCS monitoring")
     result = prometheus.query('NooBaa_bucket_status')
     # check that we actually received some values
     assert len(result) > 0
