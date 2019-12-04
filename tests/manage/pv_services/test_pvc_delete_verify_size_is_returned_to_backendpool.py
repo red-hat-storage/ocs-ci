@@ -13,7 +13,6 @@ from ocs_ci.framework.testlib import tier1, acceptance, ManageTest
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.cluster import CephCluster
 
 logger = logging.getLogger(__name__)
 _templating = templating.Templating()
@@ -62,30 +61,64 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
 
     @acceptance
     @tier1
-    def test_pvc_delete_and_verify_size_is_returned_to_backend_pool(self, pod_factory):
+    def test_pvc_delete_and_verify_size_is_returned_to_backend_pool(
+        self, pvc_factory, pod_factory
+    ):
         """
         Test case to verify after delete pvc size returned to backend pools
         """
-        ceph_obj = CephCluster()
-        used_before_creating_pvc = ceph_obj.check_ceph_pool_used_space(cbp_name=constants.DEFAULT_BLOCKPOOL)
+        ct_pod = pod.get_ceph_tools_pod()
+        rados_status = ct_pod.exec_ceph_cmd(
+            ceph_cmd=f"rados df -p {constants.DEFAULT_BLOCKPOOL}"
+        )
+        size_bytes = rados_status['pools'][0]['size_bytes']
+
+        # Convert size to GB
+        used_before_creating_pvc = float(
+            format(size_bytes / constants.GB, '.4f')
+        )
         logger.info(f"Used before creating PVC {used_before_creating_pvc}")
 
-        pod_obj = pod_factory(interface=constants.CEPHBLOCKPOOL, status=constants.STATUS_RUNNING)
-        pvc_obj = pod_obj.pvc
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHBLOCKPOOL, size=10,
+            status=constants.STATUS_BOUND
+        )
+        pod_obj = pod_factory(
+            interface=constants.CEPHBLOCKPOOL, pvc=pvc_obj,
+            status=constants.STATUS_RUNNING
+        )
         pvc_obj.reload()
         pod.run_io_and_verify_mount_point(pod_obj, bs='10M', count='300')
-        used_after_creating_pvc = ceph_obj.check_ceph_pool_used_space(cbp_name=constants.DEFAULT_BLOCKPOOL)
+
+        rados_status = ct_pod.exec_ceph_cmd(
+            ceph_cmd=f"rados df -p {constants.DEFAULT_BLOCKPOOL}"
+        )
+        size_bytes = rados_status['pools'][0]['size_bytes']
+
+        # Convert size to GB
+        used_after_creating_pvc = float(
+            format(size_bytes / constants.GB, '.4f')
+        )
         logger.info(f"Used after creating PVC {used_after_creating_pvc}")
         assert used_before_creating_pvc < used_after_creating_pvc
         rbd_image_id = pvc_obj.image_uuid
-        pod_obj.delele()
+        pod_obj.delete()
         pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
         pvc_obj.delete()
         pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
 
-        verify_pv_not_exists(pvc_obj, constants.DEFAULT_BLOCKPOOL, rbd_image_id)
-        used_after_deleting_pvc = ceph_obj.check_ceph_pool_used_space(cbp_name=constants.DEFAULT_BLOCKPOOL)
+        verify_pv_not_exists(
+            pvc_obj, constants.DEFAULT_BLOCKPOOL, rbd_image_id
+        )
+        rados_status = ct_pod.exec_ceph_cmd(
+            ceph_cmd=f"rados df -p {constants.DEFAULT_BLOCKPOOL}"
+        )
+        size_bytes = rados_status['pools'][0]['size_bytes']
 
+        # Convert size to GB
+        used_after_deleting_pvc = float(
+            format(size_bytes / constants.GB, '.4f')
+        )
         logger.info(f"Used after deleting PVC {used_after_deleting_pvc}")
         assert used_after_deleting_pvc < used_after_creating_pvc
         assert (abs(
