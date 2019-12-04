@@ -1,8 +1,9 @@
 import logging
-
-from ocs_ci.ocs import constants, resources
-import pytest
 import threading
+
+import pytest
+
+from ocs_ci.ocs import constants
 
 log = logging.getLogger(__name__)
 
@@ -60,40 +61,6 @@ def create_pods(
         ) for pvc in pvcs
     ]
     return pods
-
-
-@pytest.fixture(scope='session')
-def default_storageclasses(request, teardown_factory_session):
-    """
-    Returns dictionary with storageclasses. Keys represent reclaim policy of
-    storageclass. There are two storageclasses for each key. First is RBD based
-    and the second one is CephFS based.
-    """
-    scs = {
-        constants.RECLAIM_POLICY_DELETE: [],
-        constants.RECLAIM_POLICY_RETAIN: []
-    }
-
-    # TODO(fbalak): Use proper constants after
-    # https://github.com/red-hat-storage/ocs-ci/issues/1056
-    # is resolved
-    for sc_name in (
-        'ocs-storagecluster-ceph-rbd',
-        'ocs-storagecluster-cephfs'
-    ):
-        sc = resources.ocs.OCS(
-            kind=constants.STORAGECLASS,
-            metadata={'name': sc_name}
-        )
-        sc.reload()
-        scs[constants.RECLAIM_POLICY_DELETE].append(sc)
-        sc.data['reclaimPolicy'] = constants.RECLAIM_POLICY_RETAIN
-        sc.data['metadata']['name'] += '-retain'
-        sc._name = sc.data['metadata']['name']
-        sc.create()
-        teardown_factory_session(sc)
-        scs[constants.RECLAIM_POLICY_RETAIN].append(sc)
-    return scs
 
 
 @pytest.fixture(scope='session')
