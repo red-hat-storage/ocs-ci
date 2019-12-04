@@ -756,15 +756,15 @@ def workload_storageutilization_50p_rbd(
 
 
 @pytest.fixture
-def workload_storageutilization_80p_rbd(
+def workload_storageutilization_85p_rbd(
         project,
         fio_pvc_dict,
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
         tmp_path):
-    target_percentage = 0.8
-    fixture_name = "workload_storageutilization_80p_rbd"
+    target_percentage = 0.85
+    fixture_name = "workload_storageutilization_85p_rbd"
     measured_op = workload_fio_storageutilization(
         fixture_name,
         target_percentage,
@@ -778,15 +778,15 @@ def workload_storageutilization_80p_rbd(
 
 
 @pytest.fixture
-def workload_storageutilization_90p_rbd(
+def workload_storageutilization_95p_rbd(
         project,
         fio_pvc_dict,
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
         tmp_path):
-    target_percentage = 0.9
-    fixture_name = "workload_storageutilization_90p_rbd"
+    target_percentage = 0.95
+    fixture_name = "workload_storageutilization_95p_rbd"
     measured_op = workload_fio_storageutilization(
         fixture_name,
         target_percentage,
@@ -822,15 +822,15 @@ def workload_storageutilization_50p_cephfs(
 
 
 @pytest.fixture
-def workload_storageutilization_80p_cephfs(
+def workload_storageutilization_85p_cephfs(
         project,
         fio_pvc_dict,
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
         tmp_path):
-    target_percentage = 0.8
-    fixture_name = "workload_storageutilization_80p_cephfs"
+    target_percentage = 0.85
+    fixture_name = "workload_storageutilization_85p_cephfs"
     measured_op = workload_fio_storageutilization(
         fixture_name,
         target_percentage,
@@ -844,15 +844,15 @@ def workload_storageutilization_80p_cephfs(
 
 
 @pytest.fixture
-def workload_storageutilization_90p_cephfs(
+def workload_storageutilization_95p_cephfs(
         project,
         fio_pvc_dict,
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
         tmp_path):
-    target_percentage = 0.9
-    fixture_name = "workload_storageutilization_90p_cephfs"
+    target_percentage = 0.95
+    fixture_name = "workload_storageutilization_95p_cephfs"
     measured_op = workload_fio_storageutilization(
         fixture_name,
         target_percentage,
