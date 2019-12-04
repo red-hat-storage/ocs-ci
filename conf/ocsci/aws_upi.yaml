@@ -3,3 +3,4 @@ ENV_DATA:
   deployment_type: 'upi'
   rhcos_ami: 'ami-06c85f9d106577272'
   worker_instance_type: 'm4.xlarge'
+  rhel_workers: false

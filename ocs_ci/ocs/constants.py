@@ -332,6 +332,9 @@ RSYNC_POD_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "rsync-pod.yaml"
 )
 
+ANSIBLE_INVENTORY_YAML = os.path.join(
+    "ocp-deployment", "inventory.yaml.j2"
+)
 # constants
 RBD_INTERFACE = 'rbd'
 CEPHFS_INTERFACE = 'cephfs'
@@ -416,3 +419,5 @@ ORDER_AFTER_UPGRADE = 30
 OCS_CSV_PREFIX = 'ocs-operator'
 LOCAL_STORAGE_CSV_PREFIX = 'local-storage-operator'
 LATEST_TAGS = ('latest', 'latest-stable')
+INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
+EC2_USER = "ec2-user"
