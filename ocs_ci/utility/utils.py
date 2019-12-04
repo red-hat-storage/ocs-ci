@@ -1242,7 +1242,7 @@ def clone_repo(url, location, branch='master', to_checkout=None):
         run_cmd(f"git checkout {to_checkout}", cwd=location)
 
 
-def get_latest_ds_olm_tag(upgrade=False, latest_tag='latest'):
+def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
     """
     This function returns latest tag of OCS downstream registry or one before
     latest if upgrade parameter is True
@@ -1250,7 +1250,8 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag='latest'):
     Args:
         upgrade (str): If True then it returns one version of the build before
             the latest.
-        latest_tag (str): Tag of the latest build ('latest' or 'latest-stable')
+        latest_tag (str): Tag of the latest build. If not specified
+            config.DEPLOYMENT['default_latest_tag'] or 'latest' will be used.
 
     Returns:
         str: latest tag for downstream image from quay registry
@@ -1259,6 +1260,9 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag='latest'):
         TagNotFoundException: In case no tag found
 
     """
+    latest_tag = latest_tag or config.DEPLOYMENT.get(
+        'default_latest_tag', 'latest'
+    )
     _req = requests.get(
         constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=20)
     )

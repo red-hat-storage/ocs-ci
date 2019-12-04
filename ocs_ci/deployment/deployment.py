@@ -187,7 +187,11 @@ class Deployment(object):
         image = image_and_tag[0]
         image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
         if not image_tag and config.REPORTING.get("us_ds") == 'DS':
-            image_tag = get_latest_ds_olm_tag(upgrade)
+            image_tag = get_latest_ds_olm_tag(
+                upgrade, latest_tag=config.DEPLOYMENT.get(
+                    'default_latest_tag', 'latest'
+                )
+            )
         olm_data_generator = templating.load_yaml(
             constants.OLM_YAML, multi_document=True
         )
