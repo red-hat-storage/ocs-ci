@@ -12,6 +12,7 @@ from ocs_ci.ocs.node import get_typed_nodes
 from ocs_ci.ocs.ocp import get_images
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
+from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.ocs import ocs_install_verification
 from ocs_ci.ocs.resources.pod import verify_pods_upgraded
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
@@ -141,6 +142,11 @@ def test_upgrade():
         ocs_catalog.apply(cs_yaml.name)
     # Wait for package manifest is ready
     package_manifest.wait_for_resource()
+    subscription_plan_approval = config.DEPLOYMENT.get(
+        'subscription_plan_approval'
+    )
+    if subscription_plan_approval == 'Manual':
+        wait_for_install_plan_and_approve(namespace)
     attempts = 145
     for attempt in range(1, attempts):
         if attempts == attempt:
