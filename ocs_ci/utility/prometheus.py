@@ -176,6 +176,45 @@ class PrometheusAPI(object):
         )
         return response
 
+    def query(self, query, timestamp=None, timeout=None, validate=True):
+        """
+        Perform Prometheus `instant query`_. This is a simple wrapper over
+        ``get()`` method with plumbing code for instant queries, additional
+        validation and logging.
+
+        Args:
+            query (str): Prometheus expression query string.
+            timestamp (str): Evaluation timestamp (rfc3339 or unix timestamp).
+                Optional.
+            timeout (str): Evaluation timeout in duration format. Optional.
+            validate (bool): Perform basic validation on the response.
+                Optional, ``True`` is the default. Use ``False`` when you
+                expect query to fail eg. during negative testing.
+
+        Returns:
+            list: Result of the query (value(s) for a single timestamp)
+
+        .. _`instant query`: https://prometheus.io/docs/prometheus/latest/querying/api/#instant-queries
+        """
+        query_payload = {'query': query}
+        log_msg = f"Performing prometheus instant query '{query}'"
+        if timestamp is not None:
+            query_payload['time'] = timestamp
+            log_msg += f" for timestamp {timestamp}"
+        if timeout is not None:
+            query_payload['timeout'] = timeout
+        # Log human readable summary of the query
+        logger.info(log_msg)
+        resp = self.get('query', payload=query_payload)
+        content = yaml.safe_load(resp.content)
+        if validate:
+            # If this fails, Prometheus instance or a query is so broken that
+            # test can't be performed. Note that prometheus reports "success"
+            # even for queryies which returns nothing.
+            assert content["status"] == "success"
+        # return actual result of the query
+        return content["data"]["result"]
+
     def query_range(self, query, start, end, step, timeout=None, validate=True):
         """
         Perform Prometheus `range query`_. This is a simple wrapper over
