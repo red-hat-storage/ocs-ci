@@ -1,3 +1,4 @@
+import hcl
 import json
 import logging
 import os
@@ -1495,3 +1496,62 @@ def check_timeout_reached(start_time, timeout, err_msg=None):
 
     if timeout < (time.time() - start_time):
         raise TimeoutException(msg)
+
+
+def convert_yaml2tfvars(yaml):
+    """
+    Converts yaml file to tfvars. It creates the tfvars with the
+    same filename in the required format which is used for deployment.
+
+    Args:
+        yaml (str): File path to yaml
+
+    Returns:
+        str: File path to tfvars
+
+    """
+    # importing here to avoid dependencies
+    from ocs_ci.utility.templating import load_yaml
+    data = load_yaml(yaml)
+    tfvars_file = os.path.splitext(yaml)[0]
+    with open(tfvars_file, "w+") as fd:
+        for key, val in data.items():
+            if key == "control_plane_ignition":
+                fd.write("control_plane_ignition = <<END_OF_MASTER_IGNITION\n")
+                fd.write(f"{val}\n")
+                fd.write("END_OF_MASTER_IGNITION\n")
+                continue
+
+            if key == "compute_ignition":
+                fd.write("compute_ignition = <<END_OF_WORKER_IGNITION\n")
+                fd.write(f"{val}\n")
+                fd.write("END_OF_WORKER_IGNITION\n")
+                continue
+
+            fd.write(key)
+            fd.write(" = ")
+            fd.write("\"")
+            fd.write(f"{val}")
+            fd.write("\"\n")
+
+    return tfvars_file
+
+
+def remove_keys_from_tf_variable_file(tf_file, keys):
+    """
+    Removes the keys from the tf files and convert to json format
+
+    Args:
+        tf_file (str): path to tf file
+        keys (list): list of keys to remove
+
+    """
+    # importing here to avoid dependencies
+    from ocs_ci.utility.templating import dump_data_to_json
+    with open(tf_file, 'r') as fd:
+        obj = hcl.load(fd)
+    for key in keys:
+        obj['variable'].pop(key)
+
+    dump_data_to_json(obj, f"{tf_file}.json")
+    os.rename(tf_file, f"{tf_file}.backup")
