@@ -116,3 +116,7 @@ class FailedToRemoveNodeException(Exception):
 
 class FailedToDeleteInstance(Exception):
     pass
+
+
+class NoInstallPlanForApproveFoundException(Exception):
+    pass

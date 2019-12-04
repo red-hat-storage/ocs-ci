@@ -290,7 +290,7 @@ class OCP(object):
         command = f"apply -f {yaml_file}"
         return self.exec_oc_cmd(command)
 
-    def patch(self, resource_name, params, type='json'):
+    def patch(self, resource_name='', params=None, type='json'):
         """
         Applies changes to resources
 
@@ -303,6 +303,7 @@ class OCP(object):
             bool: True in case if changes are applied. False otherwise
 
         """
+        resource_name = resource_name or self.resource_name
         params = "\'" + f"{params}" + "\'"
         command = f"patch {self.kind} {resource_name} -n {self.namespace} -p {params} --type {type}"
         log.info(f"Command: {command}")
