@@ -26,9 +26,7 @@ def test_monitoring_enabled():
     prometheus = PrometheusAPI()
 
     # ask for values of ceph_pool_stored metric
-    resp = prometheus.get('query', payload={'query': 'ceph_pool_stored'})
-    content = yaml.safe_load(resp.content)
-    result = content["data"]["result"]
+    result = prometheus.query('ceph_pool_stored')
     # check that we actually received some values
     assert len(result) > 0
     for metric in result:
@@ -40,9 +38,7 @@ def test_monitoring_enabled():
     assert len(result) == len(ceph_pools)
 
     # again for a noobaa metric
-    resp = prometheus.get('query', payload={'query': 'NooBaa_bucket_status'})
-    content = yaml.safe_load(resp.content)
-    result = content["data"]["result"]
+    result = prometheus.query('NooBaa_bucket_status')
     # check that we actually received some values
     assert len(result) > 0
     for metric in result:
