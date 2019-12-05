@@ -88,18 +88,27 @@ def test_workload_rbd(workload_storageutilization_50p_rbd):
     percentage = workload_storageutilization_50p_rbd['result']['target_p']
     expected_value = int(osd_stat_bytes[0]) * percentage
     # Now we can check the actual usage values from Prometheus.
+    at_least_one_value_out_of_range = False
     for metric in result_used:
         name = metric['metric']['__name__']
         daemon = metric['metric']['ceph_daemon']
         logger.info(f"metric {name} from {daemon}")
-        for ts, value in metric["values"]:
+        # We are skipping the 1st value, as it could be bit smaller compared
+        # to just reached utilization.
+        for ts, value in metric["values"][1:]:
             value = int(value)
             dt = datetime.utcfromtimestamp(ts)
-            # pushing the value into logs for better visibility (this is
-            # a demonstration after all)
-            logger.info(f"{dt}: {value} B")
             # checking the value, with 10% error margin in each direction
-            assert expected_value * 0.90 <= value <= expected_value * 1.10
+            if expected_value * 0.90 <= value <= expected_value * 1.10:
+                logger.info(
+                    f"value {value} B at {dt} is withing expected range")
+            else:
+                logger.error((
+                    f"value {value} B at {dt} is outside of expected range"
+                    f" {expected_value} B +- 10%"))
+                at_least_one_value_out_of_range = True
+    assert not at_least_one_value_out_of_range
+
 
 
 @pytest.mark.libtest
