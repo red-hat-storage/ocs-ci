@@ -8,7 +8,7 @@ from ocs_ci.ocs.node import (
     drain_nodes, schedule_nodes, get_typed_nodes, wait_for_nodes_status, get_node_objs
 )
 from ocs_ci.framework.testlib import (
-    tier1, tier2, tier3, ManageTest, aws_platform_required, ignore_leftovers
+    tier1, tier2, tier3, ManageTest, aws_platform_required, ignore_leftovers, bugzilla
 )
 
 from tests.sanity_helpers import Sanity
@@ -140,6 +140,7 @@ class TestNodesMaintenance(ManageTest):
             pytest.param(*['master'], marks=pytest.mark.polarion_id("OCS-1271"))
         ]
     )
+    @bugzilla('1780157')
     def test_2_nodes_maintenance_same_type(
         self, pvc_factory, pod_factory, nodes_type
     ):
