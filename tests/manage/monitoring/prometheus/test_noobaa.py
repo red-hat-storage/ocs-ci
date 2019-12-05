@@ -19,15 +19,21 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
     alerts = measure_noobaa_exceed_bucket_quota.get('prometheus_alerts')
     for target_label, target_msg, target_states, target_severity in [
         (
-            constants.ALERT_BUCKETEXCEEDINGQUOTASTATE,
-            'A NooBaa Bucket Is In Error State',
+            constants.ALERT_BUCKETREACHINGQUOTASTATE,
+            'A NooBaa Bucket Is In Reaching Quota State',
             ['firing'],
+            'warning'
+        ),
+        (
+            constants.ALERT_BUCKETERRORSTATE,
+            'A NooBaa Bucket Is In Error State',
+            ['pending', 'firing'],
             'warning'
         ),
         (
             constants.ALERT_BUCKETEXCEEDINGQUOTASTATE,
             'A NooBaa Bucket Is In Exceeding Quota State',
-            ['pending', 'firing'],
+            ['firing'],
             'warning'
         )
     ]:
