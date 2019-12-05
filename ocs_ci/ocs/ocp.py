@@ -476,15 +476,18 @@ class OCP(object):
             bool: True in case resource deletion is successful
 
         """
+        log.info(f"waiting for {self.kind} {resource_name} to be deleted")
         start_time = time.time()
         while True:
             try:
                 self.get(resource_name=resource_name)
             except CommandFailed as ex:
                 if "NotFound" in str(ex):
-                    log.info(
+                    waiting_time = time.time() - start_time
+                    log.info((
                         f"{self.kind} {resource_name} got deleted successfully"
-                    )
+                        f" after waiting for {int(waiting_time)} seconds"
+                    ))
                     return True
                 else:
                     raise ex
