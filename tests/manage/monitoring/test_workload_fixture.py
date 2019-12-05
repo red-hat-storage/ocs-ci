@@ -110,7 +110,6 @@ def test_workload_rbd(workload_storageutilization_50p_rbd):
     assert not at_least_one_value_out_of_range
 
 
-
 @pytest.mark.libtest
 def test_workload_rbd_in_some_other_way(workload_storageutilization_50p_rbd):
     """
