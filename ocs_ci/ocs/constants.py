@@ -301,6 +301,10 @@ OLM_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "deploy-with-olm.yaml"
 )
 
+CATALOG_SOURCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "catalog-source.yaml"
+)
+
 SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml"
 )
