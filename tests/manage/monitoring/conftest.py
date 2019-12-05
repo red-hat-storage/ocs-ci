@@ -14,9 +14,11 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import UnexpectedVolumeType
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.utility.prometheus import PrometheusAPI
 from tests import helpers
+from tests.helpers import craft_s3_command, create_unique_resource_name
 
 
 logger = logging.getLogger(__name__)
@@ -862,4 +864,102 @@ def workload_storageutilization_85p_cephfs(
         fio_configmap_dict,
         measurement_dir,
         tmp_path)
+    return measured_op
+
+
+@pytest.fixture
+def measure_noobaa_exceed_bucket_quota(
+    measurement_dir,
+    request,
+    mcg_obj,
+    awscli_pod
+):
+    """
+    Create NooBaa bucket, set its capacity quota to 2GB and fill it with data.
+
+    Returns:
+        dict: Contains information about `start` and `stop` time for
+        corrupting Ceph Placement Group
+    """
+    bucket_name = create_unique_resource_name(
+        resource_description='bucket',
+        resource_type='s3'
+    )
+    bucket = S3Bucket(
+        mcg_obj,
+        bucket_name
+    )
+    mcg_obj.send_rpc_query(
+        'bucket_api',
+        'update_bucket',
+        {
+            'name': bucket_name,
+            'quota': {
+                'unit': 'GIGABYTE',
+                'size': 2
+            }
+        }
+    )
+
+    def teardown():
+        """
+        Delete test bucket.
+        """
+        bucket.delete()
+
+    request.addfinalizer(teardown)
+
+    def exceed_bucket_quota():
+        """
+        Upload 5 files with 500MB size into bucket that has quota set to 2GB.
+
+        Returns:
+            str: Name of utilized bucket
+        """
+        nonlocal mcg_obj
+        nonlocal bucket_name
+        nonlocal awscli_pod
+        # run_time of operation
+        run_time = 60 * 10
+        awscli_pod.exec_cmd_on_pod(
+            'dd if=/dev/zero of=/tmp/testfile bs=1M count=500'
+        )
+        for i in range(1, 6):
+            awscli_pod.exec_cmd_on_pod(
+                helpers.craft_s3_command(
+                    mcg_obj,
+                    f"cp /tmp/testfile s3://{bucket_name}/testfile{i}"
+                ),
+                out_yaml_format=False,
+                secrets=[
+                    mcg_obj.access_key_id,
+                    mcg_obj.access_key,
+                    mcg_obj.s3_endpoint
+                ]
+            )
+
+        logger.info(f"Waiting for {run_time} seconds")
+        time.sleep(run_time)
+        return bucket_name
+
+    test_file = os.path.join(
+        measurement_dir,
+        'measure_noobaa_exceed__bucket_quota.json'
+    )
+    measured_op = measure_operation(exceed_bucket_quota, test_file)
+    logger.info(f"Deleting data from bucket {bucket_name}")
+    for i in range(1, 6):
+        awscli_pod.exec_cmd_on_pod(
+            helpers.craft_s3_command(
+                mcg_obj,
+                f"rm s3://{bucket_name}/testfile{i}"
+            ),
+            out_yaml_format=False,
+            secrets=[
+                mcg_obj.access_key_id,
+                mcg_obj.access_key,
+                mcg_obj.s3_endpoint
+            ]
+        )
+
     return measured_op
