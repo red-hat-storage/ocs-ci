@@ -365,7 +365,6 @@ ALERT_BUCKETREACHINGQUOTASTATE = 'NooBaaBucketReachingQuotaState'
 ALERT_BUCKETERRORSTATE = 'NooBaaBucketErrorState'
 ALERT_BUCKETEXCEEDINGQUOTASTATE = 'NooBaaBucketExceedingQuotaState'
 
-
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"

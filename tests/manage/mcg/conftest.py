@@ -6,9 +6,7 @@ from time import sleep
 import pytest
 from botocore.exceptions import ClientError
 
-from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
-from tests import helpers
 from tests.helpers import craft_s3_command, create_unique_resource_name
 
 logger = logging.getLogger(__name__)

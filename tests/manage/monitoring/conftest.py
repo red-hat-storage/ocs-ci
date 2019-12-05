@@ -14,11 +14,11 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import UnexpectedVolumeType
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
+from ocs_ci.ocs.resources.mcg_bucket import S3Bucket
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.utility.prometheus import PrometheusAPI
 from tests import helpers
-from tests.helpers import craft_s3_command, create_unique_resource_name
+from tests.helpers import create_unique_resource_name
 
 
 logger = logging.getLogger(__name__)
