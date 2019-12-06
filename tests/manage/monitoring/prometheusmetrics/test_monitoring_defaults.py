@@ -402,3 +402,78 @@ def test_ceph_metrics_available():
         "OCS Monitoring should provide some value(s) for all tested metrics, "
         "so that the list of metrics without results is empty.")
     assert list_of_metrics_without_results == [], msg
+
+
+@pytest.mark.polarion_id("OCS-1302")
+def test_monitoring_reporting_ok_when_idle(workload_idle):
+    """
+    When nothing is happening, OCP Prometheus reports OCS status as OK.
+
+    If this test case fails, the status is either reported wrong or the
+    cluster is in a broken state. Either way, a failure here is not good.
+    """
+    prometheus = PrometheusAPI()
+
+    health_result = prometheus.query_range(
+        query='ceph_health_status',
+        start=workload_idle['start'],
+        end=workload_idle['stop'],
+        step=15)
+    health_validation = prometheus.check_query_range_result(
+        result=health_result,
+        good_values=[0],
+        bad_values=[1],
+        exp_metric_num=1)
+    health_msg = "ceph_health_status {} report 0 (health ok) as expected"
+    if health_validation:
+        health_msg = health_msg.format('does')
+        logger.info(health_msg)
+    else:
+        health_msg = health_msg.format('should')
+        logger.error(health_msg)
+
+    mon_result = prometheus.query_range(
+        query='ceph_mon_quorum_status',
+        start=workload_idle['start'],
+        end=workload_idle['stop'],
+        step=15)
+    mon_validation = prometheus.check_query_range_result(
+        result=mon_result,
+        good_values=[1],
+        bad_values=[0],
+        exp_metric_num=workload_idle['result']['mon_num'])
+    mon_msg = "ceph_mon_quorum_status {} indicate no problems with quorum"
+    if mon_validation:
+        mon_msg = mon_msg.format('does')
+        logger.info(mon_msg)
+    else:
+        mon_msg = mon_msg.format('should')
+        logger.error(mon_msg)
+
+    osd_validations = []
+    for metric in ("ceph_osd_up", "ceph_osd_in"):
+        osd_result = prometheus.query_range(
+            query=metric,
+            start=workload_idle['start'],
+            end=workload_idle['stop'],
+            step=15)
+        osd_validation = prometheus.check_query_range_result(
+            result=osd_result,
+            good_values=[1],
+            bad_values=[0],
+            exp_metric_num=workload_idle['result']['osd_num'])
+        osd_validations.append(osd_validation)
+        osd_msg = "{} metric {} indicate no problems with OSDs"
+        if osd_validation:
+            osd_msg = osd_msg.format(metric, 'does')
+            logger.info(osd_msg)
+        else:
+            osd_msg = osd_msg.format(metric, 'should')
+            logger.error(osd_msg)
+
+    # after logging everything properly, make the test fail if necessary
+    # see ERRORs reported in the test log for details
+    assert health_validation, health_msg
+    assert mon_validation, mon_msg
+    osds_msg = "ceph_osd_{up,in} metrics should indicate no OSD issues"
+    assert all(osd_validations), osds_msg
