@@ -715,7 +715,7 @@ def workload_fio_storageutilization(
 
     test_file = os.path.join(measurement_dir, f"{fixture_name}.json")
     measured_op = measure_operation(
-        write_data, test_file, measure_after=True, minimal_time=300)
+        write_data, test_file, measure_after=True, minimal_time=480)
     # we don't need to delete anything if this fixture has been already
     # executed
     if measured_op['first_run']:
