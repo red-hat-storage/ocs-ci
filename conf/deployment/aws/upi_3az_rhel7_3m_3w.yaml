@@ -10,6 +10,6 @@ ENV_DATA:
   rhcos_ami: 'ami-06c85f9d106577272'
   rhel_worker_ami: 'ami-073251e3a0e36cebb' # RHEL7.7 as of now
   rhel_worker_instance_type: 'm5.4xlarge'
-  root_disk_size: 50
+  root_disk_size: 120
   root_disk: '/dev/sda1'
   availability_zone_count: 3
