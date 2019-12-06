@@ -1559,3 +1559,12 @@ def remove_keys_from_tf_variable_file(tf_file, keys):
 
     dump_data_to_json(obj, f"{tf_file}.json")
     os.rename(tf_file, f"{tf_file}.backup")
+
+
+def get_kubeadmin_password():
+    filename = os.path.join(
+        config.ENV_DATA['cluster_path'],
+        config.RUN['password_location']
+    )
+    with open(filename) as f:
+        return f.read()

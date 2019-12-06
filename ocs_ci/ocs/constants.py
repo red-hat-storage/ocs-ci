@@ -443,6 +443,10 @@ LATEST_TAGS = ('latest', 'latest-stable', '4.2-rc')
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
 
+# UI Deployment constants
+HTPASSWD_SECRET_YAML = "frontend/integration-tests/data/htpasswd-secret.yaml"
+HTPASSWD_PATCH_YAML = "frontend/integration-tests/data/patch-htpasswd.yaml"
+
 # Inventory
 INVENTORY_TEMPLATE = "inventory.yaml.j2"
 INVENTORY_FILE = "inventory.yaml"
