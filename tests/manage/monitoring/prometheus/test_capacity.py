@@ -22,9 +22,7 @@ log = logging.getLogger(__name__)
     ]
 )
 def test_capacity_workload_alerts(
-    workload_storageutilization_85p_rbd,
     workload_storageutilization_95p_rbd,
-    workload_storageutilization_85p_cephfs,
     workload_storageutilization_95p_cephfs,
     interface
 ):
@@ -33,40 +31,13 @@ def test_capacity_workload_alerts(
     """
     api = prometheus.PrometheusAPI()
     measure_end_time = max([
-        workload_storageutilization_85p_rbd.get('stop'),
         workload_storageutilization_95p_rbd.get('stop'),
-        workload_storageutilization_85p_cephfs.get('stop'),
-        workload_storageutilization_95p_cephfs.get('stop')
+        workload_storageutilization_95p_cephfs.get('stop'),
     ])
     if interface == 'rbd':
-        workload_storageutilization_85p = workload_storageutilization_85p_rbd
         workload_storageutilization_95p = workload_storageutilization_95p_rbd
     elif interface == 'cephfs':
-        workload_storageutilization_85p = workload_storageutilization_85p_cephfs
         workload_storageutilization_95p = workload_storageutilization_95p_cephfs
-
-    # Check utilization on 85%
-    alerts = workload_storageutilization_85p.get('prometheus_alerts')
-    target_label = constants.ALERT_CLUSTERNEARFULL
-    target_msg = 'Storage cluster is nearing full. Expansion is required.'
-    target_states = ['pending', 'firing']
-    target_severity = 'warning'
-    prometheus.check_alert_list(
-        label=target_label,
-        msg=target_msg,
-        alerts=alerts,
-        states=target_states,
-        severity=target_severity,
-        ignore_more_occurences=True
-    )
-    # the time to wait is increased because it takes more time for Ceph
-    # cluster to delete all data
-    pg_wait = 300
-    api.check_alert_cleared(
-        label=target_label,
-        measure_end_time=measure_end_time,
-        time_min=pg_wait
-    )
 
     # Check utilization on 95%
     alerts = workload_storageutilization_95p.get('prometheus_alerts')
