@@ -1,7 +1,6 @@
 # -*- coding: utf8 -*-
 
 import logging
-import tempfile
 import textwrap
 import yaml
 
@@ -11,7 +10,6 @@ from ocs_ci.framework.pytest_customization.marks import tier3
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
-from tests import helpers
 
 
 logger = logging.getLogger(__name__)
@@ -131,7 +129,7 @@ def test_bz1729853(tmp_path):
         ocp_pvc.wait_for_resource(
             condition=constants.STATUS_BOUND,
             resource_count=total_vols,
-            timeout=total_vols*30)
+            timeout=total_vols * 30)
 
         # using https://github.com/red-hat-storage/ocs-ci/pull/1077 which
         # fixes https://github.com/red-hat-storage/ocs-ci/issues/792
@@ -141,7 +139,7 @@ def test_bz1729853(tmp_path):
             condition="1",
             column='CURRENT',
             resource_count=total_vols,
-            timeout=total_vols*30)
+            timeout=total_vols * 30)
 
         logger.info(f"initiating delete of project {namespace}")
         # note that this just initializes the deletion, it doesn't wait for all
