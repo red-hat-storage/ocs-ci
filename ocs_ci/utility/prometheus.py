@@ -277,6 +277,76 @@ class PrometheusAPI(object):
         # return actual result of the query
         return content["data"]["result"]
 
+    def check_query_range_result(
+            self,
+            result,
+            good_values,
+            bad_values=(),
+            exp_metric_num=None,
+        ):
+        """
+        Check that result of range query matches given expectations. Useful
+        for metrics which convey status (eg. ceph health, ceph_osd_up), so that
+        you can assume that during a given period, it's value should match
+        given single (or tuple of) value(s).
+
+        Args:
+            result (list): Data from ``query_range()`` method.
+            good_values (tuple): Tuple of values considered good
+            bad_values (tuple): Tuple of values considered bad, indicating a
+                problem (optional, use if you need to distinguish bad and
+                invalid values)
+            exp_metric_num (int): expected number of data series in the result,
+                optional (eg. for ``ceph_health_status`` this would be 1, but
+                for something like ``ceph_osd_up`` this will be a number of
+                OSDs in the cluster)
+
+        Returns:
+            bool: True if result matches given expectations, False otherwise
+        """
+        logger.info("Validating a result of a range query")
+        # result of the validation
+        is_result_ok = True
+        # timestamps of values in bad_values list
+        bad_value_timestamps = []
+        # timestamps of values outside of both bad and good values list
+        invalid_value_timestamps = []
+
+        # check that result contains expected number of metric data series
+        if exp_metric_num is not None and len(result) != exp_metric_num:
+            msg = (
+                f"result doesn't contain {exp_metric_num} of series only, "
+                f"actual number data series is {len(result)}")
+            logger.error(msg)
+            is_result_ok = False
+
+        for metric in result:
+            name = metric['metric']['__name__']
+            logger.debug(f"checking metric {name}")
+            for ts, value in metric["values"]:
+                value = int(value)
+                dt = datetime.utcfromtimestamp(ts)
+                if value in good_values:
+                    logger.debug(f"{name} has good value {value} at {dt}")
+                elif value in bad_values:
+                    logger.error(f"{name} has bad value {value} at {dt}")
+                    bad_value_timestamps.append(dt)
+                else:
+                    msg = "{name} invalid (not good or bad): {value} at {dt}"
+                    logger.error(msg)
+                    invalid_value_timestamps.append(dt)
+
+        if bad_value_timestamps != []:
+            is_result_ok = False
+        else:
+            logger.info("No bad values detected")
+        if invalid_value_timestamps != []:
+            is_result_ok = False
+        else:
+            logger.info("No invalid values detected")
+
+        return is_result_ok
+
     def wait_for_alert(self, name, state=None, timeout=1200, sleep=5):
         """
         Search for alerts that have requested name and state.
