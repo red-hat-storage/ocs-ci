@@ -1129,8 +1129,8 @@ def get_testrun_name():
     markers = config.RUN['cli_params'].get('-m', '').replace(" ", "-")
     us_ds = config.REPORTING.get("us_ds")
     us_ds = "Upstream" if us_ds.upper() == "US" else "Downstream" if us_ds.upper() == "DS" else us_ds
-    if config.REPORTING["polarion"].get("testrun_name"):
-        testrun_name = config.REPORTING["polarion"]["testrun_name"]
+    if config.REPORTING.get("testrun_name"):
+        testrun_name = config.REPORTING["testrun_name"]
     elif markers:
         testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}_{markers}"
     else:
