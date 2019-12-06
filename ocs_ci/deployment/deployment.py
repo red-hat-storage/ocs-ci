@@ -213,7 +213,7 @@ class Deployment(object):
         )
         run_cmd(f"oc create -f {catalog_source_manifest.name}", timeout=2400)
         catalog_source = CatalogSource(
-            resource_name='ocs-catalogsource',
+            resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
             namespace='openshift-marketplace',
         )
         # Wait for catalog source is ready
