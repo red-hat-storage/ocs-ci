@@ -57,6 +57,10 @@ DEPLOYMENT:
   allow_lower_instance_requirements: true
   # For manual subscription plan (for manual approve of upgrade set bellow)
   # subscription_plan_approval: "Manual"
+  # For UI deployment you have to set following parameter ui_deployment to True
+  # UI deployment is not part of this framework, it will just do preparation
+  # steps for openshift-console.
+  ui_deployment: False
 
 # Section for reporting configuration
 REPORTING:
