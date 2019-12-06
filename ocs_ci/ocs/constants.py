@@ -157,6 +157,8 @@ CSI_RBDPLUGIN_LABEL = "app=csi-rbdplugin"
 OCS_OPERATOR_LABEL = "name=ocs-operator"
 LOCAL_STORAGE_OPERATOR_LABEL = "name=local-storage-operator"
 NOOBAA_APP_LABEL = "app=noobaa"
+NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
+NOOBAA_OPERATOR_POD_LABEL = "noobaa-operator=deployment"
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 
