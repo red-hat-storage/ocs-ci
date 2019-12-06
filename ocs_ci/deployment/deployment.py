@@ -264,17 +264,18 @@ class Deployment(object):
         ui_deployment = config.DEPLOYMENT.get('ui_deployment')
         if ui_deployment:
             logger.info("Preparing stuff for deployment by openshift-console")
-        else:
-            logger.info("Deployment of OCS via OCS operator")
-            self.label_and_taint_nodes()
-        run_cmd(f"oc create -f {constants.OLM_YAML}")
-        self.create_catalog_source()
-        if ui_deployment:
+            run_cmd(f"oc create -f {constants.OLM_YAML}")
+            self.create_catalog_source()
             logger.info(
                 "Skipping the rest of the deployment because it will be done "
                 "by UI deployment!"
             )
             return
+        else:
+            logger.info("Deployment of OCS via OCS operator")
+            self.label_and_taint_nodes()
+        run_cmd(f"oc create -f {constants.OLM_YAML}")
+        self.create_catalog_source()
 
         self.subscribe_ocs()
         # Skip rest of the deployment when deploy via UI
