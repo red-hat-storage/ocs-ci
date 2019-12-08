@@ -1,0 +1,13 @@
+vsphere_server: {{ vsphere_server }}
+vsphere_user: {{ vsphere_user | default('Administrator@vsphere.local') }}
+vsphere_password: {{ vsphere_password }}
+
+vsphere_datacenter: {{ vsphere_datacenter }}
+vsphere_datastore: {{ vsphere_datastore }}
+vsphere_network: {{ vm_network | default('VLAN_172') }}
+
+vsphere_resource_pool: {{vsphere_resource_pool}}
+cluster_domain: {{ cluster_domain }}
+rhel_template: {{ rhel_template | default('rhel77_ocs4qe') }}
+rhel_worker_count: {{ nodes_scaleup_count | default('3')}}
+rhel_worker_prefix: {{ rhel_worker_prefix }}

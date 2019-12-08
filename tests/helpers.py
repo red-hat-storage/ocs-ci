@@ -271,6 +271,7 @@ def create_ceph_block_pool(pool_name=None):
         )
     )
     cbp_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    cbp_data['spec']['failureDomain'] = get_failure_domin()
     cbp_obj = create_resource(**cbp_data)
     cbp_obj.reload()
 
@@ -1090,15 +1091,21 @@ def craft_s3_command(mcg_obj, cmd):
         str: The crafted command, ready to be executed on the pod
 
     """
-    base_command = (
-        f"sh -c \"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
-        f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
-        f"AWS_DEFAULT_REGION={mcg_obj.region} "
-        f"aws s3 "
-        f"--endpoint={mcg_obj.s3_endpoint} "
-        f"--no-verify-ssl "
-    )
-    string_wrapper = "\""
+    if mcg_obj:
+        base_command = (
+            f"sh -c \"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
+            f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
+            f"AWS_DEFAULT_REGION={mcg_obj.region} "
+            f"aws s3 "
+            f"--endpoint={mcg_obj.s3_endpoint} "
+            f"--no-verify-ssl "
+        )
+        string_wrapper = "\""
+    else:
+        base_command = (
+            f"aws s3 --no-verify-ssl --no-sign-request "
+        )
+        string_wrapper = ''
 
     return f"{base_command}{cmd}{string_wrapper}"
 
@@ -1496,3 +1503,21 @@ def create_dummy_osd(deployment):
             pass
 
     return dummy_deployment, dummy_pod
+
+
+def get_failure_domin():
+    """
+    Function is used to getting failure domain of pool
+
+    Returns:
+        str: Failure domain from cephblockpool
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    out = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd crush rule dump", format='json')
+    assert out, "Failed to get cmd output"
+    for crush_rule in out:
+        if constants.CEPHBLOCKPOOL.lower() in crush_rule.get("rule_name"):
+            for steps in crush_rule.get("steps"):
+                if "type" in steps:
+                    return steps.get("type")

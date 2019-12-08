@@ -43,6 +43,7 @@ setup(
         'python-dateutil==2.8.0',
         'pytest-ordering',
         'funcy',
+        'semantic-version',
     ],
     entry_points={
         'console_scripts': [

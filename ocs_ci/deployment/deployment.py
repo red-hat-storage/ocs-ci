@@ -19,6 +19,7 @@ from ocs_ci.ocs.monitoring import (
 )
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
+from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
@@ -172,14 +173,10 @@ class Deployment(object):
             )
             _ocp.exec_oc_cmd(command=taint_cmd)
 
-    @staticmethod
-    def get_olm_and_subscription_manifest():
+    def create_catalog_source(self):
         """
-        This method prepare manifest for deploy OCS operator and subscription.
-
-        Returns:
-            tuple: Path to olm deploy and subscription manifest
-
+        This prepare catalog source manifest for deploy OCS operator from
+        quay registry.
         """
         image = config.DEPLOYMENT.get('ocs_registry_image', '')
         upgrade = config.DEPLOYMENT.get('upgrade', False)
@@ -187,67 +184,103 @@ class Deployment(object):
         image = image_and_tag[0]
         image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
         if not image_tag and config.REPORTING.get("us_ds") == 'DS':
-            image_tag = get_latest_ds_olm_tag(upgrade)
-        olm_data_generator = templating.load_yaml(
-            constants.OLM_YAML, multi_document=True
+            image_tag = get_latest_ds_olm_tag(
+                upgrade, latest_tag=config.DEPLOYMENT.get(
+                    'default_latest_tag', 'latest'
+                )
+            )
+        catalog_source_data = templating.load_yaml(
+            constants.CATALOG_SOURCE_YAML
         )
-        olm_yaml_data = []
-        subscription_yaml_data = []
         cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
         # TODO: Once needed we can also set the channel for the subscription
         # from config.DEPLOYMENT.get('ocs_csv_channel')
-        for yaml_doc in olm_data_generator:
-            change_cs_condition = (
-                (image or image_tag) and yaml_doc['kind'] == 'CatalogSource'
-                and yaml_doc['metadata']['name'] == cs_name
+        change_cs_condition = (
+            (image or image_tag) and catalog_source_data['kind'] == 'CatalogSource'
+            and catalog_source_data['metadata']['name'] == cs_name
+        )
+        if change_cs_condition:
+            default_image = config.DEPLOYMENT['default_ocs_registry_image']
+            image = image if image else default_image.split(':')[0]
+            catalog_source_data['spec']['image'] = (
+                f"{image}:{image_tag if image_tag else 'latest'}"
             )
-            if change_cs_condition:
-                default_image = config.DEPLOYMENT['default_ocs_registry_image']
-                image = image if image else default_image.split(':')[0]
-                yaml_doc['spec']['image'] = (
-                    f"{image}:{image_tag if image_tag else 'latest'}"
-                )
-            if yaml_doc.get('kind') == 'Subscription':
-                subscription_yaml_data.append(yaml_doc)
-                continue
-            olm_yaml_data.append(yaml_doc)
-        olm_manifest = tempfile.NamedTemporaryFile(
-            mode='w+', prefix='olm_manifest', delete=False
+        catalog_source_manifest = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='catalog_source_manifest', delete=False
         )
         templating.dump_data_to_temp_yaml(
-            olm_yaml_data, olm_manifest.name
+            catalog_source_data, catalog_source_manifest.name
         )
+        run_cmd(f"oc create -f {catalog_source_manifest.name}", timeout=2400)
+        catalog_source = CatalogSource(
+            resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+            namespace='openshift-marketplace',
+        )
+        # Wait for catalog source is ready
+        catalog_source.wait_for_state("READY")
+
+    def subscribe_ocs(self):
+        """
+        This method subscription manifest and subscribe to OCS operator.
+
+        """
+        subscription_yaml_data = templating.load_yaml(
+            constants.SUBSCRIPTION_YAML
+        )
+        subscription_plan_approval = config.DEPLOYMENT.get(
+            'subscription_plan_approval'
+        )
+        if subscription_plan_approval:
+            subscription_yaml_data['spec']['installPlanApproval'] = (
+                subscription_plan_approval
+            )
+        channel = config.DEPLOYMENT.get('ocs_csv_channel')
+        if channel:
+            subscription_yaml_data['spec']['channel'] = channel
         subscription_manifest = tempfile.NamedTemporaryFile(
             mode='w+', prefix='subscription_manifest', delete=False
         )
         templating.dump_data_to_temp_yaml(
             subscription_yaml_data, subscription_manifest.name
         )
-        return olm_manifest.name, subscription_manifest.name
-
-    def deploy_ocs_via_operator(self):
-        """
-        Method for deploy OCS via OCS operator
-        """
-        logger.info("Deployment of OCS via OCS operator")
-        olm_manifest, subscription_manifest = (
-            self.get_olm_and_subscription_manifest()
-        )
-        self.label_and_taint_nodes()
-        run_cmd(f"oc create -f {olm_manifest}", timeout=2400)
-        catalog_source = CatalogSource(
-            resource_name='ocs-catalogsource',
-            namespace='openshift-marketplace',
-        )
-        # Wait for catalog source is ready
-        catalog_source.wait_for_state("READY")
-        run_cmd(f"oc create -f {subscription_manifest}")
+        run_cmd(f"oc create -f {subscription_manifest.name}")
         # wait for package manifest
         package_manifest = PackageManifest(
             resource_name=defaults.OCS_OPERATOR_NAME
         )
         # Wait for package manifest is ready
         package_manifest.wait_for_resource(timeout=300)
+        channel = config.DEPLOYMENT.get('ocs_csv_channel')
+        subscription_plan_approval = config.DEPLOYMENT.get(
+            'subscription_plan_approval'
+        )
+        if subscription_plan_approval == 'Manual':
+            wait_for_install_plan_and_approve(self.namespace)
+
+    def deploy_ocs_via_operator(self):
+        """
+        Method for deploy OCS via OCS operator
+        """
+        ui_deployment = config.DEPLOYMENT.get('ui_deployment')
+        if ui_deployment:
+            logger.info("Preparing stuff for deployment by openshift-console")
+        else:
+            logger.info("Deployment of OCS via OCS operator")
+            self.label_and_taint_nodes()
+        run_cmd(f"oc create -f {constants.OLM_YAML}")
+        self.create_catalog_source()
+        if ui_deployment:
+            logger.info(
+                "Skipping the rest of the deployment because it will be done "
+                "by UI deployment!"
+            )
+            return
+
+        self.subscribe_ocs()
+        # Skip rest of the deployment when deploy via UI
+        package_manifest = PackageManifest(
+            resource_name=defaults.OCS_OPERATOR_NAME
+        )
         channel = config.DEPLOYMENT.get('ocs_csv_channel')
         csv_name = package_manifest.get_current_csv(channel=channel)
         csv = CSV(resource_name=csv_name, namespace=self.namespace)
@@ -310,6 +343,9 @@ class Deployment(object):
             logger.info("Running OCS basic installation")
 
         self.deploy_ocs_via_operator()
+        if config.DEPLOYMENT.get('ui_deployment'):
+            config.ENV_DATA['skip_ocs_deployment'] = True
+            return
 
         pod = ocp.OCP(
             kind=constants.POD, namespace=self.namespace

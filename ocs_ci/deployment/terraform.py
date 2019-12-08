@@ -57,3 +57,22 @@ class Terraform(object):
         """
         logger.info("Destroying the cluster")
         run_cmd(f"terraform destroy '-var-file={tfvars}' -auto-approve {self.path}")
+
+    def output(self, tfstate, module, json_format=True):
+        """
+        Extracts the value of an output variable from the state file
+
+        Args:
+            tfstate (str): path to terraform.tfstate file
+            module (str): module to extract
+            json_format (bool): True if format output as json
+
+        Returns:
+            str: output from tfstate
+
+        """
+        if json_format:
+            cmd = f"terraform output -json -state={tfstate} {module}"
+        else:
+            cmd = f"terraform output -state={tfstate} {module}"
+        return run_cmd(cmd)

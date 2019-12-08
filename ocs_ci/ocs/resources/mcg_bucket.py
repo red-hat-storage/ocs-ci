@@ -16,7 +16,7 @@ class MCGBucket(ABC):
     """
     mcg, name = (None,) * 2
 
-    def __init__(self, mcg, name):
+    def __init__(self, mcg, name, *args, **kwargs):
         """
         Constructor of an MCG bucket
         """
@@ -73,7 +73,10 @@ class OCBucket(MCGBucket):
             self.name = create_unique_resource_name('oc', 'obc')
         obc_data['metadata']['name'] = self.name
         obc_data['spec']['bucketName'] = self.name
+        obc_data['spec']['storageClassName'] = self.mcg.namespace + '.noobaa.io'
         obc_data['metadata']['namespace'] = self.mcg.namespace
+        if 'bucketclass' in kwargs:
+            obc_data['spec']['additionalConfig']['bucketclass'] = kwargs['bucketclass']
         create_resource(**obc_data)
 
     def internal_delete(self):

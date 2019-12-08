@@ -18,6 +18,12 @@ There are additional prerequisites if you plan to execute AWS UPI deployments
 
 1. Install the `jq` and `awscli` system packages
 
+#### AWS UPI with RHEL workers
+Along with AWS UPI prerequisites we need following
+
+1. openshift-dev.pem needs to be availavle to ocs-ci
+2. provide ops-mirror.pem in data/ directory [ops-mirror](https://github.com/openshift/shared-secrets/blob/master/mirror/ops-mirror.pem).
+
 ##### Mac OSX Users
 The system `sed` package is not compatible with the script used to install AWS
 UPI. To resolve this issue, you must install `gnu-sed`. You can do this with brew.

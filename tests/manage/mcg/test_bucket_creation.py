@@ -71,7 +71,7 @@ class TestBucketCreation:
             bucket.name for bucket in bucket_factory(amount, interface)
         )
         assert bucket_set.issubset(
-            getattr(mcg_obj, f'{interface.lower()}_list_all_bucket_names')()
+            getattr(mcg_obj, f'{interface.lower()}_get_all_bucket_names')()
         )
 
     @pytest.mark.parametrize(

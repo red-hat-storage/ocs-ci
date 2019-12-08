@@ -13,6 +13,7 @@ from ocs_ci.ocs.constants import RSYNC_POD_YAML, STATUS_RUNNING
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     NotSupportedFunctionError,
+    NonUpgradedImagesFoundError,
     ResourceInUnexpectedState,
     ResourceNameNotSpecifiedException,
     TimeoutExpiredError,
@@ -289,7 +290,7 @@ class OCP(object):
         command = f"apply -f {yaml_file}"
         return self.exec_oc_cmd(command)
 
-    def patch(self, resource_name, params, type='json'):
+    def patch(self, resource_name='', params=None, type='json'):
         """
         Applies changes to resources
 
@@ -302,6 +303,7 @@ class OCP(object):
             bool: True in case if changes are applied. False otherwise
 
         """
+        resource_name = resource_name or self.resource_name
         params = "\'" + f"{params}" + "\'"
         command = f"patch {self.kind} {resource_name} -n {self.namespace} -p {params} --type {type}"
         log.info(f"Command: {command}")
@@ -365,8 +367,8 @@ class OCP(object):
         return token
 
     def wait_for_resource(
-        self, condition, resource_name='', selector=None, resource_count=0,
-        timeout=60, sleep=3
+        self, condition, resource_name='', column='STATUS', selector=None,
+        resource_count=0, timeout=60, sleep=3
     ):
         """
         Wait for a resource to reach to a desired condition
@@ -376,6 +378,7 @@ class OCP(object):
                 from 'oc get <kind> <resource_name>' command
             resource_name (str): The name of the resource to wait
                 for (e.g.my-pv1)
+            column (str): The name of the column to compare with
             selector (str): The resource selector to search with.
                 Example: 'app=rook-ceph-mds'
             resource_count (int): How many resources expected to be
@@ -390,7 +393,8 @@ class OCP(object):
         log.info((
             f"Waiting for a resource(s) of kind {self._kind}"
             f" identified by name '{resource_name}'"
-            f" and selector {selector}"
+            f" using selector {selector}"
+            f" at column name {column}"
             f" to reach desired condition {condition}"))
         resource_name = resource_name if resource_name else self.resource_name
 
@@ -405,11 +409,11 @@ class OCP(object):
 
                 # Only 1 resource expected to be returned
                 if resource_name:
-                    status = self.get_resource_status(resource_name)
+                    status = self.get_resource(resource_name, column)
                     if status == condition:
                         return True
                     log.info((
-                        f"status of {resource_name} was {status},"
+                        f"status of {resource_name} at column {column} was {status},"
                         f" but we were waiting for {condition}"))
                     actual_status = status
                 # More than 1 resources returned
@@ -420,13 +424,13 @@ class OCP(object):
                     for item in sample:
                         try:
                             item_name = item.get('metadata').get('name')
-                            status = self.get_resource_status(item_name)
+                            status = self.get_resource(item_name, column)
                             actual_status.append(status)
                             if status == condition:
                                 in_condition.append(item)
                         except CommandFailed as ex:
                             log.info(
-                                f"Failed to get status of resource: {item_name}, "
+                                f"Failed to get status of resource: {item_name} at column {column}, "
                                 f"Error: {ex}"
                             )
                         if resource_count:
@@ -441,13 +445,13 @@ class OCP(object):
                     else:
                         exp_num_str = "all"
                     log.info((
-                        f"status of {resource_name} item(s) were {actual_status},"
+                        f"status of {resource_name} at column {column} - item(s) were {actual_status},"
                         f" but we were waiting"
                         f" for {exp_num_str} of them to be {condition}"))
         except TimeoutExpiredError as ex:
             log.error(f"timeout expired: {ex}")
             log.error((
-                f"Wait for {self._kind} resource {resource_name}"
+                f"Wait for {self._kind} resource {resource_name} at column {column}"
                 f" to reach desired condition {condition} failed,"
                 f" last actual status was {actual_status}"))
             raise(ex)
@@ -494,25 +498,26 @@ class OCP(object):
                 raise TimeoutError(msg)
             time.sleep(sleep)
 
-    def get_resource_status(self, resource_name):
+    def get_resource(self, resource_name, column):
         """
-        Get the resource status based on:
+        Get a column value for a resource based on:
         'oc get <resource_kind> <resource_name>' command
 
         Args:
-            resource_name (str): The name of the resource to get its status
+            resource_name (str): The name of the resource to get its column value
+            column (str): The name of the column to retrive
 
         Returns:
-            str: The status returned by 'oc get' command not in the 'yaml'
+            str: The output returned by 'oc get' command not in the 'yaml'
                 format
         """
         # Get the resource in str format
         resource = self.get(resource_name=resource_name, out_yaml_format=False)
         # get the list of titles
-        titles = re.sub('\s{2,}', ',', resource)  # noqa: W605
+        titles = re.sub(r'\s{2,}', ',', resource)  # noqa: W605
         titles = titles.split(',')
-        # Get the index of 'STATUS'
-        status_index = titles.index('STATUS')
+        # Get the index of column
+        column_index = titles.index(column)
         resource = shlex.split(resource)
         # Get the values from the output including access modes in capital
         # letters
@@ -522,7 +527,22 @@ class OCP(object):
             )
         ]
 
-        return resource_info[status_index]
+        return resource_info[column_index]
+
+    def get_resource_status(self, resource_name):
+        """
+        Get the resource STATUS column based on:
+        'oc get <resource_kind> <resource_name>' command
+
+        Args:
+            resource_name (str): The name of the resource to get its STATUS
+
+        Returns:
+            str: The status returned by 'oc get' command not in the 'yaml'
+                format
+        """
+
+        return self.get_resource(resource_name, 'STATUS')
 
     def check_name_is_specified(self, resource_name=''):
         """
@@ -696,3 +716,68 @@ def rsync(src, dst, node, dst_node=True, extra_params=""):
         except CommandFailed:
             log.warning(f"Pod {pod_name} wasn't successfully deleted!")
             raise
+
+
+def get_images(data, images=None):
+    """
+    Get the images from the ocp object like pod, CSV and so on.
+
+    Args:
+        data (dict): Yaml data from the object.
+        images (dict): Dict where to put the images (doesn't have to be set!).
+
+    Returns:
+        dict: Images dict like: {'image_name': 'image.url.to:tag', ...}
+    """
+    if images is None:
+        images = dict()
+    data_type = type(data)
+    if data_type == dict:
+        # Check if we have those keys: 'name' and 'value' in the data dict.
+        # If yes and the value ends with '_IMAGE' we found the image.
+        if set(("name", "value")) <= data.keys() and (
+            type(data["name"]) == str and data["name"].endswith("_IMAGE")
+        ):
+            image_name = data["name"].rstrip('_IMAGE').lower()
+            image = data['value']
+            images[image_name] = image
+        else:
+            for key, value in data.items():
+                value_type = type(value)
+                if value_type in (dict, list):
+                    get_images(value, images)
+                elif value_type == str and key == "image":
+                    image_name = data.get('name')
+                    if image_name:
+                        images[image_name] = value
+    elif data_type == list:
+        for item in data:
+            get_images(item, images)
+    return images
+
+
+def verify_images_upgraded(old_images, object_data):
+    """
+    Verify that all images in ocp object are upgraded.
+
+    Args:
+       old_images (set): Set with old images.
+       object_data (dict): OCP object yaml data.
+
+    Raises:
+        NonUpgradedImagesFoundError: In case the images weren't upgraded.
+
+    """
+    current_images = get_images(object_data)
+    not_upgraded_images = set(
+        [image for image in current_images.values() if image in old_images]
+    )
+    name = object_data['metadata']['name']
+    if not_upgraded_images:
+        raise NonUpgradedImagesFoundError(
+            f"Images: {not_upgraded_images} weren't upgraded in: {name}!"
+        )
+    log.info(
+        f"All the images: {current_images} were successfully upgraded in: "
+        f"{name}!"
+    )
