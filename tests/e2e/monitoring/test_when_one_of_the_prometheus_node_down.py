@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import ocp, constants, defaults
-from ocs_ci.framework.testlib import tier4, E2ETest, bugzilla
+from ocs_ci.framework.testlib import workloads, E2ETest, bugzilla
 from ocs_ci.ocs.resources import pvc, pod
 from tests import helpers
 from ocs_ci.ocs.monitoring import check_pvcdata_collected_on_prometheus
@@ -86,7 +86,7 @@ class TestWhenOneOfThePrometheusNodeDown(E2ETest):
         """
         self.sanity_helpers = Sanity()
 
-    @tier4
+    @workloads
     def test_monitoring_when_one_of_the_prometheus_node_down(self, test_fixture):
         """
         Test case to validate when the prometheus pod is down and
