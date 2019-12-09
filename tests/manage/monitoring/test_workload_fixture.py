@@ -93,9 +93,16 @@ def test_workload_rbd(workload_storageutilization_50p_rbd):
         name = metric['metric']['__name__']
         daemon = metric['metric']['ceph_daemon']
         logger.info(f"metric {name} from {daemon}")
-        # We are skipping the 1st value, as it could be bit smaller compared
-        # to just reached utilization.
-        for ts, value in metric["values"][1:]:
+        # We are skipping the 1st 10% of the values, as it could take some
+        # additional time for all the data to be written everywhere, and
+        # during this time utilization value still grows.
+        start_index = int(len(metric["values"]) * 0.1)
+        logger.info(f"ignoring first {start_index} values")
+        for ts, value in metric["values"][:start_index]:
+            value = int(value)
+            dt = datetime.utcfromtimestamp(ts)
+            logger.info(f"ignoring value {value} B at {dt}")
+        for ts, value in metric["values"][start_index:]:
             value = int(value)
             dt = datetime.utcfromtimestamp(ts)
             # checking the value, with 10% error margin in each direction
