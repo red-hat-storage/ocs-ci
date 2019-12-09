@@ -13,5 +13,7 @@ class ClusterNameLengthError(Exception):
         self.max = max
 
     def __str__(self):
-        return (f"Cluster Name '{self.name}' is {len(self.name)} characters long "
-                f"while it should be {self.min}-{self.max} characters long")
+        return (
+            f"Cluster Name '{self.name}' is {len(self.name)} characters long "
+            f"while it should be {self.min}-{self.max} characters long"
+        )
