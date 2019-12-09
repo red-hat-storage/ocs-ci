@@ -57,7 +57,8 @@ def check_alert_list(
                         delete = True
     assert_msg = (
         f"Incorrect number of {label} alerts ({len(target_alerts)} "
-        f"instead of {len(states)})"
+        f"instead of {len(states)} with states: {states})."
+        f"\nAlerts: {target_alerts}"
     )
     assert len(target_alerts) == len(states), assert_msg
 
