@@ -47,13 +47,13 @@ def test_capacity_workload_alerts(
         (
             constants.ALERT_CLUSTERNEARFULL,
             'Storage cluster is nearing full. Expansion is required.',
-            ['pending', 'firing'] if interface=='rbd' else ['firing'],
+            ['pending', 'firing'] if interface == 'rbd' else ['firing'],
             'warning'
         ),
         (
             constants.ALERT_CLUSTERCRITICALLYFULL,
             'Storage cluster is critically full and needs immediate expansion',
-            ['pending', 'firing'] if interface=='rbd' else ['firing'],
+            ['pending', 'firing'] if interface == 'rbd' else ['firing'],
             'error'
         ),
     ]:
