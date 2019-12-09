@@ -151,13 +151,13 @@ def test_bz1729853(tmp_path):
         # Wait for all PVCs in the test namespace to be gone
         for pvc_name in pvc_list:
             logger.info(f"waiting for PVC {pvc_name} to be deleted")
-            ocp_pvc.wait_for_delete(resource_name=pvc_name, timeout=180)
+            ocp_pvc.wait_for_delete(resource_name=pvc_name, timeout=300)
         # Wait for all PVs in the test namespace to be gone as well
         ocp_pv = ocp.OCP(kind=constants.PV, namespace=namespace)
         for pvc_name in pvc_list:
             logger.info(f"waiting for PV {pvc_name} to be deleted")
             try:
-                ocp_pv.wait_for_delete(resource_name=pvc_name, timeout=180)
+                ocp_pv.wait_for_delete(resource_name=pvc_name, timeout=300)
             except TimeoutError:
                 msg = (
                     "PV {pvc_name} failed to be deleted, "
