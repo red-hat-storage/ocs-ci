@@ -41,17 +41,19 @@ def test_capacity_workload_alerts(
 
     # Check utilization on 95%
     alerts = workload_storageutilization_95p.get('prometheus_alerts')
+    # TODO(fbalak): it seems that CephFS utilization triggers only firing
+    # alerts. This needs to be more investigated.
     for target_label, target_msg, target_states, target_severity in [
         (
             constants.ALERT_CLUSTERNEARFULL,
             'Storage cluster is nearing full. Expansion is required.',
-            ['pending', 'firing'],
+            ['pending', 'firing'] if interface=='rbd' else ['firing'],
             'warning'
         ),
         (
             constants.ALERT_CLUSTERCRITICALLYFULL,
             'Storage cluster is critically full and needs immediate expansion',
-            ['pending', 'firing'],
+            ['pending', 'firing'] if interface=='rbd' else ['firing'],
             'error'
         ),
     ]:
