@@ -4,6 +4,13 @@
 
 For full usage run: `run-ci --help`
 
+# usage for getting various ocs image versions
+
+for full help run: `report-version --help`
+
+Run `report-version --cluster-path /my-cluster/path --log-level INFO` to
+get information on various image version deployed by ocs-ci
+
 ## Required configuration
 
 * **AWS credentials** - if you have AWS already configured by `aws configure`,
