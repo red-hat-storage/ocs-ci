@@ -637,7 +637,7 @@ def get_openshift_mirror_url(file_name, version):
         os_type=os_type,
     )
     sample = TimeoutSampler(
-        timeout=60, sleep=5, func=ensure_nightly_build_availability,
+        timeout=180, sleep=5, func=ensure_nightly_build_availability,
         build_url=url,
     )
     if not sample.wait_for_func_status(result=True):
