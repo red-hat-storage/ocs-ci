@@ -894,7 +894,7 @@ class StackStatusError(Exception):
     pass
 
 
-@retry(StackStatusError, tries=12, delay=30, backoff=1)
+@retry(StackStatusError, tries=20, delay=30, backoff=1)
 def verify_stack_deleted(stack_name):
     try:
         cf = boto3.client('cloudformation')
