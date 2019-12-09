@@ -86,7 +86,6 @@ def get_deploymentconfig_dict(name, pvc_name):
 
 
 @tier3
-@pytest.mark.polarion_id("OCS-278")
 @pytest.mark.bugzilla("1729853")
 @pytest.mark.bugzilla("1716276")
 def test_bz1729853(tmp_path):
