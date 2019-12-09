@@ -486,7 +486,7 @@ class OCP(object):
                     waiting_time = time.time() - start_time
                     log.info((
                         f"{self.kind} {resource_name} got deleted successfully"
-                        f" after waiting for {int(waiting_time)} seconds"
+                        f" after waiting for {waiting_time:.3f} seconds"
                     ))
                     return True
                 else:
