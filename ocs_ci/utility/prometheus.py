@@ -230,7 +230,7 @@ class PrometheusAPI(object):
             timeout -= sleep
         return alerts
 
-    def check_alert_cleared(self, label, measure_end_time, time_min=30):
+    def check_alert_cleared(self, label, measure_end_time, time_min=120):
         """
         Check that all alerts with provided label are cleared.
 
