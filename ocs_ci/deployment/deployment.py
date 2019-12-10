@@ -180,6 +180,7 @@ class Deployment(object):
         This prepare catalog source manifest for deploy OCS operator from
         quay registry.
         """
+        logger.info("Adding CatalogSource")
         image = config.DEPLOYMENT.get('ocs_registry_image', '')
         upgrade = config.DEPLOYMENT.get('upgrade', False)
         image_and_tag = image.split(':')
@@ -264,10 +265,7 @@ class Deployment(object):
         Method for deploy OCS via OCS operator
         """
         ui_deployment = config.DEPLOYMENT.get('ui_deployment')
-        olm_cmd = f"oc create -f {constants.OLM_YAML}"
         if ui_deployment:
-            logger.info("Preparing stuff for deployment by openshift-console")
-            run_cmd(olm_cmd)
             self.create_catalog_source()
             self.deployment_with_ui()
             # Skip the rest of the deployment when deploy via UI
@@ -275,7 +273,8 @@ class Deployment(object):
         else:
             logger.info("Deployment of OCS via OCS operator")
             self.label_and_taint_nodes()
-        run_cmd(olm_cmd)
+        logger.info("Creating namespace and operator group.")
+        run_cmd(f"oc create -f {constants.OLM_YAML}")
         self.create_catalog_source()
         self.subscribe_ocs()
         package_manifest = PackageManifest(
@@ -328,6 +327,10 @@ class Deployment(object):
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
 
     def deployment_with_ui(self):
+        """
+        This method will deploy OCS with openshift-console UI test.
+        """
+        # TODO: add support for other browsers
         logger.info("Deployment of OCS will be done by openshift-console")
         console_path = config.RUN['openshift_console_path']
         password_secret_yaml = os.path.join(
@@ -357,10 +360,15 @@ class Deployment(object):
             "FORCE_CHROME_BRANCH_SHA256SUM": chrome_branch_sha,
         }
         openshift_console_env.update(os.environ)
-        run_cmd(
+        ui_deploy_output = run_cmd(
             "./test-gui.sh ceph-storage-install", cwd=console_path,
             env=openshift_console_env,
         )
+        ui_deploy_log_file = os.path.join(
+            config.RUN['log_dir'], "ui_deployment.log"
+        )
+        with open(ui_deploy_log_file, "w+") as log_fd:
+            log_fd.write(ui_deploy_output)
 
     def deploy_ocs(self):
         """
