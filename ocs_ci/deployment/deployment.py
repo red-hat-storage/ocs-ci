@@ -349,7 +349,7 @@ class Deployment(object):
         )
         bridge_base_address = run_cmd(
             "oc get consoles.config.openshift.io cluster -o"
-            "jsonpath='{.status.consoleURL}')"
+            "jsonpath='{.status.consoleURL}'"
         )
         chrome_branch_base = config.RUN.get("force_chrome_branch_base")
         chrome_branch_sha = config.RUN.get("force_chrome_branch_sha256sum")
@@ -362,10 +362,10 @@ class Deployment(object):
         openshift_console_env.update(os.environ)
         ui_deploy_output = run_cmd(
             "./test-gui.sh ceph-storage-install", cwd=console_path,
-            env=openshift_console_env,
+            env=openshift_console_env, timeout=900,
         )
-        ui_deploy_log_file = os.path.join(
-            config.RUN['log_dir'], "ui_deployment.log"
+        ui_deploy_log_file = os.path.expanduser(
+            os.path.join(config.RUN['log_dir'], "ui_deployment.log")
         )
         with open(ui_deploy_log_file, "w+") as log_fd:
             log_fd.write(ui_deploy_output)
