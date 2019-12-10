@@ -8,12 +8,11 @@ pytest which proccess config and passes all params to pytest.
 """
 import logging
 import os
-from getpass import getuser
 
 import pytest
 
 from ocs_ci.framework import config as ocsci_config
-from ocs_ci.framework.exceptions import ClusterPathNotProvidedError
+from ocs_ci.framework.exceptions import ClusterPathNotProvidedError, ClusterNameNotProvidedError
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import (
     dump_config_to_file,
@@ -193,6 +192,9 @@ def process_cluster_cli_params(config):
     Args:
         config (pytest.config): Pytest config object
 
+    Raises:
+        ClusterPathNotProvidedError: If a cluster path is missing
+        ClusterNameNotProvidedError: If a cluster name is missing
     """
     cluster_path = get_cli_param(config, 'cluster_path')
     if not cluster_path:
@@ -207,14 +209,17 @@ def process_cluster_cli_params(config):
         os.path.join(cluster_path, ocsci_config.RUN['kubeconfig_location'])
     )
     cluster_name = get_cli_param(config, 'cluster_name')
-    if not cluster_name:
-        cluster_name = f"ocs-ci-{getuser()[:8]}"
     ocsci_config.RUN['cli_params']['teardown'] = get_cli_param(config, "teardown", default=False)
     ocsci_config.RUN['cli_params']['deploy'] = get_cli_param(config, "deploy", default=False)
     ocsci_config.RUN['cli_params']['io_in_bg'] = get_cli_param(config, "io_in_bg", default=False)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
     get_cli_param(config, 'collect-logs')
+    if (
+        ocsci_config.RUN.get("cli_params").get("deploy")
+        and not cluster_name
+    ):
+        raise ClusterNameNotProvidedError()
     if get_cli_param(config, 'email') and not get_cli_param(config, '--html'):
         pytest.exit("--html option must be provided to send email reports")
     get_cli_param(config, '-m')
