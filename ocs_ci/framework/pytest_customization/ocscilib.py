@@ -220,9 +220,7 @@ def process_cluster_cli_params(config):
         len(cluster_name) < CLUSTER_NAME_MIN_CHARACTERS
         or len(cluster_name) > CLUSTER_NAME_MAX_CHARACTERS
     ):
-        raise ClusterNameLengthError(
-            cluster_name, CLUSTER_NAME_MIN_CHARACTERS, CLUSTER_NAME_MAX_CHARACTERS
-        )
+        raise ClusterNameLengthError(cluster_name)
     ocsci_config.RUN['cli_params']['teardown'] = get_cli_param(config, "teardown", default=False)
     ocsci_config.RUN['cli_params']['deploy'] = get_cli_param(config, "deploy", default=False)
     ocsci_config.RUN['cli_params']['io_in_bg'] = get_cli_param(config, "io_in_bg", default=False)

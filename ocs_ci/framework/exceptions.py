@@ -1,3 +1,8 @@
+from ocs_ci.ocs.constants import (
+    CLUSTER_NAME_MIN_CHARACTERS,
+    CLUSTER_NAME_MAX_CHARACTERS
+)
+
 
 class ClusterPathNotProvidedError(Exception):
 
@@ -6,8 +11,9 @@ class ClusterPathNotProvidedError(Exception):
 
 
 class ClusterNameLengthError(Exception):
-
-    def __init__(self, name, min, max):
+    def __init__(
+        self, name, min=CLUSTER_NAME_MIN_CHARACTERS, max=CLUSTER_NAME_MAX_CHARACTERS
+    ):
         self.name = name
         self.min = min
         self.max = max

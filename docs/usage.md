@@ -44,7 +44,7 @@ to the pytest.
 
 ### Additional arguments:
 
-* `--cluster-name <name>` - name of cluster.
+* `--cluster-name <name>` - name of cluster - it must be 5-17 characters long.
 * `--ocsci-conf` - with this configuration parameter you can overwrite the
     default OCS-CI config parameters defined in
     [default config](https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/conf/default_config.yaml).
