@@ -1,7 +1,5 @@
 # Usage
 
-**Work in progress**
-
 For full usage run: `run-ci --help`
 
 # usage for getting various ocs image versions
@@ -10,6 +8,13 @@ for full help run: `report-version --help`
 
 Run `report-version --cluster-path /my-cluster/path --log-level INFO` to
 get information on various image version deployed by ocs-ci
+
+# usage for cleanup
+  This should be used only when your cluster-dir is accidentally deleted
+  `ci-cleanup [-h] --cluster CLUSTER`
+  CLUSTER points to cluster tag eg: mycluster-ocs-ci-jlgzn , without additional
+   -master or -worker. This can be found by logging into AWS, Selecting the VM
+   and clicking on Tags.
 
 ## Required configuration
 
@@ -85,7 +90,7 @@ provided and if given without the `--deploy` argument, it must contain informati
 that can be used to access an existing cluster.
 
 > In case you lost your cluster dir, the destroy can be done with
-> `uni-cleanup.sh` script.
+> `ci-cleanup` cli that should be invoked with cluster-tag from AWS.
 
 #### Deployment of cluster
 
