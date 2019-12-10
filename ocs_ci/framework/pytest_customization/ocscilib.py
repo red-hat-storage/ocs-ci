@@ -216,9 +216,9 @@ def process_cluster_cli_params(config):
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
     get_cli_param(config, 'collect-logs')
     if (
-        ocsci_config.RUN["cli_params"]["deploy"]
-        or ocsci_config.RUN["cli_params"]["teardown"]
-    ) and not ocsci_config.ENV_DATA["cluster_name"]:
+        ocsci_config.RUN.get("cli_params").get("deploy")
+        and not cluster_name
+    ):
         raise ClusterNameNotProvidedError()
     if get_cli_param(config, 'email') and not get_cli_param(config, '--html'):
         pytest.exit("--html option must be provided to send email reports")
