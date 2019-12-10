@@ -402,8 +402,12 @@ class Deployment(object):
                 selector=['prometheus', 'alertmanager']
             )
 
-            # Create configmap cluster-monitoring-config
-            create_configmap_cluster_monitoring_pod(sc_name)
+            # Create configmap cluster-monitoring-config and reconfigure
+            # storage class and telemeter server (if the url is specified in a
+            # config file)
+            create_configmap_cluster_monitoring_pod(
+                sc_name=sc_name,
+                telemeter_server_url=config.ENV_DATA.get("telemeter_server_url"))
 
             # Take some time to respin the pod
             waiting_time = 45
@@ -420,6 +424,11 @@ class Deployment(object):
 
             # Validate the pvc are mounted on pods
             validate_pvc_are_mounted_on_monitoring_pods(pods_list)
+        elif config.ENV_DATA.get('monitoring_enabled') and config.ENV_DATA.get("telemeter_server_url"):
+            # Create configmap cluster-monitoring-config to reconfigure
+            # telemeter server url when 'persistent-monitoring' is False
+            create_configmap_cluster_monitoring_pod(
+                telemeter_server_url=config.ENV_DATA["telemeter_server_url"])
 
         # Change registry backend to OCS CEPHFS RWX PVC
         registry.change_registry_backend_to_ocs()

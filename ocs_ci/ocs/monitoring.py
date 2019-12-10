@@ -15,22 +15,38 @@ from ocs_ci.utility.retry import retry
 logger = logging.getLogger(__name__)
 
 
-def create_configmap_cluster_monitoring_pod(sc_name):
+def create_configmap_cluster_monitoring_pod(sc_name=None, telemeter_server_url=None):
     """
-    Create a configmap named cluster-monitoring-config
-    and configure pvc on monitoring pod
+    Create a configmap named cluster-monitoring-config based on the arguments.
 
     Args:
-        sc_name (str): Name of the storage class
-
+        sc_name (str): Name of the storage class which will be used for
+            persistent storage needs of OCP Prometheus and Alert Manager.
+            If not defined, the related options won't be present in the
+            monitoring config map and the default (non persistent) storage
+            will be used for OCP Prometheus and Alert Manager.
+        telemeter_server_url (str): URL of Telemeter server where telemeter
+            client (running in the cluster) will send it's telemetry data. If
+            not defined, related option won't be present in the monitoring
+            config map and the default (production) telemeter server will
+            receive the metrics data.
     """
     logger.info("Creating configmap cluster-monitoring-config")
     config_map = templating.load_yaml(
         constants.CONFIGURE_PVC_ON_MONITORING_POD
     )
     config = yaml.safe_load(config_map['data']['config.yaml'])
-    config['prometheusK8s']['volumeClaimTemplate']['spec']['storageClassName'] = sc_name
-    config['alertmanagerMain']['volumeClaimTemplate']['spec']['storageClassName'] = sc_name
+    if sc_name is not None:
+        logger.info(f"Setting {sc_name} as storage backed for Prometheus and Alertmanager")
+        config['prometheusK8s']['volumeClaimTemplate']['spec']['storageClassName'] = sc_name
+        config['alertmanagerMain']['volumeClaimTemplate']['spec']['storageClassName'] = sc_name
+    else:
+        del config['prometheusK8s']
+        del config['alertmanagerMain']
+    if telemeter_server_url is not None:
+        logger.info(f"Setting {telemeter_server_url} as telemeter server url")
+        config['telemeterClient'] = {}
+        config['telemeterClient']['telemeterServerURL'] = telemeter_server_url
     config = yaml.dump(config)
     config_map['data']['config.yaml'] = config
     assert helpers.create_resource(**config_map)
