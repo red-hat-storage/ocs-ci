@@ -107,7 +107,7 @@ class Deployment(object):
         self.ocp_deployment.deploy(log_cli_level)
         # logging the cluster UUID so that we can ask for it's telemetry data
         cluster_id = run_cmd("oc get clusterversion version -o jsonpath='{.spec.clusterID}'")
-        logger.info(f"clusterID (UUID): {cluster_id)")
+        logger.info(f"clusterID (UUID): {cluster_id}")
 
     def label_and_taint_nodes(self):
         """
