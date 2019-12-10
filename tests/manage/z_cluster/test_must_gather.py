@@ -27,8 +27,8 @@ class TestMustGather(ManageTest):
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         def check_for_must_gather_project():
-            ret = self.ocp_obj.get("project")
-            namespaces = [each.metadata.name for each in ret.get('items')]
+            projects = ocp.OCP(kind='Namespace').get().get('items')
+            namespaces = [each.get('metadata').get('name') for each in projects]
             logger.info(f"namespaces: {namespaces}")
             for project in namespaces:
                 logger.info(f"project: {project}")
@@ -90,11 +90,12 @@ class TestMustGather(ManageTest):
         logger.info("Checking logs tree")
         logs = self.get_log_directories(directory)
         pods = pod.get_all_pods(namespace='openshift-storage')
+        pods = [each.name for each in pods]
         logger.info(f"Logs: {logs}")
         logger.info(f"pods list: {pods}")
         assert set(sorted(logs)) == set(sorted(pods)), (
-            "List of openshift-storage pods are not equal to list of logs directories"
-            f"list of pods: {pods}"
+            "List of openshift-storage pods are not equal to list of "
+            "logs directories list of pods: {pods}"
             f"list of log directories: {logs}"
         )
 
