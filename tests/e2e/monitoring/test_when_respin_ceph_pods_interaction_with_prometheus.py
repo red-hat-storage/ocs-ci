@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import ocp, constants
-from ocs_ci.framework.testlib import tier4, E2ETest
+from ocs_ci.framework.testlib import workloads, E2ETest
 from ocs_ci.ocs.resources import pvc, pod
 from tests import disruption_helpers, helpers
 from ocs_ci.ocs.monitoring import check_pvcdata_collected_on_prometheus
@@ -71,7 +71,7 @@ class TestRespinCephPodsAndInteractionWithPrometheus(E2ETest):
     impact to prometheus pods, all data/metrics should be collected correctly.
     """
 
-    @tier4
+    @workloads
     def test_monitoring_after_respinning_ceph_pods(self, test_fixture):
         """
         Test case to validate respinning the ceph pods and

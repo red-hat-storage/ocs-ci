@@ -426,12 +426,15 @@ class AWSUPI(AWSBase):
         if config.ENV_DATA['rhel_workers']:
             self.add_rhel_workers()
 
-    def gather_worker_data(self):
+    def gather_worker_data(self, suffix='no0'):
         """
         Gather various info like vpc, iam role, subnet,security group,
         cluster tag from existing RHCOS workers
+
+        Args:
+            suffix (str): suffix to get resource of worker node, 'no0' by default
+
         """
-        suffix = 'no0'
         stack_name = f'{self.cluster_name}-{suffix}'
         resource = self.cf.list_stack_resources(StackName=stack_name)
         worker_id = self.get_worker_resource_id(resource)
@@ -486,6 +489,7 @@ class AWSUPI(AWSBase):
         num_workers = int(os.environ.get('num_workers', 3))
         logging.info(f"Creating {num_workers} RHEL workers")
         for i in range(num_workers):
+            self.gather_worker_data(f'no{i}')
             logging.info(f"Creating {i + 1}/{num_workers} worker")
             response = self.client.run_instances(
                 BlockDeviceMappings=[
@@ -752,7 +756,6 @@ class AWSUPI(AWSBase):
         """
         Add RHEL worker nodes to the existing cluster
         """
-        self.gather_worker_data()
         self.create_rhel_instance()
         self.run_ansible_playbook()
 
@@ -891,7 +894,7 @@ class StackStatusError(Exception):
     pass
 
 
-@retry(StackStatusError, tries=12, delay=30, backoff=1)
+@retry(StackStatusError, tries=20, delay=30, backoff=1)
 def verify_stack_deleted(stack_name):
     try:
         cf = boto3.client('cloudformation')
