@@ -84,7 +84,12 @@ def test_config_parametrize(testdir, tmpdir):
             - 1
             - 2
         """))
-    pytest_arguments = ['-v', f'--ocsci-conf={conf_file}', f'--cluster-path={tmpdir}']
+    pytest_arguments = [
+        "-v",
+        f"--ocsci-conf={conf_file}",
+        f"--cluster-path={tmpdir}",
+        f"--cluster-name=fake-cluster",
+    ]
     # this is a bit hack which allow us init all the config which we do in
     # runner run_ocsci.py. Without this we won't be able to access config
     init_ocsci_conf(pytest_arguments)
