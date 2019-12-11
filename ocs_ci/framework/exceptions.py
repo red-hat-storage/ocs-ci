@@ -29,4 +29,3 @@ class ClusterNameNotProvidedError(Exception):
 
     def __str__(self):
         return "Please provide a valid --cluster-name."
-
