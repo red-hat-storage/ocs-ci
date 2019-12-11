@@ -203,7 +203,7 @@ class Pod(OCS):
 
         # For some commands, like "ceph fs ls", the returned output is a list
         if isinstance(out, list):
-            return [item for item in out if item]
+            return [item for item in out if not item == ""]
         return out
 
     def get_storage_path(self, storage_type='fs'):
