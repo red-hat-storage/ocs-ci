@@ -125,7 +125,9 @@ class TestDaemonKillDuringCreationOperations(ManageTest):
 
         # Create one pod using each RWO PVC and two pods using each RWX PVC
         # for running IO
-        io_pods = self.pods_creation(pvc_objs_for_io_pods, pod_factory, interface)
+        io_pods = helpers.create_pods(
+            pvc_objs_for_io_pods, pod_factory, interface, 2
+        )
 
         # Wait for pods to be in Running state
         for pod_obj in io_pods:
@@ -136,42 +138,6 @@ class TestDaemonKillDuringCreationOperations(ManageTest):
         log.info(f"Created {len(io_pods)} pods for running IO.")
 
         return pvc_objs, io_pods, pvc_objs_new_pods, access_modes
-
-    def pods_creation(self, pvc_objs, pod_factory, interface):
-        """
-        Create pods
-
-        Args:
-            pvc_objs (list): List of ocs_ci.ocs.resources.pvc.PVC instances
-            pvc_objs (function): Function to be used for creating pods
-            interface (int): Interface type
-
-        Returns:
-            list: list of Pod objects
-        """
-        pod_objs = []
-
-        # Create one pod using each RWO PVC and two pods using each RWX PVC
-        for pvc_obj in pvc_objs:
-            if pvc_obj.volume_mode == 'Block':
-                pod_dict = constants.CSI_RBD_RAW_BLOCK_POD_YAML
-                raw_block_pv = True
-            else:
-                raw_block_pv = False
-                pod_dict = ''
-            if pvc_obj.access_mode == constants.ACCESS_MODE_RWX:
-                pod_obj = pod_factory(
-                    interface=interface, pvc=pvc_obj, status="",
-                    pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
-                )
-                pod_objs.append(pod_obj)
-            pod_obj = pod_factory(
-                interface=interface, pvc=pvc_obj, status="",
-                pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
-            )
-            pod_objs.append(pod_obj)
-
-        return pod_objs
 
     def test_daemon_kill_during_pvc_pod_creation_and_io(
         self, interface, resource_name, setup, multi_pvc_factory,
@@ -232,7 +198,7 @@ class TestDaemonKillDuringCreationOperations(ManageTest):
         # Start creating new pods
         log.info("Start creating new pods.")
         bulk_pod_create = executor.submit(
-            self.pods_creation, pvc_objs_new_pods, pod_factory, interface
+            helpers.create_pods, pvc_objs_new_pods, pod_factory, interface, 2
         )
 
         # Start creation of new PVCs
@@ -354,7 +320,9 @@ class TestDaemonKillDuringCreationOperations(ManageTest):
 
         # Verify that PVCs are reusable by creating new pods
         all_pvc_objs = pvc_objs + pvc_objs_new
-        pod_objs_re = self.pods_creation(all_pvc_objs, pod_factory, interface)
+        pod_objs_re = helpers.create_pods(
+            all_pvc_objs, pod_factory, interface, 2
+        )
 
         # Verify pods are Running
         for pod_obj in pod_objs_re:
