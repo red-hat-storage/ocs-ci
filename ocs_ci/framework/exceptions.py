@@ -12,16 +12,19 @@ class ClusterPathNotProvidedError(Exception):
 
 class ClusterNameLengthError(Exception):
     def __init__(
-        self, name, min=CLUSTER_NAME_MIN_CHARACTERS, max=CLUSTER_NAME_MAX_CHARACTERS
+        self,
+        name,
+        min_length=CLUSTER_NAME_MIN_CHARACTERS,
+        max_length=CLUSTER_NAME_MAX_CHARACTERS
     ):
         self.name = name
-        self.min = min
-        self.max = max
+        self.min_length = min_length
+        self.max_length = max_length
 
     def __str__(self):
         return (
             f"Cluster Name '{self.name}' is {len(self.name)} characters long "
-            f"while it should be {self.min}-{self.max} characters long"
+            f"while it should be {self.min_length}-{self.max_length} characters long"
         )
 
 
