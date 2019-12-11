@@ -271,7 +271,7 @@ class AWSUPI(AWSBase):
         self.name = self.__class__.__name__
         super(AWSUPI, self).__init__()
 
-        if config.ENV_DATA['rhel_workers']:
+        if config.ENV_DATA.get('rhel_workers'):
             self.worker_vpc = None
             self.worker_iam_role = None
             self.worker_subnet = None
@@ -423,7 +423,7 @@ class AWSUPI(AWSBase):
         if config.DEPLOYMENT.get('host_network'):
             self.host_network_update()
 
-        if config.ENV_DATA['rhel_workers']:
+        if config.ENV_DATA.get('rhel_workers'):
             self.add_rhel_workers()
 
     def gather_worker_data(self, suffix='no0'):
@@ -830,7 +830,7 @@ class AWSUPI(AWSBase):
                 default:DEBUG)
         """
         cluster_name = get_cluster_name(self.cluster_path)
-        if config.ENV_DATA['rhel_workers']:
+        if config.ENV_DATA.get('rhel_workers'):
             self.terminate_rhel_workers(self.get_rhel_worker_instances())
         # Destroy extra volumes
         self.destroy_volumes()
