@@ -739,26 +739,48 @@ def validate_pv_delete(pv_name):
         return True
 
 
-def create_pods(pvc_objs_list, interface_type=None, namespace=None):
+def create_pods(pvc_objs, pod_factory, interface, pods_for_rwx=1, status=""):
     """
-    Create Pods.
-    A pod will be created for each PVC in 'pvc_objs_list'.
+    Create pods
 
     Args:
-        pvc_objs_list (list): List of PVC objects
-        interface_type (str): The interface type (CephFS, Cephblockpool, etc.)
-        namespace(str): Name of the namespace
+        pvc_objs (list): List of ocs_ci.ocs.resources.pvc.PVC instances
+        pod_factory (function): pod_factory function
+        interface (int): Interface type
+        pods_for_rwx (int): Number of pods to be created if access mode of
+            PVC is RWX
+        status (str): If provided, wait for desired state of each pod before
+            creating next one
 
     Returns:
-        list: List of Pod objects
-
+        list: list of Pod objects
     """
-    pod_objs = [
-        create_pod(
-            interface_type=interface_type, pvc_name=pvc_obj.name,
-            do_reload=False, namespace=namespace
-        ) for pvc_obj in pvc_objs_list
-    ]
+    pod_objs = []
+
+    for pvc_obj in pvc_objs:
+        volume_mode = getattr(
+            pvc_obj, 'volume_mode', pvc_obj.get()['spec']['volumeMode']
+        )
+        access_mode = getattr(
+            pvc_obj, 'access_mode', pvc_obj.get_pvc_access_mode
+        )
+        if volume_mode == 'Block':
+            pod_dict = constants.CSI_RBD_RAW_BLOCK_POD_YAML
+            raw_block_pv = True
+        else:
+            raw_block_pv = False
+            pod_dict = ''
+        if access_mode == constants.ACCESS_MODE_RWX:
+            pod_obj_rwx = [pod_factory(
+                interface=interface, pvc=pvc_obj, status=status,
+                pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
+            ) for _ in range(1, pods_for_rwx)]
+            pod_objs.extend(pod_obj_rwx)
+        pod_obj = pod_factory(
+            interface=interface, pvc=pvc_obj, status=status,
+            pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
+        )
+        pod_objs.append(pod_obj)
 
     return pod_objs
 

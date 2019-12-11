@@ -10,7 +10,7 @@ from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods, get_all_pods,
     get_fio_rw_iops, get_plugin_pods, get_rbdfsplugin_provisioner_pods,
-    get_cephfsplugin_provisioner_pods, get_operator_pods
+    get_cephfsplugin_provisioner_pods, get_operator_pods, delete_pods
 )
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from tests.helpers import (
@@ -155,14 +155,6 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         log.info(f"Created {len(pod_objs) + len(rwx_pod_objs)} pods.")
 
         return pvc_objs, pod_objs, rwx_pod_objs
-
-    def delete_pods(self, pods_to_delete):
-        """
-        Delete pods
-        """
-        for pod_obj in pods_to_delete:
-            pod_obj.delete(wait=False)
-        return True
 
     def run_io_on_pods(self, pod_objs):
         """
@@ -331,9 +323,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         log.info("Verified IO result on pods having PVCs to delete.")
 
         # Delete pods having PVCs to delete.
-        assert self.delete_pods(pods_for_pvc), (
-            "Couldn't delete pods which are having PVCs to delete."
-        )
+        delete_pods(pods_for_pvc)
         for pod_obj in pods_for_pvc:
             pod_obj.ocp.wait_for_delete(pod_obj.name)
         log.info("Verified: Deleted pods which are having PVCs to delete.")
@@ -348,7 +338,9 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         log.info("Started deleting PVCs")
 
         # Start deleting pods
-        pod_bulk_delete = executor.submit(self.delete_pods, pods_to_delete)
+        pod_bulk_delete = executor.submit(
+            delete_pods, pods_to_delete, wait=False
+        )
         log.info("Started deleting pods")
 
         # Start IO on IO pods
@@ -382,8 +374,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         # Delete pod of type 'resource_to_delete'
         disruption.delete_resource()
 
-        pods_deleted = pod_bulk_delete.result()
-        assert pods_deleted, "Deletion of pods failed."
+        pod_bulk_delete.result()
 
         # Verify pods are deleted
         for pod_obj in pods_to_delete:
