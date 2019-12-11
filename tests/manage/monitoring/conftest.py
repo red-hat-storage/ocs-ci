@@ -292,8 +292,9 @@ def measure_stop_ceph_mon(measurement_dir):
     ]
 
     # check that downscaled monitors are removed as OCS should redeploy them
+    # but only when we are running this for the first time
     check_old_mons_deleted = all(mon not in mons for mon in mons_to_stop)
-    if not check_old_mons_deleted:
+    if measured_op['first_run'] and not check_old_mons_deleted:
         for mon in mons_to_stop:
             logger.info(f"Upscaling deployment {mon} back to 1")
             oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mon}")
