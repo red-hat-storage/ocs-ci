@@ -283,6 +283,7 @@ class PrometheusAPI(object):
             good_values,
             bad_values=(),
             exp_metric_num=None,
+            exp_delay=None,
         ):
         """
         Check that result of range query matches given expectations. Useful
@@ -300,6 +301,10 @@ class PrometheusAPI(object):
                 optional (eg. for ``ceph_health_status`` this would be 1, but
                 for something like ``ceph_osd_up`` this will be a number of
                 OSDs in the cluster)
+            exp_delay (int): Number of seconds from the start of the query
+                time range for which we should tolerate bad values. This is
+                useful if you change cluster state and processing of this
+                change is expected to take some time.
 
         Returns:
             bool: True if result matches given expectations, False otherwise
@@ -323,14 +328,25 @@ class PrometheusAPI(object):
         for metric in result:
             name = metric['metric']['__name__']
             logger.debug(f"checking metric {name}")
+            # get start of the query range for which we are processing data
+            start_ts = metric["values"][0][0]
+            start_dt = datetime.utcfromtimestamp(start_ts)
+            logger.info(f"metrics for {name} starts at {start_dt}")
             for ts, value in metric["values"]:
                 value = int(value)
                 dt = datetime.utcfromtimestamp(ts)
                 if value in good_values:
                     logger.debug(f"{name} has good value {value} at {dt}")
                 elif value in bad_values:
-                    logger.error(f"{name} has bad value {value} at {dt}")
-                    bad_value_timestamps.append(dt)
+                    msg = f"{name} has bad value {value} at {dt}"
+                    # delta is time since start of the query range
+                    delta = dt - start_dt
+                    if exp_delay is not None and delta.seconds < exp_delay:
+                        logger.info(
+                            msg + f" but within expected {exp_delay}s delay")
+                    else:
+                        logger.error(msg)
+                        bad_value_timestamps.append(dt)
                 else:
                     msg = "{name} invalid (not good or bad): {value} at {dt}"
                     logger.error(msg)
