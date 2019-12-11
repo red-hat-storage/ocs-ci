@@ -789,6 +789,12 @@ class AWSUPI(AWSBase):
             exceptions.FailedToDeleteInstance: if failed to terminate
 
         """
+        if not worker_list:
+            logger.info(
+                "No workers in list, skipping termination of RHEL workers"
+            )
+            return
+
         logging.info(f"Terminating RHEL workers {worker_list}")
         # Do a dry run of instance termination
         try:
