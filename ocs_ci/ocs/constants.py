@@ -466,3 +466,7 @@ WORKER_LABEL = "node-role.kubernetes.io/worker"
 REPO_MAPPING = {
     '4.2.0': OCP4_2_REPO
 }
+
+# Cluster name limits
+CLUSTER_NAME_MIN_CHARACTERS = 5
+CLUSTER_NAME_MAX_CHARACTERS = 17
