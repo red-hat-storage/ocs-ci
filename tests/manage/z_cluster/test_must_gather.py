@@ -5,7 +5,8 @@ import re   # This is part of workaround for BZ-1766646, to be removed when fixe
 import pytest
 
 from ocs_ci.framework.testlib import ManageTest, tier1
-from ocs_ci.ocs import openshift_ops, ocp
+from ocs_ci.ocs import ocp
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.utility.utils import ocsci_log_path, TimeoutSampler
 
@@ -21,24 +22,25 @@ class TestMustGather(ManageTest):
         """
         init OCP() object
         """
-
-        self.ocs = openshift_ops.OCP()
         self.ocp_obj = ocp.OCP()
 
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         def check_for_must_gather_project():
-            namespaces = self.ocs.get_projects()
+            projects = ocp.OCP(kind='Namespace').get().get('items')
+            namespaces = [each.get('metadata').get('name') for each in projects]
             logger.info(f"namespaces: {namespaces}")
             for project in namespaces:
                 logger.info(f"project: {project}")
-                if project[:-5] == "openshift-must-gather-":
+                if "openshift-must-gather" in project:
                     return project
 
             return False
 
         def check_for_must_gather_pod():
-            must_gather_pods = self.ocs.get_pods(label_selector='app=must-gather')
+            must_gather_pods = pod.get_all_pods(
+                selector_label='app=must-gather'
+            )
             if must_gather_pods:
                 logger.info(f"must_gather pods: {must_gather_pods}")
                 logger.info("pod still exist")
@@ -47,7 +49,9 @@ class TestMustGather(ManageTest):
                 return False
 
         def finalizer():
-            must_gather_pods = self.ocs.get_pods(label_selector='app=must-gather')
+            must_gather_pods = pod.get_all_pods(
+                selector_label='app=must-gather'
+            )
             logger.info(f"must_gather_pods: {must_gather_pods} ")
             sample_pods = TimeoutSampler(
                 timeout=30, sleep=3, func=check_for_must_gather_pod,
@@ -85,12 +89,13 @@ class TestMustGather(ManageTest):
         # Compare running pods list to "/pods" subdirectories
         logger.info("Checking logs tree")
         logs = self.get_log_directories(directory)
-        pods = self.get_ocs_pods()
+        pods = pod.get_all_pods(namespace='openshift-storage')
+        pods = [each.name for each in pods]
         logger.info(f"Logs: {logs}")
         logger.info(f"pods list: {pods}")
         assert set(sorted(logs)) == set(sorted(pods)), (
-            "List of openshift-storage pods are not equal to list of logs directories"
-            f"list of pods: {pods}"
+            "List of openshift-storage pods are not equal to list of "
+            "logs directories list of pods: {pods}"
             f"list of log directories: {logs}"
         )
 
@@ -132,19 +137,6 @@ class TestMustGather(ManageTest):
         list_dir = os.listdir(dir_name)
 
         return list_dir
-
-    def get_ocs_pods(self):
-        """
-        Get list of openshift-storage pods
-
-        Returns:
-            list: pods in openshift-storage namespace
-
-        """
-
-        pods = self.ocs.get_pods(namespace='openshift-storage')
-
-        return pods
 
     def locate_pods_directory(self, root_directory):
         """
