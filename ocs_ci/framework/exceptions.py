@@ -24,9 +24,9 @@ class ClusterNameLengthError(Exception):
             f"while it should be {self.min}-{self.max} characters long"
         )
 
-    
+
 class ClusterNameNotProvidedError(Exception):
 
     def __str__(self):
         return "Please provide a valid --cluster-name."
-    
+
