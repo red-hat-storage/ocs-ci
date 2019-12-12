@@ -7,9 +7,10 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import upgrade
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
-from ocs_ci.ocs.exceptions import TimeoutException
+from ocs_ci.ocs.exceptions import CephHealthException, TimeoutException
 from ocs_ci.ocs.node import get_typed_nodes
 from ocs_ci.ocs.ocp import get_images
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -115,6 +116,8 @@ def verify_image_versions(old_images):
 
 @upgrade
 def test_upgrade():
+    ceph_cluster = CephCluster()
+    ceph_cluster.enable_health_monitor()
     namespace = config.ENV_DATA['cluster_namespace']
     ocs_catalog = CatalogSource(
         resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
@@ -174,3 +177,9 @@ def test_upgrade():
     )
     verify_image_versions(old_images)
     ocs_install_verification(timeout=600, skip_osd_distribution_check=True)
+    ceph_cluster.disable_health_monitor()
+    if ceph_cluster.health_error_status:
+        CephHealthException(
+            f"During upgrade hit Ceph HEALTH_ERROR: "
+            f"{ceph_cluster.health_error_status}"
+        )
