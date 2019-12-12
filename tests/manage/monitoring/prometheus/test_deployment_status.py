@@ -30,7 +30,8 @@ def test_ceph_manager_stopped(measure_stop_ceph_mgr):
         msg=target_msg,
         alerts=alerts,
         states=states,
-        severity='critical')
+        severity='critical'
+    )
     api.check_alert_cleared(
         label=target_label,
         measure_end_time=measure_stop_ceph_mgr.get('stop')

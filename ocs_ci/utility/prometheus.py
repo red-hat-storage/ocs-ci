@@ -48,7 +48,7 @@ def check_alert_list(
     if ignore_more_occurences:
         for state in states:
             delete = False
-            for key, alert in enumerate(target_alerts):
+            for key, alert in reversed(list(enumerate(target_alerts))):
                 if alert.get('state') == state:
                     if delete:
                         d_msg = f"Ignoring {alert} as alert already appeared."
@@ -58,7 +58,8 @@ def check_alert_list(
                         delete = True
     assert_msg = (
         f"Incorrect number of {label} alerts ({len(target_alerts)} "
-        f"instead of {len(states)})"
+        f"instead of {len(states)} with states: {states})."
+        f"\nAlerts: {target_alerts}"
     )
     assert len(target_alerts) == len(states), assert_msg
 
@@ -293,7 +294,7 @@ class PrometheusAPI(object):
             timeout -= sleep
         return alerts
 
-    def check_alert_cleared(self, label, measure_end_time, time_min=30):
+    def check_alert_cleared(self, label, measure_end_time, time_min=120):
         """
         Check that all alerts with provided label are cleared.
 
