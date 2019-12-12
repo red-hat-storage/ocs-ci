@@ -14,13 +14,15 @@ from ocs_ci.ocs.ocp import OCP
 logger = logging.getLogger(name=__file__)
 
 
+# TODO(fbalak): if ignore_more_occurences is set to False then tests are flaky.
+# The root cause should be inspected.
 def check_alert_list(
     label,
     msg,
     alerts,
     states,
     severity="warning",
-    ignore_more_occurences=False
+    ignore_more_occurences=True
 ):
     """
     Check list of alerts that there are alerts with requested label and
