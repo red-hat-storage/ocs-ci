@@ -3,6 +3,7 @@ This module provides base class for different deployment
 platforms like AWS, VMWare, Baremetal etc.
 """
 import logging
+import os
 import tempfile
 import time
 from copy import deepcopy
@@ -30,7 +31,8 @@ from ocs_ci.ocs.utils import (
 )
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
-    run_cmd, ceph_health_check, is_cluster_running, get_latest_ds_olm_tag
+    run_cmd, ceph_health_check, is_cluster_running, get_kubeadmin_password,
+    get_latest_ds_olm_tag,
 )
 from tests import helpers
 
@@ -178,6 +180,7 @@ class Deployment(object):
         This prepare catalog source manifest for deploy OCS operator from
         quay registry.
         """
+        logger.info("Adding CatalogSource")
         image = config.DEPLOYMENT.get('ocs_registry_image', '')
         upgrade = config.DEPLOYMENT.get('upgrade', False)
         image_and_tag = image.split(':')
@@ -263,21 +266,17 @@ class Deployment(object):
         """
         ui_deployment = config.DEPLOYMENT.get('ui_deployment')
         if ui_deployment:
-            logger.info("Preparing stuff for deployment by openshift-console")
+            self.create_catalog_source()
+            self.deployment_with_ui()
+            # Skip the rest of the deployment when deploy via UI
+            return
         else:
             logger.info("Deployment of OCS via OCS operator")
             self.label_and_taint_nodes()
+        logger.info("Creating namespace and operator group.")
         run_cmd(f"oc create -f {constants.OLM_YAML}")
         self.create_catalog_source()
-        if ui_deployment:
-            logger.info(
-                "Skipping the rest of the deployment because it will be done "
-                "by UI deployment!"
-            )
-            return
-
         self.subscribe_ocs()
-        # Skip rest of the deployment when deploy via UI
         package_manifest = PackageManifest(
             resource_name=defaults.OCS_OPERATOR_NAME
         )
@@ -327,6 +326,50 @@ class Deployment(object):
         )
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
 
+    def deployment_with_ui(self):
+        """
+        This method will deploy OCS with openshift-console UI test.
+        """
+        # TODO: add support for other browsers
+        logger.info("Deployment of OCS will be done by openshift-console")
+        console_path = config.RUN['openshift_console_path']
+        password_secret_yaml = os.path.join(
+            console_path, constants.HTPASSWD_SECRET_YAML
+        )
+        patch_htpasswd_yaml = os.path.join(
+            console_path, constants.HTPASSWD_PATCH_YAML
+        )
+        with open(patch_htpasswd_yaml) as fd_patch_htpasswd:
+            content_patch_htpasswd_yaml = fd_patch_htpasswd.read()
+        run_cmd(f"oc apply -f {password_secret_yaml}", cwd=console_path)
+        run_cmd(
+            f"oc patch oauths cluster --patch "
+            f"\"{content_patch_htpasswd_yaml}\" --type=merge",
+            cwd=console_path
+        )
+        bridge_base_address = run_cmd(
+            "oc get consoles.config.openshift.io cluster -o"
+            "jsonpath='{.status.consoleURL}'"
+        )
+        chrome_branch_base = config.RUN.get("force_chrome_branch_base")
+        chrome_branch_sha = config.RUN.get("force_chrome_branch_sha256sum")
+        openshift_console_env = {
+            "BRIDGE_KUBEADMIN_PASSWORD": get_kubeadmin_password(),
+            "BRIDGE_BASE_ADDRESS": bridge_base_address,
+            "FORCE_CHROME_BRANCH_BASE": chrome_branch_base,
+            "FORCE_CHROME_BRANCH_SHA256SUM": chrome_branch_sha,
+        }
+        openshift_console_env.update(os.environ)
+        ui_deploy_output = run_cmd(
+            "./test-gui.sh ceph-storage-install", cwd=console_path,
+            env=openshift_console_env, timeout=900,
+        )
+        ui_deploy_log_file = os.path.expanduser(
+            os.path.join(config.RUN['log_dir'], "ui_deployment.log")
+        )
+        with open(ui_deploy_log_file, "w+") as log_fd:
+            log_fd.write(ui_deploy_output)
+
     def deploy_ocs(self):
         """
         Handle OCS deployment, since OCS deployment steps are common to any
@@ -341,12 +384,7 @@ class Deployment(object):
             return
         except (IndexError, CommandFailed):
             logger.info("Running OCS basic installation")
-
         self.deploy_ocs_via_operator()
-        if config.DEPLOYMENT.get('ui_deployment'):
-            config.ENV_DATA['skip_ocs_deployment'] = True
-            return
-
         pod = ocp.OCP(
             kind=constants.POD, namespace=self.namespace
         )
