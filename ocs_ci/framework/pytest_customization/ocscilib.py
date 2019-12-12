@@ -220,16 +220,14 @@ def process_cluster_cli_params(config):
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
     get_cli_param(config, 'collect-logs')
-    if (
-        ocsci_config.RUN.get("cli_params").get("deploy")
-        and not cluster_name
-    ):
-        raise ClusterNameNotProvidedError()
-    if (
-        len(cluster_name) < CLUSTER_NAME_MIN_CHARACTERS
-        or len(cluster_name) > CLUSTER_NAME_MAX_CHARACTERS
-    ):
-        raise ClusterNameLengthError(cluster_name)
+    if ocsci_config.RUN.get("cli_params").get("deploy"):
+        if not cluster_name:
+            raise ClusterNameNotProvidedError()
+        if (
+            len(cluster_name) < CLUSTER_NAME_MIN_CHARACTERS
+            or len(cluster_name) > CLUSTER_NAME_MAX_CHARACTERS
+        ):
+            raise ClusterNameLengthError(cluster_name)
     if get_cli_param(config, 'email') and not get_cli_param(config, '--html'):
         pytest.exit("--html option must be provided to send email reports")
     get_cli_param(config, '-m')
