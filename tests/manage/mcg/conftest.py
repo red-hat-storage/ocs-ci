@@ -6,6 +6,7 @@ from time import sleep
 import pytest
 from botocore.exceptions import ClientError
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import mcg
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
@@ -25,9 +26,10 @@ def mcg_obj(request):
     """
     mcg_obj = mcg.MCG()
 
-    def finalizer():
-        mcg_obj.cred_req_obj.delete()
-    request.addfinalizer(finalizer)
+    if config.ENV_DATA['platform'].lower() == 'aws':
+        def finalizer():
+            mcg_obj.cred_req_obj.delete()
+        request.addfinalizer(finalizer)
 
     return mcg_obj
 
