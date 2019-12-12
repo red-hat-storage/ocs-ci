@@ -508,7 +508,7 @@ class HealthMonitorThread(threading.Thread):
             health_status = self.ceph_cluster.get_ceph_health(detail=True)
             if "HEALTH_ERROR" in health_status:
                 self.ceph_cluster.health_error_status = (
-                    self.ceph_cluster.ceph_status()
+                    self.ceph_cluster.get_ceph_status()
                 )
 
 
