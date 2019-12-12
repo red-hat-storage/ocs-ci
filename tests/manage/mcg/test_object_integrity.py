@@ -18,6 +18,7 @@ class TestBucketIntegrity(ManageTest):
     """
     Test data integrity of a bucket
     """
+    @pytest.mark.filterwarnings('ignore::urllib3.exceptions.InsecureRequestWarning')
     @pytest.mark.polarion_id("OCS-1321")
     def test_check_object_integrity(self, mcg_obj, awscli_pod, bucket_factory):
         """

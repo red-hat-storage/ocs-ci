@@ -13,16 +13,16 @@ import calendar
 from threading import Thread
 import base64
 
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, verify_images_upgraded
 from tests import helpers
 from ocs_ci.ocs import workload
 from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, NonUpgradedImagesFoundError
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import TimeoutSampler, run_cmd
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler, check_timeout_reached
 
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
@@ -127,7 +127,9 @@ class Pod(OCS):
             logger.exception(f"Found Exception: {ex}")
             raise
 
-    def exec_cmd_on_pod(self, command, out_yaml_format=True, secrets=None, **kwargs):
+    def exec_cmd_on_pod(
+        self, command, out_yaml_format=True, secrets=None, timeout=600, **kwargs
+    ):
         """
         Execute a command on a pod (e.g. oc rsh)
 
@@ -138,14 +140,17 @@ class Pod(OCS):
 
             secrets (list): A list of secrets to be masked with asterisks
                 This kwarg is popped in order to not interfere with
-                subprocess.run(**kwargs)
+                subprocess.run(``**kwargs``)
+            timeout (int): timeout for the exec_oc_cmd, defaults to 600 seconds
 
         Returns:
             Munch Obj: This object represents a returned yaml file
         """
         rsh_cmd = f"rsh {self.name} "
         rsh_cmd += command
-        return self.ocp.exec_oc_cmd(rsh_cmd, out_yaml_format, secrets=secrets, **kwargs)
+        return self.ocp.exec_oc_cmd(
+            rsh_cmd, out_yaml_format, secrets=secrets, timeout=timeout, **kwargs
+        )
 
     def exec_bash_cmd_on_pod(self, command):
         """
@@ -355,15 +360,16 @@ class Pod(OCS):
 
 # Helper functions for Pods
 
-def get_all_pods(namespace=None, selector=None):
+def get_all_pods(namespace=None, selector=None, selector_label='app'):
     """
     Get all pods in a namespace.
 
     Args:
         namespace (str): Name of the namespace
             If namespace is None - get all pods
-        selector (list) : List of the resource selector to search with
+        selector (list) : List of the resource selector to search with.
             Example: ['alertmanager','prometheus']
+        selector_label (str): Label of selector (default: app).
 
     Returns:
         list: List of Pod objects
@@ -372,7 +378,10 @@ def get_all_pods(namespace=None, selector=None):
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     pods = ocp_pod_obj.get()['items']
     if selector:
-        pods_new = [pod for pod in pods if pod['metadata']['labels'].get('app') in selector]
+        pods_new = [
+            pod for pod in pods if
+            pod['metadata']['labels'].get(selector_label) in selector
+        ]
         pods = pods_new
     pod_objs = [Pod(**pod) for pod in pods]
     return pod_objs
@@ -831,26 +840,25 @@ def get_pod_node(pod_obj):
         pod_obj (OCS): The pod object
 
     Returns:
-        OCP: The node object
+        ocs_ci.ocs.ocp.OCP: The node object
 
     """
     node_name = pod_obj.get().get('spec').get('nodeName')
     return node.get_node_objs(node_names=node_name)[0]
 
 
-def delete_pods(pod_objs):
+def delete_pods(pod_objs, wait=True):
     """
     Deletes list of the pod objects
 
     Args:
         pod_objs (list): List of the pod objects to be deleted
-
-    Returns:
-        bool: True if deletion is successful
+        wait (bool): Determines if the delete command should wait for
+            completion
 
     """
     for pod in pod_objs:
-        pod.delete()
+        pod.delete(wait=wait)
 
 
 def validate_pods_are_respinned_and_running_state(pod_objs_list):
@@ -1051,3 +1059,57 @@ def upload(pod_name, localpath, remotepath):
     """
     cmd = f"oc cp {os.path.expanduser(localpath)} {pod_name}:{remotepath}"
     run_cmd(cmd)
+
+
+def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
+    """
+    Verify that all pods do not have old image.
+
+    Args:
+       old_images (set): Set with old images.
+       selector (str): Selector (e.g. app=ocs-osd)
+       count (int): Number of resources for selector.
+       timeout (int): Timeout in seconds to wait for pods to be upgraded.
+
+    Raises:
+        TimeoutException: If the pods didn't get upgraded till the timeout.
+
+    """
+
+    namespace = config.ENV_DATA['cluster_namespace']
+    pod = OCP(
+        kind=constants.POD, namespace=namespace,
+    )
+    info_message = (
+        f"Waiting for {count} pods with selector: {selector} to be running "
+        f"and upgraded."
+    )
+    logger.info(info_message)
+    start_time = time.time()
+    selector_label, selector_value = selector.split('=')
+    while True:
+        pod_count = 0
+        try:
+            pods = get_all_pods(namespace, [selector_value], selector_label)
+            pods_len = len(pods)
+            logger.info(f"Found {pods_len} pod(s) for selector: {selector}")
+            if pods_len != count:
+                logger.warning(
+                    f"Number of found pods {pods_len} is not as expected: "
+                    f"{count}"
+                )
+            for pod in pods:
+                verify_images_upgraded(old_images, pod.get())
+                pod_count += 1
+        except CommandFailed as ex:
+            logger.warning(
+                f"Failed when getting pods with selector {selector}."
+                f"Error: {ex}"
+            )
+        except NonUpgradedImagesFoundError as ex:
+            logger.warning(ex)
+        check_timeout_reached(start_time, timeout, info_message)
+        if pods_len != count:
+            logger.error(f"Found pods: {pods_len} but expected: {count}!")
+        elif pod_count == count:
+            return

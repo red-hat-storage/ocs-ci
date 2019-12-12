@@ -13,33 +13,6 @@ metadata:
   name: openshift-storage-operatorgroup
   namespace: openshift-storage
 spec:
-  serviceAccount:
-    metadata:
-      creationTimestamp: null
+  creationTimestamp: null
   targetNamespaces:
-  - openshift-storage
----
-apiVersion: operators.coreos.com/v1alpha1
-kind: CatalogSource
-metadata:
-  name: ocs-catalogsource
-  namespace: openshift-marketplace
-spec:
-  displayName: Openshift Container Storage
-  icon:
-    base64data: ""
-    mediatype: ""
-  image: quay.io/rhceph-dev/ocs-registry:latest
-  publisher: Red Hat
-  sourceType: grpc
----
-apiVersion: operators.coreos.com/v1alpha1
-kind: Subscription
-metadata:
-  name: ocs-subscription
-  namespace: openshift-storage
-spec:
-  channel: alpha
-  name: ocs-operator
-  source: ocs-catalogsource
-  sourceNamespace: openshift-marketplace
+        - openshift-storage

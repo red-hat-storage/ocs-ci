@@ -10,6 +10,7 @@ from subprocess import TimeoutExpired
 import tempfile
 import time
 import yaml
+import threading
 
 from ocs_ci.ocs.ocp import OCP
 
@@ -270,6 +271,7 @@ def create_ceph_block_pool(pool_name=None):
         )
     )
     cbp_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
+    cbp_data['spec']['failureDomain'] = get_failure_domin()
     cbp_obj = create_resource(**cbp_data)
     cbp_obj.reload()
 
@@ -737,26 +739,48 @@ def validate_pv_delete(pv_name):
         return True
 
 
-def create_pods(pvc_objs_list, interface_type=None, namespace=None):
+def create_pods(pvc_objs, pod_factory, interface, pods_for_rwx=1, status=""):
     """
-    Create Pods.
-    A pod will be created for each PVC in 'pvc_objs_list'.
+    Create pods
 
     Args:
-        pvc_objs_list (list): List of PVC objects
-        interface_type (str): The interface type (CephFS, Cephblockpool, etc.)
-        namespace(str): Name of the namespace
+        pvc_objs (list): List of ocs_ci.ocs.resources.pvc.PVC instances
+        pod_factory (function): pod_factory function
+        interface (int): Interface type
+        pods_for_rwx (int): Number of pods to be created if access mode of
+            PVC is RWX
+        status (str): If provided, wait for desired state of each pod before
+            creating next one
 
     Returns:
-        list: List of Pod objects
-
+        list: list of Pod objects
     """
-    pod_objs = [
-        create_pod(
-            interface_type=interface_type, pvc_name=pvc_obj.name,
-            do_reload=False, namespace=namespace
-        ) for pvc_obj in pvc_objs_list
-    ]
+    pod_objs = []
+
+    for pvc_obj in pvc_objs:
+        volume_mode = getattr(
+            pvc_obj, 'volume_mode', pvc_obj.get()['spec']['volumeMode']
+        )
+        access_mode = getattr(
+            pvc_obj, 'access_mode', pvc_obj.get_pvc_access_mode
+        )
+        if volume_mode == 'Block':
+            pod_dict = constants.CSI_RBD_RAW_BLOCK_POD_YAML
+            raw_block_pv = True
+        else:
+            raw_block_pv = False
+            pod_dict = ''
+        if access_mode == constants.ACCESS_MODE_RWX:
+            pod_obj_rwx = [pod_factory(
+                interface=interface, pvc=pvc_obj, status=status,
+                pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
+            ) for _ in range(1, pods_for_rwx)]
+            pod_objs.extend(pod_obj_rwx)
+        pod_obj = pod_factory(
+            interface=interface, pvc=pvc_obj, status=status,
+            pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
+        )
+        pod_objs.append(pod_obj)
 
     return pod_objs
 
@@ -1089,15 +1113,21 @@ def craft_s3_command(mcg_obj, cmd):
         str: The crafted command, ready to be executed on the pod
 
     """
-    base_command = (
-        f"sh -c \"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
-        f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
-        f"AWS_DEFAULT_REGION={mcg_obj.region} "
-        f"aws s3 "
-        f"--endpoint={mcg_obj.s3_endpoint} "
-        f"--no-verify-ssl "
-    )
-    string_wrapper = "\""
+    if mcg_obj:
+        base_command = (
+            f"sh -c \"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
+            f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
+            f"AWS_DEFAULT_REGION={mcg_obj.region} "
+            f"aws s3 "
+            f"--endpoint={mcg_obj.s3_endpoint} "
+            f"--no-verify-ssl "
+        )
+        string_wrapper = "\""
+    else:
+        base_command = (
+            f"aws s3 --no-verify-ssl --no-sign-request "
+        )
+        string_wrapper = ''
 
     return f"{base_command}{cmd}{string_wrapper}"
 
@@ -1270,9 +1300,13 @@ def delete_objs_parallel(obj_list):
         bool: True if obj deleted else False
 
     """
-    with ThreadPoolExecutor() as p:
-        for obj in obj_list:
-            p.submit(obj.delete)
+    threads = list()
+    for obj in obj_list:
+        process = threading.Thread(target=obj.delete)
+        process.start()
+        threads.append(process)
+    for process in threads:
+        process.join()
     return True
 
 
@@ -1491,3 +1525,21 @@ def create_dummy_osd(deployment):
             pass
 
     return dummy_deployment, dummy_pod
+
+
+def get_failure_domin():
+    """
+    Function is used to getting failure domain of pool
+
+    Returns:
+        str: Failure domain from cephblockpool
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    out = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd crush rule dump", format='json')
+    assert out, "Failed to get cmd output"
+    for crush_rule in out:
+        if constants.CEPHBLOCKPOOL.lower() in crush_rule.get("rule_name"):
+            for steps in crush_rule.get("steps"):
+                if "type" in steps:
+                    return steps.get("type")

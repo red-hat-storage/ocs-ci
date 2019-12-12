@@ -216,6 +216,10 @@ def get_deviceset_pvs():
         AssertionError: In case the deviceset PVCs are not found
 
     """
-    deviceset_pvcs = get_all_pvc_objs(selector=constants.DEFAULT_DEVICESET_LABEL)
+    ocs_pvc_obj = get_all_pvc_objs(namespace=config.ENV_DATA['cluster_namespace'])
+    deviceset_pvcs = []
+    for pvc_obj in ocs_pvc_obj:
+        if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME):
+            deviceset_pvcs.append(pvc_obj)
     assert deviceset_pvcs, "Failed to find the deviceset PVCs"
     return [pvc.backed_pv_obj for pvc in deviceset_pvcs]

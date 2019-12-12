@@ -13,7 +13,7 @@ import threading
 from tests import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.testlib import scale, E2ETest
+from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
 
 log = logging.getLogger(__name__)
 
@@ -113,6 +113,7 @@ class BasePvcPodCreateDelete(E2ETest):
 
 
 @scale
+@ignore_leftovers
 @pytest.mark.parametrize(
     argnames="start_io",
     argvalues=[
@@ -120,7 +121,7 @@ class BasePvcPodCreateDelete(E2ETest):
             *[False], marks=pytest.mark.polarion_id("OCS-682")
         ),
         pytest.param(
-            *[True], marks=pytest.mark.polarion_id("OCS-679")
+            *[True], marks=[pytest.mark.polarion_id("OCS-679"), pytest.mark.bugzilla("1768031")]
         )
     ]
 )

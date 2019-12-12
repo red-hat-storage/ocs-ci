@@ -56,17 +56,25 @@ class RadosHelper:
         outbuf = out.read().decode()
         return json.loads('\n'.join(outbuf.split('\n')[1:]))
 
-    def create_pool(self, pool_name, pg_num=16,
-                    erasure_code_profile_name=None,
-                    min_size=None,
-                    erasure_code_use_overwrites=False):
+    def create_pool(
+        self,
+        pool_name,
+        pg_num=16,
+        erasure_code_profile_name=None,
+        min_size=None,
+        erasure_code_use_overwrites=False
+    ):
         """
         Create a pool named from the pool_name parameter.
-        :param pool_name: name of the pool being created.
-        :param pg_num: initial number of pgs.
-        :param erasure_code_profile_name: if set and !None create an
-            erasure coded pool using the profile
-        :param erasure_code_use_overwrites: if true, allow overwrites
+
+        Args:
+            pool_name (str): name of the pool being created.
+            pg_num (int): initial number of pgs.
+            erasure_code_profile_name (str): if set and !None create an
+                erasure coded pool using the profile
+            min_size (int): minimum size
+            erasure_code_use_overwrites (bool): if True, allow overwrites
+
         """
         assert isinstance(pool_name, str)
         assert isinstance(pg_num, int)

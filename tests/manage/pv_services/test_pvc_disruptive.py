@@ -8,7 +8,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from tests import helpers, disruption_helpers
 
@@ -188,67 +187,6 @@ class TestPVCDisruption(ManageTest):
         self.sc_obj = storageclass_factory(interface=interface)
         self.proj_obj = project_factory()
 
-    def verify_resource_creation(self, func_to_use, previous_num, namespace):
-        """
-        Wait for new resources to be created.
-
-        Args:
-            func_to_use (function): Function to be used to fetch resource info
-            previous_num (int): Previous number of resources
-            namespace (str): The namespace to look in
-
-        Returns:
-            bool: True if resource creation has started.
-                  False in case of timeout.
-        """
-        try:
-            for sample in TimeoutSampler(10, 1, func_to_use, namespace):
-                if func_to_use == get_all_pvcs:
-                    current_num = len(sample['items'])
-                else:
-                    current_num = len(sample)
-                if current_num > previous_num:
-                    return True
-        except TimeoutExpiredError:
-            return False
-
-    def pods_creation(self, pvc_objs, pod_factory, interface):
-        """
-        Create pods
-
-        Args:
-            pvc_objs (list): List of ocs_ci.ocs.resources.pvc.PVC instances
-            pvc_objs (function): Function to be used for creating pods
-            interface (int): Interface type
-
-        Returns:
-            list: list of Pod objects
-        """
-        pod_objs = []
-
-        # Create one pod using each RWO PVC and two pods using each RWX PVC
-        for pvc_obj in pvc_objs:
-            pvc_info = pvc_obj.get()
-            if pvc_info['spec']['volumeMode'] == 'Block':
-                pod_dict = constants.CSI_RBD_RAW_BLOCK_POD_YAML
-                raw_block_pv = True
-            else:
-                raw_block_pv = False
-                pod_dict = ''
-            if pvc_obj.access_mode == constants.ACCESS_MODE_RWX:
-                pod_obj = pod_factory(
-                    interface=interface, pvc=pvc_obj, status="",
-                    pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
-                )
-                pod_objs.append(pod_obj)
-            pod_obj = pod_factory(
-                interface=interface, pvc=pvc_obj, status="",
-                pod_dict_path=pod_dict, raw_block_pv=raw_block_pv
-            )
-            pod_objs.append(pod_obj)
-
-        return pod_objs
-
     def test_pvc_disruptive(
         self, interface, operation_to_disrupt, resource_to_delete,
         multi_pvc_factory, pod_factory
@@ -314,8 +252,8 @@ class TestPVCDisruption(ManageTest):
 
         if operation_to_disrupt == 'create_pvc':
             # Ensure PVCs are being created before deleting the resource
-            ret = self.verify_resource_creation(
-                get_all_pvcs, initial_num_of_pvc, namespace
+            ret = helpers.wait_for_resource_count_change(
+                get_all_pvcs, initial_num_of_pvc, namespace, 'increase'
             )
             assert ret, "Wait timeout: PVCs are not being created."
             logger.info(
@@ -335,13 +273,13 @@ class TestPVCDisruption(ManageTest):
 
         # Start creating pods
         bulk_pod_create = executor.submit(
-            self.pods_creation, pvc_objs, pod_factory, interface
+            helpers.create_pods, pvc_objs, pod_factory, interface, 2
         )
 
         if operation_to_disrupt == 'create_pod':
             # Ensure that pods are being created before deleting the resource
-            ret = self.verify_resource_creation(
-                pod.get_all_pods, initial_num_of_pods, namespace
+            ret = helpers.wait_for_resource_count_change(
+                pod.get_all_pods, initial_num_of_pods, namespace, 'increase'
             )
             assert ret, "Wait timeout: Pods are not being created."
             logger.info(
@@ -414,10 +352,7 @@ class TestPVCDisruption(ManageTest):
             pod_obj.ocp.wait_for_delete(pod_obj.name)
 
         # Verify that PVCs are reusable by creating new pods
-        create_pods = executor.submit(
-            self.pods_creation, pvc_objs, pod_factory, interface
-        )
-        pod_objs = create_pods.result()
+        pod_objs = helpers.create_pods(pvc_objs, pod_factory, interface, 2)
 
         # Verify new pods are Running
         for pod_obj in pod_objs:

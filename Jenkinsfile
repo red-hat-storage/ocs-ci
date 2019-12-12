@@ -102,19 +102,24 @@ pipeline {
     }
     success {
       script {
+        def registry_image = "${env.OCS_REGISTRY_IMAGE}"
+        // quay.io/rhceph-dev/ocs-registry:4.2-58.e59ca0f.master -> 4.2-58.e59ca0f.master
+        def registry_tag = registry_image.split(':')[-1]
+        // tag ocs-registry container as 'latest-stable'
+        build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-registry:latest-stable")]
+        // tag ocs-olm-operator container as 'latest-stable'
+        build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-olm-operator:latest-stable")]
         if( env.UMB_MESSAGE in [true, 'true'] ) {
-          def registry_image = "${env.OCS_REGISTRY_IMAGE}"
-          // quay.io/rhceph-dev/ocs-registry:4.2-58.e59ca0f.master -> 4.2
-          def registry_version = registry_image.split(':')[-1].split('-')[0]
+          def registry_version = registry_tag.split('-')[0]
           def properties = """
             TOOL=ocs-ci
             PRODUCT=ocs
-            PRODUCT_VERSION={registry_version}
+            PRODUCT_VERSION=${registry_version}
           """
-          def content_string = '''{
+          def content_string = """{
             "SENDER_BUILD_NUMBER": "${BUILD_NUMBER}",
             "OCS_REGISTRY_IMAGE": "${env.OCS_REGISTRY_IMAGE}",
-          }'''
+          }"""
           def content = readJSON text: content_string
           echo "Sending UMB message"
           echo 'Properties: ' + properties

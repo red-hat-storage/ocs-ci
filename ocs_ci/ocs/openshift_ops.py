@@ -11,6 +11,7 @@ import ocs_ci.ocs.defaults as default
 log = logging.getLogger(__name__)
 
 
+# DEPRECATED - DO NOT USE #
 class OCP(object):
     """
     Class which contains various utility functions for interacting

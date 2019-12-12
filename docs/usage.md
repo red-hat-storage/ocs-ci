@@ -1,8 +1,20 @@
 # Usage
 
-**Work in progress**
-
 For full usage run: `run-ci --help`
+
+# usage for getting various ocs image versions
+
+for full help run: `report-version --help`
+
+Run `report-version --cluster-path /my-cluster/path --log-level INFO` to
+get information on various image version deployed by ocs-ci
+
+# usage for cleanup
+  This should be used only when your cluster-dir is accidentally deleted
+  `ci-cleanup [-h] --cluster CLUSTER`
+  CLUSTER points to cluster tag eg: mycluster-ocs-ci-jlgzn , without additional
+   -master or -worker. This can be found by logging into AWS, Selecting the VM
+   and clicking on Tags.
 
 ## Required configuration
 
@@ -37,15 +49,16 @@ to the pytest.
 
 ### Additional arguments:
 
-* `--cluster-name <name>` - name of cluster.
+
+* `--cluster-name <name>` - name of cluster (always required for deployment) must be 5-17 characters long. 
 * `--ocsci-conf` - with this configuration parameter you can overwrite the
     default OCS-CI config parameters defined in
-    [default config](/ocs_ci/framework/conf/default_config.yaml).
+    [default config](https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/conf/default_config.yaml).
     This is the repeatable parameter and you can use it multiple times for
     adding multiple config files. (The last one overwrites previous config!)
 * `--cluster-conf` - with this configuration you can overwrite the default
     parameters for cluster and deployment. See the example of such file
-    [here](../conf/ocs_basic_install.yml). This parameter is obsolete and going
+    [here](https://github.com/red-hat-storage/ocs-ci/tree/master/conf/ocs_basic_install.yml). This parameter is obsolete and going
     to be repleced by the --ocsci-conf parameter.
 * `--deploy` - if this is given and a cluster can not be accessed from the
     provided `--cluster-path` then a new test cluster will be deployed.
@@ -78,7 +91,7 @@ provided and if given without the `--deploy` argument, it must contain informati
 that can be used to access an existing cluster.
 
 > In case you lost your cluster dir, the destroy can be done with
-> `uni-cleanup.sh` script.
+> `ci-cleanup` cli that should be invoked with cluster-tag from AWS.
 
 #### Deployment of cluster
 
@@ -96,7 +109,7 @@ values.
 
 Note that during deployment, openshift command line tools like `oc` and
 `openshift-install` are installed into [`bin` directory of the
-repository](../bin). These tools are then available to both deployment and test
+repository](https://github.com/red-hat-storage/ocs-ci/tree/master/bin). These tools are then available to both deployment and test
 code because `run-ci` wrapper includes the `bin` directory into `PATH`
 environment variable.
 
@@ -104,7 +117,7 @@ environment variable.
 
 terraform and jq is needed for deployment of OCS on vSphere platform.
 
-Change the [vsphere_upi_vars.yaml.example](../conf/ocsci/vsphere_upi_vars.yaml.example) to vsphere_upi_vars.yaml and update the values accordingly.
+Change the [vsphere_upi_vars.yaml.example](https://github.com/red-hat-storage/ocs-ci/tree/master/conf/ocsci/vsphere_upi_vars.yaml.example) to vsphere_upi_vars.yaml and update the values accordingly.
 Check for vsphere_upi_vars.yaml.skeleton(../conf/ocsci/vsphere_upi_vars.yaml.skeleton) for more options.
 
 After filling all the required parameters, run the following command:

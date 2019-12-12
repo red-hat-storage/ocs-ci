@@ -1,0 +1,14 @@
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: ocs-catalogsource
+  namespace: openshift-marketplace
+spec:
+  displayName: Openshift Container Storage
+  icon:
+    base64data: ""
+    mediatype: ""
+  image: quay.io/rhceph-dev/ocs-registry:latest
+  publisher: Red Hat
+  sourceType: grpc

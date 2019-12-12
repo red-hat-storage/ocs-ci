@@ -1,3 +1,4 @@
+
 """
 This module deploys the openshift-logging on the cluster
 EFK stack
@@ -51,7 +52,8 @@ def create_elasticsearch_operator_group(yaml_file, resource_name):
         bool: True if operator group for elastic search is created
             successfully, false otherwise
 
-    Example:
+    Example::
+
         create_elasticsearch_operator_group(
             constants.EO_OG_YAML, 'openshift-operators-redhat'
         )
@@ -110,7 +112,7 @@ def set_rbac(yaml_file, resource_name):
     return True
 
 
-def create_elasticsearch_subscription(yaml_file):
+def get_elasticsearch_subscription():
     """
     Creation of Subscription for the namespace
     to subscribe a Namespace to an Operator.
@@ -131,9 +133,6 @@ def create_elasticsearch_subscription(yaml_file):
     es_subscription = ocp.OCP(
         kind=constants.SUBSCRIPTION, namespace='openshift-operators-redhat'
     )
-
-    subscription = es_subscription.create(yaml_file, out_yaml_format=True)
-    logger.info(subscription)
     subscription_info = es_subscription.get(out_yaml_format=True)
     if subscription_info:
         logger.info("The Subscription is created successfully")
@@ -176,7 +175,7 @@ def create_clusterlogging_operator_group(yaml_file):
     return True
 
 
-def create_clusterlogging_subscription(yaml_file):
+def get_clusterlogging_subscription():
     """
     Creation of subscription for clusterlogging to subscribe
     a namespace to an operator
@@ -197,10 +196,6 @@ def create_clusterlogging_subscription(yaml_file):
     clusterlogging_subscription = ocp.OCP(
         kind=constants.SUBSCRIPTION, namespace='openshift-logging'
     )
-    subscription = clusterlogging_subscription.create(
-        yaml_file, out_yaml_format=True
-    )
-    logger.info(subscription)
     subscription_info = clusterlogging_subscription.get(
         resource_name='cluster-logging', out_yaml_format=True
     )
@@ -211,7 +206,7 @@ def create_clusterlogging_subscription(yaml_file):
     return subscription_info
 
 
-def create_instance_in_clusterlogging(sc_name=None):
+def create_instance_in_clusterlogging():
     """
     Creation of instance for clusterlogging that creates PVCs,
     ElasticSearch, curator fluentd and kibana pods and checks for all
@@ -226,10 +221,11 @@ def create_instance_in_clusterlogging(sc_name=None):
             values, storage class and size details etc.
 
     """
+    num_of_worker_nodes = len(helpers.get_worker_nodes())
+    num_of_master_nodes = len(helpers.get_master_nodes())
+    nodes_in_cluster = num_of_worker_nodes + num_of_master_nodes
     inst_data = templating.load_yaml(constants.CL_INSTANCE_YAML)
-    inst_data['spec']['logStore']['elasticsearch']['storage']['storageClassName'] = sc_name
-    inst_data['spec']['logStore']['elasticsearch']['storage']['size'] = "200Gi"
-    node_count = inst_data['spec']['logStore']['elasticsearch']['nodeCount']
+    es_node_count = inst_data['spec']['logStore']['elasticsearch']['nodeCount']
     helpers.create_resource(wait=False, **inst_data)
     oc = ocp.OCP('v1', 'ClusterLogging', 'openshift-logging')
     logging_instance = oc.get(resource_name='instance', out_yaml_format='True')
@@ -243,8 +239,8 @@ def create_instance_in_clusterlogging(sc_name=None):
         kind=constants.POD, namespace='openshift-logging'
     )
     pod_status = pod_obj.wait_for_resource(
-        condition=constants.STATUS_RUNNING, resource_count=11, timeout=200,
-        sleep=5
+        condition=constants.STATUS_RUNNING, resource_count=2 + es_node_count + nodes_in_cluster,
+        timeout=200, sleep=5
     )
     assert pod_status, "Pods are not in Running state."
     logger.info("All pods are in Running state")
@@ -252,7 +248,7 @@ def create_instance_in_clusterlogging(sc_name=None):
         kind=constants.PVC, namespace='openshift-logging'
     )
     pvc_status = pvc_obj.wait_for_resource(
-        condition=constants.STATUS_BOUND, resource_count=node_count,
+        condition=constants.STATUS_BOUND, resource_count=es_node_count,
         timeout=150, sleep=5
     )
     assert pvc_status, "PVCs are not in bound state."
@@ -260,14 +256,13 @@ def create_instance_in_clusterlogging(sc_name=None):
     return logging_instance
 
 
-@retry((CommandFailed, UnexpectedBehaviour), 10, 60, 2)
+@retry((CommandFailed, UnexpectedBehaviour), tries=10, delay=60, backoff=2)
 def check_health_of_clusterlogging():
     """
     * Checks for ElasticSearch, curator, fluentd and kibana pods in
-    openshift-logging namespace
-
+        openshift-logging namespace
     * And check for the health of cluster logging, If status is green then the
-    cluster is healthy,if status is red then health is bad
+        cluster is healthy,if status is red then health is bad
 
     Returns:
         list: Gives all the pods that are present in the namespace
@@ -295,6 +290,6 @@ def check_health_of_clusterlogging():
     if status_check['status'] == 'green':
         logger.info("Cluster logging is in Healthy state & Ready to use")
     else:
-        raise UnexpectedBehaviour
         logger.error("Cluster logging is in Bad state")
+        raise UnexpectedBehaviour
     return pod_list

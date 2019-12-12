@@ -2,16 +2,19 @@ import base64
 import json
 import logging
 import shlex
+from time import sleep
 
 import boto3
 import requests
 from botocore.client import ClientError
 
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_mcg_cmd, TimeoutSampler
-
+from tests.helpers import create_unique_resource_name, create_resource
 
 logger = logging.getLogger(name=__file__)
 
@@ -36,13 +39,14 @@ class MCG(object):
         results = ocp_obj.get()
         self.s3_endpoint = (
             results.get('items')[0].get('status').get('services')
-            .get('serviceS3').get('externalDNS')[0]
+            .get('serviceS3').get('externalDNS')[-1]
         )
         self.mgmt_endpoint = (
             results.get('items')[0].get('status').get('services')
-            .get('serviceMgmt').get('externalDNS')[0]
+            .get('serviceMgmt').get('externalDNS')[-1]
         ) + '/rpc'
-        self.region = self.s3_endpoint.split('.')[1]
+        self.region = config.ENV_DATA['region']
+
         creds_secret_name = (
             results.get('items')[0].get('status').get('accounts')
             .get('admin').get('secretRef').get('name')
@@ -73,47 +77,61 @@ class MCG(object):
             }
         ).json().get('reply').get('token')
 
+        (
+            self.cred_req_obj,
+            self.aws_access_key_id,
+            self.aws_access_key
+        ) = self.request_aws_credentials()
+
         self._ocp_resource = ocp_obj
+
         self.s3_resource = boto3.resource(
             's3', verify=False, endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
         )
 
-    def s3_list_all_bucket_names(self):
+        self.aws_s3_resource = boto3.resource(
+            's3', verify=False, endpoint_url="https://s3.amazonaws.com",
+            aws_access_key_id=self.aws_access_key_id,
+            aws_secret_access_key=self.aws_access_key
+        )
+
+    def s3_get_all_bucket_names(self):
         """
         Returns:
-            list: A list of all bucket names
+            set: A set of all bucket names
 
         """
-        return [bucket.name for bucket in self.s3_resource.buckets.all()]
+        return {bucket.name for bucket in self.s3_resource.buckets.all()}
 
-    def oc_list_all_bucket_names(self):
+    def oc_get_all_bucket_names(self):
         """
         Returns:
-            list: A list of all bucket names
+            set: A set of all bucket names
 
         """
         all_obcs_in_namespace = OCP(namespace=self.namespace, kind='obc').get().get('items')
-        return [bucket.get('spec').get('bucketName')
+        return {bucket.get('spec').get('bucketName')
                 for bucket
-                in all_obcs_in_namespace]
+                in all_obcs_in_namespace}
 
-    def cli_list_all_bucket_names(self):
+    def cli_get_all_bucket_names(self):
         """
         Returns:
-            list: A list of all bucket names
+            set: A set of all bucket names
 
         """
         obc_lst = run_mcg_cmd('obc list').split('\n')[1:-1]
-        return [row.split()[1] for row in obc_lst]
+        # TODO assert the bucket passed the Pending state
+        return {row.split()[1] for row in obc_lst}
 
     def s3_list_all_objects_in_bucket(self, bucketname):
         """
         Returns:
             list: A list of all bucket objects
         """
-        return [obj for obj in self.s3_resource.Bucket(bucketname).objects.all()]
+        return {obj for obj in self.s3_resource.Bucket(bucketname).objects.all()}
 
     def s3_get_all_buckets(self):
         """
@@ -121,7 +139,7 @@ class MCG(object):
             list: A list of all s3.Bucket objects
 
         """
-        return [bucket for bucket in self.s3_resource.buckets.all()]
+        return {bucket for bucket in self.s3_resource.buckets.all()}
 
     def s3_verify_bucket_exists(self, bucketname):
         """
@@ -193,9 +211,9 @@ class MCG(object):
               bool: True if bucket exists, False otherwise
 
         """
-        return bucketname in self.cli_list_all_bucket_names()
+        return bucketname in self.cli_get_all_bucket_names()
 
-    def send_rpc_query(self, api, method, params):
+    def send_rpc_query(self, api, method, params=None):
         """
         Templates and sends an RPC query to the MCG mgmt endpoint
 
@@ -255,7 +273,7 @@ class MCG(object):
             return bucket_data, bucket_data_reduced
 
         try:
-            for total_size, total_reduced in TimeoutSampler(120, 5, _retrieve_reduction_data):
+            for total_size, total_reduced in TimeoutSampler(140, 5, _retrieve_reduction_data):
                 if total_size - total_reduced > 80000000:
                     logger.info(
                         'Data reduced:' + str(total_size - total_reduced)
@@ -271,4 +289,315 @@ class MCG(object):
             logger.error(
                 'Not enough data reduction. Something is wrong.'
             )
+            assert False
+
+    def request_aws_credentials(self):
+        """
+        Uses a CredentialsRequest CR to create an AWS IAM that allows the program
+        to interact with S3
+
+        Returns:
+            OCS: The CredentialsRequest resource
+        """
+        awscreds_data = templating.load_yaml(constants.MCG_AWS_CREDS_YAML)
+        req_name = create_unique_resource_name('awscredreq', 'credentialsrequests')
+        awscreds_data['metadata']['name'] = req_name
+        awscreds_data['metadata']['namespace'] = self.namespace
+        awscreds_data['spec']['secretRef']['name'] = req_name
+        awscreds_data['spec']['secretRef']['namespace'] = self.namespace
+
+        creds_request = create_resource(**awscreds_data)
+        sleep(5)
+
+        secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
+        cred_req_secret_dict = secret_ocp_obj.get(creds_request.name)
+
+        aws_access_key_id = base64.b64decode(
+            cred_req_secret_dict.get('data').get('aws_access_key_id')
+        ).decode('utf-8')
+
+        aws_access_key = base64.b64decode(
+            cred_req_secret_dict.get('data').get('aws_secret_access_key')
+        ).decode('utf-8')
+
+        def _check_aws_credentials():
+            try:
+                s3_res = boto3.resource(
+                    's3', verify=False, endpoint_url="https://s3.amazonaws.com",
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_access_key
+                )
+                test_bucket = s3_res.create_bucket(Bucket='noobaa-test-creds-verification')
+                test_bucket.delete()
+                return True
+
+            except ClientError:
+                logger.info('Credentials are still not active. Retrying...')
+                return False
+
+        try:
+            for api_test_result in TimeoutSampler(40, 5, _check_aws_credentials):
+                if api_test_result:
+                    logger.info('AWS credentials created successfully.')
+                    break
+
+        except TimeoutExpiredError:
+            logger.error(
+                'Failed to create credentials'
+            )
+            assert False
+
+        return creds_request, aws_access_key_id, aws_access_key
+
+    def create_new_aws_connection(self, conn_name=None):
+        """
+        Creates a new NooBaa connection to an AWS backend
+
+        Args:
+            conn_name: The connection name to be used
+
+        Returns:
+            bool: False if the connection creation failed
+
+        """
+        if conn_name is None:
+            conn_name = create_unique_resource_name('awsconnection', 'mcgconn')
+
+        params = {
+            "auth_method": "AWS_V4",
+            "endpoint": "https://s3.amazonaws.com",
+            "endpoint_type": "AWS",
+            "identity": self.aws_access_key_id,
+            "name": conn_name,
+            "secret": self.aws_access_key
+        }
+
+        try:
+            for resp in TimeoutSampler(
+                30, 3, self.send_rpc_query, 'account_api', 'add_external_connection', params
+            ):
+                if 'error' not in resp.text:
+                    logger.info(f'Connection {conn_name} created successfully')
+                    return True
+                else:
+                    logger.info('AWS IAM did not yet propagate')
+        except TimeoutExpiredError:
+            logger.error(f'Could not create connection {conn_name}')
+            assert False
+
+    def create_new_backingstore_aws_bucket(self, backingstore_info):
+        """
+        Creates an S3 target bucket for NooBaa to use as a backing store
+
+        Args:
+            backingstore_info: A tuple containing the BS information
+            to be used in its creation.
+
+        """
+        if backingstore_info.get('name') is None:
+            backingstore_info['name'] = create_unique_resource_name('backingstorebucket', 'awsbucket')
+
+        if backingstore_info.get('region') is None:
+            self.aws_s3_resource.create_bucket(Bucket=backingstore_info['name'])
+        else:
+            self.aws_s3_resource.create_bucket(
+                Bucket=backingstore_info['name'],
+                CreateBucketConfiguration={
+                    'LocationConstraint': backingstore_info['region']
+                }
+            )
+
+    def create_aws_backingstore_secret(self, name):
+        """
+        Creates a secret for NooBaa's backingstore
+        Args:
+            name: The name to be given to the secret
+
+        Returns:
+            OCS: The secret resource
+
+        """
+        bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
+        bs_secret_data['metadata']['name'] += f'-{name}'
+        bs_secret_data['metadata']['namespace'] = self.namespace
+        bs_secret_data['data']['AWS_ACCESS_KEY_ID'] = base64.urlsafe_b64encode(
+            self.aws_access_key_id.encode('UTF-8')
+        ).decode('ascii')
+        bs_secret_data['data']['AWS_SECRET_ACCESS_KEY'] = base64.urlsafe_b64encode(
+            self.aws_access_key.encode('UTF-8')
+        ).decode('ascii')
+        return create_resource(**bs_secret_data)
+
+    def oc_create_aws_backingstore(self, name, targetbucket, secretname, region):
+        """
+        Creates a new NooBaa backing store
+        Args:
+            name: The name to be given to the backing store
+            targetbucket: The S3 target bucket to connect to
+            secretname: The secret to use for authentication
+            region: The target bucket's region
+
+        Returns:
+            OCS: The backingstore resource
+
+        """
+        bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+        bs_data['metadata']['name'] += f'-{name}'
+        bs_data['metadata']['namespace'] = self.namespace
+        bs_data['spec']['awsS3']['secret']['name'] = secretname
+        bs_data['spec']['awsS3']['targetBucket'] = targetbucket
+        bs_data['spec']['awsS3']['region'] = region
+        return create_resource(**bs_data)
+
+    def oc_create_bucketclass(self, name, backingstores, placement):
+        """
+        Creates a new NooBaa bucket class
+        Args:
+            name: The name to be given to the bucket class
+            backingstores: The backing stores to use as part of the policy
+            placement: The placement policy to be used - Mirror | Spread
+
+        Returns:
+            OCS: The bucket class resource
+
+        """
+        bc_data = templating.load_yaml(constants.MCG_BUCKETCLASS_YAML)
+        bc_data['metadata']['name'] = name
+        bc_data['metadata']['namespace'] = self.namespace
+        tiers = bc_data['spec']['placementPolicy']['tiers'][0]
+        tiers['backingStores'] = backingstores
+        tiers['placement'] = placement
+        return create_resource(**bc_data)
+
+    def toggle_aws_bucket_readwrite(self, bucketname, block=True):
+        """
+        Toggles a bucket's IO using a bucket policy
+
+        Args:
+            bucketname: The name of the bucket that should be manipulated
+            block: Whether to block RW or un-block. True | False
+
+        """
+        if block:
+            bucket_policy = {
+                "Version": "2012-10-17",
+                "Id": "DenyReadWrite",
+                "Statement": [
+                    {
+                        "Effect": "Deny",
+                        "Principal": {
+                            "AWS": "*"
+                        },
+                        "Action": [
+                            "s3:GetObject",
+                            "s3:PutObject",
+                            "s3:ListBucket"
+                        ],
+                        "Resource": [
+                            f"arn:aws:s3:::{bucketname}/*",
+                            f"arn:aws:s3:::{bucketname}"
+                        ]
+                    }
+                ]
+            }
+            bucket_policy = json.dumps(bucket_policy)
+            self.aws_s3_resource.meta.client.put_bucket_policy(
+                Bucket=bucketname, Policy=bucket_policy
+            )
+        else:
+            self.aws_s3_resource.meta.client.delete_bucket_policy(
+                Bucket=bucketname
+            )
+
+    def check_if_mirroring_is_done(self, bucket_name):
+        """
+        Check whether all object chunks in a bucket
+        are mirrored across all backing stores.
+
+        Args:
+            bucket_name: The name of the bucket that should be checked
+
+        Returns:
+            bool: Whether mirroring finished successfully
+
+        """
+
+        def _check_mirroring():
+            results = []
+            obj_list = self.send_rpc_query('object_api', 'list_objects', params={
+                'bucket': bucket_name
+            }).json().get('reply').get('objects')
+
+            for written_object in obj_list:
+                object_chunks = self.send_rpc_query('object_api', 'read_object_mapping', params={
+                    'bucket': bucket_name,
+                    'key': written_object.get('key'),
+                    'obj_id': written_object.get('obj_id')
+                }).json().get('reply').get('chunks')
+
+                for object_chunk in object_chunks:
+                    mirror_blocks = object_chunk.get('frags')[0].get('blocks')
+                    mirror_nodes = [
+                        mirror_blocks[i].get('block_md').get('node')
+                        for i in range(len(mirror_blocks))
+                    ]
+                    if 2 <= len(mirror_blocks) == len(set(mirror_nodes)):
+                        results.append(True)
+                    else:
+                        results.append(False)
+
+            return all(results)
+
+        try:
+            for mirroring_is_complete in TimeoutSampler(140, 5, _check_mirroring):
+                if mirroring_is_complete:
+                    logger.info(
+                        'All objects mirrored successfully.'
+                    )
+                    return True
+                else:
+                    logger.info(
+                        'Waiting for the mirroring process to finish...'
+                    )
+        except TimeoutExpiredError:
+            logger.error(
+                'The mirroring process did not complete within the time limit.'
+            )
+            assert False
+
+    def check_backingstore_state(self, backingstore_name, desired_state):
+        """
+        Checks whether the backing store reached a specific state
+        Args:
+            backingstore_name: Name of the backing store to be checked
+            desired_state: The desired state of the backing store
+
+        Returns:
+            bool: Whether the backing store has reached the desired state
+
+        """
+
+        def _check_state():
+            sysinfo = self.send_rpc_query('system_api', 'read_system', params={}).json()['reply']
+            for pool in sysinfo.get('pools'):
+                if pool.get('name') == backingstore_name:
+                    if pool.get('mode') == desired_state:
+                        return True
             return False
+
+        try:
+            for reached_state in TimeoutSampler(180, 10, _check_state):
+                if reached_state:
+                    logger.info(
+                        f'BackingStore {backingstore_name} reached state {desired_state}.'
+                    )
+                    return True
+                else:
+                    logger.info(
+                        f'Waiting for BackingStore {backingstore_name} to reach state {desired_state}...'
+                    )
+        except TimeoutExpiredError:
+            logger.error(
+                'The BackingStore did not reach the desired state within the time limit.'
+            )
+            assert False

@@ -15,6 +15,7 @@ TOP_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 TEMPLATE_DIR = os.path.join(TOP_DIR, "ocs_ci", "templates")
+TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
@@ -51,6 +52,7 @@ ROOK_EXAMPLES_DIR = os.path.join(
 )
 ROOK_CSI_RBD_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "rbd")
 ROOK_CSI_CEPHFS_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "cephfs")
+CLEANUP_YAML = "cleanup.yaml.j2"
 
 
 # Statuses
@@ -62,6 +64,10 @@ STATUS_TERMINATING = 'Terminating'
 STATUS_BOUND = 'Bound'
 STATUS_RELEASED = 'Released'
 STATUS_COMPLETED = 'Completed'
+
+# NooBaa statuses
+BS_AUTH_FAILED = 'AUTH_FAILED'
+BS_OPTIMAL = 'OPTIMAL'
 
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
@@ -126,7 +132,6 @@ IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
 ADMIN_USER = 'admin'
 GB = 1024 ** 3
 GB2KB = 1024 ** 2
-DEFAULT_DEVICE_SIZE = 100
 
 # Reclaim Policy
 RECLAIM_POLICY_RETAIN = 'Retain'
@@ -143,6 +148,7 @@ MDS_APP_LABEL = "app=rook-ceph-mds"
 TOOL_APP_LABEL = "app=rook-ceph-tools"
 MGR_APP_LABEL = "app=rook-ceph-mgr"
 OSD_APP_LABEL = "app=rook-ceph-osd"
+RGW_APP_LABEL = "app=rook-ceph-rgw"
 OPERATOR_LABEL = "app=rook-ceph-operator"
 CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = "app=csi-cephfsplugin-provisioner"
 CSI_RBDPLUGIN_PROVISIONER_LABEL = "app=csi-rbdplugin-provisioner"
@@ -190,6 +196,22 @@ CSI_PVC_YAML = os.path.join(
 
 MCG_OBC_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "ObjectBucketClaim.yaml"
+)
+
+MCG_AWS_CREDS_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "AwsCreds.yaml"
+)
+
+MCG_BACKINGSTORE_SECRET_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "BackingStoreSecret.yaml"
+)
+
+MCG_BACKINGSTORE_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "BackingStore.yaml"
+)
+
+MCG_BUCKETCLASS_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "BucketClass.yaml"
 )
 
 CSI_RBD_POD_YAML = os.path.join(
@@ -281,6 +303,14 @@ OLM_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "deploy-with-olm.yaml"
 )
 
+CATALOG_SOURCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "catalog-source.yaml"
+)
+
+SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml"
+)
+
 STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
 )
@@ -312,6 +342,9 @@ RSYNC_POD_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "rsync-pod.yaml"
 )
 
+ANSIBLE_INVENTORY_YAML = os.path.join(
+    "ocp-deployment", "inventory.yaml.j2"
+)
 # constants
 RBD_INTERFACE = 'rbd'
 CEPHFS_INTERFACE = 'cephfs'
@@ -367,6 +400,7 @@ WORKER_IGN = "worker.ign"
 
 # vSphere related constants
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
+VSPHERE_SCALEUP_REPO = "https://code.engineering.redhat.com/gerrit/openshift-misc"
 VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")
 INSTALLER_IGNITION = os.path.join(VSPHERE_DIR, "machine/ignition.tf")
 INSTALLER_ROUTE53 = os.path.join(VSPHERE_DIR, "route53/main.tf")
@@ -374,6 +408,15 @@ INSTALLER_MACHINE_CONF = os.path.join(VSPHERE_DIR, "machine/main.tf")
 VSPHERE_CONFIG_PATH = os.path.join(TOP_DIR, "conf/ocsci/vsphere_upi_vars.yaml")
 VSPHERE_MAIN = os.path.join(VSPHERE_DIR, "main.tf")
 TERRAFORM_DATA_DIR = "terraform_data"
+SCALEUP_TERRAFORM_DATA_DIR = "scaleup_terraform_data"
+SCALEUP_VSPHERE_DIR = os.path.join(
+    EXTERNAL_DIR,
+    "openshift-misc/v4-testing-misc/v4-scaleup/vsphere/"
+)
+SCALEUP_VSPHERE_MAIN = os.path.join(SCALEUP_VSPHERE_DIR, "main.tf")
+SCALEUP_VSPHERE_VARIABLES = os.path.join(SCALEUP_VSPHERE_DIR, "variables.tf")
+SCALEUP_VSPHERE_ROUTE53 = os.path.join(SCALEUP_VSPHERE_DIR, "route53/vsphere-rhel-dns.tf")
+SCALEUP_VSPHERE_ROUTE53_VARIABLES = os.path.join(SCALEUP_VSPHERE_DIR, "route53/variables.tf")
 TERRAFORM_VARS = "terraform.tfvars"
 VM_DISK_TYPE = "thin"
 VM_DISK_MODE = "persistent"
@@ -388,7 +431,10 @@ OCP4_2_REPO = os.path.join(REPO_DIR, "ocp_4_2.repo")
 # packages
 RHEL_POD_PACKAGES = ["openssh-clients", "openshift-ansible", "openshift-clients", "jq"]
 
-POD_UPLOADPATH = "/tmp/"
+# common locations
+POD_UPLOADPATH = RHEL_TMP_PATH = "/tmp/"
+YUM_REPOS_PATH = "/etc/yum.repos.d/"
+PEM_PATH = "/etc/pki/ca-trust/source/anchors/"
 
 # Upgrade related constants, keeping some space between, so we can add
 # additional order.
@@ -399,3 +445,32 @@ ORDER_AFTER_UPGRADE = 30
 # Deployment constants
 OCS_CSV_PREFIX = 'ocs-operator'
 LOCAL_STORAGE_CSV_PREFIX = 'local-storage-operator'
+LATEST_TAGS = ('latest', 'latest-stable', '4.2-rc')
+INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
+EC2_USER = "ec2-user"
+
+# Inventory
+INVENTORY_TEMPLATE = "inventory.yaml.j2"
+INVENTORY_FILE = "inventory.yaml"
+
+# users
+VM_RHEL_USER = "test"
+
+# PEM
+OCP_PEM = "ops-mirror.pem"
+
+# playbooks
+SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scaleup.yml"
+
+# labels
+MASTER_LABEL = "node-role.kubernetes.io/master"
+WORKER_LABEL = "node-role.kubernetes.io/worker"
+
+# Rep mapping
+REPO_MAPPING = {
+    '4.2.0': OCP4_2_REPO
+}
+
+# Cluster name limits
+CLUSTER_NAME_MIN_CHARACTERS = 5
+CLUSTER_NAME_MAX_CHARACTERS = 17

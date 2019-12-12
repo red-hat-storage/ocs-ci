@@ -45,14 +45,22 @@ DEPLOYMENT:
   # ocs_csv_channel: "alpha"
   # you can overwrite the image for ocs operator catalog source by following parameter:
   # ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:4.2-32.9b6c93e.master"
-  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest"
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:4.2-rc"
+  default_latest_tag: '4.2-rc'
   ocs_operator_nodes_to_label: 3
   # This is described as a WA for minimal configuration 3/3 worker/master
   # nodes. See: https://github.com/openshift/ocs-operator
   ocs_operator_nodes_to_taint: 0
   ssh_key: "~/.ssh/openshift-dev.pub"
+  ssh_key_private: "~/.ssh/openshift-dev.pem"
   force_deploy_multiple_clusters: False
   allow_lower_instance_requirements: true
+  # For manual subscription plan (for manual approve of upgrade set bellow)
+  # subscription_plan_approval: "Manual"
+  # For UI deployment you have to set following parameter ui_deployment to True
+  # UI deployment is not part of this framework, it will just do preparation
+  # steps for openshift-console.
+  ui_deployment: False
 
 # Section for reporting configuration
 REPORTING:
@@ -86,6 +94,7 @@ ENV_DATA:
   worker_replicas: 3
   skip_ocp_deployment: false
   skip_ocs_deployment: false
+  logging_version: '4.2'
   # uncomment to use custom directory for storing measurement data related to
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'

@@ -17,3 +17,5 @@ dist
 .coverage
 data/*
 external/
+apidoc/*
+_build/*

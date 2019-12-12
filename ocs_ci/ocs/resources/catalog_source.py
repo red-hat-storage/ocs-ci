@@ -108,7 +108,7 @@ class CatalogSource(OCP):
         return False
 
     @retry(ResourceInUnexpectedState, tries=4, delay=5, backoff=1)
-    def wait_for_state(self, state, timeout=300, sleep=5):
+    def wait_for_state(self, state, timeout=480, sleep=5):
         """
         Wait till state of catalog source resource is the same as required one
         passed in the state parameter.

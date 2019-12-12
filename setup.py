@@ -34,9 +34,7 @@ setup(
         'bs4',
         'gspread',
         'oauth2client',
-        # issue opened for pytest_marker_bugzilla here:
-        # https://github.com/eanxgeek/pytest_marker_bugzilla/issues/43
-        'pytest_marker_bugzilla>=0.9.1.dev6',
+        'pytest_marker_bugzilla>=0.9.3',
         'pyvmomi',
         'pyhcl',
         # issue opened for botocore
@@ -45,10 +43,13 @@ setup(
         'python-dateutil==2.8.0',
         'pytest-ordering',
         'funcy',
+        'semantic-version',
     ],
     entry_points={
         'console_scripts': [
-            'run-ci=ocs_ci.run_ocsci:main',
+            'run-ci=ocs_ci.framework.main:main',
+            'report-version=ocs_ci.ocs.version:main',
+            'ci-cleanup=ocs_ci.cleanup.aws.cleanup:main',
         ],
     },
     zip_safe=True,

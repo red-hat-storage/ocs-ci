@@ -92,3 +92,31 @@ class SameNamePrefixClusterAlreadyExistsException(Exception):
 
 class MissingRequiredConfigKeyError(Exception):
     pass
+
+
+class NotSupportedFunctionError(Exception):
+    pass
+
+
+class NonUpgradedImagesFoundError(Exception):
+    pass
+
+
+class UnexpectedVolumeType(Exception):
+    pass
+
+
+class FailedToAddNodeException(Exception):
+    pass
+
+
+class FailedToRemoveNodeException(Exception):
+    pass
+
+
+class FailedToDeleteInstance(Exception):
+    pass
+
+
+class NoInstallPlanForApproveFoundException(Exception):
+    pass
