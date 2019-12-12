@@ -5,8 +5,9 @@ import botocore
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1, tier2, tier3, noobaa_cli_required, aws_platform_required,
-    filter_insecure_request_warning, acceptance
+    tier1, tier2, tier3, noobaa_cli_required,
+    filter_insecure_request_warning, acceptance,
+    aws_platform_required
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
@@ -15,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 @filter_insecure_request_warning
-@aws_platform_required
 class TestBucketCreation:
     """
     Test creation of a bucket
@@ -42,7 +42,10 @@ class TestBucketCreation:
             ),
             pytest.param(
                 *[1000, 'S3'],
-                marks=[tier2, pytest.mark.polarion_id("OCS-1824")]
+                marks=[
+                    tier2, aws_platform_required,
+                    pytest.mark.polarion_id("OCS-1824")
+                ]
             ),
             pytest.param(
                 *[100, 'CLI'],
@@ -51,8 +54,11 @@ class TestBucketCreation:
             ),
             pytest.param(
                 *[1000, 'CLI'],
-                marks=[tier2, noobaa_cli_required,
-                       pytest.mark.polarion_id("OCS-1828")]
+                marks=[
+                    tier2, noobaa_cli_required,
+                    aws_platform_required,
+                    pytest.mark.polarion_id("OCS-1828")
+                ]
             ),
             pytest.param(
                 *[100, 'OC'],
@@ -60,7 +66,10 @@ class TestBucketCreation:
             ),
             pytest.param(
                 *[1000, 'OC'],
-                marks=[tier2, pytest.mark.polarion_id("OCS-1827")]
+                marks=[
+                    tier2, aws_platform_required,
+                    pytest.mark.polarion_id("OCS-1827")
+                ]
             ),
         ]
     )
