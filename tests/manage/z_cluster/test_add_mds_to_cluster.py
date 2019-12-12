@@ -7,13 +7,14 @@ import pytest
 
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import (
-    tier1, ManageTest, bugzilla, ignore_leftovers
-)
+from ocs_ci.framework.testlib import tier1, ManageTest
+from ocs_ci.ocs.defaults import ROOK_CLUSTER_NAMESPACE
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
+
+MDS_NAME_TEMPLATE = "rook-ceph-mds-ocs-storagecluster-cephfilesystem-"
 
 
 @pytest.fixture()
@@ -27,6 +28,15 @@ def fs_setup(request):
             original_active_count
         )
         ceph_obj.apply(**fs_data)
+        pod = ocp.OCP(kind=constants.POD, namespace=ROOK_CLUSTER_NAMESPACE)
+        mds_pods = pod.get(
+            selector=constants.MDS_APP_LABEL,
+            all_namespaces=ROOK_CLUSTER_NAMESPACE
+        )['items']
+        mds_names = [pod.get("metadata").get("name") for pod in mds_pods]
+        for mds in mds_names:
+            if MDS_NAME_TEMPLATE + 'c' in mds or MDS_NAME_TEMPLATE + 'd' in mds:
+                pod.wait_for_delete(resource_name=mds)
 
     request.addfinalizer(finalizer)
     cephfs = ocp.OCP(
@@ -61,17 +71,12 @@ def get_mds_active_count():
     return new_active_count, pods
 
 
-@ignore_leftovers
-@bugzilla('1752286')
 @tier1
 class TestCephFilesystemCreation(ManageTest):
     """
     Testing creation of Ceph FileSystem
     """
-    def test_cephfilesystem_creation(
-        self,
-        fs_setup
-    ):
+    def test_cephfilesystem_creation(self, fs_setup):
         """
         Creating a Ceph Filesystem
         """
