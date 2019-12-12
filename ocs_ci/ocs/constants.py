@@ -371,6 +371,8 @@ ALERT_MGRISABSENT = 'CephMgrIsAbsent'
 ALERT_MONQUORUMATRISK = 'CephMonQuorumAtRisk'
 ALERT_OSDDISKNOTRESPONDING = 'CephOSDDiskNotResponding'
 ALERT_PGREPAIRTAKINGTOOLONG = 'CephPGRepairTakingTooLong'
+ALERT_CLUSTERNEARFULL = 'CephClusterNearFull'
+ALERT_CLUSTERCRITICALLYFULL = 'CephClusterCriticallyFull'
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
