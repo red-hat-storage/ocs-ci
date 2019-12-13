@@ -19,8 +19,6 @@ logger = logging.getLogger(__name__)
 
 
 @filter_insecure_request_warning
-@acceptance
-@tier1
 class TestBucketDeletion:
     """
     Test bucket Creation Deletion of buckets
@@ -46,17 +44,17 @@ class TestBucketDeletion:
                 marks=[tier2, pytest.mark.polarion_id("OCS-1865")]
             ),
             pytest.param(
-                *[1000, 'S3'],
-                marks=[tier2, pytest.mark.polarion_id("OCS-1866")]
-            ),
-            pytest.param(
                 *[100, 'OC'],
                 marks=[tier2, pytest.mark.polarion_id("OCS-1915")]
             ),
             pytest.param(
-                *[1000, 'OC'],
-                marks=[tier2, pytest.mark.polarion_id("OCS-1916")]
+                *[1000, 'S3'],
+                marks=[tier2, pytest.mark.polarion_id("OCS-1866")]
             ),
+            # pytest.param(
+            #     *[1000, 'OC'],
+            #     marks=[tier2, pytest.mark.polarion_id("OCS-1916")]
+            # ),
         ]
     )
     def test_bucket_delete(self, mcg_obj, bucket_factory, amount, interface):
