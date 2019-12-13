@@ -46,7 +46,7 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
         )
         # the time to wait is increased because it takes more time for OCS
         # cluster to resolve its issues
-        pg_wait = 300
+        pg_wait = 480
         api.check_alert_cleared(
             label=target_label,
             measure_end_time=measure_noobaa_exceed_bucket_quota.get('stop'),
