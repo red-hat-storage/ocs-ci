@@ -29,7 +29,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox, collect_ocs_logs
 )
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, prometheus
 from ocs_ci.utility.utils import (
     run_cmd, ceph_health_check, is_cluster_running, get_kubeadmin_password,
     get_latest_ds_olm_tag,
@@ -86,6 +86,8 @@ class Deployment(object):
         if not config.ENV_DATA['skip_ocs_deployment']:
             try:
                 self.deploy_ocs()
+                # try to login to ocp to set context
+                prometheus.PrometheusAPI(gen_cert=False)
             except Exception:
                 if config.REPORTING['gather_on_deploy_failure']:
                     # Let's do the collections separately to guard against one

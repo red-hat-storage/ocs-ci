@@ -90,7 +90,7 @@ class PrometheusAPI(object):
     _endpoint = None
     _cacert = None
 
-    def __init__(self, user=None, password=None):
+    def __init__(self, user=None, password=None, gen_cert=True):
         """
         Constructor for PrometheusAPI class.
 
@@ -107,7 +107,8 @@ class PrometheusAPI(object):
                 password = f.read()
         self._password = password
         self.refresh_connection()
-        self.generate_cert()
+        if gen_cert:
+            self.generate_cert()
 
     def refresh_connection(self):
         """
