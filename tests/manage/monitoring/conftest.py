@@ -694,6 +694,10 @@ def workload_fio_storageutilization(
         Write data via fio Job (specified in ``tf`` tmp file) to reach desired
         utilization level, and keep this level for ``minimal_time`` seconds.
         """
+        # unix timestamp before starting the job so that one can check status
+        # prior the fio job run
+        fio_job_start_ts = time.time()
+
         # deploy the fio Job to the cluster
         fio_job_file.create()
 
@@ -746,6 +750,7 @@ def workload_fio_storageutilization(
         # data which will be available to the test via:
         # fixture_name['result']
         result = {
+            'fio_job_start': fio_job_start_ts,
             'fio': fio_report,
             'pvc_size': pvc_size,
             'target_p': target_percentage,
