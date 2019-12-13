@@ -13,14 +13,12 @@ import calendar
 from threading import Thread
 import base64
 
-from ocs_ci.ocs.ocp import OCP, verify_images_upgraded, get_images
+from ocs_ci.ocs.ocp import OCP, verify_images_upgraded
 from tests import helpers
 from ocs_ci.ocs import workload
 from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed, NonUpgradedImagesFoundError
-from ocs_ci.ocs.resources.packagemanifest import PackageManifest
-from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
@@ -669,18 +667,6 @@ def get_pods_having_label(label, namespace):
     ocp_pod = OCP(kind=constants.POD, namespace=namespace)
     pods = ocp_pod.get(selector=label).get('items')
     return pods
-
-
-def get_version_info(namespace=None):
-    package_manifest = PackageManifest(resource_name=defaults.OCS_OPERATOR_NAME)
-    csv_name = package_manifest.get_current_csv()
-    csv_pre = CSV(
-        resource_name = csv_name,
-        namespace = namespace
-    )
-    info = get_images(csv_pre.get())
-    logging.info(info)
-    return info
 
 
 def get_mds_pods(mds_label=constants.MDS_APP_LABEL, namespace=None):
