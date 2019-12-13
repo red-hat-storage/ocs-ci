@@ -1235,9 +1235,10 @@ def mcg_obj(request):
     """
     mcg_obj = MCG()
 
-    def finalizer():
-        mcg_obj.cred_req_obj.delete()
-    request.addfinalizer(finalizer)
+    if config.ENV_DATA['platform'].lower() == 'aws':
+        def finalizer():
+            mcg_obj.cred_req_obj.delete()
+        request.addfinalizer(finalizer)
 
     return mcg_obj
 
