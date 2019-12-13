@@ -55,6 +55,11 @@ def secret_factory_class(request):
     return secret_factory_fixture(request)
 
 
+@pytest.fixture(scope='session')
+def secret_factory_session(request):
+    return secret_factory_fixture(request)
+
+
 @pytest.fixture(scope='function')
 def secret_factory(request):
     return secret_factory_fixture(request)
@@ -95,11 +100,6 @@ def secret_factory_fixture(request):
     return factory
 
 
-@pytest.fixture(scope='class')
-def ceph_pool_factory_class(request):
-    return ceph_pool_factory_fixture(request)
-
-
 @pytest.fixture(scope="session", autouse=True)
 def log_ocs_version(cluster):
     """
@@ -126,6 +126,16 @@ def log_ocs_version(cluster):
     with open(file_name, "w") as file_obj:
         report_ocs_version(cluster_version, image_dict, file_obj)
     log.info("human readable ocs version info written into %s", file_name)
+
+
+@pytest.fixture(scope='class')
+def ceph_pool_factory_class(request):
+    return ceph_pool_factory_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def ceph_pool_factory_session(request):
+    return ceph_pool_factory_fixture(request)
 
 
 @pytest.fixture(scope='function')
@@ -178,6 +188,19 @@ def storageclass_factory_class(
         request,
         ceph_pool_factory_class,
         secret_factory_class
+    )
+
+
+@pytest.fixture(scope='session')
+def storageclass_factory_session(
+    request,
+    ceph_pool_factory_session,
+    secret_factory_session
+):
+    return storageclass_factory_fixture(
+        request,
+        ceph_pool_factory_session,
+        secret_factory_session
     )
 
 
@@ -253,7 +276,7 @@ def storageclass_factory_fixture(
 
     def finalizer():
         """
-        Delete the Ceph block pool
+        Delete the storageclass
         """
         for instance in instances:
             instance.delete()
@@ -265,8 +288,13 @@ def storageclass_factory_fixture(
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
 def project_factory_class(request):
+    return project_factory_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def project_factory_session(request):
     return project_factory_fixture(request)
 
 
@@ -303,7 +331,7 @@ def project_factory_fixture(request):
 
     def finalizer():
         """
-        Delete the Ceph block pool
+        Delete the project
         """
         for instance in instances:
             ocp.switch_to_default_rook_cluster_project()
@@ -324,6 +352,19 @@ def pvc_factory_class(
         request,
         storageclass_factory_class,
         project_factory_class
+    )
+
+
+@pytest.fixture(scope='session')
+def pvc_factory_session(
+    request,
+    storageclass_factory_session,
+    project_factory_session
+):
+    return pvc_factory_fixture(
+        request,
+        storageclass_factory_session,
+        project_factory_session
     )
 
 
@@ -447,10 +488,21 @@ def pvc_factory_fixture(
                 )
 
         # Wait for PVs to delete
+        # If they have ReclaimPolicy set to Retain then delete them manually
         for pv_obj in pv_objs:
-            pv_obj.ocp.wait_for_delete(
-                resource_name=pv_obj.name, timeout=180
-            )
+            if pv_obj.data.get('spec').get(
+                'persistentVolumeReclaimPolicy'
+            ) == constants.RECLAIM_POLICY_RETAIN:
+                helpers.wait_for_resource_state(
+                    pv_obj,
+                    constants.STATUS_RELEASED
+                )
+                pv_obj.delete()
+                pv_obj.ocp.wait_for_delete(pv_obj.name)
+            else:
+                pv_obj.ocp.wait_for_delete(
+                    resource_name=pv_obj.name, timeout=180
+                )
 
     request.addfinalizer(finalizer)
     return factory
@@ -459,6 +511,11 @@ def pvc_factory_fixture(
 @pytest.fixture(scope='class')
 def pod_factory_class(request, pvc_factory_class):
     return pod_factory_fixture(request, pvc_factory_class)
+
+
+@pytest.fixture(scope='session')
+def pod_factory_session(request, pvc_factory_session):
+    return pod_factory_fixture(request, pvc_factory_session)
 
 
 @pytest.fixture(scope='function')
@@ -536,6 +593,11 @@ def pod_factory_fixture(request, pvc_factory):
 
 @pytest.fixture(scope='class')
 def teardown_factory_class(request):
+    return teardown_factory_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def teardown_factory_session(request):
     return teardown_factory_fixture(request)
 
 
@@ -933,6 +995,19 @@ def multi_pvc_factory_class(
     )
 
 
+@pytest.fixture(scope='session')
+def multi_pvc_factory_session(
+    storageclass_factory_session,
+    project_factory_session,
+    pvc_factory_session
+):
+    return multi_pvc_factory_fixture(
+        storageclass_factory_session,
+        project_factory_session,
+        pvc_factory_session
+    )
+
+
 @pytest.fixture(scope='function')
 def multi_pvc_factory(storageclass_factory, project_factory, pvc_factory):
     return multi_pvc_factory_fixture(
@@ -1236,3 +1311,38 @@ def nodes():
     factory = platform_nodes.PlatformNodesFactory()
     nodes = factory.get_nodes_platform()
     return nodes
+
+
+@pytest.fixture(scope='session')
+def default_storageclasses(request, teardown_factory_session):
+    """
+    Returns dictionary with storageclasses. Keys represent reclaim policy of
+    storageclass. There are two storageclasses for each key. First is RBD based
+    and the second one is CephFS based. Storageclasses with Retain Reclaim
+    Policy are created from default storageclasses.
+    """
+    scs = {
+        constants.RECLAIM_POLICY_DELETE: [],
+        constants.RECLAIM_POLICY_RETAIN: []
+    }
+
+    # TODO(fbalak): Use proper constants after
+    # https://github.com/red-hat-storage/ocs-ci/issues/1056
+    # is resolved
+    for sc_name in (
+        'ocs-storagecluster-ceph-rbd',
+        'ocs-storagecluster-cephfs'
+    ):
+        sc = OCS(
+            kind=constants.STORAGECLASS,
+            metadata={'name': sc_name}
+        )
+        sc.reload()
+        scs[constants.RECLAIM_POLICY_DELETE].append(sc)
+        sc.data['reclaimPolicy'] = constants.RECLAIM_POLICY_RETAIN
+        sc.data['metadata']['name'] += '-retain'
+        sc._name = sc.data['metadata']['name']
+        sc.create()
+        teardown_factory_session(sc)
+        scs[constants.RECLAIM_POLICY_RETAIN].append(sc)
+    return scs

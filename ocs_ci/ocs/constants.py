@@ -363,6 +363,10 @@ NODE_READY = 'Ready'
 NODE_NOT_READY = 'NotReady'
 NODE_READY_SCHEDULING_DISABLED = 'Ready,SchedulingDisabled'
 
+# Volume modes
+VOLUME_MODE_BLOCK = 'Block'
+VOLUME_MODE_FILESYSTEM = 'Filesystem'
+
 # Alert labels
 ALERT_CLUSTERERRORSTATE = 'CephClusterErrorState'
 ALERT_CLUSTERWARNINGSTATE = 'CephClusterWarningState'
