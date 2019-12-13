@@ -6,11 +6,13 @@ rook cluster. This works with assumptions that an OCP cluster is already
 functional and proper configurations are made for interaction.
 """
 
-import logging
 import base64
+import logging
 import random
-import yaml
 import re
+import threading
+import yaml
+from time import sleep
 
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
@@ -100,7 +102,9 @@ class CephCluster(object):
         self.mon_count = 0
         self.mgr_count = 0
         self.osd_count = 0
-
+        self.health_error_status = None
+        self.health_monitor_enabled = False
+        self.health_monitor = None
         self.scan_cluster()
         logging.info(f"Number of mons = {self.mon_count}")
         logging.info(f"Number of mds = {self.mds_count}")
@@ -426,6 +430,86 @@ class CephCluster(object):
         raise UnexpectedBehaviour(
             f"In Rados df, Used size is varying"
         )
+
+    def get_ceph_health(self, detail=False):
+        """
+        Exec `ceph health` cmd on tools pod and return the status of the ceph
+        cluster.
+
+        Args:
+            detail (bool): If True the 'ceph health detail' is executed
+
+        Returns:
+            str: Output of the ceph health command.
+
+        """
+        ceph_health_cmd = "ceph health"
+        if detail:
+            ceph_health_cmd = f"{ceph_health_cmd} detail"
+
+        return self.toolbox.exec_cmd_on_pod(
+            ceph_health_cmd, out_yaml_format=False,
+        )
+
+    def get_ceph_status(self):
+        """
+        Exec `ceph status` cmd on tools pod and return its output.
+
+        Returns:
+            str: Output of the ceph status command.
+
+        """
+        return self.toolbox.exec_cmd_on_pod(
+            "ceph status", out_yaml_format=False,
+        )
+
+    def enable_health_monitor(self, sleep=5):
+        """
+        Enable monitoring for ceph health status.
+
+        Args:
+            sleep (int): Number of seconds to sleep between health checks.
+
+        """
+        self.monitor = HealthMonitorThread(self, sleep)
+        self.monitor.start()
+
+    def disable_health_monitor(self):
+        self.health_monitor_enabled = False
+
+
+class HealthMonitorThread(threading.Thread):
+    """
+    Class for monitoring ceph health status of CephCluster. If CephCluster will
+    get to HEALTH_ERROR state it will save the ceph status to
+    health_error_status variable in ceph_cluster object and will stop
+    monitoring. It's up to user how to handle the error.
+    """
+
+    def __init__(self, ceph_cluster, sleep=5):
+        """
+        Constructor for ceph health status thread.
+
+        Args:
+            ceph_cluster (CephCluster): Reference to CephCluster object.
+            sleep (int): Number of seconds to sleep between health checks.
+
+        """
+        self.ceph_cluster = ceph_cluster
+        self.sleep = sleep
+        super(HealthMonitorThread, self).__init__()
+
+    def run(self):
+        self.ceph_cluster.health_monitor_enabled = True
+        while self.ceph_cluster.health_monitor_enabled and (
+            not self.ceph_cluster.health_error_status
+        ):
+            sleep(self.sleep)
+            health_status = self.ceph_cluster.get_ceph_health(detail=True)
+            if "HEALTH_ERROR" in health_status:
+                self.ceph_cluster.health_error_status = (
+                    self.ceph_cluster.get_ceph_status()
+                )
 
 
 def validate_cluster_on_pvc():

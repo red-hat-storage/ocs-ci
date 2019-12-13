@@ -1,0 +1,5 @@
+---
+# This config file will set installPlanApproval to Manual for the subscription.
+# This will be used mainly for upgrade purpose.
+DEPLOYMENT:
+  subscription_plan_approval: "Manual"

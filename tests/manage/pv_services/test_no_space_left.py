@@ -71,6 +71,7 @@ class TestPVCFullWithIORWO(ManageTest):
                 log.info(f"FIO succeeded to fill the PVC with data")
         log.info(f"Deleting the pod and attaching the full PVC to a new pod")
         self.pod_obj.delete()
+        self.pod_obj.ocp.wait_for_delete(resource_name=self.pod_obj.name)
         log.info(f"Creating a new Pod with the existing full PVC")
         self.pod_obj = pod_factory(interface=self.interface, pvc=self.pvc_obj)
         used_space = get_used_space_on_mount_point(self.pod_obj)
@@ -112,14 +113,12 @@ class TestPVCFullWithIORWX(ManageTest):
             'fs', size=self.pvc_size_gb, io_direction='write', runtime=60
         )
         log.info("Waiting for IO results")
-        catch_error = False
         try:
             self.pod_obj1.get_fio_results()
         except ex.CommandFailed as cf:
             if "No space left on device" not in str(cf):
                 raise
             else:
-                catch_error = True
                 used_space = get_used_space_on_mount_point(self.pod_obj1)
                 assert used_space == '100%', (
                     f"The used space is not 100% but {used_space} which means "
@@ -131,9 +130,6 @@ class TestPVCFullWithIORWX(ManageTest):
                     f"the device is not full"
                 )
                 log.info(f"FIO succeeded to fill the PVC with data")
-        assert catch_error, (
-            "No error raised during FIO to fill the device with data"
-        )
         log.info(
             f"Deleting the first pod and checking used size from the 2nd pod"
         )

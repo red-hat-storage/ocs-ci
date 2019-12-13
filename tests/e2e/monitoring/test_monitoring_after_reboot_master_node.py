@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import tier4, E2ETest, ignore_leftovers
+from ocs_ci.framework.testlib import workloads, E2ETest, ignore_leftovers
 from ocs_ci.utility import aws
 from tests.sanity_helpers import Sanity
 from ocs_ci.ocs.monitoring import check_pvcdata_collected_on_prometheus
@@ -55,7 +55,7 @@ class TestRebootMasterNodeAndInteractionWithPrometheus(E2ETest):
                 f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
             )
 
-    @tier4
+    @workloads
     def test_monitoring_after_rebooting_master_node(self, pod_factory):
         """
         Test case to validate reboot master node and its

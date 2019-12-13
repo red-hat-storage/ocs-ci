@@ -271,7 +271,7 @@ class AWSUPI(AWSBase):
         self.name = self.__class__.__name__
         super(AWSUPI, self).__init__()
 
-        if config.ENV_DATA['rhel_workers']:
+        if config.ENV_DATA.get('rhel_workers'):
             self.worker_vpc = None
             self.worker_iam_role = None
             self.worker_subnet = None
@@ -423,15 +423,18 @@ class AWSUPI(AWSBase):
         if config.DEPLOYMENT.get('host_network'):
             self.host_network_update()
 
-        if config.ENV_DATA['rhel_workers']:
+        if config.ENV_DATA.get('rhel_workers'):
             self.add_rhel_workers()
 
-    def gather_worker_data(self):
+    def gather_worker_data(self, suffix='no0'):
         """
         Gather various info like vpc, iam role, subnet,security group,
         cluster tag from existing RHCOS workers
+
+        Args:
+            suffix (str): suffix to get resource of worker node, 'no0' by default
+
         """
-        suffix = 'no0'
         stack_name = f'{self.cluster_name}-{suffix}'
         resource = self.cf.list_stack_resources(StackName=stack_name)
         worker_id = self.get_worker_resource_id(resource)
@@ -486,6 +489,7 @@ class AWSUPI(AWSBase):
         num_workers = int(os.environ.get('num_workers', 3))
         logging.info(f"Creating {num_workers} RHEL workers")
         for i in range(num_workers):
+            self.gather_worker_data(f'no{i}')
             logging.info(f"Creating {i + 1}/{num_workers} worker")
             response = self.client.run_instances(
                 BlockDeviceMappings=[
@@ -752,7 +756,6 @@ class AWSUPI(AWSBase):
         """
         Add RHEL worker nodes to the existing cluster
         """
-        self.gather_worker_data()
         self.create_rhel_instance()
         self.run_ansible_playbook()
 
@@ -786,6 +789,12 @@ class AWSUPI(AWSBase):
             exceptions.FailedToDeleteInstance: if failed to terminate
 
         """
+        if not worker_list:
+            logger.info(
+                "No workers in list, skipping termination of RHEL workers"
+            )
+            return
+
         logging.info(f"Terminating RHEL workers {worker_list}")
         # Do a dry run of instance termination
         try:
@@ -821,7 +830,7 @@ class AWSUPI(AWSBase):
                 default:DEBUG)
         """
         cluster_name = get_cluster_name(self.cluster_path)
-        if config.ENV_DATA['rhel_workers']:
+        if config.ENV_DATA.get('rhel_workers'):
             self.terminate_rhel_workers(self.get_rhel_worker_instances())
         # Destroy extra volumes
         self.destroy_volumes()
@@ -891,7 +900,7 @@ class StackStatusError(Exception):
     pass
 
 
-@retry(StackStatusError, tries=12, delay=30, backoff=1)
+@retry(StackStatusError, tries=20, delay=30, backoff=1)
 def verify_stack_deleted(stack_name):
     try:
         cf = boto3.client('cloudformation')

@@ -28,6 +28,9 @@ RUN:
   # We can also specify the tag or specific commit id to checkout by changin
   # following parameter in custom config file:
   # rook_to_checkout: "commit_id or tag_name"
+  # Following chrome params are for openshift console UI testing
+  force_chrome_branch_base: "665006"
+  force_chrome_branch_sha256sum: "a1ae2e0950828f991119825f62c24464ab3765aa219d150a94fb782a4c66a744"
 
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
@@ -45,7 +48,8 @@ DEPLOYMENT:
   # ocs_csv_channel: "alpha"
   # you can overwrite the image for ocs operator catalog source by following parameter:
   # ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:4.2-32.9b6c93e.master"
-  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:4.2-rc1"
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:4.2-rc"
+  default_latest_tag: '4.2-rc'
   ocs_operator_nodes_to_label: 3
   # This is described as a WA for minimal configuration 3/3 worker/master
   # nodes. See: https://github.com/openshift/ocs-operator
@@ -54,6 +58,12 @@ DEPLOYMENT:
   ssh_key_private: "~/.ssh/openshift-dev.pem"
   force_deploy_multiple_clusters: False
   allow_lower_instance_requirements: true
+  # For manual subscription plan (for manual approve of upgrade set bellow)
+  # subscription_plan_approval: "Manual"
+  # For UI deployment you have to set following parameter ui_deployment to True
+  # UI deployment is not part of this framework, it will just do preparation
+  # steps for openshift-console.
+  ui_deployment: False
 
 # Section for reporting configuration
 REPORTING:

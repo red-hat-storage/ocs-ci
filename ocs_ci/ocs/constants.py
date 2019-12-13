@@ -15,6 +15,7 @@ TOP_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 TEMPLATE_DIR = os.path.join(TOP_DIR, "ocs_ci", "templates")
+TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
 EXTERNAL_DIR = os.path.join(TOP_DIR, "external")
 TEMPLATE_DEPLOYMENT_DIR = os.path.join(TEMPLATE_DIR, "ocs-deployment")
@@ -51,6 +52,7 @@ ROOK_EXAMPLES_DIR = os.path.join(
 )
 ROOK_CSI_RBD_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "rbd")
 ROOK_CSI_CEPHFS_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "cephfs")
+CLEANUP_YAML = "cleanup.yaml.j2"
 
 
 # Statuses
@@ -301,6 +303,14 @@ OLM_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "deploy-with-olm.yaml"
 )
 
+CATALOG_SOURCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "catalog-source.yaml"
+)
+
+SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml"
+)
+
 STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
 )
@@ -364,6 +374,8 @@ ALERT_PGREPAIRTAKINGTOOLONG = 'CephPGRepairTakingTooLong'
 ALERT_BUCKETREACHINGQUOTASTATE = 'NooBaaBucketReachingQuotaState'
 ALERT_BUCKETERRORSTATE = 'NooBaaBucketErrorState'
 ALERT_BUCKETEXCEEDINGQUOTASTATE = 'NooBaaBucketExceedingQuotaState'
+ALERT_CLUSTERNEARFULL = 'CephClusterNearFull'
+ALERT_CLUSTERCRITICALLYFULL = 'CephClusterCriticallyFull'
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -434,9 +446,13 @@ ORDER_AFTER_UPGRADE = 30
 # Deployment constants
 OCS_CSV_PREFIX = 'ocs-operator'
 LOCAL_STORAGE_CSV_PREFIX = 'local-storage-operator'
-LATEST_TAGS = ('latest', 'latest-stable')
+LATEST_TAGS = ('latest', 'latest-stable', '4.2-rc')
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
+
+# UI Deployment constants
+HTPASSWD_SECRET_YAML = "frontend/integration-tests/data/htpasswd-secret.yaml"
+HTPASSWD_PATCH_YAML = "frontend/integration-tests/data/patch-htpasswd.yaml"
 
 # Inventory
 INVENTORY_TEMPLATE = "inventory.yaml.j2"
@@ -459,3 +475,7 @@ WORKER_LABEL = "node-role.kubernetes.io/worker"
 REPO_MAPPING = {
     '4.2.0': OCP4_2_REPO
 }
+
+# Cluster name limits
+CLUSTER_NAME_MIN_CHARACTERS = 5
+CLUSTER_NAME_MAX_CHARACTERS = 17

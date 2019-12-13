@@ -1,11 +1,15 @@
 import logging
 import pytest
 
+from subprocess import TimeoutExpired
+
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import (
     drain_nodes, schedule_nodes, get_typed_nodes, wait_for_nodes_status, get_node_objs
 )
-from ocs_ci.framework.testlib import tier1, tier2, ManageTest, bugzilla, aws_platform_required
+from ocs_ci.framework.testlib import (
+    tier1, tier2, tier3, ManageTest, aws_platform_required, ignore_leftovers, bugzilla
+)
 
 from tests.sanity_helpers import Sanity
 
@@ -30,7 +34,7 @@ def schedule_nodes_teardown(request):
     request.addfinalizer(finalizer)
 
 
-@bugzilla('1769350')
+@ignore_leftovers
 class TestNodesMaintenance(ManageTest):
     """
     Test basic flows of maintenance (unschedule and drain) and
@@ -45,6 +49,7 @@ class TestNodesMaintenance(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
+    @bugzilla('1778488')
     @tier1
     @pytest.mark.parametrize(
         argnames=["node_type"],
@@ -82,6 +87,7 @@ class TestNodesMaintenance(ManageTest):
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
 
+    @bugzilla('1778488')
     @tier2
     @aws_platform_required
     @pytest.mark.parametrize(
@@ -128,7 +134,7 @@ class TestNodesMaintenance(ManageTest):
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
         self.sanity_helpers.delete_resources()
 
-    @tier2
+    @tier3
     @pytest.mark.parametrize(
         argnames=["nodes_type"],
         argvalues=[
@@ -136,16 +142,12 @@ class TestNodesMaintenance(ManageTest):
             pytest.param(*['master'], marks=pytest.mark.polarion_id("OCS-1271"))
         ]
     )
-    def test_2_nodes_maintenance_same_type(
-        self, pvc_factory, pod_factory, nodes_type
-    ):
+    @bugzilla('1780157')
+    def test_2_nodes_maintenance_same_type(self, nodes_type):
         """
         OCS-1273/OCs-1271:
-        - Maintenance (mark as unscheduable and drain) 2 worker/master nodes
-        - Mark the nodes as scheduable
+        - Try draining 2 nodes from the same type - should fail
         - Check cluster and Ceph health
-        - Check cluster functionality by creating resources
-          (pools, storageclasses, PVCs, pods - both CephFS and RBD)
 
         """
         # Get 2 nodes
@@ -154,20 +156,14 @@ class TestNodesMaintenance(ManageTest):
 
         typed_node_names = [typed_node.name for typed_node in typed_nodes]
 
-        # Maintenance the nodes (unschedule and drain)
-        drain_nodes(typed_node_names)
-
-        # Mark the nodes back to schedulable
-        schedule_nodes(typed_node_names)
+        # Try draining 2 nodes - should fail
+        try:
+            drain_nodes(typed_node_names)
+        except TimeoutExpired:
+            logger.info(f"Draining of nodes {typed_node_names} failed as expected")
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
-
-        # Check basic cluster functionality by creating resources
-        # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
-        # run IO and delete the resources
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
-        self.sanity_helpers.delete_resources()
 
     @tier2
     @pytest.mark.polarion_id("OCS-1274")

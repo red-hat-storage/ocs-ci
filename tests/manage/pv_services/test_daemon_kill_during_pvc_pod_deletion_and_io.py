@@ -10,7 +10,7 @@ from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods, get_all_pods,
     get_fio_rw_iops, get_plugin_pods, get_rbdfsplugin_provisioner_pods,
-    get_cephfsplugin_provisioner_pods, get_operator_pods, delete_pods
+    get_cephfsplugin_provisioner_pods, get_operator_pods
 )
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from tests.helpers import (
@@ -24,67 +24,41 @@ log = logging.getLogger(__name__)
 
 @tier4
 @pytest.mark.parametrize(
-    argnames=['interface', 'resource_to_delete'],
+    argnames=['interface', 'resource_name'],
     argvalues=[
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-810")
+            marks=pytest.mark.polarion_id("OCS-1136")
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'mon'],
-            marks=pytest.mark.polarion_id("OCS-811")
+            marks=pytest.mark.polarion_id("OCS-1122")
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'osd'],
-            marks=pytest.mark.polarion_id("OCS-812")
+            marks=pytest.mark.polarion_id("OCS-1129")
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'mgr'],
-            marks=pytest.mark.polarion_id("OCS-813")
+            marks=pytest.mark.polarion_id("OCS-1108")
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'mon'],
-            marks=pytest.mark.polarion_id("OCS-814")
+            marks=pytest.mark.polarion_id("OCS-1093")
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'osd'],
-            marks=pytest.mark.polarion_id("OCS-815")
+            marks=pytest.mark.polarion_id("OCS-1101")
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'mds'],
-            marks=pytest.mark.polarion_id("OCS-816")
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, 'cephfsplugin'],
-            marks=pytest.mark.polarion_id("OCS-1012")
-        ),
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'rbdplugin'],
-            marks=[pytest.mark.polarion_id("OCS-1015"), pytest.mark.bugzilla(
-                '1752487'
-            )]
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, 'cephfsplugin_provisioner'],
-            marks=pytest.mark.polarion_id("OCS-946")
-        ),
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'rbdplugin_provisioner'],
-            marks=pytest.mark.polarion_id("OCS-953")
-        ),
-        pytest.param(
-            *[constants.CEPHBLOCKPOOL, 'operator'],
-            marks=pytest.mark.polarion_id("OCS-934")
-        ),
-        pytest.param(
-            *[constants.CEPHFILESYSTEM, 'operator'],
-            marks=pytest.mark.polarion_id("OCS-930")
+            marks=pytest.mark.polarion_id("OCS-1115")
         )
     ]
 )
-class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
+class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
     """
-    Delete ceph/rook pod while deletion of PVCs, pods and IO are progressing
+    Kill ceph daemon while deletion of PVCs, pods and IO are progressing
     """
     num_of_pvcs = 30
     pvc_size = 3
@@ -156,6 +130,14 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         return pvc_objs, pod_objs, rwx_pod_objs
 
+    def delete_pods(self, pods_to_delete):
+        """
+        Delete pods
+        """
+        for pod_obj in pods_to_delete:
+            pod_obj.delete(wait=False)
+        return True
+
     def run_io_on_pods(self, pod_objs):
         """
         Run IO on pods
@@ -177,13 +159,13 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
                 fio_filename=f'{pod_obj.name}_io'
             )
 
-    def test_disruptive_during_pod_pvc_deletion_and_io(
-        self, interface, resource_to_delete,
+    def test_daemon_kill_during_pvc_pod_deletion_and_io(
+        self, interface, resource_name,
         setup_base
     ):
         """
-        Delete ceph/rook pod while PVCs deletion, pods deletion and IO are
-        progressing
+        Kill 'resource_name' daemon while PVCs deletion, pods deletion
+        and IO are progressing
         """
         pvc_objs, pod_objs, rwx_pod_objs = setup_base
         sc_obj = pvc_objs[0].storageclass
@@ -247,13 +229,13 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         }
 
         disruption = disruption_helpers.Disruptions()
-        disruption.set_resource(resource=resource_to_delete)
+        disruption.set_resource(resource=resource_name)
         executor = ThreadPoolExecutor(
             max_workers=len(pod_objs) + len(rwx_pod_objs)
         )
 
-        # Get number of pods of type 'resource_to_delete'
-        num_of_resource_to_delete = len(pod_functions[resource_to_delete]())
+        # Get number of pods of type 'resource_name'
+        num_of_resource_pods = len(pod_functions[resource_name]())
 
         # Fetch the number of Pods and PVCs
         initial_num_of_pods = len(get_all_pods(namespace=namespace))
@@ -323,10 +305,15 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         log.info("Verified IO result on pods having PVCs to delete.")
 
         # Delete pods having PVCs to delete.
-        delete_pods(pods_for_pvc)
+        assert self.delete_pods(pods_for_pvc), (
+            "Couldn't delete pods which are having PVCs to delete."
+        )
         for pod_obj in pods_for_pvc:
             pod_obj.ocp.wait_for_delete(pod_obj.name)
         log.info("Verified: Deleted pods which are having PVCs to delete.")
+
+        # Select daemon
+        disruption.select_daemon()
 
         # Start IO on pods to be deleted
         log.info("Starting IO on pods to be deleted.")
@@ -338,9 +325,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         log.info("Started deleting PVCs")
 
         # Start deleting pods
-        pod_bulk_delete = executor.submit(
-            delete_pods, pods_to_delete, wait=False
-        )
+        pod_bulk_delete = executor.submit(self.delete_pods, pods_to_delete)
         log.info("Started deleting pods")
 
         # Start IO on IO pods
@@ -371,10 +356,11 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
         )
         log.info("Pods deletion has started.")
 
-        # Delete pod of type 'resource_to_delete'
-        disruption.delete_resource()
+        # Kill daemon
+        disruption.kill_daemon()
 
-        pod_bulk_delete.result()
+        pods_deleted = pod_bulk_delete.result()
+        assert pods_deleted, "Deletion of pods failed."
 
         # Verify pods are deleted
         for pod_obj in pods_to_delete:
@@ -431,13 +417,13 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
             )
         log.info("Verified IO result on pods.")
 
-        # Verify number of pods of type 'resource_to_delete'
-        final_num_resource_to_delete = len(pod_functions[resource_to_delete]())
-        assert final_num_resource_to_delete == num_of_resource_to_delete, (
-            f"Total number of {resource_to_delete} pods is not matching with "
-            f"initial value. Total number of pods before deleting a pod: "
-            f"{num_of_resource_to_delete}. Total number of pods present now: "
-            f"{final_num_resource_to_delete}"
+        # Verify number of pods of type 'resource_name'
+        final_num_resource_name = len(pod_functions[resource_name]())
+        assert final_num_resource_name == num_of_resource_pods, (
+            f"Total number of {resource_name} pods is not matching with "
+            f"initial value. Total number of pods before daemon kill: "
+            f"{num_of_resource_pods}. Total number of pods present now: "
+            f"{final_num_resource_name}"
         )
 
         # Check ceph status

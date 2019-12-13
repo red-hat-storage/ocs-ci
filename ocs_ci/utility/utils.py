@@ -378,18 +378,18 @@ def mask_secrets(plaintext, secrets):
     return plaintext
 
 
-def run_cmd(cmd, secrets=None, timeout=600, **kwargs):
+def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     """
     Run an arbitrary command locally
 
     Args:
         cmd (str): command to run
-
         secrets (list): A list of secrets to be masked with asterisks
             This kwarg is popped in order to not interfere with
             subprocess.run(``**kwargs``)
-
         timeout (int): Timeout for the command, defaults to 600 seconds.
+        ignore_error (bool): True if ignore non zero return code and do not
+            raise the exception.
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -413,7 +413,7 @@ def run_cmd(cmd, secrets=None, timeout=600, **kwargs):
     log.debug(f"Command output: {r.stdout.decode()}")
     if r.stderr and not r.returncode:
         log.warning(f"Command warning: {mask_secrets(r.stderr.decode(), secrets)}")
-    if r.returncode:
+    if r.returncode and not ignore_error:
         raise CommandFailed(
             f"Error during execution of command: {masked_cmd}."
             f"\nError is {mask_secrets(r.stderr.decode(), secrets)}"
@@ -637,7 +637,7 @@ def get_openshift_mirror_url(file_name, version):
         os_type=os_type,
     )
     sample = TimeoutSampler(
-        timeout=60, sleep=5, func=ensure_nightly_build_availability,
+        timeout=180, sleep=5, func=ensure_nightly_build_availability,
         build_url=url,
     )
     if not sample.wait_for_func_status(result=True):
@@ -1129,8 +1129,8 @@ def get_testrun_name():
     markers = config.RUN['cli_params'].get('-m', '').replace(" ", "-")
     us_ds = config.REPORTING.get("us_ds")
     us_ds = "Upstream" if us_ds.upper() == "US" else "Downstream" if us_ds.upper() == "DS" else us_ds
-    if config.REPORTING["polarion"].get("testrun_name"):
-        testrun_name = config.REPORTING["polarion"]["testrun_name"]
+    if config.REPORTING.get("testrun_name"):
+        testrun_name = config.REPORTING["testrun_name"]
     elif markers:
         testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}_{markers}"
     else:
@@ -1242,7 +1242,7 @@ def clone_repo(url, location, branch='master', to_checkout=None):
         run_cmd(f"git checkout {to_checkout}", cwd=location)
 
 
-def get_latest_ds_olm_tag(upgrade=False, latest_tag='latest'):
+def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
     """
     This function returns latest tag of OCS downstream registry or one before
     latest if upgrade parameter is True
@@ -1250,7 +1250,8 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag='latest'):
     Args:
         upgrade (str): If True then it returns one version of the build before
             the latest.
-        latest_tag (str): Tag of the latest build ('latest' or 'latest-stable')
+        latest_tag (str): Tag of the latest build. If not specified
+            config.DEPLOYMENT['default_latest_tag'] or 'latest' will be used.
 
     Returns:
         str: latest tag for downstream image from quay registry
@@ -1259,6 +1260,9 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag='latest'):
         TagNotFoundException: In case no tag found
 
     """
+    latest_tag = latest_tag or config.DEPLOYMENT.get(
+        'default_latest_tag', 'latest'
+    )
     _req = requests.get(
         constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=20)
     )
@@ -1555,3 +1559,12 @@ def remove_keys_from_tf_variable_file(tf_file, keys):
 
     dump_data_to_json(obj, f"{tf_file}.json")
     os.rename(tf_file, f"{tf_file}.backup")
+
+
+def get_kubeadmin_password():
+    filename = os.path.join(
+        config.ENV_DATA['cluster_path'],
+        config.RUN['password_location']
+    )
+    with open(filename) as f:
+        return f.read()
