@@ -17,7 +17,7 @@ spec:
       storage:
         storageClassName: "ocs-storagecluster-ceph-rbd"
         size: "200G"
-      redundancyPolicy: "FullRedundancy"
+      redundancyPolicy: "SingleRedundancy"
   visualization:
     type: "kibana"
     kibana:
@@ -25,7 +25,7 @@ spec:
   curation:
     type: "curator"
     curator:
-      schedule: "* * 1 * *"
+      schedule: "30 3 * * *"
   collection:
     logs:
       type: "fluentd"
