@@ -5,7 +5,7 @@ import botocore
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1, noobaa_cli_required, acceptance,
+    tier1, tier2, tier3, noobaa_cli_required, acceptance,
     filter_insecure_request_warning
 )
 from ocs_ci.ocs.exceptions import CommandFailed
