@@ -3,10 +3,11 @@ import re
 
 import botocore
 import pytest
+from pytest import skip
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1, tier3, noobaa_cli_required, filter_insecure_request_warning, acceptance,
-    performance, skip_always
+    tier1, tier3, noobaa_cli_required, filter_insecure_request_warning,
+    acceptance, performance
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
@@ -19,6 +20,7 @@ class TestBucketCreation:
     """
     Test creation of a bucket
     """
+    ERRATIC_TIMEOUTS_SKIP_REASON = 'Skipped because of erratic timeouts'
     @pytest.mark.parametrize(
         argnames="amount,interface",
         argvalues=[
@@ -28,11 +30,17 @@ class TestBucketCreation:
             ),
             pytest.param(
                 *[100, 'S3'],
-                marks=[skip_always, performance, pytest.mark.polarion_id("OCS-1823")]
+                marks=[
+                    skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    performance, pytest.mark.polarion_id("OCS-1823")
+                ]
             ),
             pytest.param(
                 *[1000, 'S3'],
-                marks=[skip_always, performance, pytest.mark.polarion_id("OCS-1824")]
+                marks=[
+                    skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    performance, pytest.mark.polarion_id("OCS-1824")
+                ]
             ),
             pytest.param(
                 *[3, 'OC'],
@@ -40,11 +48,17 @@ class TestBucketCreation:
             ),
             pytest.param(
                 *[100, 'OC'],
-                marks=[skip_always, performance, pytest.mark.polarion_id("OCS-1826")]
+                marks=[
+                    skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    performance, pytest.mark.polarion_id("OCS-1826")
+                ]
             ),
             pytest.param(
                 *[1000, 'OC'],
-                marks=[skip_always, performance, pytest.mark.polarion_id("OCS-1827")]
+                marks=[
+                    skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    performance, pytest.mark.polarion_id("OCS-1827")
+                ]
             ),
             pytest.param(
                 *[3, 'CLI'],
@@ -56,15 +70,15 @@ class TestBucketCreation:
             pytest.param(
                 *[100, 'CLI'],
                 marks=[
-                    skip_always, performance, noobaa_cli_required,
-                    pytest.mark.polarion_id("OCS-1825")
+                    skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    performance, noobaa_cli_required, pytest.mark.polarion_id("OCS-1825")
                 ]
             ),
             pytest.param(
                 *[1000, 'CLI'],
                 marks=[
-                    skip_always, performance, noobaa_cli_required,
-                    pytest.mark.polarion_id("OCS-1828")
+                    skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    performance, noobaa_cli_required, pytest.mark.polarion_id("OCS-1828")
                 ]
             ),
         ]
