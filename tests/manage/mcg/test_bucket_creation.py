@@ -48,18 +48,24 @@ class TestBucketCreation:
             ),
             pytest.param(
                 *[3, 'CLI'],
-                marks=[tier1, acceptance, noobaa_cli_required,
-                       pytest.mark.polarion_id("OCS-1298")]
+                marks=[
+                    tier1, acceptance, noobaa_cli_required,
+                    pytest.mark.polarion_id("OCS-1298")
+                ]
             ),
             pytest.param(
                 *[100, 'CLI'],
-                marks=[skip_always, performance, noobaa_cli_required,
-                       pytest.mark.polarion_id("OCS-1825")]
+                marks=[
+                    skip_always, performance, noobaa_cli_required,
+                    pytest.mark.polarion_id("OCS-1825")
+                ]
             ),
             pytest.param(
                 *[1000, 'CLI'],
-                marks=[skip_always, performance, noobaa_cli_required,
-                       pytest.mark.polarion_id("OCS-1828")]
+                marks=[
+                    skip_always, performance, noobaa_cli_required,
+                    pytest.mark.polarion_id("OCS-1828")
+                ]
             ),
         ]
     )
