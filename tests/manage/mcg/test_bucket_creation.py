@@ -3,7 +3,6 @@ import re
 
 import botocore
 import pytest
-from pytest import skip
 
 from ocs_ci.framework.pytest_customization.marks import (
     tier1, tier3, noobaa_cli_required, filter_insecure_request_warning,
@@ -21,6 +20,7 @@ class TestBucketCreation:
     Test creation of a bucket
     """
     ERRATIC_TIMEOUTS_SKIP_REASON = 'Skipped because of erratic timeouts'
+
     @pytest.mark.parametrize(
         argnames="amount,interface",
         argvalues=[
@@ -31,14 +31,14 @@ class TestBucketCreation:
             pytest.param(
                 *[100, 'S3'],
                 marks=[
-                    skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance, pytest.mark.polarion_id("OCS-1823")
                 ]
             ),
             pytest.param(
                 *[1000, 'S3'],
                 marks=[
-                    skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance, pytest.mark.polarion_id("OCS-1824")
                 ]
             ),
@@ -49,14 +49,14 @@ class TestBucketCreation:
             pytest.param(
                 *[100, 'OC'],
                 marks=[
-                    skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance, pytest.mark.polarion_id("OCS-1826")
                 ]
             ),
             pytest.param(
                 *[1000, 'OC'],
                 marks=[
-                    skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance, pytest.mark.polarion_id("OCS-1827")
                 ]
             ),
@@ -70,14 +70,14 @@ class TestBucketCreation:
             pytest.param(
                 *[100, 'CLI'],
                 marks=[
-                    skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance, noobaa_cli_required, pytest.mark.polarion_id("OCS-1825")
                 ]
             ),
             pytest.param(
                 *[1000, 'CLI'],
                 marks=[
-                    skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
                     performance, noobaa_cli_required, pytest.mark.polarion_id("OCS-1828")
                 ]
             ),
