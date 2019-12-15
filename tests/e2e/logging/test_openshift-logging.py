@@ -14,7 +14,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.utility.retry import retry
 from tests import helpers
-from ocs_ci.framework.testlib import E2ETest, tier1, ignore_leftovers
+from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility import templating
@@ -154,7 +154,7 @@ class Test_openshift_logging_on_ocs(E2ETest):
             raise ModuleNotFoundError
 
     @pytest.mark.polarion_id("OCS-657")
-    @tier1
+    @workloads
     def test_create_new_project_to_verify_logging(self, create_pvc_and_deploymentconfig_pod):
         """
         This function creates new project to verify logging in EFK stack
