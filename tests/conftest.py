@@ -821,15 +821,15 @@ def cluster(request, log_cli_level):
     get_openshift_client(force_download=force_download)
 
     if deploy:
+        # Deploy cluster
+        deployer.deploy_cluster(log_cli_level)
         # Workaround for #1777384 - enable container_use_cephfs on RHEL workers
         ocp_obj = ocp.OCP()
-        cmd = ['/usr/sbin/setsebool container_use_cephfs on']
+        cmd = ['/usr/sbin/setsebool -P container_use_cephfs on']
         workers = get_typed_worker_nodes(os_id="rhel")
         for worker in workers:
             log.info(f"{worker} is a RHEL based worker - applying '{cmd}'")
             ocp_obj.exec_oc_debug_cmd(node=worker, cmd_list=cmd)
-        # Deploy cluster
-        deployer.deploy_cluster(log_cli_level)
 
 
 @pytest.fixture(scope='class')
