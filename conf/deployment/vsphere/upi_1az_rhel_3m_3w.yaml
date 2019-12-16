@@ -1,0 +1,19 @@
+---
+# This config is suppose to work on DC4, DC5 and VSAN DC
+# This config won't work for DC1 and DC2
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  worker_replicas: 3
+  master_replicas: 3
+  worker_num_cpus: '16'
+  master_num_cpus: '4'
+  memory: '65536'
+  scale_up: True
+  nodes_scaleup_count: '3'
+  rhel_template: 'rhel77_ocs4qe'
+  rhel_worker_prefix: 'rhel1'
+  rhel_user: 'test'
+  mixed_cluster: False
