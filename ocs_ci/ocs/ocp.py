@@ -86,7 +86,8 @@ class OCP(object):
         self._data = self.get()
 
     def exec_oc_cmd(
-        self, command, out_yaml_format=True, secrets=None, timeout=600, **kwargs
+        self, command, out_yaml_format=True, secrets=None, timeout=600,
+        ignore_error=False, **kwargs
     ):
         """
         Executing 'oc' command
@@ -94,18 +95,19 @@ class OCP(object):
         Args:
             command (str): The command to execute (e.g. create -f file.yaml)
                 without the initial 'oc' at the beginning
-
             out_yaml_format (bool): whether to return  yaml loaded python
                 object or raw output
-
             secrets (list): A list of secrets to be masked with asterisks
                 This kwarg is popped in order to not interfere with
                 subprocess.run(``**kwargs``)
-
             timeout (int): timeout for the oc_cmd, defaults to 600 seconds
+            ignore_error (bool): True if ignore non zero return code and do not
+                raise the exception.
 
         Returns:
-            dict: Dictionary represents a returned yaml file
+            dict: Dictionary represents a returned yaml file.
+            str: If out_yaml_format is False.
+
         """
         oc_cmd = "oc "
         kubeconfig = os.getenv('KUBECONFIG')
@@ -116,7 +118,10 @@ class OCP(object):
             oc_cmd += f"--kubeconfig {kubeconfig} "
 
         oc_cmd += command
-        out = run_cmd(cmd=oc_cmd, secrets=secrets, timeout=timeout, **kwargs)
+        out = run_cmd(
+            cmd=oc_cmd, secrets=secrets, timeout=timeout,
+            ignore_error=ignore_error, **kwargs
+        )
 
         try:
             if out.startswith('hints = '):

@@ -363,6 +363,10 @@ NODE_READY = 'Ready'
 NODE_NOT_READY = 'NotReady'
 NODE_READY_SCHEDULING_DISABLED = 'Ready,SchedulingDisabled'
 
+# Volume modes
+VOLUME_MODE_BLOCK = 'Block'
+VOLUME_MODE_FILESYSTEM = 'Filesystem'
+
 # Alert labels
 ALERT_CLUSTERERRORSTATE = 'CephClusterErrorState'
 ALERT_CLUSTERWARNINGSTATE = 'CephClusterWarningState'
@@ -371,6 +375,8 @@ ALERT_MGRISABSENT = 'CephMgrIsAbsent'
 ALERT_MONQUORUMATRISK = 'CephMonQuorumAtRisk'
 ALERT_OSDDISKNOTRESPONDING = 'CephOSDDiskNotResponding'
 ALERT_PGREPAIRTAKINGTOOLONG = 'CephPGRepairTakingTooLong'
+ALERT_CLUSTERNEARFULL = 'CephClusterNearFull'
+ALERT_CLUSTERCRITICALLYFULL = 'CephClusterCriticallyFull'
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -444,6 +450,10 @@ LOCAL_STORAGE_CSV_PREFIX = 'local-storage-operator'
 LATEST_TAGS = ('latest', 'latest-stable', '4.2-rc')
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
+
+# UI Deployment constants
+HTPASSWD_SECRET_YAML = "frontend/integration-tests/data/htpasswd-secret.yaml"
+HTPASSWD_PATCH_YAML = "frontend/integration-tests/data/patch-htpasswd.yaml"
 
 # Inventory
 INVENTORY_TEMPLATE = "inventory.yaml.j2"

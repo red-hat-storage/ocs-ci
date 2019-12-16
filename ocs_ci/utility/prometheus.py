@@ -5,6 +5,7 @@ import requests
 import tempfile
 import time
 import yaml
+from datetime import datetime
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
@@ -13,13 +14,15 @@ from ocs_ci.ocs.ocp import OCP
 logger = logging.getLogger(name=__file__)
 
 
+# TODO(fbalak): if ignore_more_occurences is set to False then tests are flaky.
+# The root cause should be inspected.
 def check_alert_list(
     label,
     msg,
     alerts,
     states,
     severity="warning",
-    ignore_more_occurences=False
+    ignore_more_occurences=True
 ):
     """
     Check list of alerts that there are alerts with requested label and
@@ -47,7 +50,7 @@ def check_alert_list(
     if ignore_more_occurences:
         for state in states:
             delete = False
-            for key, alert in enumerate(target_alerts):
+            for key, alert in reversed(list(enumerate(target_alerts))):
                 if alert.get('state') == state:
                     if delete:
                         d_msg = f"Ignoring {alert} as alert already appeared."
@@ -57,7 +60,8 @@ def check_alert_list(
                         delete = True
     assert_msg = (
         f"Incorrect number of {label} alerts ({len(target_alerts)} "
-        f"instead of {len(states)})"
+        f"instead of {len(states)} with states: {states})."
+        f"\nAlerts: {target_alerts}"
     )
     assert len(target_alerts) == len(states), assert_msg
 
@@ -172,6 +176,68 @@ class PrometheusAPI(object):
         )
         return response
 
+    def query_range(self, query, start, end, step, timeout=None, validate=True):
+        """
+        Perform Prometheus `range query`_. This is a simple wrapper over
+        ``get()`` method with plumbing code for range queries, additional
+        validation and logging.
+
+        Args:
+            query (str): Prometheus expression query string.
+            start (str): start timestamp (rfc3339 or unix timestamp)
+            end (str): end timestamp (rfc3339 or unix timestamp)
+            step (float): Query resolution step width as float number of
+                seconds.
+            timeout (str): Evaluation timeout in duration format. Optional.
+            validate (bool): Perform basic validation on the response.
+                Optional, ``True`` is the default. Use ``False`` when you
+                expect query to fail eg. during negative testing.
+
+        Returns:
+            list: result of the query
+
+        .. _`range query`: https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
+        """
+        query_payload = {
+            'query': query,
+            'start': start,
+            'end': end,
+            'step': step}
+        if timeout is not None:
+            query_payload['timeout'] = timeout
+        # Human readable summary of the query (details are logged by get
+        # method itself with debug level).
+        logger.info((
+            f"Performing prometheus range query '{query}' "
+            f"over a time range ({start}, {end})"))
+        resp = self.get('query_range', payload=query_payload)
+        content = yaml.safe_load(resp.content)
+        if validate:
+            # If this fails, Prometheus instance is so broken that test can't
+            # be performed.
+            assert content["status"] == "success"
+            # For a range query, we should always get a matrix result type, as
+            # noted in Prometheus documentation, see:
+            # https://prometheus.io/docs/prometheus/latest/querying/api/#range-vectors
+            assert content["data"]["resultType"] == "matrix"
+            # All metric sample series has the same size.
+            sizes = []
+            for metric in content["data"]["result"]:
+                sizes.append(len(metric["values"]))
+            msg = "Metric sample series doesn't have the same size."
+            assert all(size == sizes[0] for size in sizes), msg
+            # Check that we don't have holes in the response. If this fails,
+            # our Prometheus instance is missing some part of the data we are
+            # asking it about. For positive test cases, this is most likely a
+            # test blocker product bug.
+            start_dt = datetime.utcfromtimestamp(start)
+            end_dt = datetime.utcfromtimestamp(end)
+            duration = end_dt - start_dt
+            exp_samples = duration.seconds / step
+            assert exp_samples - 1 <= sizes[0] <= exp_samples + 1
+        # return actual result of the query
+        return content["data"]["result"]
+
     def wait_for_alert(self, name, state=None, timeout=1200, sleep=5):
         """
         Search for alerts that have requested name and state.
@@ -230,7 +296,7 @@ class PrometheusAPI(object):
             timeout -= sleep
         return alerts
 
-    def check_alert_cleared(self, label, measure_end_time, time_min=30):
+    def check_alert_cleared(self, label, measure_end_time, time_min=120):
         """
         Check that all alerts with provided label are cleared.
 

@@ -77,25 +77,26 @@ class MCG(object):
             }
         ).json().get('reply').get('token')
 
-        (
-            self.cred_req_obj,
-            self.aws_access_key_id,
-            self.aws_access_key
-        ) = self.request_aws_credentials()
-
-        self._ocp_resource = ocp_obj
-
         self.s3_resource = boto3.resource(
             's3', verify=False, endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
         )
 
-        self.aws_s3_resource = boto3.resource(
-            's3', verify=False, endpoint_url="https://s3.amazonaws.com",
-            aws_access_key_id=self.aws_access_key_id,
-            aws_secret_access_key=self.aws_access_key
-        )
+        if config.ENV_DATA['platform'].lower() == 'aws':
+            (
+                self.cred_req_obj,
+                self.aws_access_key_id,
+                self.aws_access_key
+            ) = self.request_aws_credentials()
+
+            self._ocp_resource = ocp_obj
+
+            self.aws_s3_resource = boto3.resource(
+                's3', verify=False, endpoint_url="https://s3.amazonaws.com",
+                aws_access_key_id=self.aws_access_key_id,
+                aws_secret_access_key=self.aws_access_key
+            )
 
     def s3_get_all_bucket_names(self):
         """
@@ -327,7 +328,9 @@ class MCG(object):
                     aws_access_key_id=aws_access_key_id,
                     aws_secret_access_key=aws_access_key
                 )
-                test_bucket = s3_res.create_bucket(Bucket='noobaa-test-creds-verification')
+                test_bucket = s3_res.create_bucket(
+                    Bucket=create_unique_resource_name('cred-verify', 's3-bucket')
+                )
                 test_bucket.delete()
                 return True
 

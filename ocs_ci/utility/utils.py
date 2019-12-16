@@ -378,18 +378,18 @@ def mask_secrets(plaintext, secrets):
     return plaintext
 
 
-def run_cmd(cmd, secrets=None, timeout=600, **kwargs):
+def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     """
     Run an arbitrary command locally
 
     Args:
         cmd (str): command to run
-
         secrets (list): A list of secrets to be masked with asterisks
             This kwarg is popped in order to not interfere with
             subprocess.run(``**kwargs``)
-
         timeout (int): Timeout for the command, defaults to 600 seconds.
+        ignore_error (bool): True if ignore non zero return code and do not
+            raise the exception.
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -413,7 +413,7 @@ def run_cmd(cmd, secrets=None, timeout=600, **kwargs):
     log.debug(f"Command output: {r.stdout.decode()}")
     if r.stderr and not r.returncode:
         log.warning(f"Command warning: {mask_secrets(r.stderr.decode(), secrets)}")
-    if r.returncode:
+    if r.returncode and not ignore_error:
         raise CommandFailed(
             f"Error during execution of command: {masked_cmd}."
             f"\nError is {mask_secrets(r.stderr.decode(), secrets)}"
@@ -1458,13 +1458,14 @@ def dump_config_to_file(file_path):
         yaml.safe_dump(config_copy, fs)
 
 
-def create_rhelpod(namespace, pod_name):
+def create_rhelpod(namespace, pod_name, timeout=300):
     """
     Creates the RHEL pod
 
     Args:
         namespace (str): Namespace to create RHEL pod
         pod_name (str): Pod name
+        timeout (int): wait time for RHEL pod to be in Running state
 
     Returns:
         pod: Pod instance for RHEL
@@ -1477,7 +1478,7 @@ def create_rhelpod(namespace, pod_name):
         pod_name=pod_name,
         pod_dict_path=constants.RHEL_7_7_POD_YAML
     )
-    helpers.wait_for_resource_state(rhelpod_obj, constants.STATUS_RUNNING)
+    helpers.wait_for_resource_state(rhelpod_obj, constants.STATUS_RUNNING, timeout)
     return rhelpod_obj
 
 
@@ -1559,3 +1560,12 @@ def remove_keys_from_tf_variable_file(tf_file, keys):
 
     dump_data_to_json(obj, f"{tf_file}.json")
     os.rename(tf_file, f"{tf_file}.backup")
+
+
+def get_kubeadmin_password():
+    filename = os.path.join(
+        config.ENV_DATA['cluster_path'],
+        config.RUN['password_location']
+    )
+    with open(filename) as f:
+        return f.read()

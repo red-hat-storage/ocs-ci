@@ -3,7 +3,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1, noobaa_cli_required, aws_platform_required, acceptance,
+    tier1, noobaa_cli_required, acceptance,
     filter_insecure_request_warning
 )
 
@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 
 @filter_insecure_request_warning
-@aws_platform_required
 @acceptance
 @tier1
 class TestBucketDeletion:

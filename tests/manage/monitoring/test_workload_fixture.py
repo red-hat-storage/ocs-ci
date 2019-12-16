@@ -39,12 +39,11 @@ else first to prevent loosing it.
 """
 
 import logging
+from datetime import datetime
 
 import pytest
 
-# from ocs_ci.utility.prometheus import PrometheusAPI
-# from ocs_ci.ocs.ocp import OCP
-# from tests import helpers
+from ocs_ci.utility.prometheus import PrometheusAPI
 
 
 logger = logging.getLogger(__name__)
@@ -53,9 +52,69 @@ logger = logging.getLogger(__name__)
 @pytest.mark.libtest
 def test_workload_rbd(workload_storageutilization_50p_rbd):
     """
-    Purpose of this test is to make the workload fixture executed.
+    Purpose of this test is to make the workload fixture executed, and
+    show how to query prometheus.
+
+    Note that this test is valid only on 3 osd cluster with all pools using
+    3 way replication.
     """
-    logger.info(workload_storageutilization_50p_rbd)
+    prometheus = PrometheusAPI()
+    # Asking for values of `ceph_osd_stat_bytes_used` for every 15s in
+    # when the workload fixture was utilizing 50% of the OCS storage.
+    result_used = prometheus.query_range(
+        query='ceph_osd_stat_bytes_used',
+        start=workload_storageutilization_50p_rbd['start'],
+        end=workload_storageutilization_50p_rbd['stop'],
+        step=15)
+    # This time, we are asking for total OCS capacity, in the same format
+    # as in previous case (for each OSD).
+    result_total = prometheus.query_range(
+        query='ceph_osd_stat_bytes',
+        start=workload_storageutilization_50p_rbd['start'],
+        end=workload_storageutilization_50p_rbd['stop'],
+        step=15)
+    # Check test assumption that ceph_osd_stat_bytes hasn't changed for each
+    # OSD, and that each OSD has the same size.
+    osd_stat_bytes = []
+    for metric in result_total:
+        values = []
+        for ts, value in metric["values"]:
+            values.append(value)
+        assert all(value == values[0] for value in values)
+        osd_stat_bytes.append(values[0])
+    assert all(value == osd_stat_bytes[0] for value in osd_stat_bytes)
+    # Compute expected value of'ceph_osd_stat_bytes_used, based on percentage
+    # utilized by the fixture.
+    percentage = workload_storageutilization_50p_rbd['result']['target_p']
+    expected_value = int(osd_stat_bytes[0]) * percentage
+    # Now we can check the actual usage values from Prometheus.
+    at_least_one_value_out_of_range = False
+    for metric in result_used:
+        name = metric['metric']['__name__']
+        daemon = metric['metric']['ceph_daemon']
+        logger.info(f"metric {name} from {daemon}")
+        # We are skipping the 1st 10% of the values, as it could take some
+        # additional time for all the data to be written everywhere, and
+        # during this time utilization value still grows.
+        start_index = int(len(metric["values"]) * 0.1)
+        logger.info(f"ignoring first {start_index} values")
+        for ts, value in metric["values"][:start_index]:
+            value = int(value)
+            dt = datetime.utcfromtimestamp(ts)
+            logger.info(f"ignoring value {value} B at {dt}")
+        for ts, value in metric["values"][start_index:]:
+            value = int(value)
+            dt = datetime.utcfromtimestamp(ts)
+            # checking the value, with 10% error margin in each direction
+            if expected_value * 0.90 <= value <= expected_value * 1.10:
+                logger.info(
+                    f"value {value} B at {dt} is withing expected range")
+            else:
+                logger.error((
+                    f"value {value} B at {dt} is outside of expected range"
+                    f" {expected_value} B +- 10%"))
+                at_least_one_value_out_of_range = True
+    assert not at_least_one_value_out_of_range
 
 
 @pytest.mark.libtest
