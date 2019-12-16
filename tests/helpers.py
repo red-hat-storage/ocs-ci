@@ -1121,7 +1121,7 @@ def craft_s3_command(mcg_obj, cmd):
             "aws s3 "
             f"--endpoint={mcg_obj.s3_endpoint} "
             "--no-verify-ssl "
-            "--cli-connect-timeout 60"
+            "--cli-connect-timeout 60 "
         )
         string_wrapper = "\""
     else:
