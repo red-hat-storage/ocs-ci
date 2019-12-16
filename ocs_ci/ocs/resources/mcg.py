@@ -328,7 +328,9 @@ class MCG(object):
                     aws_access_key_id=aws_access_key_id,
                     aws_secret_access_key=aws_access_key
                 )
-                test_bucket = s3_res.create_bucket(Bucket='noobaa-test-creds-verification')
+                test_bucket = s3_res.create_bucket(
+                    Bucket=create_unique_resource_name('cred-verify', 's3-bucket')
+                )
                 test_bucket.delete()
                 return True
 
