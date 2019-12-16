@@ -1290,7 +1290,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
                 continue
             if (
                 tag['name'] not in constants.LATEST_TAGS
-                and tag['image_id'] != latest_image
+                and tag['image_id'] != latest_image and "rc" in tag['name']
             ):
                 return tag['name']
     raise TagNotFoundException(f"Couldn't find any desired tag!")
