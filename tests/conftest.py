@@ -829,7 +829,8 @@ def cluster(request, log_cli_level):
         workers = get_typed_worker_nodes(os_id="rhel")
         for worker in workers:
             log.info(f"{worker} is a RHEL based worker - applying '{cmd}'")
-            ocp_obj.exec_oc_debug_cmd(node=worker, cmd_list=cmd)
+            node = worker.get().get('metadata').get('name')
+            ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=cmd)
 
 
 @pytest.fixture(scope='class')
