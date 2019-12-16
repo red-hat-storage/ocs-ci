@@ -188,6 +188,7 @@ class Pod(OCS):
 
         Returns:
             dict: Ceph command output
+            (For some commands, like "ceph fs ls", the returned output is a list)
 
         Raises:
             CommandFailed: In case the pod is not a toolbox pod
@@ -200,10 +201,6 @@ class Pod(OCS):
         if format:
             ceph_cmd += f" --format {format}"
         out = self.exec_cmd_on_pod(ceph_cmd)
-
-        # For some commands, like "ceph fs ls", the returned output is a list
-        if isinstance(out, list):
-            return [item for item in out]
         return out
 
     def get_storage_path(self, storage_type='fs'):
