@@ -80,7 +80,10 @@ def verify_image_versions(old_images):
         resource_name=config.ENV_DATA['storage_cluster_name'],
         namespace=namespace
     )
-    osd_count = storage_cluster.data['spec']['storageDeviceSets'][0]['count']
+    osd_count = (
+        int(storage_cluster.data['spec']['storageDeviceSets'][0]['count'])
+        * int(storage_cluster.data['spec']['storageDeviceSets'][0]['replica'])
+    )
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
     verify_pods_upgraded(
