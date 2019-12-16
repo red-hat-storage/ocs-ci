@@ -1118,9 +1118,10 @@ def craft_s3_command(mcg_obj, cmd):
             f"sh -c \"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
             f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
             f"AWS_DEFAULT_REGION={mcg_obj.region} "
-            f"aws s3 "
+            "aws s3 "
             f"--endpoint={mcg_obj.s3_endpoint} "
-            f"--no-verify-ssl "
+            "--no-verify-ssl "
+            "--cli-connect-timeout 60"
         )
         string_wrapper = "\""
     else:
