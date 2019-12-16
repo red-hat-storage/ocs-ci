@@ -828,9 +828,10 @@ def cluster(request, log_cli_level):
         cmd = ['/usr/sbin/setsebool -P container_use_cephfs on']
         workers = get_typed_worker_nodes(os_id="rhel")
         for worker in workers:
-            log.info(f"{worker} is a RHEL based worker - applying '{cmd}'")
+            cmd_list = cmd.copy()
             node = worker.get().get('metadata').get('name')
-            ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=cmd)
+            log.info(f"{node} is a RHEL based worker - applying '{cmd_list}'")
+            ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=cmd_list)
 
 
 @pytest.fixture(scope='class')
