@@ -28,6 +28,7 @@ from tests import helpers
 from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
+from ocs_ci.ocs.node import get_typed_worker_nodes
 
 
 log = logging.getLogger(__name__)
@@ -822,6 +823,15 @@ def cluster(request, log_cli_level):
     if deploy:
         # Deploy cluster
         deployer.deploy_cluster(log_cli_level)
+        # Workaround for #1777384 - enable container_use_cephfs on RHEL workers
+        ocp_obj = ocp.OCP()
+        cmd = ['/usr/sbin/setsebool -P container_use_cephfs on']
+        workers = get_typed_worker_nodes(os_id="rhel")
+        for worker in workers:
+            cmd_list = cmd.copy()
+            node = worker.get().get('metadata').get('name')
+            log.info(f"{node} is a RHEL based worker - applying '{cmd_list}'")
+            ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=cmd_list)
 
 
 @pytest.fixture(scope='class')
