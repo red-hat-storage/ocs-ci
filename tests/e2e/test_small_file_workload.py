@@ -82,7 +82,7 @@ class TestSmallFileWorkload(E2ETest):
         sf_obj.create()
         # wait for benchmark pods to get created - takes a while
         for bench_pod in TimeoutSampler(
-            40, 3, get_pod_name_by_pattern, 'smallfile-client', 'my-ripsaw'
+            80, 5, get_pod_name_by_pattern, 'smallfile-client', 'my-ripsaw'
         ):
             try:
                 if bench_pod[0] is not None:
