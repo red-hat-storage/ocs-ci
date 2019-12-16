@@ -253,7 +253,10 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
         timeout=timeout
     )
     # osds
-    osd_count = storage_cluster.data['spec']['storageDeviceSets'][0]['count']
+    osd_count = (
+        int(storage_cluster.data['spec']['storageDeviceSets'][0]['count'])
+        * int(storage_cluster.data['spec']['storageDeviceSets'][0]['replica'])
+    )
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
         selector=constants.OSD_APP_LABEL,
