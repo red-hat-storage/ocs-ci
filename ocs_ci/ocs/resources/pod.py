@@ -188,7 +188,7 @@ class Pod(OCS):
 
         Returns:
             dict: Ceph command output
-            (For some commands, like "ceph fs ls", the returned output is a list)
+            list: some commands, like "ceph fs ls", the returned output is a list
 
         Raises:
             CommandFailed: In case the pod is not a toolbox pod
