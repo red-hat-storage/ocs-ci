@@ -1,0 +1,19 @@
+---
+DEPLOYMENT:
+  # TODO: update to false when supported
+  allow_lower_instance_requirements: true
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  worker_replicas: 3
+  master_replicas: 3
+  # TODO: update worker_num_cpus to 16 when supported
+  worker_num_cpus: '12'
+  master_num_cpus: '4'
+  memory: '32768'
+  scale_up: True
+  nodes_scaleup_count: '3'
+  rhel_template: 'rhel77_ocs4qe'
+  rhel_worker_prefix: 'rhel1'
+  rhel_user: 'test'
+  mixed_cluster: False
