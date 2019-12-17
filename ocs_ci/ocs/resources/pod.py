@@ -560,6 +560,7 @@ def get_fio_rw_iops(pod_obj):
     """
     logging.info(f"Waiting for IO results from pod {pod_obj.name}")
     fio_result = pod_obj.get_fio_results()
+    logging.info(f"FIO output: {fio_result}")
     logging.info("IOPs after FIO:")
     logging.info(
         f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
