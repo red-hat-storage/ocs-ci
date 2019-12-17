@@ -219,7 +219,7 @@ CSI_RBD_POD_YAML = os.path.join(
 )
 
 CSI_RBD_RAW_BLOCK_POD_YAML = os.path.join(
-    TEMPLATE_APP_POD_DIR, "raw_block_pod.yaml"
+    TEMPLATE_APP_POD_DIR, "fio_pod.yaml"
 )
 
 CSI_CEPHFS_POD_YAML = os.path.join(

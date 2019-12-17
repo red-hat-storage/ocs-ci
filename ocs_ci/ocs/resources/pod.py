@@ -242,7 +242,6 @@ class Pod(OCS):
         self.wl_obj = workload.WorkLoad(
             name, path, work_load, storage_type, self, jobs
         )
-        assert self.wl_obj.setup(), f"Setup for FIO failed on pod {self.name}"
         self.wl_setup_done = True
 
     def run_io(

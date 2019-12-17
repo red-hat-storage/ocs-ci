@@ -1,0 +1,19 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fio-pod
+  namespace: default
+spec:
+  nodeName: fio-node
+  containers:
+   - name: fionode
+     image: quay.io/johnstrunk/fs-performance:latest
+     volumeMounts:
+       - name: mypvc
+         mountPath: /var/lib/www/html
+  volumes:
+   - name: mypvc
+     persistentVolumeClaim:
+       claimName: pvc
+       readOnly: false
