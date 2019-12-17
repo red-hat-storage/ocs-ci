@@ -365,7 +365,7 @@ class Deployment(object):
         openshift_console_env.update(os.environ)
         ui_deploy_output = run_cmd(
             "./test-gui.sh ceph-storage-install", cwd=console_path,
-            env=openshift_console_env, timeout=900,
+            env=openshift_console_env, timeout=1500,
         )
         ui_deploy_log_file = os.path.expanduser(
             os.path.join(config.RUN['log_dir'], "ui_deployment.log")
