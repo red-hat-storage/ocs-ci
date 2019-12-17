@@ -28,7 +28,7 @@ class OCPDeployment:
         self.metadata = {}
         self.deployment_platform = config.ENV_DATA['platform'].lower()
         self.deployment_type = config.ENV_DATA['deployment_type'].lower()
-        self.installer = self.download_installer()
+        self.installer = None
         self.cluster_path = config.ENV_DATA['cluster_path']
 
     def download_installer(self):
@@ -42,7 +42,7 @@ class OCPDeployment:
             config.RUN['cli_params'].get('deploy')
             and config.DEPLOYMENT['force_download_installer']
         )
-        return utils.get_openshift_installer(
+        self.installer = utils.get_openshift_installer(
             config.DEPLOYMENT['installer_version'],
             force_download=force_download
         )
