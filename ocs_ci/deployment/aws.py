@@ -285,7 +285,7 @@ class AWSUPI(AWSBase):
             self.client = boto3.client(
                 'ec2', region_name=config.ENV_DATA['region']
             )
-            self.cf = boto3.client('cloudformation')
+            self.cf = boto3.client('cloudformation', region_name=self.region)
 
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
@@ -438,7 +438,7 @@ class AWSUPI(AWSBase):
         stack_name = f'{self.cluster_name}-{suffix}'
         resource = self.cf.list_stack_resources(StackName=stack_name)
         worker_id = self.get_worker_resource_id(resource)
-        ec2 = boto3.resource('ec2')
+        ec2 = boto3.resource('ec2', region_name=self.region)
         worker_instance = ec2.Instance(worker_id)
         self.worker_vpc = worker_instance.vpc.id
         self.worker_subnet = worker_instance.subnet.id
@@ -516,7 +516,7 @@ class AWSUPI(AWSBase):
                 KeyName='openshift-dev'
             )
             inst_id = response['Instances'][0]['InstanceId']
-            worker_ec2 = boto3.resource('ec2')
+            worker_ec2 = boto3.resource('ec2', region_name=self.region)
             worker_instance = worker_ec2.Instance(inst_id)
             worker_instance.wait_until_running()
             worker_name = f'{cluster_id}-rhel-worker-{i}'
@@ -836,7 +836,7 @@ class AWSUPI(AWSBase):
         self.destroy_volumes()
 
         # Create cloudformation client
-        cf = boto3.client('cloudformation')
+        cf = boto3.client('cloudformation', region_name=self.region)
 
         # Delete master, bootstrap, security group, and worker stacks
         suffixes = ['ma', 'bs', 'sg']
@@ -903,7 +903,9 @@ class StackStatusError(Exception):
 @retry(StackStatusError, tries=20, delay=30, backoff=1)
 def verify_stack_deleted(stack_name):
     try:
-        cf = boto3.client('cloudformation')
+        cf = boto3.client(
+            'cloudformation', region_name=config.ENV_DATA['region']
+        )
         result = cf.describe_stacks(StackName=stack_name)
         stacks = result['Stacks']
         for stack in stacks:
