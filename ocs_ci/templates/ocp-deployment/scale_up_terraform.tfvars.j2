@@ -11,3 +11,5 @@ cluster_domain: {{ cluster_domain }}
 rhel_template: {{ rhel_template | default('rhel77_ocs4qe') }}
 rhel_worker_count: {{ nodes_scaleup_count | default('3')}}
 rhel_worker_prefix: {{ rhel_worker_prefix }}
+rhel_num_cpus: {{ rhel_num_cpus | default('12')}}
+rhel_memory: {{ rhel_memory | default('16384')}}
