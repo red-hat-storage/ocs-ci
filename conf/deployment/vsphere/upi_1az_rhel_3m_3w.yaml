@@ -17,3 +17,5 @@ ENV_DATA:
   rhel_worker_prefix: 'rhel1'
   rhel_user: 'test'
   mixed_cluster: False
+  rhel_num_cpus: '16'
+  rhel_memory: '65536'
