@@ -6,8 +6,8 @@ metadata:
   namespace: default
 spec:
   containers:
-   - name: web-server
-     image: nginx
+   - name: fio-rbd
+     image: quay.io/vasukulkarni/centos-fio:latest
      volumeMounts:
        - name: mypvc
          mountPath: /var/lib/www/html

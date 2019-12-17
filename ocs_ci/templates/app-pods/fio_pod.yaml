@@ -8,7 +8,7 @@ spec:
   nodeName: fio-node
   containers:
    - name: fionode
-     image: quay.io/johnstrunk/fs-performance:latest
+     image: quay.io/vasukulkarni/centos-fio:latest
      volumeMounts:
        - name: mypvc
          mountPath: /var/lib/www/html
