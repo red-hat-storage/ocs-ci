@@ -1,0 +1,6 @@
+# Configuration file example/template for installation of OCS from stage.
+DEPLOYMENT:
+  stage: True
+  # stage_namespace: '<namespace>'
+  # stage_quay_username: '<username>'
+  # stage_quay_password: '<password>'
