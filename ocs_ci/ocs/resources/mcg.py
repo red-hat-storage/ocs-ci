@@ -274,7 +274,7 @@ class MCG(object):
             return bucket_data, bucket_data_reduced
 
         try:
-            for total_size, total_reduced in TimeoutSampler(140, 5, _retrieve_reduction_data):
+            for total_size, total_reduced in TimeoutSampler(300, 10, _retrieve_reduction_data):
                 if total_size - total_reduced > 80000000:
                     logger.info(
                         'Data reduced:' + str(total_size - total_reduced)
@@ -550,7 +550,7 @@ class MCG(object):
             return all(results)
 
         try:
-            for mirroring_is_complete in TimeoutSampler(140, 5, _check_mirroring):
+            for mirroring_is_complete in TimeoutSampler(140, 10, _check_mirroring):
                 if mirroring_is_complete:
                     logger.info(
                         'All objects mirrored successfully.'
@@ -587,7 +587,7 @@ class MCG(object):
             return False
 
         try:
-            for reached_state in TimeoutSampler(180, 10, _check_state):
+            for reached_state in TimeoutSampler(600, 40, _check_state):
                 if reached_state:
                     logger.info(
                         f'BackingStore {backingstore_name} reached state {desired_state}.'
