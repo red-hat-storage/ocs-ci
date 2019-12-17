@@ -343,6 +343,14 @@ class AWSUPI(AWSBase):
             )
             os.symlink(absolute_cluster_path, install_dir)
 
+        def download_installer(self):
+            """
+            Overriding download_installer from parent. Perform all necessary
+            prerequisites for AWSUPI here.
+            """
+
+            super(AWSUPI.OCPDeployment, self).download_installer()
+
             # NOT A CLEAN APPROACH: copy openshift-install and oc binary to
             # script path because upi script expects it to be present in
             # script dir
