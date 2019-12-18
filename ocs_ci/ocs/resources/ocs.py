@@ -160,7 +160,6 @@ def get_version_info(namespace=None):
         namespace=namespace
     )
     info = get_images(csv_pre.get())
-    logging.info(info)
     return info
 
 
