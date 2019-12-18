@@ -230,6 +230,13 @@ class Deployment(object):
         This method subscription manifest and subscribe to OCS operator.
 
         """
+        # wait for package manifest
+        package_manifest = PackageManifest(
+            resource_name=defaults.OCS_OPERATOR_NAME
+        )
+        # Wait for package manifest is ready
+        package_manifest.wait_for_resource(timeout=300)
+        default_channel = package_manifest.get_default_channel()
         subscription_yaml_data = templating.load_yaml(
             constants.SUBSCRIPTION_YAML
         )
@@ -240,9 +247,14 @@ class Deployment(object):
             subscription_yaml_data['spec']['installPlanApproval'] = (
                 subscription_plan_approval
             )
-        channel = config.DEPLOYMENT.get('ocs_csv_channel')
-        if channel:
-            subscription_yaml_data['spec']['channel'] = channel
+        custom_channel = config.DEPLOYMENT.get('ocs_csv_channel')
+        if custom_channel:
+            logger.info(f"Custom channel will be used: {custom_channel}")
+            subscription_yaml_data['spec']['channel'] = custom_channel
+        else:
+            logger.info(f"Default channel will be used: {default_channel}")
+            subscription_yaml_data['spec']['channel'] = default_channel
+
         subscription_manifest = tempfile.NamedTemporaryFile(
             mode='w+', prefix='subscription_manifest', delete=False
         )
@@ -250,13 +262,6 @@ class Deployment(object):
             subscription_yaml_data, subscription_manifest.name
         )
         run_cmd(f"oc create -f {subscription_manifest.name}")
-        # wait for package manifest
-        package_manifest = PackageManifest(
-            resource_name=defaults.OCS_OPERATOR_NAME
-        )
-        # Wait for package manifest is ready
-        package_manifest.wait_for_resource(timeout=300)
-        channel = config.DEPLOYMENT.get('ocs_csv_channel')
         subscription_plan_approval = config.DEPLOYMENT.get(
             'subscription_plan_approval'
         )
