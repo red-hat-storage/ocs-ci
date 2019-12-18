@@ -1328,7 +1328,7 @@ def get_next_version_available_for_upgrade(current_tag):
     sliced_reversed_tags = tags[:current_tag_index]
     sliced_reversed_tags.reverse()
     for tag in sliced_reversed_tags:
-        if tag['name'] not in constants.LATEST_TAGS:
+        if tag['name'] not in constants.LATEST_TAGS and "rc" in tag['name']:
             return tag['name']
     raise TagNotFoundException(f"Couldn't find any tag!")
 
