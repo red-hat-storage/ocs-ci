@@ -6,7 +6,7 @@ import yaml
 import tempfile
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, get_images
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
@@ -150,6 +150,18 @@ class OCS(object):
 
     def delete_temp_yaml_file(self):
         utils.delete_file(self.temp_yaml.name)
+
+
+def get_version_info(namespace=None):
+    package_manifest = PackageManifest(resource_name=defaults.OCS_OPERATOR_NAME)
+    csv_name = package_manifest.get_current_csv()
+    csv_pre = CSV(
+        resource_name=csv_name,
+        namespace=namespace
+    )
+    info = get_images(csv_pre.get())
+    logging.info(info)
+    return info
 
 
 def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):

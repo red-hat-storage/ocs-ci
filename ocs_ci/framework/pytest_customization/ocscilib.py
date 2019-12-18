@@ -18,11 +18,11 @@ from ocs_ci.utility.utils import (
     dump_config_to_file,
     get_cluster_version,
     get_ceph_version,
-    get_rook_version,
     get_csi_versions,
     get_testrun_name,
 )
 from ocs_ci.ocs.utils import collect_ocs_logs
+from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.constants import (
     OPERATOR_CATALOG_SOURCE_NAME,
@@ -147,13 +147,8 @@ def pytest_configure(config):
             ceph_version = get_ceph_version()
             config._metadata['Ceph Version'] = ceph_version
 
-            # add rook version
-            rook_version = get_rook_version()
-            config._metadata['Rook Version'] = rook_version
-
             # add csi versions
             csi_versions = get_csi_versions()
-            config._metadata['csi-provisioner'] = csi_versions.get('csi-provisioner')
             config._metadata['cephfsplugin'] = csi_versions.get('csi-cephfsplugin')
             config._metadata['rbdplugin'] = csi_versions.get('csi-rbdplugin')
 
@@ -166,6 +161,13 @@ def pytest_configure(config):
                 config._metadata['OCS operator'] = (
                     ocs_catalog.get_image_name()
                 )
+            mods = get_version_info(
+                namespace=ocsci_config.ENV_DATA['cluster_namespace']
+            )
+            skip_list = ['ocs-operator']
+            for key, val in mods.items():
+                if key not in skip_list:
+                    config._metadata[key] = val.rsplit('/')[-1]
         except (FileNotFoundError, CommandFailed):
             pass
 
