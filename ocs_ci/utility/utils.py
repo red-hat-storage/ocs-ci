@@ -1430,17 +1430,22 @@ def wait_for_co(operator):
 
 def censor_values(data_to_censor):
     """
-    This function censor values in dictionary keys that match pattern defined
-    in config_keys_patterns_to_censor in constants.
+    This function recursively censor string and numeric values in dictionary
+    keys that match pattern defined in config_keys_patterns_to_censor in
+    constants.
 
     Args:
         data_to_censor (dict): Data to censor.
 
     """
     for key in data_to_censor:
-        for pattern in constants.config_keys_patterns_to_censor:
-            if pattern in key:
-                data_to_censor[key] = '*' * 5
+        if isinstance(data_to_censor[key], dict):
+            censor_values(data_to_censor[key])
+        elif isinstance(data_to_censor[key], (str, int, float)):
+            for pattern in constants.config_keys_patterns_to_censor:
+                if pattern in key.lower():
+                    data_to_censor[key] = '*' * 5
+    return data_to_censor
 
 
 def dump_config_to_file(file_path):
@@ -1452,8 +1457,7 @@ def dump_config_to_file(file_path):
 
     """
     config_copy = deepcopy(config.to_dict())
-    for key in config_copy:
-        censor_values(config_copy[key])
+    censor_values(config_copy)
     with open(file_path, "w+") as fs:
         yaml.safe_dump(config_copy, fs)
 

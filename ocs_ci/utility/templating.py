@@ -3,8 +3,10 @@ import logging
 from jinja2 import Environment, FileSystemLoader, Template
 import yaml
 
+from copy import deepcopy
+
 from ocs_ci.ocs.constants import TEMPLATE_DIR
-from ocs_ci.utility.utils import get_url_content
+from ocs_ci.utility.utils import censor_values, get_url_content
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +201,8 @@ def dump_data_to_temp_yaml(data, temp_yaml):
     yaml_data = dumper(data)
     with open(temp_yaml, 'w') as yaml_file:
         yaml_file.write(yaml_data)
-    logger.info(yaml_data)
+    yaml_data_censored = dumper(censor_values(deepcopy(data)))
+    logger.info(yaml_data_censored)
     return yaml_data
 
 
