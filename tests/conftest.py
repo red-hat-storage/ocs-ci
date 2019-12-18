@@ -26,6 +26,7 @@ from ocs_ci.utility.utils import (
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
 from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
+from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.node import get_typed_worker_nodes
@@ -1307,6 +1308,63 @@ def ec2_instances(request, aws_obj):
     request.addfinalizer(finalizer)
 
     return ec2_instances
+
+
+@pytest.fixture()
+def mcg_obj(request):
+    """
+    Returns an MCG resource that's connected to the S3 endpoint
+
+    Returns:
+        MCG: An MCG resource
+    """
+    mcg_obj = MCG()
+
+    if config.ENV_DATA['platform'].lower() == 'aws':
+        def finalizer():
+            mcg_obj.cred_req_obj.delete()
+        request.addfinalizer(finalizer)
+
+    return mcg_obj
+
+
+@pytest.fixture()
+def created_pods(request):
+    """
+    Deletes all pods that were created as part of the test
+
+    Returns:
+        list: An empty list of pods
+    """
+    created_pods_objects = []
+
+    def pod_cleanup():
+        for pod in created_pods_objects:
+            log.info(f'Deleting pod {pod.name}')
+            pod.delete()
+    request.addfinalizer(pod_cleanup)
+    return created_pods_objects
+
+
+@pytest.fixture()
+def awscli_pod(mcg_obj, created_pods):
+    """
+    Creates a new AWSCLI pod for relaying commands
+
+    Args:
+        created_pods (Fixture/list): A fixture used to keep track of created
+             pods and clean them up in the teardown
+
+    Returns:
+        pod: A pod running the AWS CLI
+    """
+    awscli_pod_obj = helpers.create_pod(
+        namespace=mcg_obj.namespace,
+        pod_dict_path=constants.AWSCLI_POD_YAML
+    )
+    helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
+    created_pods.append(awscli_pod_obj)
+    return awscli_pod_obj
 
 
 @pytest.fixture()
