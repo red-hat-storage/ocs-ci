@@ -256,8 +256,8 @@ class Deployment(object):
         # generate quay token
         credentials = {
             "user": {
-                "username": config.DEPLOYMENT.get("stage_quay_username"),
-                "password": config.DEPLOYMENT.get("stage_quay_password"),
+                "username": config.DEPLOYMENT["stage_quay_username"],
+                "password": config.DEPLOYMENT["stage_quay_password"],
             }
         }
         token = requests.post(
@@ -265,7 +265,7 @@ class Deployment(object):
             data=json.dumps(credentials),
             headers={'Content-Type': 'application/json'},
         ).json()['token']
-        stage_ns = config.DEPLOYMENT.get("stage_namespace")
+        stage_ns = config.DEPLOYMENT["stage_namespace"]
 
         # create Secret
         stage_os_secret = templating.load_yaml(
@@ -339,12 +339,9 @@ class Deployment(object):
         else:
             logger.info(f"Default channel will be used: {default_channel}")
             subscription_yaml_data['spec']['channel'] = default_channel
-        if (
-            config.DEPLOYMENT.get('stage')
-            and config.DEPLOYMENT.get('stage_namespace')
-        ):
+        if config.DEPLOYMENT.get('stage'):
             subscription_yaml_data['spec']['source'] = (
-                config.DEPLOYMENT.get('stage_namespace')
+                config.DEPLOYMENT['stage_namespace']
             )
         subscription_manifest = tempfile.NamedTemporaryFile(
             mode='w+', prefix='subscription_manifest', delete=False
