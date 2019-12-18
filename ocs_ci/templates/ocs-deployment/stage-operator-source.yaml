@@ -2,14 +2,14 @@
 apiVersion: operators.coreos.com/v1
 kind: OperatorSource
 metadata:
-  name: "NAME"
+  name: "NAME-PLACEHOLDER"
   namespace: openshift-marketplace
 spec:
   type: appregistry
   endpoint: https://quay.io/cnr
-  registryNamespace: "REGISTRY-NAMESPACE"
-  displayName: "DISPLAY-NAME"
+  registryNamespace: "REGISTRY-NAMESPACE-PLACEHOLDER"
+  displayName: "DISPLAY-NAME-PLACEHOLDER"
   publisher: "Red Hat"
   authorizationToken:
-    secretName: SECRET-NAME
+    secretName: SECRET-NAME-PLACEHOLDER
 
