@@ -432,6 +432,7 @@ SCALEUP_VSPHERE_MAIN = os.path.join(SCALEUP_VSPHERE_DIR, "main.tf")
 SCALEUP_VSPHERE_VARIABLES = os.path.join(SCALEUP_VSPHERE_DIR, "variables.tf")
 SCALEUP_VSPHERE_ROUTE53 = os.path.join(SCALEUP_VSPHERE_DIR, "route53/vsphere-rhel-dns.tf")
 SCALEUP_VSPHERE_ROUTE53_VARIABLES = os.path.join(SCALEUP_VSPHERE_DIR, "route53/variables.tf")
+SCALEUP_VSPHERE_MACHINE_CONF = os.path.join(SCALEUP_VSPHERE_DIR, "machines/vsphere-rhel-machine.tf")
 TERRAFORM_VARS = "terraform.tfvars"
 VM_DISK_TYPE = "thin"
 VM_DISK_MODE = "persistent"
@@ -497,3 +498,7 @@ CLUSTER_NAME_MAX_CHARACTERS = 17
 STAGE_CA_FILE = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "stage-ca.crt"
 )
+
+# Root Disk size
+CURRENT_VM_ROOT_DISK_SIZE = '60'
+VM_ROOT_DISK_SIZE = '120'

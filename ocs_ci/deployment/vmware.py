@@ -230,6 +230,13 @@ class VSPHEREBASE(Deployment):
             ['access_key', 'secret_key']
         )
 
+        # change root disk size
+        replace_content_in_file(
+            constants.SCALEUP_VSPHERE_MACHINE_CONF,
+            constants.CURRENT_VM_ROOT_DISK_SIZE,
+            constants.VM_ROOT_DISK_SIZE
+        )
+
 
 class VSPHEREUPI(VSPHEREBASE):
     """
@@ -376,6 +383,13 @@ class VSPHEREUPI(VSPHEREBASE):
                 # doesn't support dumping of data in HCL format
                 dump_data_to_json(obj, f"{constants.VSPHERE_MAIN}.json")
                 os.rename(constants.VSPHERE_MAIN, f"{constants.VSPHERE_MAIN}.backup")
+
+            # change root disk size
+            replace_content_in_file(
+                constants.INSTALLER_MACHINE_CONF,
+                constants.CURRENT_VM_ROOT_DISK_SIZE,
+                constants.VM_ROOT_DISK_SIZE
+            )
 
         def create_config(self):
             """
