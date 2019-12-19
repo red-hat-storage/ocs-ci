@@ -485,3 +485,7 @@ REPO_MAPPING = {
 # Cluster name limits
 CLUSTER_NAME_MIN_CHARACTERS = 5
 CLUSTER_NAME_MAX_CHARACTERS = 17
+
+STAGE_CA_FILE = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "stage-ca.crt"
+)

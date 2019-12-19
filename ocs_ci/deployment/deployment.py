@@ -96,6 +96,25 @@ class Deployment(object):
         else:
             logger.warning("OCS deployment will be skipped")
 
+    def add_stage_cert(self):
+        """
+        Deploy stage certificate to the cluster.
+        """
+        logger.info("Create configmap stage-registry-config with stage CA.")
+        run_cmd(
+            f"oc -n openshift-config create configmap stage-registry-config"
+            f" --from-file=registry.stage.redhat.io={constants.STAGE_CA_FILE}"
+        )
+
+        logger.info("Add stage-registry-config to additionalTrustedCA.")
+        additional_trusted_ca_patch = (
+            '{"spec":{"additionalTrustedCA":{"name":"stage-registry-config"}}}'
+        )
+        run_cmd(
+            f"oc patch image.config.openshift.io cluster --type=merge"
+            f" -p '{additional_trusted_ca_patch}'"
+        )
+
     def deploy_ocp(self, log_cli_level='DEBUG'):
         """
         Base deployment steps, the rest should be implemented in the child
@@ -107,6 +126,7 @@ class Deployment(object):
         self.ocp_deployment = self.OCPDeployment()
         self.ocp_deployment.deploy_prereq()
         self.ocp_deployment.deploy(log_cli_level)
+        self.add_stage_cert()
         # logging the cluster UUID so that we can ask for it's telemetry data
         cluster_id = run_cmd("oc get clusterversion version -o jsonpath='{.spec.clusterID}'")
         logger.info(f"clusterID (UUID): {cluster_id}")
