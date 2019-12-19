@@ -120,3 +120,7 @@ class FailedToDeleteInstance(Exception):
 
 class NoInstallPlanForApproveFoundException(Exception):
     pass
+
+
+class NoobaaConditionException(Exception):
+    pass

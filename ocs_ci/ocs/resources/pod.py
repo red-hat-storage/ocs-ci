@@ -27,7 +27,6 @@ from ocs_ci.utility.utils import run_cmd, TimeoutSampler, check_timeout_reached
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
 
-
 TEXT_CONTENT = (
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
     "sed do eiusmod tempor incididunt ut labore et dolore magna "
@@ -113,7 +112,7 @@ class Pod(OCS):
         try:
             if self.fio_thread.running():
                 for sample in TimeoutSampler(
-                    timeout=FIO_TIMEOUT, sleep=3, func=self.fio_thread.done
+                        timeout=FIO_TIMEOUT, sleep=3, func=self.fio_thread.done
                 ):
                     if sample:
                         return yaml.safe_load(self.fio_thread.result())
@@ -128,7 +127,7 @@ class Pod(OCS):
             raise
 
     def exec_cmd_on_pod(
-        self, command, out_yaml_format=True, secrets=None, timeout=600, **kwargs
+            self, command, out_yaml_format=True, secrets=None, timeout=600, **kwargs
     ):
         """
         Execute a command on a pod (e.g. oc rsh)
@@ -246,8 +245,8 @@ class Pod(OCS):
         self.wl_setup_done = True
 
     def run_io(
-        self, storage_type, size, io_direction='rw', rw_ratio=75,
-        jobs=1, runtime=60, depth=4, fio_filename=None
+            self, storage_type, size, io_direction='rw', rw_ratio=75,
+            jobs=1, runtime=60, depth=4, fio_filename=None
     ):
         """
         Execute FIO on a pod
@@ -409,7 +408,7 @@ def get_ceph_tools_pod():
     running_ct_pods = list()
     for pod in ct_pod_items:
         if ocp_pod_obj.get_resource_status(
-            pod.get('metadata').get('name')
+                pod.get('metadata').get('name')
         ) == constants.STATUS_RUNNING:
             running_ct_pods.append(pod)
 
@@ -753,8 +752,8 @@ def get_pod_count(label, namespace=None):
 
 
 def get_cephfsplugin_provisioner_pods(
-    cephfsplugin_provisioner_label=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-    namespace=None
+        cephfsplugin_provisioner_label=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+        namespace=None
 ):
     """
     Fetches info about CSI Cephfs plugin provisioner pods in the cluster
@@ -776,8 +775,8 @@ def get_cephfsplugin_provisioner_pods(
 
 
 def get_rbdfsplugin_provisioner_pods(
-    rbdplugin_provisioner_label=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
-    namespace=None
+        rbdplugin_provisioner_label=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+        namespace=None
 ):
     """
     Fetches info about CSI Cephfs plugin provisioner pods in the cluster
@@ -1017,7 +1016,7 @@ def plugin_provisioner_leader(interface, namespace=None):
                 # Ensure that there is no non leader message logged after
                 # the last occurrence of leader message
                 if not any(
-                    non_leader_msg in msg for msg in log_list[:curr_index]
+                        non_leader_msg in msg for msg in log_list[:curr_index]
                 ):
                     assert not leader_pod, (
                         "Couldn't identify plugin provisioner leader pod by "
@@ -1114,3 +1113,23 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
             logger.error(f"Found pods: {pods_len} but expected: {count}!")
         elif pod_count == count:
             return
+
+
+def get_noobaa_pods(noobaa_label=constants.NOOBAA_APP_LABEL, namespace=None):
+    """
+    Fetches info about noobaa pods in the cluster
+
+    Args:
+        noobaa_label (str): label associated with osd pods
+            (default: defaults.NOOBAA_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list : of noobaa pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    noobaas = get_pods_having_label(noobaa_label, namespace)
+    noobaa_pods = [Pod(**noobaa) for noobaa in noobaas]
+
+    return noobaa_pods

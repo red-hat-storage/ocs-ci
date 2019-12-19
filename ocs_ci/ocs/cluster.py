@@ -92,16 +92,20 @@ class CephCluster(object):
         self.tool_selector = constant.TOOL_APP_LABEL
         self.mgr_selector = constant.MGR_APP_LABEL
         self.osd_selector = constant.OSD_APP_LABEL
+        self.noobaa_selector = constant.NOOBAA_APP_LABEL
+        self.noobaa_core_selector = constant.NOOBAA_CORE_POD_LABEL
         self.mons = []
         self._ceph_pods = []
         self.mdss = []
         self.mgrs = []
         self.osds = []
+        self.noobaas = []
         self.toolbox = None
         self.mds_count = 0
         self.mon_count = 0
         self.mgr_count = 0
         self.osd_count = 0
+        self.noobaa_count = 0
         self.health_error_status = None
         self.health_monitor_enabled = False
         self.health_monitor = None
@@ -137,6 +141,7 @@ class CephCluster(object):
         self.mdss = pod.get_mds_pods(self.mds_selector, self.namespace)
         self.mgrs = pod.get_mgr_pods(self.mgr_selector, self.namespace)
         self.osds = pod.get_osd_pods(self.osd_selector, self.namespace)
+        self.noobaas = pod.get_noobaa_pods(self.noobaa_selector, self.namespace)
         self.toolbox = pod.get_ceph_tools_pod()
 
         # set port attrib on mon pods
@@ -157,6 +162,7 @@ class CephCluster(object):
         self.mds_count = len(self.mdss)
         self.mgr_count = len(self.mgrs)
         self.osd_count = len(self.osds)
+        self.noobaa_count = len(self.noobaas)
 
     @staticmethod
     def set_port(pod):
@@ -232,6 +238,12 @@ class CephCluster(object):
             else:
                 self.mds_health_check(expected_mds_count)
         except exceptions.MDSCountException as e:
+            logger.error(e)
+            raise exceptions.CephHealthException("Cluster health is NOT OK")
+
+        try:
+            self.noobaa_health_check()
+        except exceptions.NoobaaConditionException as e:
             logger.error(e)
             raise exceptions.CephHealthException("Cluster health is NOT OK")
         # TODO: OSD and MGR health check
@@ -332,6 +344,38 @@ class CephCluster(object):
             raise exceptions.MDSCountException(
                 f"Failed to achieve desired MDS count"
                 f" {count}"
+            )
+
+    def noobaa_health_check(self):
+        """
+        Noobaa health check based on pods status
+
+        Raises:
+            NoobaaConditionException if Noobaa Core or
+            Noobaa Operator status is not "Running"
+
+        """
+        timeout = 10 * len(self.pods)
+        try:
+            assert self.POD.wait_for_resource(
+                condition='Running', selector=self.noobaa_selector,
+                timeout=timeout, sleep=3,
+            )
+        except AssertionError as e:
+            logger.error(e)
+            raise exceptions.NoobaaConditionException(
+                f"Failed to achieve desired Noobaa Operator Status"
+            )
+
+        try:
+            assert self.POD.wait_for_resource(
+                condition='Running', selector=self.noobaa_core_selector,
+                timeout=timeout, sleep=3,
+            )
+        except AssertionError as e:
+            logger.error(e)
+            raise exceptions.NoobaaConditionException(
+                f"Failed to achieve desired Noobaa Core Status"
             )
 
     def get_admin_key(self):
