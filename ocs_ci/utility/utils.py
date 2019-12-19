@@ -1430,12 +1430,15 @@ def wait_for_co(operator):
 
 def censor_values(data_to_censor):
     """
-    This function recursively censor string and numeric values in dictionary
+    This function censor string and numeric values in dictionary based on
     keys that match pattern defined in config_keys_patterns_to_censor in
-    constants.
+    constants. It is performed recursively for nested dictionaries.
 
     Args:
         data_to_censor (dict): Data to censor.
+
+    Returns:
+        dict: filtered data
 
     """
     for key in data_to_censor:
