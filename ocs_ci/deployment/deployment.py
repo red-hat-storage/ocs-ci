@@ -6,6 +6,9 @@ import logging
 import os
 import tempfile
 import time
+
+import json
+import requests
 from copy import deepcopy
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
@@ -245,6 +248,68 @@ class Deployment(object):
         # Wait for catalog source is ready
         catalog_source.wait_for_state("READY")
 
+    def create_stage_operator_source(self):
+        """
+        This prepare operator source for OCS deployment from stage.
+        """
+        logger.info("Adding Stage Secret")
+        # generate quay token
+        credentials = {
+            "user": {
+                "username": config.DEPLOYMENT["stage_quay_username"],
+                "password": config.DEPLOYMENT["stage_quay_password"],
+            }
+        }
+        token = requests.post(
+            url='https://quay.io/cnr/api/v1/users/login',
+            data=json.dumps(credentials),
+            headers={'Content-Type': 'application/json'},
+        ).json()['token']
+        stage_ns = config.DEPLOYMENT["stage_namespace"]
+
+        # create Secret
+        stage_os_secret = templating.load_yaml(
+            constants.STAGE_OPERATOR_SOURCE_SECRET_YAML
+        )
+        stage_os_secret['metadata']['name'] = f"secret-{stage_ns}"
+        stage_os_secret['stringData']['token'] = token
+        stage_secret_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix=f"secret-{stage_ns}", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            stage_os_secret, stage_secret_data_yaml.name
+        )
+        run_cmd(f"oc apply -f {stage_secret_data_yaml.name}")
+
+        logger.info("Adding Stage Operator Source")
+        # create Operator Source
+        stage_os = templating.load_yaml(
+            constants.STAGE_OPERATOR_SOURCE_YAML
+        )
+        stage_os['metadata']['name'] = stage_ns
+        stage_os['spec']['registryNamespace'] = stage_ns
+        stage_os['spec']['displayName'] = stage_ns
+        stage_os['spec']['authorizationToken']['secretName'] = (
+            f"secret-{stage_ns}"
+        )
+        stage_os_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix='secret', delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            stage_os, stage_os_data_yaml.name
+        )
+        run_cmd(f"oc apply -f {stage_os_data_yaml.name}")
+
+    def create_operator_catalog_source(self):
+        """
+        This prepare catalog or operator source for OCS deployment.
+        """
+        if config.DEPLOYMENT.get('stage'):
+            # deployment from stage
+            self.create_stage_operator_source()
+        else:
+            self.create_catalog_source()
+
     def subscribe_ocs(self):
         """
         This method subscription manifest and subscribe to OCS operator.
@@ -274,7 +339,10 @@ class Deployment(object):
         else:
             logger.info(f"Default channel will be used: {default_channel}")
             subscription_yaml_data['spec']['channel'] = default_channel
-
+        if config.DEPLOYMENT.get('stage'):
+            subscription_yaml_data['spec']['source'] = (
+                config.DEPLOYMENT['stage_namespace']
+            )
         subscription_manifest = tempfile.NamedTemporaryFile(
             mode='w+', prefix='subscription_manifest', delete=False
         )
@@ -294,7 +362,7 @@ class Deployment(object):
         """
         ui_deployment = config.DEPLOYMENT.get('ui_deployment')
         if ui_deployment:
-            self.create_catalog_source()
+            self.create_operator_catalog_source()
             self.deployment_with_ui()
             # Skip the rest of the deployment when deploy via UI
             return
@@ -303,7 +371,7 @@ class Deployment(object):
             self.label_and_taint_nodes()
         logger.info("Creating namespace and operator group.")
         run_cmd(f"oc create -f {constants.OLM_YAML}")
-        self.create_catalog_source()
+        self.create_operator_catalog_source()
         self.subscribe_ocs()
         package_manifest = PackageManifest(
             resource_name=defaults.OCS_OPERATOR_NAME

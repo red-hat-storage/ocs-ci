@@ -317,6 +317,14 @@ STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
 )
 
+STAGE_OPERATOR_SOURCE_SECRET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "stage-operator-source-secret.yaml"
+)
+
+STAGE_OPERATOR_SOURCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "stage-operator-source.yaml"
+)
+
 # Openshift-logging clusterlogging operator deployment yamls
 CL_NAMESPACE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_CLO, "cl-namespace.yaml"
