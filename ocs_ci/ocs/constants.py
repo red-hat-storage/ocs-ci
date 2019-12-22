@@ -132,6 +132,7 @@ IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
 ADMIN_USER = 'admin'
 GB = 1024 ** 3
 GB2KB = 1024 ** 2
+WEEK2SEC = '604800s'
 
 # Reclaim Policy
 RECLAIM_POLICY_RETAIN = 'Retain'

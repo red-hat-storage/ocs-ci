@@ -9,7 +9,7 @@ import tempfile
 import time
 import yaml
 
-from ocs_ci.ocs.constants import RSYNC_POD_YAML, STATUS_RUNNING
+from ocs_ci.ocs.constants import RSYNC_POD_YAML, STATUS_RUNNING, WEEK2SEC
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     NotSupportedFunctionError,
@@ -356,7 +356,9 @@ class OCP(object):
         Returns:
             str: output of login command
         """
-        command = f"oc login -u {user} -p {password}"
+        command = (
+            f"oc login -u {user} -p {password} --request-timeout={WEEK2SEC}"
+        )
         status = run_cmd(command)
         return status
 
