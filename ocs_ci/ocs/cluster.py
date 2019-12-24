@@ -356,27 +356,15 @@ class CephCluster(object):
 
         """
         timeout = 10 * len(self.pods)
-        try:
-            assert self.POD.wait_for_resource(
-                condition='Running', selector=self.noobaa_selector,
-                timeout=timeout, sleep=3,
-            )
-        except AssertionError as e:
-            logger.error(e)
-            raise exceptions.NoobaaConditionException(
-                f"Failed to achieve desired Noobaa Operator Status"
-            )
+        assert self.POD.wait_for_resource(
+            condition='Running', selector=self.noobaa_selector,
+            timeout=timeout, sleep=3,
+        ), "Failed to achieve desired Noobaa Operator Status"
 
-        try:
-            assert self.POD.wait_for_resource(
-                condition='Running', selector=self.noobaa_core_selector,
-                timeout=timeout, sleep=3,
-            )
-        except AssertionError as e:
-            logger.error(e)
-            raise exceptions.NoobaaConditionException(
-                f"Failed to achieve desired Noobaa Core Status"
-            )
+        assert self.POD.wait_for_resource(
+            condition='Running', selector=self.noobaa_core_selector,
+            timeout=timeout, sleep=3,
+        ), "Failed to achieve desired Noobaa Core Status"
 
     def get_admin_key(self):
         """

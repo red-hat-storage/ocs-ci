@@ -112,7 +112,7 @@ class Pod(OCS):
         try:
             if self.fio_thread.running():
                 for sample in TimeoutSampler(
-                        timeout=FIO_TIMEOUT, sleep=3, func=self.fio_thread.done
+                    timeout=FIO_TIMEOUT, sleep=3, func=self.fio_thread.done
                 ):
                     if sample:
                         return yaml.safe_load(self.fio_thread.result())
@@ -127,7 +127,7 @@ class Pod(OCS):
             raise
 
     def exec_cmd_on_pod(
-            self, command, out_yaml_format=True, secrets=None, timeout=600, **kwargs
+        self, command, out_yaml_format=True, secrets=None, timeout=600, **kwargs
     ):
         """
         Execute a command on a pod (e.g. oc rsh)
@@ -245,8 +245,8 @@ class Pod(OCS):
         self.wl_setup_done = True
 
     def run_io(
-            self, storage_type, size, io_direction='rw', rw_ratio=75,
-            jobs=1, runtime=60, depth=4, fio_filename=None
+        self, storage_type, size, io_direction='rw', rw_ratio=75,
+        jobs=1, runtime=60, depth=4, fio_filename=None
     ):
         """
         Execute FIO on a pod
@@ -408,7 +408,7 @@ def get_ceph_tools_pod():
     running_ct_pods = list()
     for pod in ct_pod_items:
         if ocp_pod_obj.get_resource_status(
-                pod.get('metadata').get('name')
+            pod.get('metadata').get('name')
         ) == constants.STATUS_RUNNING:
             running_ct_pods.append(pod)
 
@@ -752,8 +752,8 @@ def get_pod_count(label, namespace=None):
 
 
 def get_cephfsplugin_provisioner_pods(
-        cephfsplugin_provisioner_label=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-        namespace=None
+    cephfsplugin_provisioner_label=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+    namespace=None
 ):
     """
     Fetches info about CSI Cephfs plugin provisioner pods in the cluster
@@ -775,8 +775,8 @@ def get_cephfsplugin_provisioner_pods(
 
 
 def get_rbdfsplugin_provisioner_pods(
-        rbdplugin_provisioner_label=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
-        namespace=None
+    rbdplugin_provisioner_label=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+    namespace=None
 ):
     """
     Fetches info about CSI Cephfs plugin provisioner pods in the cluster
@@ -1016,7 +1016,7 @@ def plugin_provisioner_leader(interface, namespace=None):
                 # Ensure that there is no non leader message logged after
                 # the last occurrence of leader message
                 if not any(
-                        non_leader_msg in msg for msg in log_list[:curr_index]
+                    non_leader_msg in msg for msg in log_list[:curr_index]
                 ):
                     assert not leader_pod, (
                         "Couldn't identify plugin provisioner leader pod by "
