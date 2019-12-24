@@ -360,6 +360,20 @@ class OCP(object):
         status = run_cmd(command)
         return status
 
+    def login_as_sa(self):
+        """
+        Logs in as system:admin
+
+        Returns:
+            str: output of login command
+        """
+        kubeconfig = os.getenv('KUBECONFIG')
+        command = f"oc login -u system:admin "
+        if kubeconfig:
+            command += f"--kubeconfig {kubeconfig}"
+        status = run_cmd(command)
+        return status
+
     def get_user_token(self):
         """
         Get user access token
