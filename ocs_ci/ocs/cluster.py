@@ -241,11 +241,7 @@ class CephCluster(object):
             logger.error(e)
             raise exceptions.CephHealthException("Cluster health is NOT OK")
 
-        try:
-            self.noobaa_health_check()
-        except exceptions.NoobaaConditionException as e:
-            logger.error(e)
-            raise exceptions.CephHealthException("Cluster health is NOT OK")
+        self.noobaa_health_check()
         # TODO: OSD and MGR health check
         logger.info("Cluster HEALTH_OK")
         # This scan is for reconcilation on *.count
@@ -349,11 +345,6 @@ class CephCluster(object):
     def noobaa_health_check(self):
         """
         Noobaa health check based on pods status
-
-        Raises:
-            NoobaaConditionException if Noobaa Core or
-            Noobaa Operator status is not "Running"
-
         """
         timeout = 10 * len(self.pods)
         assert self.POD.wait_for_resource(
