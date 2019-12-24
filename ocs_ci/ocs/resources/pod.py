@@ -27,7 +27,6 @@ from ocs_ci.utility.utils import run_cmd, TimeoutSampler, check_timeout_reached
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
 
-
 TEXT_CONTENT = (
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
     "sed do eiusmod tempor incididunt ut labore et dolore magna "
@@ -1114,3 +1113,23 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
             logger.error(f"Found pods: {pods_len} but expected: {count}!")
         elif pod_count == count:
             return
+
+
+def get_noobaa_pods(noobaa_label=constants.NOOBAA_APP_LABEL, namespace=None):
+    """
+    Fetches info about noobaa pods in the cluster
+
+    Args:
+        noobaa_label (str): label associated with osd pods
+            (default: defaults.NOOBAA_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list : of noobaa pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    noobaas = get_pods_having_label(noobaa_label, namespace)
+    noobaa_pods = [Pod(**noobaa) for noobaa in noobaas]
+
+    return noobaa_pods
