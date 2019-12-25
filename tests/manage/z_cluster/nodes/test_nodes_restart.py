@@ -108,13 +108,21 @@ class TestNodesRestart(ManageTest):
             # Create resources that their deletion will be tested later
             self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
-        provisioner_pod = None
-
+        provisioner_pods = None
         # Get the provisioner pod according to the interface
         if interface == 'rbd':
-            provisioner_pod = pod.get_rbdfsplugin_provisioner_pods()[0]
+            provisioner_pods = pod.get_rbdfsplugin_provisioner_pods()
         elif interface == 'cephfs':
-            provisioner_pod = pod.get_cephfsplugin_provisioner_pods()[0]
+            provisioner_pods = pod.get_cephfsplugin_provisioner_pods()
+        provisioner_pod = provisioner_pods[0]
+        # Workaround for BZ 1778488 - https://github.com/red-hat-storage/ocs-ci/issues/1222
+        provisioner_node = pod.get_pod_node(provisioner_pod)
+        rook_operator_pod = pod.get_operator_pods()[0]
+        operator_node = pod.get_pod_node(rook_operator_pod)
+        if operator_node.get().get('metadata').get('name') == provisioner_node.get().get('metadata').get('name'):
+            provisioner_pod = provisioner_pods[1]
+        # End of workaround for BZ 1778488
+
         provisioner_pod_name = provisioner_pod.name
         logger.info(
             f"{interface} provisioner pod found: {provisioner_pod_name}"
@@ -122,7 +130,7 @@ class TestNodesRestart(ManageTest):
 
         # Get the node name that has the provisioner pod running on
         provisioner_node = pod.get_pod_node(provisioner_pod)
-        provisioner_node_name = provisioner_node.get('metadata').get('name')
+        provisioner_node_name = provisioner_node.get().get('metadata').get('name')
         logger.info(
             f"{interface} provisioner pod is running on node {provisioner_node_name}"
         )
