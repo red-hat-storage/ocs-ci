@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from subprocess import TimeoutExpired
-
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import (
     drain_nodes, schedule_nodes, get_typed_nodes, wait_for_nodes_status, get_node_objs
@@ -49,7 +49,6 @@ class TestNodesMaintenance(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
-    @bugzilla('1778488')
     @tier1
     @pytest.mark.parametrize(
         argnames=["node_type"],
@@ -69,8 +68,14 @@ class TestNodesMaintenance(ManageTest):
 
         """
         # Get 1 node
-        typed_nodes = get_typed_nodes(node_type=node_type, num_of_nodes=1)
+        typed_nodes = get_typed_nodes(node_type=node_type, num_of_nodes=2)
         typed_node_name = typed_nodes[0].name
+        # Workaround for BZ 1778488 - https://github.com/red-hat-storage/ocs-ci/issues/1222
+        rook_operator_pod = pod.get_operator_pods()[0]
+        operator_node = pod.get_pod_node(rook_operator_pod)
+        if operator_node.get().get('metadata').get('name') == typed_node_name:
+            typed_node_name = typed_nodes[1].name
+        # End of workaround for BZ 1778488
 
         # Maintenance the node (unschedule and drain)
         drain_nodes([typed_node_name])
@@ -111,15 +116,22 @@ class TestNodesMaintenance(ManageTest):
 
         """
         # Get 1 node
-        typed_node = get_typed_nodes(node_type=node_type, num_of_nodes=1)
-        assert typed_node, f"Failed to find a {node_type} node for the test"
-        typed_node_name = typed_node[0].name
+        typed_nodes = get_typed_nodes(node_type=node_type, num_of_nodes=2)
+        assert typed_nodes, f"Failed to find a {node_type} node for the test"
+        typed_node_name = typed_nodes[0].name
+
+        # Workaround for BZ 1778488 - https://github.com/red-hat-storage/ocs-ci/issues/1222
+        rook_operator_pod = pod.get_operator_pods()[0]
+        operator_node = pod.get_pod_node(rook_operator_pod)
+        if operator_node.get().get('metadata').get('name') == typed_node_name:
+            typed_node_name = typed_nodes[1].name
+        # End of workaround for BZ 1778488
 
         # Maintenance the node (unschedule and drain). The function contains logging
         drain_nodes([typed_node_name])
 
         # Restarting the node
-        nodes.restart_nodes(nodes=typed_node, wait=True)
+        nodes.restart_nodes(nodes=typed_nodes, wait=True)
 
         wait_for_nodes_status(
             node_names=[typed_node_name], status=constants.NODE_READY_SCHEDULING_DISABLED
@@ -142,7 +154,6 @@ class TestNodesMaintenance(ManageTest):
             pytest.param(*['master'], marks=pytest.mark.polarion_id("OCS-1271"))
         ]
     )
-    @bugzilla('1780157')
     def test_2_nodes_maintenance_same_type(self, nodes_type):
         """
         OCS-1273/OCs-1271:
@@ -161,6 +172,8 @@ class TestNodesMaintenance(ManageTest):
             drain_nodes(typed_node_names)
         except TimeoutExpired:
             logger.info(f"Draining of nodes {typed_node_names} failed as expected")
+
+        schedule_nodes(typed_node_names)
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
