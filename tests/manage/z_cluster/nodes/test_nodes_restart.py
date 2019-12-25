@@ -57,26 +57,13 @@ class TestNodesRestart(ManageTest):
         self.sanity_helpers.health_check()
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
-    # Due to BZ 1778488, the following tests can't run on VMWare
     @pytest.mark.parametrize(
         argnames=["interface", "operation"],
         argvalues=[
-            pytest.param(
-                *['rbd', 'create_resources'],
-                marks=[pytest.mark.polarion_id("OCS-1138")]
-            ),
-            pytest.param(
-                *['rbd', 'delete_resources'],
-                marks=[pytest.mark.polarion_id("OCS-1241")]
-            ),
-            pytest.param(
-                *['cephfs', 'create_resources'],
-                marks=[pytest.mark.polarion_id("OCS-1139")]
-            ),
-            pytest.param(
-                *['cephfs', 'delete_resources'],
-                marks=[pytest.mark.polarion_id("OCS-1242")]
-            )
+            pytest.param(*['rbd', 'create_resources'], marks=[pytest.mark.polarion_id("OCS-1138")]),
+            pytest.param(*['rbd', 'delete_resources'], marks=[pytest.mark.polarion_id("OCS-1241")]),
+            pytest.param(*['cephfs', 'create_resources'], marks=[pytest.mark.polarion_id("OCS-1139")]),
+            pytest.param(*['cephfs', 'delete_resources'], marks=[pytest.mark.polarion_id("OCS-1242")])
         ]
     )
     def test_pv_provisioning_under_degraded_state(
