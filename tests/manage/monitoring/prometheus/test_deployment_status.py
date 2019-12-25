@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.framework.testlib import tier4
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
+from ocs_ci.ocs.ocp import OCP
 
 
 log = logging.getLogger(__name__)
@@ -127,3 +128,8 @@ def test_ceph_osd_stopped(measure_stop_ceph_osd):
             measure_end_time=measure_stop_ceph_osd.get('stop'),
             time_min=osd_up_wait
         )
+
+
+def teardown_module():
+    ocs_obj = OCP()
+    ocs_obj.login_as_sa()

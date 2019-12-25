@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.framework.testlib import tier1
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
+from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
@@ -73,3 +74,8 @@ def test_capacity_workload_alerts(
             measure_end_time=measure_end_time,
             time_min=pg_wait
         )
+
+
+def teardown_module():
+    ocs_obj = OCP()
+    ocs_obj.login_as_sa()
