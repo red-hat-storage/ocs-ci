@@ -67,7 +67,8 @@ class TestNodesMaintenance(ManageTest):
         - Check cluster and Ceph health
 
         """
-        # Get 1 node
+        # Get a list of 2 nodes. Pick one of them after checking
+        # which one does't have the rook operator running on
         typed_nodes = get_typed_nodes(node_type=node_type, num_of_nodes=2)
         typed_node_name = typed_nodes[0].name
         # Workaround for BZ 1778488 - https://github.com/red-hat-storage/ocs-ci/issues/1222
@@ -115,7 +116,8 @@ class TestNodesMaintenance(ManageTest):
           (pools, storageclasses, PVCs, pods - both CephFS and RBD)
 
         """
-        # Get 1 node
+        # Get a list of 2 nodes. Pick one of them after checking
+        # which one does't have the rook operator running on
         typed_nodes = get_typed_nodes(node_type=node_type, num_of_nodes=2)
         assert typed_nodes, f"Failed to find a {node_type} node for the test"
         typed_node_name = typed_nodes[0].name
