@@ -11,7 +11,9 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
 from tests import disruption_helpers
-from ocs_ci.framework.testlib import E2ETest, google_api_required, workloads, ignore_leftovers
+from ocs_ci.framework.testlib import (
+    E2ETest, google_api_required, workloads, ignore_leftovers
+)
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 
@@ -32,6 +34,7 @@ def ripsaw(request, storageclass_factory):
         ripsaw.cleanup()
     request.addfinalizer(teardown)
     return ripsaw
+
 
 @ignore_leftovers
 @workloads
