@@ -1083,6 +1083,35 @@ def change_default_storageclass(scname):
     return True
 
 
+def default_storage_class(
+    interface_type
+):
+    """
+    Return default storage class based on interface_type
+
+    Args:
+        interface_type (str): The type of the interface
+            (e.g. CephBlockPool, CephFileSystem)
+
+    Returns:
+        OCS obj: Existing StorageClass Instance
+
+    """
+
+    if interface_type == constants.CEPHBLOCKPOOL:
+        base_sc = OCP(
+            kind=constants.STORAGECLASS,
+            resource_name=constants.DEFAULT_STORAGECLASS_RBD
+        )
+    elif interface_type == constants.CEPHFILESYSTEM:
+        base_sc = OCP(
+            kind=constants.STORAGECLASS,
+            resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
+        )
+    sc = OCS(**base_sc.data)
+    return sc
+
+
 def verify_volume_deleted_in_backend(interface, image_uuid, pool_name=None):
     """
     Verify that Image/Subvolume is not present in the backend.

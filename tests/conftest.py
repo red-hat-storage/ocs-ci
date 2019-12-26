@@ -761,6 +761,7 @@ def dc_pod_factory(
         helpers.wait_for_resource_state(
             dc_pod_obj, constants.STATUS_RUNNING, timeout=180
         )
+        dc_pod_obj.pvc = pvc
         return dc_pod_obj
 
     def finalizer():
