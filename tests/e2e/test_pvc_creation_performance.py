@@ -60,7 +60,7 @@ class TestPVCCreationPerformance(E2ETest):
             raise ex.PerformanceException(
                 f"PVC creation time is {create_time} and greater than 3 second"
             )
-        logging.info("PVC creation took less than a 3 second")
+        logging.info(f"PVC creation took {create_time} seconds")
 
     @pytest.mark.usefixtures(base_setup.__name__)
     @polarion_id('OCS-1620')
@@ -80,6 +80,7 @@ class TestPVCCreationPerformance(E2ETest):
             size=self.pvc_size,
         )
         for pvc_obj in pvc_objs:
+            pvc_obj.reload()
             teardown_factory(pvc_obj)
         with ThreadPoolExecutor(max_workers=5) as executor:
             for pvc_obj in pvc_objs:
@@ -103,7 +104,7 @@ class TestPVCCreationPerformance(E2ETest):
                 f"greater than 180 seconds"
             )
         logging.info(
-            f"{number_of_pvcs} PVCs creation time took less than a 180 seconds"
+            f"{number_of_pvcs} PVCs creation time took {total_time} seconds"
         )
 
     @pytest.mark.usefixtures(base_setup.__name__)
@@ -126,6 +127,7 @@ class TestPVCCreationPerformance(E2ETest):
             size=self.pvc_size,
         )
         for pvc_obj in pvc_objs:
+            pvc_obj.reload()
             teardown_factory(pvc_obj)
         with ThreadPoolExecutor() as executor:
             for pvc_obj in pvc_objs:
@@ -146,6 +148,16 @@ class TestPVCCreationPerformance(E2ETest):
             number_of_pvc=number_of_pvcs,
             size=self.pvc_size,
         )
+        for pvc_obj in pvc_objs:
+            pvc_obj.reload()
+            teardown_factory(pvc_obj)
+        with ThreadPoolExecutor() as executor:
+            for pvc_obj in pvc_objs:
+                executor.submit(
+                    helpers.wait_for_resource_state, pvc_obj,
+                    constants.STATUS_BOUND
+                )
+                executor.submit(pvc_obj.reload)
         start_time = helpers.get_start_creation_time(
             self.interface, pvc_objs[0].name
         )
@@ -160,5 +172,5 @@ class TestPVCCreationPerformance(E2ETest):
                 f"75%) time is {total_time} and greater than 135 seconds"
             )
         logging.info(
-            f"{number_of_pvcs} PVCs creation time took less than a 135 seconds"
+            f"{number_of_pvcs} PVCs creation time took {total_time} seconds"
         )
