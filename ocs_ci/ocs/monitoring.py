@@ -173,14 +173,17 @@ def check_ceph_health_status_metrics_on_prometheus(mgr_pod):
     )
 
 
-def prometheus_health_check(name='monitoring', kind='ClusterOperator'):
+def prometheus_health_check(name=constants.MONITORING, kind=constants.CLUSTER_OPERATOR):
     """
     Return true if the prometheus cluster is healthy
+
      Args:
         name (str) : Name of the resources
         kind (str): Kind of the resource
+
      Returns:
          bool : True on prometheus health is ok, false otherwise
+
      """
     ocp_obj = OCP(kind=kind)
     health_info = ocp_obj.get(resource_name=name)

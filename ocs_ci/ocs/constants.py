@@ -83,6 +83,8 @@ DEPLOYMENTCONFIG = "deploymentconfig"
 CONFIG = "Config"
 MACHINESETS = 'machinesets'
 STORAGECLUSTER = 'storagecluster'
+CLUSTER_OPERATOR = 'ClusterOperator'
+MONITORING = 'monitoring'
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"

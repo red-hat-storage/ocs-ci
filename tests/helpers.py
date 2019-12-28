@@ -1083,9 +1083,7 @@ def change_default_storageclass(scname):
     return True
 
 
-def default_storage_class(
-    interface_type
-):
+def default_storage_class(interface_type):
     """
     Return default storage class based on interface_type
 
