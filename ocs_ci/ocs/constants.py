@@ -501,3 +501,8 @@ CLUSTER_NAME_MAX_CHARACTERS = 17
 STAGE_CA_FILE = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "stage-ca.crt"
 )
+
+#PDB NAMES
+MDS_PDB = "rook-ceph-mds-ocs-storagecluster-cephfilesystem"
+OSD_PDB = "rook-ceph-osd-"
+MON_PDB = "rook-ceph-mon-pdb"

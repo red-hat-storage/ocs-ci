@@ -14,7 +14,7 @@ from copy import deepcopy
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults, registry
-from ocs_ci.ocs.cluster import validate_cluster_on_pvc
+from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
 from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
@@ -504,6 +504,9 @@ class Deployment(object):
 
         # validate ceph mon/osd volumes are backed by pvc
         validate_cluster_on_pvc()
+
+        # validate PDB creation of MON, MDS, OSD pods
+        validate_pdb_creation()
 
         # Creating toolbox pod
         setup_ceph_toolbox()

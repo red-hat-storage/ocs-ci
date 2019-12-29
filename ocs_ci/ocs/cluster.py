@@ -16,7 +16,7 @@ from time import sleep
 
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
-from ocs_ci.ocs.resources import ocs
+from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
@@ -575,3 +575,46 @@ def validate_cluster_on_pvc():
                 assert claimName in pvc_names, (
                     "Ceph Internal Volume not backed by PVC"
                 )
+
+
+def count_cluster_osd():
+    """
+    Returns the number of OSD pods in current cluster
+
+    """
+    storage_cluster_obj = storage_cluster.StorageCluster(
+        resource_name=config.ENV_DATA['storage_cluster_name'],
+        namespace=config.ENV_DATA['cluster_namespace'],
+    )
+    storage_cluster_obj.reload_data()
+    osd_count = (
+        int(storage_cluster_obj.data['spec']['storageDeviceSets'][0]['count'])
+        * int(storage_cluster_obj.data['spec']['storageDeviceSets'][0]['replica'])
+    )
+    return osd_count
+
+
+def validate_pdb_creation():
+    """
+    Validate creation of PDBs for MON, MDS and OSD pods.
+
+    Raises:
+        AssertionError: If required PDBs were not created.
+
+    """
+    pdb_obj = ocp.OCP(kind='PodDisruptionBudget')
+    item_list = pdb_obj.get().get('items')
+    pdb_list = [item['metadata']['name'] for item in item_list]
+    osd_count = count_cluster_osd()
+    pdb_required = [constants.MDS_PDB, constants.MON_PDB]
+    for num in range(osd_count):
+        pdb_required.append(constants.OSD_PDB + str(num))
+
+    pdb_list.sort()
+    pdb_required.sort()
+    logger.info(pdb_list)
+    logger.info(pdb_required)
+    for required, given in zip(pdb_required, pdb_list):
+        assert required == given, f"{required} was not created"
+
+    logger.info("All required PDBs created.")
