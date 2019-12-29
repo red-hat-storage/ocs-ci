@@ -579,7 +579,7 @@ def validate_cluster_on_pvc():
 
 def count_cluster_osd():
     """
-    Returns the number of OSD pods in current cluster
+    Returns Integer number of OSD pods in current cluster
 
     """
     storage_cluster_obj = storage_cluster.StorageCluster(
@@ -612,8 +612,6 @@ def validate_pdb_creation():
 
     pdb_list.sort()
     pdb_required.sort()
-    logger.info(pdb_list)
-    logger.info(pdb_required)
     for required, given in zip(pdb_required, pdb_list):
         assert required == given, f"{required} was not created"
 
