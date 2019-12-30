@@ -2,18 +2,18 @@ import logging
 import pytest
 
 from ocs_ci.ocs import node, constants
-from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.resources.pod import get_all_pods
-from ocs_ci.framework.testlib import tier4, ignore_leftovers, ManageTest
+from ocs_ci.framework.testlib import (
+    tier4, ignore_leftovers, ManageTest, aws_platform_required
+)
 from tests.sanity_helpers import Sanity
-from tests.helpers import wait_for_resource_count_change, get_admin_key
+from tests.helpers import wait_for_ct_pod_recovery
 
 logger = logging.getLogger(__name__)
 
 
 @tier4
 @ignore_leftovers
+@aws_platform_required
 class TestDetachAttachWorkerVolume(ManageTest):
     """
     Test class for detach and attach worker volume
@@ -71,28 +71,13 @@ class TestDetachAttachWorkerVolume(ManageTest):
         nodes.detach_volume(data_volume)
 
         # Validate cluster is still functional
-        try:
-            # In case the selected node that its volume disk was detached was the one
-            # running the ceph tools pod, we'll need to wait for a new ct pod to start.
-            # For that, a function that connects to the ct pod is being used to check if
-            # it's alive
-            _ = get_admin_key()
-        except CommandFailed as ex:
-            if "connection timed out" in str(ex):
-                logger.info(
-                    "Ceph tools box was running on the node that its data "
-                    "volume has been detached. Hence, waiting for a new "
-                    "Ceph tools box pod to spin up"
-                )
-                wait_for_resource_count_change(
-                    func_to_use=get_all_pods, previous_num=1,
-                    namespace=config.ENV_DATA['cluster_namespace'], timeout=120,
-                    selector='app=rook-ceph-tools'
-                )
-            else:
-                raise
-        finally:
-            self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        # In case the selected node that its volume disk was detached was the one
+        # running the ceph tools pod, we'll need to wait for a new ct pod to start.
+        # For that, a function that connects to the ct pod is being used to check if
+        # it's alive
+        assert wait_for_ct_pod_recovery(), "Ceph tools pod failed to come up on another node"
+
+        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
         # Wait for worker volume to be re-attached automatically to the node
         assert nodes.wait_for_volume_attach(data_volume), (

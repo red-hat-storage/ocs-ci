@@ -7,10 +7,11 @@ import ssl
 import atexit
 
 from pyVmomi import vim, vmodl
-from pyVim.task import WaitForTask
+from pyVim.task import WaitForTask, WaitForTasks
 from pyVim.connect import Disconnect, SmartStubAdapter, VimSessionOrientedStub
 from ocs_ci.ocs.exceptions import VMMaxDisksReachedException
-from ocs_ci.ocs.constants import GB2KB, VM_DISK_TYPE, VM_DISK_MODE
+from ocs_ci.ocs.constants import GB2KB, VM_DISK_TYPE, VM_DISK_MODE, VM_POWERED_OFF
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -288,3 +289,98 @@ class VSPHERE(object):
         """
         for _ in range(int(num_disks)):
             self.add_disk(vm, size, disk_type)
+
+    def get_vm_power_status(self, vm):
+        """
+        Get the VM power status
+
+        Args:
+            vm (vm): VM object
+
+        Returns:
+            str: VM power status
+
+        """
+        return vm.summary.runtime.powerState
+
+    def get_vms_ips(self, vms):
+        """
+        Get VMs IPs
+
+        Args:
+            vms (list): VM (vm) objects
+
+        Returns:
+            list: VMs IPs
+
+        """
+        return [vm.summary.guest.ipAddress for vm in vms]
+
+    def stop_vms(self, vms, force=True):
+        """
+        Stop VMs
+
+        Args:
+            vms (list): VM (vm) objects
+            force (bool): True for VM ungraceful power off, False for
+                graceful VM shutdown
+
+        """
+        if force:
+            logger.info(f"Powering off VMs: {[vm.name for vm in vms]}")
+            tasks = [vm.PowerOff() for vm in vms]
+            WaitForTasks(tasks, self._si)
+
+        else:
+            logger.info(f"Gracefully shutting down VMs: {[vm.name for vm in vms]}")
+
+            # Can't use WaitForTasks as it requires VMWare tools installed
+            # on the guests to check for Shutdown task completion
+            _ = [vm.ShutdownGuest() for vm in vms]
+
+            def get_vms_power_status(vms):
+                return [self.get_vm_power_status(vm) for vm in vms]
+
+            for statuses in TimeoutSampler(600, 5, get_vms_power_status, vms):
+                logger.info(
+                    f"Waiting for VMs {[vm.name for vm in vms]} to power off. "
+                    f"Current VMs statuses: {statuses}"
+                )
+                if all(status == VM_POWERED_OFF for status in statuses):
+                    logger.info("All VMs reached poweredOff off status")
+                    break
+
+    def start_vms(self, vms, wait=True):
+        """
+        Start VMs
+
+        Args:
+            vms (list): VM (vm) objects
+            wait (bool): Wait for VMs to start
+
+        """
+        logger.info(f"Powering on VMs: {[vm.name for vm in vms]}")
+        tasks = [vm.PowerOn() for vm in vms]
+        WaitForTasks(tasks, self._si)
+
+        if wait:
+            for ips in TimeoutSampler(240, 3, self.get_vms_ips, vms):
+                logger.info(
+                    f"Waiting for VMs {[vm.name for vm in vms]} to power on "
+                    f"based on network connectivity. Current VMs IPs: {ips}"
+                )
+                if not (None in ips or '<unset>' in ips):
+                    break
+
+    def restart_vms(self, vms, force=True):
+        """
+        Restart VMs
+
+        Args:
+            vms (list): VM (vm) objects
+            force (bool): True for VM ungraceful power off, False for
+                graceful VM shutdown
+
+        """
+        self.stop_vms(vms, force=force)
+        self.start_vms(vms)
