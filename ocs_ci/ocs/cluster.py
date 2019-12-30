@@ -615,4 +615,4 @@ def validate_pdb_creation():
     for required, given in zip(pdb_required, pdb_list):
         assert required == given, f"{required} was not created"
 
-    logger.info("All required PDBs created.")
+    logger.info(f"All required PDBs created: {pdb_required}")
