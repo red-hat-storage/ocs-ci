@@ -368,6 +368,10 @@ INSTANCE_RUNNING = 16
 INSTANCE_SHUTTING_DOWN = 32
 INSTANCE_TERMINATED = 48
 
+# vSphere VM power statuses
+VM_POWERED_OFF = 'poweredOff'
+VM_POWERED_ON = 'poweredOn'
+
 # Node statuses
 NODE_READY = 'Ready'
 NODE_NOT_READY = 'NotReady'

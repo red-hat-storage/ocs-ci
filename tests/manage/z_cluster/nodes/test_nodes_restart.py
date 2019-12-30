@@ -1,11 +1,14 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import tier4, ignore_leftovers, ManageTest, bugzilla
+from ocs_ci.framework.testlib import (
+    tier4, ignore_leftovers, ManageTest, aws_platform_required
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.resources import pod
 from tests.sanity_helpers import Sanity
+from tests.helpers import wait_for_ct_pod_recovery
 
 
 logger = logging.getLogger(__name__)
@@ -13,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 @tier4
 @ignore_leftovers
-@bugzilla('1768277')
 class TestNodesRestart(ManageTest):
     """
     Test ungraceful cluster shutdown
@@ -40,7 +42,10 @@ class TestNodesRestart(ManageTest):
         argnames=["force"],
         argvalues=[
             pytest.param(*[True], marks=pytest.mark.polarion_id("OCS-894")),
-            pytest.param(*[False], marks=pytest.mark.polarion_id("OCS-895"))
+            pytest.param(
+                *[False],
+                marks=[pytest.mark.polarion_id("OCS-895"), aws_platform_required]
+            )
         ]
     )
     def test_nodes_restart(self, nodes, pvc_factory, pod_factory, force):
@@ -48,17 +53,17 @@ class TestNodesRestart(ManageTest):
         Test nodes restart (from the platform layer, i.e, EC2 instances, VMWare VMs)
         """
         ocp_nodes = get_node_objs()
-        nodes.restart_nodes(nodes=ocp_nodes, wait=True, force=force)
+        nodes.restart_nodes(nodes=ocp_nodes, force=force)
         self.sanity_helpers.health_check()
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
     @pytest.mark.parametrize(
         argnames=["interface", "operation"],
         argvalues=[
-            pytest.param(*['rbd', 'create_resources'], marks=pytest.mark.polarion_id("OCS-1138")),
-            pytest.param(*['rbd', 'delete_resources'], marks=pytest.mark.polarion_id("OCS-1241")),
-            pytest.param(*['cephfs', 'create_resources'], marks=pytest.mark.polarion_id("OCS-1139")),
-            pytest.param(*['cephfs', 'delete_resources'], marks=pytest.mark.polarion_id("OCS-1242"))
+            pytest.param(*['rbd', 'create_resources'], marks=[pytest.mark.polarion_id("OCS-1138")]),
+            pytest.param(*['rbd', 'delete_resources'], marks=[pytest.mark.polarion_id("OCS-1241")]),
+            pytest.param(*['cephfs', 'create_resources'], marks=[pytest.mark.polarion_id("OCS-1139")]),
+            pytest.param(*['cephfs', 'delete_resources'], marks=[pytest.mark.polarion_id("OCS-1242")])
         ]
     )
     def test_pv_provisioning_under_degraded_state(
@@ -169,6 +174,8 @@ class TestNodesRestart(ManageTest):
             timeout=600, condition=constants.STATUS_RUNNING, selector=selector,
             resource_count=2
         ), f"{interface} provisioner pod failed to reach status Running"
+
+        assert wait_for_ct_pod_recovery(), "Ceph tools pod failed to come up on another node"
 
         if operation == 'create_resources':
             # Cluster validation (resources creation and IO running)
