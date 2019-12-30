@@ -579,7 +579,8 @@ def validate_cluster_on_pvc():
 
 def count_cluster_osd():
     """
-    Returns Integer number of OSD pods in current cluster
+    Returns:
+         osc_count (Integer): number of OSD pods in current cluster
 
     """
     storage_cluster_obj = storage_cluster.StorageCluster(
