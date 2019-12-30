@@ -380,6 +380,7 @@ class Deployment(object):
         csv_name = package_manifest.get_current_csv(channel=channel)
         csv = CSV(resource_name=csv_name, namespace=self.namespace)
         csv.wait_for_phase("Succeeded", timeout=720)
+        run_cmd('oc get csv -o yaml | sed "s/quay.io\/rhceph-dev\/rhceph:4-7/registry.redhat.io\/rhceph-beta\/rhceph-4-rhel8/" | oc replace -f -')
         cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
         cluster_data['metadata']['name'] = config.ENV_DATA[
             'storage_cluster_name'
