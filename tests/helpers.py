@@ -828,13 +828,11 @@ def get_start_creation_time(interface, pvc_name):
     """
     format = '%H:%M:%S.%f'
     # Get the correct provisioner pod based on the interface
-    if interface == constants.CEPHBLOCKPOOL:
-        pod_name = pod.get_rbd_provisioner_pod().name
-    else:
-        pod_name = pod.get_cephfs_provisioner_pod().name
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    # get the logs from the csi-provisioner containers
+    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
+    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
 
-    # get the logs from the csi-provisioner container
-    logs = pod.get_pod_logs(pod_name, 'csi-provisioner')
     logs = logs.split("\n")
     # Extract the starting time for the PVC provisioning
     start = [
@@ -858,13 +856,11 @@ def get_end_creation_time(interface, pvc_name):
     """
     format = '%H:%M:%S.%f'
     # Get the correct provisioner pod based on the interface
-    if interface == constants.CEPHBLOCKPOOL:
-        pod_name = pod.get_rbd_provisioner_pod().name
-    else:
-        pod_name = pod.get_cephfs_provisioner_pod().name
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    # get the logs from the csi-provisioner containers
+    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
+    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
 
-    # get the logs from the csi-provisioner container
-    logs = pod.get_pod_logs(pod_name, 'csi-provisioner')
     logs = logs.split("\n")
     # Extract the starting time for the PVC provisioning
     end = [
@@ -888,6 +884,80 @@ def measure_pvc_creation_time(interface, pvc_name):
     """
     start = get_start_creation_time(interface=interface, pvc_name=pvc_name)
     end = get_end_creation_time(interface=interface, pvc_name=pvc_name)
+    total = end - start
+    return total.total_seconds()
+
+
+def get_start_deletion_time(interface, pv_name):
+    """
+    Get the starting deletion time of a PVC based on provisioner logs
+
+    Args:
+        interface (str): The interface backed the PVC
+        pvc_name (str): Name of the PVC for deletion time measurement
+
+    Returns:
+        datetime object: Start time of PVC deletion
+
+    """
+    format = '%H:%M:%S.%f'
+    # Get the correct provisioner pod based on the interface
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    # get the logs from the csi-provisioner containers
+    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
+    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+
+    logs = logs.split("\n")
+    # Extract the starting time for the PVC deletion
+    start = [
+        i for i in logs if re.search(f"delete \"{pv_name}\": started", i)
+    ]
+    start = start[0].split(' ')[1]
+    return datetime.datetime.strptime(start, format)
+
+
+def get_end_deletion_time(interface, pv_name):
+    """
+    Get the ending deletion time of a PVC based on provisioner logs
+
+    Args:
+        interface (str): The interface backed the PVC
+        pv_name (str): Name of the PVC for deletion time measurement
+
+    Returns:
+        datetime object: End time of PVC deletion
+
+    """
+    format = '%H:%M:%S.%f'
+    # Get the correct provisioner pod based on the interface
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    # get the logs from the csi-provisioner containers
+    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
+    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+
+    logs = logs.split("\n")
+    # Extract the starting time for the PV deletion
+    end = [
+        i for i in logs if re.search(f"delete \"{pv_name}\": succeeded", i)
+    ]
+    end = end[0].split(' ')[1]
+    return datetime.datetime.strptime(end, format)
+
+
+def measure_pvc_deletion_time(interface, pv_name):
+    """
+    Measure PVC deletion time based on logs
+
+    Args:
+        interface (str): The interface backed the PVC
+        pv_name (str): Name of the PV for creation time measurement
+
+    Returns:
+        float: Deletion time for the PVC
+
+    """
+    start = get_start_deletion_time(interface=interface, pv_name=pv_name)
+    end = get_end_deletion_time(interface=interface, pv_name=pv_name)
     total = end - start
     return total.total_seconds()
 
