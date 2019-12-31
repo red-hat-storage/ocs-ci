@@ -20,8 +20,11 @@ tier1 = pytest.mark.tier1(value=1)
 tier2 = pytest.mark.tier2(value=2)
 tier3 = pytest.mark.tier3(value=3)
 tier4 = pytest.mark.tier4(value=4)
+tier4a = compose(tier4, pytest.mark.tier4a)
+tier4b = compose(tier4, pytest.mark.tier4b)
+tier4c = compose(tier4, pytest.mark.tier4c)
 
-tier_marks = [tier1, tier2, tier3, tier4]
+tier_marks = [tier1, tier2, tier3, tier4, tier4a, tier4b, tier4c]
 
 # build acceptance
 acceptance = pytest.mark.acceptance

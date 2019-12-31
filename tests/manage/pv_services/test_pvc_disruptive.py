@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import ManageTest, tier4
+from ocs_ci.framework.testlib import ManageTest, tier4, tier4a
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
@@ -18,6 +18,7 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
 
 
 @tier4
+@tier4a
 @pytest.mark.parametrize(
     argnames=["interface", "operation_to_disrupt", "resource_to_delete"],
     argvalues=[

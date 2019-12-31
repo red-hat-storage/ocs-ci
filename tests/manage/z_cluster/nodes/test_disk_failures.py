@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.ocs import node, constants
 from ocs_ci.framework.testlib import (
-    tier4, ignore_leftovers, ManageTest, aws_platform_required
+    tier4, tier4b, ignore_leftovers, ManageTest, aws_platform_required
 )
 from tests.sanity_helpers import Sanity
 from tests.helpers import wait_for_ct_pod_recovery
@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 @tier4
+@tier4b
 @ignore_leftovers
 @aws_platform_required
 class TestDetachAttachWorkerVolume(ManageTest):
