@@ -39,17 +39,35 @@ class TestPVCCreationPerformance(E2ETest):
         self.interface = interface_iterate
         self.sc_obj = storageclass_factory(self.interface)
 
+    @pytest.mark.parametrize(
+        argnames=["pvc_size"],
+        argvalues=[
+            pytest.param(
+                *['1Gi'], marks=pytest.mark.polarion_id("OCS-1225")
+            ),
+            pytest.param(
+                *['10Gi'], marks=pytest.mark.polarion_id("OCS-2010")
+            ),
+            pytest.param(
+                *['100Gi'], marks=pytest.mark.polarion_id("OCS-2011")
+            ),
+            pytest.param(
+                *['1Ti'], marks=pytest.mark.polarion_id("OCS-2008")
+            ),
+            pytest.param(
+                *['2Ti'], marks=pytest.mark.polarion_id("OCS-2009")
+            ),
+        ]
+    )
     @pytest.mark.usefixtures(base_setup.__name__)
-    @polarion_id('OCS-1225')
-    @bugzilla('1740139')
-    def test_pvc_creation_measurement_performance(self, teardown_factory):
+    def test_pvc_creation_measurement_performance(self, teardown_factory, pvc_size):
         """
-        Measuring PVC creation time
+        Measuring PVC creation time is less than 3 seconds
         """
         log.info('Start creating new PVC')
 
         pvc_obj = helpers.create_pvc(
-            sc_name=self.sc_obj.name, size=self.pvc_size
+            sc_name=self.sc_obj.name, size=pvc_size
         )
         helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
         pvc_obj.reload()
@@ -57,20 +75,19 @@ class TestPVCCreationPerformance(E2ETest):
         create_time = helpers.measure_pvc_creation_time(
             self.interface, pvc_obj.name
         )
-        if create_time > 1:
+        logging.info(f"PVC created in {create_time} seconds")
+        if create_time > 3:
             raise ex.PerformanceException(
-                f"PVC creation time is {create_time} and greater than 1 second"
+                f"PVC creation time is {create_time} and greater than 3 second"
             )
-        logging.info("PVC creation took less than a 1 second")
 
     @pytest.mark.usefixtures(base_setup.__name__)
     @polarion_id('OCS-1620')
-    @bugzilla('1741612')
     def test_multiple_pvc_creation_measurement_performance(
         self, teardown_factory
     ):
         """
-        Measuring PVC creation time of 120 PVCs in 60 seconds
+        Measuring PVC creation time of 120 PVCs in 180 seconds
         """
         number_of_pvcs = 120
         log.info('Start creating new 120 PVCs')
@@ -82,6 +99,7 @@ class TestPVCCreationPerformance(E2ETest):
             size=self.pvc_size,
         )
         for pvc_obj in pvc_objs:
+            pvc_obj.reload()
             teardown_factory(pvc_obj)
         with ThreadPoolExecutor(max_workers=5) as executor:
             for pvc_obj in pvc_objs:
@@ -99,13 +117,13 @@ class TestPVCCreationPerformance(E2ETest):
         )
         total = end_time - start_time
         total_time = total.total_seconds()
-        if total_time > 60:
+        if total_time > 180:
             raise ex.PerformanceException(
                 f"{number_of_pvcs} PVCs creation time is {total_time} and "
-                f"greater than 60 seconds"
+                f"greater than 180 seconds"
             )
         logging.info(
-            f"{number_of_pvcs} PVCs creation time took less than a 60 seconds"
+            f"{number_of_pvcs} PVCs creation time took {total_time} seconds"
         )
 
     @pytest.mark.usefixtures(base_setup.__name__)
