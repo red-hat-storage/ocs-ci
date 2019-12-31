@@ -1572,3 +1572,17 @@ def wait_for_ct_pod_recovery():
         else:
             return False
     return True
+
+
+def label_worker_node(node_list, label):
+    """
+    Function to label worker node for running app pods on specific worker nodes.
+
+    Args:
+        node_list (list): List of node name
+        label (str): Label to be added in worker
+    """
+    ocp_obj = OCP()
+    for node in node_list:
+        out = ocp_obj.exec_oc_cmd(command=f"label node {node} nodetype={label}", out_yaml_format=False)
+        logger.info(out)
