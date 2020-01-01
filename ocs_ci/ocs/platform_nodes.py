@@ -73,12 +73,12 @@ class NodesBase(object):
             "Restart nodes functionality is not implemented"
         )
 
-    def detach_volume(self, node):
+    def detach_volume(self, volume, node):
         raise NotImplementedError(
             "Detach volume functionality is not implemented"
         )
 
-    def attach_volume(self, node, volume):
+    def attach_volume(self, volume, node):
         raise NotImplementedError(
             "Attach volume functionality is not implemented"
         )
@@ -174,6 +174,7 @@ class VMWareNodes(NodesBase):
         self.password = config.ENV_DATA['vsphere_password']
         self.cluster = config.ENV_DATA['vsphere_cluster']
         self.datacenter = config.ENV_DATA['vsphere_datacenter']
+        self.datastore = config.ENV_DATA['vsphere_datastore']
         self.vsphere = vsphere.VSPHERE(self.server, self.user, self.password)
 
     def get_vms(self, nodes):
@@ -198,15 +199,34 @@ class VMWareNodes(NodesBase):
         return vms
 
     def get_data_volumes(self):
-        raise NotImplementedError(
-            "Get data volume functionality is not implemented for VMWare"
-        )
+        """
+        Get the data vSphere volumes
+
+        Returns:
+            list: vSphere volumes
+
+        """
+        pvs = get_deviceset_pvs()
+        return [
+            pv.get().get('spec').get('vsphereVolume').get('volumePath') for pv in pvs
+        ]
 
     def get_node_by_attached_volume(self, volume):
-        raise NotImplementedError(
-            "Get node by attached volume functionality is not "
-            "implemented for VMWare"
-        )
+        """
+
+        Args:
+            volume:
+
+        Returns:
+
+        """
+        ocp_nodes = get_node_objs()
+        vms = self.get_vms(ocp_nodes)
+        vm, _ = self.vsphere.get_vm_and_volume_by_volume_path(vms, volume)
+        return [
+            node for node in ocp_nodes if node.get()
+            .get('metadata').get('name') == vm.name
+        ][0]
 
     def stop_nodes(self, nodes, force=True):
         """
@@ -252,10 +272,19 @@ class VMWareNodes(NodesBase):
         )
         self.vsphere.restart_vms(vms, force=force)
 
-    def detach_volume(self, node):
-        raise NotImplementedError(
-            "Detach volume functionality is not implemented for VMWare"
-        )
+    def delete_volume(self, volume, node):
+        """
+        Detach and delete a disk from a VM
+
+        Args:
+            volume (str): Volume path
+            node (OCS): The OCS object representing the node
+
+        Returns:
+
+        """
+        vm = self.get_vms([node])[0]
+        self.vsphere.delete_volume(volume, vm)
 
     def attach_volume(self, node, volume):
         raise NotImplementedError(
@@ -263,9 +292,8 @@ class VMWareNodes(NodesBase):
         )
 
     def wait_for_volume_attach(self, volume):
-        raise NotImplementedError(
-            "Wait for volume attach functionality is not implemented for VMWare"
-        )
+        logger.info("Not waiting for volume to get re-attached")
+        pass
 
     def restart_nodes_teardown(self):
         """
@@ -413,7 +441,7 @@ class AWSNodes(NodesBase):
         )
         self.aws.terminate_ec2_instances(instances=instances, wait=wait)
 
-    def detach_volume(self, volume):
+    def detach_volume(self, volume, node=None):
         """
         Detach a volume from an EC2 instance
 
@@ -423,13 +451,13 @@ class AWSNodes(NodesBase):
         """
         self.aws.detach_volume(volume)
 
-    def attach_volume(self, node, volume):
+    def attach_volume(self, volume, node):
         """
         Attach a data volume to an instance
 
         Args:
-            node (OCS): The EC2 instance to attach the volume to
             volume (Volume): The volume to delete
+            node (OCS): The EC2 instance to attach the volume to
 
         """
         volume.load()

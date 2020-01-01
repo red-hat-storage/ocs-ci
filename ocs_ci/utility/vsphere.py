@@ -587,3 +587,57 @@ class VSPHERE(object):
                     WaitForTask(vm.Destroy())
         else:
             logger.info(f"Folder {name} doesn't exist in templates")
+
+    def get_vm_and_volume_by_volume_path(self, vms, volume_path):
+        """
+        Get the VM and the volume objects according to the volume path
+
+        Args:
+            vms (list): VM (vm) objects
+            volume_path (str): Volume path in the datastore (i.e,
+                '[vsanDatastore] d4210a5e-40ce-efb8-c87e-040973d176e1/control-plane-1.vmdk')
+
+        Returns:
+            tuple: the VM and the volume objects
+
+        """
+        match_vm = None
+        match_volume = None
+        for vm in vms:
+            vm_volumes = [
+                device for device in vm.config.hardware.device if isinstance(
+                    device, vim.vm.device.VirtualDisk
+                )
+            ]
+            for vol in vm_volumes:
+                if volume_path == vol.backing.fileName:
+                    match_volume = vol
+                    match_vm = vm
+                    logger.info(f"Volume {volume_path} is attached to VM {vm.name}")
+                    break
+        return match_vm, match_volume
+
+    def delete_volume(self, volume_path, vm):
+        """
+        Detach volume from VM
+
+        Args:
+            volume_path (str): Volume path in the datastore (i.e,
+                '[vsanDatastore] d4210a5e-40ce-efb8-c87e-040973d176e1/control-plane-1.vmdk')
+            vm (vm): VM (vm) object
+
+        """
+        _, volume = self.get_vm_and_volume_by_volume_path([vm], volume_path)
+
+        spec = vim.vm.ConfigSpec()
+        device_changes = []
+        disk_spec = vim.vm.device.VirtualDeviceSpec()
+        disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.remove
+        disk_spec.device = volume
+        device_changes.append(disk_spec)
+        spec.deviceChange = device_changes
+        logger.info(f"Detaching volume {volume.backing.fileName} from VM {vm.name}")
+        WaitForTask(vm.ReconfigVM_Task(spec=spec))
+        logger.info(
+            f"Volume {volume.backing.fileName} detached successfully from VM {vm.name}"
+        )

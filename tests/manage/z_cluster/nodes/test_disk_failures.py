@@ -14,8 +14,7 @@ logger = logging.getLogger(__name__)
 @tier4
 @tier4b
 @ignore_leftovers
-@aws_platform_required
-class TestDetachAttachWorkerVolume(ManageTest):
+class TestDiskFailures(ManageTest):
     """
     Test class for detach and attach worker volume
 
@@ -49,6 +48,7 @@ class TestDetachAttachWorkerVolume(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
+    @aws_platform_required
     @pytest.mark.polarion_id("OCS-1085")
     def test_detach_attach_worker_volume(self, nodes, pvc_factory, pod_factory):
         """
@@ -64,12 +64,11 @@ class TestDetachAttachWorkerVolume(ManageTest):
         """
         # Get a data volume
         data_volume = nodes.get_data_volumes()[0]
-
         # Get the worker node according to the volume attachment
         worker = nodes.get_node_by_attached_volume(data_volume)
 
         # Detach volume (logging is done inside the function)
-        nodes.detach_volume(data_volume)
+        nodes.detach_volume(data_volume, worker)
 
         # Validate cluster is still functional
         # In case the selected node that its volume disk was detached was the one
@@ -82,7 +81,7 @@ class TestDetachAttachWorkerVolume(ManageTest):
 
         # Wait for worker volume to be re-attached automatically to the node
         assert nodes.wait_for_volume_attach(data_volume), (
-            f"Volume {data_volume.id} failed to be re-attached to a worker node"
+            "Volume failed to be re-attached to a worker node"
         )
 
         # Restart the instance so the volume will get re-mounted
@@ -91,6 +90,7 @@ class TestDetachAttachWorkerVolume(ManageTest):
         # Cluster health check
         self.sanity_helpers.health_check()
 
+    @aws_platform_required
     @pytest.mark.polarion_id("OCS-1086")
     def test_detach_attach_2_data_volumes(self, nodes, pvc_factory, pod_factory):
         """
@@ -112,7 +112,9 @@ class TestDetachAttachWorkerVolume(ManageTest):
 
         for worker_and_volume in workers_and_volumes:
             # Detach the volume (logging is done inside the function)
-            nodes.detach_volume(worker_and_volume['volume'])
+            nodes.detach_volume(
+                worker_and_volume['volume'], nodes.detach_volume(worker_and_volume['worker'])
+            )
 
         for worker_and_volume in workers_and_volumes:
             # Wait for worker volume to be re-attached automatically to the node
@@ -129,3 +131,14 @@ class TestDetachAttachWorkerVolume(ManageTest):
         # Validate cluster is still functional
         self.sanity_helpers.health_check()
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+
+    def test_recovery_from_volume_deletion(self, nodes, pvc_factory, pod_factory):
+        """
+
+        """
+        # Get a data volume
+        data_volume = nodes.get_data_volumes()[0]
+        # Get the worker node according to the volume attachment
+        worker = nodes.get_node_by_attached_volume(data_volume)
+
+        nodes.delete_volume(data_volume, worker)
