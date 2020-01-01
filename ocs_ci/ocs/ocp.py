@@ -87,7 +87,7 @@ class OCP(object):
 
     def exec_oc_cmd(
         self, command, out_yaml_format=True, secrets=None, timeout=600,
-        ignore_error=False, **kwargs
+        ignore_error=False, all_namespaces=False, **kwargs
     ):
         """
         Executing 'oc' command
@@ -103,6 +103,7 @@ class OCP(object):
             timeout (int): timeout for the oc_cmd, defaults to 600 seconds
             ignore_error (bool): True if ignore non zero return code and do not
                 raise the exception.
+            all_namespaces (bool): Equal to 'oc get <resource> -A'
 
         Returns:
             dict: Dictionary represents a returned yaml file.
@@ -111,7 +112,9 @@ class OCP(object):
         """
         oc_cmd = "oc "
         kubeconfig = os.getenv('KUBECONFIG')
-        if self.namespace:
+        if all_namespaces and not self.namespace:
+            oc_cmd += "-A"
+        elif self.namespace:
             oc_cmd += f"-n {self.namespace} "
 
         if kubeconfig:
@@ -181,15 +184,11 @@ class OCP(object):
         """
         resource_name = resource_name if resource_name else self.resource_name
         command = f"get {self.kind} {resource_name}"
-        if all_namespaces and not self.namespace:
-            command += " -A"
-        elif self.namespace:
-            command += f" -n {self.namespace}"
         if selector is not None:
             command += f" --selector={selector}"
         if out_yaml_format:
             command += " -o yaml"
-        return self.exec_oc_cmd(command)
+        return self.exec_oc_cmd(command, all_namespaces=all_namespaces)
 
     def describe(self, resource_name='', selector=None, all_namespaces=False):
         """
@@ -207,11 +206,11 @@ class OCP(object):
             dict: Dictionary represents a returned yaml file
         """
         command = f"describe {self.kind} {resource_name}"
-        if all_namespaces and not self.namespace:
-            command += " -A"
         if selector is not None:
             command += f" --selector={selector}"
-        return self.exec_oc_cmd(command, out_yaml_format=False)
+        return self.exec_oc_cmd(
+            command, out_yaml_format=False, all_namespaces=all_namespaces
+        )
 
     def create(self, yaml_file=None, resource_name='', out_yaml_format=True):
         """
