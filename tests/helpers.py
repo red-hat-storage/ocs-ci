@@ -1599,5 +1599,7 @@ def remove_label_from_worker_node(node_list, label_key):
         label_key (str): Label_key to be remove from worker node
     """
     ocp_obj = OCP()
-    out = ocp_obj.exec_oc_cmd(command=f"label node {' '.join(node_list)} {label_key}-", out_yaml_format=False)
+    out = ocp_obj.exec_oc_cmd(
+        command=f"label node {' '.join(node_list)} {label_key}-", out_yaml_format=False
+    )
     logger.info(out)
