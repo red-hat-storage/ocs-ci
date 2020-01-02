@@ -38,7 +38,7 @@ class InstallPlan(OCP):
         Approve install plan.
         """
         self.check_name_is_specified()
-        self.patch(params='{"spec": {"approved": true}}', type='merge')
+        self.patch(params='{"spec": {"approved": true}}', format_type='merge')
 
 
 def get_install_plans_for_approve(namespace, raise_exception=False):
