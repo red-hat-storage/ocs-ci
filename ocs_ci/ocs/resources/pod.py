@@ -299,7 +299,10 @@ class Pod(OCS):
         work_load = 'jenkins'
 
         wl = workload.WorkLoad(
-            name=name, work_load=work_load, pod=self
+            name=name,
+            work_load=work_load,
+            pod=self,
+            path=self.get_storage_path()
         )
         assert wl.setup(), "Setup up for git failed"
         wl.run()
