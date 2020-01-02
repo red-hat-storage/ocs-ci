@@ -51,7 +51,8 @@ def run(**kwargs):
         str: result of command
     """
     io_pod = kwargs.pop('pod')
+    path = kwargs.pop('path')
     git_repo = kwargs.get('repo', "https://github.com/ceph/ceph.git")
-    git_clone_cmd = f"git clone --recursive {git_repo}"
+    git_clone_cmd = f"git clone --recursive {git_repo} {path}"
     log.info(f"Running cmd: {git_clone_cmd}")
     return io_pod.exec_cmd_on_pod(git_clone_cmd, out_yaml_format=False)
