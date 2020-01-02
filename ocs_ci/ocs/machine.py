@@ -3,6 +3,8 @@ import logging
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+import time
 
 log = logging.getLogger(__name__)
 
@@ -138,6 +140,63 @@ def get_machinesets():
     return machine_sets
 
 
+def get_machine_from_machineset(machine_set):
+    """
+    Get the machine name from its associated machineset
+
+    Args:
+        machine_set (str): Name of the machine set
+
+    Returns:
+        List: Machine names
+    """
+    machine_objs = get_machine_objs()
+    machine_set_list = []
+    for machine in machine_objs:
+        if machine.get().get(
+                'metadata'
+        ).get('name')[:-6] == machine_set:
+            return machine_set_list.append(
+                machine.get().get('metadata').get('name')
+            )
+
+
+def get_machine_from_node_name(node_name):
+    """
+    Get the associated machine name for the give node name
+
+    Args:
+        node_name (str): Name of the node
+
+    Returns:
+        str: Machine name
+    """
+    machine_objs = get_machine_objs()
+    for machine in machine_objs:
+        if machine.get().get(
+                'status'
+        ).get('addresses')[1].get('address') == node_name:
+            return machine.name
+
+
+def get_machineset_from_machine_name(machine_name):
+    """
+    Get the machineset associated with the machine name
+
+    Args:
+        machine_name (str): Name of the machine
+
+    Returns:
+        str: Machineset name
+    """
+    machine_objs = get_machine_objs()
+    for machine in machine_objs:
+        if machine.name == machine_name:
+            return machine.get().get(
+                'metadata'
+            ).get('labels').get('machine.openshift.io/cluster-api-machineset')
+
+
 def get_replica_count(machine_set):
     """
     Get replica count of a machine set
@@ -166,6 +225,31 @@ def add_node(machine_set, count):
     ocp = OCP(namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
     ocp.exec_oc_cmd(f'scale --replicas={count} machinesets {machine_set}')
     return True
+
+
+def wait_for_new_node_to_be_ready(machine_set):
+    """
+     Wait for the new node to be in ready state
+
+     Args:
+         machine_set (str): Name of the machine set
+
+    Raises:
+        CommandFailed: In case the new spun machine fails to come
+     """
+    count = 0
+    replica_count = get_replica_count(machine_set)
+    try:
+        time.sleep(300)
+        for machine in get_machines():
+            if re.match(machine.name[:-6], machine_set):
+                count = count + 1
+        if count == replica_count:
+            log.info("New spun node in Ready state")
+    except TimeoutExpiredError:
+        log.error(
+            "Timed out waiting for the new spun machine to be in Ready state"
+        )
 
 
 def add_capacity(count, storagecluster_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
