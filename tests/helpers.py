@@ -1595,7 +1595,7 @@ def remove_label_from_worker_node(node_list, label_key):
 
     Args:
         node_list (list): List of node name
-        label_key (str): Label_key to be added in worker
+        label_key (str): Label_key to be remove from worker node
     """
     ocp_obj = OCP()
     for node in node_list:
