@@ -1096,16 +1096,13 @@ def default_storage_class(interface_type):
 
     """
 
-    if interface_type == constants.CEPHBLOCKPOOL:
-        base_sc = OCP(
-            kind=constants.STORAGECLASS,
-            resource_name=constants.DEFAULT_STORAGECLASS_RBD
-        )
-    elif interface_type == constants.CEPHFILESYSTEM:
-        base_sc = OCP(
-            kind=constants.STORAGECLASS,
-            resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
-        )
+    resource_name = constants.DEFAULT_STORAGECLASS_RBD if (
+        interface_type == constants.CEPHBLOCKPOOL
+    ) else constants.DEFAULT_STORAGECLASS_CEPHFS
+    base_sc = OCP(
+        kind=constants.STORAGECLASS,
+        resource_name=resource_name
+    )
     sc = OCS(**base_sc.data)
     return sc
 

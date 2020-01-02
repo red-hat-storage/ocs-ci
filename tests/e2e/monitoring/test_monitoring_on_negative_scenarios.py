@@ -24,6 +24,10 @@ log = logging.getLogger(__name__)
 
 @retry(AssertionError, tries=30, delay=3, backoff=1)
 def wait_to_update_mgrpod_info_prometheus_pod():
+    """
+    Validates the ceph health metrics is updated on prometheus pod
+
+    """
 
     log.info(
         f"Verifying ceph health status metrics is updated after rebooting the node"
@@ -42,7 +46,9 @@ def wait_to_update_mgrpod_info_prometheus_pod():
 def wait_for_master_node_to_be_running_state():
     """
     Waits for the all the nodes to be in running state
+
     """
+
     wait_for_nodes_status(timeout=900)
 
 
@@ -127,7 +133,9 @@ class TestMonitoringBackedByOCS(E2ETest):
         """
 
         # Get the prometheus pod
-        prometheus_pod_obj = pod.get_all_pods(namespace=defaults.OCS_MONITORING_NAMESPACE, selector=['prometheus'])
+        prometheus_pod_obj = pod.get_all_pods(
+            namespace=defaults.OCS_MONITORING_NAMESPACE, selector=['prometheus']
+        )
 
         for pod_object in prometheus_pod_obj:
             # Get the pvc which mounted on prometheus pod
@@ -162,7 +170,9 @@ class TestMonitoringBackedByOCS(E2ETest):
         """
 
         # Get the prometheus pod
-        pod_obj_list = pod.get_all_pods(namespace=defaults.OCS_MONITORING_NAMESPACE, selector=['prometheus'])
+        pod_obj_list = pod.get_all_pods(
+            namespace=defaults.OCS_MONITORING_NAMESPACE, selector=['prometheus']
+        )
 
         for pod_obj in pod_obj_list:
             # Get the pvc which mounted on prometheus pod
@@ -255,7 +265,7 @@ class TestMonitoringBackedByOCS(E2ETest):
 
         params = '{"spec": {"replicas": 0}}'
         name = osd_pod_list[0].get().get('metadata').get('name')
-        assert ocp_obj.patch(resource_name=name[:-17], params=params), (
+        assert ocp_obj.patch(resource_name=name[:-16], params=params), (
             f"Failed to change the replica count of osd {name} to 0"
         )
 
@@ -273,7 +283,7 @@ class TestMonitoringBackedByOCS(E2ETest):
 
         # Make osd up which was down
         params = '{"spec": {"replicas": 1}}'
-        assert ocp_obj.patch(resource_name=name[:-17], params=params), (
+        assert ocp_obj.patch(resource_name=name[:-16], params=params), (
             f"Failed to change the replica count of osd {name} to 1"
         )
 
@@ -289,7 +299,9 @@ class TestMonitoringBackedByOCS(E2ETest):
         """
 
         # Get all prometheus pods
-        pod_obj_list = pod.get_all_pods(namespace=defaults.OCS_MONITORING_NAMESPACE, selector=['prometheus'])
+        pod_obj_list = pod.get_all_pods(
+            namespace=defaults.OCS_MONITORING_NAMESPACE, selector=['prometheus']
+        )
 
         for pod_obj in pod_obj_list:
             # Get the node where the prometheus pod is hosted
@@ -381,11 +393,10 @@ class TestMonitoringBackedByOCS(E2ETest):
         node where monitoring pods running has no functional impact
 
         """
-        # Get all the openshift-monitoring pods
-        monitoring_pod_obj_list = pod.get_all_pods(namespace=defaults.OCS_MONITORING_NAMESPACE)
-
         # Get all prometheus pods
-        prometheus_pod_obj_list = pod.get_all_pods(namespace=defaults.OCS_MONITORING_NAMESPACE, selector=['prometheus'])
+        prometheus_pod_obj_list = pod.get_all_pods(
+            namespace=defaults.OCS_MONITORING_NAMESPACE, selector=['prometheus']
+        )
 
         for prometheus_pod_obj in prometheus_pod_obj_list:
             # Get the node where the prometheus pod is hosted
@@ -400,8 +411,8 @@ class TestMonitoringBackedByOCS(E2ETest):
         # Check the node are Ready state and check cluster is health ok
         self.sanity_helpers.health_check()
 
-        # Check all the monitoring pods are up
-        for pod_obj in monitoring_pod_obj_list:
+        # Check all the prometheus pods are up
+        for pod_obj in prometheus_pod_obj_list:
             wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
 
         # Check for the created pvc metrics after shutdown and recovery of prometheus nodes
