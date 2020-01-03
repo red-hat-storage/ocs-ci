@@ -1642,3 +1642,34 @@ def wait_for_ct_pod_recovery():
         else:
             return False
     return True
+
+
+def label_worker_node(node_list, label_key, label_value):
+    """
+    Function to label worker node for running app pods on specific worker nodes.
+
+    Args:
+        node_list (list): List of node name
+        label_key (str): Label_key to be added in worker
+        label_value (str): Label_value
+    """
+    ocp_obj = OCP()
+    out = ocp_obj.exec_oc_cmd(
+        command=f"label node {' '.join(node_list)} {label_key}={label_value}", out_yaml_format=False
+    )
+    logger.info(out)
+
+
+def remove_label_from_worker_node(node_list, label_key):
+    """
+    Function to remove label from worker node.
+
+    Args:
+        node_list (list): List of node name
+        label_key (str): Label_key to be remove from worker node
+    """
+    ocp_obj = OCP()
+    out = ocp_obj.exec_oc_cmd(
+        command=f"label node {' '.join(node_list)} {label_key}-", out_yaml_format=False
+    )
+    logger.info(out)
