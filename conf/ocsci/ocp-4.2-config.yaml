@@ -1,0 +1,6 @@
+---
+# Use this config for installation of OCP 4.2 cluster
+RUN:
+  client_version: '4.2.0-0.nightly'
+DEPLOYMENT:
+  installer_version: "4.2.0-0.nightly"
