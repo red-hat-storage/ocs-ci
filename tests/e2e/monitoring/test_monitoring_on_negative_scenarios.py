@@ -264,15 +264,15 @@ class TestMonitoringBackedByOCS(E2ETest):
         ocp_obj = ocp.OCP(kind=constants.DEPLOYMENT, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
 
         params = '{"spec": {"replicas": 0}}'
-        name = osd_pod_list[0].get().get('metadata').get('name')
-        assert ocp_obj.patch(resource_name=name[:-16], params=params), (
-            f"Failed to change the replica count of osd {name} to 0"
+        resource_name = osd_pod_list[0].get().get('metadata').get('name').strip()[:-17]
+        assert ocp_obj.patch(resource_name=resource_name, params=params), (
+            f"Failed to change the replica count of osd {resource_name} to 0"
         )
 
         # Validate osd is down
         pod_obj = ocp.OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-        pod_obj.wait_for_delete(resource_name=name), (
-            f"Resources is not deleted {name}"
+        pod_obj.wait_for_delete(resource_name=resource_name), (
+            f"Resources is not deleted {resource_name}"
         )
 
         # Check for the created pvc metrics when osd is down
@@ -283,8 +283,8 @@ class TestMonitoringBackedByOCS(E2ETest):
 
         # Make osd up which was down
         params = '{"spec": {"replicas": 1}}'
-        assert ocp_obj.patch(resource_name=name[:-16], params=params), (
-            f"Failed to change the replica count of osd {name} to 1"
+        assert ocp_obj.patch(resource_name=resource_name, params=params), (
+            f"Failed to change the replica count of osd {resource_name} to 1"
         )
 
         # Validate osd is up and ceph health is ok
