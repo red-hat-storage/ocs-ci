@@ -153,9 +153,17 @@ def create_pod(
             pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
 
     if interface_type == constants.CEPHBLOCKPOOL and raw_block_pv:
-        pod_data['spec']['containers'][0]['volumeDevices'][0]['devicePath'] = raw_block_device
-        pod_data['spec']['containers'][0]['volumeDevices'][0]['name'] = pod_data.get('spec').get('volumes')[
-            0].get('name')
+        if pod_dict_path == constants.FEDORA_DC_YAML:
+            temp_dict = [
+                {'devicePath': raw_block_device, 'name': pod_data.get('spec').get(
+                    'template').get('spec').get('volumes')[0].get('name')}
+            ]
+            del pod_data['spec']['template']['spec']['containers'][0]['volumeMounts']
+            pod_data['spec']['template']['spec']['containers'][0]['volumeDevices'] = temp_dict
+        else:
+            pod_data['spec']['containers'][0]['volumeDevices'][0]['devicePath'] = raw_block_device
+            pod_data['spec']['containers'][0]['volumeDevices'][0]['name'] = pod_data.get('spec').get('volumes')[
+                0].get('name')
 
     if node_name:
         pod_data['spec']['nodeName'] = node_name
@@ -1318,7 +1326,9 @@ def create_multiple_pvc_parallel(
     return pvc_objs_list
 
 
-def create_pods_parallel(pvc_list, namespace, interface, raw_block_pv=False):
+def create_pods_parallel(
+    pvc_list, namespace, interface, pod_dict_path=None, sa_name=None, raw_block_pv=False, dc_deployment=False
+):
     """
     Function to create pods in parallel
 
@@ -1326,7 +1336,10 @@ def create_pods_parallel(pvc_list, namespace, interface, raw_block_pv=False):
         pvc_list (list): List of pvcs to be attached in pods
         namespace (str): The namespace for creating pod
         interface (str): The interface backed the PVC
+        pod_dict_path (str): pod_dict_path for yaml
+        sa_name (str): sa_name for providing permission
         raw_block_pv (bool): Either RAW block or not
+        dc_deployment (bool): Either DC deployment or not
 
     Returns:
         pod_objs (list): Returns list of pods created
@@ -1335,17 +1348,16 @@ def create_pods_parallel(pvc_list, namespace, interface, raw_block_pv=False):
     # Added 300 sec wait time since in scale test once the setup has more
     # PODs time taken for the pod to be up will be based on resource available
     wait_time = 300
-    if raw_block_pv:
+    if raw_block_pv and not pod_dict_path:
         pod_dict_path = constants.CSI_RBD_RAW_BLOCK_POD_YAML
-    else:
-        pod_dict_path = None
     with ThreadPoolExecutor() as executor:
         for pvc_obj in pvc_list:
             future_pod_objs.append(executor.submit(
                 create_pod, interface_type=interface,
                 pvc_name=pvc_obj.name, do_reload=False, namespace=namespace,
-                raw_block_pv=raw_block_pv, pod_dict_path=pod_dict_path)
-            )
+                raw_block_pv=raw_block_pv, pod_dict_path=pod_dict_path,
+                sa_name=sa_name, dc_deployment=dc_deployment
+            ))
     pod_objs = [pvc_obj.result() for pvc_obj in future_pod_objs]
     # Check for all the pods are in Running state
     # In above pod creation not waiting for the pod to be created because of threads usage
