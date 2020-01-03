@@ -5,8 +5,8 @@ import botocore
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1, tier2, tier3, noobaa_cli_required, acceptance,
-    filter_insecure_request_warning
+    tier1, tier3, noobaa_cli_required, acceptance,
+    performance, filter_insecure_request_warning
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
@@ -16,6 +16,7 @@ from tests.helpers import create_unique_resource_name
 from tests.manage.mcg import helpers
 
 logger = logging.getLogger(__name__)
+ERRATIC_TIMEOUTS_SKIP_REASON = 'Skipped because of erratic timeouts'
 
 
 @filter_insecure_request_warning
@@ -41,20 +42,32 @@ class TestBucketDeletion:
             ),
             pytest.param(
                 *[100, 'S3'],
-                marks=[tier2, pytest.mark.polarion_id("OCS-1865")]
+                marks=[
+                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    performance, pytest.mark.polarion_id("OCS-1865")
+                ]
             ),
             pytest.param(
                 *[100, 'OC'],
-                marks=[tier2, pytest.mark.polarion_id("OCS-1915")]
+                marks=[
+                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    performance, pytest.mark.polarion_id("OCS-1915")
+                ]
             ),
             pytest.param(
                 *[1000, 'S3'],
-                marks=[tier2, pytest.mark.polarion_id("OCS-1866")]
+                marks=[
+                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    performance, pytest.mark.polarion_id("OCS-1866")
+                ]
             ),
-            # pytest.param(
-            #     *[1000, 'OC'],
-            #     marks=[tier2, pytest.mark.polarion_id("OCS-1916")]
-            # ),
+            pytest.param(
+                *[1000, 'OC'],
+                marks=[
+                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    performance, pytest.mark.polarion_id("OCS-1916")
+                ]
+            ),
         ]
     )
     def test_bucket_delete(self, mcg_obj, bucket_factory, amount, interface):
