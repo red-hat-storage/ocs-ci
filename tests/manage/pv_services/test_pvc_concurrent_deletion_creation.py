@@ -118,15 +118,13 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
 
         # Verify PV using ceph toolbox. Image/Subvolume should be deleted.
         for pvc_name, uuid in pvc_uuid_map.items():
+            pool_name = None
             if interface == constants.CEPHBLOCKPOOL:
-                ret = verify_volume_deleted_in_backend(
-                    interface=interface, image_uuid=uuid,
-                    pool_name=storageclass.ceph_pool.name
-                )
-            if interface == constants.CEPHFILESYSTEM:
-                ret = verify_volume_deleted_in_backend(
-                    interface=interface, image_uuid=uuid
-                )
+                pool_name = storageclass.ceph_pool.name
+            ret = verify_volume_deleted_in_backend(
+                interface=interface, image_uuid=uuid,
+                pool_name=pool_name
+            )
             assert ret, (
                 f"Volume associated with PVC {pvc_name} still exists "
                 f"in backend"
