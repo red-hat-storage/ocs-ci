@@ -2,14 +2,14 @@ import logging
 import pytest
 import random
 from ocs_ci.framework.testlib import (
-    tier4, ManageTest, aws_platform_required, ignore_leftovers)
+    tier4, ManageTest, aws_platform_required,
+    ipi_deployment_required, ignore_leftovers)
 from ocs_ci.ocs import machine
 from ocs_ci.ocs import constants
-from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources import pod
-from tests.helpers import get_worker_nodes
 from tests.helpers import wait_for_resource_state
 from tests.sanity_helpers import Sanity
+from ocs_ci.ocs.node import add_new_node_and_label_it
 
 
 log = logging.getLogger(__name__)
@@ -18,7 +18,8 @@ log = logging.getLogger(__name__)
 @tier4
 @ignore_leftovers
 @aws_platform_required
-class Testknip678(ManageTest):
+@ipi_deployment_required
+class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     """
     Knip-678 Automated recovery from failed nodes
     """
@@ -30,7 +31,9 @@ class Testknip678(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
-    def test_knip678_proactive(self, pvc_factory, pod_factory):
+    def test_automated_recovery_from_failed_nodes_IPI_proactive(
+            self, pvc_factory, pod_factory
+    ):
         """
         Knip-678 Automated recovery from failed nodes
         Proactive case - IPI
@@ -49,46 +52,17 @@ class Testknip678(ManageTest):
         log.info(f"{osd_node_name} associated machine is {machine_name}")
 
         # Get the machineset name using machine name
-        machineset_name = machine.get_machineset_from_machine_name(machine_name)
-        log.info(f"{osd_node_name} associated machineset is {machineset_name}")
-
-        # Get the initial nodes list
-        initial_nodes = get_worker_nodes()
-        log.info(f"Initial current available nodes are {initial_nodes}")
-
-        # get machineset replica count
-        machineset_replica_count = machine.get_replica_count(machineset_name)
-        log.info(
-            f"{machineset_name} has replica count: {machineset_replica_count}"
-        )
-
-        # Increase its replica count
-        machine.add_node(machineset_name, count=machineset_replica_count + 1)
-        log.info(
-            f"Increased {machineset_name} count "
-            f"by {machineset_replica_count + 1}"
-        )
-
-        # wait for the new node to come to ready state
-        log.info("Waiting for the new node to be in ready state")
-        machine.wait_for_new_node_to_be_ready(machineset_name)
-
-        # Get the node name of new spun node
-        nodes_after_new_spun_node = get_worker_nodes()
-        new_spun_node = list(
-            set(nodes_after_new_spun_node) - set(initial_nodes)
-        )
-        log.info(f"New spun node is {new_spun_node}")
-
-        # Label it
-        node_obj = ocp.OCP(kind='node')
-        node_obj.add_label(
-            resource_name=new_spun_node[0],
-            label=constants.OPERATOR_NODE_LABEL
+        machineset_name = machine.get_machineset_from_machine_name(
+            machine_name
         )
         log.info(
-            f"Successfully labeled {new_spun_node} with OCS storage label"
+            f"{osd_node_name} associated machineset is {machineset_name}"
         )
+
+        # Add a new node and label it
+        assert add_new_node_and_label_it(
+            machineset_name
+        ), "Failed adding new node.. Check logs"
 
         # Delete the machine
         machine.delete_machine(machine_name)
@@ -98,7 +72,7 @@ class Testknip678(ManageTest):
         all_pod_obj = pod.get_all_pods()
         for pod_obj in all_pod_obj:
             wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=180
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=200
             )
 
         # Check basic cluster functionality by creating resources

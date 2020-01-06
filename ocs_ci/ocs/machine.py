@@ -3,8 +3,8 @@ import logging
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, defaults
+from tests.helpers import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
-import time
 
 log = logging.getLogger(__name__)
 
@@ -156,14 +156,15 @@ def get_machine_from_machineset(machine_set):
         if machine.get().get(
                 'metadata'
         ).get('name')[:-6] == machine_set:
-            return machine_set_list.append(
+            machine_set_list.append(
                 machine.get().get('metadata').get('name')
             )
+    return machine_set_list
 
 
 def get_machine_from_node_name(node_name):
     """
-    Get the associated machine name for the give node name
+    Get the associated machine name for the given node name
 
     Args:
         node_name (str): Name of the node
@@ -211,6 +212,25 @@ def get_replica_count(machine_set):
     return machinesets_obj.get(resource_name=machine_set).get('spec').get('replicas')
 
 
+def get_ready_replica_count(machine_set):
+    """
+    Get replica count which are in ready state in a machine set
+
+    Args:
+        machine_set (str): Machineset name
+
+    Returns:
+        ready_replica (int): replica count which are in ready state
+    """
+    machinesets_obj = OCP(
+        kind=constants.MACHINESETS,
+        namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+    )
+    return machinesets_obj.get(
+        resource_name=machine_set
+    ).get('status').get('readyReplicas')
+
+
 def add_node(machine_set, count):
     """
     Add new node to the cluster
@@ -229,27 +249,24 @@ def add_node(machine_set, count):
 
 def wait_for_new_node_to_be_ready(machine_set):
     """
-     Wait for the new node to be in ready state
+    Wait for the new node to reach ready state
 
-     Args:
-         machine_set (str): Name of the machine set
+    Args:
+        machine_set (str): Name of the machine set
 
     Raises:
-        CommandFailed: In case the new spun machine fails to come
-     """
-    count = 0
+        TimeoutExpiredError: In case the new spun machine fails to come
+    """
     replica_count = get_replica_count(machine_set)
     try:
-        time.sleep(300)
-        for machine in get_machines():
-            if re.match(machine.name[:-6], machine_set):
-                count = count + 1
-        if count == replica_count:
-            log.info("New spun node in Ready state")
+        for timer in TimeoutSampler(
+                300, 100, get_ready_replica_count, machine_set=machine_set
+        ):
+            if replica_count == timer:
+                log.info("New spun node reached Ready state")
+                break
     except TimeoutExpiredError:
-        log.error(
-            "Timed out waiting for the new spun machine to be in Ready state"
-        )
+        log.error("New spun node failed to reach ready state")
 
 
 def add_capacity(count, storagecluster_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):

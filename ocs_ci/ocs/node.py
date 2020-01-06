@@ -7,6 +7,10 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs import machine
+from tests.helpers import get_worker_nodes
+from ocs_ci.ocs import ocp
+
 
 log = logging.getLogger(__name__)
 
@@ -219,3 +223,41 @@ def get_node_ips(node_type='worker'):
         ]
     else:
         raise NotImplementedError
+
+
+def add_new_node_and_label_it(machineset_name):
+
+    # Get the initial nodes list
+    initial_nodes = get_worker_nodes()
+    log.info(f"Current available worker nodes are {initial_nodes}")
+
+    # get machineset replica count
+    machineset_replica_count = machine.get_replica_count(machineset_name)
+
+    # Increase its replica count
+    machine.add_node(machineset_name, count=machineset_replica_count + 1)
+    log.info(
+        f"Increased {machineset_name} count "
+        f"by {machineset_replica_count + 1}"
+    )
+
+    # wait for the new node to come to ready state
+    log.info("Waiting for the new node to be in ready state")
+    machine.wait_for_new_node_to_be_ready(machineset_name)
+
+    # Get the node name of new spun node
+    nodes_after_new_spun_node = get_worker_nodes()
+    new_spun_node = list(
+        set(nodes_after_new_spun_node) - set(initial_nodes)
+    )
+    log.info(f"New spun node is {new_spun_node}")
+
+    # Label it
+    node_obj = ocp.OCP(kind='node')
+    node_obj.add_label(
+        resource_name=new_spun_node[0],
+        label=constants.OPERATOR_NODE_LABEL
+    )
+    log.info(
+        f"Successfully labeled {new_spun_node} with OCS storage label"
+    )
