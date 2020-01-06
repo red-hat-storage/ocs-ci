@@ -60,9 +60,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         )
 
         # Add a new node and label it
-        assert add_new_node_and_label_it(
-            machineset_name
-        ), "Failed adding new node.. Check logs"
+        add_new_node_and_label_it(machineset_name)
 
         # Delete the machine
         machine.delete_machine(machine_name)

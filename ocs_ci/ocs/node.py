@@ -226,7 +226,13 @@ def get_node_ips(node_type='worker'):
 
 
 def add_new_node_and_label_it(machineset_name):
+    """
+    Add a new node and label it
 
+    Args:
+        machineset_name (str): Name of the machine set
+
+    """
     # Get the initial nodes list
     initial_nodes = get_worker_nodes()
     log.info(f"Current available worker nodes are {initial_nodes}")
