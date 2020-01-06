@@ -118,6 +118,9 @@ class TestBucketIO(ManageTest):
         for obj in public_s3.list_objects(
                 Bucket=public_bucket,
                 Prefix=obj_key).get('Contents'):
+            # Skip the extra file in large file type
+            if file_type == 'large' and obj["Key"] != obj_key:
+                continue
             logger.info(f'Downloading {obj["Key"]} from AWS bucket '
                         f'{public_bucket}')
             command = f'wget -P {data_dir} '
