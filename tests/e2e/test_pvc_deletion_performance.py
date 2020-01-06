@@ -68,11 +68,12 @@ class TestPVCDeletionPerformance(E2ETest):
         helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
         pvc_obj.reload()
         pv_name = pvc_obj.backed_pv
+        pvc_reclaim_policy = pvc_obj.reclaim_policy
         teardown_factory(pvc_obj)
         pvc_obj.delete()
         logging.info('Start deletion of PVC')
         pvc_obj.ocp.wait_for_delete(pvc_obj.name)
-        if pvc_obj.reclaim_policy == constants.RECLAIM_POLICY_DELETE:
+        if pvc_reclaim_policy == constants.RECLAIM_POLICY_DELETE:
             helpers.validate_pv_delete(pvc_obj.backed_pv)
         delete_time = helpers.measure_pvc_deletion_time(
             self.interface, pv_name
