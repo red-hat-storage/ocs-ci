@@ -3,8 +3,6 @@
 # by:
 #
 # * --ocsci-conf file.yaml parameter.
-# * --cluster-conf cluster.yaml parameter - this will be rendered under
-#   ENV_DATA section
 #
 # Each section in this file will be available as an attribute of the
 # framework.config object.
@@ -78,8 +76,7 @@ REPORTING:
   ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
   gather_on_deploy_failure: true
 
-# This is the default information about environment. Will be overwritten with
-# --cluster-conf file.yaml data you will pass to the pytest.
+# This is the default information about environment.
 ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
   storage_cluster_name: 'ocs-storagecluster'

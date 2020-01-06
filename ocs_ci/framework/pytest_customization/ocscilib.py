@@ -48,11 +48,6 @@ def pytest_addoption(parser):
         help="Path to config file of OCS CI",
     )
     parser.addoption(
-        '--cluster-conf',
-        dest='cluster_conf',
-        help="Path to cluster configuration yaml file",
-    )
-    parser.addoption(
         '--cluster-path',
         dest='cluster_path',
         help="Path to cluster directory",

@@ -1,6 +1,4 @@
 ---
 ENV_DATA:
-  # for testing of OCS telemetry integration with stage instance of telemeter
-  # use via `--cluster-conf conf/ocsci/stage_telemeter.yaml`
   monitoring_enabled: true
   telemeter_server_url: 'https://infogw.api.stage.openshift.com'

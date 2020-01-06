@@ -22,7 +22,6 @@ class TestEntrypoint(object):
             stderr=subprocess.STDOUT,
         ).decode()
         assert '--ocsci-conf' in result
-        assert '--cluster-conf' in result
         assert '--cluster-path' in result
         assert '--cluster-name' in result
 
@@ -42,7 +41,6 @@ class TestEntrypoint(object):
         ).dirname
         main.main([
             '--ocsci-conf', os.path.join(tempdir, 'ocsci_conf.yaml'),
-            '--cluster-conf', os.path.join(tempdir, 'cluster_conf.yaml'),
         ])
         assert config_update.call_args_list == [
             mock.call(dict(RUN=None)),
