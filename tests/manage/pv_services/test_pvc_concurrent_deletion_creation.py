@@ -121,7 +121,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
             if interface == constants.CEPHBLOCKPOOL:
                 ret = verify_volume_deleted_in_backend(
                     interface=interface, image_uuid=uuid,
-                    pool_name=self.sc_obj.ceph_pool.name
+                    pool_name=storageclass.ceph_pool.name
                 )
             if interface == constants.CEPHFILESYSTEM:
                 ret = verify_volume_deleted_in_backend(
