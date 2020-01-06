@@ -47,7 +47,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         if interface == constants.CEPHFILESYSTEM:
             self.access_modes.append(constants.ACCESS_MODE_RWX)
         self.pvc_objs = multi_pvc_factory(
-            interface=constants.CEPHBLOCKPOOL,
+            interface=interface,
             project=None,
             storageclass=None,
             size=self.pvc_size,
@@ -88,7 +88,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         # Create 100 PVCs
         log.info('Start creating new PVCs')
         self.new_pvc_objs = multi_pvc_factory(
-            interface=constants.CEPHBLOCKPOOL,
+            interface=interface,
             project=proj_obj,
             storageclass=storageclass,
             size=self.pvc_size,
