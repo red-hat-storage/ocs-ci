@@ -10,6 +10,7 @@ from botocore.client import ClientError
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.constants import BS_AUTH_FAILED, BS_OPTIMAL
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
@@ -472,45 +473,53 @@ class MCG(object):
         tiers['placement'] = placement
         return create_resource(**bc_data)
 
-    def toggle_aws_bucket_readwrite(self, bucketname, block=True):
+    def toggle_aws_bucket_readwrite(self, bucketnames, block=True, wait=True):
         """
         Toggles a bucket's IO using a bucket policy
 
         Args:
-            bucketname: The name of the bucket that should be manipulated
+            bucketnames: A list of bucket names that should be manipulated
             block: Whether to block RW or un-block. True | False
+            wait: Whether to wait for the policy change to take effect or not
 
         """
-        if block:
-            bucket_policy = {
-                "Version": "2012-10-17",
-                "Id": "DenyReadWrite",
-                "Statement": [
-                    {
-                        "Effect": "Deny",
-                        "Principal": {
-                            "AWS": "*"
-                        },
-                        "Action": [
-                            "s3:GetObject",
-                            "s3:PutObject",
-                            "s3:ListBucket"
-                        ],
-                        "Resource": [
-                            f"arn:aws:s3:::{bucketname}/*",
-                            f"arn:aws:s3:::{bucketname}"
-                        ]
-                    }
-                ]
-            }
-            bucket_policy = json.dumps(bucket_policy)
-            self.aws_s3_resource.meta.client.put_bucket_policy(
-                Bucket=bucketname, Policy=bucket_policy
-            )
-        else:
-            self.aws_s3_resource.meta.client.delete_bucket_policy(
-                Bucket=bucketname
-            )
+        for bucketname in bucketnames:
+            if block:
+                bucket_policy = {
+                    "Version": "2012-10-17",
+                    "Id": "DenyReadWrite",
+                    "Statement": [
+                        {
+                            "Effect": "Deny",
+                            "Principal": {
+                                "AWS": "*"
+                            },
+                            "Action": [
+                                "s3:GetObject",
+                                "s3:PutObject",
+                                "s3:ListBucket"
+                            ],
+                            "Resource": [
+                                f"arn:aws:s3:::{bucketname}/*",
+                                f"arn:aws:s3:::{bucketname}"
+                            ]
+                        }
+                    ]
+                }
+                bucket_policy = json.dumps(bucket_policy)
+                self.aws_s3_resource.meta.client.put_bucket_policy(
+                    Bucket=bucketname, Policy=bucket_policy
+                )
+            else:
+                self.aws_s3_resource.meta.client.delete_bucket_policy(
+                    Bucket=bucketname
+                )
+        if wait:
+            for bucketname in bucketnames:
+                if block:
+                    self.check_backingstore_state('backing-store-' + bucketname, BS_AUTH_FAILED)
+                else:
+                    self.check_backingstore_state('backing-store-' + bucketname, BS_OPTIMAL)
 
     def check_if_mirroring_is_done(self, bucket_name):
         """
@@ -544,7 +553,7 @@ class MCG(object):
                         mirror_blocks[i].get('block_md').get('node')
                         for i in range(len(mirror_blocks))
                     ]
-                    if 2 <= len(mirror_blocks) == len(set(mirror_nodes)):
+                    if 3 == len(mirror_blocks) == len(set(mirror_nodes)):
                         results.append(True)
                     else:
                         results.append(False)
