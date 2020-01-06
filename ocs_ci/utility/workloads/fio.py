@@ -12,11 +12,18 @@ Note: The above mentioned functions will be invoked from Workload.setup()
 and Workload.run() methods along with user provided parameters.
 """
 import logging
+from time import sleep
+
+from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.workloads.helpers import find_distro, DISTROS
 
 log = logging.getLogger(__name__)
 
 
+# Adding retry here to make this more stable for dpkg lock issues and network
+# issues when installing some packages.
+@retry(CommandFailed, tries=10, delay=10, backoff=1)
 def setup(**kwargs):
     """
     setup fio workload
@@ -38,6 +45,10 @@ def setup(**kwargs):
     if distro == 'Debian':
         cmd = f'{pkg_mgr} update'
         io_pod.exec_cmd_on_pod(cmd, out_yaml_format=False)
+        log.info(
+            "Sleep 5 seconds after update to make sure the lock is released"
+        )
+        sleep(5)
 
     cmd = f"{pkg_mgr} -y install fio"
     return io_pod.exec_cmd_on_pod(cmd, out_yaml_format=False)
