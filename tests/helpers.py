@@ -118,6 +118,7 @@ def create_pod(
         replica_count (int): Replica count for deployment config
         pod_name (str): Name of the pod to create
         node_selector (dict): dict of key-value pair to be used for nodeSelector field
+            eg: {'nodetype': 'app-pod'}
 
     Returns:
         Pod: A Pod instance
