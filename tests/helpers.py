@@ -1165,9 +1165,13 @@ def delete_deploymentconfig(pod_obj):
     Args:
          pod_obj (object): Pod object
     """
-    dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG)
-    dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
-    dc_ocp_obj.wait_for_delete(resource_name=pod_obj.get_labels().get('name'))
+    dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG, namespace=pod_obj.namespace)
+    pod_data_list = dc_ocp_obj.get()['items']
+    if pod_data_list:
+        for pod_data in pod_data_list:
+            if pod_obj.get_labels().get('name') == pod_data.get('metadata').get('name'):
+                dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
+                dc_ocp_obj.wait_for_delete(resource_name=pod_obj.get_labels().get('name'))
 
 
 def craft_s3_command(mcg_obj, cmd):
