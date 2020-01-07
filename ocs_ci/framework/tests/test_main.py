@@ -37,14 +37,12 @@ class TestEntrypoint(object):
         tempdir = testdir.makefile(
             '.yaml',
             ocsci_conf='RUN: null',
-            cluster_conf='DEPLOYMENT: null',
         ).dirname
         main.main([
             '--ocsci-conf', os.path.join(tempdir, 'ocsci_conf.yaml'),
         ])
         assert config_update.call_args_list == [
             mock.call(dict(RUN=None)),
-            mock.call(dict(DEPLOYMENT=None)),
         ]
 
     @mock.patch('ocs_ci.framework.main.pytest.main')
