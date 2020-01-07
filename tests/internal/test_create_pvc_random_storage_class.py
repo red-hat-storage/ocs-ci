@@ -6,10 +6,9 @@ import random
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import ManageTest, tier2
+from ocs_ci.framework.testlib import ManageTest
 
 
-@tier2
 @pytest.mark.polarion_id("OCS-288")
 class TestCreatePVCRandomStorageClass(ManageTest):
     """
