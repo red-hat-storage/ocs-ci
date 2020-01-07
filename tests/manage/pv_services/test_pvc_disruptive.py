@@ -176,15 +176,13 @@ class TestPVCDisruption(ManageTest):
     Base class for PVC related disruption tests
     """
     @pytest.fixture(autouse=True)
-    def setup(self, interface, storageclass_factory, project_factory):
+    def setup(self, project_factory):
         """
-        Create StorageClass and Project for the test
+        Create Project for the test
 
         Returns:
-            OCS: An OCS instance of the storage class
             OCP: An OCP instance of project
         """
-        self.sc_obj = storageclass_factory(interface=interface)
         self.proj_obj = project_factory()
 
     def test_pvc_disruptive(
@@ -243,7 +241,7 @@ class TestPVCDisruption(ManageTest):
         # Start creation of PVCs
         bulk_pvc_create = executor.submit(
             multi_pvc_factory, interface=interface,
-            project=self.proj_obj, storageclass=self.sc_obj, size=5,
+            project=self.proj_obj, size=5,
             access_modes=access_modes,
             access_modes_selection='distribute_random',
             status=constants.STATUS_BOUND, num_of_pvc=num_of_pvc,
