@@ -4,7 +4,8 @@ import boto3
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    filter_insecure_request_warning)
+    filter_insecure_request_warning
+)
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2, tier3
 from ocs_ci.ocs import constants
 from tests.manage.mcg import helpers
@@ -21,7 +22,8 @@ class TestBucketIntegrity(ManageTest):
     Test data integrity of a bucket
     """
     @pytest.mark.filterwarnings(
-        'ignore::urllib3.exceptions.InsecureRequestWarning')
+        'ignore::urllib3.exceptions.InsecureRequestWarning'
+    )
     @pytest.mark.polarion_id("OCS-1321")
     @tier1
     def test_check_object_integrity(self, mcg_obj, awscli_pod, bucket_factory):
@@ -35,16 +37,19 @@ class TestBucketIntegrity(ManageTest):
         # Retrieve a list of all objects on the test-objects bucket and
         # downloads them to the pod
         full_object_path = f"s3://{bucketname}"
-        downloaded_files = helpers.retrieve_test_objects_to_pod(awscli_pod,
-                                                                original_dir)
+        downloaded_files = helpers.retrieve_test_objects_to_pod(
+            awscli_pod, original_dir
+        )
         # Write all downloaded objects to the new bucket
-        helpers.sync_object_directory(awscli_pod, original_dir,
-                                      full_object_path, mcg_obj)
+        helpers.sync_object_directory(
+            awscli_pod, original_dir, full_object_path, mcg_obj
+        )
 
         # Retrieve all objects from MCG bucket to result dir in Pod
         logger.info(f'Downloading all objects from MCG bucket to awscli pod')
-        helpers.sync_object_directory(awscli_pod, full_object_path,
-                                      result_dir, mcg_obj)
+        helpers.sync_object_directory(
+            awscli_pod, full_object_path, result_dir, mcg_obj
+        )
 
         # Checksum is compared between original and result object
         for obj in downloaded_files:
@@ -78,8 +83,9 @@ class TestBucketIntegrity(ManageTest):
             ),
         ]
     )
-    def test_check_multi_object_integrity(self, mcg_obj, awscli_pod,
-                                          bucket_factory, amount, file_type):
+    def test_check_multi_object_integrity(
+        self, mcg_obj, awscli_pod, bucket_factory, amount, file_type
+    ):
         """
         Test write multiple files to bucket and check integrity
         """
@@ -102,13 +108,15 @@ class TestBucketIntegrity(ManageTest):
         # Use obj_key as prefix to download multiple files for large_small
         # case, it also works with single file
         for obj in public_s3.list_objects(
-                Bucket=public_bucket,
-                Prefix=obj_key).get('Contents'):
+            Bucket=public_bucket,
+            Prefix=obj_key
+        ).get('Contents'):
             # Skip the extra file in large file type
             if file_type == 'large' and obj["Key"] != obj_key:
                 continue
-            logger.info(f'Downloading {obj["Key"]} from AWS bucket '
-                        f'{public_bucket}')
+            logger.info(
+                f'Downloading {obj["Key"]} from AWS bucket {public_bucket}'
+            )
             command = f'wget -P {original_dir} '
             command += f'https://{public_bucket}.s3.amazonaws.com/{obj["Key"]}'
             awscli_pod.exec_cmd_on_pod(command=command)
@@ -119,13 +127,15 @@ class TestBucketIntegrity(ManageTest):
         base_path = f"s3://{bucketname}"
         for i in range(amount):
             full_object_path = base_path + f"/{i}/"
-            helpers.sync_object_directory(awscli_pod, original_dir,
-                                          full_object_path, mcg_obj)
+            helpers.sync_object_directory(
+                awscli_pod, original_dir, full_object_path, mcg_obj
+            )
 
             # Retrieve all objects from MCG bucket to result dir in Pod
             logger.info(f'Downloading objects from MCG bucket to awscli pod')
-            helpers.sync_object_directory(awscli_pod, full_object_path,
-                                          result_dir, mcg_obj)
+            helpers.sync_object_directory(
+                awscli_pod, full_object_path, result_dir, mcg_obj
+            )
 
             # Checksum is compared between original and result object
             for obj in download_files:
@@ -133,13 +143,16 @@ class TestBucketIntegrity(ManageTest):
                     original_object_path=f'{original_dir}/{obj}',
                     result_object_path=f'{result_dir}/{obj}',
                     awscli_pod=awscli_pod
-                ), ('Checksum comparision between original and result object '
-                    'failed')
+                ), (
+                    'Checksum comparision between original and result object '
+                    'failed'
+                )
 
     @pytest.mark.polarion_id("OCS-1945")
     @tier2
-    def test_empty_file_integrity(self, mcg_obj, awscli_pod,
-                                  bucket_factory):
+    def test_empty_file_integrity(
+        self, mcg_obj, awscli_pod, bucket_factory
+    ):
         """
         Test write empty files to bucket and check integrity
         """
@@ -156,13 +169,15 @@ class TestBucketIntegrity(ManageTest):
             sh='sh'
         )
         # Write all empty objects to the new bucket
-        helpers.sync_object_directory(awscli_pod, original_dir,
-                                      full_object_path, mcg_obj)
+        helpers.sync_object_directory(
+            awscli_pod, original_dir, full_object_path, mcg_obj
+        )
 
         # Retrieve all objects from MCG bucket to result dir in Pod
         logger.info(f'Downloading objects from MCG bucket to awscli pod')
-        helpers.sync_object_directory(awscli_pod, full_object_path,
-                                      result_dir, mcg_obj)
+        helpers.sync_object_directory(
+            awscli_pod, full_object_path, result_dir, mcg_obj
+        )
 
         # Checksum is compared between original and result object
         for obj in ('test' + str(i + 1) for i in range(1000)):

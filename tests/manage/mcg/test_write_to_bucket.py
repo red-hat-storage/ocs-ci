@@ -4,9 +4,11 @@ import boto3
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    filter_insecure_request_warning)
+    filter_insecure_request_warning
+)
 from ocs_ci.framework.testlib import (
-    ManageTest, tier1, tier2, tier3, acceptance)
+    ManageTest, tier1, tier2, tier3, acceptance
+)
 from ocs_ci.ocs import constants
 from tests.manage.mcg import helpers
 
@@ -33,11 +35,13 @@ class TestBucketIO(ManageTest):
         data_dir = '/data'
         bucketname = bucket_factory(1)[0].name
         full_object_path = f"s3://{bucketname}"
-        downloaded_files = helpers.retrieve_test_objects_to_pod(awscli_pod,
-                                                                data_dir)
+        downloaded_files = helpers.retrieve_test_objects_to_pod(
+            awscli_pod, data_dir
+        )
         # Write all downloaded objects to the new bucket
-        helpers.sync_object_directory(awscli_pod, data_dir,
-                                      full_object_path, mcg_obj)
+        helpers.sync_object_directory(
+            awscli_pod, data_dir, full_object_path, mcg_obj
+        )
 
         assert set(
             downloaded_files
@@ -62,11 +66,13 @@ class TestBucketIO(ManageTest):
         for bucket in bucket_factory(5):
             bucketname = bucket.name
             full_object_path = f"s3://{bucketname}"
-            helpers.sync_object_directory(awscli_pod, download_dir,
-                                          full_object_path, mcg_obj)
+            helpers.sync_object_directory(
+                awscli_pod, download_dir, full_object_path, mcg_obj
+            )
 
         assert mcg_obj.check_data_reduction(bucketname), (
-            'Data reduction did not work as anticipated.')
+            'Data reduction did not work as anticipated.'
+        )
 
     @pytest.mark.parametrize(
         argnames="amount,file_type",
@@ -93,8 +99,9 @@ class TestBucketIO(ManageTest):
             ),
         ]
     )
-    def test_write_multi_files_to_bucket(self, mcg_obj, awscli_pod,
-                                         bucket_factory, amount, file_type):
+    def test_write_multi_files_to_bucket(
+        self, mcg_obj, awscli_pod, bucket_factory, amount, file_type
+    ):
         """
         Test write multiple files to bucket
         """
@@ -116,13 +123,15 @@ class TestBucketIO(ManageTest):
         # Use obj_key as prefix to download multiple files for large_small
         # case, it also works with single file
         for obj in public_s3.list_objects(
-                Bucket=public_bucket,
-                Prefix=obj_key).get('Contents'):
+            Bucket=public_bucket,
+            Prefix=obj_key
+        ).get('Contents'):
             # Skip the extra file in large file type
             if file_type == 'large' and obj["Key"] != obj_key:
                 continue
-            logger.info(f'Downloading {obj["Key"]} from AWS bucket '
-                        f'{public_bucket}')
+            logger.info(
+                f'Downloading {obj["Key"]} from AWS bucket {public_bucket}'
+            )
             command = f'wget -P {data_dir} '
             command += f'https://{public_bucket}.s3.amazonaws.com/{obj["Key"]}'
             awscli_pod.exec_cmd_on_pod(command=command)
@@ -132,16 +141,20 @@ class TestBucketIO(ManageTest):
         base_path = f"s3://{bucketname}"
         for i in range(amount):
             full_object_path = base_path + f"/{i}/" + obj_key.split('/')[-1]
-            helpers.sync_object_directory(awscli_pod, data_dir,
-                                          full_object_path, mcg_obj)
+            helpers.sync_object_directory(
+                awscli_pod, data_dir, full_object_path, mcg_obj
+            )
 
-        obj_list = list(obj.key.split('/')[-1] for obj in
-                        mcg_obj.s3_list_all_objects_in_bucket(bucketname))
+        obj_list = list(
+            obj.key.split('/')[-1] for obj in
+            mcg_obj.s3_list_all_objects_in_bucket(bucketname)
+        )
 
         # Check total copy files amount match
         if file_type == 'large_small':
-            assert len(obj_list) == 2 * amount, ("Total file amount does not "
-                                                 "match")
+            assert len(obj_list) == 2 * amount, (
+                "Total file amount does not match"
+            )
         else:
             assert len(obj_list) == amount, "Total file amount does not match"
 
@@ -151,8 +164,9 @@ class TestBucketIO(ManageTest):
 
     @pytest.mark.polarion_id("OCS-1945")
     @tier2
-    def test_write_empty_file_to_bucket(self, mcg_obj, awscli_pod,
-                                        bucket_factory):
+    def test_write_empty_file_to_bucket(
+        self, mcg_obj, awscli_pod, bucket_factory
+    ):
         """
         Test write empty files to bucket
         """
@@ -168,10 +182,13 @@ class TestBucketIO(ManageTest):
             sh='sh'
         )
         # Write all empty objects to the new bucket
-        helpers.sync_object_directory(awscli_pod, data_dir,
-                                      full_object_path, mcg_obj)
+        helpers.sync_object_directory(
+            awscli_pod, data_dir, full_object_path, mcg_obj
+        )
 
-        obj_set = set(obj.key for obj in
-                      mcg_obj.s3_list_all_objects_in_bucket(bucketname))
+        obj_set = set(
+            obj.key for obj in
+            mcg_obj.s3_list_all_objects_in_bucket(bucketname)
+        )
         test_set = set('test' + str(i + 1) for i in range(1000))
         assert test_set == obj_set, "File name set does not match"
