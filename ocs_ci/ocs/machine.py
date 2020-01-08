@@ -266,7 +266,10 @@ def wait_for_new_node_to_be_ready(machine_set):
                 log.info("New spun node reached Ready state")
                 break
     except TimeoutExpiredError:
-        log.error("New spun node failed to reach ready state")
+        log.error(
+            "New spun node failed to reach ready state OR"
+                  "Replica count didn't match ready replica count"
+        )
 
 
 def add_capacity(count, storagecluster_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):

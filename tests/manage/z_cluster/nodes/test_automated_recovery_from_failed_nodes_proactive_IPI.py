@@ -67,7 +67,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         log.info(f"Successfully deleted machine {machine_name}")
 
         # Check the pods should be in running state
-        all_pod_obj = pod.get_all_pods()
+        all_pod_obj = pod.get_all_pods(wait=True)
         for pod_obj in all_pod_obj:
             wait_for_resource_state(
                 resource=pod_obj, state=constants.STATUS_RUNNING, timeout=200
