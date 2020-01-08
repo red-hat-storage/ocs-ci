@@ -371,12 +371,10 @@ def pvc_factory_class(
 @pytest.fixture(scope='session')
 def pvc_factory_session(
     request,
-    storageclass_factory_session,
     project_factory_session
 ):
     return pvc_factory_fixture(
         request,
-        storageclass_factory_session,
         project_factory_session
     )
 
