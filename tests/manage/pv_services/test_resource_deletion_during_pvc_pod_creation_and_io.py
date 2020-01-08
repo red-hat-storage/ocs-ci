@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import ManageTest, tier4
+from ocs_ci.framework.testlib import ManageTest, tier4, tier4c
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods, get_mon_pods, get_mgr_pods, get_osd_pods, get_plugin_pods,
@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 
 
 @tier4
+@tier4c
 @pytest.mark.parametrize(
     argnames=['interface', 'resource_to_delete'],
     argvalues=[

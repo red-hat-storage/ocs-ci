@@ -4,7 +4,8 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     tier1, aws_platform_required,
-    filter_insecure_request_warning, tier4)
+    filter_insecure_request_warning, tier4, tier4a
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_AUTH_FAILED, BS_OPTIMAL
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -62,6 +63,7 @@ class TestMultiRegion:
         assert len(mirror_attached_pools) == 2, "Multiregion bucket did not have two backingstores attached"
 
     @tier4
+    @tier4a
     @pytest.mark.polarion_id("OCS-1784")
     def test_multiregion_mirror(self, mcg_obj, awscli_pod, multiregion_mirror_setup):
         """
