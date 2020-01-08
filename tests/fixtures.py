@@ -295,7 +295,7 @@ def create_dc_pods(request):
         """
         if hasattr(class_instance, 'dc_pod_objs'):
             for pod in class_instance.dc_pod_objs:
-                helpers.delete_deploymentconfig(pod_obj=pod)
+                helpers.delete_deploymentconfig_pods(pod_obj=pod)
 
     request.addfinalizer(finalizer)
 

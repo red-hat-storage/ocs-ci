@@ -1158,9 +1158,9 @@ def remove_scc_policy(sa_name, namespace):
     logger.info(out)
 
 
-def delete_deploymentconfig(pod_obj):
+def delete_deploymentconfig_pods(pod_obj):
     """
-    Delete deploymentconfig
+    Delete deploymentconfig pod
 
     Args:
          pod_obj (object): Pod object
