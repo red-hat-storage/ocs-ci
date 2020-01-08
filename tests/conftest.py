@@ -123,6 +123,10 @@ def log_ocs_version(cluster):
      * ocs_version file in cluster path directory (for copy pasting into bug
        reports)
     """
+    teardown = config.RUN['cli_params']['teardown']
+    if teardown:
+        log.info("Skipping version reporting for teardown.")
+        return
     cluster_version, image_dict = get_ocs_version()
     file_name = os.path.join(
         config.ENV_DATA['cluster_path'],
