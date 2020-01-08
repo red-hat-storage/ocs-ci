@@ -439,11 +439,13 @@ class CephCluster(object):
          Raises:
             UnexpectedBehaviour: If used size keeps varying in Ceph status
         """
+        logging.info(f"Before check of used space {self.used_space}")
         ct_pod = pod.get_ceph_tools_pod()
         rados_status = ct_pod.exec_ceph_cmd(ceph_cmd=f"rados df -p {cbp_name}")
         assert rados_status is not None
         used = rados_status['pools'][0]['size_bytes']
         used_in_gb = format(used / constants.GB, '.4f')
+        logging.info(f"Current used space {self.used_space}")
         if self.used_space and self.used_space == used_in_gb:
             return float(self.used_space)
         self.used_space = used_in_gb

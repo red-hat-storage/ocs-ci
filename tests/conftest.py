@@ -31,7 +31,7 @@ from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.node import get_typed_worker_nodes
-
+from tests.helpers import default_ceph_pool, default_secret
 
 log = logging.getLogger(__name__)
 
@@ -298,7 +298,8 @@ def storageclass_factory_fixture(
         secret=None,
         custom_data=None,
         sc_name=None,
-        reclaim_policy=constants.RECLAIM_POLICY_DELETE
+        reclaim_policy=constants.RECLAIM_POLICY_DELETE,
+        new_pool=False
     ):
         """
         Args:
@@ -310,6 +311,9 @@ def storageclass_factory_fixture(
                 by using these data. Parameters `block_pool` and `secret`
                 are not useds but references are set if provided.
             sc_name (str): Name of the storage class
+            reclaim_policy (str): 'delete' or 'retain'
+            new_pool (bool): Determines if to create a new Ceph pool or use
+                the default pool (based on interface)
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -318,8 +322,13 @@ def storageclass_factory_fixture(
         if custom_data:
             sc_obj = helpers.create_resource(**custom_data)
         else:
-            secret = secret or secret_factory(interface=interface)
-            ceph_pool = ceph_pool_factory(interface)
+            secret = secret or default_secret(interface_type=interface) or (
+                secret_factory(interface=interface)
+            )
+            if new_pool:
+                ceph_pool = ceph_pool_factory(interface)
+            else:
+                ceph_pool = default_ceph_pool(interface)
             if interface == constants.CEPHBLOCKPOOL:
                 interface_name = ceph_pool.name
             elif interface == constants.CEPHFILESYSTEM:
@@ -461,7 +470,8 @@ def pvc_factory_fixture(
         access_mode=constants.ACCESS_MODE_RWO,
         custom_data=None,
         status=constants.STATUS_BOUND,
-        volume_mode=None
+        volume_mode=None,
+        pvc_name=None
     ):
         """
         Args:
@@ -483,6 +493,7 @@ def pvc_factory_fixture(
                 desired state.
             volume_mode (str): Volume mode for PVC.
                 eg: volume_mode='Block' to create rbd `block` type volume
+            pvc_name (str): Name of the PVC
 
         Returns:
             object: helpers.create_pvc instance.
@@ -508,6 +519,12 @@ def pvc_factory_fixture(
                 )
                 active_cephfs_storageclass = storageclass
 
+                # Set volume_mode to 'Block' in case the iterface is RBD
+                # with access mode of RWX.
+            if access_mode == constants.ACCESS_MODE_RWX and (
+                interface == constants.CEPHBLOCKPOOL
+            ):
+                volume_mode = 'Block'
             pvc_size = f"{size}Gi" if size else None
 
             pvc_obj = helpers.create_pvc(
@@ -516,7 +533,8 @@ def pvc_factory_fixture(
                 size=pvc_size,
                 do_reload=False,
                 access_mode=access_mode,
-                volume_mode=volume_mode
+                volume_mode=volume_mode,
+                pvc_name=pvc_name
             )
             assert pvc_obj, "Failed to create PVC"
 

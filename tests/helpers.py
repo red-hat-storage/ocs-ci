@@ -12,6 +12,7 @@ import time
 import yaml
 import threading
 
+from ocs_ci.ocs.defaults import ROOK_CLUSTER_NAMESPACE
 from ocs_ci.ocs.ocp import OCP
 
 from uuid import uuid4
@@ -144,6 +145,17 @@ def create_pod(
         interface = constants.CEPHFS_INTERFACE
     if dc_deployment:
         pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
+    if pvc_name:
+        pvc_data = OCP(kind=constants.PVC, resource_name=pvc_name).data
+        pvc_obj = pvc.PVC(**pvc_data)
+        if pvc_obj.volume_mode == 'Block' and (
+            pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWX
+        ):
+            pod_dict = pod_dict_path if pod_dict_path else (
+                constants.CSI_RBD_RAW_BLOCK_POD_YAML
+            )
+            raw_block_pv = True
+            interface = constants.RBD_INTERFACE
     pod_data = templating.load_yaml(pod_dict)
     if not pod_name:
         pod_name = create_unique_resource_name(
@@ -357,9 +369,7 @@ def create_ceph_file_system(pool_name=None):
     return cfs_data
 
 
-def default_storage_class(
-    interface_type,
-):
+def default_storage_class(interface_type):
     """
     Return default storage class based on interface_type
 
@@ -383,6 +393,64 @@ def default_storage_class(
         )
     sc = OCS(**base_sc.data)
     return sc
+
+
+def default_ceph_pool(interface_type):
+    """
+    Return default ceph pool based on interface_type from 'openshift-storage
+    namespace
+
+    Args:
+        interface_type (str): The type of the interface
+            (e.g. CephBlockPool, CephFileSystem)
+
+    Returns:
+        OCS: Existing ceph pool Instance
+    """
+    if interface_type == constants.CEPHBLOCKPOOL:
+        base_pool = OCP(
+            kind='cephblockpool',
+            namespace=ROOK_CLUSTER_NAMESPACE,
+            resource_name=constants.DEFAULT_BLOCKPOOL
+        )
+    elif interface_type == constants.CEPHFILESYSTEM:
+        base_pool = OCP(
+            kind='cephfilesystem',
+            namespace=ROOK_CLUSTER_NAMESPACE,
+            resource_name=constants.DEFAULT_CEPHFILESYSTEM
+        )
+    pool_obj = OCS(**base_pool.data)
+    return pool_obj
+
+
+def default_secret(
+    interface_type,
+):
+    """
+    Return default secret based on interface_type from 'openshift-storage
+    namespace
+
+    Args:
+        interface_type (str): The type of the interface
+            (e.g. CephBlockPool, CephFileSystem)
+    Returns:
+        OCS: Existing Secret Instance
+    """
+
+    if interface_type == constants.CEPHBLOCKPOOL:
+        secret = OCP(
+            kind='secret',
+            namespace=ROOK_CLUSTER_NAMESPACE,
+            resource_name=constants.DEFAULT_RBD_SECRET
+        )
+    elif interface_type == constants.CEPHFILESYSTEM:
+        secret = OCP(
+            kind='secret',
+            namespace=ROOK_CLUSTER_NAMESPACE,
+            resource_name=constants.DEFAULT_CEPHFS_SECRET
+        )
+    secret_obj = OCS(**secret.data)
+    return secret_obj
 
 
 def create_storage_class(

@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources import pod as POD
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import run_cmd
 
@@ -56,6 +57,16 @@ class PVC(OCS):
             str: PV name
         """
         return self.data.get('spec').get('volumeName')
+
+    @property
+    def volume_mode(self):
+        """
+        Returns the backed PV volume mode
+
+        Returns:
+            str: Volume mode
+        """
+        return self.data.get('spec').get('volumeMode')
 
     @property
     def backed_pv_obj(self):
@@ -134,6 +145,40 @@ class PVC(OCS):
         if verify:
             return self.size == new_size
         return True
+
+    def change_reclaim_policy(self, new_reclaim_policy):
+        """
+        Change the backed PV reclaim policy
+
+        new_reclaim_policy (str): A new reclaim policy for the PVC
+
+        Returns:
+            Bool: True if succeeded, False otherwise
+
+        """
+        pv_obj = self.backed_pv_obj
+        patch_param = (
+            f'{{"spec":{{"persistentVolumeReclaimPolicy":'
+            f'"{new_reclaim_policy}"}}}}'
+        )
+        return pv_obj.ocp.patch(
+            resource_name=pv_obj.name, params=patch_param, type='strategic'
+        )
+
+    def get_attached_pods(self):
+        """
+        Get the pods attached to this PVC
+
+        Returns:
+             list: A list of pod objects attached to the PVC
+        """
+        attached_pods = []
+        all_pods = POD.get_all_pods()
+        for pod in all_pods:
+            pvc = POD.get_pvc_name(pod)
+            if pvc == self.name:
+                attached_pods.append(pod)
+        return attached_pods
 
 
 def delete_pvcs(pvc_objs, concurrent=False):

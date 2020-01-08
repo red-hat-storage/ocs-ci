@@ -129,10 +129,14 @@ OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
+DEFAULT_RBD_SECRET = "rook-csi-rbd-node"
+DEFAULT_CEPHFS_SECRET = "rook-csi-cephfs-node"
+
 DEFAULT_CLUSTERNAME = 'ocs-storagecluster'
 DEFAULT_BLOCKPOOL = f'{DEFAULT_CLUSTERNAME}-cephblockpool'
 METADATA_POOL = f'{DEFAULT_CLUSTERNAME}-cephfilesystem-metadata'
 DATA_POOL = f'{DEFAULT_CLUSTERNAME}-cephfilesystem-data0'
+DEFAULT_CEPHFILESYSTEM = f"{DEFAULT_CLUSTERNAME}-cephfilesystem"
 DEFAULT_ROUTE_CRT = "router-certs-default"
 DEFAULT_NAMESPACE = "default"
 IMAGE_REGISTRY_RESOURCE_NAME = "cluster"

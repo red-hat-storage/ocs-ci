@@ -21,6 +21,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed, NonUpgradedImagesFoundError
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd, check_timeout_reached
 from ocs_ci.utility.utils import check_if_executable_in_path
@@ -978,6 +979,22 @@ def get_pvc_name(pod_obj):
     return pod_obj.get().get(
         'spec'
     ).get('volumes')[0].get('persistentVolumeClaim').get('claimName')
+
+
+def get_pvc_obj(pod_obj):
+    """
+    Function to get pvc_name from pod_obj
+
+    Args:
+        pod_obj (str): The pod object
+
+    Returns:
+        PVC Object: The pvc object on a given pod_obj
+    """
+    pvc = get_pvc_name(pod_obj)
+
+    pvc_obj = OCP(kind="pvc").get(resource_name=pvc)
+    return PVC(**pvc_obj)
 
 
 def get_used_space_on_mount_point(pod_obj):
