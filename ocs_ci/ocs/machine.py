@@ -268,7 +268,7 @@ def wait_for_new_node_to_be_ready(machine_set):
     except TimeoutExpiredError:
         log.error(
             "New spun node failed to reach ready state OR"
-                  "Replica count didn't match ready replica count"
+            "Replica count didn't match ready replica count"
         )
 
 
