@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import tier4
+from ocs_ci.framework.testlib import tier4, tier4a
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
@@ -10,6 +10,7 @@ log = logging.getLogger(__name__)
 
 
 @tier4
+@tier4a
 @pytest.mark.polarion_id("OCS-1254")
 def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota):
     """
