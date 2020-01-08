@@ -174,7 +174,6 @@ class TestPVCCreationPerformance(E2ETest):
         Performance in test_multiple_pvc_creation_measurement_performance
         Each kernel (unzipped) is 892M and 61694 files
         """
-        interface = constants.CEPHFILESYSTEM
         kernel_url = 'https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.5.tar.gz'
         download_path = 'tmp'
         # Number of times we copy the kernel
@@ -195,7 +194,7 @@ class TestPVCCreationPerformance(E2ETest):
 
         # Create a RWX PVC
         pvc_obj = pvc_factory(
-            interface=interface, access_mode=constants.ACCESS_MODE_RWX,
+            interface=constants.CEPHFILESYSTEM, access_mode=constants.ACCESS_MODE_RWX,
             status=constants.STATUS_BOUND,
             size='15',
         )
@@ -205,7 +204,7 @@ class TestPVCCreationPerformance(E2ETest):
             f"Creating Pod with pvc {pvc_obj.name} on node {node_one}"
         )
         pod_obj1 = helpers.create_pod(
-            interface_type=interface, pvc_name=pvc_obj.name,
+            interface_type=constants.CEPHFILESYSTEM, pvc_name=pvc_obj.name,
             namespace=pvc_obj.namespace, node_name=node_one,
             pod_dict_path=constants.NGINX_POD_YAML
         )
@@ -223,8 +222,6 @@ class TestPVCCreationPerformance(E2ETest):
         _ocp = OCP(namespace=pvc_obj.namespace)
         rsh_cmd = f"rsync {dir_path} {pod_name}:{pod_path}"
         _ocp.exec_oc_cmd(rsh_cmd)
-        # doesn't work!
-        # ocp.rsync(src='/tmp/tocopy', dst=pod_path, node=pod_name)
 
         rsh_cmd = f"exec {pod_name} -- tar xvf {pod_path}/tmp/file.gz -C /var/lib/www/html/tmp"
         _ocp.exec_oc_cmd(rsh_cmd)
@@ -238,17 +235,18 @@ class TestPVCCreationPerformance(E2ETest):
         rsh_cmd = f"delete pod {pod_name}"
         _ocp.exec_oc_cmd(rsh_cmd)
 
-        start_time = time.time()
-
         logging.info(
             f"Creating Pod with pvc {pvc_obj.name} on node {node_two}"
         )
 
         pod_obj2 = helpers.create_pod(
-            interface_type=interface, pvc_name=pvc_obj.name,
+            interface_type=constants.CEPHFILESYSTEM, pvc_name=pvc_obj.name,
             namespace=pvc_obj.namespace, node_name=node_two,
             pod_dict_path=constants.NGINX_POD_YAML
         )
+
+        start_time = time.time()
+
         pod_name = pod_obj2.name
         helpers.wait_for_resource_state(
             resource=pod_obj2, state=constants.STATUS_RUNNING,
