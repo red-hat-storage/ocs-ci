@@ -105,7 +105,7 @@ def create_pod(
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
     raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1,
-    pod_name=None
+    pod_name=None, node_selector=None
 ):
     """
     Create a pod
@@ -123,6 +123,8 @@ def create_pod(
         raw_block_device (str): raw block device for the pod
         replica_count (int): Replica count for deployment config
         pod_name (str): Name of the pod to create
+        node_selector (dict): dict of key-value pair to be used for nodeSelector field
+            eg: {'nodetype': 'app-pod'}
 
     Returns:
         Pod: A Pod instance
@@ -164,10 +166,17 @@ def create_pod(
             0].get('name')
 
     if node_name:
-        pod_data['spec']['nodeName'] = node_name
-    else:
-        if 'nodeName' in pod_data.get('spec'):
-            del pod_data['spec']['nodeName']
+        if dc_deployment:
+            pod_data['spec']['template']['spec']['nodeName'] = node_name
+        else:
+            pod_data['spec']['nodeName'] = node_name
+
+    if node_selector:
+        if dc_deployment:
+            pod_data['spec']['template']['spec']['nodeSelector'] = node_selector
+        else:
+            pod_data['spec']['nodeSelector'] = node_selector
+
     if sa_name and dc_deployment:
         pod_data['spec']['template']['spec']['serviceAccountName'] = sa_name
     if dc_deployment:
