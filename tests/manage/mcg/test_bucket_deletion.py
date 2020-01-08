@@ -106,9 +106,11 @@ class TestBucketDeletion:
         bucket_map = {
             's3': S3Bucket,
             'oc': OCBucket,
-            'cli': CLIBucket}
+            'cli': CLIBucket
+        }
         bucketname = create_unique_resource_name(
-            resource_description='bucket', resource_type=interface.lower())
+            resource_description='bucket', resource_type=interface.lower()
+        )
         try:
             bucket = bucket_map[interface.lower()](mcg_obj, bucketname)
 
@@ -117,21 +119,24 @@ class TestBucketDeletion:
             data_dir = '/data'
             full_object_path = f"s3://{bucketname}"
             helpers.retrieve_test_objects_to_pod(awscli_pod, data_dir)
-            helpers.sync_object_directory(awscli_pod, data_dir,
-                                          full_object_path, mcg_obj)
+            helpers.sync_object_directory(
+                awscli_pod, data_dir, full_object_path, mcg_obj
+            )
 
             logger.info(f"Deleting bucket: {bucketname}")
             if interface == "S3":
                 try:
                     s3_del = mcg_obj.s3_resource.Bucket(bucketname).delete()
-                    assert not s3_del, ("Unexpected s3 delete non-empty "
-                                        "OBC succeed")
+                    assert not s3_del, (
+                        "Unexpected s3 delete non-empty OBC succeed"
+                    )
                 except botocore.exceptions.ClientError as err:
-                    assert "BucketNotEmpty" in str(err), ("Couldn't verify "
-                                                          "delete non-empty "
-                                                          "OBC with s3")
-                    logger.info(f"Delete non-empty OBC {bucketname} failed as "
-                                "expected")
+                    assert "BucketNotEmpty" in str(err), (
+                        "Couldn't verify delete non-empty OBC with s3"
+                    )
+                    logger.info(
+                        f"Delete non-empty OBC {bucketname} failed as expected"
+                    )
         finally:
             bucket.delete()
 
@@ -161,30 +166,34 @@ class TestBucketDeletion:
         if interface == "S3":
             try:
                 s3_del = mcg_obj.s3_resource.Bucket(name).delete()
-                assert not s3_del, ("Unexpected s3 delete non-exist "
-                                    "OBC succeed")
+                assert not s3_del, (
+                    "Unexpected s3 delete non-exist OBC succeed"
+                )
             except botocore.exceptions.ClientError as err:
-                assert "NoSuchBucket" in str(err), ("Couldn't verify "
-                                                    "delete non-exist "
-                                                    "OBC with s3")
+                assert "NoSuchBucket" in str(err), (
+                    "Couldn't verify delete non-exist OBC with s3"
+                )
         elif interface == "OC":
             try:
-                oc_del = OCP(kind='obc', namespace=mcg_obj.namespace
-                             ).delete(resource_name=name)
+                oc_del = OCP(
+                    kind='obc', namespace=mcg_obj.namespace
+                ).delete(resource_name=name)
                 assert oc_del, "Unexpected oc delete non-exist OBC succeed"
             except CommandFailed as err:
-                assert "NotFound" in str(err), ("Couldn't verify delete "
-                                                "non-exist OBC with oc")
+                assert "NotFound" in str(err), (
+                    "Couldn't verify delete non-exist OBC with oc"
+                )
         elif interface == "CLI":
             try:
                 cli_del = run_mcg_cmd(f'obc delete {name}')
                 assert cli_del, "Unexpected cli delete non-exist OBC succeed"
             except CommandFailed as err:
-                assert "Could not delete OBC" in str(err), ("Couldn't verify "
-                                                            "delete non-exist "
-                                                            "OBC with cli")
-        logger.info(f"Delete non-exist OBC {name} failed as "
-                    "expected")
+                assert "Could not delete OBC" in str(err), (
+                    "Couldn't verify delete non-exist OBC with cli"
+                )
+        logger.info(
+            f"Delete non-exist OBC {name} failed as expected"
+        )
 
     @pytest.mark.bugzilla("1753109")
     @pytest.mark.polarion_id("OCS-1924")
@@ -194,7 +203,8 @@ class TestBucketDeletion:
         Test with deletion of bucket has 1T objects stored in.
         """
         bucketname = create_unique_resource_name(
-            resource_description='bucket', resource_type='s3')
+            resource_description='bucket', resource_type='s3'
+        )
         try:
             bucket = S3Bucket(mcg_obj, bucketname)
             logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
@@ -208,8 +218,9 @@ class TestBucketDeletion:
             logger.info(f'Writing objects to bucket')
             for i in range(3175):
                 full_object_path = f"s3://{bucketname}/{i}/"
-                helpers.sync_object_directory(awscli_pod, data_dir,
-                                              full_object_path, mcg_obj)
+                helpers.sync_object_directory(
+                    awscli_pod, data_dir, full_object_path, mcg_obj
+                )
 
             # Delete bucket content use aws rm with --recursive option.
             # The object_versions.delete function does not work with objects
