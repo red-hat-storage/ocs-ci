@@ -38,10 +38,6 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         Knip-678 Automated recovery from failed nodes
         Proactive case - IPI
         """
-        # Creating resources (pools, storageclasses, PVCs,
-        # pods - both CephFS and RBD), run IO
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
-
         # Get the osd associated node name
         osd_pods_obj = pod.get_osd_pods()
         osd_node_name = pod.get_pod_node(random.choice(osd_pods_obj)).name
