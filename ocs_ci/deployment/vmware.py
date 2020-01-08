@@ -231,11 +231,7 @@ class VSPHEREBASE(Deployment):
         )
 
         # change root disk size
-        replace_content_in_file(
-            constants.SCALEUP_VSPHERE_MACHINE_CONF,
-            constants.CURRENT_VM_ROOT_DISK_SIZE,
-            constants.VM_ROOT_DISK_SIZE
-        )
+        change_vm_root_disk_size(constants.SCALEUP_VSPHERE_MACHINE_CONF)
 
 
 class VSPHEREUPI(VSPHEREBASE):
@@ -385,11 +381,7 @@ class VSPHEREUPI(VSPHEREBASE):
                 os.rename(constants.VSPHERE_MAIN, f"{constants.VSPHERE_MAIN}.backup")
 
             # change root disk size
-            replace_content_in_file(
-                constants.INSTALLER_MACHINE_CONF,
-                constants.CURRENT_VM_ROOT_DISK_SIZE,
-                constants.VM_ROOT_DISK_SIZE
-            )
+            change_vm_root_disk_size(constants.INSTALLER_MACHINE_CONF)
 
         def create_config(self):
             """
@@ -591,3 +583,21 @@ class VSPHEREUPI(VSPHEREBASE):
         os.chdir(scale_up_terraform_data_dir)
         terraform_scale_up.initialize(upgrade=True)
         terraform_scale_up.destroy(scale_up_terraform_var)
+
+
+def change_vm_root_disk_size(machine_file):
+    """
+    Change the root disk size of VM from constants.CURRENT_VM_ROOT_DISK_SIZE
+    to constants.VM_ROOT_DISK_SIZE
+
+    Args:
+         machine_file (str): machine file to change the disk size
+    """
+    disk_size_prefix = "size             = "
+    current_vm_root_disk_size = f"{disk_size_prefix}{constants.CURRENT_VM_ROOT_DISK_SIZE}"
+    vm_root_disk_size = f"{disk_size_prefix}{constants.VM_ROOT_DISK_SIZE}"
+    replace_content_in_file(
+        machine_file,
+        current_vm_root_disk_size,
+        vm_root_disk_size
+    )
