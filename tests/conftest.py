@@ -764,7 +764,7 @@ def dc_pod_factory(
         Delete dc pods
         """
         for instance in instances:
-            helpers.delete_deploymentconfig(instance)
+            helpers.delete_deploymentconfig_pods(instance)
 
     request.addfinalizer(finalizer)
     return factory
