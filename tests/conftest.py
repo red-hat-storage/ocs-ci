@@ -1103,10 +1103,9 @@ def multi_pvc_factory_fixture(
             status_tmp = ""
 
         project = project or project_factory()
-        if interface == constants.CEPHBLOCKPOOL:
-            storageclass = helpers.default_storage_class(interface_type=interface)
-        elif interface == constants.CEPHFILESYSTEM:
-            storageclass = helpers.default_storage_class(interface_type=interface)
+        storageclass = storageclass or helpers.default_storage_class(
+            interface_type=interface
+        )
 
         access_modes = access_modes or [constants.ACCESS_MODE_RWO]
 
