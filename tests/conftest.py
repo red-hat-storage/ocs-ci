@@ -448,10 +448,14 @@ def pvc_factory_fixture(
             project = project or active_project or project_factory()
             active_project = project
             if interface == constants.CEPHBLOCKPOOL:
-                storageclass = helpers.default_storage_class(interface_type=interface)
+                storageclass = storageclass or helpers.default_storage_class(
+                    interface_type=interface
+                )
                 active_rbd_storageclass = storageclass
             elif interface == constants.CEPHFILESYSTEM:
-                storageclass = helpers.default_storage_class(interface_type=interface)
+                storageclass = storageclass or helpers.default_storage_class(
+                    interface_type=interface
+                )
                 active_cephfs_storageclass = storageclass
 
             pvc_size = f"{size}Gi" if size else None
