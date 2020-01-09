@@ -479,7 +479,6 @@ class AWS(object):
                 instance = self.get_ec2_instance(instance_id)
                 instance.wait_until_terminated()
 
-
     def get_ec2_instance_volumes(self, instance_id):
         """
         Get all volumes attached to an ec2 instance

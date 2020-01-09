@@ -15,6 +15,7 @@ from ocs_ci.ocs.node import add_new_node_and_label_it
 
 log = logging.getLogger(__name__)
 
+
 @ignore_leftovers
 @tier4
 @aws_platform_required
@@ -24,7 +25,6 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     Knip-678 Automated recovery from failed nodes
     """
     @pytest.fixture(autouse=True)
-
     def init_sanity(self):
         """
         Initialize Sanity instance
@@ -35,9 +35,9 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     @pytest.mark.parametrize(
         argnames="failure",
         argvalues=[
-             pytest.param(
-                 *["shutdown"]
-             ),
+            pytest.param(
+                *["shutdown"]
+            ),
             pytest.param(
                 *["terminate"]
             )
@@ -87,7 +87,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         for pod_obj in all_pod_obj:
             wait_for_resource_state(
                 resource=pod_obj, state=constants.STATUS_RUNNING, timeout=300
-                )
+            )
 
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
@@ -96,4 +96,3 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
-
