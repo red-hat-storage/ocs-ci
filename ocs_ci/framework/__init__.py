@@ -9,12 +9,13 @@ under section PYTEST_DONT_REWRITE
 # Use the new python 3.7 dataclass decorator, which provides an object similar
 # to a namedtuple, but allows type enforcement and defining methods.
 import collections
+import logging
 import os
 import yaml
 from dataclasses import dataclass, field, fields
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_CONFIG_PATH = os.path.join(THIS_DIR, "conf/default_config.yaml")
+DEFAULT_CONFIG_PATH = os.path.join(THIS_DIR, "conf/common_config.yaml")
 
 
 @dataclass

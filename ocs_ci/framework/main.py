@@ -2,6 +2,7 @@ import argparse
 import os
 import sys
 import time
+import logging
 
 import pytest
 import yaml
@@ -9,6 +10,9 @@ import yaml
 from ocs_ci import framework
 from ocs_ci.utility import utils
 from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
+
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_CONFIG_PATH = os.path.join(THIS_DIR, "conf")
 
 
 def check_config_requirements():
@@ -59,11 +63,66 @@ def init_ocsci_conf(arguments=None):
             os.path.expanduser(framework.config.RUN['bin_dir'])
         )
         utils.add_path_to_env_path(framework.config.RUN['bin_dir'])
+    print(framework.config)
     check_config_requirements()
+
+
+def sanitize_version_string(version):
+    """
+    Checks whether version string provided is of format x.y and returns
+    normalized string of form "x_y" which would serve as prefix for searching
+    version specific config files
+
+    Args:
+        version (str): input version by user (ex: 4.2, 4.3 etc)
+
+    Returns:
+        str: sanitized version string which would be prefix for default config
+            ex: 4_2, 4_3 etc
+
+    """
+    prefix = ''
+    for c in version.split('.'):
+        try:
+            int(c)
+        except ValueError:
+            logging.exception("Please provide proper version number")
+        prefix = f'{prefix}{c}_'
+    return prefix
+
+
+def init_version_defaults(arguments=None):
+    """
+    Update the config object with version specific defaults
+
+    Args:
+        arguments (list): Arguments for pytest execution
+
+    """
+    print(arguments)
+    parser = argparse.ArgumentParser(add_help=False, argument_default=argparse.SUPPRESS)
+    parser.add_argument('--ocs-version')
+    args, vals = parser.parse_known_args(arguments)
+    try:
+        if args.ocs_version:
+            ocs_version = args.ocs_version
+    except AttributeError:
+        ocs_version = "4.3"
+    # Read in version specific default file
+    version_prefix = sanitize_version_string(ocs_version)
+    conf_file_name = f"{version_prefix}default_config.yaml"
+    conf_file_path = os.path.join(DEFAULT_CONFIG_PATH, conf_file_name)
+    with open(
+        os.path.abspath(os.path.expanduser(conf_file_path))
+    ) as file_stream:
+        default_config = yaml.safe_load(file_stream)
+        framework.config.update(default_config)
+        framework.config.RUN['ocs_version'] = ocs_version
 
 
 def main(argv=None):
     arguments = argv or sys.argv[1:]
+    init_version_defaults(arguments)
     init_ocsci_conf(arguments)
     pytest_logs_dir = utils.ocsci_log_path()
     utils.create_directory_path(framework.config.RUN['log_dir'])

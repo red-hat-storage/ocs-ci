@@ -1,0 +1,40 @@
+---
+# This is the default configuration file for 4.2 version which will be merged
+#  with file passed
+# by:
+#
+# * --ocsci-conf file.yaml parameter.
+# * --cluster-conf cluster.yaml parameter - this will be rendered under
+#   ENV_DATA section
+#
+# Each section in this file will be available as an attribute of the
+# framework.config object.
+#
+# ------------------------------------------------------------------------
+
+# in this RUN section we will keep default parameters for run of OCS-CI
+RUN:
+  client_version: '4.2.0-0.nightly'
+
+DEPLOYMENT:
+  # OCP url download template can be overwritten by parameter ocp_url_template.
+  # We are exposing version, file_name and os_type. Example below:
+  # ocp_url_template: "https://openshift-release-artifacts.svc.ci.openshift.org/{version}/{file_name}-{os_type}-{version}.tar.gz"
+  # if the installer version ends with .nightly, the version will be exposed
+  # to the latest accepted OCP nightly build version. You can also use the
+  # specific build version like: "4.2.0-0.nightly-2019-08-06-195545"
+  installer_version: "4.2.0-0.nightly"
+  # You can overwrite csv channel version by following parameter
+  # ocs_csv_channel: "alpha"
+  # you can overwrite the image for ocs operator catalog source by following parameter:
+  # ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:4.2-32.9b6c93e.master"
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:4.2-rc"
+  default_latest_tag: '4.2-rc'
+
+# This is the default information about environment. Will be overwritten with
+# --cluster-conf file.yaml data you will pass to the pytest.
+ENV_DATA:
+  logging_version: '4.2'
+  # uncomment to use custom directory for storing measurement data related to
+  # monitoring tests, otherwise generate temporary directory for each test run
+  # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'

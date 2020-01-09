@@ -98,6 +98,13 @@ def pytest_addoption(parser):
         default=False,
         help="Run IO in the background",
     )
+    parser.addoption(
+        '--ocs-version',
+        dest='ocs_version',
+        action="store_true",
+        default=False,
+        help="ocs version for which ocs-ci to be run"
+    )
 
 
 def pytest_configure(config):
@@ -190,6 +197,7 @@ def get_cli_param(config, name_of_param, default=None):
 
     """
     cli_param = config.getoption(name_of_param, default=default)
+    print(cli_param)
     ocsci_config.RUN['cli_params'][name_of_param] = cli_param
     return cli_param
 
@@ -206,6 +214,7 @@ def process_cluster_cli_params(config):
         ClusterNameNotProvidedError: If a cluster name is missing
         ClusterNameLengthError: If a cluster name is too short or too long
     """
+    log.info(f"CONFIG = {config}")
     cluster_path = get_cli_param(config, 'cluster_path')
     if not cluster_path:
         raise ClusterPathNotProvidedError()
@@ -226,6 +235,7 @@ def process_cluster_cli_params(config):
         ocsci_config.DEPLOYMENT.get('live_deployment', False)
     )
     ocsci_config.RUN['cli_params']['io_in_bg'] = get_cli_param(config, "io_in_bg", default=False)
+    ocsci_config.RUN['cli_params']['ocs_version'] = get_cli_param(config, "ocs_version", default=False)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
     get_cli_param(config, 'collect-logs')
