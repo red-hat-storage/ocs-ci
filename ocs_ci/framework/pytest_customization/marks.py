@@ -85,6 +85,11 @@ aws_platform_required = pytest.mark.skipif(
     reason="Tests are not running on AWS deployed cluster"
 )
 
+ipi_deployment_required = pytest.mark.skipif(
+    config.ENV_DATA['deployment_type'].lower() != 'ipi',
+    reason="Tests are not running on IPI deployed cluster"
+)
+
 # Filter warnings
 filter_insecure_request_warning = pytest.mark.filterwarnings(
     'ignore::urllib3.exceptions.InsecureRequestWarning'

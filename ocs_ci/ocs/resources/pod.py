@@ -366,7 +366,9 @@ class Pod(OCS):
 
 # Helper functions for Pods
 
-def get_all_pods(namespace=None, selector=None, selector_label='app'):
+def get_all_pods(
+        namespace=None, selector=None, selector_label='app', wait=False
+):
     """
     Get all pods in a namespace.
 
@@ -382,6 +384,13 @@ def get_all_pods(namespace=None, selector=None, selector_label='app'):
 
     """
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    # In case of >4 worker nodes node failures automatic failover of pods to
+    # other nodes will happen.
+    # So, we are waiting for the pods to come up on new node
+    if wait:
+        wait_time = 180
+        logger.info(f"Waiting for {wait_time}s for the pods to stabilize")
+        time.sleep(wait_time)
     pods = ocp_pod_obj.get()['items']
     if selector:
         pods_new = [
