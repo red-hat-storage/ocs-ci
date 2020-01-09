@@ -14,4 +14,5 @@ def test_main(teardown_factory, pvc_factory):
     sc._name = sc.data['metadata']['name']
     sc.create()
     teardown_factory(sc)
-    pvc_factory(storageclass=sc)
+    sc_obj = pvc_factory(storageclass=sc)
+    assert sc_obj.storageclass.name == sc.name
