@@ -2,7 +2,6 @@ import logging
 import pytest
 
 from subprocess import TimeoutExpired
-from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import (
     drain_nodes, schedule_nodes, get_typed_nodes, wait_for_nodes_status, get_node_objs
@@ -68,16 +67,10 @@ class TestNodesMaintenance(ManageTest):
         - Check cluster and Ceph health
 
         """
-        # Get a list of 2 nodes. Pick one of them after checking
-        # which one does't have the rook operator running on
-        typed_nodes = get_typed_nodes(node_type=node_type, num_of_nodes=2)
+        # Get 1 node of the type needed for the test iteration
+        typed_nodes = get_typed_nodes(node_type=node_type, num_of_nodes=1)
+        assert typed_nodes, f"Failed to find a {node_type} node for the test"
         typed_node_name = typed_nodes[0].name
-        # Workaround for BZ 1778488 - https://github.com/red-hat-storage/ocs-ci/issues/1222
-        rook_operator_pod = pod.get_operator_pods()[0]
-        operator_node = pod.get_pod_node(rook_operator_pod)
-        if operator_node.get().get('metadata').get('name') == typed_node_name:
-            typed_node_name = typed_nodes[1].name
-        # End of workaround for BZ 1778488
 
         # Maintenance the node (unschedule and drain)
         drain_nodes([typed_node_name])
@@ -94,7 +87,6 @@ class TestNodesMaintenance(ManageTest):
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
 
-    @bugzilla('1778488')
     @tier4
     @tier4b
     @aws_platform_required
@@ -102,7 +94,7 @@ class TestNodesMaintenance(ManageTest):
         argnames=["node_type"],
         argvalues=[
             pytest.param(*['worker'], marks=pytest.mark.polarion_id("OCS-1292")),
-            pytest.param(*['master'], marks=pytest.mark.polarion_id("OCS-1293"))
+            pytest.param(*['master'], marks=[pytest.mark.polarion_id("OCS-1293"), bugzilla('1754287')])
         ]
     )
     def test_node_maintenance_restart_activate(
@@ -118,18 +110,10 @@ class TestNodesMaintenance(ManageTest):
           (pools, storageclasses, PVCs, pods - both CephFS and RBD)
 
         """
-        # Get a list of 2 nodes. Pick one of them after checking
-        # which one does't have the rook operator running on
-        typed_nodes = get_typed_nodes(node_type=node_type, num_of_nodes=2)
+        # Get 1 node of the type needed for the test iteration
+        typed_nodes = get_typed_nodes(node_type=node_type, num_of_nodes=1)
         assert typed_nodes, f"Failed to find a {node_type} node for the test"
         typed_node_name = typed_nodes[0].name
-
-        # Workaround for BZ 1778488 - https://github.com/red-hat-storage/ocs-ci/issues/1222
-        rook_operator_pod = pod.get_operator_pods()[0]
-        operator_node = pod.get_pod_node(rook_operator_pod)
-        if operator_node.get().get('metadata').get('name') == typed_node_name:
-            typed_node_name = typed_nodes[1].name
-        # End of workaround for BZ 1778488
 
         # Maintenance the node (unschedule and drain). The function contains logging
         drain_nodes([typed_node_name])
