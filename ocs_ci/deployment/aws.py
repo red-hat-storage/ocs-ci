@@ -534,7 +534,7 @@ class AWSUPI(AWSBase):
                 InstanceId=inst_id,
             )
 
-    @retry(exceptions.CommandFailed, tries=10, delay=60, backoff=2)
+    @retry(exceptions.CommandFailed, tries=15, delay=30, backoff=1)
     def check_connection(self, rhel_pod_obj, host, pem_dst_path):
         cmd = 'ls'
         rhel_pod_obj.exec_cmd_on_node(
