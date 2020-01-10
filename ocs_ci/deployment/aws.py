@@ -534,6 +534,13 @@ class AWSUPI(AWSBase):
                 InstanceId=inst_id,
             )
 
+    @retry(exceptions.CommandFailed, tries=15, delay=30, backoff=1)
+    def check_connection(self, rhel_pod_obj, host, pem_dst_path):
+        cmd = 'ls'
+        rhel_pod_obj.exec_cmd_on_node(
+            host, pem_dst_path, cmd, user=self.rhel_worker_user
+        )
+
     def run_ansible_playbook(self):
         """
         Bring up a helper pod (RHEL) to run openshift-ansible
@@ -570,6 +577,10 @@ class AWSUPI(AWSBase):
             inst.private_dns_name for node, inst in
             self.rhel_worker_list.items()
         ]
+        # Check whether every host is acceptin ssh connections
+        for host in hosts:
+            self.check_connection(rhel_pod_obj, host, pem_dst_path)
+
         for host in hosts:
             disable = "sudo yum-config-manager --disable *"
             rhel_pod_obj.exec_cmd_on_node(
