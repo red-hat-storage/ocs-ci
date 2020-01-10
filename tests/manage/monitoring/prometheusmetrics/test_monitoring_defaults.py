@@ -9,6 +9,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.framework.testlib import tier1
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.prometheus import PrometheusAPI
@@ -17,6 +18,7 @@ from ocs_ci.utility.prometheus import PrometheusAPI
 logger = logging.getLogger(__name__)
 
 
+@tier1
 @pytest.mark.deployment
 @pytest.mark.polarion_id("OCS-1261")
 def test_monitoring_enabled():
@@ -52,6 +54,7 @@ def test_monitoring_enabled():
         assert int(value) >= 0, "bucket status is a positive integer or 0"
 
 
+@tier1
 @pytest.mark.polarion_id("OCS-1265")
 def test_ceph_mgr_dashboard_not_deployed():
     """
@@ -84,6 +87,7 @@ def test_ceph_mgr_dashboard_not_deployed():
         assert "ceph-mgr-dashboard" not in route_name, msg
 
 
+@tier1
 @pytest.mark.bugzilla("1779336")
 @pytest.mark.polarion_id("OCS-1267")
 def test_ceph_rbd_metrics_available():
@@ -116,6 +120,7 @@ def test_ceph_rbd_metrics_available():
     assert list_of_metrics_without_results == [], msg
 
 
+@tier1
 @pytest.mark.polarion_id("OCS-1268")
 def test_ceph_metrics_available():
     """
@@ -402,6 +407,7 @@ def test_ceph_metrics_available():
     assert list_of_metrics_without_results == [], msg
 
 
+@tier1
 @pytest.mark.polarion_id("OCS-1302")
 def test_monitoring_reporting_ok_when_idle(workload_idle):
     """
