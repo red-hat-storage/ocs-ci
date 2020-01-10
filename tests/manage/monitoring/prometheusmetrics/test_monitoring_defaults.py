@@ -5,10 +5,8 @@ check that OCS Monitoring is configured and available as expected.
 """
 
 import logging
-from datetime import datetime
 
 import pytest
-import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
@@ -35,7 +33,7 @@ def test_monitoring_enabled():
     msg = "check that we actually received some values for a ceph query"
     assert len(result) > 0, msg
     for metric in result:
-        _ , value = metric['value']
+        _, value = metric['value']
         assert int(value) >= 0, "number bytes in a pool isn't negative integer"
     # additional check that values makes at least some sense
     logger.info(
@@ -50,7 +48,7 @@ def test_monitoring_enabled():
     msg = "check that we actually received some values for a MCG/NooBaa query"
     assert len(result) > 0, msg
     for metric in result:
-        _ , value = metric['value']
+        _, value = metric['value']
         assert int(value) >= 0, "bucket status is a positive integer or 0"
 
 
@@ -67,11 +65,11 @@ def test_ceph_mgr_dashboard_not_deployed():
         kind=constants.POD,
         namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     # if there is no "items" in the reply, OCS is very broken
-    ocs_pods= ocp_pod.get()['items']
-    for pod in ocs_pods:
+    ocs_pods = ocp_pod.get()['items']
+    for pod_item in ocs_pods:
         # just making the assumptions explicit
-        assert pod['kind'] == constants.POD
-        pod_name = pod['metadata']['name']
+        assert pod_item['kind'] == constants.POD
+        pod_name = pod_item['metadata']['name']
         msg = "ceph mgr dashboard should not be deployed as part of OCS"
         assert "dashboard" not in pod_name, msg
         assert "ceph-mgr-dashboard" not in pod_name, msg
@@ -388,8 +386,8 @@ def test_ceph_metrics_available():
             # deployed on on-prem platforms only, so we are going to ignore
             # missing metrics from these components on such platforms.
             is_rgw_metric = (
-                metric.startswith("ceph_rgw") or
-                metric.startswith("ceph_objecter"))
+                metric.startswith("ceph_rgw")
+                or metric.startswith("ceph_objecter"))
             if current_platform in platforms_without_rgw and is_rgw_metric:
                 msg = (
                     f"failed to get results for {metric}, "

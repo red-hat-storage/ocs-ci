@@ -992,8 +992,9 @@ def workload_idle(measurement_dir):
         logger.info(
             f"There are {osd_num} OSDs, {mon_num} MONs")
         return osd_num, mon_num
+
     def do_nothing():
-        sleep_time = 60*15  # seconds
+        sleep_time = 60 * 15  # seconds
         logger.info(f"idle workload is about to sleep for {sleep_time} s")
         osd_num_1, mon_num_1 = count_ceph_components()
         time.sleep(sleep_time)
@@ -1010,6 +1011,7 @@ def workload_idle(measurement_dir):
         assert osd_num_1 >= 3, "OCS cluster should have at least 3 OSDs"
         result = {'osd_num': osd_num_1, 'mon_num': mon_num_1}
         return result
+
     test_file = os.path.join(measurement_dir, 'measure_workload_idle.json')
     measured_op = measure_operation(do_nothing, test_file)
     return measured_op
