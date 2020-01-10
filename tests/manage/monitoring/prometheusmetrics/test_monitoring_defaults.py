@@ -32,11 +32,11 @@ def test_monitoring_enabled():
     # ask for values of ceph_pool_stored metric
     logger.info("Checking that ceph data are provided in OCS monitoring")
     result = prometheus.query('ceph_pool_stored')
-    # check that we actually received some values
-    assert len(result) > 0
+    msg = "check that we actually received some values for a ceph query"
+    assert len(result) > 0, msg
     for metric in result:
         _ , value = metric['value']
-        assert int(value) >= 0
+        assert int(value) >= 0, "number bytes in a pool isn't negative integer"
     # additional check that values makes at least some sense
     logger.info(
         "Checking that size of ceph_pool_stored result matches number of pools")
@@ -47,11 +47,11 @@ def test_monitoring_enabled():
     # again for a noobaa metric
     logger.info("Checking that MCG/NooBaa data are provided in OCS monitoring")
     result = prometheus.query('NooBaa_bucket_status')
-    # check that we actually received some values
-    assert len(result) > 0
+    msg = "check that we actually received some values for a MCG/NooBaa query"
+    assert len(result) > 0, msg
     for metric in result:
         _ , value = metric['value']
-        assert int(value) >= 0
+        assert int(value) >= 0, "bucket status is a positive integer or 0"
 
 
 @pytest.mark.polarion_id("OCS-1265")
