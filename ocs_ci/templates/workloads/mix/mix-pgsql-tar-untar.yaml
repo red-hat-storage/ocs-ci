@@ -1,0 +1,10 @@
+folder: mix-fs-rbd
+ocp_upgrade: True
+ocp_version: registry.svc.ci.openshift.org/ocp/release:4.3.0-0.nightly-2020-01-06-185654
+check-for-errors: True
+cmd:
+  - date --utc ; sh pod-create.sh pgsql1 ocs-storagecluster-ceph-rbd
+  - sh run-io.sh pgsql1 run-logs
+  - date --utc ; sh pod-create.sh pgsql2 ocs-storagecluster-cephfs  
+  - sh run-io.sh pgsql2  run-logs
+  - date --utc ; oc new-project kernel-untar ; sh fedora-pod.sh ocs-storagecluster-ceph-rbd 2 kernel-untar

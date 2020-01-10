@@ -27,6 +27,7 @@ TEMPLATE_APP_POD_DIR = os.path.join(TEMPLATE_DIR, "app-pods")
 TEMPLATE_WORKLOAD_DIR = os.path.join(TEMPLATE_DIR, "workloads")
 TEMPLATE_FIO_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fio")
 TEMPLATE_SMALLFILE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "smallfile")
+TEMPLATE_MIX_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "mix")
 TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
 TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
@@ -267,6 +268,10 @@ PGSQL_BENCHMARK_YAML = os.path.join(
 
 SMALLFILE_BENCHMARK_YAML = os.path.join(
     TEMPLATE_SMALLFILE_DIR, "SmallFile.yaml"
+)
+
+MIX_PGSQL_TAR_YAML = os.path.join(
+    TEMPLATE_MIX_DIR, "mix-pgsql-tar-untar.yaml"
 )
 
 NGINX_POD_YAML = os.path.join(
