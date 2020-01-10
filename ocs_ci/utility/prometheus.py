@@ -278,13 +278,13 @@ class PrometheusAPI(object):
         return content["data"]["result"]
 
     def check_query_range_result(
-            self,
-            result,
-            good_values,
-            bad_values=(),
-            exp_metric_num=None,
-            exp_delay=None,
-        ):
+        self,
+        result,
+        good_values,
+        bad_values=(),
+        exp_metric_num=None,
+        exp_delay=None,
+    ):
         """
         Check that result of range query matches given expectations. Useful
         for metrics which convey status (eg. ceph health, ceph_osd_up), so that
