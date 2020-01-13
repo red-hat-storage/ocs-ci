@@ -1,5 +1,6 @@
 import logging
 
+from ocs_ci.ocs.exceptions import CommandFailed
 from tests import helpers
 
 from ocs_ci.framework import config
@@ -69,19 +70,29 @@ class Sanity:
             for dc_pod in self.dc_pod_objs:
                 get_fio_rw_iops(dc_pod)
 
-    def delete_resources(self):
+    def delete_resources(self, ignore_delete=False):
         """
         Sanity validation - Delete resources (FS and RBD)
+
+        Args:
+            ignore_delete (bool): skip deletion of pod if deleted already
 
         """
         logger.info(f"Deleting resources as a sanity functional validation")
 
         for pod_obj in self.pod_objs:
-            pod_obj.delete()
+            if ignore_delete:
+                try:
+                    pod_obj.delete()
+                except CommandFailed:
+                    logger.warning(f"Skipping as {pod_obj.name} might get deleted")
+                    pod_obj._is_deleted = True
+            else:
+                pod_obj.delete()
         for pod_obj in self.pod_objs:
             pod_obj.ocp.wait_for_delete(pod_obj.name)
         for dc_pod_obj in self.dc_pod_objs:
-            helpers.delete_deploymentconfig(dc_pod_obj)
+            helpers.delete_deploymentconfig_pods(dc_pod_obj)
         for pvc_obj in self.pvc_objs:
             pvc_obj.delete()
         for pvc_obj in self.pvc_objs:
