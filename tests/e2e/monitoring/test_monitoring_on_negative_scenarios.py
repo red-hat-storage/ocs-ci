@@ -17,7 +17,7 @@ from ocs_ci.ocs.node import (
     get_typed_nodes, drain_nodes, schedule_nodes
 )
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 
 log = logging.getLogger(__name__)
 
@@ -42,14 +42,24 @@ def wait_to_update_mgrpod_info_prometheus_pod():
     log.info("Ceph health status metrics is updated")
 
 
-@retry((CommandFailed, TimeoutError), tries=10, delay=3, backoff=1)
-def wait_for_master_node_to_be_running_state():
+@retry((CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException), tries=10, delay=3, backoff=1)
+def wait_for_nodes_status_and_prometheus_health_check(pods):
     """
     Waits for the all the nodes to be in running state
+    and also check prometheus health
 
     """
 
+    # Validate all nodes are in READY state
     wait_for_nodes_status(timeout=900)
+
+    # Check for the created pvc metrics after rebooting the master nodes
+    for pod_obj in pods:
+        assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
+            f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
+        )
+
+    assert prometheus_health_check(), "Prometheus health is degraded"
 
 
 @tier4
@@ -264,7 +274,8 @@ class TestMonitoringBackedByOCS(E2ETest):
         ocp_obj = ocp.OCP(kind=constants.DEPLOYMENT, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
 
         params = '{"spec": {"replicas": 0}}'
-        resource_name = osd_pod_list[0].get().get('metadata').get('name').strip()[:-17]
+        resource_name = osd_pod_list[0].get().get('metadata').get('name')
+        resource_name = '-'.join(resource_name.split('-')[0:4])
         assert ocp_obj.patch(resource_name=resource_name, params=params), (
             f"Failed to change the replica count of osd {resource_name} to 0"
         )
@@ -342,17 +353,10 @@ class TestMonitoringBackedByOCS(E2ETest):
         for node in master_nodes:
             nodes.restart_nodes([node])
 
-            # Validate all nodes are in READY state
-            wait_for_master_node_to_be_running_state()
+            wait_for_nodes_status_and_prometheus_health_check(pods)
 
         # Check the node are Ready state and check cluster is health ok
         self.sanity_helpers.health_check()
-
-        # Check for the created pvc metrics after rebooting the master nodes
-        for pod_obj in pods:
-            assert check_pvcdata_collected_on_prometheus(pod_obj.pvc.name), (
-                f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is not collected"
-            )
 
     @pytest.mark.polarion_id("OCS-710")
     def test_monitoring_after_rebooting_node_where_mgr_is_running(self, nodes, pods):
