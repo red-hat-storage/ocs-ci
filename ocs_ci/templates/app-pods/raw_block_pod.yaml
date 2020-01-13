@@ -3,7 +3,6 @@ kind: Pod
 metadata:
   name: test-raw-block-pod
 spec:
-  nodeName: foo
   containers:
     - name: my-container
       image: nginx
