@@ -3,7 +3,9 @@ Package manifest related functionalities
 """
 import logging
 
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP, defaults
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 
 
@@ -32,6 +34,7 @@ class PackageManifest(OCP):
             **kwargs
         )
 
+    @retry((CommandFailed), tries=100, delay=5, backoff=1)
     def get_default_channel(self):
         """
         Returns default channel for package manifest
