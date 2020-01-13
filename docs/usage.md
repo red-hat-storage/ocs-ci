@@ -93,7 +93,7 @@ that can be used to access an existing cluster.
 
 If you would like to deploy new cluster you can run following command:
 ```bash
-run-ci -m deployment --ocsci-conf conf/ocsci/custom_config.yaml \
+run-ci -m deployment --ocsci-conf conf/path_to_config_to_be_used.yaml \
     --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir tests/ \
     --deploy

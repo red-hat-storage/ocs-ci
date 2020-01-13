@@ -1,4 +1,6 @@
 ---
 ENV_DATA:
+  # for testing of OCS monitoring based on OCP Prometheus
+  # use via `--ocsci-conf conf/ocsci/monitoring.yaml`
   monitoring_enabled: true
   cluster_namespace: 'openshift-storage'
