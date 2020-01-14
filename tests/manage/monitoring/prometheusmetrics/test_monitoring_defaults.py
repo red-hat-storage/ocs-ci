@@ -19,13 +19,13 @@ logger = logging.getLogger(__name__)
 
 
 @tier1
-@pytest.mark.deployment
+@pytest.mark.post_deployment
 @pytest.mark.polarion_id("OCS-1261")
 def test_monitoring_enabled():
     """
     OCS Monitoring is enabled after OCS installation (which is why this test
-    has a deployment marker) by asking for values of one ceph and one noobaa
-    related metrics.
+    has a post deployment marker) by asking for values of one ceph and one
+    noobaa related metrics.
     """
     prometheus = PrometheusAPI()
 
