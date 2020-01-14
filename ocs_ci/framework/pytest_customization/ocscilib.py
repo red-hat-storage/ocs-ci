@@ -77,6 +77,13 @@ def pytest_addoption(parser):
         help="If provided a test cluster will be deployed on AWS to use for testing",
     )
     parser.addoption(
+        '--live-deploy',
+        dest='live_deploy',
+        action="store_true",
+        default=False,
+        help="Deploy OCS from live registry like a customer",
+    )
+    parser.addoption(
         '--email',
         dest='email',
         help="Email ID to send results",
@@ -218,6 +225,9 @@ def process_cluster_cli_params(config):
     cluster_name = get_cli_param(config, 'cluster_name')
     ocsci_config.RUN['cli_params']['teardown'] = get_cli_param(config, "teardown", default=False)
     ocsci_config.RUN['cli_params']['deploy'] = get_cli_param(config, "deploy", default=False)
+    live_deploy = get_cli_param(config, "live_deploy", default=False)
+    ocsci_config.RUN['cli_params']['live_deploy'] = live_deploy
+    ocsci_config.DEPLOYMENT['live_deploy'] = live_deploy
     ocsci_config.RUN['cli_params']['io_in_bg'] = get_cli_param(config, "io_in_bg", default=False)
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
