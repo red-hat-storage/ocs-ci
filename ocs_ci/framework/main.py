@@ -2,7 +2,6 @@ import argparse
 import os
 import sys
 import time
-import logging
 
 import pytest
 import yaml
@@ -65,30 +64,6 @@ def init_ocsci_conf(arguments=None):
         utils.add_path_to_env_path(framework.config.RUN['bin_dir'])
     print(framework.config)
     check_config_requirements()
-
-
-def sanitize_version_string(version):
-    """
-    Checks whether version string provided is of format x.y and returns
-    normalized string of form "x_y" which would serve as prefix for searching
-    version specific config files
-
-    Args:
-        version (str): input version by user (ex: 4.2, 4.3 etc)
-
-    Returns:
-        str: sanitized version string which would be prefix for default config
-            ex: 4_2, 4_3 etc
-
-    """
-    prefix = ''
-    for c in version.split('.'):
-        try:
-            int(c)
-        except ValueError:
-            logging.exception("Please provide proper version number")
-        prefix = f'{prefix}{c}_'
-    return prefix
 
 
 def init_version_defaults(arguments=None):
