@@ -36,7 +36,6 @@ def test_help_message(testdir):
     # fnmatch_lines does an assertion internally
     result.stdout.fnmatch_lines([
         '*--ocsci-conf*',
-        '*--cluster-conf*',
         '*--cluster-path*',
         '*--cluster-name*',
     ])

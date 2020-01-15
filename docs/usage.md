@@ -56,10 +56,6 @@ to the pytest.
     [default config](https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/conf/default_config.yaml).
     This is the repeatable parameter and you can use it multiple times for
     adding multiple config files. (The last one overwrites previous config!)
-* `--cluster-conf` - with this configuration you can overwrite the default
-    parameters for cluster and deployment. See the example of such file
-    [here](https://github.com/red-hat-storage/ocs-ci/tree/master/conf/ocs_basic_install.yml). This parameter is obsolete and going
-    to be repleced by the --ocsci-conf parameter.
 * `--deploy` - if this is given and a cluster can not be accessed from the
     provided `--cluster-path` then a new test cluster will be deployed.
 * `--teardown` - if this is given the testing cluster will be destroyed after
@@ -97,14 +93,12 @@ that can be used to access an existing cluster.
 
 If you would like to deploy new cluster you can run following command:
 ```bash
-run-ci -m deployment --ocsci-conf conf/ocsci/custom_config.yaml \
-    --cluster-conf conf/ocs_basic_install.yml \
+run-ci -m deployment --ocsci-conf conf/path_to_config_to_be_used.yaml \
     --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir tests/ \
     --deploy
  ```
-of course you can utilize your cluster to add `--cluster-conf` parameter or
-you can omit --cluster-name if you would like to use default
+of course you can omit --cluster-name if you would like to use default
 values.
 
 Note that during deployment, openshift command line tools like `oc` and

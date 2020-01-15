@@ -22,7 +22,6 @@ class TestEntrypoint(object):
             stderr=subprocess.STDOUT,
         ).decode()
         assert '--ocsci-conf' in result
-        assert '--cluster-conf' in result
         assert '--cluster-path' in result
         assert '--cluster-name' in result
 
@@ -38,15 +37,12 @@ class TestEntrypoint(object):
         tempdir = testdir.makefile(
             '.yaml',
             ocsci_conf='RUN: null',
-            cluster_conf='DEPLOYMENT: null',
         ).dirname
         main.main([
             '--ocsci-conf', os.path.join(tempdir, 'ocsci_conf.yaml'),
-            '--cluster-conf', os.path.join(tempdir, 'cluster_conf.yaml'),
         ])
         assert config_update.call_args_list == [
             mock.call(dict(RUN=None)),
-            mock.call(dict(DEPLOYMENT=None)),
         ]
 
     @mock.patch('ocs_ci.framework.main.pytest.main')
