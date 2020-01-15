@@ -8,8 +8,7 @@ from ocs_ci.ocs.node import (
     drain_nodes, schedule_nodes, get_typed_nodes, wait_for_nodes_status, get_node_objs
 )
 from ocs_ci.framework.testlib import (
-    tier1, tier2, tier3, tier4, tier4b,
-    ManageTest, aws_platform_required, ignore_leftovers, bugzilla
+    tier1, tier2, tier3, tier4, tier4b, ManageTest, ignore_leftovers, bugzilla
 )
 
 from tests.sanity_helpers import Sanity
