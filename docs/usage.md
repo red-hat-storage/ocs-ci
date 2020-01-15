@@ -58,6 +58,7 @@ to the pytest.
     adding multiple config files. (The last one overwrites previous config!)
 * `--deploy` - if this is given and a cluster can not be accessed from the
     provided `--cluster-path` then a new test cluster will be deployed.
+* `--live-deploy` - OCS-CI will use live content to deploy OCS.
 * `--teardown` - if this is given the testing cluster will be destroyed after
     the test have completed, regardless of if the tests passed or failed.
 * `--html` - to generate html reports of the test run

@@ -343,6 +343,12 @@ class Deployment(object):
             subscription_yaml_data['spec']['source'] = (
                 config.DEPLOYMENT['stage_namespace']
             )
+        if config.DEPLOYMENT.get('live_deployment'):
+            subscription_yaml_data['spec']['source'] = (
+                config.DEPLOYMENT.get(
+                    'live_content_source', defaults.LIVE_CONTENT_SOURCE
+                )
+            )
         subscription_manifest = tempfile.NamedTemporaryFile(
             mode='w+', prefix='subscription_manifest', delete=False
         )
@@ -361,8 +367,10 @@ class Deployment(object):
         Method for deploy OCS via OCS operator
         """
         ui_deployment = config.DEPLOYMENT.get('ui_deployment')
+        live_deployment = config.DEPLOYMENT.get('live_deployment')
         if ui_deployment:
-            self.create_operator_catalog_source()
+            if not live_deployment:
+                self.create_operator_catalog_source()
             self.deployment_with_ui()
             # Skip the rest of the deployment when deploy via UI
             return
@@ -371,7 +379,8 @@ class Deployment(object):
             self.label_and_taint_nodes()
         logger.info("Creating namespace and operator group.")
         run_cmd(f"oc create -f {constants.OLM_YAML}")
-        self.create_operator_catalog_source()
+        if not live_deployment:
+            self.create_operator_catalog_source()
         self.subscribe_ocs()
         package_manifest = PackageManifest(
             resource_name=defaults.OCS_OPERATOR_NAME
