@@ -9,19 +9,20 @@ import random
 from math import floor
 
 from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.utility import aws
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    deployment, destroy, ignore_leftovers
+    deployment, destroy, ignore_leftovers, tier4a, tier4b, tier4c
 )
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.utility.environment_check import (
     get_status_before_execution, get_status_after_execution
 )
 from ocs_ci.utility.utils import (
-    get_openshift_client, ocsci_log_path, get_testrun_name
+    get_openshift_client, ocsci_log_path, get_testrun_name,
+    ceph_health_check_base
 )
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
@@ -796,6 +797,24 @@ def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
     record_testsuite_property(
         'polarion-custom-isautomated', "True"
     )
+
+
+@pytest.fixture(scope='function', autouse=True)
+def health_checker(request):
+    node = request.node
+    # Limit the health check for tier4a, tier4b, tier4c
+    tier4_marks = [m.mark for m in [tier4a(), tier4b(), tier4c()]]
+    for mark in node.iter_markers():
+        if mark in tier4_marks:
+            log.info("Checking for Ceph Health OK ")
+            try:
+                status = ceph_health_check_base()
+                if status:
+                    log.info("Health check passed")
+                    return
+            except CephHealthException:
+                # skip because ceph is not in good health
+                pytest.skip("Ceph Health check failed")
 
 
 @pytest.fixture(scope="session", autouse=True)
