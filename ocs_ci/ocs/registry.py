@@ -58,8 +58,8 @@ def get_registry_pod_obj():
     # Sometimes when there is a update in config crd, there will be 2 registry pods
     # i.e. old pod will be terminated and new pod will be up based on new crd
     # so below loop waits till old pod terminates
-    wait_time = 30
-    for iteration in range(10):
+    wait_time = 10
+    for iteration in range(30):
         pod_data = pod.get_pods_having_label(
             label='docker-registry=default', namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
         )
@@ -68,10 +68,10 @@ def get_registry_pod_obj():
             break
         elif len(pod_obj) == 0:
             raise UnexpectedBehaviour("Image-registry pod not present")
-        elif iteration > 5:
+        elif iteration == 18:  # 18*10 = 180 secs.
             raise UnexpectedBehaviour("Waited for 3 mins Image-registry pod is not in Running state")
         else:
-            logger.info(f"Waiting for 30 sec's for registry pod to be up iteration {iteration}")
+            logger.info(f"Waiting for {wait_time} seconds for registry pod to be up - iteration {iteration}")
             time.sleep(wait_time)
     return pod_obj
 
