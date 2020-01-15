@@ -64,6 +64,8 @@ DEPLOYMENT:
   # UI deployment is not part of this framework, it will just do preparation
   # steps for openshift-console.
   ui_deployment: False
+  # Following options are defaults for deployment from live content
+  live_deployment: False
 
 # Section for reporting configuration
 REPORTING:
