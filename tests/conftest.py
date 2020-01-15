@@ -1413,6 +1413,15 @@ def ec2_instances(request, aws_obj):
 
 @pytest.fixture()
 def mcg_obj(request):
+    return mcg_obj_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def mcg_obj_session(request):
+    return mcg_obj_fixture(request)
+
+
+def mcg_obj_fixture(request):
     """
     Returns an MCG resource that's connected to the S3 endpoint
 
@@ -1431,6 +1440,15 @@ def mcg_obj(request):
 
 @pytest.fixture()
 def created_pods(request):
+    return created_pods_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def created_pods_session(request):
+    return created_pods_fixture(request)
+
+
+def created_pods_fixture(request):
     """
     Deletes all pods that were created as part of the test
 
@@ -1449,6 +1467,15 @@ def created_pods(request):
 
 @pytest.fixture()
 def awscli_pod(mcg_obj, created_pods):
+    return awscli_pod_fixture(mcg_obj, created_pods)
+
+
+@pytest.fixture()
+def awscli_pod_session(mcg_obj_session, created_pods_session):
+    return awscli_pod_fixture(mcg_obj_session, created_pods_session)
+
+
+def awscli_pod_fixture(mcg_obj, created_pods):
     """
     Creates a new AWSCLI pod for relaying commands
 
@@ -1484,10 +1511,40 @@ def nodes():
 
 @pytest.fixture()
 def uploaded_objects(request, mcg_obj, awscli_pod, verify_rgw_restart_count):
+    return uploaded_objects_fixture(
+        request,
+        mcg_obj,
+        awscli_pod,
+        verify_rgw_restart_count
+    )
+
+
+@pytest.fixture(scope='session')
+def uploaded_objects_session(
+    request,
+    mcg_obj_session,
+    awscli_pod_session,
+    verify_rgw_restart_count_session
+):
+    return uploaded_objects_fixture(
+        request,
+        mcg_obj_session,
+        awscli_pod_session,
+        verify_rgw_restart_count_session
+    )
+
+
+def uploaded_objects_fixture(
+    request,
+    mcg_obj,
+    awscli_pod,
+    verify_rgw_restart_count
+):
     """
     Deletes all objects that were created as part of the test
     Args:
-        mcg_obj (MCG): An MCG object containing the MCG S3 connection credentials
+        mcg_obj (MCG): An MCG object containing the MCG S3 connection
+            credentials
         awscli_pod (Pod): A pod running the AWSCLI tools
     Returns:
         list: An empty list of objects
@@ -1498,8 +1555,14 @@ def uploaded_objects(request, mcg_obj, awscli_pod, verify_rgw_restart_count):
         for uploaded_filename in uploaded_objects_paths:
             log.info(f'Deleting object {uploaded_filename}')
             awscli_pod.exec_cmd_on_pod(
-                command=helpers.craft_s3_command(mcg_obj, "rm " + uploaded_filename),
-                secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+                command=helpers.craft_s3_command(
+                    mcg_obj, "rm " + uploaded_filename
+                ),
+                secrets=[
+                    mcg_obj.access_key_id,
+                    mcg_obj.access_key,
+                    mcg_obj.s3_endpoint
+                ]
             )
 
     request.addfinalizer(object_cleanup)
@@ -1508,6 +1571,15 @@ def uploaded_objects(request, mcg_obj, awscli_pod, verify_rgw_restart_count):
 
 @pytest.fixture()
 def verify_rgw_restart_count(request):
+    return verify_rgw_restart_count_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def verify_rgw_restart_count_session(request):
+    return verify_rgw_restart_count_fixture(request)
+
+
+def verify_rgw_restart_count_fixture(request):
     """
     Verifies the RGW restart count at start and end of a test
     """
@@ -1526,11 +1598,21 @@ def verify_rgw_restart_count(request):
 
 @pytest.fixture()
 def bucket_factory(request, mcg_obj):
+    return bucket_factory_fixture(request, mcg_obj)
+
+
+@pytest.fixture(scope='session')
+def bucket_factory_session(request, mcg_obj_session):
+    return bucket_factory_fixture(request, mcg_obj_session)
+
+
+def bucket_factory_fixture(request, mcg_obj):
     """
     Create a bucket factory. Calling this fixture creates a new bucket(s).
     For a custom amount, provide the 'amount' parameter.
     Args:
-        mcg_obj (MCG): An MCG object containing the MCG S3 connection credentials
+        mcg_obj (MCG): An MCG object containing the MCG S3 connection
+            credentials
     """
     created_buckets = []
 
@@ -1545,9 +1627,11 @@ def bucket_factory(request, mcg_obj):
         Creates and deletes all buckets that were created as part of the test
         Args:
             amount (int): The amount of buckets to create
-            interface (str): The interface to use for creation of buckets. S3 | OC | CLI
+            interface (str): The interface to use for creation of buckets.
+                S3 | OC | CLI
         Returns:
-            list: A list of s3.Bucket objects, containing all the created buckets
+            list: A list of s3.Bucket objects, containing all the created
+                buckets
         """
         if interface.lower() not in bucketMap:
             raise RuntimeError(
@@ -1559,7 +1643,12 @@ def bucket_factory(request, mcg_obj):
                 resource_description='bucket', resource_type=interface.lower()
             )
             created_buckets.append(
-                bucketMap[interface.lower()](mcg_obj, bucket_name, *args, **kwargs)
+                bucketMap[interface.lower()](
+                    mcg_obj,
+                    bucket_name,
+                    *args,
+                    **kwargs
+                )
             )
         return created_buckets
 
@@ -1570,7 +1659,8 @@ def bucket_factory(request, mcg_obj):
                 log.info(f'Cleaning up bucket {bucket.name}')
                 bucket.delete()
                 log.info(
-                    f"Verifying whether bucket: {bucket.name} exists after deletion"
+                        f"Verifying whether bucket: {bucket.name} exists after"
+                        f" deletion"
                 )
                 assert not mcg_obj.s3_verify_bucket_exists(bucket.name)
             else:
@@ -1583,6 +1673,15 @@ def bucket_factory(request, mcg_obj):
 
 @pytest.fixture()
 def multiregion_resources(request, mcg_obj):
+    return multiregion_resources_fixture(request, mcg_obj)
+
+
+@pytest.fixture(scope='session')
+def multiregion_resources_session(request, mcg_obj_session):
+    return multiregion_resources_fixture(request, mcg_obj_session)
+
+
+def multiregion_resources_fixture(request, mcg_obj):
     bs_objs, bs_secrets, bucketclasses, aws_buckets = (
         [] for _ in range(4)
     )
@@ -1594,17 +1693,25 @@ def multiregion_resources(request, mcg_obj):
 
         for backingstore in bs_objs:
             backingstore.delete()
-            mcg_obj.send_rpc_query('pool_api', 'delete_pool', {'name': backingstore.name})
+            mcg_obj.send_rpc_query(
+                'pool_api',
+                'delete_pool',
+                {'name': backingstore.name}
+            )
 
         for aws_bucket_name in aws_buckets:
             mcg_obj.toggle_aws_bucket_readwrite(aws_bucket_name, block=False)
             for _ in range(10):
                 try:
-                    mcg_obj.aws_s3_resource.Bucket(aws_bucket_name).objects.all().delete()
+                    mcg_obj.aws_s3_resource.Bucket(
+                        aws_bucket_name
+                    ).objects.all().delete()
                     mcg_obj.aws_s3_resource.Bucket(aws_bucket_name).delete()
                     break
                 except ClientError:
-                    log.info(f'Deletion of bucket {aws_bucket_name} failed. Retrying...')
+                    log.info(
+                        f'Deletion of bucket {aws_bucket_name} failed. Retrying...'
+                    )
                     sleep(3)
 
     request.addfinalizer(resource_cleanup)
@@ -1614,11 +1721,43 @@ def multiregion_resources(request, mcg_obj):
 
 @pytest.fixture()
 def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
+    return multiregion_mirror_setup_fixture(
+        mcg_obj,
+        multiregion_resources,
+        bucket_factory
+    )
+
+
+@pytest.fixture()
+def multiregion_mirror_setup_session(
+    mcg_obj_session,
+    multiregion_resources_session,
+    bucket_factory_session
+):
+    return multiregion_mirror_setup_fixture(
+        mcg_obj_session,
+        multiregion_resources_session,
+        bucket_factory_session
+    )
+
+
+def multiregion_mirror_setup_fixture(
+    mcg_obj,
+    multiregion_resources,
+    bucket_factory
+):
     # Setup
     # Todo:
-    #  add region and amount parametrization - note that `us-east-1` will cause an error
-    #  as it is the default region. If usage of `us-east-1` needs to be tested, keep the 'region' field out.
-    aws_buckets, backingstore_secrets, backingstore_objects, bucketclasses = multiregion_resources
+    #  add region and amount parametrization - note that `us-east-1`
+    #  will cause an error as it is the default region. If usage of `us-east-1`
+    #  needs to be tested, keep the 'region' field out.
+    (
+        aws_buckets,
+        backingstore_secrets,
+        backingstore_objects,
+        bucketclasses
+    ) = multiregion_resources
+
     # Define backing stores
     backingstore1 = {
         'name': helpers.create_unique_resource_name(
@@ -1639,17 +1778,26 @@ def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
     mcg_obj.create_new_backingstore_aws_bucket(backingstore2)
     aws_buckets.extend((backingstore1['name'], backingstore2['name']))
     # Create a backing store secret
-    backingstore_secret = mcg_obj.create_aws_backingstore_secret(backingstore1['name'] + 'secret')
+    backingstore_secret = mcg_obj.create_aws_backingstore_secret(
+        backingstore1['name'] + 'secret'
+    )
     backingstore_secrets.append(backingstore_secret)
     # Create AWS-backed backing stores on NooBaa
     backingstore_obj_1 = mcg_obj.oc_create_aws_backingstore(
-        backingstore1['name'], backingstore1['name'], backingstore_secret.name, backingstore1['region']
+        backingstore1['name'],
+        backingstore1['name'],
+        backingstore_secret.name,
+        backingstore1['region']
     )
     backingstore_obj_2 = mcg_obj.oc_create_aws_backingstore(
-        backingstore2['name'], backingstore2['name'], backingstore_secret.name, backingstore2['region']
+        backingstore2['name'],
+        backingstore2['name'],
+        backingstore_secret.name,
+        backingstore2['region']
     )
     backingstore_objects.extend((backingstore_obj_1, backingstore_obj_2))
-    # Create a new mirror bucketclass that'll use all the backing stores we created
+    # Create a new mirror bucketclass that'll use all the backing stores we
+    # created
     bucketclass = mcg_obj.oc_create_bucketclass(
         helpers.create_unique_resource_name(
             resource_description='testbc',
@@ -1658,7 +1806,8 @@ def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
         [backingstore.name for backingstore in backingstore_objects], 'Mirror'
     )
     bucketclasses.append(bucketclass)
-    # Create a NooBucket that'll use the bucket class in order to test the mirroring policy
+    # Create a NooBucket that'll use the bucket class in order to test
+    # the mirroring policy
     bucket_name = bucket_factory(1, 'OC', bucketclass=bucketclass.name)[0].name
 
     return bucket_name, backingstore1, backingstore2
