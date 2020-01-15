@@ -136,24 +136,8 @@ class TestVDBenchWorkload(E2ETest):
                   'samples', 'width', 'depth', 'files', 'file_size', 'runtime',
                   'pause'],
         argvalues=[
-            # pytest.param(*[9, 16, ["64k"], "random",
-            #                 1, 4, 3, 256, 5, 600, 5]),
-            pytest.param(*["VDBench-Max-All.yaml", 0, 2, [], "random",
-                           0, 0, 0, 0, 0, 0, 0]),
-            pytest.param(*["VDBench-Max-All.yaml", 0, 4, [], "random",
-                           0, 0, 0, 0, 0, 0, 0]),
-            pytest.param(*["VDBench-Max-All.yaml", 0, 8, [], "random",
-                           0, 0, 0, 0, 0, 0, 0]),
-            pytest.param(*["VDBench-Max-All.yaml", 0, 12, [], "random",
-                           0, 0, 0, 0, 0, 0, 0]),
-            pytest.param(*["VDBench-Max-All.yaml", 0, 16, [], "random",
-                           0, 0, 0, 0, 0, 0, 0]),
-            pytest.param(*["VDBench-Max-All.yaml", 0, 20, [], "random",
-                           0, 0, 0, 0, 0, 0, 0]),
-            pytest.param(*["VDBench-Max-All.yaml", 0, 24, [], "random",
-                           0, 0, 0, 0, 0, 0, 0]),
-            pytest.param(*["VDBench-Max-All.yaml", 0, 32, [], "random",
-                           0, 0, 0, 0, 0, 0, 0]),
+            pytest.param(*["VDBench-Basic.yaml",
+                           0, 0, [], "", 0, 0, 0, 0, 0, 0, 0]),
         ]
     )
     # @pytest.mark.polarion_id("OCS-1295")
