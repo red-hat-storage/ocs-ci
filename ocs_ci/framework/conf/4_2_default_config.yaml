@@ -4,8 +4,7 @@
 # by:
 #
 # * --ocsci-conf file.yaml parameter.
-# * --cluster-conf cluster.yaml parameter - this will be rendered under
-#   ENV_DATA section
+# this will be rendered under ENV_DATA section
 #
 # Each section in this file will be available as an attribute of the
 # framework.config object.

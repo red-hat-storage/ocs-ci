@@ -4,8 +4,7 @@
 # by:
 #
 # * --ocsci-conf file.yaml parameter.
-# * --cluster-conf cluster.yaml parameter - this will be rendered under
-#   ENV_DATA section
+#  this will be rendered under ENV_DATA section
 #
 # Each section in this file will be available as an attribute of the
 # framework.config object.
@@ -29,7 +28,7 @@ DEPLOYMENT:
   # you can overwrite the image for ocs operator catalog source by following parameter:
   # ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:4.2-32.9b6c93e.master"
   default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:4.3-rc"
-  default_latest_tag: '4.3-rc'
+  default_latest_tag: 'latest-4.3'
 
 # This is the default information about environment. Will be overwritten with
 # --cluster-conf file.yaml data you will pass to the pytest.

@@ -101,8 +101,7 @@ def pytest_addoption(parser):
     parser.addoption(
         '--ocs-version',
         dest='ocs_version',
-        action="store_true",
-        default=False,
+        default=ocsci_config.ENV_DATA['current_default_ocs'],
         help="ocs version for which ocs-ci to be run"
     )
 
@@ -235,7 +234,9 @@ def process_cluster_cli_params(config):
         ocsci_config.DEPLOYMENT.get('live_deployment', False)
     )
     ocsci_config.RUN['cli_params']['io_in_bg'] = get_cli_param(config, "io_in_bg", default=False)
-    ocsci_config.RUN['cli_params']['ocs_version'] = get_cli_param(config, "ocs_version", default=False)
+    ocsci_config.ENV_DATA['cli_params']['ocs_version'] = get_cli_param(
+        config, "ocs_version",
+    )
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
     get_cli_param(config, 'collect-logs')

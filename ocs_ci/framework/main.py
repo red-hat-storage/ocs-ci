@@ -100,24 +100,24 @@ def init_version_defaults(arguments=None):
 
     """
     print(arguments)
-    parser = argparse.ArgumentParser(add_help=False, argument_default=argparse.SUPPRESS)
-    parser.add_argument('--ocs-version')
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument(
+        '--ocs-version',
+        default=framework.config.ENV_DATA['current_default_ocs'],
+        choices=framework.config.ENV_DATA['available_ocs_versions']
+    )
     args, vals = parser.parse_known_args(arguments)
-    try:
-        if args.ocs_version:
-            ocs_version = args.ocs_version
-    except AttributeError:
-        ocs_version = "4.3"
+    ocs_version = args.ocs_version
     # Read in version specific default file
-    version_prefix = sanitize_version_string(ocs_version)
-    conf_file_name = f"{version_prefix}default_config.yaml"
+    conf_file_name = f"{ocs_version.replace('.','_')}_default_config.yaml"
+    print(conf_file_name)
     conf_file_path = os.path.join(DEFAULT_CONFIG_PATH, conf_file_name)
     with open(
         os.path.abspath(os.path.expanduser(conf_file_path))
     ) as file_stream:
         default_config = yaml.safe_load(file_stream)
         framework.config.update(default_config)
-        framework.config.RUN['ocs_version'] = ocs_version
+        framework.config.ENV_DATA['ocs_version'] = ocs_version
 
 
 def main(argv=None):
