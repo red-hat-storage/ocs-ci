@@ -110,21 +110,13 @@ class Pod(OCS):
             Exception: In case of exception from FIO
         """
         try:
-            for sample in TimeoutSampler(
-                timeout=FIO_TIMEOUT, sleep=3, func=self.fio_thread.result,
-                func_args=FIO_TIMEOUT
-            ):
-                if sample:
-                    return yaml.safe_load(self.fio_thread.result())
-            raise CommandFailed(
-                f"FIO execution results: {self.fio_thread.result()}."
-            )
+            result = self.fio_thread.result(FIO_TIMEOUT)
+            if result:
+                return yaml.safe_load(result)
+            raise CommandFailed(f"FIO execution results: {result}.")
 
         except CommandFailed as ex:
             logger.exception(f"FIO failed: {ex}")
-            raise
-        except TimeoutError as ex:
-            logger.exception(f"FIO didn't finish: {ex}")
             raise
         except Exception as ex:
             logger.exception(f"Found Exception: {ex}")
