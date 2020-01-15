@@ -37,7 +37,8 @@ def test_monitoring_enabled():
     assert len(result) > 0, msg
     for metric in result:
         _, value = metric['value']
-        assert int(value) >= 0, "number bytes in a pool isn't negative integer"
+        assert_msg = "number of bytes in a pool isn't a positive integer or zero"
+        assert int(value) >= 0, assert_msg
     # additional check that values makes at least some sense
     logger.info(
         "Checking that size of ceph_pool_stored result matches number of pools")
@@ -59,7 +60,7 @@ def test_monitoring_enabled():
     assert len(result) > 0, msg
     for metric in result:
         _, value = metric['value']
-        assert int(value) >= 0, "bucket status is a positive integer or 0"
+        assert int(value) >= 0, "bucket status isn't a positive integer or zero"
 
 
 @tier1
