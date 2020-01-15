@@ -102,7 +102,7 @@ class TestNodesMaintenance(ManageTest):
         argnames=["node_type"],
         argvalues=[
             pytest.param(*['worker'], marks=pytest.mark.polarion_id("OCS-1292")),
-            pytest.param(*['master'], marks=pytest.mark.polarion_id("OCS-1293"))
+            pytest.param(*['master'], marks=[pytest.mark.polarion_id("OCS-1293"), bugzilla('1754287')])
         ]
     )
     def test_node_maintenance_restart_activate(
