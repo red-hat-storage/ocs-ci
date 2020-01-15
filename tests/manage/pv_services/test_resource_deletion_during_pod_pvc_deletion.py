@@ -15,8 +15,8 @@ from ocs_ci.ocs.resources.pod import (
     get_operator_pods
 )
 from tests.helpers import (
-    verify_volume_deleted_in_backend,
-    wait_for_resource_count_change
+    verify_volume_deleted_in_backend, wait_for_resource_count_change,
+    default_ceph_block_pool
 )
 from tests import disruption_helpers
 
@@ -176,11 +176,12 @@ class DisruptionBase(ManageTest):
         log.info("Verified: PVs are deleted.")
 
         # Verify PV using ceph toolbox. Image/Subvolume should be deleted.
+        pool_name = default_ceph_block_pool()
         for pvc_name, uuid in pvc_uuid_map.items():
             if interface == constants.CEPHBLOCKPOOL:
                 ret = verify_volume_deleted_in_backend(
                     interface=interface, image_uuid=uuid,
-                    pool_name=self.sc_obj.ceph_pool.name
+                    pool_name=pool_name
                 )
             if interface == constants.CEPHFILESYSTEM:
                 ret = verify_volume_deleted_in_backend(
@@ -387,7 +388,6 @@ class TestDeleteResourceDuringPodPvcDeletion(DisruptionBase):
         Delete ceph/rook pod while deletion of PVCs/pods is progressing
         """
         self.pvc_objs, self.pod_objs = setup_base
-        self.sc_obj = self.pvc_objs[0].storageclass
         self.namespace = self.pvc_objs[0].project.namespace
         self.disruptive_base(
             interface, operation_to_disrupt, resource_to_delete
