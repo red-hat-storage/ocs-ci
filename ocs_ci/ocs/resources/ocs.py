@@ -349,3 +349,13 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
     assert {defaults.CEPHFS_PROVISIONER, defaults.RBD_PROVISIONER} == (
         {item['metadata']['name'] for item in csi_driver.get()['items']}
     )
+
+    # Verify node and provisioner secret names in storage class
+    log.info("Verifying node and provisioner secret names in storage class.")
+    sc_rbd = storage_class.get(resource_name='ocs-storagecluster-ceph-rbd')
+    sc_cephfs = storage_class.get(resource_name='ocs-storagecluster-cephfs')
+    assert sc_rbd['parameters']['csi.storage.k8s.io/node-stage-secret-name'] == 'rook-csi-rbd-node'
+    assert sc_rbd['parameters']['csi.storage.k8s.io/provisioner-secret-name'] == 'rook-csi-rbd-provisioner'
+    assert sc_cephfs['parameters']['csi.storage.k8s.io/node-stage-secret-name'] == 'rook-csi-cephfs-node'
+    assert sc_cephfs['parameters']['csi.storage.k8s.io/provisioner-secret-name'] == 'rook-csi-cephfs-provisioner'
+    log.info("Verified node and provisioner secret names in storage class.")
