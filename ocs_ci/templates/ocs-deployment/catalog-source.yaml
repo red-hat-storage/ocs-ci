@@ -4,6 +4,8 @@ kind: CatalogSource
 metadata:
   name: ocs-catalogsource
   namespace: openshift-marketplace
+  labels:
+      ocs-operator-internal: "true"
 spec:
   displayName: Openshift Container Storage
   icon:

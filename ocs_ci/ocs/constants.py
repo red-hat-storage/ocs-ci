@@ -402,6 +402,8 @@ ALERT_CLUSTERCRITICALLYFULL = 'CephClusterCriticallyFull'
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
 OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
+OPERATOR_CATALOG_NAMESPACE = "openshift-marketplace"
+OPERATOR_INTERNAL_SELECTOR = "ocs-operator-internal=true"
 OPERATOR_CS_QUAY_API_QUERY = (
     'https://quay.io/api/v1/repository/rhceph-dev/ocs-registry/'
     'tag/?onlyActiveTags=true&limit={tag_limit}'
