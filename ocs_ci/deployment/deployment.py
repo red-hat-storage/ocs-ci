@@ -387,8 +387,10 @@ class Deployment(object):
         if not live_deployment:
             self.create_operator_catalog_source()
         self.subscribe_ocs()
+        operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=defaults.OCS_OPERATOR_NAME
+            resource_name=defaults.OCS_OPERATOR_NAME,
+            selector=operator_selector,
         )
         channel = config.DEPLOYMENT.get('ocs_csv_channel')
         csv_name = package_manifest.get_current_csv(channel=channel)
