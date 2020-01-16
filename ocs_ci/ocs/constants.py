@@ -361,7 +361,7 @@ ANSIBLE_INVENTORY_YAML = os.path.join(
 # constants
 RBD_INTERFACE = 'rbd'
 CEPHFS_INTERFACE = 'cephfs'
-RAW_BLOCK_DEVICE = '/dev/block'
+RAW_BLOCK_DEVICE = '/dev/rbdblock'
 
 # EC2 instance statuses
 INSTANCE_PENDING = 0

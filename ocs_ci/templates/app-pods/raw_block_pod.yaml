@@ -10,7 +10,7 @@ spec:
          capabilities:
            add: ["SYS_ADMIN"]
       volumeDevices:
-        - devicePath: /dev/block
+        - devicePath: /dev/rbdblock
           name: my-volume
       imagePullPolicy: IfNotPresent
   volumes:
