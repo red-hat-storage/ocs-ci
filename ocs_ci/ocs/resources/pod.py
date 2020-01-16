@@ -22,7 +22,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, NonUpgradedImagesFoundError
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler, check_timeout_reached
+from ocs_ci.utility.utils import run_cmd, check_timeout_reached
 
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
