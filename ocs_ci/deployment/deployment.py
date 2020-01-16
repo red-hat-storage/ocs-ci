@@ -24,7 +24,10 @@ from ocs_ci.ocs.monitoring import (
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
-from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.ocs.resources.packagemanifest import (
+    get_selector_for_ocs_operator,
+    PackageManifest,
+)
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state
@@ -243,7 +246,7 @@ class Deployment(object):
         run_cmd(f"oc create -f {catalog_source_manifest.name}", timeout=2400)
         catalog_source = CatalogSource(
             resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
-            namespace='openshift-marketplace',
+            namespace=constants.OPERATOR_CATALOG_NAMESPACE,
         )
         # Wait for catalog source is ready
         catalog_source.wait_for_state("READY")
@@ -315,9 +318,11 @@ class Deployment(object):
         This method subscription manifest and subscribe to OCS operator.
 
         """
+        operator_selector = get_selector_for_ocs_operator()
         # wait for package manifest
         package_manifest = PackageManifest(
-            resource_name=defaults.OCS_OPERATOR_NAME
+            resource_name=defaults.OCS_OPERATOR_NAME,
+            selector=operator_selector,
         )
         # Wait for package manifest is ready
         package_manifest.wait_for_resource(timeout=300)
