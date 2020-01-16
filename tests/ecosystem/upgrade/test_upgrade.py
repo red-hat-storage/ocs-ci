@@ -16,7 +16,10 @@ from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.ocs import ocs_install_verification
 from ocs_ci.ocs.resources.pod import verify_pods_upgraded
-from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.ocs.resources.packagemanifest import (
+    get_selector_for_ocs_operator,
+    PackageManifest,
+)
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility.utils import (
     get_latest_ds_olm_tag,
@@ -134,7 +137,10 @@ def test_upgrade():
         new_image_tag = get_next_version_available_for_upgrade(image_tag)
     cs_data = deepcopy(ocs_catalog.data)
     cs_data['spec']['image'] = ':'.join([image_url, new_image_tag])
-    package_manifest = PackageManifest(resource_name=OCS_OPERATOR_NAME)
+    operator_selector = get_selector_for_ocs_operator()
+    package_manifest = PackageManifest(
+        resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
+    )
     csv_name_pre_upgrade = package_manifest.get_current_csv()
     log.info(f"CSV name before upgrade is: {csv_name_pre_upgrade}")
     csv_pre_upgrade = CSV(
