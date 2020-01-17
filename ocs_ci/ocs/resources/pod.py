@@ -22,7 +22,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, NonUpgradedImagesFoundError
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler, check_timeout_reached
+from ocs_ci.utility.utils import run_cmd, check_timeout_reached
 
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
@@ -110,14 +110,10 @@ class Pod(OCS):
             Exception: In case of exception from FIO
         """
         try:
-            if self.fio_thread.running():
-                for sample in TimeoutSampler(
-                    timeout=FIO_TIMEOUT, sleep=3, func=self.fio_thread.done
-                ):
-                    if sample:
-                        return yaml.safe_load(self.fio_thread.result())
-            if self.fio_thread and self.fio_thread.done():
-                return yaml.safe_load(self.fio_thread.result())
+            result = self.fio_thread.result(FIO_TIMEOUT)
+            if result:
+                return yaml.safe_load(result)
+            raise CommandFailed(f"FIO execution results: {result}.")
 
         except CommandFailed as ex:
             logger.exception(f"FIO failed: {ex}")
