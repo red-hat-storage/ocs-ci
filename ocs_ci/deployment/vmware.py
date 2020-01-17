@@ -10,17 +10,18 @@ import time
 import hcl
 import yaml
 
-from .deployment import Deployment
 from ocs_ci.deployment.install_ocp_on_rhel import OCPINSTALLRHEL
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import (
     get_node_ips, wait_for_nodes_status,
     get_typed_worker_nodes, remove_nodes,
 )
 from ocs_ci.ocs.openshift_ops import OCP
+from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.templating import Templating, dump_data_to_json
 from ocs_ci.utility.utils import (
     run_cmd, replace_content_in_file, wait_for_co,
@@ -29,7 +30,7 @@ from ocs_ci.utility.utils import (
     convert_yaml2tfvars,
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
-
+from .deployment import Deployment
 
 logger = logging.getLogger(__name__)
 
@@ -449,12 +450,21 @@ class VSPHEREUPI(VSPHEREBASE):
             self.terraform.apply(self.terraform_var)
             os.chdir(self.previous_dir)
             logger.info("waiting for bootstrap to complete")
-            run_cmd(
-                f"{self.installer} wait-for bootstrap-complete "
-                f"--dir {self.cluster_path} "
-                f"--log-level {log_cli_level}",
-                timeout=3600
-            )
+            try:
+                run_cmd(
+                    f"{self.installer} wait-for bootstrap-complete "
+                    f"--dir {self.cluster_path} "
+                    f"--log-level {log_cli_level}",
+                    timeout=3600
+                )
+            except CommandFailed as e:
+                gather_bootstrap_pattern = (
+                    "openshift-install gather bootstrap --help"
+                )
+                if gather_bootstrap_pattern in str(e):
+                    gather_bootstrap()
+                raise e
+
             logger.info("removing bootstrap node")
             os.chdir(self.terraform_data_dir)
             self.terraform.apply(self.terraform_var, bootstrap_complete=True)

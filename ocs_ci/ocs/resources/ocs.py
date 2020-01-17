@@ -274,7 +274,7 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
         resource_count=number_of_worker_nodes,
         timeout=timeout
     )
-    # csi-rbdplugin-profisioner
+    # csi-rbdplugin-provisioner
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
         selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
