@@ -725,6 +725,33 @@ def workload_fio_storageutilization(
         # make sure we communicate what is going to happen
         logger.info(f"going to delete {fixture_name} Job")
         fio_job_file.delete()
+        # now we need to wait a bit to make sure the data were really deleted
+        logger.info(
+            f"checking that data written by {fixture_name} Job are deleted")
+        for i in range(10):
+            # By asking again for pvc_size necessary to reach the target
+            # cluster utilization, we can see how much data were already
+            # deleted. Negative or small value of current pvc_size means that
+            # the data were not yet deleted.
+            pvc_size_tmp = get_storageutilization_size(
+                target_percentage, ceph_pool_name)
+            # If no other components were utilizing OCS storage, the space
+            # would be considered reclaimed when current pvc_size reaches
+            # it's original value again. But since this is not the case (eg.
+            # constantly growing monitoring or log data are stored there),
+            # we are ok with just 90% of the original value.
+            if pvc_size_tmp >= pvc_size*0.90:
+                logger.info("it seems that the storage space was reclaimed")
+                break
+            iter_wait = 60
+            logger.info(
+                f"waiting {iter_wait}s for OCS to reclaim storage"
+                " used by the fio job")
+            time.sleep(iter_wait)
+        else:
+            error_msg = "it seems that the storage space was not reclaimed"
+            logger.error(error_msg)
+            # TODO: raise exception?
 
     return measured_op
 
