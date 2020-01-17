@@ -4,6 +4,8 @@ kind: OperatorSource
 metadata:
   name: "NAME-PLACEHOLDER"
   namespace: openshift-marketplace
+  labels:
+      ocs-operator-internal: "true"
 spec:
   type: appregistry
   endpoint: https://quay.io/cnr
