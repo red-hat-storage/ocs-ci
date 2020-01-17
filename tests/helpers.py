@@ -949,13 +949,13 @@ def measure_pvc_creation_time(interface, pvc_name):
     return total.total_seconds()
 
 
-def measure_pvc_creation_time_bulk(interface, pvc_obj_list):
+def measure_pvc_creation_time_bulk(interface, pvc_name_list):
     """
     Measure PVC creation time of bulk PVC based on logs.
 
     Args:
         interface (str): The interface backed the PVC
-        pvc_obj_list (list): List of PVC Names for measuring creation time
+        pvc_name_list (list): List of PVC Names for measuring creation time
 
     Returns:
         pvc_dict (dict): Dictionary of pvc_name with creation time.
@@ -966,39 +966,39 @@ def measure_pvc_creation_time_bulk(interface, pvc_obj_list):
     # get the logs from the csi-provisioner containers
     logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
     logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+    logs = logs.split("\n")
 
     pvc_dict = dict()
     format = '%H:%M:%S.%f'
-    for pvc_obj in pvc_obj_list:
-        logs = logs.split("\n")
+    for pvc_name in pvc_name_list:
         # Extract the starting time for the PVC provisioning
         start = [
-            i for i in logs if re.search(f"provision.*{pvc_obj.name}.*started", i)
+            i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)
         ]
         start = start[0].split(' ')[1]
         start_time = datetime.datetime.strptime(start, format)
         # Extract the end time for the PVC provisioning
         end = [
-            i for i in logs if re.search(f"provision.*{pvc_obj.name}.*succeeded", i)
+            i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)
         ]
         end = end[0].split(' ')[1]
         end_time = datetime.datetime.strptime(end, format)
         total = end_time - start_time
-        pvc_dict[pvc_obj.name] = total.total_seconds()
+        pvc_dict[pvc_name] = total.total_seconds()
 
     return pvc_dict
 
 
-def measure_pvc_deletion_time_bulk(interface, pvc_obj_list):
+def measure_pvc_deletion_time_bulk(interface, pvc_name_list):
     """
     Measure PVC deletion time of bulk PVC based on logs.
 
     Args:
         interface (str): The interface backed the PVC
-        pvc_obj_list (list): List of PVC Names for measuring creation time
+        pvc_name_list (list): List of PVC Names for measuring deletion time
 
     Returns:
-        pvc_dict (dict): Dictionary of pvc_name with creation time.
+        pvc_dict (dict): Dictionary of pvc_name with deletion time.
 
     """
     # Get the correct provisioner pod based on the interface
@@ -1006,25 +1006,25 @@ def measure_pvc_deletion_time_bulk(interface, pvc_obj_list):
     # get the logs from the csi-provisioner containers
     logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
     logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+    logs = logs.split("\n")
 
     pvc_dict = dict()
     format = '%H:%M:%S.%f'
-    for pvc_obj in pvc_obj_list:
-        logs = logs.split("\n")
+    for pvc_name in pvc_name_list:
         # Extract the starting time for the PVC provisioning
         start = [
-            i for i in logs if re.search(f"delete \"{pvc_obj.name}\": started", i)
+            i for i in logs if re.search(f"delete \"{pvc_name}\": started", i)
         ]
         start = start[0].split(' ')[1]
         start_time = datetime.datetime.strptime(start, format)
         # Extract the end time for the PVC provisioning
         end = [
-            i for i in logs if re.search(f"delete \"{pvc_obj.name}\": succeeded", i)
+            i for i in logs if re.search(f"delete \"{pvc_name}\": succeeded", i)
         ]
         end = end[0].split(' ')[1]
         end_time = datetime.datetime.strptime(end, format)
         total = end_time - start_time
-        pvc_dict[pvc_obj.name] = total.total_seconds()
+        pvc_dict[pvc_name] = total.total_seconds()
 
     return pvc_dict
 
