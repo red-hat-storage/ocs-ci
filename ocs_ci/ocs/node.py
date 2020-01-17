@@ -267,3 +267,33 @@ def add_new_node_and_label_it(machineset_name):
     log.info(
         f"Successfully labeled {new_spun_node} with OCS storage label"
     )
+
+
+def get_ocs_worker_nodes():
+    """
+    Get worker nodes which are labeled for ocs
+
+    Returns:
+        list: Node obj
+    """
+    ocs_worker_node_list = list()
+    worker_node_list = get_typed_nodes()
+
+    for nodes in worker_node_list:
+        worker_label_dict = nodes.get().get('metadata').get('labels')
+        for labels in worker_label_dict.keys():
+            if labels in constants.OPERATOR_NODE_LABEL:
+                log.info(f"Worker node {nodes.name} found with ocs label")
+                ocs_worker_node_list.append(nodes.name)
+    return ocs_worker_node_list
+
+
+def get_node_from_machine_name(machine_name):
+    node_list = get_node_objs()
+    matching_annotation = "openshift-machine-api/"+machine_name
+    for nodes in node_list:
+        label_dict = nodes.get().get('metadata').get('annotations')
+        for annotation in label_dict.values():
+            if annotation == matching_annotation:
+                log.info(f"Found Worker node {nodes.name} Matching with annotation {matching_annotation}")
+                return nodes

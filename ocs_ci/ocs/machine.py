@@ -102,8 +102,8 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
         bool: True in case of success, False otherwise
     """
     machine_type = get_machine_type(machine_name)
-    machines = get_machines(machine_type=machine_type)
     delete_machine(machine_name)
+    machines = get_machines(machine_type=machine_type)
     for machine in machines:
         if re.match(machine.name[:-6], machine_name):
             log.info(f"New spinned machine name is {machine.name}")
