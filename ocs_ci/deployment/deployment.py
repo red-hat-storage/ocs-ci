@@ -286,6 +286,8 @@ class Deployment(object):
             stage_os_secret, stage_secret_data_yaml.name
         )
         run_cmd(f"oc create -f {stage_secret_data_yaml.name}")
+        logger.info("Waiting 10 secs after secret is created")
+        time.sleep(10)
 
         logger.info("Adding Stage Operator Source")
         # create Operator Source

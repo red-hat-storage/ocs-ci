@@ -37,11 +37,23 @@ class PackageManifest(OCP):
         )
 
     def get(self, **kwargs):
+        resource_name = kwargs.get("resource_name", "")
+        resource_name = resource_name if resource_name else self.resource_name
+
         data = super(PackageManifest, self).get(**kwargs)
-        if type(data) == dict and (
-            data.get('kind') == 'List' and len(data['items']) == 1
-        ):
-            return data['items'][0]
+        if type(data) == dict and (data.get('kind') == 'List'):
+            items = data['items']
+            data_len = len(items)
+            if data_len == 1:
+                return items[0]
+            if data_len > 1 and resource_name:
+                items_match_name = [
+                    i for i in items if i['metadata']['name'] == resource_name
+                ]
+                if len(items_match_name) == 1:
+                    return items_match_name[0]
+                else:
+                    return items_match_name
         return data
 
     @retry((CommandFailed), tries=100, delay=5, backoff=1)
