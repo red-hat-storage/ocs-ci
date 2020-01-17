@@ -54,7 +54,7 @@ class TestAvailabilityZones(ManageTest):
         request.addfinalizer(finalizer)
 
     def test_availability_zone_failure(
-        self, aws_obj, ec2_instances, pvc_factory, pod_factory,dc_pod_factory, teardown
+        self, aws_obj, ec2_instances, pvc_factory, pod_factory, dc_pod_factory, teardown
     ):
         """
 

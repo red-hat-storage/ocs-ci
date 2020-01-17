@@ -106,7 +106,7 @@ class TestNodesMaintenance(ManageTest):
         ]
     )
     def test_node_maintenance_restart_activate(
-        self, nodes, pvc_factory, pod_factory,dc_pod_factory, node_type
+        self, nodes, pvc_factory, pod_factory, dc_pod_factory, node_type
     ):
         """
         OCS-1292/OCS-1293:
