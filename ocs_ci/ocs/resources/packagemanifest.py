@@ -5,7 +5,7 @@ import logging
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.ocp import OCP, defaults
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
@@ -20,7 +20,7 @@ class PackageManifest(OCP):
     """
 
     def __init__(
-            self, resource_name='', namespace=defaults.MARKETPLACE_NAMESPACE,
+            self, resource_name='', namespace=constants.MARKETPLACE_NAMESPACE,
             **kwargs
     ):
         """
@@ -131,13 +131,32 @@ class PackageManifest(OCP):
 
 
 def get_selector_for_ocs_operator():
+    """
+    This is the helper function which returns selector for package manifest.
+    It's needed because of conflict with live content and multiple package
+    manifests with the ocs-operator name. In case we are using internal builds
+    we label catalog source or operator source and using the same selector for
+    package manifest.
+
+    Returns:
+        str: Selector for package manifest if we are on internal
+            builds, otherwise it returns None
+    """
     catalog_source = CatalogSource(
         resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
-        namespace='openshift-marketplace',
+        namespace=constants.MARKETPLACE_NAMESPACE,
     )
     try:
         catalog_source.get()
+        return constants.OPERATOR_INTERNAL_SELECTOR
     except CommandFailed:
         log.info("Catalog source not found!")
-        return None
-    return constants.OPERATOR_INTERNAL_SELECTOR
+    operator_source = OCP(
+        kind="OperatorSource", resource_name=constants.OPERATOR_SOURCE_NAME,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+    try:
+        operator_source.get()
+        return constants.OPERATOR_INTERNAL_SELECTOR
+    except CommandFailed:
+        log.info("Catalog source not found!")
