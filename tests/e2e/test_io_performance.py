@@ -40,7 +40,7 @@ class TestIOPerformance(ManageTest):
         ],
         argvalues=[
             pytest.param(
-                *['1000GB', 'rw', '4k', 1, 1200, 4, 4],
+                *['1000GB', 'rw', '4k', 1, 600, 4, 4],
                 marks=pytest.mark.polarion_id("OCS-676")
             ),
             pytest.param(
@@ -52,28 +52,28 @@ class TestIOPerformance(ManageTest):
                 marks=pytest.mark.polarion_id("OCS-678")
             ),
             pytest.param(
-                *['1000GB', 'ro', '4k', 1, 1200, 8, 7]
+                *['1000GB', 'ro', '4k', 1, 600, 8, 7]
             ),
             pytest.param(
-                *['1000GB', 'wo', '4k', 1, 1200, 8, 8]
+                *['1000GB', 'wo', '4k', 1, 600, 8, 8]
             ),
             pytest.param(
-                *['1000GB', 'rw', '32k', 1, 1200, 8, 4]
+                *['1000GB', 'rw', '32k', 1, 600, 8, 4]
             ),
             pytest.param(
-                *['1000GB', 'ro', '32k', 1, 1200, 8, 7]
+                *['1000GB', 'ro', '32k', 1, 600, 8, 7]
             ),
             pytest.param(
-                *['1000GB', 'wo', '32k', 1, 1200, 8, 8]
+                *['1000GB', 'wo', '32k', 1, 600, 8, 8]
             ),
             pytest.param(
-                *['1000GB', 'rw', '4m', 1, 1200, 8, 10]
+                *['1000GB', 'rw', '4m', 1, 600, 8, 10]
             ),
             pytest.param(
-                *['1000GB', 'ro', '4m', 1, 1200, 8, 11]
+                *['1000GB', 'ro', '4m', 1, 600, 8, 11]
             ),
             pytest.param(
-                *['1000GB', 'wo', '4m', 1, 1200, 8, 12]
+                *['1000GB', 'wo', '4m', 1, 600, 8, 12]
             ),
 
         ]
