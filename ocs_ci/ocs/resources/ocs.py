@@ -342,3 +342,10 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
             assert not node_names.count(node) > 1, (
                 "OSD's are not distributed evenly across worker nodes"
             )
+
+    # Verify that CSI driver object contains provisioner names
+    log.info("Verifying CSI driver object contains provisioner names.")
+    csi_driver = OCP(kind="CSIDriver")
+    assert {defaults.CEPHFS_PROVISIONER, defaults.RBD_PROVISIONER} == (
+        {item['metadata']['name'] for item in csi_driver.get()['items']}
+    )
