@@ -222,7 +222,7 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
         # Verify pods are Running
         for pod_obj in pod_objs:
             helpers.wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=180
             )
             pod_obj.reload()
         log.info("Verified: All pods are Running.")
