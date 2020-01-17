@@ -1428,6 +1428,7 @@ def mcg_obj_fixture(request):
     Returns:
         MCG: An MCG resource
     """
+
     mcg_obj = MCG()
 
     if config.ENV_DATA['platform'].lower() == 'aws':
@@ -1470,7 +1471,7 @@ def awscli_pod(mcg_obj, created_pods):
     return awscli_pod_fixture(mcg_obj, created_pods)
 
 
-@pytest.fixture()
+@pytest.fixture(scope='session')
 def awscli_pod_session(mcg_obj_session, created_pods_session):
     return awscli_pod_fixture(mcg_obj_session, created_pods_session)
 
@@ -1549,6 +1550,7 @@ def uploaded_objects_fixture(
     Returns:
         list: An empty list of objects
     """
+
     uploaded_objects_paths = []
 
     def object_cleanup():
@@ -1659,8 +1661,8 @@ def bucket_factory_fixture(request, mcg_obj):
                 log.info(f'Cleaning up bucket {bucket.name}')
                 bucket.delete()
                 log.info(
-                        f"Verifying whether bucket: {bucket.name} exists after"
-                        f" deletion"
+                    f"Verifying whether bucket: {bucket.name} exists after"
+                    f" deletion"
                 )
                 assert not mcg_obj.s3_verify_bucket_exists(bucket.name)
             else:
@@ -1728,7 +1730,7 @@ def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
     )
 
 
-@pytest.fixture()
+@pytest.fixture(scope='session')
 def multiregion_mirror_setup_session(
     mcg_obj_session,
     multiregion_resources_session,
