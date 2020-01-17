@@ -3,7 +3,7 @@ import logging
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, defaults
-from tests.helpers import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
 log = logging.getLogger(__name__)

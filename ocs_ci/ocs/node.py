@@ -8,7 +8,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import machine
-from tests.helpers import get_worker_nodes
+import tests.helpers
 from ocs_ci.ocs import ocp
 
 
@@ -234,7 +234,7 @@ def add_new_node_and_label_it(machineset_name):
 
     """
     # Get the initial nodes list
-    initial_nodes = get_worker_nodes()
+    initial_nodes = tests.helpers.get_worker_nodes()
     log.info(f"Current available worker nodes are {initial_nodes}")
 
     # get machineset replica count
@@ -252,7 +252,7 @@ def add_new_node_and_label_it(machineset_name):
     machine.wait_for_new_node_to_be_ready(machineset_name)
 
     # Get the node name of new spun node
-    nodes_after_new_spun_node = get_worker_nodes()
+    nodes_after_new_spun_node = tests.helpers.get_worker_nodes()
     new_spun_node = list(
         set(nodes_after_new_spun_node) - set(initial_nodes)
     )
@@ -267,3 +267,16 @@ def add_new_node_and_label_it(machineset_name):
     log.info(
         f"Successfully labeled {new_spun_node} with OCS storage label"
     )
+
+
+def get_node_logs(node_name):
+    """
+    Get logs from a given node
+
+    pod_name (str): Name of the node
+
+    Returns:
+        str: Output of 'dmesg' run on node
+    """
+    node = OCP(kind='node')
+    return node.exec_oc_debug_cmd(node_name, ["dmesg"])

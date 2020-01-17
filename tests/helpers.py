@@ -17,13 +17,13 @@ from ocs_ci.ocs.ocp import OCP
 from uuid import uuid4
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs import constants, defaults, ocp, node
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler, run_cmd
+from ocs_ci.utility.utils import TimeoutSampler, ocsci_log_path, run_cmd
 from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
@@ -1750,3 +1750,62 @@ def remove_label_from_worker_node(node_list, label_key):
         command=f"label node {' '.join(node_list)} {label_key}-", out_yaml_format=False
     )
     logger.info(out)
+
+
+def get_pods_nodes_logs():
+    """
+    Get logs from all pods and nodes
+
+    Returns:
+        dict: node/pod name as key, logs content as value (string)
+    """
+    all_logs = {}
+    all_pods = pod.get_all_pods()
+    all_nodes = node.get_node_objs()
+
+    for node_obj in all_nodes:
+        node_name = node_obj.name
+        log_content = node.get_node_logs(node_name)
+        all_logs.update({node_name: log_content})
+
+    for pod_obj in all_pods:
+        try:
+            pod_name = pod_obj.name
+            log_content = pod.get_pod_logs(pod_name)
+            all_logs.update({pod_name: log_content})
+        except CommandFailed:
+            pass
+
+    return all_logs
+
+
+def get_logs_with_errors(errors=None):
+    """
+    From logs of all pods and nodes, get only logs
+    containing any of specified errors
+
+    Args:
+        errors (list): List of errors to look for
+
+    Returns:
+        dict: node/pod name as key, logs content as value; may be empty
+    """
+    all_logs = get_pods_nodes_logs()
+    output_logs = {}
+
+    errors_list = constants.CRITICAL_ERRORS
+
+    if errors:
+        errors_list = errors_list + errors
+
+    for name, log_content in all_logs.items():
+        for error_msg in errors_list:
+            if error_msg in log_content:
+                logger.debug(f"Found '{error_msg}' in log of {name}")
+                output_logs.update({name: log_content})
+
+                log_path = f"{ocsci_log_path()}/{name}.log"
+                with open(log_path, 'w') as fh:
+                    fh.write(log_content)
+
+    return output_logs
