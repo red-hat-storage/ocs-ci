@@ -1329,13 +1329,13 @@ def verify_pv_mounted_on_node(node_pv_dict):
             eg: {'node1': ['pv1', 'pv3'], 'node2': ['pv5']}
     """
     existing_pvs = {}
-    for node, pvs in node_pv_dict.items():
-        cmd = f'oc debug nodes/{node} -- df'
+    for node_name, pvs in node_pv_dict.items():
+        cmd = f'oc debug nodes/{node_name} -- df'
         df_on_node = run_cmd(cmd)
-        existing_pvs[node] = []
+        existing_pvs[node_name] = []
         for pv_name in pvs:
             if f"/pv/{pv_name}/" in df_on_node:
-                existing_pvs[node].append(pv_name)
+                existing_pvs[node_name].append(pv_name)
     return existing_pvs
 
 
