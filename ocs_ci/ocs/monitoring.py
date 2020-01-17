@@ -125,7 +125,7 @@ def get_metrics_persistentvolumeclaims_info():
     return json.loads(response.content.decode('utf-8'))
 
 
-@retry(UnexpectedBehaviour, tries=10, delay=3, backoff=1)
+@retry(UnexpectedBehaviour, tries=60, delay=3, backoff=1)
 def check_pvcdata_collected_on_prometheus(pvc_name):
     """
     Checks whether initially pvc related data is collected on pod

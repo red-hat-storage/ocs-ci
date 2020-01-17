@@ -1,4 +1,5 @@
 import logging
+import time
 import pytest
 
 from ocs_ci.ocs import ocp, constants, defaults
@@ -13,7 +14,7 @@ from ocs_ci.ocs.monitoring import (
     prometheus_health_check
 )
 from ocs_ci.ocs.node import (
-    wait_for_nodes_status, get_node_objs,
+    wait_for_nodes_status,
     get_typed_nodes, drain_nodes, schedule_nodes
 )
 from ocs_ci.utility.retry import retry
@@ -42,7 +43,7 @@ def wait_to_update_mgrpod_info_prometheus_pod():
     log.info("Ceph health status metrics is updated")
 
 
-@retry((CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException), tries=10, delay=3, backoff=1)
+@retry((CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException), tries=30, delay=3, backoff=1)
 def wait_for_nodes_status_and_prometheus_health_check(pods):
     """
     Waits for the all the nodes to be in running state
@@ -90,18 +91,6 @@ class TestMonitoringBackedByOCS(E2ETest):
         """
 
         def finalizer():
-            not_ready_nodes = [
-                n for n in get_node_objs() if n
-                .ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
-            ]
-            log.warning(
-                f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
-            )
-            if not_ready_nodes:
-                nodes.restart_nodes(not_ready_nodes)
-                wait_for_nodes_status()
-
-            log.info("All nodes are in Ready status")
 
             assert prometheus_health_check(), "Prometheus health is degraded"
 
@@ -407,7 +396,13 @@ class TestMonitoringBackedByOCS(E2ETest):
             prometheus_node_obj = pod.get_pod_node(prometheus_pod_obj)
 
             # Shutdown and recovery node(i,e. restart nodes) where the prometheus pod is hosted
-            nodes.restart_nodes([prometheus_node_obj])
+            nodes.stop_nodes([prometheus_node_obj])
+
+            waiting_time = '20'
+            log.info(f"Waiting for {waiting_time} seconds")
+            time.sleep(waiting_time)
+
+            nodes.start_nodes([prometheus_node_obj])
 
             # Validate all nodes are in READY state
             wait_for_nodes_status()
