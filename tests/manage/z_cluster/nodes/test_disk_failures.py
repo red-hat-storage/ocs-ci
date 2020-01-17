@@ -50,7 +50,7 @@ class TestDetachAttachWorkerVolume(ManageTest):
         self.sanity_helpers = Sanity()
 
     @pytest.mark.polarion_id("OCS-1085")
-    def test_detach_attach_worker_volume(self, nodes, pvc_factory, pod_factory):
+    def test_detach_attach_worker_volume(self, nodes, pvc_factory, pod_factory, dc_pod_factory):
         """
         Detach and attach worker volume
 
@@ -78,7 +78,7 @@ class TestDetachAttachWorkerVolume(ManageTest):
         # it's alive
         assert wait_for_ct_pod_recovery(), "Ceph tools pod failed to come up on another node"
 
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(pvc_factory, pod_factory, dc_pod_factory)
 
         # Wait for worker volume to be re-attached automatically to the node
         assert nodes.wait_for_volume_attach(data_volume), (
@@ -92,7 +92,7 @@ class TestDetachAttachWorkerVolume(ManageTest):
         self.sanity_helpers.health_check()
 
     @pytest.mark.polarion_id("OCS-1086")
-    def test_detach_attach_2_data_volumes(self, nodes, pvc_factory, pod_factory):
+    def test_detach_attach_2_data_volumes(self, nodes, pvc_factory, pod_factory, dc_pod_factory):
         """
         Detach and attach disk from 2 worker nodes
 
@@ -128,4 +128,4 @@ class TestDetachAttachWorkerVolume(ManageTest):
 
         # Validate cluster is still functional
         self.sanity_helpers.health_check()
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(pvc_factory, pod_factory, dc_pod_factory)

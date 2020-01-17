@@ -49,14 +49,14 @@ class TestNodesRestart(ManageTest):
             )
         ]
     )
-    def test_nodes_restart(self, nodes, pvc_factory, pod_factory, force):
+    def test_nodes_restart(self, nodes, pvc_factory, pod_factory, dc_pod_factory, force):
         """
         Test nodes restart (from the platform layer, i.e, EC2 instances, VMWare VMs)
         """
         ocp_nodes = get_node_objs()
         nodes.restart_nodes(nodes=ocp_nodes, force=force)
         self.sanity_helpers.health_check()
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(pvc_factory, pod_factory, dc_pod_factory)
 
     @pytest.mark.parametrize(
         argnames=["interface", "operation"],
@@ -68,7 +68,7 @@ class TestNodesRestart(ManageTest):
         ]
     )
     def test_pv_provisioning_under_degraded_state(
-        self, nodes, pvc_factory, pod_factory, interface, operation
+        self, nodes, pvc_factory, pod_factory, dc_pod_factory, interface, operation
     ):
         """
         Test PV provisioning under degraded state
@@ -112,7 +112,7 @@ class TestNodesRestart(ManageTest):
         """
         if operation == 'delete_resources':
             # Create resources that their deletion will be tested later
-            self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+            self.sanity_helpers.create_resources(pvc_factory, pod_factory, dc_pod_factory)
 
         provisioner_pods = None
         # Get the provisioner pod according to the interface
@@ -180,7 +180,7 @@ class TestNodesRestart(ManageTest):
 
         if operation == 'create_resources':
             # Cluster validation (resources creation and IO running)
-            self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+            self.sanity_helpers.create_resources(pvc_factory, pod_factory, dc_pod_factory)
         elif operation == 'delete_resources':
             # Cluster validation (resources creation and IO running)
             self.sanity_helpers.delete_resources()

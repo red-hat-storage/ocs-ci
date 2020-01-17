@@ -54,7 +54,7 @@ class TestAvailabilityZones(ManageTest):
         request.addfinalizer(finalizer)
 
     def test_availability_zone_failure(
-        self, aws_obj, ec2_instances, pvc_factory, pod_factory, teardown
+        self, aws_obj, ec2_instances, pvc_factory, pod_factory,dc_pod_factory, teardown
     ):
         """
 
@@ -83,7 +83,7 @@ class TestAvailabilityZones(ManageTest):
 
         # Create resources
         logger.info("Trying to create resources on un-healthy cluster")
-        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.create_resources(pvc_factory, pod_factory, dc_pod_factory)
         logger.info("Resources Created")
 
         # Delete resources
