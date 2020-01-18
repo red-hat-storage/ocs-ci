@@ -17,11 +17,7 @@ log = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope='function')
-def ripsaw(request, storageclass_factory):
-
-    # Create storage class
-    log.info("Creating a Storage Class")
-    storageclass_factory(sc_name='pgsql-workload')
+def ripsaw(request):
 
     # Create RipSaw Operator
     ripsaw = RipSaw()
