@@ -120,13 +120,16 @@ OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
-DEFAULT_SECRET = 'rook-ceph-csi'
-DEFAULT_BLOCKPOOL = 'rbd'
-DEFAULT_SC_RBD = 'ceph-rbd'
+DEFAULT_CLUSTERNAME = 'ocs-storagecluster'
+DEFAULT_BLOCKPOOL = f'{DEFAULT_CLUSTERNAME}-cephblockpool'
 DEFAULT_SC_CEPHFS = "cephfs"
 DEFAULT_ROUTE_CRT = "router-certs-default"
 DEFAULT_NAMESPACE = "default"
 IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
+
+# Default StorageClass
+DEFAULT_STORAGECLASS_CEPHFS = f'{DEFAULT_CLUSTERNAME}-cephfs'
+DEFAULT_STORAGECLASS_RBD = f'{DEFAULT_CLUSTERNAME}-ceph-rbd'
 
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
@@ -358,7 +361,7 @@ ANSIBLE_INVENTORY_YAML = os.path.join(
 # constants
 RBD_INTERFACE = 'rbd'
 CEPHFS_INTERFACE = 'cephfs'
-RAW_BLOCK_DEVICE = '/dev/block'
+RAW_BLOCK_DEVICE = '/dev/rbdblock'
 
 # EC2 instance statuses
 INSTANCE_PENDING = 0
@@ -399,6 +402,8 @@ ALERT_CLUSTERCRITICALLYFULL = 'CephClusterCriticallyFull'
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
 OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
+OPERATOR_CATALOG_NAMESPACE = "openshift-marketplace"
+OPERATOR_INTERNAL_SELECTOR = "ocs-operator-internal=true"
 OPERATOR_CS_QUAY_API_QUERY = (
     'https://quay.io/api/v1/repository/rhceph-dev/ocs-registry/'
     'tag/?onlyActiveTags=true&limit={tag_limit}'
@@ -436,6 +441,7 @@ SCALEUP_VSPHERE_MAIN = os.path.join(SCALEUP_VSPHERE_DIR, "main.tf")
 SCALEUP_VSPHERE_VARIABLES = os.path.join(SCALEUP_VSPHERE_DIR, "variables.tf")
 SCALEUP_VSPHERE_ROUTE53 = os.path.join(SCALEUP_VSPHERE_DIR, "route53/vsphere-rhel-dns.tf")
 SCALEUP_VSPHERE_ROUTE53_VARIABLES = os.path.join(SCALEUP_VSPHERE_DIR, "route53/variables.tf")
+SCALEUP_VSPHERE_MACHINE_CONF = os.path.join(SCALEUP_VSPHERE_DIR, "machines/vsphere-rhel-machine.tf")
 TERRAFORM_VARS = "terraform.tfvars"
 VM_DISK_TYPE = "thin"
 VM_DISK_MODE = "persistent"
@@ -506,3 +512,7 @@ STAGE_CA_FILE = os.path.join(
 MDS_PDB = "rook-ceph-mds-ocs-storagecluster-cephfilesystem"
 OSD_PDB = "rook-ceph-osd-"
 MON_PDB = "rook-ceph-mon-pdb"
+
+# Root Disk size
+CURRENT_VM_ROOT_DISK_SIZE = '60'
+VM_ROOT_DISK_SIZE = '120'

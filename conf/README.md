@@ -79,8 +79,7 @@ Lower number == higher priority
 1) **CLI args** - sometime we can pass some variables by CLI parameters, in
     this case those arguments should overwrite everything and have the highest
     priority.
-2) **cluster config file** - yaml file passed by `--cluster-conf` parameter
-3) **ocsci config file** - ocsci related config passed by `--ocsci-conf`
+2) **ocsci config file** - ocsci related config passed by `--ocsci-conf`
     parameter.
-4) **default configuration** - default values and the lowest priority. You can
+3) **default configuration** - default values and the lowest priority. You can
     see [default config here](https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/conf/default_config.yaml).

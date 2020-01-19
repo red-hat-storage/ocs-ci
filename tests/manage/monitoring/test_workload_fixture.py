@@ -22,8 +22,7 @@ need to create the following ``reuse-workload.yaml`` config file:
     ENV_DATA:
       measurement_dir: /home/my_user/my-ocs-dir/measurement_results
 
-And then pass it to ``run-ci`` via ``--cluster-conf reuse-workload.yaml``
-option. Value of ``measurement_dir`` specifies the path where a measurement
+Value of ``measurement_dir`` specifies the path where a measurement
 file for each workload fixture is stored. First time you execute a test
 run, measurement files will be placed there. When you can run the tests again,
 workload fixtures won't be executed because the tests will use the measurements

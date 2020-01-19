@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import (
-    tier4, ignore_leftovers, ManageTest, aws_platform_required
+    tier4, tier4a, ignore_leftovers, ManageTest, aws_platform_required
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 @tier4
+@tier4a
 @ignore_leftovers
 class TestNodesRestart(ManageTest):
     """

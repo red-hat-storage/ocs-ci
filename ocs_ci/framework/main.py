@@ -45,8 +45,6 @@ def init_ocsci_conf(arguments=None):
     """
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--ocsci-conf', action='append', default=[])
-    # cluster-conf parameter will be deleted once we will update all the jobs
-    parser.add_argument('--cluster-conf')
     args, unknown = parser.parse_known_args(args=arguments)
     for config_file in args.ocsci_conf:
         with open(
@@ -54,11 +52,6 @@ def init_ocsci_conf(arguments=None):
         ) as file_stream:
             custom_config_data = yaml.safe_load(file_stream)
             framework.config.update(custom_config_data)
-    cluster_config = args.cluster_conf
-    if cluster_config:
-        with open(os.path.expanduser(cluster_config)) as file_stream:
-            cluster_config_data = yaml.safe_load(file_stream)
-            framework.config.update(cluster_config_data)
     framework.config.RUN['run_id'] = int(time.time())
     bin_dir = framework.config.RUN.get('bin_dir')
     if bin_dir:

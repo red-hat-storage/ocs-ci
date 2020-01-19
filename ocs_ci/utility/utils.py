@@ -637,7 +637,7 @@ def get_openshift_mirror_url(file_name, version):
         os_type=os_type,
     )
     sample = TimeoutSampler(
-        timeout=180, sleep=5, func=ensure_nightly_build_availability,
+        timeout=540, sleep=5, func=ensure_nightly_build_availability,
         build_url=url,
     )
     if not sample.wait_for_func_status(result=True):
@@ -1118,36 +1118,71 @@ def get_testrun_name():
     """
     Prepare testrun ID for Polarion (and other reports).
 
-    Return config.REPORTING["polarion"]["testrun_name"], if configured.
-    Otherwise prepare testrun ID based on Upstream/Downstream information,
-    OCS version and used markers.
-
     Returns:
-        str: String containing testrun ID
+        str: String containing testrun name
 
     """
     markers = config.RUN['cli_params'].get('-m', '').replace(" ", "-")
     us_ds = config.REPORTING.get("us_ds")
-    us_ds = "Upstream" if us_ds.upper() == "US" else "Downstream" if us_ds.upper() == "DS" else us_ds
-    if config.REPORTING.get("testrun_name"):
-        testrun_name = config.REPORTING["testrun_name"]
-    elif markers:
-        testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}_{markers}"
-    else:
-        testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}"
-
-    # form complete testrun name that includes deployment platform and type
-    testrun_name = (
-        f"{testrun_name}-{config.ENV_DATA.get('platform').upper()}-"
-        f"{config.ENV_DATA.get('deployment_type').upper()}"
+    if us_ds.upper() == "US":
+        us_ds = "Upstream"
+    elif us_ds.upper() == "DS":
+        us_ds = "Downstream"
+    ocp_version = ".".join(
+        config.DEPLOYMENT.get('installer_version').split('.')[:-2]
     )
+    ocp_version_string = f"OCP{ocp_version}" if ocp_version else ''
+    ocs_version = config.ENV_DATA.get('ocs_version')
+    ocs_version_string = f"OCS{ocs_version}" if ocs_version else ''
+    worker_os = 'RHEL' if config.ENV_DATA.get('rhel_workers') else 'RHCOS'
+    build_user = None
+
+    if config.REPORTING.get('display_name'):
+        testrun_name = config.REPORTING.get('display_name')
+    else:
+        build_user = config.REPORTING.get('build_user')
+        testrun_name = (
+            f"{config.ENV_DATA.get('platform', '').upper()} "
+            f"{config.ENV_DATA.get('deployment_type', '').upper()} "
+            f"{get_az_count()}AZ "
+            f"{worker_os} "
+            f"{config.ENV_DATA.get('master_replicas')}M "
+            f"{config.ENV_DATA.get('worker_replicas')}W "
+            f"{markers}"
+        )
+    testrun_name = (
+        f"{ocs_version_string} {us_ds} {ocp_version_string} "
+        f"{testrun_name}"
+    )
+    if build_user:
+        testrun_name = f"{build_user} {testrun_name}"
     # replace invalid character(s) by '-'
     testrun_name = testrun_name.translate(
         str.maketrans(
             {key: '-' for key in ''' \\/.:*"<>|~!@#$?%^&'*(){}+`,=\t'''}
         )
     )
+    log.info("testrun_name: %s", testrun_name)
     return testrun_name
+
+
+def get_az_count():
+    """
+    Using a number of different configuration attributes, determine how many
+    availability zones the cluster is configured for.
+
+    Returns:
+        int: number of availability zones
+
+    """
+    if config.ENV_DATA.get('availability_zone_count'):
+        return int(config.ENV_DATA.get('availability_zone_count'))
+    elif config.ENV_DATA.get('worker_availability_zones'):
+        return len(config.ENV_DATA.get('worker_availability_zones'))
+    elif config.ENV_DATA.get('platform') == 'vsphere':
+        return 1
+    else:
+        return 3
 
 
 @retry((CephHealthException, CommandFailed), tries=20, delay=30, backoff=1)

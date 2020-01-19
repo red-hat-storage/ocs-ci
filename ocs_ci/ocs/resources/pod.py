@@ -22,7 +22,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, NonUpgradedImagesFoundError
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler, check_timeout_reached
+from ocs_ci.utility.utils import run_cmd, check_timeout_reached
 
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
@@ -110,14 +110,10 @@ class Pod(OCS):
             Exception: In case of exception from FIO
         """
         try:
-            if self.fio_thread.running():
-                for sample in TimeoutSampler(
-                    timeout=FIO_TIMEOUT, sleep=3, func=self.fio_thread.done
-                ):
-                    if sample:
-                        return yaml.safe_load(self.fio_thread.result())
-            if self.fio_thread and self.fio_thread.done():
-                return yaml.safe_load(self.fio_thread.result())
+            result = self.fio_thread.result(FIO_TIMEOUT)
+            if result:
+                return yaml.safe_load(result)
+            raise CommandFailed(f"FIO execution results: {result}.")
 
         except CommandFailed as ex:
             logger.exception(f"FIO failed: {ex}")
@@ -366,7 +362,9 @@ class Pod(OCS):
 
 # Helper functions for Pods
 
-def get_all_pods(namespace=None, selector=None, selector_label='app'):
+def get_all_pods(
+        namespace=None, selector=None, selector_label='app', wait=False
+):
     """
     Get all pods in a namespace.
 
@@ -382,6 +380,13 @@ def get_all_pods(namespace=None, selector=None, selector_label='app'):
 
     """
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    # In case of >4 worker nodes node failures automatic failover of pods to
+    # other nodes will happen.
+    # So, we are waiting for the pods to come up on new node
+    if wait:
+        wait_time = 180
+        logger.info(f"Waiting for {wait_time}s for the pods to stabilize")
+        time.sleep(wait_time)
     pods = ocp_pod_obj.get()['items']
     if selector:
         pods_new = [

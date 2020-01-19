@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import ManageTest, tier4
+from ocs_ci.framework.testlib import ManageTest, tier4, tier4b
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
@@ -15,6 +15,7 @@ log = logging.getLogger(__name__)
 
 
 @tier4
+@tier4b
 @pytest.mark.parametrize(
     argnames=["interface", "operation_to_disrupt", "resource_to_delete"],
     argvalues=[
@@ -109,15 +110,13 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
     Base class for ceph daemon kill related disruption tests
     """
     @pytest.fixture(autouse=True)
-    def setup(self, interface, storageclass_factory, project_factory):
+    def setup(self, project_factory):
         """
-        Create StorageClass and Project for the test
+        Create Project for the test
 
         Returns:
-            OCS: An OCS instance of the storage class
             OCP: An OCP instance of project
         """
-        self.sc_obj = storageclass_factory(interface=interface)
         self.proj_obj = project_factory()
 
     def test_ceph_daemon_kill_during_resource_creation(
@@ -178,7 +177,7 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
         # Start creation of PVCs
         bulk_pvc_create = executor.submit(
             multi_pvc_factory, interface=interface,
-            project=self.proj_obj, storageclass=self.sc_obj, size=8,
+            project=self.proj_obj, size=8,
             access_modes=access_modes,
             access_modes_selection='distribute_random',
             status=constants.STATUS_BOUND, num_of_pvc=num_of_pvc,
@@ -223,7 +222,7 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
         # Verify pods are Running
         for pod_obj in pod_objs:
             helpers.wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=180
             )
             pod_obj.reload()
         log.info("Verified: All pods are Running.")

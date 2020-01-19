@@ -3,8 +3,6 @@
 # by:
 #
 # * --ocsci-conf file.yaml parameter.
-# * --cluster-conf cluster.yaml parameter - this will be rendered under
-#   ENV_DATA section
 #
 # Each section in this file will be available as an attribute of the
 # framework.config object.
@@ -64,6 +62,8 @@ DEPLOYMENT:
   # UI deployment is not part of this framework, it will just do preparation
   # steps for openshift-console.
   ui_deployment: False
+  # Following options are defaults for deployment from live content
+  live_deployment: False
 
 # Section for reporting configuration
 REPORTING:
@@ -78,8 +78,7 @@ REPORTING:
   ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
   gather_on_deploy_failure: true
 
-# This is the default information about environment. Will be overwritten with
-# --cluster-conf file.yaml data you will pass to the pytest.
+# This is the default information about environment.
 ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
   storage_cluster_name: 'ocs-storagecluster'
@@ -98,6 +97,7 @@ ENV_DATA:
   skip_ocp_deployment: false
   skip_ocs_deployment: false
   logging_version: '4.2'
+  ocs_version: '4.2'
   # uncomment to use custom directory for storing measurement data related to
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'

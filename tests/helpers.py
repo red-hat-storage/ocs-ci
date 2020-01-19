@@ -83,6 +83,12 @@ def wait_for_resource_state(resource, state, timeout=60):
             reached the desired state
 
     """
+    if (
+        resource.name == constants.DEFAULT_STORAGECLASS_CEPHFS
+        or resource.name == constants.DEFAULT_STORAGECLASS_RBD
+    ):
+        logger.info(f"Attempt to default default Secret or StorageClass")
+        return
     try:
         resource.ocp.wait_for_resource(
             condition=state, resource_name=resource.name, timeout=timeout
@@ -99,7 +105,7 @@ def create_pod(
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
     raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1,
-    pod_name=None
+    pod_name=None, node_selector=None
 ):
     """
     Create a pod
@@ -117,6 +123,8 @@ def create_pod(
         raw_block_device (str): raw block device for the pod
         replica_count (int): Replica count for deployment config
         pod_name (str): Name of the pod to create
+        node_selector (dict): dict of key-value pair to be used for nodeSelector field
+            eg: {'nodetype': 'app-pod'}
 
     Returns:
         Pod: A Pod instance
@@ -153,15 +161,30 @@ def create_pod(
             pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
 
     if interface_type == constants.CEPHBLOCKPOOL and raw_block_pv:
-        pod_data['spec']['containers'][0]['volumeDevices'][0]['devicePath'] = raw_block_device
-        pod_data['spec']['containers'][0]['volumeDevices'][0]['name'] = pod_data.get('spec').get('volumes')[
-            0].get('name')
+        if pod_dict_path == constants.FEDORA_DC_YAML:
+            temp_dict = [
+                {'devicePath': raw_block_device, 'name': pod_data.get('spec').get(
+                    'template').get('spec').get('volumes')[0].get('name')}
+            ]
+            del pod_data['spec']['template']['spec']['containers'][0]['volumeMounts']
+            pod_data['spec']['template']['spec']['containers'][0]['volumeDevices'] = temp_dict
+        else:
+            pod_data['spec']['containers'][0]['volumeDevices'][0]['devicePath'] = raw_block_device
+            pod_data['spec']['containers'][0]['volumeDevices'][0]['name'] = pod_data.get('spec').get('volumes')[
+                0].get('name')
 
     if node_name:
-        pod_data['spec']['nodeName'] = node_name
-    else:
-        if 'nodeName' in pod_data.get('spec'):
-            del pod_data['spec']['nodeName']
+        if dc_deployment:
+            pod_data['spec']['template']['spec']['nodeName'] = node_name
+        else:
+            pod_data['spec']['nodeName'] = node_name
+
+    if node_selector:
+        if dc_deployment:
+            pod_data['spec']['template']['spec']['nodeSelector'] = node_selector
+        else:
+            pod_data['spec']['nodeSelector'] = node_selector
+
     if sa_name and dc_deployment:
         pod_data['spec']['template']['spec']['serviceAccountName'] = sa_name
     if dc_deployment:
@@ -221,6 +244,8 @@ def create_multilpe_projects(number_of_project):
 def create_secret(interface_type):
     """
     Create a secret
+    ** This method should not be used anymore **
+    ** This method is for internal testing only **
 
     Args:
         interface_type (str): The type of the interface
@@ -254,9 +279,21 @@ def create_secret(interface_type):
     return create_resource(**secret_data)
 
 
+def default_ceph_block_pool():
+    """
+    Returns default CephBlockPool
+
+    Returns:
+        default CephBlockPool
+    """
+    return constants.DEFAULT_BLOCKPOOL
+
+
 def create_ceph_block_pool(pool_name=None):
     """
     Create a Ceph block pool
+    ** This method should not be used anymore **
+    ** This method is for internal testing only **
 
     Args:
         pool_name (str): The pool name to create
@@ -284,6 +321,8 @@ def create_ceph_block_pool(pool_name=None):
 def create_ceph_file_system(pool_name=None):
     """
     Create a Ceph file system
+    ** This method should not be used anymore **
+    ** This method is for internal testing only **
 
     Args:
         pool_name (str): The pool name to create
@@ -307,6 +346,34 @@ def create_ceph_file_system(pool_name=None):
     return cfs_data
 
 
+def default_storage_class(
+    interface_type,
+):
+    """
+    Return default storage class based on interface_type
+
+    Args:
+        interface_type (str): The type of the interface
+            (e.g. CephBlockPool, CephFileSystem)
+
+    Returns:
+        OCS: Existing StorageClass Instance
+    """
+
+    if interface_type == constants.CEPHBLOCKPOOL:
+        base_sc = OCP(
+            kind='storageclass',
+            resource_name=constants.DEFAULT_STORAGECLASS_RBD
+        )
+    elif interface_type == constants.CEPHFILESYSTEM:
+        base_sc = OCP(
+            kind='storageclass',
+            resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
+        )
+    sc = OCS(**base_sc.data)
+    return sc
+
+
 def create_storage_class(
     interface_type, interface_name, secret_name,
     reclaim_policy=constants.RECLAIM_POLICY_DELETE, sc_name=None,
@@ -314,6 +381,8 @@ def create_storage_class(
 ):
     """
     Create a storage class
+    ** This method should not be used anymore **
+    ** This method is for internal testing only **
 
     Args:
         interface_type (str): The type of the interface
@@ -1158,16 +1227,20 @@ def remove_scc_policy(sa_name, namespace):
     logger.info(out)
 
 
-def delete_deploymentconfig(pod_obj):
+def delete_deploymentconfig_pods(pod_obj):
     """
-    Delete deploymentconfig
+    Delete deploymentconfig pod
 
     Args:
          pod_obj (object): Pod object
     """
-    dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG)
-    dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
-    dc_ocp_obj.wait_for_delete(resource_name=pod_obj.get_labels().get('name'))
+    dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG, namespace=pod_obj.namespace)
+    pod_data_list = dc_ocp_obj.get()['items']
+    if pod_data_list:
+        for pod_data in pod_data_list:
+            if pod_obj.get_labels().get('name') == pod_data.get('metadata').get('name'):
+                dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
+                dc_ocp_obj.wait_for_delete(resource_name=pod_obj.get_labels().get('name'))
 
 
 def craft_s3_command(mcg_obj, cmd):
@@ -1318,7 +1391,9 @@ def create_multiple_pvc_parallel(
     return pvc_objs_list
 
 
-def create_pods_parallel(pvc_list, namespace, interface, raw_block_pv=False):
+def create_pods_parallel(
+    pvc_list, namespace, interface, pod_dict_path=None, sa_name=None, raw_block_pv=False, dc_deployment=False
+):
     """
     Function to create pods in parallel
 
@@ -1326,7 +1401,10 @@ def create_pods_parallel(pvc_list, namespace, interface, raw_block_pv=False):
         pvc_list (list): List of pvcs to be attached in pods
         namespace (str): The namespace for creating pod
         interface (str): The interface backed the PVC
+        pod_dict_path (str): pod_dict_path for yaml
+        sa_name (str): sa_name for providing permission
         raw_block_pv (bool): Either RAW block or not
+        dc_deployment (bool): Either DC deployment or not
 
     Returns:
         pod_objs (list): Returns list of pods created
@@ -1335,17 +1413,16 @@ def create_pods_parallel(pvc_list, namespace, interface, raw_block_pv=False):
     # Added 300 sec wait time since in scale test once the setup has more
     # PODs time taken for the pod to be up will be based on resource available
     wait_time = 300
-    if raw_block_pv:
+    if raw_block_pv and not pod_dict_path:
         pod_dict_path = constants.CSI_RBD_RAW_BLOCK_POD_YAML
-    else:
-        pod_dict_path = None
     with ThreadPoolExecutor() as executor:
         for pvc_obj in pvc_list:
             future_pod_objs.append(executor.submit(
                 create_pod, interface_type=interface,
                 pvc_name=pvc_obj.name, do_reload=False, namespace=namespace,
-                raw_block_pv=raw_block_pv, pod_dict_path=pod_dict_path)
-            )
+                raw_block_pv=raw_block_pv, pod_dict_path=pod_dict_path,
+                sa_name=sa_name, dc_deployment=dc_deployment
+            ))
     pod_objs = [pvc_obj.result() for pvc_obj in future_pod_objs]
     # Check for all the pods are in Running state
     # In above pod creation not waiting for the pod to be created because of threads usage

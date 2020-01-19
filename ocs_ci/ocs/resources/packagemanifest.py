@@ -3,7 +3,11 @@ Package manifest related functionalities
 """
 import logging
 
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP, defaults
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 
 
@@ -32,6 +36,15 @@ class PackageManifest(OCP):
             **kwargs
         )
 
+    def get(self, **kwargs):
+        data = super(PackageManifest, self).get(**kwargs)
+        if type(data) == dict and (
+            data.get('kind') == 'List' and len(data['items']) == 1
+        ):
+            return data['items'][0]
+        return data
+
+    @retry((CommandFailed), tries=100, delay=5, backoff=1)
     def get_default_channel(self):
         """
         Returns default channel for package manifest
@@ -81,7 +94,7 @@ class PackageManifest(OCP):
                 return _channel['currentCSV']
 
     def wait_for_resource(
-        self, resource_name='', timeout=60, sleep=3
+        self, resource_name='', timeout=60, sleep=3, label=None, selector=None,
     ):
         """
         Wait for a packagemanifest exists.
@@ -92,6 +105,7 @@ class PackageManifest(OCP):
                 on of those has to be set!
             timeout (int): Time in seconds to wait
             sleep (int): Sampling time in seconds
+            selector (str): The resource selector to search with.
 
         Raises:
             ResourceNameNotSpecifiedException: in case the name is not
@@ -104,6 +118,7 @@ class PackageManifest(OCP):
             f" identified by name '{resource_name}'"
         )
         resource_name = resource_name if resource_name else self.resource_name
+        selector = selector if selector else self.selector
         self.check_name_is_specified(resource_name)
 
         for sample in TimeoutSampler(
@@ -113,3 +128,16 @@ class PackageManifest(OCP):
                 log.info(f"package manifest {resource_name} found!")
                 return
             log.info(f"package manifest {resource_name} not found!")
+
+
+def get_selector_for_ocs_operator():
+    catalog_source = CatalogSource(
+        resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+        namespace='openshift-marketplace',
+    )
+    try:
+        catalog_source.get()
+    except CommandFailed:
+        log.info("Catalog source not found!")
+        return None
+    return constants.OPERATOR_INTERNAL_SELECTOR

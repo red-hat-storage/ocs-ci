@@ -24,7 +24,10 @@ from ocs_ci.ocs.monitoring import (
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
-from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.ocs.resources.packagemanifest import (
+    get_selector_for_ocs_operator,
+    PackageManifest,
+)
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state
@@ -243,7 +246,7 @@ class Deployment(object):
         run_cmd(f"oc create -f {catalog_source_manifest.name}", timeout=2400)
         catalog_source = CatalogSource(
             resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
-            namespace='openshift-marketplace',
+            namespace=constants.OPERATOR_CATALOG_NAMESPACE,
         )
         # Wait for catalog source is ready
         catalog_source.wait_for_state("READY")
@@ -315,9 +318,11 @@ class Deployment(object):
         This method subscription manifest and subscribe to OCS operator.
 
         """
+        operator_selector = get_selector_for_ocs_operator()
         # wait for package manifest
         package_manifest = PackageManifest(
-            resource_name=defaults.OCS_OPERATOR_NAME
+            resource_name=defaults.OCS_OPERATOR_NAME,
+            selector=operator_selector,
         )
         # Wait for package manifest is ready
         package_manifest.wait_for_resource(timeout=300)
@@ -343,6 +348,12 @@ class Deployment(object):
             subscription_yaml_data['spec']['source'] = (
                 config.DEPLOYMENT['stage_namespace']
             )
+        if config.DEPLOYMENT.get('live_deployment'):
+            subscription_yaml_data['spec']['source'] = (
+                config.DEPLOYMENT.get(
+                    'live_content_source', defaults.LIVE_CONTENT_SOURCE
+                )
+            )
         subscription_manifest = tempfile.NamedTemporaryFile(
             mode='w+', prefix='subscription_manifest', delete=False
         )
@@ -361,8 +372,10 @@ class Deployment(object):
         Method for deploy OCS via OCS operator
         """
         ui_deployment = config.DEPLOYMENT.get('ui_deployment')
+        live_deployment = config.DEPLOYMENT.get('live_deployment')
         if ui_deployment:
-            self.create_operator_catalog_source()
+            if not live_deployment:
+                self.create_operator_catalog_source()
             self.deployment_with_ui()
             # Skip the rest of the deployment when deploy via UI
             return
@@ -371,10 +384,13 @@ class Deployment(object):
             self.label_and_taint_nodes()
         logger.info("Creating namespace and operator group.")
         run_cmd(f"oc create -f {constants.OLM_YAML}")
-        self.create_operator_catalog_source()
+        if not live_deployment:
+            self.create_operator_catalog_source()
         self.subscribe_ocs()
+        operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=defaults.OCS_OPERATOR_NAME
+            resource_name=defaults.OCS_OPERATOR_NAME,
+            selector=operator_selector,
         )
         channel = config.DEPLOYMENT.get('ocs_csv_channel')
         csv_name = package_manifest.get_current_csv(channel=channel)
@@ -531,7 +547,7 @@ class Deployment(object):
         # Change monitoring backend to OCS
         if config.ENV_DATA.get('monitoring_enabled') and config.ENV_DATA.get('persistent-monitoring'):
 
-            sc_name = f"{config.ENV_DATA['storage_cluster_name']}-{constants.DEFAULT_SC_RBD}"
+            sc = helpers.default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
 
             # Get the list of monitoring pods
             pods_list = get_all_pods(
@@ -543,7 +559,7 @@ class Deployment(object):
             # storage class and telemeter server (if the url is specified in a
             # config file)
             create_configmap_cluster_monitoring_pod(
-                sc_name=sc_name,
+                sc_name=sc.name,
                 telemeter_server_url=config.ENV_DATA.get("telemeter_server_url"))
 
             # Take some time to respin the pod

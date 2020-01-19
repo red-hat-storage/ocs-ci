@@ -9,7 +9,10 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP, get_images
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.csv import CSV
-from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.ocs.resources.packagemanifest import (
+    get_selector_for_ocs_operator,
+    PackageManifest,
+)
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility import utils
 from ocs_ci.utility import templating
@@ -115,6 +118,14 @@ class OCS(object):
             bool: True if deleted, False otherwise
 
         """
+        # Avoid accidental delete of default storageclass and secret
+        if (
+            self.name == constants.DEFAULT_STORAGECLASS_CEPHFS
+            or self.name == constants.DEFAULT_STORAGECLASS_RBD
+        ):
+            log.info(f"Attempt to delete default Secret or StorageClass")
+            return
+
         if self._is_deleted:
             log.info(
                 f"Attempt to remove resource: {self.name} which is"
@@ -153,7 +164,10 @@ class OCS(object):
 
 
 def get_version_info(namespace=None):
-    package_manifest = PackageManifest(resource_name=defaults.OCS_OPERATOR_NAME)
+    operator_selector = get_selector_for_ocs_operator()
+    package_manifest = PackageManifest(
+        resource_name=defaults.OCS_OPERATOR_NAME, selector=operator_selector,
+    )
     csv_name = package_manifest.get_current_csv()
     csv_pre = CSV(
         resource_name=csv_name,
@@ -181,8 +195,9 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
 
     # Verify OCS CSV is in Succeeded phase
     log.info("verifying ocs csv")
+    operator_selector = get_selector_for_ocs_operator()
     ocs_package_manifest = PackageManifest(
-        resource_name=defaults.OCS_OPERATOR_NAME
+        resource_name=defaults.OCS_OPERATOR_NAME, selector=operator_selector,
     )
     ocs_csv_name = ocs_package_manifest.get_current_csv()
     ocs_csv = CSV(

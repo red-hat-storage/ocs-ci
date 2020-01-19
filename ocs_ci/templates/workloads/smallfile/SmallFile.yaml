@@ -24,5 +24,5 @@ spec:
       threads: 4
       file_size: 64
       files: 50000
-      storageclass: ceph-backed
+      storageclass: ocs-storageclass-ceph-rbd
       storagesize: 100Gi

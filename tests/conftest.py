@@ -71,6 +71,8 @@ def secret_factory_fixture(request):
     """
     Secret factory. Calling this fixture creates a new secret.
     RBD based is default.
+    ** This method should not be used anymore **
+    ** This method is for internal testing only **
     """
     instances = []
 
@@ -121,6 +123,11 @@ def log_ocs_version(cluster):
      * ocs_version file in cluster path directory (for copy pasting into bug
        reports)
     """
+    teardown = config.RUN['cli_params'].get('teardown')
+    deploy = config.RUN['cli_params'].get('deploy')
+    if teardown and not deploy:
+        log.info("Skipping version reporting for teardown.")
+        return
     cluster_version, image_dict = get_ocs_version()
     file_name = os.path.join(
         config.ENV_DATA['cluster_path'],
@@ -149,6 +156,8 @@ def ceph_pool_factory_fixture(request):
     """
     Create a Ceph pool factory.
     Calling this fixture creates new Ceph pool instance.
+    ** This method should not be used anymore **
+    ** This method is for internal testing only **
     """
     instances = []
 
@@ -227,6 +236,10 @@ def storageclass_factory_fixture(
     """
     Create a storage class factory. Default is RBD based.
     Calling this fixture creates new storage class instance.
+
+    ** This method should not be used anymore **
+    ** This method is for internal testing only **
+
     """
     instances = []
 
@@ -347,12 +360,10 @@ def project_factory_fixture(request):
 @pytest.fixture(scope='class')
 def pvc_factory_class(
     request,
-    storageclass_factory_class,
     project_factory_class
 ):
     return pvc_factory_fixture(
         request,
-        storageclass_factory_class,
         project_factory_class
     )
 
@@ -360,12 +371,10 @@ def pvc_factory_class(
 @pytest.fixture(scope='session')
 def pvc_factory_session(
     request,
-    storageclass_factory_session,
     project_factory_session
 ):
     return pvc_factory_fixture(
         request,
-        storageclass_factory_session,
         project_factory_session
     )
 
@@ -373,19 +382,16 @@ def pvc_factory_session(
 @pytest.fixture(scope='function')
 def pvc_factory(
     request,
-    storageclass_factory,
     project_factory
 ):
     return pvc_factory_fixture(
         request,
-        storageclass_factory,
         project_factory,
     )
 
 
 def pvc_factory_fixture(
     request,
-    storageclass_factory,
     project_factory
 ):
     """
@@ -442,17 +448,16 @@ def pvc_factory_fixture(
             project = project or active_project or project_factory()
             active_project = project
             if interface == constants.CEPHBLOCKPOOL:
-                storageclass = (
-                    storageclass or active_rbd_storageclass
-                    or storageclass_factory(interface)
+                storageclass = storageclass or helpers.default_storage_class(
+                    interface_type=interface
                 )
                 active_rbd_storageclass = storageclass
             elif interface == constants.CEPHFILESYSTEM:
-                storageclass = (
-                    storageclass or active_cephfs_storageclass
-                    or storageclass_factory(interface)
+                storageclass = storageclass or helpers.default_storage_class(
+                    interface_type=interface
                 )
                 active_cephfs_storageclass = storageclass
+
             pvc_size = f"{size}Gi" if size else None
 
             pvc_obj = helpers.create_pvc(
@@ -763,7 +768,7 @@ def dc_pod_factory(
         Delete dc pods
         """
         for instance in instances:
-            helpers.delete_deploymentconfig(instance)
+            helpers.delete_deploymentconfig_pods(instance)
 
     request.addfinalizer(finalizer)
     return factory
@@ -995,12 +1000,10 @@ def interface_iterate(request):
 
 @pytest.fixture(scope='class')
 def multi_pvc_factory_class(
-    storageclass_factory_class,
     project_factory_class,
     pvc_factory_class
 ):
     return multi_pvc_factory_fixture(
-        storageclass_factory_class,
         project_factory_class,
         pvc_factory_class
     )
@@ -1008,28 +1011,24 @@ def multi_pvc_factory_class(
 
 @pytest.fixture(scope='session')
 def multi_pvc_factory_session(
-    storageclass_factory_session,
     project_factory_session,
     pvc_factory_session
 ):
     return multi_pvc_factory_fixture(
-        storageclass_factory_session,
         project_factory_session,
         pvc_factory_session
     )
 
 
 @pytest.fixture(scope='function')
-def multi_pvc_factory(storageclass_factory, project_factory, pvc_factory):
+def multi_pvc_factory(project_factory, pvc_factory):
     return multi_pvc_factory_fixture(
-        storageclass_factory,
         project_factory,
         pvc_factory
     )
 
 
 def multi_pvc_factory_fixture(
-    storageclass_factory,
     project_factory,
     pvc_factory
 ):
@@ -1108,7 +1107,9 @@ def multi_pvc_factory_fixture(
             status_tmp = ""
 
         project = project or project_factory()
-        storageclass = storageclass or storageclass_factory(interface)
+        storageclass = storageclass or helpers.default_storage_class(
+            interface_type=interface
+        )
 
         access_modes = access_modes or [constants.ACCESS_MODE_RWO]
 

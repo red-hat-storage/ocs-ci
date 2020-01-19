@@ -39,7 +39,7 @@ class OCP(object):
 
     def __init__(
         self, api_version='v1', kind='Service', namespace=None,
-        resource_name=''
+        resource_name='', selector=None,
     ):
         """
         Initializer function
@@ -49,12 +49,15 @@ class OCP(object):
             kind (str): TBD
             namespace (str): The name of the namespace to use
             resource_name (str): Resource name
+            selector (str): The label selector to look for. It has higher
+                priority than resource_name and is used instead of the name.
         """
         self._api_version = api_version
         self._kind = kind
         self._namespace = namespace
         self._resource_name = resource_name
         self._data = {}
+        self.selector = selector
 
     @property
     def api_version(self):
@@ -162,7 +165,7 @@ class OCP(object):
 
     def get(
         self, resource_name='', out_yaml_format=True, selector=None,
-        all_namespaces=False
+        all_namespaces=False, retry=0, wait=3
     ):
         """
         Get command - 'oc get <resource>'
@@ -170,8 +173,10 @@ class OCP(object):
         Args:
             resource_name (str): The resource name to fetch
             out_yaml_format (bool): Adding '-o yaml' to oc command
-            selector (str): The label selector to look for
+            selector (str): The label selector to look for.
             all_namespaces (bool): Equal to oc get <resource> -A
+            retry (int): Number of attempts to retry to get resource
+            wait (int): Number of seconds to wait between attempts for retry
 
         Example:
             get('my-pv1')
@@ -180,6 +185,9 @@ class OCP(object):
             dict: Dictionary represents a returned yaml file
         """
         resource_name = resource_name if resource_name else self.resource_name
+        selector = selector if selector else self.selector
+        if selector:
+            resource_name = ""
         command = f"get {self.kind} {resource_name}"
         if all_namespaces and not self.namespace:
             command += " -A"
@@ -189,7 +197,26 @@ class OCP(object):
             command += f" --selector={selector}"
         if out_yaml_format:
             command += " -o yaml"
-        return self.exec_oc_cmd(command)
+        retry += 1
+        while retry:
+            try:
+                return self.exec_oc_cmd(command)
+            except CommandFailed as ex:
+                log.warning(
+                    f"Failed to get resource: {resource_name} of kind: "
+                    f"{self.kind}, selector: {selector}, Error: {ex}"
+                )
+                retry -= 1
+                if not retry:
+                    log.error("Number of attempts to get resource reached!")
+                    raise
+                else:
+                    log.info(
+                        f"Number of attempts: {retry} to get resource: "
+                        f"{resource_name}, selector: {selector}, remain! "
+                        f"Trying again in {wait} sec."
+                    )
+                    time.sleep(wait if wait else 1)
 
     def describe(self, resource_name='', selector=None, all_namespaces=False):
         """
@@ -416,6 +443,7 @@ class OCP(object):
             f" at column name {column}"
             f" to reach desired condition {condition}"))
         resource_name = resource_name if resource_name else self.resource_name
+        selector = selector if selector else self.selector
 
         # actual status of the resource we are waiting for, setting it to None
         # now prevents UnboundLocalError raised when waiting timeouts
@@ -428,7 +456,10 @@ class OCP(object):
 
                 # Only 1 resource expected to be returned
                 if resource_name:
-                    status = self.get_resource(resource_name, column)
+                    retry = int(timeout / sleep if sleep else timeout / 1)
+                    status = self.get_resource(
+                        resource_name, column, retry=retry, wait=sleep,
+                    )
                     if status == condition:
                         return True
                     log.info((
@@ -517,7 +548,9 @@ class OCP(object):
                 raise TimeoutError(msg)
             time.sleep(sleep)
 
-    def get_resource(self, resource_name, column):
+    def get_resource(
+        self, resource_name, column, retry=0, wait=3, selector=None
+    ):
         """
         Get a column value for a resource based on:
         'oc get <resource_kind> <resource_name>' command
@@ -525,13 +558,21 @@ class OCP(object):
         Args:
             resource_name (str): The name of the resource to get its column value
             column (str): The name of the column to retrive
+            retry (int): Number of attempts to retry to get resource
+            wait (int): Number of seconds to wait beteween attempts for retry
+            selector (str): The resource selector to search with.
 
         Returns:
             str: The output returned by 'oc get' command not in the 'yaml'
                 format
         """
+        resource_name = resource_name if resource_name else self.resource_name
+        selector = selector if selector else self.selector
         # Get the resource in str format
-        resource = self.get(resource_name=resource_name, out_yaml_format=False)
+        resource = self.get(
+            resource_name=resource_name, out_yaml_format=False, retry=retry,
+            wait=wait, selector=selector
+        )
         # get the list of titles
         titles = re.sub(r'\s{2,}', ',', resource)  # noqa: W605
         titles = titles.split(',')
