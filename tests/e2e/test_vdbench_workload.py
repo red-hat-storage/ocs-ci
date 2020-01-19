@@ -136,8 +136,18 @@ class TestVDBenchWorkload(E2ETest):
                   'samples', 'width', 'depth', 'files', 'file_size', 'runtime',
                   'pause'],
         argvalues=[
-            pytest.param(*["VDBench-Basic.yaml",
-                           0, 0, [], "", 0, 0, 0, 0, 0, 0, 0]),
+            pytest.param(*["VDBench-BCurve.yaml",
+                           9, 4, ["4k"], "random",
+                           1, 4, 3, 256, 5, 600, 5]),
+            pytest.param(*["VDBench-BCurve.yaml",
+                           9, 4, ["64k"], "random",
+                           1, 4, 3, 256, 5, 600, 5]),
+            pytest.param(*["VDBench-BCurve-FS.yaml",
+                           9, 4, ["4k"], "random",
+                           1, 4, 3, 256, 5, 600, 5]),
+            pytest.param(*["VDBench-BCurve-FS.yaml",
+                           9, 4, ["64k"], "random",
+                           1, 4, 3, 256, 5, 600, 5]),
         ]
     )
     # @pytest.mark.polarion_id("OCS-1295")
@@ -160,7 +170,7 @@ class TestVDBenchWorkload(E2ETest):
             template = constants.VDBENCH_BENCHMARK_YAML
         sf_data = templating.load_yaml(template)
 
-        target_results = 'Results'
+        target_results = template + 'Results'
         """
             Setting up the parameters for this test
         """
@@ -217,7 +227,7 @@ class TestVDBenchWorkload(E2ETest):
 
         log.info(sf_data)
 
-        timeout = 86400  # 3600 (1H) * 24 (1D) = one day
+        timeout = 8640000  # 3600 (1H) * 24 (1D) * 100 = one hundred days
 
         sf_obj = OCS(**sf_data)
         sf_obj.create()
