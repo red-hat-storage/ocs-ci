@@ -246,7 +246,7 @@ class Deployment(object):
         run_cmd(f"oc create -f {catalog_source_manifest.name}", timeout=2400)
         catalog_source = CatalogSource(
             resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
-            namespace=constants.OPERATOR_CATALOG_NAMESPACE,
+            namespace=constants.MARKETPLACE_NAMESPACE,
         )
         # Wait for catalog source is ready
         catalog_source.wait_for_state("READY")
@@ -272,38 +272,47 @@ class Deployment(object):
 
         # create Secret
         stage_os_secret = templating.load_yaml(
-            constants.STAGE_OPERATOR_SOURCE_SECRET_YAML
+            constants.OPERATOR_SOURCE_SECRET_YAML
         )
-        stage_os_secret['metadata']['name'] = f"secret-{stage_ns}"
+        stage_os_secret['metadata']['name'] = (
+            constants.OPERATOR_SOURCE_SECRET_NAME
+        )
         stage_os_secret['stringData']['token'] = token
         stage_secret_data_yaml = tempfile.NamedTemporaryFile(
-            mode='w+', prefix=f"secret-{stage_ns}", delete=False
+            mode='w+', prefix=constants.OPERATOR_SOURCE_SECRET_NAME,
+            delete=False,
         )
         templating.dump_data_to_temp_yaml(
             stage_os_secret, stage_secret_data_yaml.name
         )
-        run_cmd(f"oc apply -f {stage_secret_data_yaml.name}")
+        run_cmd(f"oc create -f {stage_secret_data_yaml.name}")
+        logger.info("Waiting 10 secs after secret is created")
+        time.sleep(10)
 
         logger.info("Adding Stage Operator Source")
         # create Operator Source
         stage_os = templating.load_yaml(
-            constants.STAGE_OPERATOR_SOURCE_YAML
+            constants.OPERATOR_SOURCE_YAML
         )
-        stage_os['metadata']['name'] = stage_ns
         stage_os['spec']['registryNamespace'] = stage_ns
-        stage_os['spec']['displayName'] = stage_ns
         stage_os['spec']['authorizationToken']['secretName'] = (
-            f"secret-{stage_ns}"
+            constants.OPERATOR_SOURCE_SECRET_NAME
         )
         stage_os_data_yaml = tempfile.NamedTemporaryFile(
-            mode='w+', prefix='secret', delete=False
+            mode='w+', prefix=constants.OPERATOR_SOURCE_NAME, delete=False
         )
         templating.dump_data_to_temp_yaml(
             stage_os, stage_os_data_yaml.name
         )
-        run_cmd(f"oc apply -f {stage_os_data_yaml.name}")
+        run_cmd(f"oc create -f {stage_os_data_yaml.name}")
+        catalog_source = CatalogSource(
+            resource_name=constants.OPERATOR_SOURCE_NAME,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
+        # Wait for catalog source is ready
+        catalog_source.wait_for_state("READY")
 
-    def create_operator_catalog_source(self):
+    def create_ocs_operator_source(self):
         """
         This prepare catalog or operator source for OCS deployment.
         """
@@ -346,7 +355,7 @@ class Deployment(object):
             subscription_yaml_data['spec']['channel'] = default_channel
         if config.DEPLOYMENT.get('stage'):
             subscription_yaml_data['spec']['source'] = (
-                config.DEPLOYMENT['stage_namespace']
+                constants.OPERATOR_SOURCE_NAME
             )
         if config.DEPLOYMENT.get('live_deployment'):
             subscription_yaml_data['spec']['source'] = (
@@ -375,7 +384,7 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get('live_deployment')
         if ui_deployment:
             if not live_deployment:
-                self.create_operator_catalog_source()
+                self.create_ocs_operator_source()
             self.deployment_with_ui()
             # Skip the rest of the deployment when deploy via UI
             return
@@ -385,7 +394,7 @@ class Deployment(object):
         logger.info("Creating namespace and operator group.")
         run_cmd(f"oc create -f {constants.OLM_YAML}")
         if not live_deployment:
-            self.create_operator_catalog_source()
+            self.create_ocs_operator_source()
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(

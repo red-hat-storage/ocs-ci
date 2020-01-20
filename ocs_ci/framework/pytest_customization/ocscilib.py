@@ -25,9 +25,10 @@ from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.constants import (
-    OPERATOR_CATALOG_SOURCE_NAME,
+    CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
-    CLUSTER_NAME_MAX_CHARACTERS
+    MARKETPLACE_NAMESPACE,
+    OPERATOR_CATALOG_SOURCE_NAME,
 )
 
 __all__ = [
@@ -157,7 +158,7 @@ def pytest_configure(config):
             # add ocs operator version
             ocs_catalog = CatalogSource(
                 resource_name=OPERATOR_CATALOG_SOURCE_NAME,
-                namespace="openshift-marketplace"
+                namespace=MARKETPLACE_NAMESPACE,
             )
             if ocsci_config.REPORTING['us_ds'] == 'DS':
                 config._metadata['OCS operator'] = (
