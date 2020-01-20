@@ -450,12 +450,13 @@ class AWS(object):
 
     def terminate_ec2_instances(self, instances, wait=True):
         """
-         Terminate an instance
-         Args:
-             instances (dict): A dictionary of instance IDs and names
-             wait (bool): True in case wait for status is needed,
-                 False otherwise
-         """
+        Terminate an instance
+
+        Args:
+            instances (dict): A dictionary of instance IDs and names
+            wait (bool): True in case wait for status is needed,
+                False otherwise
+        """
         instance_ids, instance_names = zip(*instances.items())
         logger.info(f"Terminating instances {list(instances.values())}")
         ret = self.ec2_client.terminate_instances(InstanceIds=instance_ids)
