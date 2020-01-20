@@ -161,6 +161,23 @@ class TestVDBenchWorkload(E2ETest):
                               ):
         """
         Run VDBench Workload
+
+        Args :
+            template (str) : Name of yaml file that will used as a template
+            label_nodes (fixture) : This fixture is labeling the worker(s)
+                                    that will used for App. pod(s)
+            ripsaw (fixture) : Fixture to deploy the ripsaw benchmarking operator
+            servers (int) : Number of servers (pods) that will run the IO
+            threads (int) : Number of threads that will run on each server
+            blocksize (list - str): List of BlockSize - must add the 'K' to it
+            fileio (str) : How to select file for the IO : random / sequential
+            samples (int) : Number of time(s) to run each test
+            width (int) : Width of directory tree to create
+            depth (int) : Depth of directory tree to create
+            files (int) : Number of files to create in each directory
+            file_size (int) : File size (in MB) to create
+            runtime (int) : Time (in Sec.) for each test iteration
+            pause (int) : Time (in Min.) to pause between each test iteration.
         """
         log.info("Apply Operator CRD")
 
