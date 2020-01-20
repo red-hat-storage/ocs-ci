@@ -11,8 +11,8 @@ from ocs_ci.ocs import ocp
 from ocs_ci.ocs import node
 from tests.sanity_helpers import Sanity
 
-
 log = logging.getLogger(__name__)
+
 
 @tier4
 @ignore_leftovers
@@ -32,7 +32,7 @@ class Testknip894(ManageTest):
 
     def test_nodereplacement_proactive(self, pvc_factory, pod_factory):
         """
-        Knip-678 Node Replacement
+        Knip-894 Node Replacement proactive
         """
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
         ocs_worker_node = node.get_ocs_worker_nodes()

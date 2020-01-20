@@ -290,7 +290,7 @@ def get_ocs_worker_nodes():
 
 def get_node_from_machine_name(machine_name):
     node_list = get_node_objs()
-    matching_annotation = "openshift-machine-api/"+machine_name
+    matching_annotation = "openshift-machine-api/" +machine_name
     for nodes in node_list:
         label_dict = nodes.get().get('metadata').get('annotations')
         for annotation in label_dict.values():
