@@ -18,6 +18,7 @@ from tests import helpers
 
 log = logging.getLogger(__name__)
 
+
 # TODO: move this function to pod.py helper functions
 def download(pod_name, localpath, remotepath):
     """
@@ -33,6 +34,7 @@ def download(pod_name, localpath, remotepath):
     ocp_obj = OCP()
     ocp_obj.exec_oc_cmd(command=cmd)
 
+
 # TODO: move this function to helper.py helper functions
 def get_labeled_nodes(label):
     """
@@ -47,6 +49,7 @@ def get_labeled_nodes(label):
     nodes = ocp_node_obj.get(selector=label).get('items')
     labeled_nodes_list = [node.get('metadata').get('name') for node in nodes]
     return labeled_nodes_list
+
 
 def label_node(node, label):
     """
@@ -97,6 +100,7 @@ def label_nodes(request):
 
     return
 
+
 @pytest.fixture(scope='function')
 def ripsaw(request):
     """
@@ -109,7 +113,7 @@ def ripsaw(request):
     request.addfinalizer(teardown)
 
     # Create RipSaw Operator
-    #ripsaw = RipSaw()
+    # ripsaw = RipSaw()
     # TODO: replace beween the too lines when the vdbench will merge into
     #       ripsaw PR-#265
     ripsaw = RipSaw(repo='https://github.com/Avilir/ripsaw',
@@ -208,8 +212,8 @@ class TestVDBenchWorkload(E2ETest):
             sf_data['spec']['workload']['args']['bs'] = blocksize
             target_results = target_results + '-' + '_'.join(blocksize)
 
-        """ 
-            Calculating the size of the volume that need to be test, it should 
+        """
+            Calculating the size of the volume that need to be test, it should
             be at least twice in the size then the size of the files, and at
             least 100Gi.
             since the file_size is in Kb and the vol_size need to be in Gb,
