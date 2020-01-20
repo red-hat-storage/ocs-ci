@@ -588,12 +588,19 @@ class MCG(object):
             )
             assert False
 
-    def check_backingstore_state(self, backingstore_name, desired_state):
+    def check_backingstore_state(
+        self,
+        backingstore_name,
+        desired_state,
+        timeout=180
+    ):
         """
         Checks whether the backing store reached a specific state
         Args:
-            backingstore_name: Name of the backing store to be checked
-            desired_state: The desired state of the backing store
+            backingstore_name (str): Name of the backing store to be checked
+            desired_state (str): The desired state of the backing store
+            timeout (int): Number of seconds for timeout which will be used
+                in the checks used in this function.
 
         Returns:
             bool: Whether the backing store has reached the desired state
@@ -609,7 +616,7 @@ class MCG(object):
             return False
 
         try:
-            for reached_state in TimeoutSampler(180, 10, _check_state):
+            for reached_state in TimeoutSampler(timeout, 10, _check_state):
                 if reached_state:
                     logger.info(
                         f'BackingStore {backingstore_name} reached state {desired_state}.'
