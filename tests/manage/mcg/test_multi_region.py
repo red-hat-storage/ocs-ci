@@ -118,4 +118,3 @@ class TestMultiRegion:
             awscli_pod.exec_cmd_on_pod(command=f'sh -c \"rm -rf {local_temp_path}/*\"')
             logger.info(f'Freeing buckets {toggled_buckets}')
             mcg_obj.toggle_aws_bucket_readwrite(toggled_buckets, block=False)
-
