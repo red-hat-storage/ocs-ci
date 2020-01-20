@@ -4,6 +4,7 @@ General OCS object
 import logging
 import yaml
 import tempfile
+import re
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP, get_images
@@ -16,6 +17,8 @@ from ocs_ci.ocs.resources.packagemanifest import (
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility import utils
 from ocs_ci.utility import templating
+from ocs_ci.ocs.resources.pvc import get_all_pvcs
+from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
 log = logging.getLogger(__name__)
 
@@ -363,3 +366,32 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
     assert sc_cephfs['parameters']['csi.storage.k8s.io/node-stage-secret-name'] == constants.CEPHFS_NODE_SECRET
     assert sc_cephfs['parameters']['csi.storage.k8s.io/provisioner-secret-name'] == constants.CEPHFS_PROVISIONER_SECRET
     log.info("Verified node and provisioner secret names in storage class.")
+
+    # Verify ceph osd tree have device set PVC names specified
+    log.info("Checking for device set PVC names in ceph osd tree output.")
+    deviceset_pvcs = [
+        item['metadata']['name'] for item in get_all_pvcs(
+            namespace=namespace
+        )['items'] if item['metadata']['name'].startswith(
+            constants.DEFAULT_DEVICESET_PVC_NAME
+        )
+    ]
+    ct_pod = get_ceph_tools_pod()
+    osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree', format='')
+    for pvc in deviceset_pvcs:
+        assert f'host {pvc}' in osd_tree, (
+            f"ceph osd tree output does not contain pvc name {pvc}"
+        )
+    log.info("Verified device set PVC names in ceph osd tree output.")
+
+    # Verify OSDs are listed as sdd
+    log.info("Verify OSDs are listed as sdd in ceph osd tree output.")
+    for num in range(len(deviceset_pvcs)):
+        re_exp = f'ssd [0-9]*.[0-9]*[ ]*osd.{num}'
+        match = re.search(re_exp, osd_tree)
+        log.info(match)
+        assert match, (
+            f"One or more OSDs are not listed as sdd in ceph osd tree output."
+            f" No match for expression {re_exp}"
+        )
+    log.info("Verified OSDs are listed as sdd in ceph osd tree output.")
