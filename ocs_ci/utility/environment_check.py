@@ -6,6 +6,7 @@ import copy
 import logging
 import yaml
 from gevent.threadpool import ThreadPoolExecutor
+
 from ocs_ci.ocs import ocp, constants, exceptions
 
 log = logging.getLogger(__name__)
@@ -75,7 +76,7 @@ def compare_dicts(before, after):
 
 def assign_get_values(
     env_status_dict, key, kind=None,
-    exclude_namespaces=('openshift-marketplace',)
+    exclude_namespaces=(constants.MARKETPLACE_NAMESPACE,)
 ):
     """
     Assigning kind status into env_status_dict

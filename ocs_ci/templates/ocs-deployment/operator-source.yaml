@@ -2,7 +2,7 @@
 apiVersion: operators.coreos.com/v1
 kind: OperatorSource
 metadata:
-  name: "NAME-PLACEHOLDER"
+  name: ocs-operatorsource
   namespace: openshift-marketplace
   labels:
       ocs-operator-internal: "true"
@@ -10,8 +10,7 @@ spec:
   type: appregistry
   endpoint: https://quay.io/cnr
   registryNamespace: "REGISTRY-NAMESPACE-PLACEHOLDER"
-  displayName: "DISPLAY-NAME-PLACEHOLDER"
+  displayName: Openshift Container Storage
   publisher: "Red Hat"
   authorizationToken:
     secretName: SECRET-NAME-PLACEHOLDER
-

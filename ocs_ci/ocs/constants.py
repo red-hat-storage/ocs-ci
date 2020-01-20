@@ -320,13 +320,17 @@ STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
 )
 
-STAGE_OPERATOR_SOURCE_SECRET_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "stage-operator-source-secret.yaml"
+OPERATOR_SOURCE_SECRET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "operator-source-secret.yaml"
 )
 
-STAGE_OPERATOR_SOURCE_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "stage-operator-source.yaml"
+OPERATOR_SOURCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "operator-source.yaml"
 )
+
+OPERATOR_SOURCE_NAME = "ocs-operatorsource"
+
+OPERATOR_SOURCE_SECRET_NAME = "ocs-operatorsource-secret"
 
 # Openshift-logging clusterlogging operator deployment yamls
 CL_NAMESPACE_YAML = os.path.join(
@@ -402,7 +406,7 @@ ALERT_CLUSTERCRITICALLYFULL = 'CephClusterCriticallyFull'
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
 OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
-OPERATOR_CATALOG_NAMESPACE = "openshift-marketplace"
+MARKETPLACE_NAMESPACE = "openshift-marketplace"
 OPERATOR_INTERNAL_SELECTOR = "ocs-operator-internal=true"
 OPERATOR_CS_QUAY_API_QUERY = (
     'https://quay.io/api/v1/repository/rhceph-dev/ocs-olm-operator/'

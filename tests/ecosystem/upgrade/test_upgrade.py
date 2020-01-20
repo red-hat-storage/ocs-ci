@@ -127,7 +127,7 @@ def test_upgrade():
     namespace = config.ENV_DATA['cluster_namespace']
     ocs_catalog = CatalogSource(
         resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
-        namespace="openshift-marketplace",
+        namespace=constants.MARKETPLACE_NAMESPACE,
     )
     image_url = ocs_catalog.get_image_url()
     image_tag = ocs_catalog.get_image_name()
