@@ -403,7 +403,6 @@ def get_all_pods(
     pod_objs = [Pod(**pod) for pod in pods]
     return pod_objs
 
-
 def get_ceph_tools_pod():
     """
     Get the Ceph tools pod

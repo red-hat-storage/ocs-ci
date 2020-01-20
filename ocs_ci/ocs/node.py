@@ -249,7 +249,7 @@ def add_new_node_and_label_it(machineset_name):
     machine.add_node(machineset_name, count=machineset_replica_count + 1)
     log.info(
         f"{machineset_name} now has replica "
-        f"count {machineset_replica_count + 1}"
+        f"count: {machineset_replica_count + 1}"
     )
 
     # wait for the new node to come to ready state

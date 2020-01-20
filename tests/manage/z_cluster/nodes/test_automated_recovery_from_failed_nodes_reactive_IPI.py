@@ -9,7 +9,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from tests.helpers import wait_for_resource_state
 from tests.sanity_helpers import Sanity
-from ocs_ci.ocs import platform_nodes
 from ocs_ci.ocs.node import add_new_node_and_label_it
 
 
@@ -44,7 +43,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         ]
     )
     def test_automated_recovery_from_failed_nodes_IPI_reactive(
-            self, pvc_factory, pod_factory, failure
+            self, nodes, pvc_factory, pod_factory, failure
     ):
         """
         Knip-678 Automated recovery from failed nodes
@@ -71,15 +70,14 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         add_new_node_and_label_it(machineset_name)
 
         # Induce failure
-        aws_obj = platform_nodes.AWSNodes()
         if failure == "shutdown":
-            aws_obj.stop_nodes([osd_node_obj], wait=True)
+            nodes.stop_nodes([osd_node_obj], wait=True)
             log.info(f"Successfully powered off node: {osd_node_obj.name}")
 
-            aws_obj.terminate_nodes([osd_node_obj], wait=True)
+            nodes.terminate_nodes([osd_node_obj], wait=True)
             log.info(f"Successfully terminated node : {osd_node_obj.name} instance")
         elif failure == "terminate":
-            aws_obj.terminate_nodes([osd_node_obj], wait=True)
+            nodes.terminate_nodes([osd_node_obj], wait=True)
             log.info(f"Successfully terminated node : {osd_node_obj.name} instance")
 
         # Check the pods should be in running state
