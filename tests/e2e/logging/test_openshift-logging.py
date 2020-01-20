@@ -92,7 +92,7 @@ def teardown():
     """
     The teardown will uninstall the openshift-logging from the cluster
     """
-    #uninstall_cluster_logging()
+    uninstall_cluster_logging()
 
 
 @pytest.mark.usefixtures(
@@ -108,7 +108,7 @@ class Test_openshift_logging_on_ocs(E2ETest):
         """
         """
         def finalizer():
-            helpers.delete_deploymentconfig_pods(pod_obj)
+            helpers.delete_deploymentconfig(pod_obj)
 
         request.addfinalizer(finalizer)
 
