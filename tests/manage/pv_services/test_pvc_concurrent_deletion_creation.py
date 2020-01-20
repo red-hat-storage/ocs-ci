@@ -10,7 +10,8 @@ from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.resources.pvc import delete_pvcs
 from ocs_ci.framework.testlib import tier2, ManageTest, bugzilla
 from tests.helpers import (
-    wait_for_resource_state, verify_volume_deleted_in_backend
+    wait_for_resource_state, verify_volume_deleted_in_backend,
+    default_ceph_block_pool
 )
 
 log = logging.getLogger(__name__)
@@ -64,7 +65,6 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         To exercise resource creation and deletion
         """
         proj_obj = self.pvc_objs[0].project
-        storageclass = self.pvc_objs[0].storageclass
 
         executor = ThreadPoolExecutor(max_workers=1)
 
@@ -90,7 +90,6 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         self.new_pvc_objs = multi_pvc_factory(
             interface=interface,
             project=proj_obj,
-            storageclass=storageclass,
             size=self.pvc_size,
             access_modes=self.access_modes,
             status='',
@@ -120,7 +119,7 @@ class TestMultiplePvcConcurrentDeletionCreation(ManageTest):
         for pvc_name, uuid in pvc_uuid_map.items():
             pool_name = None
             if interface == constants.CEPHBLOCKPOOL:
-                pool_name = storageclass.ceph_pool.name
+                pool_name = default_ceph_block_pool()
             ret = verify_volume_deleted_in_backend(
                 interface=interface, image_uuid=uuid,
                 pool_name=pool_name
