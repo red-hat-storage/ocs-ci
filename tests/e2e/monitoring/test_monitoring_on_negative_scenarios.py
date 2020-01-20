@@ -398,7 +398,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             # Shutdown and recovery node(i,e. restart nodes) where the prometheus pod is hosted
             nodes.stop_nodes([prometheus_node_obj])
 
-            waiting_time = '20'
+            waiting_time = 20
             log.info(f"Waiting for {waiting_time} seconds")
             time.sleep(waiting_time)
 
