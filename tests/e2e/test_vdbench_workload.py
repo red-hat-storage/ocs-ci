@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 
 # TODO: move this function to pod.py helper functions
-def download(pod_name, localpath, remotepath):
+def retrive_files_from_pod(pod_name, localpath, remotepath):
     """
     Download a file from pod
 
@@ -269,11 +269,11 @@ class TestVDBenchWorkload(E2ETest):
             time.sleep(30)
 
         """
-            Getting the results file from the benchamrk pod and put it with the
+            Getting the results file from the benchmark pod and put it with the
             test logs.
         """
         # TODO: find the place of the actual test log and not in the parent
         #       logs path
         target_results = '{}/{}.tgz'.format(ocsci_log_path(), target_results)
         pod_results = constants.VDBENCH_RESULTS_FILE
-        download(vdbench_client_pod, target_results, pod_results)
+        retrive_files_from_pod(vdbench_client_pod, target_results, pod_results)
