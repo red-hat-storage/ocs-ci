@@ -352,10 +352,14 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
-    sc_rbd = storage_class.get(resource_name='ocs-storagecluster-ceph-rbd')
-    sc_cephfs = storage_class.get(resource_name='ocs-storagecluster-cephfs')
-    assert sc_rbd['parameters']['csi.storage.k8s.io/node-stage-secret-name'] == 'rook-csi-rbd-node'
-    assert sc_rbd['parameters']['csi.storage.k8s.io/provisioner-secret-name'] == 'rook-csi-rbd-provisioner'
-    assert sc_cephfs['parameters']['csi.storage.k8s.io/node-stage-secret-name'] == 'rook-csi-cephfs-node'
-    assert sc_cephfs['parameters']['csi.storage.k8s.io/provisioner-secret-name'] == 'rook-csi-cephfs-provisioner'
+    sc_rbd = storage_class.get(
+        resource_name=constants.DEFAULT_STORAGECLASS_RBD
+    )
+    sc_cephfs = storage_class.get(
+        resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
+    )
+    assert sc_rbd['parameters']['csi.storage.k8s.io/node-stage-secret-name'] == constants.RBD_NODE_SECRET
+    assert sc_rbd['parameters']['csi.storage.k8s.io/provisioner-secret-name'] == constants.RBD_PROVISIONER_SECRET
+    assert sc_cephfs['parameters']['csi.storage.k8s.io/node-stage-secret-name'] == constants.CEPHFS_NODE_SECRET
+    assert sc_cephfs['parameters']['csi.storage.k8s.io/provisioner-secret-name'] == constants.CEPHFS_PROVISIONER_SECRET
     log.info("Verified node and provisioner secret names in storage class.")
