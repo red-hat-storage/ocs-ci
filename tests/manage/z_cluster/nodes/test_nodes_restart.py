@@ -225,7 +225,7 @@ class TestNodesRestart(ManageTest):
         - Start the worker node
         - Check cluster and Ceph health
 
-        OCS-2016:
+        OCS-2017:
         - Stop 1 worker node that has the rook ceph operator pod running on
         - Wait for the rook ceph operator pod to come up again to running status
         - Validate cluster functionality, without checking cluster and Ceph
