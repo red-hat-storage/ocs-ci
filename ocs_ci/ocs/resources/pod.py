@@ -983,10 +983,10 @@ def get_pvc_name(pod_obj):
 
 def get_pvc_obj(pod_obj):
     """
-    Function to get pvc_name from pod_obj
+    Function to get pvc object from pod object
 
     Args:
-        pod_obj (str): The pod object
+        pod_obj (POD Object): The pod object
 
     Returns:
         PVC Object: The pvc object on a given pod_obj

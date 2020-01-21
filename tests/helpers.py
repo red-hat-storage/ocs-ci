@@ -423,9 +423,7 @@ def default_ceph_pool(interface_type):
     return pool_obj
 
 
-def default_secret(
-    interface_type,
-):
+def default_secret(interface_type,):
     """
     Return default secret based on interface_type from 'openshift-storage
     namespace
