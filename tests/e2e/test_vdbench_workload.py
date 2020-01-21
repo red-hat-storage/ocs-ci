@@ -51,20 +51,6 @@ def get_labeled_nodes(label):
     return labeled_nodes_list
 
 
-def label_node(node, label):
-    """
-    Add / Delete label to / from node.
-
-    Args:
-        node (str): node name
-        label (str): the label that need to be add/delete to/from the node
-    """
-    ocp_obj = OCP()
-    ocp_obj.exec_oc_cmd(
-        command=f'label node {node} {label}', out_yaml_format=False
-    )
-
-
 @pytest.fixture(scope='function')
 def label_nodes(request):
     """
@@ -75,9 +61,8 @@ def label_nodes(request):
         log.info('Clear label form worker (Application) nodes')
         # Getting all Application nodes
         app_nodes = get_labeled_nodes(constants.VDBENCH_NODE_LABEL)
-        for node in app_nodes:
-            log.info(f'Clear vdbench label from {node}')
-            label_node(node, 'app-node-')
+        helpers.remove_label_from_worker_node(app_nodes,
+                                              constants.APP_NODE_LABEL)
 
     request.addfinalizer(teardown)
 
@@ -85,18 +70,20 @@ def label_nodes(request):
     ocs_nodes = get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
     # Add label to the worker nodes
     worker_nodes = helpers.get_worker_nodes()
+    # Getting list of free nodes
+    free_nodes = list(set(worker_nodes) - set(ocs_nodes))
 
     log.info('Adding the app-node label to Non-OCS workers')
-    log.info(f'The Workers nodes are : {worker_nodes}')
-    log.info(f'The OCS nodes are : {ocs_nodes}')
-    found_worker = 0
-    for node in worker_nodes:
-        if node not in ocs_nodes:
-            found_worker += 1
-            log.info(f'Going to use {node} as application node')
-            label_node(node, constants.VDBENCH_NODE_LABEL)
-    assert found_worker, \
+    log.debug(f'The Workers nodes are : {worker_nodes}')
+    log.debug(f'The OCS nodes are : {ocs_nodes}')
+    log.debug(f'The free nodes are : {free_nodes}')
+
+    assert free_nodes, \
         'Did not found any worker to run on, pleas deploy another worker'
+
+    helpers.label_worker_node(free_nodes,
+                              constants.APP_NODE_LABEL,
+                              constants.VDBENCH_NODE_LABEL)
 
     return
 
@@ -154,7 +141,6 @@ class TestVDBenchWorkload(E2ETest):
                            1, 4, 3, 256, 5, 600, 5]),
         ]
     )
-    # @pytest.mark.polarion_id("OCS-1295")
     def test_vdbench_workload(self, template, label_nodes, ripsaw, servers,
                               threads, blocksize, fileio, samples, width,
                               depth, files, file_size, runtime, pause
@@ -285,10 +271,8 @@ class TestVDBenchWorkload(E2ETest):
                 raise TimeoutError('Timed out waiting for benchmark to complete')
             time.sleep(30)
 
-        """
-            Getting the results file from the benchmark pod and put it with the
-            test logs.
-        """
+        # Getting the results file from the benchmark pod and put it with the
+        # test logs.
         # TODO: find the place of the actual test log and not in the parent
         #       logs path
         target_results = '{}/{}.tgz'.format(ocsci_log_path(), target_results)

@@ -415,7 +415,8 @@ OPERATOR_CS_QUAY_API_QUERY = (
 )
 
 # VDbench benchmark related constants
-VDBENCH_NODE_LABEL = "app-node='vdbench'"
+APP_NODE_LABEL = 'app-node'
+VDBENCH_NODE_LABEL = 'vdbench'
 VDBENCH_RESULTS_FILE = '/tmp/Results.tar.gz'
 
 # Platforms
