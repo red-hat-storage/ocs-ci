@@ -15,6 +15,7 @@ from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import E2ETest, workloads
 from tests import helpers
+from ocs_ci.ocs import machine
 
 log = logging.getLogger(__name__)
 
@@ -35,22 +36,6 @@ def retrive_files_from_pod(pod_name, localpath, remotepath):
     ocp_obj.exec_oc_cmd(command=cmd)
 
 
-# TODO: move this function to helper.py helper functions
-def get_labeled_nodes(label):
-    """
-    Fetches all worker nodes.
-
-    Args:
-        label (str): node label to look for
-    Returns:
-        list: List of names of labeled nodes
-    """
-    ocp_node_obj = OCP(kind=constants.NODE)
-    nodes = ocp_node_obj.get(selector=label).get('items')
-    labeled_nodes_list = [node.get('metadata').get('name') for node in nodes]
-    return labeled_nodes_list
-
-
 @pytest.fixture(scope='function')
 def label_nodes(request):
     """
@@ -60,14 +45,14 @@ def label_nodes(request):
     def teardown():
         log.info('Clear label form worker (Application) nodes')
         # Getting all Application nodes
-        app_nodes = get_labeled_nodes(constants.VDBENCH_NODE_LABEL)
+        app_nodes = machine.get_labeled_nodes(constants.VDBENCH_NODE_LABEL)
         helpers.remove_label_from_worker_node(app_nodes,
                                               constants.APP_NODE_LABEL)
 
     request.addfinalizer(teardown)
 
     # Getting all OCS nodes (to verify app pod wil not run on)
-    ocs_nodes = get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+    ocs_nodes = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
     # Add label to the worker nodes
     worker_nodes = helpers.get_worker_nodes()
     # Getting list of free nodes
