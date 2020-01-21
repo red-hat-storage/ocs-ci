@@ -572,10 +572,10 @@ def get_storageutilization_size(target_percentage, ceph_pool_name):
     target = total * target_percentage
     to_utilize = target - ceph_total_stored
     pvc_size = round(to_utilize / 2**30)  # GiB
-    logger.info((
-        f"fixture is going to request {pvc_size} Gi volume "
-        f"to reach {target/2**30} Gi of total cluster utilization, which "
-        f"is {target_percentage*100}% of the total capacity"))
+    logger.info(
+        f"to reach {target/2**30} Gi of total cluster utilization, "
+        f"which is {target_percentage*100}% of the total capacity, "
+        f"utilization job should request and fill {pvc_size} Gi volume")
     return pvc_size
 
 
