@@ -479,6 +479,7 @@ class Deployment(object):
             "BRIDGE_BASE_ADDRESS": bridge_base_address,
             "FORCE_CHROME_BRANCH_BASE": chrome_branch_base,
             "FORCE_CHROME_BRANCH_SHA256SUM": chrome_branch_sha,
+            "OCS_LIVE": int(config.DEPLOYMENT.get('live_deployment', 0)),
         }
         openshift_console_env.update(os.environ)
         ui_deploy_output = run_cmd(
