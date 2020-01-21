@@ -234,7 +234,7 @@ class TestVDBenchWorkload(E2ETest):
 
         log.info(sf_data)
 
-        timeout = 8640000  # 3600 (1H) * 24 (1D) * 100 = one hundred days
+        timeout = 86400  # 3600 (1H) * 24 (1D)  = one days
 
         sf_obj = OCS(**sf_data)
         sf_obj.create()
