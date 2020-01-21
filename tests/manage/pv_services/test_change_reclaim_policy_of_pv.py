@@ -165,7 +165,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
                 f'"{reclaim_policy_to}"}}}}'
             )
             assert pv_obj.ocp.patch(
-                resource_name=pv_name, params=patch_param, type='strategic'
+                resource_name=pv_name, params=patch_param, format_type='strategic'
             ), (
                 f"Failed to change persistentVolumeReclaimPolicy of pv "
                 f"{pv_name} to {reclaim_policy_to}"
@@ -270,7 +270,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
             pv_name = pv_obj.name
             patch_param = '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
             assert pv_obj.ocp.patch(
-                resource_name=pv_name, params=patch_param, type='strategic'
+                resource_name=pv_name, params=patch_param, format_type='strategic'
             ), (
                 f"Failed to change persistentVolumeReclaimPolicy "
                 f"for pv {pv_name} to Delete"

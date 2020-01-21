@@ -83,6 +83,8 @@ DEPLOYMENTCONFIG = "deploymentconfig"
 CONFIG = "Config"
 MACHINESETS = 'machinesets'
 STORAGECLUSTER = 'storagecluster'
+CLUSTER_OPERATOR = 'ClusterOperator'
+MONITORING = 'monitoring'
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -126,6 +128,8 @@ DEFAULT_SC_CEPHFS = "cephfs"
 DEFAULT_ROUTE_CRT = "router-certs-default"
 DEFAULT_NAMESPACE = "default"
 IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
+
+DEFAULT_CLUSTERNAME = 'ocs-storagecluster'
 
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f'{DEFAULT_CLUSTERNAME}-cephfs'
