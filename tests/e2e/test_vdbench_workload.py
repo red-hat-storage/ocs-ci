@@ -93,7 +93,6 @@ def ripsaw(request):
     return ripsaw
 
 
-@workloads
 class TestVDBenchWorkload(E2ETest):
     """
     Deploy Ripsaw operator and run VDBench workload
