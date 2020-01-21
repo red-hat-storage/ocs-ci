@@ -34,7 +34,7 @@ def change_registry_backend_to_ocs():
     )
     param_cmd = f'[{{"op": "add", "path": "/spec/storage", "value": {{"pvc": {{"claim": "{pv_obj.name}"}}}}}}]'
     assert ocp_obj.patch(
-        resource_name=constants.IMAGE_REGISTRY_RESOURCE_NAME, params=param_cmd
+        resource_name=constants.IMAGE_REGISTRY_RESOURCE_NAME, params=param_cmd, format_type='json'
     ), f"Registry pod storage backend to OCS is not success"
 
     # Validate registry pod status
@@ -186,7 +186,7 @@ def enable_route_and_create_ca_for_registry_access():
     )
     assert ocp_obj.patch(
         resource_name=constants.IMAGE_REGISTRY_RESOURCE_NAME,
-        params='{"spec": {"defaultRoute": true}}', type='merge'
+        params='{"spec": {"defaultRoute": true}}', format_type='merge'
     ), f"Registry pod defaultRoute enable is not success"
     logger.info(f"Enabled defaultRoute to true")
     ocp_obj = ocp.OCP()
