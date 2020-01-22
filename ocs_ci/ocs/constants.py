@@ -534,3 +534,9 @@ MON_PDB = "rook-ceph-mon-pdb"
 # Root Disk size
 CURRENT_VM_ROOT_DISK_SIZE = '60'
 VM_ROOT_DISK_SIZE = '120'
+
+# Secrets
+RBD_PROVISIONER_SECRET = 'rook-csi-rbd-provisioner'
+RBD_NODE_SECRET = 'rook-csi-rbd-node'
+CEPHFS_PROVISIONER_SECRET = 'rook-csi-cephfs-provisioner'
+CEPHFS_NODE_SECRET = 'rook-csi-cephfs-node'

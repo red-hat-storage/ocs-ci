@@ -349,3 +349,17 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
     assert {defaults.CEPHFS_PROVISIONER, defaults.RBD_PROVISIONER} == (
         {item['metadata']['name'] for item in csi_driver.get()['items']}
     )
+
+    # Verify node and provisioner secret names in storage class
+    log.info("Verifying node and provisioner secret names in storage class.")
+    sc_rbd = storage_class.get(
+        resource_name=constants.DEFAULT_STORAGECLASS_RBD
+    )
+    sc_cephfs = storage_class.get(
+        resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
+    )
+    assert sc_rbd['parameters']['csi.storage.k8s.io/node-stage-secret-name'] == constants.RBD_NODE_SECRET
+    assert sc_rbd['parameters']['csi.storage.k8s.io/provisioner-secret-name'] == constants.RBD_PROVISIONER_SECRET
+    assert sc_cephfs['parameters']['csi.storage.k8s.io/node-stage-secret-name'] == constants.CEPHFS_NODE_SECRET
+    assert sc_cephfs['parameters']['csi.storage.k8s.io/provisioner-secret-name'] == constants.CEPHFS_PROVISIONER_SECRET
+    log.info("Verified node and provisioner secret names in storage class.")
