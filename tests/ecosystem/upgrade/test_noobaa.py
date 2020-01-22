@@ -10,7 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_AUTH_FAILED, BS_OPTIMAL
 from tests.manage.mcg.helpers import (
-    retrieve_test_objects_to_pod, sync_object_directory
+    sync_object_directory
 )
 
 logger = logging.getLogger(__name__)
@@ -34,11 +34,11 @@ def test_fill_bucket(
     """
 
     (
-        bucket_name,
+        bucket,
         backingstore1,
         backingstore2
     ) = multiregion_mirror_setup_session
-    mcg_bucket_path = f's3://{bucket_name}'
+    mcg_bucket_path = f's3://{bucket.name}'
 
     # Download test objects from the public bucket
     awscli_pod_session.exec_cmd_on_pod(
@@ -61,8 +61,8 @@ def test_fill_bucket(
         for i in range(2):
             awscli_pod_session.exec_cmd_on_pod(
             command=f'sh -c "'
-                    f'cp {LOCAL_TESTOBJS_DIR_PATH}/{obj.key} '
-                    f'{LOCAL_TESTOBJS_DIR_PATH}/{obj.key}.{i}"'
+               f'cp {LOCAL_TESTOBJS_DIR_PATH}/{obj.key} '
+               f'{LOCAL_TESTOBJS_DIR_PATH}/{obj.key}.{i}"'
             )
             DOWNLOADED_OBJS.append(f'{obj.key}.{i}')
 
@@ -82,7 +82,8 @@ def test_fill_bucket(
         mcg_obj_session
     )
 
-    mcg_obj_session.check_if_mirroring_is_done(bucket_name)
+    mcg_obj_session.check_if_mirroring_is_done(bucket.name)
+    assert bucket.phase == constants.STATUS_BOUND
 
     # Bring bucket A down
     mcg_obj_session.toggle_aws_bucket_readwrite(backingstore1['name'])
@@ -108,6 +109,7 @@ def test_fill_bucket(
             result_object_path=f'{LOCAL_TEMP_PATH}/{obj}',
             awscli_pod=awscli_pod_session
         ), 'Checksum comparision between original and result object failed'
+    assert bucket.phase == constants.STATUS_BOUND
 
 
 @aws_platform_required
@@ -124,11 +126,11 @@ def test_noobaa_postupgrade(
     """
 
     (
-        bucket_name,
+        bucket,
         backingstore1,
         backingstore2
     ) = multiregion_mirror_setup_session
-    mcg_bucket_path = f's3://{bucket_name}'
+    mcg_bucket_path = f's3://{bucket.name}'
 
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
@@ -137,6 +139,8 @@ def test_noobaa_postupgrade(
             result_object_path=f'{LOCAL_TEMP_PATH}/{obj}',
             awscli_pod=awscli_pod_session
         ), 'Checksum comparision between original and result object failed'
+
+    assert bucket.phase == constants.STATUS_BOUND
 
     # Clean up the temp dir
     awscli_pod_session.exec_cmd_on_pod(
@@ -161,6 +165,9 @@ def test_noobaa_postupgrade(
         BS_AUTH_FAILED,
         timeout=360
     )
+
+    assert bucket.phase == constants.STATUS_BOUND
+
 
     # Verify integrity of A
     # Retrieve all objects from MCG bucket to result dir in Pod
@@ -188,3 +195,5 @@ def test_noobaa_postupgrade(
         BS_OPTIMAL,
         timeout=360
     )
+
+    assert bucket.phase == constants.STATUS_BOUND
