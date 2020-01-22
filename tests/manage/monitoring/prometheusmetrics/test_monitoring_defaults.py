@@ -163,7 +163,7 @@ def test_ceph_metrics_available():
         "ceph_bluestore_read_lat_count",
         "ceph_pg_degraded",
         "ceph_mon_num_sessions",
-        "ceph_objecter_0x5633ca03ff80_op_rmw",
+        "ceph_objecter_op_rmw",
         "ceph_bluefs_bytes_written_wal",
         "ceph_mon_num_elections",
         "ceph_rocksdb_compact",
