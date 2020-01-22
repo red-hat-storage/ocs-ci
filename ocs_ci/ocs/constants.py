@@ -118,6 +118,9 @@ MOUNT_POINT = '/var/lib/www/html'
 OCP_QE_MISC_REPO = (
     "http://git.host.prod.eng.bos.redhat.com/git/openshift-misc.git"
 )
+CRITICAL_ERRORS = [
+    "core dumped", "oom_reaper"
+]
 
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 

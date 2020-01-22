@@ -13,6 +13,7 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import E2ETest, workloads
+from tests.helpers import get_logs_with_errors
 
 log = logging.getLogger(__name__)
 
@@ -136,3 +137,4 @@ class TestSmallFileWorkload(E2ETest):
             if timeout < (time.time() - start_time):
                 raise TimeoutError(f"Timed out waiting for benchmark to complete")
             time.sleep(30)
+        assert not get_logs_with_errors()
