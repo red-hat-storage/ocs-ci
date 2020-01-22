@@ -472,14 +472,16 @@ class Deployment(object):
             "oc get consoles.config.openshift.io cluster -o"
             "jsonpath='{.status.consoleURL}'"
         )
+        logger.info(f"Bridge base address: {bridge_base_address}")
         chrome_branch_base = config.RUN.get("force_chrome_branch_base")
         chrome_branch_sha = config.RUN.get("force_chrome_branch_sha256sum")
+        live_deploy = '1' if config.DEPLOYMENT.get('live_deployment') else '0'
         openshift_console_env = {
             "BRIDGE_KUBEADMIN_PASSWORD": get_kubeadmin_password(),
             "BRIDGE_BASE_ADDRESS": bridge_base_address,
             "FORCE_CHROME_BRANCH_BASE": chrome_branch_base,
             "FORCE_CHROME_BRANCH_SHA256SUM": chrome_branch_sha,
-            "OCS_LIVE": int(config.DEPLOYMENT.get('live_deployment', 0)),
+            "OCS_LIVE": live_deploy,
         }
         openshift_console_env.update(os.environ)
         ui_deploy_output = run_cmd(
