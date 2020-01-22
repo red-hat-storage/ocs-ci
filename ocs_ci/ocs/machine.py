@@ -90,6 +90,21 @@ def get_machine_type(machine_name):
         break
 
 
+def get_labeled_nodes(label):
+    """
+    Fetches all nodes with specific label.
+
+    Args:
+        label (str): node label to look for
+    Returns:
+        list: List of names of labeled nodes
+    """
+    ocp_node_obj = OCP(kind=constants.NODE)
+    nodes = ocp_node_obj.get(selector=label).get('items')
+    labeled_nodes_list = [node.get('metadata').get('name') for node in nodes]
+    return labeled_nodes_list
+
+
 def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
     """
     Deletes a machine and checks the state of the newly spinned

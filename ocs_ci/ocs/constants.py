@@ -28,6 +28,7 @@ TEMPLATE_WORKLOAD_DIR = os.path.join(TEMPLATE_DIR, "workloads")
 TEMPLATE_FIO_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fio")
 TEMPLATE_SMALLFILE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "smallfile")
 TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
+TEMPLATE_VDBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "vdbench")
 TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(
@@ -273,6 +274,10 @@ SMALLFILE_BENCHMARK_YAML = os.path.join(
     TEMPLATE_SMALLFILE_DIR, "SmallFile.yaml"
 )
 
+VDBENCH_BENCHMARK_YAML = os.path.join(
+    TEMPLATE_VDBENCH_DIR, "VDBench.yaml"
+)
+
 NGINX_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "nginx.yaml"
 )
@@ -416,6 +421,11 @@ OPERATOR_CS_QUAY_API_QUERY = (
     'https://quay.io/api/v1/repository/rhceph-dev/ocs-olm-operator/'
     'tag/?onlyActiveTags=true&limit={tag_limit}'
 )
+
+# VDbench benchmark related constants
+APP_NODE_LABEL = 'app-node'
+VDBENCH_NODE_LABEL = 'vdbench'
+VDBENCH_RESULTS_FILE = '/tmp/Results.tar.gz'
 
 # Platforms
 AWS_PLATFORM = 'aws'
