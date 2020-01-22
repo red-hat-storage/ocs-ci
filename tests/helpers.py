@@ -989,16 +989,16 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list):
     return pvc_dict
 
 
-def measure_pvc_deletion_time_bulk(interface, pvc_name_list):
+def measure_pv_deletion_time_bulk(interface, pv_name_list):
     """
-    Measure PVC deletion time of bulk PVC based on logs.
+    Measure PV deletion time of bulk PV, based on logs.
 
     Args:
-        interface (str): The interface backed the PVC
-        pvc_name_list (list): List of PVC Names for measuring deletion time
+        interface (str): The interface backed the PV
+        pv_name_list (list): List of PV Names for measuring deletion time
 
     Returns:
-        pvc_dict (dict): Dictionary of pvc_name with deletion time.
+        pv_dict (dict): Dictionary of pv_name with deletion time.
 
     """
     # Get the correct provisioner pod based on the interface
@@ -1008,25 +1008,25 @@ def measure_pvc_deletion_time_bulk(interface, pvc_name_list):
     logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
     logs = logs.split("\n")
 
-    pvc_dict = dict()
+    pv_dict = dict()
     format = '%H:%M:%S.%f'
-    for pvc_name in pvc_name_list:
-        # Extract the starting time for the PVC provisioning
+    for pv_name in pv_name_list:
+        # Extract the deletion start time for the PV
         start = [
-            i for i in logs if re.search(f"delete \"{pvc_name}\": started", i)
+            i for i in logs if re.search(f"delete \"{pv_name}\": started", i)
         ]
         start = start[0].split(' ')[1]
         start_time = datetime.datetime.strptime(start, format)
-        # Extract the end time for the PVC provisioning
+        # Extract the deletion end time for the PV
         end = [
-            i for i in logs if re.search(f"delete \"{pvc_name}\": succeeded", i)
+            i for i in logs if re.search(f"delete \"{pv_name}\": succeeded", i)
         ]
         end = end[0].split(' ')[1]
         end_time = datetime.datetime.strptime(end, format)
         total = end_time - start_time
-        pvc_dict[pvc_name] = total.total_seconds()
+        pv_dict[pv_name] = total.total_seconds()
 
-    return pvc_dict
+    return pv_dict
 
 
 def get_start_deletion_time(interface, pv_name):
