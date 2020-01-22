@@ -40,6 +40,7 @@ TEXT_CONTENT = (
 TEST_FILE = '/var/lib/www/html/test'
 FEDORA_TEST_FILE = '/mnt/test'
 
+
 class Pod(OCS):
     """
     Handles per pod related context
@@ -604,9 +605,9 @@ def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=None):
                 )
             else:
                 pod_obj.exec_cmd_on_pod(
-                f"bash -c \"let i=0; while true; do echo {TEXT_CONTENT} "
-                f">> {TEST_FILE}$i; let i++; sleep 0.01; done\""
-            )
+                    f"bash -c \"let i=0; while true; do echo {TEXT_CONTENT} "
+                    f">> {TEST_FILE}$i; let i++; sleep 0.01; done\""
+                )
         # Once the pod gets deleted, the I/O execution will get terminated.
         # Hence, catching this exception
         except CommandFailed as ex:
