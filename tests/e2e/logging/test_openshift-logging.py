@@ -6,6 +6,7 @@ import logging
 
 import pytest
 
+import random
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
@@ -159,6 +160,20 @@ class Test_openshift_logging_on_ocs(E2ETest):
         else:
             raise ModuleNotFoundError
 
+    def get_elasticsearch_pod_obj(self):
+        """
+        This function returns the Elasticsearch pod obj
+        """
+        pod_list = get_all_pods(namespace=constants.OPENSHIFT_LOGGING_NAMESPACE)
+        elasticsearch_pod = [
+            pod.name for pod in pod_list if pod.name.startswith('elasticsearch')
+        ]
+        elasticsearch_pod = random.choice(elasticsearch_pod)
+        elasticsearch_pod_obj = get_pod_obj(
+            name=elasticsearch_pod, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+        )
+        return elasticsearch_pod_obj
+
     @pytest.mark.polarion_id("OCS-657")
     @workloads
     def test_create_new_project_to_verify_logging(self, create_pvc_and_deploymentconfig_pod):
@@ -183,8 +198,16 @@ class Test_openshift_logging_on_ocs(E2ETest):
     @retry(ModuleNotFoundError, 6, 300, 3)
     def test_respin_osd_pods_to_verify_logging(self, create_pvc_and_deploymentconfig_pod):
         """
-
+        This function creates projects before and after respin of osd
+        and verify project existence in EFK stack.
+        1. Creates new project with PVC and app-pods
+        2. Respins osd
+        3. Logs into the EFK stack and checks for the health of cluster-logging
+        4. Logs into the EFK stack and checks project existence
+        5. Checks for the shards of the project in the EFK stack
+        6. Creates new project and checks the existence again
         """
+
         # Create 1st project and app_pod
         dc_pod_obj, dc_pvc_obj = create_pvc_and_deploymentconfig_pod
 
@@ -198,25 +221,19 @@ class Test_openshift_logging_on_ocs(E2ETest):
         # Check the health of the cluster-logging
         assert ocp_logging_obj.check_health_of_clusterlogging()
 
-        # Check for the 1st project created in EFK stack after respin
-        pod_list = get_all_pods(namespace='openshift-logging')
-        elasticsearch_pod = [
-            pod.name for pod in pod_list if pod.name.startswith('elasticsearch')
-        ]
-        elasticsearch_pod_obj = get_pod_obj(
-            name=elasticsearch_pod[1], namespace='openshift-logging'
-        )
+        # Check for the 1st project created in EFK stack before the respin
         self.validate_project_exists(dc_pvc_obj)
 
         # Check the files in the project
+        elasticsearch_pod_obj = self.get_elasticsearch_pod_obj()
+
         project1_filecount = elasticsearch_pod_obj.exec_cmd_on_pod(
             command=f'es_util --query=project.{project1}.*/_count'
         )
-        logger.info(f'File Count {project1_filecount}')
-        if project1_filecount:
-            logger.info(f'The files in the project1 {project1_filecount}')
+        if project1_filecount['_shards']['successful'] != 0:
+            logger.info(f'The files in the project 1 {project1_filecount}')
         else:
-            raise ModuleNotFoundError
+            raise FileNotFoundError
 
         # Create another app_pod in new project
         pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
@@ -231,7 +248,7 @@ class Test_openshift_logging_on_ocs(E2ETest):
         )
         logger.info(f'The files in the project2 {project2_filecount}')
 
-        if project2_filecount:
-            logger.info(f'Project 2 {project2} exists in the EFK stack')
+        if project2_filecount['_shards']['successful'] != 0:
+            logger.info(f'The files in the project 2 {project2_filecount}')
         else:
-            raise ModuleNotFoundError
+            raise FileNotFoundError
