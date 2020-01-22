@@ -38,7 +38,7 @@ TEXT_CONTENT = (
     "deserunt mollit anim id est laborum."
 )
 TEST_FILE = '/var/lib/www/html/test'
-
+FEDORA_TEST_FILE = '/mnt/test'
 
 class Pod(OCS):
     """
@@ -573,7 +573,7 @@ def get_fio_rw_iops(pod_obj):
     )
 
 
-def run_io_in_bg(pod_obj, expect_to_fail=False):
+def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=None):
     """
     Run I/O in the background
 
@@ -581,13 +581,15 @@ def run_io_in_bg(pod_obj, expect_to_fail=False):
         pod_obj (Pod): The object of the pod
         expect_to_fail (bool): True for the command to be expected to fail
             (disruptive operations), False otherwise
+        fedora_dc(str): set to None by default. If set to True, it runs IO in
+            background on a fedora dc pod.
 
     Returns:
         Thread: A thread of the I/O execution
     """
     logger.info(f"Running I/O on pod {pod_obj.name}")
 
-    def exec_run_io_cmd(pod_obj, expect_to_fail):
+    def exec_run_io_cmd(pod_obj, expect_to_fail, fedora_dc):
         """
         Execute I/O
         """
@@ -595,7 +597,13 @@ def run_io_in_bg(pod_obj, expect_to_fail=False):
             # Writing content to a new file every 0.01 seconds.
             # Without sleep, the device will run out of space very quickly -
             # 5-10 seconds for a 5GB device
-            pod_obj.exec_cmd_on_pod(
+            if fedora_dc:
+                pod_obj.exec_cmd_on_pod(
+                    f"bash -c \"let i=0; while true; do echo {TEXT_CONTENT} "
+                    f">> {FEDORA_TEST_FILE}$i; let i++; sleep 0.01; done\""
+                )
+            else:
+                pod_obj.exec_cmd_on_pod(
                 f"bash -c \"let i=0; while true; do echo {TEXT_CONTENT} "
                 f">> {TEST_FILE}$i; let i++; sleep 0.01; done\""
             )
@@ -608,12 +616,16 @@ def run_io_in_bg(pod_obj, expect_to_fail=False):
                     return
             raise ex
 
-    thread = Thread(target=exec_run_io_cmd, args=(pod_obj, expect_to_fail,))
+    thread = Thread(target=exec_run_io_cmd, args=(pod_obj, expect_to_fail, fedora_dc))
     thread.start()
     time.sleep(2)
 
     # Checking file existence
-    test_file = TEST_FILE + "1"
+    if fedora_dc:
+        pod_obj.install_packages("findutils")
+        test_file = FEDORA_TEST_FILE + "1"
+    else:
+        test_file = TEST_FILE + "1"
     assert check_file_existence(pod_obj, test_file), (
         f"I/O failed to start inside {pod_obj.name}"
     )
