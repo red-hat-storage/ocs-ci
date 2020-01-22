@@ -14,7 +14,7 @@ from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.utility import aws
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    deployment, destroy, ignore_leftovers, tier4a, tier4b, tier4c
+    deployment, destroy, ignore_leftovers
 )
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.utility.environment_check import (
@@ -803,9 +803,9 @@ def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
 def health_checker(request):
     node = request.node
     # Limit the health check for tier4a, tier4b, tier4c
-    tier4_marks = [m.mark for m in [tier4a(), tier4b(), tier4c()]]
+    tier4_marks = ['tier4', 'tier4a', 'tier4b', 'tier4c']
     for mark in node.iter_markers():
-        if mark in tier4_marks:
+        if mark.name in tier4_marks:
             log.info("Checking for Ceph Health OK ")
             try:
                 status = ceph_health_check_base()
