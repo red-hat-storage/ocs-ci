@@ -55,9 +55,10 @@ def get_typed_nodes(node_type='worker', num_of_nodes=None):
 
     """
     nodes = get_node_objs()
+    from pdb import set_trace; set_trace()
     typed_nodes = [
-        n for n in nodes if node_type in n.get().get('metadata')
-        .get('annotations').get('machineconfiguration.openshift.io/currentConfig')
+        node for node in nodes if node
+        .ocp.get_resource(resource_name=node.name, column='ROLES') == node_type
     ]
     if num_of_nodes:
         typed_nodes = typed_nodes[:num_of_nodes]
