@@ -177,14 +177,14 @@ def prometheus_health_check(name=constants.MONITORING, kind=constants.CLUSTER_OP
     """
     Return true if the prometheus cluster is healthy
 
-     Args:
+    Args:
         name (str) : Name of the resources
         kind (str): Kind of the resource
 
-     Returns:
-         bool : True on prometheus health is ok, false otherwise
+    Returns:
+        bool : True on prometheus health is ok, false otherwise
 
-     """
+    """
     ocp_obj = OCP(kind=kind)
     health_info = ocp_obj.get(resource_name=name)
     health_conditions = health_info.get('status').get('conditions')
