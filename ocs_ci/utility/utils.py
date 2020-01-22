@@ -730,11 +730,14 @@ class TimeoutSampler(object):
             self.last_sample_time = time.time()
             try:
                 yield self.func(*self.func_args, **self.func_kwargs)
-            except Exception:
-                pass
-
+            except Exception as ex:
+                msg = f"Exception raised during iteration: {ex}"
+                logging.error(msg)
             if self.timeout < (time.time() - self.start_time):
                 raise self.timeout_exc_cls(*self.timeout_exc_args)
+            log.info(
+                f"Going to sleep for {self.sleep} seconds"
+                " before next iteration")
             time.sleep(self.sleep)
 
     def wait_for_func_status(self, result):
@@ -759,11 +762,10 @@ class TimeoutSampler(object):
             for res in self:
                 if result == res:
                     return True
-
         except self.timeout_exc_cls:
             log.error(
-                f"({self.func.__name__}) return incorrect status after timeout"
-            )
+                f"({self.func.__name__}) return incorrect status "
+                f"after {self.timeout} second timeout")
             return False
 
 

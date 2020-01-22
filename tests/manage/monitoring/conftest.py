@@ -17,6 +17,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.utility.prometheus import PrometheusAPI
+from ocs_ci.utility.utils import TimeoutSampler
 from tests import helpers
 from tests.helpers import create_unique_resource_name
 
@@ -571,10 +572,10 @@ def get_storageutilization_size(target_percentage, ceph_pool_name):
     target = total * target_percentage
     to_utilize = target - ceph_total_stored
     pvc_size = round(to_utilize / 2**30)  # GiB
-    logger.info((
-        f"fixture is going to request {pvc_size} Gi volume "
-        f"to reach {target/2**30} Gi of total cluster utilization, which "
-        f"is {target_percentage*100}% of the total capacity"))
+    logger.info(
+        f"to reach {target/2**30} Gi of total cluster utilization, "
+        f"which is {target_percentage*100}% of the total capacity, "
+        f"utilization job should request and fill {pvc_size} Gi volume")
     return pvc_size
 
 
@@ -725,6 +726,46 @@ def workload_fio_storageutilization(
         # make sure we communicate what is going to happen
         logger.info(f"going to delete {fixture_name} Job")
         fio_job_file.delete()
+        logger.info(
+            f"going to wait a bit to make sure that "
+            f"data written by {fixture_name} Job are really deleted")
+
+        def check_pvc_size():
+            """
+            Check whether data created by the Job were actually deleted.
+            """
+            # By asking again for pvc_size necessary to reach the target
+            # cluster utilization, we can see how much data were already
+            # deleted. Negative or small value of current pvc_size means that
+            # the data were not yet deleted.
+            pvc_size_tmp = get_storageutilization_size(
+                target_percentage, ceph_pool_name)
+            # If no other components were utilizing OCS storage, the space
+            # would be considered reclaimed when current pvc_size reaches
+            # it's original value again. But since this is not the case (eg.
+            # constantly growing monitoring or log data are stored there),
+            # we are ok with just 90% of the original value.
+            result = pvc_size_tmp >= pvc_size * 0.90
+            if result:
+                logger.info("storage space was reclaimed")
+            else:
+                logger.info(
+                    "storage space was not yet fully reclaimed, "
+                    f"current pvc size {pvc_size_tmp} value "
+                    f"should be close to {pvc_size}")
+            return result
+
+        check_timeout = 660  # seconds
+        check_sampler = TimeoutSampler(
+            timeout=check_timeout, sleep=30, func=check_pvc_size)
+        finished_in_time = check_sampler.wait_for_func_status(result=True)
+        if not finished_in_time:
+            error_msg = (
+                "it seems that the storage space was not reclaimed "
+                f"within {check_timeout} seconds, "
+                "this is most likely a product bug or misconfiguration")
+            logger.error(error_msg)
+            raise Exception(error_msg)
 
     return measured_op
 
