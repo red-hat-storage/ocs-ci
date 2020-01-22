@@ -1810,9 +1810,9 @@ def multiregion_mirror_setup_fixture(
     bucketclasses.append(bucketclass)
     # Create a NooBucket that'll use the bucket class in order to test
     # the mirroring policy
-    bucket_name = bucket_factory(1, 'OC', bucketclass=bucketclass.name)[0].name
+    bucket = bucket_factory(1, 'OC', bucketclass=bucketclass.name)[0]
 
-    return bucket_name, backingstore1, backingstore2
+    return bucket, backingstore1, backingstore2
 
 
 @pytest.fixture(scope='session')
