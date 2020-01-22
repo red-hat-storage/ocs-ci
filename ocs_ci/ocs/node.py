@@ -55,7 +55,6 @@ def get_typed_nodes(node_type='worker', num_of_nodes=None):
 
     """
     nodes = get_node_objs()
-    from pdb import set_trace; set_trace()
     typed_nodes = [
         node for node in nodes if node
         .ocp.get_resource(resource_name=node.name, column='ROLES') == node_type
