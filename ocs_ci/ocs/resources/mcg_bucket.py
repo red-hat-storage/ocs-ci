@@ -33,6 +33,19 @@ class MCGBucket(ABC):
         elif type(other) == MCGBucket:
             return self.name == other.name
 
+    @property
+    def phase(self):
+        """
+        Returns phase of bucket claim
+
+        Returns:
+            str: OBC phase
+        """
+        return OCP(kind='obc', namespace=self.mcg.namespace).get_resource(
+            self.name,
+            "PHASE"
+        )
+
     def delete(self):
         """
         Super method that first logs the bucket deletion and then calls
