@@ -738,7 +738,7 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True):
         'KUBECONFIG' in os.environ
         or os.path.exists(os.path.expanduser('~/.kube/config'))
     ):
-        log.warn(
+        log.warning(
             "Cannot find $KUBECONFIG or ~/.kube/config; "
             "skipping log collection"
         )
@@ -751,12 +751,17 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True):
     )
 
     if ocs:
-        run_must_gather(os.path.join(log_dir_path, 'ocs_must_gather'),
-                        ocsci_config.REPORTING['ocs_must_gather_image'])
+        latest_tag = ocsci_config.DEPLOYMENT['default_latest_tag']
+        ocs_log_dir_path = os.path.join(log_dir_path, 'ocs_must_gather')
+        ocs_must_gather_image = ocsci_config.REPORTING['ocs_must_gather_image']
+        ocs_must_gather_image_and_tag = f"{ocs_must_gather_image}:{latest_tag}"
+        run_must_gather(ocs_log_dir_path, ocs_must_gather_image_and_tag)
 
     if ocp:
         ocp_log_dir_path = os.path.join(log_dir_path, 'ocp_must_gather')
         ocp_must_gather_image = ocsci_config.REPORTING['ocp_must_gather_image']
         run_must_gather(ocp_log_dir_path, ocp_must_gather_image)
-        run_must_gather(ocp_log_dir_path, ocp_must_gather_image,
-                        '/usr/bin/gather_service_logs worker')
+        run_must_gather(
+            ocp_log_dir_path, ocp_must_gather_image,
+            '/usr/bin/gather_service_logs worker'
+        )
