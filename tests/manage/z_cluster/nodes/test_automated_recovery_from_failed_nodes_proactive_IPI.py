@@ -16,6 +16,7 @@ log = logging.getLogger(__name__)
 
 
 @tier4
+@tier4b
 @ignore_leftovers
 @aws_platform_required
 @ipi_deployment_required
