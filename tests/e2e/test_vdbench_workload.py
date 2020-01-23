@@ -13,7 +13,7 @@ from ocs_ci.utility import templating
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest
+from ocs_ci.framework.testlib import E2ETest, workloads
 from tests import helpers
 from ocs_ci.ocs import machine
 
@@ -45,7 +45,7 @@ def label_nodes(request):
     def teardown():
         log.info('Clear label form worker (Application) nodes')
         # Getting all Application nodes
-        app_nodes = machine.get_labeled_nodes(constants.VDBENCH_NODE_LABEL)
+        app_nodes = machine.get_labeled_nodes(constants.APP_NODE_LABEL)
         helpers.remove_label_from_worker_node(app_nodes,
                                               constants.APP_NODE_LABEL)
 
@@ -123,8 +123,15 @@ class TestVDBenchWorkload(E2ETest):
             pytest.param(*["VDBench-BCurve-FS.yaml",
                            9, 4, ["64k"], "random",
                            1, 4, 3, 256, 5, 600, 5]),
-        ]
+            pytest.param(*["VDBench-Basic.yaml",
+                           9, 4, ["4k"], "random",
+                           1, 4, 3, 256, 5, 600, 1],
+                        marks=pytest.mark.workloads()
+            ),
+        ],
     )
+
+
     def test_vdbench_workload(self, template, label_nodes, ripsaw, servers,
                               threads, blocksize, fileio, samples, width,
                               depth, files, file_size, runtime, pause
