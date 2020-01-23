@@ -129,8 +129,6 @@ class TestVDBenchWorkload(E2ETest):
                          marks=pytest.mark.workloads()),
         ],
     )
-
-
     def test_vdbench_workload(self, template, label_nodes, ripsaw, servers,
                               threads, blocksize, fileio, samples, width,
                               depth, files, file_size, runtime, pause
