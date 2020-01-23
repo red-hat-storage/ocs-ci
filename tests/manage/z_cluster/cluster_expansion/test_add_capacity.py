@@ -8,6 +8,8 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs import defaults
 from ocs_ci.framework import config
 from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.ocs.resources import storage_cluster, pod
+from tests import helpers
 logger = logging.getLogger(__name__)
 
 
@@ -19,33 +21,24 @@ class TestAddCapacity(ManageTest):
     """
     @pytest.mark.parametrize(
         argnames=[
-            "node_multiplier", "capacity"
+            "capacity"
         ],
         argvalues=[
             pytest.param(
-                *[3, '2000Gi'],
+                *['2048Gi'],
             ),
         ]
     )
-    def test_add_capacity(self, node_multiplier, capacity):
+    def test_add_capacity(self, capacity):
         """
         Test to add variable capacity to the OSD cluster while IOs running
 
         Args:
-        node_multiplier: the number of OSD to add per worker node
-        capacity: the storage capacity of each OSD
+            capacity:the storage capacity of each OSD
         """
         dt = config.ENV_DATA['deployment_type']
         if dt == 'ipi':
-            storage_cluster = machine_utils.get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-            worker_nodes = len(get_typed_nodes())
-            machine_utils.add_capacity(storagecluster_name=storage_cluster, count=worker_nodes * node_multiplier)
-            machine_utils.add_storage_capacity(storagecluster_name=storage_cluster, capacity=capacity)
-            pod_obj = ocp.OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-            assert pod_obj.wait_for_resource(
-                condition=constants.STATUS_RUNNING, selector=constants.OSD_APP_LABEL,
-                resource_count=worker_nodes * node_multiplier, timeout=600
-            ), "OSD pods failed to reach RUNNING state"
+            storage_cluster.add_capacity(capacity)
+
         else:
             pytest.skip("UPI not yet supported")
-        # ToDo run IOs
