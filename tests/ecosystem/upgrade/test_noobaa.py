@@ -60,9 +60,9 @@ def test_fill_bucket(
         # Use 3x time more objects than there is in test objects pod
         for i in range(2):
             awscli_pod_session.exec_cmd_on_pod(
-            command=f'sh -c "'
-               f'cp {LOCAL_TESTOBJS_DIR_PATH}/{obj.key} '
-               f'{LOCAL_TESTOBJS_DIR_PATH}/{obj.key}.{i}"'
+                command=f'sh -c "'
+                        f'cp {LOCAL_TESTOBJS_DIR_PATH}/{obj.key} '
+                        f'{LOCAL_TESTOBJS_DIR_PATH}/{obj.key}.{i}"'
             )
             DOWNLOADED_OBJS.append(f'{obj.key}.{i}')
 
@@ -85,15 +85,6 @@ def test_fill_bucket(
     mcg_obj_session.check_if_mirroring_is_done(bucket.name)
     assert bucket.phase == constants.STATUS_BOUND
 
-    # Bring bucket A down
-    mcg_obj_session.toggle_aws_bucket_readwrite(backingstore1['name'])
-    mcg_obj_session.check_backingstore_state(
-        'backing-store-' + backingstore1['name'],
-        BS_AUTH_FAILED,
-        timeout=360
-    )
-
-    # Verify integrity of B
     # Retrieve all objects from MCG bucket to result dir in Pod
     sync_object_directory(
         awscli_pod_session,
@@ -101,6 +92,8 @@ def test_fill_bucket(
         LOCAL_TEMP_PATH,
         mcg_obj_session
     )
+
+    assert bucket.phase == constants.STATUS_BOUND
 
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
@@ -150,11 +143,6 @@ def test_noobaa_postupgrade(
     # Bring B down, bring A up
     logger.info('Blocking bucket B')
     mcg_obj_session.toggle_aws_bucket_readwrite(backingstore2['name'])
-    logger.info('Freeing bucket A')
-    mcg_obj_session.toggle_aws_bucket_readwrite(
-        backingstore1['name'],
-        block=False
-    )
     mcg_obj_session.check_backingstore_state(
         'backing-store-' + backingstore1['name'],
         BS_OPTIMAL,
@@ -167,7 +155,6 @@ def test_noobaa_postupgrade(
     )
 
     assert bucket.phase == constants.STATUS_BOUND
-
 
     # Verify integrity of A
     # Retrieve all objects from MCG bucket to result dir in Pod
