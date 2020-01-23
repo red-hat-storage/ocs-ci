@@ -1190,6 +1190,17 @@ def get_az_count():
 @retry((CephHealthException, CommandFailed), tries=20, delay=30, backoff=1)
 def ceph_health_check(namespace=None):
     """
+    Args:
+        namespace (str): Namespace of OCS
+            (default: config.ENV_DATA['cluster_namespace'])
+
+    Returns: ceph_health_check_base with default retries of 20, delay of 30 seconds
+    """
+    return ceph_health_check_base(namespace)
+
+
+def ceph_health_check_base(namespace=None):
+    """
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
     Args:
