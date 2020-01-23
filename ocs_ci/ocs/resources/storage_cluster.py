@@ -30,7 +30,7 @@ class StorageCluster(OCP):
         )
 
 
-def add_capacity(capacity):
+def add_capacity(capacity_string):
     """
         Add storage capacity to the cluster
 
@@ -40,11 +40,15 @@ def add_capacity(capacity):
     """
 
     ocp = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind=constants.STORAGECLUSTER)
-    osd_capacity = get_storage_cluster()['spec']['storageDeviceSets'][0]['dataPVCTemplate']['spec']['resources']['resources']['storage']
-    osd_replicas = get_storage_cluster()['spec']['storageDeviceSets'][0]['replicas']
+    osd_capacity = parse_size_to_int(get_storage_cluster()['spec']['storageDeviceSets']
+                                        [0]['dataPVCTemplate']['spec']
+                                        ['resources']['resources']['storage'])
+
+    osd_replicas = parse_size_to_int(get_storage_cluster()['spec']['storageDeviceSets'][0]['replicas'])
     worker_nodes = len(helpers.get_worker_nodes())
     current_osd_count = len(pod.get_osd_pods())
     available_osd_number = worker_nodes * 3 - current_osd_count
+    capacity = parse_size_to_int(capacity_string)
 
     if capacity % osd_capacity == 0:
         if capacity / osd_capacity * osd_replicas <= available_osd_number:
@@ -81,3 +85,14 @@ def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
 
     sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
     return sc_obj.get()
+
+
+def parse_size_to_int(self, num):
+    """
+        Change capacity string to int
+
+        num (String):
+        returns( int) : capacity in int format (Gi)
+    """
+    place = num.find('G')
+    return int(num[0, place])

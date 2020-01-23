@@ -42,8 +42,9 @@ class TestAddCapacity(ManageTest):
         if dt == 'ipi':
             returned_bool = storage_cluster.add_capacity(capacity)
             assert returned_bool == expected(
-                logger.info("gggg")
+                logger.info("test failed successfully")
             )
 
         else:
             pytest.skip("UPI not yet supported")
+
