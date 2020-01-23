@@ -108,7 +108,7 @@ class Test_openshift_logging_on_ocs(E2ETest):
         """
         """
         def finalizer():
-            helpers.delete_deploymentconfig(pod_obj)
+            helpers.delete_deploymentconfig_pods(pod_obj)
 
         request.addfinalizer(finalizer)
 
