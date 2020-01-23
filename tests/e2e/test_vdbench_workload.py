@@ -13,7 +13,7 @@ from ocs_ci.utility import templating
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest, workloads
+from ocs_ci.framework.testlib import E2ETest
 from tests import helpers
 from ocs_ci.ocs import machine
 
@@ -126,8 +126,7 @@ class TestVDBenchWorkload(E2ETest):
             pytest.param(*["VDBench-Basic.yaml",
                            9, 4, ["4k"], "random",
                            1, 4, 3, 256, 5, 600, 1],
-                        marks=pytest.mark.workloads()
-            ),
+                         marks=pytest.mark.workloads()),
         ],
     )
 
