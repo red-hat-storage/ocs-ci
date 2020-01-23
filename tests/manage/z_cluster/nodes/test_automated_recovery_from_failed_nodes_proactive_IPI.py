@@ -2,8 +2,10 @@ import logging
 import pytest
 import random
 from ocs_ci.framework.testlib import (
-    tier4, ManageTest, aws_platform_required,
-    ipi_deployment_required, ignore_leftovers)
+    tier4, tier4b, ManageTest,
+    aws_platform_required,
+    ipi_deployment_required, ignore_leftovers
+)
 from ocs_ci.ocs import machine
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
