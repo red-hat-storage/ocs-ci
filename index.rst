@@ -41,6 +41,7 @@ and functionality using AWS and other supported platforms.
    Debugging <docs/debugging.md>
    Unit tests <docs/unit_tests.md>
    Workarounds <docs/workarounds.md>
+   Logging usage <docs/deploy_logging.md>
 
 
 Indices and tables
