@@ -54,10 +54,9 @@ def get_typed_nodes(node_type='worker', num_of_nodes=None):
         list: The nodes OCP instances
 
     """
-    nodes = get_node_objs()
     typed_nodes = [
-        n for n in nodes if node_type in n.get().get('metadata')
-        .get('annotations').get('machineconfiguration.openshift.io/currentConfig')
+        node for node in get_node_objs() if node
+        .ocp.get_resource(resource_name=node.name, column='ROLES') == node_type
     ]
     if num_of_nodes:
         typed_nodes = typed_nodes[:num_of_nodes]
