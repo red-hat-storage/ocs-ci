@@ -600,7 +600,7 @@ class MCG(object):
             backingstore_name (str): Name of the backing store to be checked
             desired_state (str): The desired state of the backing store
             timeout (int): Number of seconds for timeout which will be used
-                in the checks used in this function.
+            in the checks used in this function.
 
         Returns:
             bool: Whether the backing store has reached the desired state
