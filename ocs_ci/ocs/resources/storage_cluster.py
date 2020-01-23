@@ -60,10 +60,13 @@ def add_capacity(capacity):
                 params=f'[{{"op": "replace", "path": "/spec/storageDeviceSets/0/dataPVCTemplate/spec/resources'
                        f'/requests/storage", "value":{capacity}}}] '
             )
+            return True
         else:
             log.info("not enough worker nodes")
+            return False
     else:
         log.info("invalid storage capacity ")
+        return False
 
 
 def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
