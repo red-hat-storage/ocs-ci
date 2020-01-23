@@ -35,7 +35,9 @@ def add_capacity(capacity_string):
         Add storage capacity to the cluster
 
         Args:
-            capacity (int): Size of the storage to add
+            capacity_string(int): Size of the storage to add
+        Returns:
+            True if capacity was added, False if not
 
     """
 
@@ -87,12 +89,16 @@ def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     return sc_obj.get()
 
 
-def parse_size_to_int(self, num):
+def parse_size_to_int(num):
     """
         Change capacity string to int
 
-        num (String):
-        returns( int) : capacity in int format (Gi)
+        Args:
+            num (String):
+        Returns:
+            capacity (int) : capacity in int format (Gi)
+
     """
     place = num.find('G')
-    return int(num[0, place])
+    capacity = int(num[0, place])
+    return capacity
