@@ -153,10 +153,7 @@ class Test_openshift_logging_on_ocs(E2ETest):
             for item in project_index.split("\n"):
                 if project in item:
                     logger.info(item.strip())
-                    if 'green' in item.strip():
-                        logger.info(f'The project {project} is Healthy')
-                    else:
-                        logger.info(f'The project {project} is unhealthy')
+                    assert 'green' in item.strip(), f"Project {project} is Unhealthy"
         else:
             raise ModuleNotFoundError
 
