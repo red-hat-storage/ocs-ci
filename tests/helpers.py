@@ -1809,3 +1809,21 @@ def get_logs_with_errors(errors=None):
                     fh.write(log_content)
 
     return output_logs
+
+
+def modify_osd_replica_count(resource_name, replica_count):
+    """
+    Function to modify osd replica count to 0 or 1
+
+    Args:
+        resource_name (str): Name of osd i.e, 'rook-ceph-osd-0-c9c4bc7c-bkf4b'
+        replica_count (int): osd replica count to be changed to
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    ocp_obj = ocp.OCP(kind=constants.DEPLOYMENT, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    params = f'{{"spec": {{"replicas": {replica_count}}}}}'
+    resource_name = '-'.join(resource_name.split('-')[0:4])
+    return ocp_obj.patch(resource_name=resource_name, params=params)

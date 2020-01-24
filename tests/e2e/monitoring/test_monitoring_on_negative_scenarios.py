@@ -5,7 +5,7 @@ import pytest
 from ocs_ci.ocs import ocp, constants, defaults
 from ocs_ci.framework.testlib import workloads, E2ETest, ignore_leftovers, tier4
 from ocs_ci.ocs.resources import pod
-from tests.helpers import wait_for_resource_state, default_storage_class
+from tests.helpers import wait_for_resource_state, default_storage_class, modify_osd_replica_count
 from tests.disruption_helpers import Disruptions
 from tests.sanity_helpers import Sanity
 from ocs_ci.ocs.monitoring import (
@@ -260,14 +260,8 @@ class TestMonitoringBackedByOCS(E2ETest):
         osd_pod_list = pod.get_osd_pods()
 
         # Make one of the osd down(first one)
-        ocp_obj = ocp.OCP(kind=constants.DEPLOYMENT, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-
-        params = '{"spec": {"replicas": 0}}'
         resource_name = osd_pod_list[0].get().get('metadata').get('name')
-        resource_name = '-'.join(resource_name.split('-')[0:4])
-        assert ocp_obj.patch(resource_name=resource_name, params=params), (
-            f"Failed to change the replica count of osd {resource_name} to 0"
-        )
+        assert modify_osd_replica_count(resource_name=resource_name, replica_count=0)
 
         # Validate osd is down
         pod_obj = ocp.OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
@@ -282,10 +276,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             )
 
         # Make osd up which was down
-        params = '{"spec": {"replicas": 1}}'
-        assert ocp_obj.patch(resource_name=resource_name, params=params), (
-            f"Failed to change the replica count of osd {resource_name} to 1"
-        )
+        assert modify_osd_replica_count(resource_name=resource_name, replica_count=1)
 
         # Validate osd is up and ceph health is ok
         self.sanity_helpers.health_check()
