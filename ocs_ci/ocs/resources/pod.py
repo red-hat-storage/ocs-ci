@@ -599,15 +599,13 @@ def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=None):
             # Without sleep, the device will run out of space very quickly -
             # 5-10 seconds for a 5GB device
             if fedora_dc:
-                pod_obj.exec_cmd_on_pod(
-                    f"bash -c \"let i=0; while true; do echo {TEXT_CONTENT} "
-                    f">> {FEDORA_TEST_FILE}$i; let i++; sleep 0.01; done\""
-                )
+                FILE = FEDORA_TEST_FILE
             else:
-                pod_obj.exec_cmd_on_pod(
-                    f"bash -c \"let i=0; while true; do echo {TEXT_CONTENT} "
-                    f">> {TEST_FILE}$i; let i++; sleep 0.01; done\""
-                )
+                FILE = TEST_FILE
+            pod_obj.exec_cmd_on_pod(
+                f"bash -c \"let i=0; while true; do echo {TEXT_CONTENT} "
+                f">> {FILE}$i; let i++; sleep 0.01; done\""
+            )
         # Once the pod gets deleted, the I/O execution will get terminated.
         # Hence, catching this exception
         except CommandFailed as ex:
@@ -624,9 +622,10 @@ def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=None):
     # Checking file existence
     if fedora_dc:
         pod_obj.install_packages("findutils")
-        test_file = FEDORA_TEST_FILE + "1"
+        FILE = FEDORA_TEST_FILE
     else:
-        test_file = TEST_FILE + "1"
+        FILE = TEST_FILE
+    test_file = FILE + "1"
     assert check_file_existence(pod_obj, test_file), (
         f"I/O failed to start inside {pod_obj.name}"
     )
