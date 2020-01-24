@@ -383,15 +383,3 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
             f"ceph osd tree output does not contain pvc name {pvc}"
         )
     log.info("Verified device set PVC names in ceph osd tree output.")
-
-    # Verify OSDs are listed as sdd
-    log.info("Verify OSDs are listed as sdd in ceph osd tree output.")
-    for num in range(len(deviceset_pvcs)):
-        re_exp = f'ssd [0-9]*.[0-9]*[ ]*osd.{num}'
-        match = re.search(re_exp, osd_tree)
-        log.info(match)
-        assert match, (
-            f"One or more OSDs are not listed as sdd in ceph osd tree output."
-            f" No match for expression {re_exp}"
-        )
-    log.info("Verified OSDs are listed as sdd in ceph osd tree output.")
