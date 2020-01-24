@@ -17,8 +17,6 @@ from ocs_ci.ocs.resources.packagemanifest import (
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility import utils
 from ocs_ci.utility import templating
-from ocs_ci.ocs.resources.pvc import get_all_pvcs
-from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
 log = logging.getLogger(__name__)
 
@@ -192,6 +190,8 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
 
     """
     from ocs_ci.ocs.node import get_typed_nodes
+    from ocs_ci.ocs.resources.pvc import get_all_pvcs
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
     number_of_worker_nodes = len(get_typed_nodes())
     namespace = config.ENV_DATA['cluster_namespace']
     log.info("Verifying OCS installation")
