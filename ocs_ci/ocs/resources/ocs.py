@@ -4,7 +4,6 @@ General OCS object
 import logging
 import yaml
 import tempfile
-import re
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP, get_images
