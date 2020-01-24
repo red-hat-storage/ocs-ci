@@ -5,9 +5,11 @@ from time import sleep
 
 import pytest
 from botocore.exceptions import ClientError
+import boto3
 
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from tests.helpers import craft_s3_command, create_unique_resource_name
+from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 
@@ -172,3 +174,28 @@ def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
     bucket_name = bucket_factory(1, 'OC', bucketclass=bucketclass.name)[0].name
 
     return bucket_name, backingstore1, backingstore2
+
+
+@pytest.fixture()
+def retrive_s3_objects(awscli_pod, mcg_obj):
+    """
+    Retrieve a list of all objects on the test-objects bucket and downloads them to the pod
+
+    Args:
+        awscli_pod (Pod): A pod running the AWSCLI tools
+        mcg_obj (MCG): An MCG object containing the MCG S3 connection credentials
+
+    Returns:
+        list: A list of retrieved objects
+
+    """
+    downloaded_files = []
+    public_s3 = boto3.resource('s3', region_name=mcg_obj.region)
+    for obj in public_s3.Bucket(constants.TEST_FILES_BUCKET).objects.all():
+        # Download test object(s)
+        logger.info(f'Downloading {obj.key}')
+        awscli_pod.exec_cmd_on_pod(
+            command=f'wget https://{constants.TEST_FILES_BUCKET}.s3.{mcg_obj.region}.amazonaws.com/{obj.key}'
+        )
+        downloaded_files.append(obj.key)
+    return downloaded_files
