@@ -163,7 +163,8 @@ def multiregion_setup_factory(mcg_obj, multiregion_resources, bucket_factory):
         for i in range(backingstore_amount):
             backingstores.append(
                 {'name': create_unique_resource_name(resource_description='testbs',
-                resource_type='s3bucket'), 'region': f'us-west-{randrange(1, 3)}'}
+                                                     resource_type='s3bucket'),
+                 'region': f'us-west-{randrange(1, 3)}'}
             )
         # Create a backing store secret
         backingstore_secret = mcg_obj.create_aws_backingstore_secret(
