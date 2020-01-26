@@ -3,6 +3,8 @@ import logging
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, defaults
+from tests.helpers import TimeoutSampler
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
 log = logging.getLogger(__name__)
 
@@ -138,6 +140,64 @@ def get_machinesets():
     return machine_sets
 
 
+def get_machine_from_machineset(machine_set):
+    """
+    Get the machine name from its associated machineset
+
+    Args:
+        machine_set (str): Name of the machine set
+
+    Returns:
+        List: Machine names
+    """
+    machine_objs = get_machine_objs()
+    machine_set_list = []
+    for machine in machine_objs:
+        if machine.get().get(
+                'metadata'
+        ).get('name')[:-6] == machine_set:
+            machine_set_list.append(
+                machine.get().get('metadata').get('name')
+            )
+    return machine_set_list
+
+
+def get_machine_from_node_name(node_name):
+    """
+    Get the associated machine name for the given node name
+
+    Args:
+        node_name (str): Name of the node
+
+    Returns:
+        str: Machine name
+    """
+    machine_objs = get_machine_objs()
+    for machine in machine_objs:
+        if machine.get().get(
+                'status'
+        ).get('addresses')[1].get('address') == node_name:
+            return machine.name
+
+
+def get_machineset_from_machine_name(machine_name):
+    """
+    Get the machineset associated with the machine name
+
+    Args:
+        machine_name (str): Name of the machine
+
+    Returns:
+        str: Machineset name
+    """
+    machine_objs = get_machine_objs()
+    for machine in machine_objs:
+        if machine.name == machine_name:
+            return machine.get().get(
+                'metadata'
+            ).get('labels').get('machine.openshift.io/cluster-api-machineset')
+
+
 def get_replica_count(machine_set):
     """
     Get replica count of a machine set
@@ -150,6 +210,25 @@ def get_replica_count(machine_set):
     """
     machinesets_obj = OCP(kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
     return machinesets_obj.get(resource_name=machine_set).get('spec').get('replicas')
+
+
+def get_ready_replica_count(machine_set):
+    """
+    Get replica count which are in ready state in a machine set
+
+    Args:
+        machine_set (str): Machineset name
+
+    Returns:
+        ready_replica (int): replica count which are in ready state
+    """
+    machinesets_obj = OCP(
+        kind=constants.MACHINESETS,
+        namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+    )
+    return machinesets_obj.get(
+        resource_name=machine_set
+    ).get('status').get('readyReplicas')
 
 
 def add_node(machine_set, count):
@@ -168,44 +247,29 @@ def add_node(machine_set, count):
     return True
 
 
-def add_capacity(count, storagecluster_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+def wait_for_new_node_to_be_ready(machine_set):
     """
-    Add capacity to the cluster
+    Wait for the new node to reach ready state
 
     Args:
-        storagecluster_name (str): Name of a storage cluster
-        count (int): Count of osds to add, for ex: if total count of osds is 3, it will add 3 osds more
-    Returns:
-        bool: True if commands executes successfully
-    """
-    ocp = OCP(namespace=namespace)
-    # ToDo Update patch command with pr https://github.com/red-hat-storage/ocs-ci/pull/803
-    cmd = f'''
-patch storagecluster/{storagecluster_name} --type='json' -p='[{{"op": "replace",
-"path": "/spec/storageDeviceSets/0/count", "value":{count}}}]'
-            '''
-    ocp.exec_oc_cmd(cmd)
-    return True
+        machine_set (str): Name of the machine set
 
-
-def add_storage_capacity(capacity, storagecluster_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    Raises:
+        TimeoutExpiredError: In case the new spun machine fails to come
     """
-    Add storage capacity to the cluster
-
-    Args:
-        capacity (str): Size of the storage
-        storagecluster_name (str): Name of a storage cluster
-    Returns:
-        bool: True if commands executes successfully
-    """
-    ocp = OCP(namespace=namespace)
-    # ToDo Update patch command with pr https://github.com/red-hat-storage/ocs-ci/pull/803
-    cmd = f'''
-patch storagecluster/{storagecluster_name} --type='json' -p='[{{"op": "replace",
-"path": "/spec/storageDeviceSets/0/dataPVCTemplate/spec/resources/requests/storage", "value":{capacity}}}]'
-            '''
-    ocp.exec_oc_cmd(cmd)
-    return True
+    replica_count = get_replica_count(machine_set)
+    try:
+        for timer in TimeoutSampler(
+                300, 100, get_ready_replica_count, machine_set=machine_set
+        ):
+            if replica_count == timer:
+                log.info("New spun node reached Ready state")
+                break
+    except TimeoutExpiredError:
+        log.error(
+            "New spun node failed to reach ready state OR"
+            "Replica count didn't match ready replica count"
+        )
 
 
 def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
@@ -219,4 +283,4 @@ def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     """
 
     sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
-    return sc_obj.get().get('items')[0].get('metadata').get('name')
+    return sc_obj.get()
