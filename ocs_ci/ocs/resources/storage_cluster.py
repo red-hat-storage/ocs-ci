@@ -1,12 +1,14 @@
 """
 StorageCluster related functionalities
 """
-import pytest
 import logging
 from ocs_ci.ocs import defaults, constants
 from ocs_ci.ocs.ocp import OCP, log
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pod import get_osd_pods, get_pod_count
 from tests import helpers
+
+
+logger = logging.getLogger(__name__)
 
 
 class StorageCluster(OCP):
@@ -48,8 +50,8 @@ def add_capacity(capacity_string):
 
     osd_replicas = parse_size_to_int(get_storage_cluster()['spec']['storageDeviceSets'][0]['replicas'])
     worker_nodes = len(helpers.get_worker_nodes())
-    current_osd_count = len(pod.get_osd_pods())
-    available_osd_number = worker_nodes * 3 - current_osd_count
+    current_osd_count = len(get_pod_count("app=rook-ceph-osd"))
+    available_osd_number = (worker_nodes * 3) - current_osd_count
     capacity = parse_size_to_int(capacity_string)
 
     if capacity % osd_capacity == 0:
@@ -60,12 +62,10 @@ def add_capacity(capacity_string):
                 params=f'[{{"op": "replace", "path": "/spec/storageDeviceSets/0/count", '
                        f'"value":{capacity / osd_capacity * osd_replicas}}}]'
             )
-
-            ocp.patch(
-                resource_name=sc['metadata']['name'],
-                params=f'[{{"op": "replace", "path": "/spec/storageDeviceSets/0/dataPVCTemplate/spec/resources'
-                       f'/requests/storage", "value":{capacity}}}] '
-            )
+            osd_list = get_osd_pods()
+            for pod in osd_list:
+                pass
+                # TODO: TBD
             return True
         else:
             log.info("not enough worker nodes")
