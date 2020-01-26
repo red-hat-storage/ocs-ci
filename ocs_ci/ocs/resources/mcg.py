@@ -483,6 +483,7 @@ class MCG(object):
             wait: Whether to wait for the policy change to take effect or not
 
         """
+        policy = BS_AUTH_FAILED if block else BS_OPTIMAL
         for bucketname in bucketnames:
             if block:
                 bucket_policy = {
@@ -516,10 +517,7 @@ class MCG(object):
                 )
         if wait:
             for bucketname in bucketnames:
-                if block:
-                    self.check_backingstore_state('backing-store-' + bucketname, BS_AUTH_FAILED)
-                else:
-                    self.check_backingstore_state('backing-store-' + bucketname, BS_OPTIMAL)
+                self.check_backingstore_state('backing-store-' + bucketname, policy)
 
     def check_if_mirroring_is_done(self, bucket_name):
         """

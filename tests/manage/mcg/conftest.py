@@ -134,11 +134,13 @@ def multiregion_resources(request, mcg_obj):
 @pytest.fixture()
 def multiregion_setup_factory(mcg_obj, multiregion_resources, bucket_factory):
     """
-    Create a multiregion setup factory. Calling this fixture creates a new bucket with custom amount of backingstores.
+    Create a multiregion setup factory. Calling this fixture creates a new
+    bucket with custom amount of backingstores.
 
     Args:
-         bucket_factory: A bucket factory for creating new NooBuckets
-         multiregion_resources: Contains all the resources of the test (buckets, backing stores, auth)
+         bucket_factory (Class): A bucket factory for creating new NooBuckets
+         multiregion_resources (List): Contains all the resources of the test
+        (buckets, backing stores, auth)
          mcg_obj (MCG): An MCG object containing the MCG S3 connection credentials
     """
 
@@ -151,19 +153,22 @@ def multiregion_setup_factory(mcg_obj, multiregion_resources, bucket_factory):
                 policy (string): The policy of the NooBucket ('Mirror' or 'Spread')
 
             Returns:
-                list: A list containing the NooBucket name and a list of backingstores created for the bucket
-
+                list: A list containing the NooBucket name and a list of backingstores
+                      created for the bucket
         """
         aws_buckets, backingstore_secrets, backingstore_objects, bucketclasses = multiregion_resources
         # Define backing stores
         backingstores = []
         backingstore_list = []
         for i in range(backingstore_amount):
-            backingstores.append({'name': create_unique_resource_name(resource_description='testbs',
-                                                                      resource_type='s3bucket'),
-                                  'region': f'us-west-{randrange(1, 3)}'})
+            backingstores.append(
+                {'name': create_unique_resource_name(resource_description='testbs',
+                resource_type='s3bucket'), 'region': f'us-west-{randrange(1, 3)}'}
+            )
         # Create a backing store secret
-        backingstore_secret = mcg_obj.create_aws_backingstore_secret(backingstores[0]['name'] + 'secret')
+        backingstore_secret = mcg_obj.create_aws_backingstore_secret(
+            backingstores[0]['name'] + 'secret'
+        )
         backingstore_secrets.append(backingstore_secret)
         # Create target buckets for them
         for backingstore in backingstores:
@@ -171,7 +176,8 @@ def multiregion_setup_factory(mcg_obj, multiregion_resources, bucket_factory):
             aws_buckets.append(backingstore['name'])
             # Create AWS-backed backing stores on NooBaa
             backingstore_obj = mcg_obj.oc_create_aws_backingstore(
-                backingstore['name'], backingstore['name'], backingstore_secret.name, backingstore['region'])
+                backingstore['name'], backingstore['name'], backingstore_secret.name,
+                backingstore['region'])
             backingstore_list.append(backingstore_obj)
 
         backingstore_objects.extend(tuple(backingstore_list))

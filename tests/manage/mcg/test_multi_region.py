@@ -102,7 +102,9 @@ class TestMultiRegion:
         for i in range(3):
             # (i+ 1 or 2) % 3 equals to cells (1,2), (0,2), (0,1)
             # Bring buckets down
-            toggled_buckets = [backingstores[((i + 1) % 3)]['name'], backingstores[((i + 2) % 3)]['name']]
+            toggled_buckets = [
+                backingstores[((i + 1) % 3)]['name'], backingstores[((i + 2) % 3)]['name']
+            ]
             logger.info(f'Blocking buckets {toggled_buckets}')
             mcg_obj.toggle_aws_bucket_readwrite(toggled_buckets)
             # Verify integrity of i bucketstore
