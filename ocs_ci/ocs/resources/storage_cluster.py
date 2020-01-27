@@ -64,8 +64,9 @@ def add_capacity(capacity_string):
             )
             osd_list = get_osd_pods()
             for pod in osd_list:
-                pass
-                # TODO: TBD
+                if not ocp.wait_for_resource('Running', pod.name):
+                    log.info(f" OSD pod {pod.name} faild to reach running state ")
+                    return False
             return True
         else:
             log.info("not enough worker nodes")
