@@ -223,10 +223,8 @@ class Test_openshift_logging_on_ocs(E2ETest):
         project1_filecount = elasticsearch_pod_obj.exec_cmd_on_pod(
             command=f'es_util --query=project.{project1}.*/_count'
         )
-        if project1_filecount['_shards']['successful'] != 0:
-            logger.info(f'The files in the project 1 {project1_filecount}')
-        else:
-            raise FileNotFoundError
+        assert project1_filecount['_shards']['successful'] == 0, f"No files found in project {project1}"
+        logger.info(f'The files in the project 1 {project1_filecount}')
 
         # Create another app_pod in new project
         pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
@@ -241,7 +239,5 @@ class Test_openshift_logging_on_ocs(E2ETest):
         )
         logger.info(f'The files in the project2 {project2_filecount}')
 
-        if project2_filecount['_shards']['successful'] != 0:
-            logger.info(f'The files in the project 2 {project2_filecount}')
-        else:
-            raise FileNotFoundError
+        assert project2_filecount['_shards']['successful'] == 0, f"No files found in project {project2}"
+        logger.info(f'The files in the project 2 {project2_filecount}')
