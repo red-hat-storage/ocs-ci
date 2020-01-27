@@ -163,12 +163,9 @@ class Test_openshift_logging_on_ocs(E2ETest):
         """
         pod_list = get_all_pods(namespace=constants.OPENSHIFT_LOGGING_NAMESPACE)
         elasticsearch_pod = [
-            pod.name for pod in pod_list if pod.name.startswith('elasticsearch')
+            pod for pod in pod_list if pod.name.startswith('elasticsearch')
         ]
-        elasticsearch_pod = random.choice(elasticsearch_pod)
-        elasticsearch_pod_obj = get_pod_obj(
-            name=elasticsearch_pod, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
-        )
+        elasticsearch_pod_obj = random.choice(elasticsearch_pod)
         return elasticsearch_pod_obj
 
     @pytest.mark.polarion_id("OCS-657")
@@ -192,7 +189,6 @@ class Test_openshift_logging_on_ocs(E2ETest):
 
     @pytest.mark.polarion_id("OCS-650")
     @tier4
-    @retry(ModuleNotFoundError, 6, 300, 3)
     def test_respin_osd_pods_to_verify_logging(self, create_pvc_and_deploymentconfig_pod):
         """
         This function creates projects before and after respin of osd
