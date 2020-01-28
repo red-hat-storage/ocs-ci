@@ -383,6 +383,10 @@ class VSPHEREUPI(VSPHEREBASE):
             # change root disk size
             change_vm_root_disk_size(constants.INSTALLER_MACHINE_CONF)
 
+            # sync guest time with host
+            if config.ENV_DATA.get('sync_time_with_host'):
+                sync_time_with_host(constants.INSTALLER_MACHINE_CONF, True)
+
         def create_config(self):
             """
             Creates the OCP deploy config for the vSphere
@@ -600,4 +604,22 @@ def change_vm_root_disk_size(machine_file):
         machine_file,
         current_vm_root_disk_size,
         vm_root_disk_size
+    )
+
+
+def sync_time_with_host(machine_file, enable=False):
+    """
+    Syncs the guest time with host
+
+    Args:
+         machine_file (str): machine file to sync the guest time with host
+         enable (bool): True to sync guest time with host
+    """
+    to_change = 'enable_disk_uuid = "true"'
+    sync_time = f"{to_change} sync_time_with_host = \"{enable}\""
+
+    replace_content_in_file(
+        machine_file,
+        to_change,
+        sync_time
     )
