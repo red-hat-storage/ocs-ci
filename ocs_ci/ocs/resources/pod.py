@@ -877,7 +877,7 @@ def validate_pods_are_respinned_and_running_state(pod_objs_list):
 
     """
     for pod in pod_objs_list:
-        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING)
+        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING, timeout=180)
 
     for pod in pod_objs_list:
         pod_obj = pod.get()
