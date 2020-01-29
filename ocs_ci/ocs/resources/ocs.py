@@ -189,7 +189,7 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
 
     """
     from ocs_ci.ocs.node import get_typed_nodes
-    from ocs_ci.ocs.resources.pvc import get_all_pvcs
+    from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
     number_of_worker_nodes = len(get_typed_nodes())
     namespace = config.ENV_DATA['cluster_namespace']
@@ -368,17 +368,11 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
 
     # Verify ceph osd tree have device set PVC names specified
     log.info("Checking for device set PVC names in ceph osd tree output.")
-    deviceset_pvcs = [
-        item['metadata']['name'] for item in get_all_pvcs(
-            namespace=namespace
-        )['items'] if item['metadata']['name'].startswith(
-            constants.DEFAULT_DEVICESET_PVC_NAME
-        )
-    ]
+    deviceset_pvcs = get_deviceset_pvcs()
     ct_pod = get_ceph_tools_pod()
     osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree', format='')
     for pvc in deviceset_pvcs:
-        assert f'host {pvc}' in osd_tree, (
+        assert f'host {pvc.name}' in osd_tree, (
             f"ceph osd tree output does not contain pvc name {pvc}"
         )
     log.info("Verified device set PVC names in ceph osd tree output.")
