@@ -86,7 +86,7 @@ def create_instance():
     csv_obj = CSV(namespace=constants.OPENSHIFT_LOGGING_NAMESPACE)
 
     # Get the CSV installed
-    get_csv = csv_obj.get(out_yaml_format=True)
+    get_csv = csv_obj.get(out_yaml_format=False)
     logger.info(f'The installed CSV is {get_csv}')
 
 
@@ -225,7 +225,7 @@ class Test_openshift_logging_on_ocs(E2ETest):
         project1_filecount = elasticsearch_pod_obj.exec_cmd_on_pod(
             command=f'es_util --query=project.{project1}.*/_count'
         )
-        assert project1_filecount['_shards']['successful'] == 0, f"No files found in project {project1}"
+        assert project1_filecount['_shards']['successful'] != 0, f"No files found in project {project1}"
         logger.info(f'Total number of files in project 1 {project1_filecount}')
 
         # Create another app_pod in new project
@@ -239,7 +239,7 @@ class Test_openshift_logging_on_ocs(E2ETest):
         project2_filecount = elasticsearch_pod_obj.exec_cmd_on_pod(
             command=f'es_util --query=project.{project2}.*/_count', out_yaml_format=True
         )
-        assert project2_filecount['_shards']['successful'] == 0, f"No files found in project {project2}"
+        assert project2_filecount['_shards']['successful'] != 0, f"No files found in project {project2}"
         logger.info(f'Total number files in project 2 {project2_filecount}')
 
     @pytest.mark.polarion_id("OCS-665")
@@ -251,22 +251,14 @@ class Test_openshift_logging_on_ocs(E2ETest):
         """
 
         # Creates multiple app-pods
-        num_of_pvcs = 10
+        num_of_pvcs = 1
         pvc_size = 2
-
         pvc_objs = multi_pvc_factory(
             size=pvc_size, num_of_pvc=num_of_pvcs
         )
-
-        dc_pod_objs = list()
-        for pvc_obj in pvc_objs:
-            dc_pod_objs.append(dc_pod_factory(pvc=pvc_obj))
-
-        dc_pod_list = []
-        for pod in dc_pod_objs:
-            dc_pod_list.append(pod.name)
-
-        project = pvc_obj.project.namespace
+        dc_pod_objs = [dc_pod_factory(pvc=pvc_obj) for pvc_obj in pvc_objs]
+        dc_pod_list = [pod.name for pod in dc_pod_objs]
+        project = pvc_objs[0].project.namespace
 
         # Collects project indices from EFK stack
         elasticsearch_pod_obj = self.get_elasticsearch_pod_obj()
@@ -275,8 +267,7 @@ class Test_openshift_logging_on_ocs(E2ETest):
         )
 
         # Validates if the project exists in EFK stack
-        self.validate_project_exists(pvc_obj)
-
+        self.validate_project_exists(pvc_objs[0])
         for item in project_index.split("\n"):
             if project in item:
                 index = re.findall(r'\.*(project+\S+)', item.strip())
