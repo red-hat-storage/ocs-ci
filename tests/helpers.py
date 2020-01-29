@@ -133,13 +133,26 @@ def create_pod(
         AssertionError: In case of any failure
     """
     if interface_type == constants.CEPHBLOCKPOOL:
-        pod_dict = pod_dict_path if pod_dict_path else constants.CSI_RBD_POD_YAML
         interface = constants.RBD_INTERFACE
+        if pod_dict_path:
+            pod_dict = pod_dict_path
+        else:
+            pod_dict = constants.CSI_RBD_POD_YAML
+            pull_images('nginx')
     else:
-        pod_dict = pod_dict_path if pod_dict_path else constants.CSI_CEPHFS_POD_YAML
         interface = constants.CEPHFS_INTERFACE
+        if pod_dict_path:
+            pod_dict = pod_dict_path
+        else:
+            pod_dict = constants.CSI_CEPHFS_POD_YAML
+            pull_images('nginx')
+
     if dc_deployment:
-        pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
+        if pod_dict_path:
+            pod_dict = pod_dict_path
+        else:
+            pod_dict = constants.FEDORA_DC_YAML
+            pull_images('fedora')
     pod_data = templating.load_yaml(pod_dict)
     if not pod_name:
         pod_name = create_unique_resource_name(
@@ -708,6 +721,25 @@ def get_cephfs_name():
     )
     result = cfs_obj.get()
     return result['items'][0].get('metadata').get('name')
+
+
+def pull_images(image_name):
+    """
+    Function to pull images on all nodes
+
+    Args:
+        image_name (str): Name of the container image to be pulled
+
+    Returns: None
+
+    """
+
+    node_objs = node.get_node_objs(get_worker_nodes())
+    for node_obj in node_objs:
+        logging.info(f'pulling image "{image_name}  " on node {node_obj.name}')
+        assert node_obj.ocp.exec_oc_debug_cmd(
+            node_obj.name, cmd_list=[f'podman pull {image_name}']
+        )
 
 
 def run_io_with_rados_bench(**kw):
