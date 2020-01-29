@@ -373,6 +373,6 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
     osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree', format='')
     for pvc in deviceset_pvcs:
         assert f'host {pvc.name}' in osd_tree, (
-            f"ceph osd tree output does not contain pvc name {pvc}"
+            f"ceph osd tree output does not contain pvc name {pvc.name}"
         )
     log.info("Verified device set PVC names in ceph osd tree output.")
