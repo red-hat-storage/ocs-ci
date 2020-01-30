@@ -9,6 +9,7 @@ import traceback
 import pytest
 import yaml
 
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.openshift_ops import OCP
@@ -190,5 +191,8 @@ class OCPDeployment:
             logger.info(f"Destroying cluster defined in {self.cluster_path}")
             run_cmd(destroy_cmd)
 
+        except CommandFailed:
+            logger.error(traceback.format_exc())
+            raise
         except Exception:
             logger.error(traceback.format_exc())
