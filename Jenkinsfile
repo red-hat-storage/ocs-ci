@@ -105,10 +105,11 @@ pipeline {
         def registry_image = "${env.OCS_REGISTRY_IMAGE}"
         // quay.io/rhceph-dev/ocs-registry:4.2-58.e59ca0f.master -> 4.2-58.e59ca0f.master
         def registry_tag = registry_image.split(':')[-1]
-        // tag ocs-registry container as 'latest-stable'
-        build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-registry:latest-stable")]
+        def ocs_version = registry_tag.split('-')[0]
+        // tag ocs-registry container as 'latest-stable-$ocs_version'
+        build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-registry:latest-stable-${ocs_version}")]
         // tag ocs-olm-operator container as 'latest-stable'
-        build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-olm-operator:latest-stable")]
+        build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-olm-operator:latest-stable-${ocs_version}")]
         if( env.UMB_MESSAGE in [true, 'true'] ) {
           def registry_version = registry_tag.split('-')[0]
           def properties = """
