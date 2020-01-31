@@ -85,19 +85,12 @@ def get_oc_podman_login_cmd():
 
     """
     user = config.RUN['username']
-    filename = os.path.join(
-        config.ENV_DATA['cluster_path'],
-        config.RUN['password_location']
-    )
-    with open(filename) as f:
-        password = f.read()
     helpers.refresh_oc_login_connection()
     ocp_obj = ocp.OCP()
     token = ocp_obj.get_user_token()
     route = get_default_route_name()
     cmd_list = [
         'export KUBECONFIG=/home/core/auth/kubeconfig',
-        f"oc login -u {user} -p {password}",
         f"podman login {route} -u {user} -p {token}"
     ]
     master_list = helpers.get_master_nodes()
@@ -279,3 +272,23 @@ def image_rm(registry_path):
     ocp_obj = ocp.OCP()
     ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=cmd_list)
     logger.info(f"Image {registry_path} rm successful")
+
+
+def check_image_in_registry(image_url):
+    """
+    Function to check either image present in registry or not
+
+    Args:
+        image_url (str): Image url to be verified
+
+    Returns:
+        True : Returns True if present
+
+    """
+    output = image_list_all()
+    output = output.split("\n")
+    if any(image_url in i for i in output):
+        logger.info("Image URL present")
+        return True
+    else:
+        raise UnexpectedBehaviour("Image url not Present in Registry")

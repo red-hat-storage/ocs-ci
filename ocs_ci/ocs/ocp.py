@@ -136,7 +136,7 @@ class OCP(object):
             return yaml.safe_load(out)
         return out
 
-    def exec_oc_debug_cmd(self, node, cmd_list, timeout=600):
+    def exec_oc_debug_cmd(self, node, cmd_list, timeout=300):
         """
         Function to execute "oc debug" command on OCP node
 
@@ -762,7 +762,7 @@ def rsync(src, dst, node, dst_node=True, extra_params=""):
     pod_data = load_yaml(RSYNC_POD_YAML)
     pod_data['metadata']['name'] = pod_name
     pod_data['spec']['nodeName'] = node
-    pod = OCP(kind='pod')
+    pod = OCP(kind='pod', namespace=defaults.constants.DEFAULT_NAMESPACE)
     src = src if dst_node else f"{pod_name}:/host{src}"
     dst = f"{pod_name}:/host{dst}" if dst_node else dst
     try:
