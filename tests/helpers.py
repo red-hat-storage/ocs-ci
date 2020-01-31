@@ -1111,6 +1111,37 @@ def measure_pvc_deletion_time(interface, pv_name):
     return total.total_seconds()
 
 
+def pod_start_time(pod_obj):
+    """
+    Function to measure time taken for container(s) to get into running state
+    by measuring the difference between container's start time (when container
+    went into running state) and started time (when container was actually
+    started)
+
+    Args:
+        pod_obj(obj): pod object to measure start time
+
+    Returns:
+        containers_start_time(dict):
+        Returns the name and start time of container(s) in a pod
+
+    """
+    time_format = '%Y-%m-%dT%H:%M:%SZ'
+    containers_start_time = {}
+    start_time = pod_obj.data['status']['startTime']
+    start_time = datetime.datetime.strptime(start_time, time_format)
+    for container in range(len(pod_obj.data['status']['containerStatuses'])):
+        started_time = pod_obj.data[
+            'status']['containerStatuses'][container]['state'][
+            'running']['startedAt']
+        started_time = datetime.datetime.strptime(started_time, time_format)
+        container_name = pod_obj.data[
+            'status']['containerStatuses'][container]['name']
+        container_start_time = (started_time - start_time).seconds
+        containers_start_time[container_name] = container_start_time
+        return containers_start_time
+
+
 def get_default_storage_class():
     """
     Get the default StorageClass(es)
