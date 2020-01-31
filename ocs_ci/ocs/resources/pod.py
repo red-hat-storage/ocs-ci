@@ -627,7 +627,7 @@ def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=None):
     else:
         FILE = TEST_FILE
     test_file = FILE + "1"
-    assert check_file_existence(pod_obj, test_file, fedora_dc=True), (
+    assert check_file_existence(pod_obj, test_file, fedora_dc), (
         f"I/O failed to start inside {pod_obj.name}"
     )
 
