@@ -17,7 +17,6 @@ class TestRegistryImagePullPush(E2ETest):
     def test_registry_image_pull_push(self):
         """
         Test case to validate registry image pull and push with OCS backend
-
         """
         image_url = 'docker.io/library/busybox'
 
@@ -25,11 +24,9 @@ class TestRegistryImagePullPush(E2ETest):
         registry.enable_route_and_create_ca_for_registry_access()
 
         # Add roles to user so that user can perform image pull and push to registry
-        registry.add_role_to_user(role_type='registry-viewer', user=config.RUN['username'])
-        registry.add_role_to_user(role_type='registry-editor', user=config.RUN['username'])
-        registry.add_role_to_user(role_type='system:registry', user=config.RUN['username'])
-        registry.add_role_to_user(role_type='admin', user=config.RUN['username'])
-        registry.add_role_to_user(role_type='system:image-builder', user=config.RUN['username'])
+        role_type = ['registry-viewer', 'registry-editor', 'system:registry', 'admin', 'system:image-builder']
+        for role in role_type:
+            registry.add_role_to_user(role_type=role, user=config.RUN['username'])
 
         # Provide write access to registry
         ocp_obj = ocp.OCP()
