@@ -8,6 +8,7 @@ pytest which proccess config and passes all params to pytest.
 """
 import logging
 import os
+import yaml
 
 import pytest
 
@@ -30,6 +31,9 @@ from ocs_ci.ocs.constants import (
     MARKETPLACE_NAMESPACE,
     OPERATOR_CATALOG_SOURCE_NAME,
 )
+THIS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+VERSION_SPECIFIC_CONFIG = os.path.join(THIS_DIR, 'conf')
+
 
 __all__ = [
     "pytest_addoption",
@@ -101,7 +105,6 @@ def pytest_addoption(parser):
     parser.addoption(
         '--ocs-version',
         dest='ocs_version',
-        default=ocsci_config.ENV_DATA['current_default_ocs'],
         help="ocs version for which ocs-ci to be run"
     )
 
@@ -196,7 +199,6 @@ def get_cli_param(config, name_of_param, default=None):
 
     """
     cli_param = config.getoption(name_of_param, default=default)
-    print(cli_param)
     ocsci_config.RUN['cli_params'][name_of_param] = cli_param
     return cli_param
 
@@ -213,7 +215,6 @@ def process_cluster_cli_params(config):
         ClusterNameNotProvidedError: If a cluster name is missing
         ClusterNameLengthError: If a cluster name is too short or too long
     """
-    log.info(f"CONFIG = {config}")
     cluster_path = get_cli_param(config, 'cluster_path')
     if not cluster_path:
         raise ClusterPathNotProvidedError()
@@ -234,9 +235,23 @@ def process_cluster_cli_params(config):
         ocsci_config.DEPLOYMENT.get('live_deployment', False)
     )
     ocsci_config.RUN['cli_params']['io_in_bg'] = get_cli_param(config, "io_in_bg", default=False)
-    ocsci_config.ENV_DATA['cli_params']['ocs_version'] = get_cli_param(
-        config, "ocs_version",
-    )
+
+    if ocsci_config.ENV_DATA.get('ocs_version'):
+        version_conf_file = (
+            f"{ocsci_config.ENV_DATA['ocs_version'].replace('.','_')}"
+            f"_default_config.yaml"
+        )
+        # Read-in version-specific defaults
+        with open(
+            os.path.abspath(
+                os.path.expanduser(
+                    os.path.join(VERSION_SPECIFIC_CONFIG, version_conf_file)
+                )
+            )
+        ) as file_stream:
+            version_defaults = yaml.safe_load(file_stream)
+            ocsci_config.update(version_defaults)
+
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
     get_cli_param(config, 'collect-logs')

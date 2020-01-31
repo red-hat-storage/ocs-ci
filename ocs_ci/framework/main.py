@@ -62,7 +62,6 @@ def init_ocsci_conf(arguments=None):
             os.path.expanduser(framework.config.RUN['bin_dir'])
         )
         utils.add_path_to_env_path(framework.config.RUN['bin_dir'])
-    print(framework.config)
     check_config_requirements()
 
 
@@ -74,7 +73,6 @@ def init_version_defaults(arguments=None):
         arguments (list): Arguments for pytest execution
 
     """
-    print(arguments)
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument(
         '--ocs-version',
@@ -84,15 +82,7 @@ def init_version_defaults(arguments=None):
     args, vals = parser.parse_known_args(arguments)
     ocs_version = args.ocs_version
     # Read in version specific default file
-    conf_file_name = f"{ocs_version.replace('.','_')}_default_config.yaml"
-    print(conf_file_name)
-    conf_file_path = os.path.join(DEFAULT_CONFIG_PATH, conf_file_name)
-    with open(
-        os.path.abspath(os.path.expanduser(conf_file_path))
-    ) as file_stream:
-        default_config = yaml.safe_load(file_stream)
-        framework.config.update(default_config)
-        framework.config.ENV_DATA['ocs_version'] = ocs_version
+    framework.config.ENV_DATA['ocs_version'] = ocs_version
 
 
 def main(argv=None):

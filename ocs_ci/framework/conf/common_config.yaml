@@ -17,6 +17,7 @@ RUN:
   run_id: null  # this will be redefined in the execution
   kubeconfig_location: 'auth/kubeconfig' # relative from cluster_dir
   cli_params: {}  # this will be filled with CLI parameters data
+  client_version: '4.3'
   bin_dir: './bin'
   google_api_secret: '~/.ocs-ci/google_api_secret.json'
   rook_branch: "master"
