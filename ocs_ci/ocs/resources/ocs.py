@@ -393,5 +393,5 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
         "output."
     )
 
-    # TODO: Verify ceph osd tree output have osd listed as sdd
+    # TODO: Verify ceph osd tree output have osd listed as ssd
     # TODO: Verify ceph osd tree output have zone or rack based on AZ
