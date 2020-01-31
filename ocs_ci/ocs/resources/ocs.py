@@ -4,6 +4,7 @@ General OCS object
 import logging
 import yaml
 import tempfile
+from jsonschema import validate
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP, get_images
@@ -366,13 +367,31 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
     assert sc_cephfs['parameters']['csi.storage.k8s.io/provisioner-secret-name'] == constants.CEPHFS_PROVISIONER_SECRET
     log.info("Verified node and provisioner secret names in storage class.")
 
-    # Verify ceph osd tree have device set PVC names specified
-    log.info("Checking for device set PVC names in ceph osd tree output.")
-    deviceset_pvcs = get_deviceset_pvcs()
+    # Verify ceph osd tree output
+    log.info(
+        "Verifying ceph osd tree output and checking for device set PVC names "
+        "in the output."
+    )
+    deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
     ct_pod = get_ceph_tools_pod()
-    osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree', format='')
-    for pvc in deviceset_pvcs:
-        assert f'host {pvc.name}' in osd_tree, (
-            f"ceph osd tree output does not contain pvc name {pvc.name}"
-        )
-    log.info("Verified device set PVC names in ceph osd tree output.")
+    osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree', format='json')
+    schemas = {
+        'root': constants.OSD_TREE_ROOT,
+        'rack': constants.OSD_TREE_RACK,
+        'host': constants.OSD_TREE_HOST,
+        'osd': constants.OSD_TREE_OSD,
+        'region': constants.OSD_TREE_REGION,
+        'zone': constants.OSD_TREE_ZONE
+    }
+    schemas['host']['properties']['name'] = {'enum': deviceset_pvcs}
+    for item in osd_tree['nodes']:
+        validate(instance=item, schema=schemas[item['type']])
+        if item['type'] == 'host':
+            deviceset_pvcs.remove(item['name'])
+    log.info(
+        "Verified ceph osd tree output. Device set PVC names are given in the "
+        "output."
+    )
+
+    # TODO: Verify ceph osd tree output have osd listed as sdd
+    # TODO: Verify ceph osd tree output have zone or rack based on AZ
