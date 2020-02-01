@@ -388,6 +388,10 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
         validate(instance=item, schema=schemas[item['type']])
         if item['type'] == 'host':
             deviceset_pvcs.remove(item['name'])
+    assert not deviceset_pvcs, (
+        f"These device set PVCs are not given in ceph osd tree output "
+        f"- {deviceset_pvcs}"
+    )
     log.info(
         "Verified ceph osd tree output. Device set PVC names are given in the "
         "output."
