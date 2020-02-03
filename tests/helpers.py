@@ -2169,3 +2169,68 @@ def collect_performance_stats():
     file_name = os.path.join(log_dir_path, 'performance')
     with open(file_name, 'w') as outfile:
         json.dump(performance_stats, outfile)
+
+
+def validate_pods_are_running_and_not_restarted(
+    previous_pod_name, previous_pod_restart_count, namespace
+):
+    """
+    Validate given pod is in running state and not restarted or re-spinned
+
+    Args:
+        previous_pod_name (str): Name of the pod
+        previous_pod_restart_count (int): Restart count of pod
+        namespace (str): Namespace of the pod
+
+    Returns:
+        bool : True if pod is in running state and restart
+               count matches the previous one
+
+    """
+    ocp_obj = OCP(kind=constants.POD, namespace=namespace)
+    pod_obj = ocp_obj.get(resource_name=previous_pod_name)
+    restart_count = pod_obj.get('status').get('containerStatuses')[0].get('restartCount')
+    pod_state = pod_obj.get('status').get('phase')
+    if pod_state == 'Running' and restart_count == previous_pod_restart_count:
+        logger.info("Pod is running state and restart count matches with previous one")
+        return True
+    logger.error(f"Pod is in {pod_state} state and restart count of pod {restart_count}")
+    logger.info(f"{pod_obj}")
+    return False
+
+
+def validate_pod_oomkilled(
+    pod_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE, container=None
+):
+    """
+    Validate pod oomkilled message are found on log
+
+    Args:
+        pod_name (str): Name of the pod
+        namespace (str): Namespace of the pod
+        container (str): Name of the container
+
+    Returns:
+        bool : True if oomkill messages are not found on log.
+               False Otherwise.
+
+    Raises:
+        Assertion if failed to fetch logs
+
+    """
+    rc = True
+    try:
+        pod_log = pod.get_pod_logs(
+            pod_name=pod_name, namespace=namespace,
+            container=container, previous=True
+        )
+        result = pod_log.find("signal: killed")
+        if result != -1:
+            rc = False
+    except CommandFailed as ecf:
+        assert f'previous terminated container "{container}" in pod "{pod_name}" not found' in str(ecf), (
+            "Failed to fetch logs"
+        )
+
+    return rc
+

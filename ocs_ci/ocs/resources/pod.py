@@ -371,7 +371,8 @@ class Pod(OCS):
 # Helper functions for Pods
 
 def get_all_pods(
-        namespace=None, selector=None, selector_label='app', wait=False
+        namespace=None, selector=None, selector_label='app',
+        exclude_selector=False, wait=False
 ):
     """
     Get all pods in a namespace.
@@ -382,6 +383,7 @@ def get_all_pods(
         selector (list) : List of the resource selector to search with.
             Example: ['alertmanager','prometheus']
         selector_label (str): Label of selector (default: app).
+        exclude_selector (bool): If list of the resource selector not to search with
 
     Returns:
         list: List of Pod objects
@@ -397,10 +399,16 @@ def get_all_pods(
         time.sleep(wait_time)
     pods = ocp_pod_obj.get()['items']
     if selector:
-        pods_new = [
-            pod for pod in pods if
-            pod['metadata'].get('labels', {}).get(selector_label) in selector
-        ]
+        if exclude_selector:
+            pods_new = [
+                pod for pod in pods if
+                pod['metadata']['labels'].get(selector_label) not in selector
+            ]
+        else:
+            pods_new = [
+                pod for pod in pods if
+                pod['metadata']['labels'].get(selector_label) in selector
+            ]
         pods = pods_new
     pod_objs = [Pod(**pod) for pod in pods]
     return pod_objs
@@ -915,7 +923,7 @@ def get_pod_obj(name, namespace=None):
     return pod_obj
 
 
-def get_pod_logs(pod_name, container=None):
+def get_pod_logs(pod_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE, container=None, previous=False):
     """
     Get logs from a given pod
 
@@ -926,11 +934,13 @@ def get_pod_logs(pod_name, container=None):
         str: Output from 'oc get logs <pod_name> command
     """
     pod = OCP(
-        kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.POD, namespace=namespace
     )
     cmd = f"logs {pod_name}"
     if container:
         cmd += f" -c {container}"
+    if previous:
+        cmd += " --previous"
     return pod.exec_oc_cmd(cmd, out_yaml_format=False)
 
 
