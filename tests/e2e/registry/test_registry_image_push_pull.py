@@ -1,6 +1,6 @@
 import logging
 import pytest
-from ocs_ci.framework.testlib import tier1, E2ETest
+from ocs_ci.framework.testlib import tier1, E2ETest, ignore_leftovers
 from ocs_ci.ocs import ocp, registry, constants
 from ocs_ci.framework import config
 
@@ -13,6 +13,7 @@ class TestRegistryImagePullPush(E2ETest):
     """
 
     @tier1
+    @ignore_leftovers
     @pytest.mark.polarion_id("OCS-1080")
     def test_registry_image_pull_push(self):
         """
