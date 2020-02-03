@@ -198,6 +198,28 @@ def get_all_pvc_objs(namespace=None, selector=None):
     return [PVC(**pvc) for pvc in all_pvcs['items']]
 
 
+def get_deviceset_pvcs():
+    """
+    Get the deviceset PVCs
+
+    Returns:
+        list: The deviceset PVCs OCS objects
+
+    Raises:
+        AssertionError: In case the deviceset PVCs are not found
+
+    """
+    ocs_pvc_obj = get_all_pvc_objs(
+        namespace=config.ENV_DATA['cluster_namespace']
+    )
+    deviceset_pvcs = []
+    for pvc_obj in ocs_pvc_obj:
+        if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME):
+            deviceset_pvcs.append(pvc_obj)
+    assert deviceset_pvcs, "Failed to find the deviceset PVCs"
+    return deviceset_pvcs
+
+
 def get_deviceset_pvs():
     """
     Get the deviceset PVs
@@ -209,10 +231,5 @@ def get_deviceset_pvs():
         AssertionError: In case the deviceset PVCs are not found
 
     """
-    ocs_pvc_obj = get_all_pvc_objs(namespace=config.ENV_DATA['cluster_namespace'])
-    deviceset_pvcs = []
-    for pvc_obj in ocs_pvc_obj:
-        if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME):
-            deviceset_pvcs.append(pvc_obj)
-    assert deviceset_pvcs, "Failed to find the deviceset PVCs"
+    deviceset_pvcs = get_deviceset_pvcs()
     return [pvc.backed_pv_obj for pvc in deviceset_pvcs]
