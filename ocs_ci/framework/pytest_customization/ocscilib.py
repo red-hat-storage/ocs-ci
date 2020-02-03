@@ -98,6 +98,11 @@ def pytest_addoption(parser):
         default=False,
         help="Run IO in the background",
     )
+    parser.addoption(
+        '--ocs-version',
+        dest='ocs_version',
+        help="ocs version for which ocs-ci to be run"
+    )
 
 
 def pytest_configure(config):
