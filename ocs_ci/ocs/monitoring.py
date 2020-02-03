@@ -9,7 +9,7 @@ from ocs_ci.ocs.resources.pvc import get_all_pvcs, PVC
 from ocs_ci.ocs.resources.pod import get_pod_obj
 from tests import helpers
 import ocs_ci.utility.prometheus
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour, ServiceUnavailable
 from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
@@ -110,6 +110,7 @@ def get_list_pvc_objs_created_on_monitoring_pods():
     return pvc_obj_list
 
 
+@retry(ServiceUnavailable, tries=60, delay=3, backoff=1)
 def get_metrics_persistentvolumeclaims_info():
     """
     Returns the created pvc information on prometheus pod
@@ -118,10 +119,13 @@ def get_metrics_persistentvolumeclaims_info():
         response.content (dict): The pvc metrics collected on prometheus pod
 
     """
+
     prometheus = ocs_ci.utility.prometheus.PrometheusAPI()
     response = prometheus.get(
         'query?query=kube_pod_spec_volumes_persistentvolumeclaims_info'
     )
+    if response.status_code == 503:
+        raise ServiceUnavailable("Fialed to handle the request")
     return json.loads(response.content.decode('utf-8'))
 
 

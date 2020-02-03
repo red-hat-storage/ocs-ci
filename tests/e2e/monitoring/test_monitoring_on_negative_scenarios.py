@@ -193,7 +193,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             # Validate all prometheus pod is running
             POD = ocp.OCP(kind=constants.POD, namespace=defaults.OCS_MONITORING_NAMESPACE)
             assert POD.wait_for_resource(
-                condition='Running', selector='app=prometheus', timeout=60
+                condition='Running', selector='app=prometheus', timeout=180
             ), (
                 "One or more prometheus pods are not in running state"
             )
@@ -309,7 +309,9 @@ class TestMonitoringBackedByOCS(E2ETest):
 
         # Check all the prometheus pods are up
         for pod_obj in pod_obj_list:
-            wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
+            wait_for_resource_state(
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=180
+            )
 
         # Check for the created pvc metrics after restarting node where prometheus pod is hosted
         for pod_obj in pods:
@@ -403,7 +405,9 @@ class TestMonitoringBackedByOCS(E2ETest):
 
         # Check all the prometheus pods are up
         for pod_obj in prometheus_pod_obj_list:
-            wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
+            wait_for_resource_state(
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=180
+            )
 
         # Check for the created pvc metrics after shutdown and recovery of prometheus nodes
         for pod_obj in pods:
