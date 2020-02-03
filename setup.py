@@ -44,6 +44,7 @@ setup(
         'pytest-ordering',
         'funcy',
         'semantic-version',
+        'jsonschema>=3.2.0',
     ],
     entry_points={
         'console_scripts': [
