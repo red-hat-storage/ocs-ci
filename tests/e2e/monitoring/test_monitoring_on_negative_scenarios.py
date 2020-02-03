@@ -361,7 +361,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         wait_for_nodes_status()
 
         # Check the node are Ready state and check cluster is health ok
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(timeout=180)
 
         # Check for ceph health check metrics is updated with new mgr pod
         wait_to_update_mgrpod_info_prometheus_pod()
@@ -401,7 +401,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             wait_for_nodes_status()
 
         # Check the node are Ready state and check cluster is health ok
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(timeout=180)
 
         # Check all the prometheus pods are up
         for pod_obj in prometheus_pod_obj_list:
