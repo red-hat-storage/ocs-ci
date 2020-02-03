@@ -3,9 +3,11 @@
 //   AWS_DOMAIN
 //   AWS_REGION
 //   CLUSTER_USER
-// It also requires credentials with these IDs to be present in the CI system:
-//   openshift-dev-aws-access-key-id (AWS_ACCESS_KEY_ID)
-//   openshift-dev-aws-secret-access-key (AWS_SECRET_ACCESS_KEY)
+// It also requires credentials with these IDs to be present in the CI system.
+// The openshift aws credentials are stored per user so that we can easily
+// switch to another user's credentials if need be:
+//   openshift-dev-aws-access-key-id-$CLUSTER_USER (AWS_ACCESS_KEY_ID)
+//   openshift-dev-aws-secret-access-key-$CLUSTER_USER (AWS_SECRET_ACCESS_KEY)
 //   openshift-pull-secret (PULL_SECRET)
 //   ocs-bugzilla-cfg (BUGZILLA_CFG)
 // It may also provide these optional parameters to override the framework's
@@ -18,8 +20,8 @@ pipeline {
   environment {
     AWS_SHARED_CREDENTIALS_FILE = "${env.WORKSPACE}/.aws/credentials"
     AWS_CONFIG_FILE = "${env.WORKSPACE}/.aws/config"
-    AWS_ACCESS_KEY_ID = credentials('openshift-dev-aws-access-key-id')
-    AWS_SECRET_ACCESS_KEY = credentials('openshift-dev-aws-secret-access-key')
+    AWS_ACCESS_KEY_ID = credentials("openshift-dev-aws-access-key-id-${env.CLUSTER_USER}")
+    AWS_SECRET_ACCESS_KEY = credentials("openshift-dev-aws-secret-access-key-${env.CLUSTER_USER}")
     PULL_SECRET = credentials('openshift-pull-secret')
     BUGZILLA_CFG = credentials('ocs-bugzilla-cfg')
   }
@@ -64,7 +66,7 @@ pipeline {
       steps {
         sh """
         source ./venv/bin/activate
-        run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocp.yaml --ocsci-conf=conf/ocsci/production-aws-ipi.yaml --ocsci-conf=conf/ocsci/production_device_size.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
+        run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocp.yaml --ocsci-conf=conf/ocsci/production-aws-ipi.yaml --ocsci-conf=conf/ocsci/production_device_size.yaml --cluster-name=${env.CLUSTER_USER}-ocsci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
         """
       }
     }
@@ -72,7 +74,7 @@ pipeline {
       steps {
         sh """
         source ./venv/bin/activate
-        run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocs.yaml --ocsci-conf=conf/ocsci/production-aws-ipi.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
+        run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocs.yaml --ocsci-conf=conf/ocsci/production-aws-ipi.yaml --cluster-name=${env.CLUSTER_USER}-ocsci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
         """
       }
     }
@@ -86,7 +88,7 @@ pipeline {
       steps {
         sh """
         source ./venv/bin/activate
-        run-ci -m acceptance --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --self-contained-html --html=${env.WORKSPACE}/logs/report.html --junit-xml=${env.WORKSPACE}/logs/junit.xml --collect-logs --bugzilla ${env.EMAIL_ARG}
+        run-ci -m acceptance --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocsci-${env.BUILD_ID} --cluster-path=cluster --self-contained-html --html=${env.WORKSPACE}/logs/report.html --junit-xml=${env.WORKSPACE}/logs/junit.xml --collect-logs --bugzilla ${env.EMAIL_ARG}
         """
       }
     }
@@ -96,7 +98,7 @@ pipeline {
       archiveArtifacts artifacts: 'ocs-ci-*.yaml,cluster/**,logs/**', fingerprint: true
       sh """
         source ./venv/bin/activate
-        run-ci -m deployment --teardown --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
+        run-ci -m deployment --teardown --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocsci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
         """
       junit testResults: "logs/junit.xml", keepLongStdio: false
     }
