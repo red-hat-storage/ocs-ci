@@ -165,6 +165,25 @@ def add_role_to_user(role_type, user):
     logger.info(f"Role_type {role_type} added to the user {user}")
 
 
+def remove_role_from_user(role_type, user):
+    """
+    Function to remove role to user
+
+    Args:
+        role_type (str): Type of the role to be removed
+        user (str): User of the role
+
+    Raises:
+        AssertionError: When failure in removing role from user
+
+    """
+    ocp_obj = ocp.OCP()
+    role_cmd = f"policy remove-role-from-user {role_type} {user} " \
+               f"-n {constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE}"
+    assert ocp_obj.exec_oc_cmd(command=role_cmd), 'Removing role failed'
+    logger.info(f"Role_type {role_type} removed from user {user}")
+
+
 def enable_route_and_create_ca_for_registry_access():
     """
     Function to enable route and to create ca,
@@ -290,5 +309,4 @@ def check_image_in_registry(image_url):
     if any(image_url in i for i in output):
         logger.info("Image URL present")
         return True
-    else:
-        raise UnexpectedBehaviour("Image url not Present in Registry")
+    raise UnexpectedBehaviour("Image url not Present in Registry")

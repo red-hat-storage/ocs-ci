@@ -25,14 +25,18 @@ class TestRegistryImagePullPush(E2ETest):
         registry.enable_route_and_create_ca_for_registry_access()
 
         # Add roles to user so that user can perform image pull and push to registry
-        role_type = ['registry-viewer', 'registry-editor', 'system:registry', 'admin', 'system:image-builder']
+        role_type = ['registry-viewer', 'registry-editor',
+                     'system:registry', 'admin', 'system:image-builder']
         for role in role_type:
             registry.add_role_to_user(role_type=role, user=config.RUN['username'])
 
         # Provide write access to registry
         ocp_obj = ocp.OCP()
-        read_only_cmd = f"set env deployment.apps/image-registry REGISTRY_STORAGE_MAINTENANCE_READONLY- " \
-            f"-n {constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE}"
+        read_only_cmd = (
+            f"set env deployment.apps/image-registry"
+            f" REGISTRY_STORAGE_MAINTENANCE_READONLY- -n "
+            f"{constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE}"
+        )
         ocp_obj.exec_oc_cmd(read_only_cmd)
 
         # Pull image using podman
@@ -49,3 +53,7 @@ class TestRegistryImagePullPush(E2ETest):
 
         # Check either image present in registry or not
         registry.check_image_in_registry(image_url=image_url)
+
+        # Remove user roles from User  
+        for role in role_type:
+            registry.remove_role_from_user(role_type=role, user=config.RUN['username'])

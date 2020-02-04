@@ -22,7 +22,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
-from ocs_ci.ocs import defaults
+from ocs_ci.ocs import defaults, constants
 
 
 log = logging.getLogger(__name__)
@@ -762,7 +762,7 @@ def rsync(src, dst, node, dst_node=True, extra_params=""):
     pod_data = load_yaml(RSYNC_POD_YAML)
     pod_data['metadata']['name'] = pod_name
     pod_data['spec']['nodeName'] = node
-    pod = OCP(kind='pod', namespace=defaults.constants.DEFAULT_NAMESPACE)
+    pod = OCP(kind='pod', namespace=constants.DEFAULT_NAMESPACE)
     src = src if dst_node else f"{pod_name}:/host{src}"
     dst = f"{pod_name}:/host{dst}" if dst_node else dst
     try:
