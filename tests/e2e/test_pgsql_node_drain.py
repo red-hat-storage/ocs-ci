@@ -58,7 +58,7 @@ class TestPgSQLNodeReboot(E2ETest):
         self.sanity_helpers = Sanity()
 
     @pytest.mark.usefixtures(pgsql_setup.__name__)
-    def test_run_pgsql_node_reboot(self, transactions=900, node_type='master'):
+    def test_run_pgsql_node_drain(self, transactions=900, node_type='master'):
         """
         Test pgsql workload
         """
