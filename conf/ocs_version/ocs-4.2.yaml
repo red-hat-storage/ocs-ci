@@ -1,8 +1,5 @@
 ---
-RUN:
-  client_version: '4.2.0-0.nightly'
 DEPLOYMENT:
-  installer_version: "4.2.0-0.nightly"
   default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:4.2-rc"
   default_latest_tag: '4.2-rc'
 ENV_DATA:
