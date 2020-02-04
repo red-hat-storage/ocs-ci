@@ -21,7 +21,7 @@ class TestRegistryImage(E2ETest):
         Run a pod with image backed by local registry
         """
         pvc_obj = pvc_factory(size=self.pvc_size)
-        image_obj = helpers.create_build_from_docker_image(
+        base_image_obj, image_obj, build_obj = helpers.create_build_from_docker_image(
             namespace=pvc_obj.namespace,
             source_image_label='7',
             image_name='fio',

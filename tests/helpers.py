@@ -137,13 +137,13 @@ def create_pod(
         AssertionError: In case of any failure
     """
     if interface_type == constants.CEPHBLOCKPOOL:
-        pod_dict = pod_dict_path if pod_dict_path else constants.CSI_RBD_POD_YAML
+        pod_dict = pod_dict_path if pod_dict_path else constants.CSI_RBD_FIO_POD_YAML
         interface = constants.RBD_INTERFACE
     else:
         pod_dict = pod_dict_path if pod_dict_path else constants.CSI_CEPHFS_POD_YAML
         interface = constants.CEPHFS_INTERFACE
     if dc_deployment:
-        pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
+        pod_dict = pod_dict_path if pod_dict_path else constants.FIO_DC_YAML
     pod_data = templating.load_yaml(pod_dict)
     if not pod_name:
         pod_name = create_unique_resource_name(
@@ -956,7 +956,13 @@ def create_build_from_docker_image(
             image_stream_obj = OCP(
                 kind='ImageStream', resource_name=image_name
             )
-            return image_stream_obj
+            build_obj = OCP(
+                kind='BuildConfig', resource_name=image_name
+            )
+            base_image_stream_obj = OCP(
+                kind='ImageStream', resource_name=source_image
+            )
+            return base_image_stream_obj, image_stream_obj, build_obj
     else:
         raise UnavailableBuildException('Build creation failed')
 

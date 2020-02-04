@@ -234,6 +234,10 @@ CSI_RBD_POD_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "pod.yaml"
 )
 
+CSI_RBD_FIO_POD_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "fiopod.yaml"
+)
+
 CSI_RBD_RAW_BLOCK_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "raw_block_pod.yaml"
 )
@@ -241,6 +245,11 @@ CSI_RBD_RAW_BLOCK_POD_YAML = os.path.join(
 CSI_CEPHFS_POD_YAML = os.path.join(
     TEMPLATE_CSI_FS_DIR, "pod.yaml"
 )
+
+CSI_CEPHFS_FIO_POD_YAML = os.path.join(
+    TEMPLATE_CSI_FS_DIR, "fiopod.yaml"
+)
+
 CSI_RBD_SECRET_YAML = os.path.join(
     TEMPLATE_CSI_RBD_DIR, "secret.yaml"
 )
@@ -298,6 +307,10 @@ SERVICE_ACCOUNT_YAML = os.path.join(
 
 FEDORA_DC_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "fedora_dc.yaml"
+)
+
+FIO_DC_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "fio_dc.yaml"
 )
 
 RHEL_7_7_POD_YAML = os.path.join(

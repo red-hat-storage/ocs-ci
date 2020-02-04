@@ -1,0 +1,45 @@
+kind: DeploymentConfig
+apiVersion: apps.openshift.io/v1
+metadata:
+  name: fio_dc_pod
+  labels:
+    app: fiodcpod
+spec:
+  template:
+    metadata:
+      labels:
+        name: fiodcpod
+    spec:
+      securityContext:
+        fsGroup: 2000
+      serviceAccountName: admin
+      restartPolicy: Always
+      volumes:
+      - name: dc-vol
+        persistentVolumeClaim:
+          claimName: tet-2
+      containers:
+      - name: fio
+        image: fio
+        resources:
+          limits:
+            memory: "500Mi"
+            cpu: "150m"
+        command: ["/bin/bash", "-ce", "tail -f /dev/null" ]
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - mountPath: /mnt
+          name: dc-vol
+        livenessProbe:
+          exec:
+            command:
+            - 'sh'
+            - '-ec'
+            - 'df /mnt'
+          initialDelaySeconds: 3
+          periodSeconds: 3
+
+  replicas: 1
+  triggers:
+    - type: ConfigChange
+  paused: false

@@ -432,6 +432,98 @@ def project_factory_fixture(request):
 
 
 @pytest.fixture(scope='class')
+def build_factory_class(
+    request,
+    project_factory_class
+):
+    return build_factory_class(
+        request,
+        project_factory_class
+    )
+
+
+@pytest.fixture(scope='session')
+def build_factory_session(
+    request,
+    project_factory_session
+):
+    return build_factory_session(
+        request,
+        project_factory_session
+    )
+
+
+@pytest.fixture()
+def build_factory(
+    request,
+    project_factory
+):
+    return build_factory_fixture(
+        request,
+        project_factory
+    )
+
+
+@pytest.fixture()
+def build(project_factory):
+    """
+    This fixture creates a single build instance.
+    """
+    image_obj, build_obj = build_factory()
+    return image_obj, build_obj
+
+
+def build_factory_fixture(
+    request,
+    project_factory
+):
+    """
+    Create a new build factory.
+    Calling this fixture creates new build.
+    """
+    instances = []
+    active_project = None
+
+    def factory(
+        project=None,
+        source_image='centos',
+        source_image_label='7',
+        image_name='fio',
+        install_package='fio',
+    ):
+        """
+
+        Returns:
+            object: ocs_ci.ocs.resources.ocs instance of 'Project' kind.
+        """
+
+        nonlocal active_project
+        project = project or active_project or project_factory()
+        active_project = project
+        base_image_obj, image_obj, build_obj = helpers.create_build_from_docker_image(
+            image_name=image_name,
+            install_package=install_package,
+            source_image=source_image,
+            source_image_label=source_image_label,
+            namespace=active_project.namespace,
+        )
+        instances.extend([base_image_obj, image_obj, build_obj])
+        return image_obj
+
+    def finalizer():
+        """
+        Delete the project
+        """
+        for instance in instances:
+            instance_name = instance.resource_name
+            instance.delete(resource_name=instance_name)
+            instance.wait_for_delete(instance_name)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope='class')
 def pvc_factory_class(
     request,
     project_factory_class
@@ -590,30 +682,32 @@ def pvc_factory_fixture(
 
 
 @pytest.fixture(scope='class')
-def pod_factory_class(request, pvc_factory_class):
-    return pod_factory_fixture(request, pvc_factory_class)
+def pod_factory_class(request, pvc_factory_class, build_factory_class):
+    return pod_factory_fixture(request, pvc_factory_class, build_factory_class)
 
 
 @pytest.fixture(scope='session')
-def pod_factory_session(request, pvc_factory_session):
-    return pod_factory_fixture(request, pvc_factory_session)
+def pod_factory_session(request, pvc_factory_session, build_factory_session):
+    return pod_factory_fixture(request, pvc_factory_session, build_factory_session)
 
 
 @pytest.fixture(scope='function')
-def pod_factory(request, pvc_factory):
-    return pod_factory_fixture(request, pvc_factory)
+def pod_factory(request, pvc_factory, build_factory):
+    return pod_factory_fixture(request, pvc_factory, build_factory)
 
 
-def pod_factory_fixture(request, pvc_factory):
+def pod_factory_fixture(request, pvc_factory, build_factory):
     """
     Create a Pod factory. Calling this fixture creates new Pod.
     For custom Pods provide 'pvc' parameter.
     """
     instances = []
+    active_build = None
 
     def factory(
         interface=constants.CEPHBLOCKPOOL,
         pvc=None,
+        build=None,
         custom_data=None,
         status=constants.STATUS_RUNNING,
         pod_dict_path=None,
@@ -625,6 +719,7 @@ def pod_factory_fixture(request, pvc_factory):
                 whether a RBD based or CephFS resource is created.
                 RBD is default.
             pvc (PVC object): ocs_ci.ocs.resources.pvc.PVC instance kind.
+            build (build object): build object
             custom_data (dict): If provided then Pod object is created
                 by using these data. Parameter `pvc` is not used but reference
                 is set if provided.
@@ -637,10 +732,15 @@ def pod_factory_fixture(request, pvc_factory):
         Returns:
             object: helpers.create_pvc instance.
         """
+
         if custom_data:
             pod_obj = helpers.create_resource(**custom_data)
         else:
             pvc = pvc or pvc_factory(interface=interface)
+            if not pod_dict_path:
+                nonlocal active_build
+                build = build or active_build or build_factory(project=pvc.project)
+                active_build = build
 
             pod_obj = helpers.create_pod(
                 pvc_name=pvc.name,
@@ -791,16 +891,19 @@ def service_account_factory(request):
 def dc_pod_factory(
     request,
     pvc_factory,
-    service_account_factory
+    service_account_factory,
+    build_factory
 ):
     """
     Create deploymentconfig pods
     """
     instances = []
+    active_build = None
 
     def factory(
         interface=constants.CEPHBLOCKPOOL,
         pvc=None,
+        build=None,
         service_account=None,
         size=None,
         custom_data=None,
@@ -814,6 +917,7 @@ def dc_pod_factory(
                 whether a RBD based or CephFS resource is created.
                 RBD is default.
             pvc (PVC object): ocs_ci.ocs.resources.pvc.PVC instance kind.
+            build (build object): build object
             service_account (str): service account name for dc_pods
             size (int): The requested size for the PVC
             custom_data (dict): If provided then Pod object is created
@@ -829,6 +933,9 @@ def dc_pod_factory(
         else:
 
             pvc = pvc or pvc_factory(interface=interface, size=size)
+            nonlocal active_build
+            build = build or active_build or build_factory(project=pvc.project)
+            active_build = build
             sa_obj = service_account_factory(project=pvc.project, service_account=service_account)
             dc_pod_obj = helpers.create_pod(
                 interface_type=interface, pvc_name=pvc.name, do_reload=False,
