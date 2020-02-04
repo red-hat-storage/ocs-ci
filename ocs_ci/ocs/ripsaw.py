@@ -90,7 +90,7 @@ class RipSaw(object):
         run(f'oc apply -f {crd}', shell=True, check=True, cwd=self.dir)
         run(f'oc apply -f {self.operator}', shell=True, check=True, cwd=self.dir)
 
-    def setup_postgresql(self):
+    def setup_postgresql(self, replicas, timeout):
         """
         Deploy postgres sql server
         """
@@ -104,16 +104,18 @@ class RipSaw(object):
             pgsql_sset = templating.load_yaml(
                 constants.PGSQL_STATEFULSET_YAML
             )
+            pgsql_sset['spec']['replicas'] = replicas
             self.pgsql_service = OCS(**pgsql_service)
             self.pgsql_service.create()
             self.pgsql_cmap = OCS(**pgsql_cmap)
             self.pgsql_cmap.create()
             self.pgsql_sset = OCS(**pgsql_sset)
             self.pgsql_sset.create()
+
             self.pod_obj.wait_for_resource(
                 condition='Running',
                 selector='app=postgres',
-                timeout=120
+                timeout=timeout
             )
         except (CommandFailed, CalledProcessError) as cf:
             log.error('Failed during setup of PostgreSQL server')

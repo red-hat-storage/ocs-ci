@@ -270,6 +270,10 @@ PGSQL_BENCHMARK_YAML = os.path.join(
     TEMPLATE_PGSQL_DIR, "PGSQL_Benchmark.yaml"
 )
 
+PGSQL_BENCHMARK_MULTI_YAML = os.path.join(
+    TEMPLATE_PGSQL_DIR, "PGSQL_Benchmark_Multipods.yaml"
+)
+
 SMALLFILE_BENCHMARK_YAML = os.path.join(
     TEMPLATE_SMALLFILE_DIR, "SmallFile.yaml"
 )
