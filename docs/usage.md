@@ -49,8 +49,8 @@ to the pytest.
 
 ### Additional arguments:
 
-
-* `--cluster-name <name>` - name of cluster (always required for deployment) must be 5-17 characters long. 
+* `--cluster-name <name>` - name of cluster (always required for deployment) must be 5-17 characters long.
+* `--ocs-version` - version of OCS to be used (e.g. 4.2 or 4.3). If not specified, the default from ocs-ci will be used.
 * `--ocsci-conf` - with this configuration parameter you can overwrite the
     default OCS-CI config parameters defined in
     [default config](https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/conf/default_config.yaml).
