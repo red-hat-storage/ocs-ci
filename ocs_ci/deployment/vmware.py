@@ -112,6 +112,10 @@ class VSPHEREBASE(Deployment):
             "cluster_name"
         )
 
+        # sync guest time with host
+        if config.ENV_DATA.get('sync_time_with_host'):
+            sync_time_with_host(constants.SCALEUP_VSPHERE_MACHINE_CONF, True)
+
         # get the RHCOS worker list
         self.rhcos_ips = get_node_ips()
         logger.info(f"RHCOS IP's: {json.dumps(self.rhcos_ips)}")
