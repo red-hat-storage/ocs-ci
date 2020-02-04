@@ -923,7 +923,7 @@ def get_pod_obj(name, namespace=None):
     return pod_obj
 
 
-def get_pod_logs(pod_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE, container=None, previous=False):
+def get_pod_logs(pod_name, container=None, namespace=defaults.ROOK_CLUSTER_NAMESPACE, previous=False):
     """
     Get logs from a given pod
 
