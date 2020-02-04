@@ -378,6 +378,14 @@ def measure_corrupt_pg(measurement_dir):
         namespace=config.ENV_DATA.get('cluster_namespace')
     )
     osd_deployments = oc.get(selector=constants.OSD_APP_LABEL).get('items')
+    msg = (
+        f"Some OSDs have no replicas. This is wrong state for this test.\n"
+        f"OSD deployments: {osd_deployments}"
+    )
+    assert all([
+        deployment.get('status').get('replicas')
+        for deployment in osd_deployments
+    ]), msg
     osd_deployment = osd_deployments[0].get('metadata').get('name')
     ct_pod = pod.get_ceph_tools_pod()
     pool_name = helpers.create_unique_resource_name('corrupted', 'pool')
