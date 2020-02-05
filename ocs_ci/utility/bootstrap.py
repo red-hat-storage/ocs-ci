@@ -20,16 +20,7 @@ def gather_bootstrap():
     Data is placed in the `gather_bootstrap` directory under the log directory.
 
     """
-    if not (
-        'KUBECONFIG' in os.environ
-        or os.path.exists(os.path.expanduser('~/.kube/config'))
-    ):
-        logger.warning(
-            "Cannot find $KUBECONFIG or ~/.kube/config; "
-            "skipping gather bootstrap"
-        )
-        return
-
+    logger.info("Running gather bootstrap")
     gather_bootstrap_dir = os.path.expanduser(os.path.join(
         config.RUN['log_dir'], 'gather_bootstrap'
     ))
