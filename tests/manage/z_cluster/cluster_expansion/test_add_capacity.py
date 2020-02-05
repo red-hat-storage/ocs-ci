@@ -35,7 +35,7 @@ class TestAddCapacity(ManageTest):
         """
         returned_bool = storage_cluster.add_capacity(capacity)
         assert returned_bool == expected(
-            logger.info("Error")
+            logger.info("Test Failed")
         )
 
 

@@ -57,6 +57,7 @@ def add_capacity(capacity_string):
             log.info(f" OSD pod {pod.name} failed to reach running state ")
             return False
 
+    log.info(f"{capacity_string} was added")
     return True
 
 
