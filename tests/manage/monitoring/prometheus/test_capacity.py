@@ -54,6 +54,7 @@ def test_capacity_workload_alerts(
             'Storage cluster is critically full and needs immediate expansion'
         )
     else:
+        # since OCS 4.3
         nearfull_message = (
             'Storage cluster is nearing full. Data deletion or cluster '
             'expansion is required.'
