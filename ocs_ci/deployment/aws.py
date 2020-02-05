@@ -305,7 +305,7 @@ class AWSUPI(AWSBase):
             self.upi_script_path = os.path.join(
                 self.upi_repo_path,
                 'v3-launch-templates/functionality-testing'
-                '/aos-4_2/hosts/'
+                '/aos-4_3/hosts/'
             )
 
         def deploy_prereq(self):
