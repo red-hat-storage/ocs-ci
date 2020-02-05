@@ -15,6 +15,7 @@
 //   OCS_REGISTRY_IMAGE
 //   EMAIL
 //   UMB_MESSAGE
+//   DEBUG_CLUSTER
 pipeline {
   agent { node { label "ocs-ci" }}
   environment {
@@ -96,6 +97,11 @@ pipeline {
   post {
     always {
       archiveArtifacts artifacts: 'ocs-ci-*.yaml,cluster/**,logs/**', fingerprint: true
+      script {
+        if( env.DEBUG_CLUSTER in [true, 'true'] ) {
+          input(message: "Proceed with cluster teardown?")
+        }
+      }
       sh """
         source ./venv/bin/activate
         run-ci -m deployment --teardown --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocsci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
