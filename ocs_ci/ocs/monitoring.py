@@ -125,7 +125,7 @@ def get_metrics_persistentvolumeclaims_info():
         'query?query=kube_pod_spec_volumes_persistentvolumeclaims_info'
     )
     if response.status_code == 503:
-        raise ServiceUnavailable("Fialed to handle the request")
+        raise ServiceUnavailable("Failed to handle the request")
     return json.loads(response.content.decode('utf-8'))
 
 
