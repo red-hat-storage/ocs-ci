@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import tier1
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
