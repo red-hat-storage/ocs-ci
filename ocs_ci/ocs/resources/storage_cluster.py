@@ -44,36 +44,20 @@ def add_capacity(capacity_string):
     """
 
     ocp = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind=constants.STORAGECLUSTER)
-    osd_capacity = parse_size_to_int(get_storage_cluster()['spec']['storageDeviceSets']
-                                        [0]['dataPVCTemplate']['spec']
-                                        ['resources']['resources']['storage'])
-
-    osd_replicas = parse_size_to_int(get_storage_cluster()['spec']['storageDeviceSets'][0]['replicas'])
-    worker_nodes = len(helpers.get_worker_nodes())
-    current_osd_count = len(get_pod_count("app=rook-ceph-osd"))
-    available_osd_number = (worker_nodes * 3) - current_osd_count
     capacity = parse_size_to_int(capacity_string)
-
-    if capacity % osd_capacity == 0:
-        if capacity / osd_capacity * osd_replicas <= available_osd_number:
-            sc = get_storage_cluster()
-            ocp.patch(
-                resource_name=sc['metadata']['name'],
-                params=f'[{{"op": "replace", "path": "/spec/storageDeviceSets/0/count", '
-                       f'"value":{capacity / osd_capacity * osd_replicas}}}]'
-            )
-            osd_list = get_osd_pods()
-            for pod in osd_list:
-                if not ocp.wait_for_resource('Running', pod.name):
-                    log.info(f" OSD pod {pod.name} faild to reach running state ")
-                    return False
-            return True
-        else:
-            log.info("not enough worker nodes")
+    sc = get_storage_cluster()
+    ocp.patch(
+        resource_name=sc['metadata']['name'],
+        params=f'[{{"op": "replace", "path": "/spec/storageDeviceSets/0/count", '
+               f'"value":{capacity}}}]'
+    )
+    osd_list = get_osd_pods()
+    for pod in osd_list:
+        if not ocp.wait_for_resource('Running', pod.name):
+            log.info(f" OSD pod {pod.name} failed to reach running state ")
             return False
-    else:
-        log.info("invalid storage capacity ")
-        return False
+
+    return True
 
 
 def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
