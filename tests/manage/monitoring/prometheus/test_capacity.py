@@ -44,16 +44,34 @@ def test_capacity_workload_alerts(
     alerts = workload_storageutilization_95p.get('prometheus_alerts')
     # TODO(fbalak): it seems that CephFS utilization triggers only firing
     # alerts. This needs to be more investigated.
+
+    if config.ENV_DATA.get('ocs_version') == '4.3':
+        nearfull_message = (
+            'Storage cluster is nearing full. Data deletion or cluster '
+            'expansion is required.'
+        )
+        criticallfull_mesage = (
+            'Storage cluster is critically full and needs immediate data '
+            'deletion or cluster expansion.'
+        )
+    else:
+        nearfull_message = (
+            'Storage cluster is nearing full. Expansion is required.'
+        )
+        criticallfull_mesage = (
+            'Storage cluster is critically full and needs immediate expansion'
+        )
+
     for target_label, target_msg, target_states, target_severity in [
         (
             constants.ALERT_CLUSTERNEARFULL,
-            'Storage cluster is nearing full. Expansion is required.',
+            nearfull_message,
             ['pending', 'firing'] if interface == 'rbd' else ['firing'],
             'warning'
         ),
         (
             constants.ALERT_CLUSTERCRITICALLYFULL,
-            'Storage cluster is critically full and needs immediate expansion',
+            criticallfull_mesage,
             ['pending', 'firing'] if interface == 'rbd' else ['firing'],
             'error'
         ),
