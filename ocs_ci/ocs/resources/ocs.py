@@ -191,7 +191,7 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
     """
     from ocs_ci.ocs.node import get_typed_nodes
     from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
-    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_all_pods
     number_of_worker_nodes = len(get_typed_nodes())
     namespace = config.ENV_DATA['cluster_namespace']
     log.info("Verifying OCS installation")
@@ -399,3 +399,24 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
 
     # TODO: Verify ceph osd tree output have osd listed as ssd
     # TODO: Verify ceph osd tree output have zone or rack based on AZ
+
+    # Verify CSI snapshotter sidecar container is not present
+    log.info("Verifying CSI snapshotter is not present.")
+    provisioner_pods = get_all_pods(
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        selector=[
+            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+        ]
+    )
+    for pod_obj in provisioner_pods:
+        pod_info = pod_obj.get()
+        for container, image in get_images(data=pod_info).items():
+            assert ('snapshot' not in container) and ('snapshot' not in image), (
+                f"Snapshot container is present in {pod_obj.name} pod. "
+                f"Container {container}. Image {image}"
+            )
+    assert {'name': 'CSI_ENABLE_SNAPSHOTTER', 'value': 'false'} in (
+        ocs_csv.get()['spec']['install']['spec']['deployments'][0]['spec']['template']['spec']['containers'][0]['env']
+    ), "CSI_ENABLE_SNAPSHOTTER value is not set to 'false'."
+    log.info("Verified: CSI snapshotter is not present.")
