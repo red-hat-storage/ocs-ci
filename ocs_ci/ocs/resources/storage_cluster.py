@@ -34,12 +34,12 @@ class StorageCluster(OCP):
 
 def add_capacity(capacity_string):
     """
-        Add storage capacity to the cluster
+    Add storage capacity to the cluster
 
-        Args:
-            capacity_string(int): Size of the storage to add
-        Returns:
-            True if capacity was added, False if not
+    Args:
+        capacity_string(int): Size of the storage to add
+    Returns:
+        True if capacity was added, False if not
 
     """
 
@@ -63,12 +63,12 @@ def add_capacity(capacity_string):
 
 def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     """
-        Get storage cluster name
+    Get storage cluster name
 
-        Args:
-            namespace (str): Namespace of the resource
-        Returns:
-            yaml: Storage cluster yaml
+    Args:
+        namespace (str): Namespace of the resource
+    Returns:
+        yaml: Storage cluster yaml
     """
 
     sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
@@ -77,12 +77,12 @@ def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
 
 def parse_size_to_int(num):
     """
-        Change capacity string to int
+    Change capacity string to int
 
-        Args:
-            num (String):
-        Returns:
-            capacity (int) : capacity in int format (Gi)
+    Args:
+        num (String): capacity in string format
+    Returns:
+        capacity (int) : capacity in int format (Gi)
 
     """
     place = num.find('G')
