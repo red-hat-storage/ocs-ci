@@ -71,7 +71,7 @@ class TestPgSQLNodeReboot(E2ETest):
         pg_obj = OCS(**pg_data)
         pg_obj.create()
 
-        # Wait for pgbench pod to be created
+        # Getting pgbench podname
         for pgbench_pod in TimeoutSampler(
             pg_trans, 3, get_pod_name_by_pattern,
             'pgbench', 'my-ripsaw'
@@ -81,9 +81,19 @@ class TestPgSQLNodeReboot(E2ETest):
                     pgbench_client_pod = pgbench_pod[0]
                     break
             except IndexError:
-                log.info("Bench pod not ready yet")
+                log.info("Bench pod is not found")
 
-        # Node reboot with specific node type
+        # Wait for pg_bench pod to be in running state
+        log.info("Waiting for pgbench_pod to be in running state")
+        pod_obj = OCP(kind='pod')
+        pod_obj.wait_for_resource(
+            condition='Running',
+            resource_name=pgbench_client_pod,
+            timeout=timeout,
+            sleep=5,
+        )
+
+        # Node drain with specific node type
         typed_nodes = node.get_typed_nodes(node_type=node_type, num_of_nodes=1)
         typed_node_name = typed_nodes[0].name
 
@@ -98,7 +108,6 @@ class TestPgSQLNodeReboot(E2ETest):
 
         # Wait for pg_bench pod to complete workload
         log.info("Waiting for pgbench_client to complete")
-        pod_obj = OCP(kind='pod')
         pod_obj.wait_for_resource(
             condition='Completed',
             resource_name=pgbench_client_pod,
@@ -106,7 +115,7 @@ class TestPgSQLNodeReboot(E2ETest):
             sleep=10,
         )
 
-        # Running pgbench and parsing logs
+        # Parsing the results
         output = run_cmd(f'oc logs {pgbench_client_pod}')
         pg_output = utils.parse_pgsql_logs(output)
         log.info(

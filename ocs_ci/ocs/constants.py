@@ -14,6 +14,7 @@ import os
 TOP_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
+CONF_DIR = os.path.join(TOP_DIR, 'conf')
 TEMPLATE_DIR = os.path.join(TOP_DIR, "ocs_ci", "templates")
 TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
@@ -270,10 +271,6 @@ PGSQL_BENCHMARK_YAML = os.path.join(
     TEMPLATE_PGSQL_DIR, "PGSQL_Benchmark.yaml"
 )
 
-PGSQL_BENCHMARK_MULTI_YAML = os.path.join(
-    TEMPLATE_PGSQL_DIR, "PGSQL_Benchmark_Multipods.yaml"
-)
-
 SMALLFILE_BENCHMARK_YAML = os.path.join(
     TEMPLATE_SMALLFILE_DIR, "SmallFile.yaml"
 )
@@ -492,7 +489,10 @@ ORDER_AFTER_UPGRADE = 30
 # Deployment constants
 OCS_CSV_PREFIX = 'ocs-operator'
 LOCAL_STORAGE_CSV_PREFIX = 'local-storage-operator'
-LATEST_TAGS = ('latest', 'latest-stable', '4.2-rc', 'latest-4.2')
+LATEST_TAGS = (
+    'latest', 'latest-stable', '4.2-rc', 'latest-4.2', 'latest-stable-4.2',
+    '4.3-rc', 'latest-4.3', 'latest-stable-4.3',
+)
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
 
@@ -544,3 +544,83 @@ RBD_PROVISIONER_SECRET = 'rook-csi-rbd-provisioner'
 RBD_NODE_SECRET = 'rook-csi-rbd-node'
 CEPHFS_PROVISIONER_SECRET = 'rook-csi-cephfs-provisioner'
 CEPHFS_NODE_SECRET = 'rook-csi-cephfs-node'
+
+# JSON Schema
+OSD_TREE_ROOT = {
+    'type': 'object',
+    'properties': {
+        'id': {'type': 'integer'}, 'name': {'const': 'default'},
+        'type': {'const': 'root'}, 'type_id': {'const': 11},
+        'children': {'type': 'array', 'items': {'type': 'integer'}}
+    },
+    'required': ['children', 'id', 'name', 'type', 'type_id'],
+    'additionalProperties': False
+}
+
+OSD_TREE_RACK = {
+    'type': 'object',
+    'properties': {
+        'id': {'type': 'integer'}, 'name': {'type': 'string'},
+        'type': {'const': 'rack'}, 'type_id': {'const': 3},
+        'pool_weights': {'type': 'object'},
+        'children': {'type': 'array', 'items': {'type': 'integer'}}
+    },
+    'required': ['children', 'id', 'name', 'pool_weights', 'type', 'type_id'],
+    'additionalProperties': False
+}
+
+OSD_TREE_HOST = {
+    'type': 'object',
+    'properties': {
+        'id': {'type': 'integer'}, 'name': {'type': 'string'},
+        'type': {'const': 'host'}, 'type_id': {'const': 1},
+        'pool_weights': {'type': 'object'},
+        'children': {'type': 'array', 'items': {'type': 'integer'}}
+    },
+    'required': ['children', 'id', 'name', 'pool_weights', 'type', 'type_id'],
+    'additionalProperties': False
+}
+
+OSD_TREE_OSD = {
+    'type': 'object',
+    'properties': {
+        'id': {'type': 'integer'}, 'device_class': {'type': 'string'},
+        'name': {'pattern': 'osd[.][0-9]+'}, 'type': {'const': 'osd'},
+        'type_id': {'const': 0},
+        'crush_weight': {'type': 'number', "minimum": 0, "maximum": 1},
+        'depth': {'type': 'integer'}, 'pool_weights': {'type': 'object'},
+        'exists': {'type': 'integer'}, 'status': {'const': 'up'},
+        'reweight': {'type': 'integer'},
+        'primary_affinity': {'type': 'integer'}
+    },
+    'required': [
+        'crush_weight', 'depth', 'device_class', 'exists', 'id', 'name',
+        'pool_weights', 'primary_affinity', 'reweight', 'status', 'type',
+        'type_id'
+    ],
+    'additionalProperties': False
+}
+
+OSD_TREE_REGION = {
+    'type': 'object',
+    'properties': {
+        'id': {'type': 'integer'}, 'name': {'type': 'string'},
+        'type': {'const': 'region'}, 'type_id': {'const': 10},
+        'pool_weights': {'type': 'object'},
+        'children': {'type': 'array', 'items': {'type': 'integer'}}
+    },
+    'required': ['children', 'id', 'name', 'pool_weights', 'type', 'type_id'],
+    'additionalProperties': False
+}
+
+OSD_TREE_ZONE = {
+    'type': 'object',
+    'properties': {
+        'id': {'type': 'integer'}, 'name': {'type': 'string'},
+        'type': {'const': 'zone'}, 'type_id': {'const': 9},
+        'pool_weights': {'type': 'object'},
+        'children': {'type': 'array', 'items': {'type': 'integer'}}
+    },
+    'required': ['children', 'id', 'name', 'pool_weights', 'type', 'type_id'],
+    'additionalProperties': False
+}
