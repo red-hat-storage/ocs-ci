@@ -300,9 +300,6 @@ def check_image_in_registry(image_url):
     Args:
         image_url (str): Image url to be verified
 
-    Returns:
-        True : Returns True if present
-
     """
     output = image_list_all()
     output = output.split("\n")
