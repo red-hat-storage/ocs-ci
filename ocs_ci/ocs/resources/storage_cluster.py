@@ -1,7 +1,8 @@
 """
 StorageCluster related functionalities
 """
-from ocs_ci.ocs import constants, defaults, cluster
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ocp import OCP, log
 from ocs_ci.utility import utils
 
@@ -27,6 +28,26 @@ class StorageCluster(OCP):
         )
 
 
+def count_cluster_osd():
+    """
+    The function returns the number of cluster OSDs
+
+    Returns:
+         osd_count (int): number of OSD pods in current cluster
+
+    """
+    storage_cluster_obj = StorageCluster(
+        resource_name=config.ENV_DATA['storage_cluster_name'],
+        namespace=config.ENV_DATA['cluster_namespace'],
+    )
+    storage_cluster_obj.reload_data()
+    osd_count = (
+        int(storage_cluster_obj.data['spec']['storageDeviceSets'][0]['count'])
+        * int(storage_cluster_obj.data['spec']['storageDeviceSets'][0]['replica'])
+    )
+    return osd_count
+
+
 def add_capacity(capacity_string):
     """
    Add storage capacity to the cluster
@@ -38,10 +59,10 @@ def add_capacity(capacity_string):
 
    """
     ocp = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind=constants.STORAGECLUSTER)
-    old_osd_count = cluster.get_osd_count
-    osd_size = parse_size_to_int(get_storage_cluster().get('spec').get('storageDeviceSets')[0].get('dataPVCTemplate').
-                                 get('spec').get('resources').get('resources').get('storage'))
-    replica = parse_size_to_int(get_storage_cluster().get('spec').get('storageDeviceSets')[0].get('replicas'))
+    old_osd_count = count_cluster_osd()
+    osd_size = parse_size_to_int(get_storage_cluster()['items'][0]['spec']['storageDeviceSets'][0]['dataPVCTemplate']
+                                                      ['spec']['resources']['requests']['storage'])
+    replica = parse_size_to_int(get_storage_cluster()['items'][0]['spec']['storageDeviceSets'][0]['replica'])
     capacity_to_add = parse_size_to_int(capacity_string)
     sc = get_storage_cluster()
 
@@ -58,7 +79,7 @@ def add_capacity(capacity_string):
         return False
 
     # osd amount validation
-    new_osd_count = cluster.get_osd_count
+    new_osd_count = count_cluster_osd()
     expected = capacity_to_add / osd_size * replica + old_osd_count
     if not expected == new_osd_count:
         log.info("Capacity was not added")
