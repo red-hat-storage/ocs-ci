@@ -54,6 +54,6 @@ class TestRegistryImagePullPush(E2ETest):
         # Check either image present in registry or not
         registry.check_image_in_registry(image_url=image_url)
 
-        # Remove user roles from User  
+        # Remove user roles from User
         for role in role_type:
             registry.remove_role_from_user(role_type=role, user=config.RUN['username'])

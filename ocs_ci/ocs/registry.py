@@ -306,7 +306,7 @@ def check_image_in_registry(image_url):
     """
     output = image_list_all()
     output = output.split("\n")
-    if any(image_url in i for i in output):
+    if not any(image_url in i for i in output):
+        raise UnexpectedBehaviour("Image url not Present in Registry")
+    else:
         logger.info("Image URL present")
-        return True
-    raise UnexpectedBehaviour("Image url not Present in Registry")
