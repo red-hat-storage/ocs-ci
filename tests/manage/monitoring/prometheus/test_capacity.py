@@ -68,13 +68,13 @@ def test_capacity_workload_alerts(
         (
             constants.ALERT_CLUSTERNEARFULL,
             nearfull_message,
-            ['pending', 'firing'] if interface == 'rbd' else ['firing'],
+            ['pending', 'firing'],
             'warning'
         ),
         (
             constants.ALERT_CLUSTERCRITICALLYFULL,
             criticallfull_mesage,
-            ['pending', 'firing'] if interface == 'rbd' else ['firing'],
+            ['pending', 'firing'],
             'error'
         ),
     ]:
