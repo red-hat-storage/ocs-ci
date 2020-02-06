@@ -37,6 +37,15 @@ def change_registry_backend_to_ocs():
         resource_name=constants.IMAGE_REGISTRY_RESOURCE_NAME, params=param_cmd, format_type='json'
     ), f"Registry pod storage backend to OCS is not success"
 
+    if(config.ENV_DATA['platform'] not in constants.CLOUD_PLATFORMS):
+        run_cmd(
+            f'oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p '
+            f'\'{{"spec":{{"managementState": "Managed"}}}}\''
+        )
+        logger.info(
+            "Waiting 30 seconds after change managementState of image-registry."
+        )
+        time.sleep(30)
     # Validate registry pod status
     validate_registry_pod_status()
 
