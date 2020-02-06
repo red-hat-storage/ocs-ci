@@ -123,6 +123,12 @@ run-ci -m deployment --ocsci-conf conf/ocsci/vsphere_upi.yaml \
     --deploy
 ```
 
+#### Deployment via UI - openshift console
+
+Please follow setup instructions mentioned in [Getting started](./getting_started.md) document.
+To enable UI deployment please pass `--ocsci-conf conf/ocsci/ui-testing.yaml` where you will have to update path to
+your clone of openshift console repository.
+
 #### Running tests on deployed environment
 
 ```bash
