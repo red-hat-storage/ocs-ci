@@ -132,6 +132,7 @@ DEFAULT_BLOCKPOOL = f'{DEFAULT_CLUSTERNAME}-cephblockpool'
 DEFAULT_ROUTE_CRT = "router-certs-default"
 DEFAULT_NAMESPACE = "default"
 IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
+IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
 
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f'{DEFAULT_CLUSTERNAME}-cephfs'
@@ -431,6 +432,7 @@ VDBENCH_RESULTS_FILE = '/tmp/Results.tar.gz'
 # Platforms
 AWS_PLATFORM = 'aws'
 VSPHERE_PLATFORM = 'vsphere'
+CLOUD_PLATFORMS = (AWS_PLATFORM)
 
 # Default SC based on platforms
 DEFAULT_SC_AWS = "gp2"
