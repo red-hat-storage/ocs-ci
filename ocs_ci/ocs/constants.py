@@ -381,6 +381,10 @@ RBD_INTERFACE = 'rbd'
 CEPHFS_INTERFACE = 'cephfs'
 RAW_BLOCK_DEVICE = '/dev/rbdblock'
 
+# Constant values for IOPS and Throughput
+IOPS_FOR_1TiB_OSD = 3000
+THROUGHPUT_LIMIT_OSD = 250
+
 # EC2 instance statuses
 INSTANCE_PENDING = 0
 INSTANCE_STOPPING = 64
