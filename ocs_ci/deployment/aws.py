@@ -326,7 +326,8 @@ class AWSUPI(AWSBase):
                 'num_workers': str(config.ENV_DATA['worker_replicas']),
                 'AVAILABILITY_ZONE_COUNT': str(config.ENV_DATA.get(
                     'availability_zone_count', ''
-                ))
+                )),
+                'BASE_DOMAIN': config.ENV_DATA['base_domain']
             }
             for key, value in upi_env_vars.items():
                 if value:
