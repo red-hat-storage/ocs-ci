@@ -1,9 +1,9 @@
 """
 StorageCluster related functionalities
 """
-from ocs_ci.ocs import constants, defaults, utils, cluster
+from ocs_ci.ocs import constants, defaults, cluster
 from ocs_ci.ocs.ocp import OCP, log
-from ocs_ci.ocs.resources.pod import get_osd_pods
+from ocs_ci.utility import utils
 
 
 class StorageCluster(OCP):
