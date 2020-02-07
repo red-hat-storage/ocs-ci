@@ -209,7 +209,7 @@ class OCP(object):
                 )
                 retry -= 1
                 if not retry:
-                    log.error("Number of attempts to get resource reached!")
+                    log.warning("Number of attempts to get resource reached!")
                     raise
                 else:
                     log.info(
