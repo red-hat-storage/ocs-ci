@@ -1312,7 +1312,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
         'default_latest_tag', 'latest'
     )
     _req = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=20)
+        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=100)
     )
     latest_image = None
     tags = _req.json()['tags']
