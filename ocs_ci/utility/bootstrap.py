@@ -9,7 +9,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import NodeNotFoundError, UnsupportedPlatformError
 from ocs_ci.utility import vsphere
-from ocs_ci.utility.utils import run_cmd, get_infra_id
+from ocs_ci.utility.utils import get_infra_id, run_cmd
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@ import logging
 import os
 import shutil
 import traceback
-from subprocess import Popen, PIPE
+from subprocess import PIPE, Popen
 
 import boto3
 from botocore.exceptions import ClientError
@@ -21,8 +21,8 @@ from ocs_ci.utility.aws import AWS as AWSUtil
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
-    run_cmd, clone_repo, create_rhelpod, TimeoutSampler, get_infra_id,
-    get_cluster_name
+    clone_repo, create_rhelpod, get_cluster_name, get_infra_id, run_cmd,
+    TimeoutSampler
 )
 from .deployment import Deployment
 
