@@ -659,6 +659,6 @@ def validate_osd_utilization(osd_used=80):
             logger.info(f"{osd} used value {value}")
         else:
             _rc = False
-            logger.error(f"{osd} used value {value}")
+            logger.warn(f"{osd} used value {value}")
 
     return _rc
