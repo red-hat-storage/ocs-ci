@@ -509,12 +509,15 @@ class CephCluster(object):
         """
 
         ceph_status = self.get_ceph_status()
+        logger.info(ceph_status)
         for item in ceph_status.split("\n"):
             if 'client' in item:
                 iops = re.findall(r'\d+\.+\d+|\d\d*', item.strip())
-                read_iops = iops[2]
-                write_iops = iops[3]
-                iops_in_cluster = float(read_iops) + float(write_iops)
+                iops = iops[2::1]
+                if len(iops) == 2:
+                    iops_in_cluster = float(iops[0]) + float(iops[1])
+                else:
+                    iops_in_cluster = float(iops[0])
                 return iops_in_cluster
 
     def get_iops_percentage(self, osd_size=2):
@@ -534,8 +537,9 @@ class CephCluster(object):
         iops_in_cluster = self.get_ceph_cluster_iops()
         osd_iops_limit = iops_per_osd * osd_count
         iops_percentage = (iops_in_cluster / osd_iops_limit) * 100
-        assert iops_in_cluster <= osd_iops_limit, f"The IOPS in the cluster" \
-            f"is {iops_in_cluster} has exceeded the limit {osd_iops_limit}"
+        if iops_in_cluster >= osd_iops_limit:
+            logger.warning(f"The IOPS in the cluster is {iops_in_cluster} "
+                           f"has exceeded the limit {osd_iops_limit}")
         return iops_percentage
 
     def get_cluster_throughput(self):
@@ -570,8 +574,9 @@ class CephCluster(object):
 
         throughput_of_cluster = self.get_cluster_throughput()
         throughput_percentage = (throughput_of_cluster / constants.THROUGHPUT_LIMIT_OSD) * 100
-        assert throughput_of_cluster <= constants.THROUGHPUT_LIMIT_OSD, f"The throughput " \
-            f"in the cluster is {throughput_of_cluster} has exceeded the limit {constants.THROUGHPUT_LIMIT_OSD}"
+        if throughput_of_cluster >= constants.THROUGHPUT_LIMIT_OSD:
+            logger.warning(f"The throughput in cluster is {throughput_of_cluster}"
+                           f" has exceeded the limit {constants.THROUGHPUT_LIMIT_OSD}")
         return throughput_percentage
 
 
