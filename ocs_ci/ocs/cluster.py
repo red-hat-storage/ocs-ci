@@ -619,3 +619,46 @@ def validate_pdb_creation():
         assert required == given, f"{required} was not created"
 
     logger.info(f"All required PDBs created: {pdb_required}")
+
+
+def get_osd_utilization():
+    """
+    Get osd utilization value
+
+    Returns:
+        osd_filled (dict): Dict of osd name and its used value
+        i.e {'osd.1': 15.276289408185841, 'osd.0': 15.276289408185841, 'osd.2': 15.276289408185841}
+
+    """
+    osd_filled = {}
+    ceph_cmd = "ceph osd df"
+    ct_pod = pod.get_ceph_tools_pod()
+    output = ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    for osd in output.get('nodes'):
+        osd_filled[osd['name']] = osd['utilization']
+
+    return osd_filled
+
+
+def validate_osd_utilization(osd_used=80):
+    """
+    Validates osd utilization matches osd_used value
+
+    Args:
+        osd_used (int): osd used value
+
+    Returns:
+        bool: True if all osd values is equal or greater to osd_used.
+              False Otherwise.
+
+    """
+    _rc = True
+    osd_filled = get_osd_utilization()
+    for osd, value in osd_filled.items():
+        if int(value) >= osd_used:
+            logger.info(f"{osd} used value {value}")
+        else:
+            _rc = False
+            logger.error(f"{osd} used value {value}")
+
+    return _rc
