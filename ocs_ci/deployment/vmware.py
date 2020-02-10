@@ -457,7 +457,10 @@ class VSPHEREUPI(VSPHEREBASE):
                 )
             except CommandFailed as e:
                 if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
-                    gather_bootstrap()
+                    try:
+                        gather_bootstrap()
+                    except Exception as ex:
+                        logger.error(ex)
                 raise e
 
             logger.info("removing bootstrap node")

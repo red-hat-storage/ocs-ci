@@ -231,7 +231,10 @@ class AWSIPI(AWSBase):
                 )
             except exceptions.CommandFailed as e:
                 if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
-                    gather_bootstrap()
+                    try:
+                        gather_bootstrap()
+                    except Exception as ex:
+                        logger.error(ex)
                 raise e
             self.test_cluster()
 
@@ -404,7 +407,10 @@ class AWSUPI(AWSBase):
             if proc.returncode:
                 logger.error(stderr)
                 if constants.GATHER_BOOTSTRAP_PATTERN in stderr:
-                    gather_bootstrap()
+                    try:
+                        gather_bootstrap()
+                    except Exception as ex:
+                        logger.error(ex)
                 raise exceptions.CommandFailed("upi install script failed")
             logger.info(stdout)
 
