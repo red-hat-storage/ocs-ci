@@ -458,10 +458,7 @@ class VSPHEREUPI(VSPHEREBASE):
                     timeout=3600
                 )
             except CommandFailed as e:
-                gather_bootstrap_pattern = (
-                    "openshift-install gather bootstrap --help"
-                )
-                if gather_bootstrap_pattern in str(e):
+                if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
                     gather_bootstrap()
                 raise e
 
