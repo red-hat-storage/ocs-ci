@@ -17,17 +17,15 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import (
-    get_node_ips, wait_for_nodes_status,
-    get_typed_worker_nodes, remove_nodes,
+    get_node_ips, get_typed_worker_nodes, remove_nodes, wait_for_nodes_status
 )
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility.bootstrap import gather_bootstrap
-from ocs_ci.utility.templating import Templating, dump_data_to_json
+from ocs_ci.utility.templating import dump_data_to_json, Templating
 from ocs_ci.utility.utils import (
-    run_cmd, replace_content_in_file, wait_for_co,
-    clone_repo, upload_file, read_file_as_str,
-    create_directory_path, remove_keys_from_tf_variable_file,
-    convert_yaml2tfvars,
+    clone_repo, convert_yaml2tfvars, create_directory_path, read_file_as_str,
+    remove_keys_from_tf_variable_file, replace_content_in_file, run_cmd,
+    upload_file, wait_for_co
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from .deployment import Deployment
