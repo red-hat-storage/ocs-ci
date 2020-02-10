@@ -19,6 +19,10 @@ def gather_bootstrap():
     Gather debugging data for a failing-to-bootstrap control plane.
     Data is placed in the `gather_bootstrap` directory under the log directory.
 
+    Raises:
+        NodeNotFoundError: If we are unable to retrieve the IP of any master
+            nodes
+
     """
     logger.info("Running gather bootstrap")
     gather_bootstrap_dir = os.path.expanduser(os.path.join(
@@ -52,6 +56,10 @@ def get_gather_bootstrap_node_data():
     """
     Retrieve node IPs required by the gather bootstrap command
 
+    Raises:
+        UnsupportedPlatformError: If we do not support gathering bootstrap
+            data for the configured provider
+
     Returns:
         dict: Public IP of the bootstrap node and Private IPs of master nodes
 
@@ -72,7 +80,10 @@ def get_gather_bootstrap_node_data():
 
 def get_node_data_aws():
     """
-    Retrieve bootstrap public IP and master node private IPs
+    Retrieve bootstrap public IP and master node private IPs running in aws
+
+    Raises:
+        NodeNotFoundError: If we are unable to find the bootstrap node or IP
 
     Returns:
         dict: bootstrap and master node IP data
@@ -116,6 +127,16 @@ def get_node_data_aws():
 
 
 def get_node_data_vsphere():
+    """
+    Retrieve bootstrap public IP and master node private IPs running in vsphere
+
+    Raises:
+        NodeNotFoundError: If we are unable to find the bootstrap node or IP
+
+    Returns:
+        dict: bootstrap and master node IP data
+
+    """
     server = config.ENV_DATA['vsphere_server']
     user = config.ENV_DATA['vsphere_user']
     password = config.ENV_DATA['vsphere_password']
