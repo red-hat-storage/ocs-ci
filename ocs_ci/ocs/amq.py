@@ -130,6 +130,30 @@ class AMQ(object):
             return True
         else:
             return False
+    def restart_amq_pod(self,  pod_pattern="cluster-operator"):
+        if self.is_amq_pod_running(pod_pattern=pod_pattern):
+            for pod in TimeoutSampler(
+                300, 10, get_pod_name_by_pattern, pod_pattern, self.namespace
+            ):
+                try:
+                    if pod[0] is not None:
+                        amq_pod = pod[0]
+                        break
+                except IndexError as ie:
+                    log.error(pod_pattern + " pod not ready yet")
+                    raise ie
+            amq_pod.delete(force=True)
+
+        for pod in TimeoutSampler(
+            300, 10, get_pod_name_by_pattern, pod_pattern, self.namespace
+        ):
+            try:
+                if pod[0] is not None:
+                    amq_pod = pod[0]
+                    break
+            except IndexError as ie:
+                log.error(pod_pattern + " pod not ready yet")
+                raise ie
 
     def setup_amq_kafka_persistent(self):
         """
