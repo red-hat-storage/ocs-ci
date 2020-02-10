@@ -626,3 +626,6 @@ OSD_TREE_ZONE = {
     'required': ['children', 'id', 'name', 'pool_weights', 'type', 'type_id'],
     'additionalProperties': False
 }
+
+# gather bootstrap
+GATHER_BOOTSTRAP_PATTERN = 'openshift-install gather bootstrap --help'

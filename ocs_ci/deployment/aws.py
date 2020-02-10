@@ -230,10 +230,7 @@ class AWSIPI(AWSBase):
                     timeout=3600
                 )
             except exceptions.CommandFailed as e:
-                gather_bootstrap_pattern = (
-                    "openshift-install gather bootstrap --help"
-                )
-                if gather_bootstrap_pattern in str(e):
+                if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
                     gather_bootstrap()
                 raise e
             self.test_cluster()
@@ -406,10 +403,7 @@ class AWSUPI(AWSBase):
 
             if proc.returncode:
                 logger.error(stderr)
-                gather_bootstrap_pattern = (
-                    "openshift-install gather bootstrap --help"
-                )
-                if gather_bootstrap_pattern in stderr:
+                if constants.GATHER_BOOTSTRAP_PATTERN in stderr:
                     gather_bootstrap()
                 raise exceptions.CommandFailed("upi install script failed")
             logger.info(stdout)
