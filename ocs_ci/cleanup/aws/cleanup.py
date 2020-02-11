@@ -120,7 +120,8 @@ def aws_cleanup():
         nargs=1,
         action='append',
         required=True,
-        help="Cluster running time in hours"
+        help="Maximum running time of the cluster (in hours). Clusters older than this "
+             "will be deleted. The minimum is 10 hours"
     )
     parser.add_argument(
         '--region',
