@@ -589,7 +589,7 @@ OSD_TREE_OSD = {
         'id': {'type': 'integer'}, 'device_class': {'type': 'string'},
         'name': {'pattern': 'osd[.][0-9]+'}, 'type': {'const': 'osd'},
         'type_id': {'const': 0},
-        'crush_weight': {'type': 'number', "minimum": 0, "maximum": 1},
+        'crush_weight': {'type': 'number'},
         'depth': {'type': 'integer'}, 'pool_weights': {'type': 'object'},
         'exists': {'type': 'integer'}, 'status': {'const': 'up'},
         'reweight': {'type': 'integer'},
