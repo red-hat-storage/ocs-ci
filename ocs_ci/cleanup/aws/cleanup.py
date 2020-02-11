@@ -11,6 +11,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.constants import CLEANUP_YAML, TEMPLATE_CLEANUP_DIR
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility import templating
+from ocs_ci.utility.aws import AWS
 from ocs_ci.ocs.constants import DEFAULT_AWS_REGION, CLUSTER_PREFIXES_TO_EXCLUDE_FROM_DELETION
 
 
@@ -55,12 +56,11 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_to_spare):
             ci-cleanup script
 
     """
-    conn = boto3.resource('ec2', region_name=region_name)
-    client = boto3.client('ec2', region_name=region_name)
+    aws = AWS(region_name=region_name)
     clusters_to_delete = list()
-    vpcs = client.describe_vpcs()['Vpcs']
+    vpcs = aws.ec2_client.describe_vpcs()['Vpcs']
     vpc_ids = [vpc['VpcId'] for vpc in vpcs]
-    vpc_objs = [conn.Vpc(vpc_id) for vpc_id in vpc_ids]
+    vpc_objs = [aws.ec2_resource.Vpc(vpc_id) for vpc_id in vpc_ids]
     for vpc_obj in vpc_objs:
         vpc_name = [tag['Value'] for tag in vpc_obj.tags if tag['Key'] == 'Name'][0]
         cluster_name = vpc_name[:-4]
