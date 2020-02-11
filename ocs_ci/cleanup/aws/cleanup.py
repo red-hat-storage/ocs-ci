@@ -10,7 +10,7 @@ from ocs_ci.ocs.constants import CLEANUP_YAML, TEMPLATE_CLEANUP_DIR
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import AWS
-from ocs_ci.cleanup.aws import constants
+from ocs_ci.cleanup.aws import defaults
 
 
 logger = logging.getLogger(__name__)
@@ -135,15 +135,15 @@ def aws_cleanup():
     confirmation = input(
         'Careful! This action could be highly destructive. Are you sure you want to proceed? '
     )
-    assert confirmation == constants.CONFIRMATION_ANSWER, "Wrong confirmation answer. Exiting"
+    assert confirmation == defaults.CONFIRMATION_ANSWER, "Wrong confirmation answer. Exiting"
     time_to_delete = args.hours[0][0]
-    assert time_to_delete > constants.MINIMUM_CLUSTER_RUNNING_TIME_FOR_DELETION, (
+    assert time_to_delete > defaults.MINIMUM_CLUSTER_RUNNING_TIME_FOR_DELETION, (
         "Number of hours is lower than the required minimum. Exiting"
     )
     time_to_delete = time_to_delete * 60 * 60
-    region = constants.DEFAULT_AWS_REGION if not args.region else args.region[0][0]
+    region = defaults.DEFAULT_AWS_REGION if not args.region else args.region[0][0]
     clusters_to_delete = get_clusters_to_delete(
-        time_to_delete, region, prefixes_to_spare=constants.CLUSTER_PREFIXES_TO_EXCLUDE_FROM_DELETION
+        time_to_delete, region, prefixes_to_spare=defaults.CLUSTER_PREFIXES_TO_EXCLUDE_FROM_DELETION
     )
     if not clusters_to_delete:
         logger.info("No clusters to delete")
