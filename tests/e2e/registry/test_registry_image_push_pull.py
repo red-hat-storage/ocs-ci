@@ -3,6 +3,7 @@ import pytest
 from ocs_ci.framework.testlib import tier1, E2ETest, ignore_leftovers
 from ocs_ci.ocs import ocp, registry, constants
 from ocs_ci.framework import config
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,9 @@ class TestRegistryImagePullPush(E2ETest):
         logger.info(f"Image list {img_list}")
 
         # Check either image present in registry or not
-        registry.check_image_in_registry(image_url=image_url)
+        validate = registry.check_image_exists_in_registry(image_url=image_url)
+        if not validate:
+            raise UnexpectedBehaviour("Image URL not present in registry")
 
         # Remove user roles from User
         for role in role_type:

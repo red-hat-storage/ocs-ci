@@ -293,17 +293,23 @@ def image_rm(registry_path):
     logger.info(f"Image {registry_path} rm successful")
 
 
-def check_image_in_registry(image_url):
+def check_image_exists_in_registry(image_url):
     """
-    Function to check either image present in registry or not
+    Function to check either image exists in registry or not
 
     Args:
         image_url (str): Image url to be verified
+
+    Returns:
+        bool: True if image exists, else False
 
     """
     output = image_list_all()
     output = output.split("\n")
     if not any(image_url in i for i in output):
-        raise UnexpectedBehaviour("Image url not Present in Registry")
+        return_value = False
+        logger.error("Image url not exists in Registry")
     else:
-        logger.info("Image URL present")
+        return_value = True
+        logger.info("Image exists in Registry")
+    return return_value
