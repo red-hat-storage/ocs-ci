@@ -629,3 +629,6 @@ OSD_TREE_ZONE = {
 
 # gather bootstrap
 GATHER_BOOTSTRAP_PATTERN = 'openshift-install gather bootstrap --help'
+
+DEFAULT_AWS_REGION = 'us-east-2'
+CLUSTER_PREFIXES_TO_EXCLUDE_FROM_DELETION = ['jnk']
