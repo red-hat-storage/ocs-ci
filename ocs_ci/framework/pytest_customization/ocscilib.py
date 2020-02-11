@@ -126,15 +126,22 @@ def pytest_configure(config):
             f"Dump of the consolidated config file is located here: "
             f"{config_file}"
         )
-        # Add OCS related versions to the html report and remove extraneous metadata
+        # Add OCS related versions to the html report and remove
+        # extraneous metadata
         markers_arg = config.getoption('-m')
         if ocsci_config.RUN['cli_params'].get('teardown') or (
             "deployment" in markers_arg
             and ocsci_config.RUN['cli_params'].get('deploy')
         ):
             log.info(
-                "Skiping versions collecting because: Deploy or destroy of "
+                "Skipping versions collecting because: Deploy or destroy of "
                 "cluster is performed."
+            )
+            return
+        elif ocsci_config.ENV_DATA['skip_ocs_deployment']:
+            log.info(
+                "Skipping version collection because we skipped "
+                "the OCS deployment"
             )
             return
         print("Collecting Cluster versions")
