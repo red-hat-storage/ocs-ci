@@ -5,8 +5,6 @@ import datetime
 import threading
 import os
 
-import boto3
-
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import CLEANUP_YAML, TEMPLATE_CLEANUP_DIR
 from ocs_ci.utility.utils import run_cmd
