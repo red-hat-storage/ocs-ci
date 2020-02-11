@@ -99,19 +99,6 @@ def cluster_cleanup():
         p.join()
 
 
-class ConfirmAction(argparse.Action):
-    def __call__(self, parser, namespace, value, option_string=None):
-        self.validate(parser, value)
-        setattr(namespace, self.dest, value)
-
-    @staticmethod
-    def validate(parser, value):
-        if value != 'yes-i-am-sure-i-want-to-proceed':
-            parser.error(f'{value} is not a valid answer')
-            return False
-        return True
-
-
 def aws_cleanup():
     parser = argparse.ArgumentParser(description='Cleanup AWS Resource')
     parser.add_argument(
