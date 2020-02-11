@@ -5,11 +5,11 @@ from time import sleep
 
 import pytest
 from botocore.exceptions import ClientError
-import boto3
 
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
+from ocs_ci.ocs.resources.pod import get_rgw_pod
 from tests.helpers import craft_s3_command, create_unique_resource_name
-from ocs_ci.ocs import constants
+from tests.manage.mcg.helpers import get_rgw_restart_count
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ def uploaded_objects(request, mcg_obj, awscli_pod):
     Args:
         mcg_obj (MCG): An MCG object containing the MCG S3 connection credentials
         awscli_pod (Pod): A pod running the AWSCLI tools
-
+verify_rgw_restart_count
     Returns:
         list: An empty list of objects
 
@@ -177,25 +177,17 @@ def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
 
 
 @pytest.fixture()
-def retrive_s3_objects(awscli_pod, mcg_obj):
+def verify_rgw_restart_count(request):
     """
-    Retrieve a list of all objects on the test-objects bucket and downloads them to the pod
-
-    Args:
-        awscli_pod (Pod): A pod running the AWSCLI tools
-        mcg_obj (MCG): An MCG object containing the MCG S3 connection credentials
-
-    Returns:
-        list: A list of retrieved objects
-
+    Verifies the rgw restart count at start and end of the test
     """
-    downloaded_files = []
-    public_s3 = boto3.resource('s3', region_name=mcg_obj.region)
-    for obj in public_s3.Bucket(constants.TEST_FILES_BUCKET).objects.all():
-        # Download test object(s)
-        logger.info(f'Downloading {obj.key}')
-        awscli_pod.exec_cmd_on_pod(
-            command=f'wget https://{constants.TEST_FILES_BUCKET}.s3.{mcg_obj.region}.amazonaws.com/{obj.key}'
-        )
-        downloaded_files.append(obj.key)
-    return downloaded_files
+    logger.info("Getting the restart count before executing the test")
+    initial_count = get_rgw_restart_count()
+
+    def finalizer():
+        rgw_pod = get_rgw_pod()
+        rgw_pod.reload()
+        logger.info("Getting restart count after executing the test")
+        assert rgw_pod.restart_count == initial_count, 'RGW pod restarted'
+
+    request.addfinalizer(finalizer)

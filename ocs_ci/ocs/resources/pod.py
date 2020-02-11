@@ -461,7 +461,7 @@ def get_csi_provisioner_pod(interface):
     return provisioner_pod
 
 
-def get_rgw_pods(rgw_label=constants.RGW_APP_LABEL, namespace=None):
+def get_rgw_pod(rgw_label=constants.RGW_APP_LABEL, namespace=None):
     """
     Fetches info about rgw pods in the cluster
 
@@ -469,15 +469,15 @@ def get_rgw_pods(rgw_label=constants.RGW_APP_LABEL, namespace=None):
         rgw_label (str): label associated with rgw pods
             (default: defaults.RGW_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+            (default: none)
 
     Returns:
-        list : of rgw pod objects
+        Pod object: rgw pod object
     """
     namespace = namespace or config.ENV_DATA['cluster_namespace']
     rgws = get_pods_having_label(rgw_label, namespace)
-    rgw_pods = [Pod(**rgw) for rgw in rgws]
-    return rgw_pods
+    rgw_pod = Pod(**rgws[0])
+    return rgw_pod
 
 
 def list_ceph_images(pool_name='rbd'):

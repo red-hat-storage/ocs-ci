@@ -12,8 +12,6 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants
 from tests.manage.mcg import helpers
-from tests.helpers import craft_s3_command
-from ocs_ci.ocs.resources.pod import get_rgw_pods
 
 logger = logging.getLogger(__name__)
 
@@ -31,29 +29,7 @@ def pod_io(pods):
     """
     with ThreadPoolExecutor() as p:
         for pod in pods:
-            p.submit(pod.run_io, 'fs', '10G')
-
-
-def s3_io(downloaded_files, mcg_obj, awscli_pod, bucket_factory):
-    """
-    Running IOs on s3 bucket
-
-    Args:
-        downloaded_files (list): List of retrieved objects
-        mcg_obj (obj): An MCG object containing the MCG S3 connection credentials
-        awscli_pod (pod): A pod running the AWSCLI tools
-        bucket_factory: Calling this fixture creates a new bucket(s)
-
-    """
-    bucketname = bucket_factory(1)[0].name
-    logger.info(f'Writing objects to bucket')
-    for obj_name in downloaded_files:
-        full_object_path = f"s3://{bucketname}/{obj_name}"
-        copycommand = f"cp {obj_name} {full_object_path}"
-        assert 'Completed' in awscli_pod.exec_cmd_on_pod(
-            command=craft_s3_command(mcg_obj, copycommand), out_yaml_format=False,
-            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
-        )
+            p.submit(pod.run_io, 'fs', '1G')
 
 
 @filter_insecure_request_warning
@@ -260,24 +236,19 @@ class TestBucketIO(ManageTest):
         return pods
 
     @vsphere_platform_required
+    @tier1
     @pytest.mark.polarion_id("OCS-2040")
-    def test_write_to_bucket_rbd_cephfs(self, setup_rbd_cephfs_pods, retrive_s3_objects,
+    def test_write_to_bucket_rbd_cephfs(self, verify_rgw_restart_count, setup_rbd_cephfs_pods,
                                         mcg_obj, awscli_pod, bucket_factory
                                         ):
         """
         Test RGW restarts after running s3, rbd and cephfs IOs in parallel
 
         """
-        logger.info('RGW restart count before running IOs')
-        pods = get_rgw_pods()
-        for rgw_pod in pods:
-            rgw_restart_count = rgw_pod.restart_count
-
+        target_dir = '/data/'
+        downloaded_files = helpers.retrieve_test_objects_to_pod(awscli_pod, target_dir)
         with ThreadPoolExecutor() as p:
             p.submit(pod_io, setup_rbd_cephfs_pods)
-            p.submit(s3_io, retrive_s3_objects, mcg_obj, awscli_pod, bucket_factory)
-
-        logger.info("Checking whether RGW pod restarted")
-        for rgw_pod in pods:
-            rgw_pod.reload()
-            assert rgw_pod.restart_count == rgw_restart_count, 'RGW pod restarted after running parallel IOs'
+            p.submit(helpers.write_individual_s3_objects(
+                mcg_obj, awscli_pod, bucket_factory, downloaded_files, target_dir)
+            )
