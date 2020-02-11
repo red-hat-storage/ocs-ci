@@ -644,16 +644,30 @@ def setup_ceph_toolbox():
     if len(ceph_toolbox) == 1:
         log.info("Ceph toolbox already exists, skipping")
         return
-    rook_operator = get_pod_name_by_pattern('rook-ceph-operator', namespace)
-    out = run_cmd(
-        f'oc -n {namespace} get pods {rook_operator[0]} -o yaml',
-    )
-    version = yaml.safe_load(out)
-    rook_version = version['spec']['containers'][0]['image']
-    tool_box_data = templating.load_yaml(constants.TOOL_POD_YAML)
-    tool_box_data['spec']['template']['spec']['containers'][0]['image'] = rook_version
-    rook_toolbox = OCS(**tool_box_data)
-    rook_toolbox.create()
+    if ocsci_config.ENV_DATA.get("ocs_version") == '4.2':
+        rook_operator = get_pod_name_by_pattern(
+            'rook-ceph-operator', namespace
+        )
+        out = run_cmd(
+            f'oc -n {namespace} get pods {rook_operator[0]} -o yaml',
+        )
+        version = yaml.safe_load(out)
+        rook_version = version['spec']['containers'][0]['image']
+        tool_box_data = templating.load_yaml(constants.TOOL_POD_YAML)
+        tool_box_data['spec']['template']['spec']['containers'][0][
+            'image'
+        ] = rook_version
+        rook_toolbox = OCS(**tool_box_data)
+        rook_toolbox.create()
+    else:
+        # for OCS >= 4.3 there is new toolbox pod deployment done here:
+        # https://github.com/openshift/ocs-operator/pull/207/
+        log.info("starting ceph toolbox pod")
+        run_cmd(
+            'oc patch ocsinitialization ocsinit -n openshift-storage --type '
+            'json --patch  \'[{ "op": "replace", "path": '
+            '"/spec/enableCephTools", "value": true }]\''
+        )
 
 
 def apply_oc_resource(
