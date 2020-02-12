@@ -1,18 +1,19 @@
 import logging
-import pytest
 
 from ocs_ci.ocs import defaults
 from ocs_ci.utility.utils import run_async
 from ocs_ci.framework.pytest_customization.marks import (
     tier1, noobaa_cli_required
 )
+from ocs_ci.framework.testlib import polarion_id, bugzilla
 
 log = logging.getLogger(__name__)
 
 
 @tier1
 @noobaa_cli_required
-@pytest.mark.polarion_id('OCS-2084')
+@polarion_id('OCS-2084')
+@bugzilla('1799077')
 def test_verify_noobaa_status():
     """
     Verify noobaa status output is clean without any errors
