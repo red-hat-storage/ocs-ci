@@ -48,5 +48,5 @@ def test_verify_noobaa_status():
 
     for line in out.split('\n'):
         if 'Not Found' in line:
-            assert 'optional' in line, f"Error in noobaa status output- {line}"
+            assert 'Optional' in line, f"Error in noobaa status output- {line}"
     log.info("Verified: noobaa status does not contain any error.")
