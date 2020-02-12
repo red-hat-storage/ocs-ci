@@ -743,3 +743,35 @@ def validate_osd_utilization(osd_used=80):
             logger.warn(f"{osd} used value {value}")
 
     return _rc
+
+
+def get_node_resource_utilization(nodename=None):
+    """
+    Gets the node's cpu and memory utilization in percentage
+
+    Args:
+        nodename (str): The node name
+
+    Returns:
+        cpu_utilization (int) : if nodename is present
+        memory_utilization (int) : if nodename is present
+        resource_utilization_all_nodes (str) : if nodename is None
+
+    """
+    obj = ocp.OCP()
+    resource_utilization_all_nodes = obj.exec_oc_cmd(
+        command='adm top nodes', out_yaml_format=False
+    )
+    if nodename:
+        for value in resource_utilization_all_nodes.split("\n"):
+            if nodename in value:
+                value = re.findall(r'\d+', value.strip())
+                cpu_utilization = value[2]
+                logger.info("The CPU utilized by the node "
+                            f"{nodename} is {cpu_utilization}%")
+                memory_utilization = value[4]
+                logger.info("The memory utilized of the node "
+                            f"{nodename} is {memory_utilization}%")
+                return int(cpu_utilization), int(memory_utilization)
+    else:
+        return resource_utilization_all_nodes
