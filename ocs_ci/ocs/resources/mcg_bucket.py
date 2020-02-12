@@ -41,10 +41,9 @@ class MCGBucket(ABC):
         Returns:
             str: OBC phase
         """
-        return OCP(kind='obc', namespace=self.mcg.namespace).get_resource(
-            self.name,
-            "PHASE"
-        )
+        return OCP(kind='obc', namespace=self.mcg.namespace).get(
+            resource_name=self.name
+        ).get('status').get('phase')
 
     def delete(self):
         """
