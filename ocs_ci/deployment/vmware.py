@@ -233,22 +233,25 @@ class VSPHEREBASE(Deployment):
         # change root disk size
         change_vm_root_disk_size(constants.SCALEUP_VSPHERE_MACHINE_CONF)
 
-    def post_destroy_checks(self, pool, dc, cluster):
+    def post_destroy_checks(self):
         """
         Post destroy checks on cluster
-
-        Args:
-            pool (str): Resource pool name
-            dc (str): Datacenter name
-            cluster (str): Cluster name
-
         """
-        if self.vsphere.is_resource_pool_exist(pool, dc, cluster):
-            logger.warning(f"Resource pool {pool} exists even after "
-                           f"destroying cluster")
-            self.vsphere.destroy_pool(pool, dc, cluster)
+        pool = config.ENV_DATA['cluster_name']
+        if self.vsphere.is_resource_pool_exist(
+                pool,
+                self.datacenter,
+                self.cluster
+        ):
+            logger.warning(
+                f"Resource pool {pool} exists even after destroying cluster"
+            )
+            self.vsphere.destroy_pool(pool, self.datacenter, self.cluster)
         else:
-            logger.info(f"Resource pool {pool} does not exist in cluster {cluster}")
+            logger.info(
+                f"Resource pool {pool} does not exist in "
+                f"cluster {self.cluster}"
+            )
 
 
 class VSPHEREUPI(VSPHEREBASE):
