@@ -62,15 +62,14 @@ def add_capacity(capacity_string):
     old_osd_count = count_cluster_osd()
     osd_size = parse_size_to_int(get_storage_cluster()['items'][0]['spec']['storageDeviceSets'][0]['dataPVCTemplate']
                                                       ['spec']['resources']['requests']['storage'])
-    replica = parse_size_to_int(get_storage_cluster()['items'][0]['spec']['storageDeviceSets'][0]['replica'])
-    capacity_to_add = parse_size_to_int(capacity_string)
+    capacity_to_add = parse_size_to_int(capacity_string/osd_size + old_osd_count)
     sc = get_storage_cluster()
 
     # adding the storage capacity to the cluster
     ocp.patch(
         resource_name=sc['metadata']['name'],
         params=f'[{{"op": "replace", "path": "/spec/storageDeviceSets/0/count", '
-               f'"value":{capacity_to_add + old_osd_count}}}]'
+               f'"value":{capacity_to_add}}}]'
     )
 
     # cluster health check
