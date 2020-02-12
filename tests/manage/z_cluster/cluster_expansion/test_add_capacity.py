@@ -32,7 +32,6 @@ class TestAddCapacity(ManageTest):
            capacity (String):the storage capacity of each OSD
            expected (Boolean): Expected boolean statment from add_capacity function
        """
-        returned_bool = storage_cluster.add_capacity(capacity)
-        assert returned_bool == expected(
+        assert storage_cluster.add_capacity(capacity) == expected(
             logger.info("Test Failed")
         )

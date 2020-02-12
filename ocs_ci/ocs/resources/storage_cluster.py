@@ -54,6 +54,7 @@ def add_capacity(capacity_string):
 
    Args:
        capacity_string(int): Size of the storage to add
+
    Returns:
        True if capacity was added, False if not
 
@@ -61,10 +62,10 @@ def add_capacity(capacity_string):
     ocp = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind=constants.STORAGECLUSTER)
     old_osd = count_cluster_osd()
     sc = get_storage_cluster()
-    old_deviceSet_count = sc['items'][0]['spec']['storageDeviceSets'][0]['count']
-    osd_size = parse_size_to_int(sc['items'][0]['spec']['storageDeviceSets'][0]['dataPVCTemplate']
-                                 ['spec']['resources']['requests']['storage'])
-    capacity_to_add = parse_size_to_int(capacity_string) / osd_size + old_deviceSet_count
+    old_device_set_count = sc.get('items')[0].get('spec').get('storageDeviceSets')[0].get('count')
+    osd_size = parse_size_to_int(sc.get('items')[0].get('spec').get('storageDeviceSets')[0].get('dataPVCTemplate').get
+                                 ('spec').get('resources').get('requests').get('storage'))
+    capacity_to_add = parse_size_to_int(capacity_string) / osd_size + old_device_set_count
 
     # adding the storage capacity to the cluster
     ocp.patch(
@@ -74,16 +75,12 @@ def add_capacity(capacity_string):
     )
 
     # cluster health check
-    if not utils.ceph_health_check:
-        log.info("Capacity was not added")
-        return False
+    assert utils.ceph_health_check, "Cluster is not OK"
 
     # osd amount validation
     new_osd_count = count_cluster_osd()
     expected = parse_size_to_int(capacity_string) / osd_size * 3 + old_osd
-    if not expected == new_osd_count:
-        log.info("Capacity was not added")
-        return False
+    assert utils.ceph_health_check, "Capacity was not added"
 
     log.info(f"{capacity_string} was added")
     return True
@@ -95,6 +92,7 @@ def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
 
    Args:
        namespace (str): Namespace of the resource
+
    Returns:
        yaml: Storage cluster yaml
    """
@@ -109,6 +107,7 @@ def parse_size_to_int(num):
 
    Args:
        num (String): capacity in string format
+
    Returns:
        capacity (int) : capacity in int format (Gi)
 
