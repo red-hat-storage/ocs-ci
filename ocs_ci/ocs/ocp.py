@@ -375,6 +375,23 @@ class OCP(object):
             return True
         return False
 
+    def delete_project(self, project_name):
+        """
+        Delete a project.  A project created by the new_project function does
+        not have a corresponding yaml file so normal resource deletion calls
+        do not work
+
+        Args:
+            project_name (str): Name of the project to be deleted
+
+        Returns:
+            bool: True in case project deletion succeeded, False otherwise
+        """
+        command = f"oc delete project {project_name}"
+        if f' "{project_name}" deleted' in run_cmd(f"{command}"):
+            return True
+        return False
+
     def login(self, user, password):
         """
         Logs user in
