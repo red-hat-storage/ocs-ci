@@ -1,6 +1,5 @@
 ---
-# This config is suppose to work on DC4, DC5 and VSAN DC
-# This config won't work for DC1 and DC2
+# This config is suppose to work on most of DCs we have.
 DEPLOYMENT:
   allow_lower_instance_requirements: false
 ENV_DATA:
@@ -10,4 +9,6 @@ ENV_DATA:
   master_replicas: 3
   worker_num_cpus: '16'
   master_num_cpus: '4'
-  memory: '65536'
+  master_memory: '16384'
+  # Once we will have DC which can handle 64GB we should use those and update here
+  compute_memory: '32768'
