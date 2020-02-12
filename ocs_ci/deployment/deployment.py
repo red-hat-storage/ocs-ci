@@ -39,8 +39,8 @@ from ocs_ci.utility.openshift_console import OpenshiftConsole
 from ocs_ci.utility.utils import (
     ceph_health_check,
     get_latest_ds_olm_tag,
-    run_cmd,
     is_cluster_running,
+    run_cmd,
 )
 from tests import helpers
 

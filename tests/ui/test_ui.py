@@ -4,7 +4,7 @@ UI tests
 
 import logging
 
-from ocs_ci.framework.testlib import ManageTest, ui
+from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, ui
 from ocs_ci.ocs import constants
 from ocs_ci.utility.openshift_console import OpenshiftConsole
 
@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @ui
+@ignore_leftovers
 class TestUI(ManageTest):
     """
     UI tests

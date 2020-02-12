@@ -29,6 +29,7 @@ class OpenshiftConsole:
 
         Raises:
             UnsupportedBrowser: in case the browser is not supported
+
         """
         # TODO: add support for other browsers
         if self.browser not in constants.SUPPORTED_BROWSERS:
@@ -87,9 +88,12 @@ class OpenshiftConsole:
 
         Raises:
             OpenshiftConsoleSuiteNotDefined: if suite is not defined
+
         """
         if not suite:
-            raise OpenshiftConsoleSuiteNotDefined()
+            raise OpenshiftConsoleSuiteNotDefined(
+                "Please specify suite to run!"
+            )
         env_vars = env_vars if env_vars else {}
         combined_env_vars = {**self.env_vars, **env_vars}
 
