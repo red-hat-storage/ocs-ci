@@ -1,5 +1,5 @@
 ---
-# This config is suppose to work on most of DCs we have.
+# This config is suppose to work only on DCs with enough memory.
 DEPLOYMENT:
   allow_lower_instance_requirements: false
 ENV_DATA:
@@ -20,5 +20,4 @@ ENV_DATA:
   # This is used just for RHCOS nodes which will get removed after adding
   # RHEL nodes, so no need to have big number here.
   compute_memory: '16384'
-  # Once we will have DC which can handle 64GB we should use those and update here
-  rhel_memory: '32768'
+  rhel_memory: '65536'
