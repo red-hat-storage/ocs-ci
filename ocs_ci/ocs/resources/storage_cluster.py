@@ -59,11 +59,12 @@ def add_capacity(capacity_string):
 
    """
     ocp = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind=constants.STORAGECLUSTER)
-    old_osd_count = count_cluster_osd()
-    osd_size = parse_size_to_int(get_storage_cluster()['items'][0]['spec']['storageDeviceSets'][0]['dataPVCTemplate']
-                                                      ['spec']['resources']['requests']['storage'])
-    capacity_to_add = parse_size_to_int(capacity_string/osd_size + old_osd_count)
+    old_osd = count_cluster_osd()
     sc = get_storage_cluster()
+    old_deviceSet_count = sc['items'][0]['spec']['storageDeviceSets'][0]['count']
+    osd_size = parse_size_to_int(sc['items'][0]['spec']['storageDeviceSets'][0]['dataPVCTemplate']
+                                 ['spec']['resources']['requests']['storage'])
+    capacity_to_add = parse_size_to_int(capacity_string) / osd_size + old_deviceSet_count
 
     # adding the storage capacity to the cluster
     ocp.patch(
@@ -79,7 +80,7 @@ def add_capacity(capacity_string):
 
     # osd amount validation
     new_osd_count = count_cluster_osd()
-    expected = capacity_to_add / osd_size + old_osd_count
+    expected = parse_size_to_int(capacity_string) / osd_size * 3 + old_osd
     if not expected == new_osd_count:
         log.info("Capacity was not added")
         return False
