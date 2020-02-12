@@ -147,7 +147,7 @@ class Pod(OCS):
             rsh_cmd, out_yaml_format, secrets=secrets, timeout=timeout, **kwargs
         )
 
-    def exec_bash_cmd_on_pod(self, command):
+    def exec_sh_cmd_on_pod(self, command, sh="bash"):
         """
         Execute a pure bash command on a pod via oc exec where you can use
         bash syntaxt like &&, ||, ;, for loop and so on.
@@ -158,7 +158,7 @@ class Pod(OCS):
         Returns:
             str: stdout of the command
         """
-        cmd = f'exec {self.name} -- bash -c "{command}"'
+        cmd = f'exec {self.name} -- {sh} -c "{command}"'
         return self.ocp.exec_oc_cmd(cmd, out_yaml_format=False)
 
     def get_labels(self):

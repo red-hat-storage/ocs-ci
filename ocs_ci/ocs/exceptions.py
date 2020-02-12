@@ -124,3 +124,11 @@ class NoInstallPlanForApproveFoundException(Exception):
 
 class NoobaaConditionException(Exception):
     pass
+
+
+class NodeNotFoundError(Exception):
+    pass
+
+
+class UnsupportedPlatformError(Exception):
+    pass

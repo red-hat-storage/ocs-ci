@@ -1312,7 +1312,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
         'default_latest_tag', 'latest'
     )
     _req = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=20)
+        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=100)
     )
     latest_image = None
     tags = _req.json()['tags']
@@ -1624,3 +1624,37 @@ def get_kubeadmin_password():
     )
     with open(filename) as f:
         return f.read()
+
+
+def get_infra_id(cluster_path):
+    """
+    Get infraID from metadata.json in given cluster_path
+
+    Args:
+        cluster_path: path to cluster install directory
+
+    Returns:
+        str: metadata.json['infraID']
+
+    """
+    metadata_file = os.path.join(cluster_path, "metadata.json")
+    with open(metadata_file) as f:
+        metadata = json.load(f)
+    return metadata["infraID"]
+
+
+def get_cluster_name(cluster_path):
+    """
+    Get clusterName from metadata.json in given cluster_path
+
+    Args:
+        cluster_path: path to cluster install directory
+
+    Returns:
+        str: metadata.json['clusterName']
+
+    """
+    metadata_file = os.path.join(cluster_path, "metadata.json")
+    with open(metadata_file) as f:
+        metadata = json.load(f)
+    return metadata["clusterName"]

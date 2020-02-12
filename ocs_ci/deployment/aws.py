@@ -2,31 +2,29 @@
 This module contains platform specific methods and classes for deployment
 on AWS platform
 """
-import json
 import logging
 import os
 import shutil
 import traceback
-from subprocess import Popen, PIPE
+from subprocess import PIPE, Popen
 
 import boto3
 from botocore.exceptions import ClientError
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
-from ocs_ci.ocs import exceptions
-from ocs_ci.ocs.exceptions import SameNamePrefixClusterAlreadyExistsException
+from ocs_ci.ocs import constants, exceptions, ocp
 from ocs_ci.ocs.parallel import parallel
-from ocs_ci.utility.aws import AWS as AWSUtil
-from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import (
-    run_cmd, clone_repo, create_rhelpod, TimeoutSampler
-)
-from .deployment import Deployment
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import templating
-from ocs_ci.ocs import ocp
+from ocs_ci.utility.aws import AWS as AWSUtil
+from ocs_ci.utility.bootstrap import gather_bootstrap
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import (
+    clone_repo, create_rhelpod, get_cluster_name, get_infra_id, run_cmd,
+    TimeoutSampler
+)
+from .deployment import Deployment
 
 logger = logging.getLogger(__name__)
 
@@ -224,12 +222,20 @@ class AWSIPI(AWSBase):
             logger.info(
                 f"Openshift-installer will be using loglevel:{log_cli_level}"
             )
-            run_cmd(
-                f"{self.installer} create cluster "
-                f"--dir {self.cluster_path} "
-                f"--log-level {log_cli_level}",
-                timeout=3600
-            )
+            try:
+                run_cmd(
+                    f"{self.installer} create cluster "
+                    f"--dir {self.cluster_path} "
+                    f"--log-level {log_cli_level}",
+                    timeout=3600
+                )
+            except exceptions.CommandFailed as e:
+                if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
+                    try:
+                        gather_bootstrap()
+                    except Exception as ex:
+                        logger.error(ex)
+                raise e
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level='DEBUG'):
@@ -244,9 +250,10 @@ class AWSIPI(AWSBase):
             cluster_name = config.ENV_DATA['cluster_name']
             prefix = cluster_name.split("-")[0] + '*'
             if self.check_cluster_existence(prefix):
-                raise SameNamePrefixClusterAlreadyExistsException(
+                raise exceptions.SameNamePrefixClusterAlreadyExistsException(
                     f"Cluster with name prefix {prefix} already exists. "
-                    f"Please destroy the existing cluster for a new cluster deployment"
+                    f"Please destroy the existing cluster for a new cluster "
+                    f"deployment"
                 )
         super(AWSIPI, self).deploy_ocp(log_cli_level)
         if config.DEPLOYMENT.get('host_network'):
@@ -390,7 +397,7 @@ class AWSUPI(AWSBase):
                 [os.path.join(
                     self.upi_script_path, constants.UPI_INSTALL_SCRIPT
                 )],
-                stdout=PIPE, stderr=PIPE
+                stdout=PIPE, stderr=PIPE, encoding='utf-8'
             )
             stdout, stderr = proc.communicate()
 
@@ -399,6 +406,11 @@ class AWSUPI(AWSBase):
 
             if proc.returncode:
                 logger.error(stderr)
+                if constants.GATHER_BOOTSTRAP_PATTERN in stderr:
+                    try:
+                        gather_bootstrap()
+                    except Exception as ex:
+                        logger.error(ex)
                 raise exceptions.CommandFailed("upi install script failed")
             logger.info(stdout)
 
@@ -871,40 +883,6 @@ class AWSUPI(AWSBase):
             logger.info("Destroying stack: %s", stack_name)
             cf.delete_stack(StackName=stack_name)
             verify_stack_deleted(stack_name)
-
-
-def get_infra_id(cluster_path):
-    """
-    Get infraID from metadata.json in given cluster_path
-
-    Args:
-        cluster_path: path to cluster install directory
-
-    Returns:
-        str: metadata.json['infraID']
-
-    """
-    metadata_file = os.path.join(cluster_path, "metadata.json")
-    with open(metadata_file) as f:
-        metadata = json.load(f)
-    return metadata["infraID"]
-
-
-def get_cluster_name(cluster_path):
-    """
-    Get clusterName from metadata.json in given cluster_path
-
-    Args:
-        cluster_path: path to cluster install directory
-
-    Returns:
-        str: metadata.json['clusterName']
-
-    """
-    metadata_file = os.path.join(cluster_path, "metadata.json")
-    with open(metadata_file) as f:
-        metadata = json.load(f)
-    return metadata["clusterName"]
 
 
 class StackStatusError(Exception):

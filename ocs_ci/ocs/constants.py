@@ -132,6 +132,7 @@ DEFAULT_BLOCKPOOL = f'{DEFAULT_CLUSTERNAME}-cephblockpool'
 DEFAULT_ROUTE_CRT = "router-certs-default"
 DEFAULT_NAMESPACE = "default"
 IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
+IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
 
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f'{DEFAULT_CLUSTERNAME}-cephfs'
@@ -431,6 +432,7 @@ VDBENCH_RESULTS_FILE = '/tmp/Results.tar.gz'
 # Platforms
 AWS_PLATFORM = 'aws'
 VSPHERE_PLATFORM = 'vsphere'
+CLOUD_PLATFORMS = (AWS_PLATFORM)
 
 # Default SC based on platforms
 DEFAULT_SC_AWS = "gp2"
@@ -587,7 +589,7 @@ OSD_TREE_OSD = {
         'id': {'type': 'integer'}, 'device_class': {'type': 'string'},
         'name': {'pattern': 'osd[.][0-9]+'}, 'type': {'const': 'osd'},
         'type_id': {'const': 0},
-        'crush_weight': {'type': 'number', "minimum": 0, "maximum": 1},
+        'crush_weight': {'type': 'number'},
         'depth': {'type': 'integer'}, 'pool_weights': {'type': 'object'},
         'exists': {'type': 'integer'}, 'status': {'const': 'up'},
         'reweight': {'type': 'integer'},
@@ -624,3 +626,6 @@ OSD_TREE_ZONE = {
     'required': ['children', 'id', 'name', 'pool_weights', 'type', 'type_id'],
     'additionalProperties': False
 }
+
+# gather bootstrap
+GATHER_BOOTSTRAP_PATTERN = 'openshift-install gather bootstrap --help'
