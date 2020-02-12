@@ -94,19 +94,12 @@ def get_oc_podman_login_cmd():
 
     """
     user = config.RUN['username']
-    filename = os.path.join(
-        config.ENV_DATA['cluster_path'],
-        config.RUN['password_location']
-    )
-    with open(filename) as f:
-        password = f.read()
     helpers.refresh_oc_login_connection()
     ocp_obj = ocp.OCP()
     token = ocp_obj.get_user_token()
     route = get_default_route_name()
     cmd_list = [
         'export KUBECONFIG=/home/core/auth/kubeconfig',
-        f"oc login -u {user} -p {password}",
         f"podman login {route} -u {user} -p {token}"
     ]
     master_list = helpers.get_master_nodes()
@@ -179,6 +172,25 @@ def add_role_to_user(role_type, user):
                f"-n {constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE}"
     assert ocp_obj.exec_oc_cmd(command=role_cmd), 'Adding role failed'
     logger.info(f"Role_type {role_type} added to the user {user}")
+
+
+def remove_role_from_user(role_type, user):
+    """
+    Function to remove role to user
+
+    Args:
+        role_type (str): Type of the role to be removed
+        user (str): User of the role
+
+    Raises:
+        AssertionError: When failure in removing role from user
+
+    """
+    ocp_obj = ocp.OCP()
+    role_cmd = f"policy remove-role-from-user {role_type} {user} " \
+               f"-n {constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE}"
+    assert ocp_obj.exec_oc_cmd(command=role_cmd), 'Removing role failed'
+    logger.info(f"Role_type {role_type} removed from user {user}")
 
 
 def enable_route_and_create_ca_for_registry_access():
@@ -288,3 +300,25 @@ def image_rm(registry_path):
     ocp_obj = ocp.OCP()
     ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=cmd_list)
     logger.info(f"Image {registry_path} rm successful")
+
+
+def check_image_exists_in_registry(image_url):
+    """
+    Function to check either image exists in registry or not
+
+    Args:
+        image_url (str): Image url to be verified
+
+    Returns:
+        bool: True if image exists, else False
+
+    """
+    output = image_list_all()
+    output = output.split("\n")
+    if not any(image_url in i for i in output):
+        return_value = False
+        logger.error("Image url not exists in Registry")
+    else:
+        return_value = True
+        logger.info("Image exists in Registry")
+    return return_value
