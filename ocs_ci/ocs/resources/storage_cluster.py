@@ -80,7 +80,7 @@ def add_capacity(capacity_string):
 
     # osd amount validation
     new_osd_count = count_cluster_osd()
-    expected = capacity_to_add / osd_size * replica + old_osd_count
+    expected = capacity_to_add / osd_size + old_osd_count
     if not expected == new_osd_count:
         log.info("Capacity was not added")
         return False
