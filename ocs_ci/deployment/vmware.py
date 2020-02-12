@@ -236,6 +236,26 @@ class VSPHEREBASE(Deployment):
         # change root disk size
         change_vm_root_disk_size(constants.SCALEUP_VSPHERE_MACHINE_CONF)
 
+    def post_destroy_checks(self):
+        """
+        Post destroy checks on cluster
+        """
+        pool = config.ENV_DATA['cluster_name']
+        if self.vsphere.is_resource_pool_exist(
+                pool,
+                self.datacenter,
+                self.cluster
+        ):
+            logger.warning(
+                f"Resource pool {pool} exists even after destroying cluster"
+            )
+            self.vsphere.destroy_pool(pool, self.datacenter, self.cluster)
+        else:
+            logger.info(
+                f"Resource pool {pool} does not exist in "
+                f"cluster {self.cluster}"
+            )
+
 
 class VSPHEREUPI(VSPHEREBASE):
     """
@@ -564,6 +584,9 @@ class VSPHEREUPI(VSPHEREBASE):
         terraform.initialize(upgrade=True)
         terraform.destroy(tfvars)
         os.chdir(previous_dir)
+
+        # post destroy checks
+        self.post_destroy_checks()
 
     def destroy_scaleup_nodes(self, scale_up_terraform_data_dir, scale_up_terraform_var):
         """

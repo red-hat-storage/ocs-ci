@@ -384,3 +384,86 @@ class VSPHERE(object):
         """
         self.stop_vms(vms, force=force)
         self.start_vms(vms)
+
+    def is_resource_pool_exist(self, pool, dc, cluster):
+        """
+        Check whether resource pool exists in cluster or not
+
+        Args:
+            pool (str): Resource pool name
+            dc (str): Datacenter name
+            cluster (str): Cluster name
+
+        Returns:
+            bool: True if resource pool exists, otherwise False
+
+        """
+        return True if self.get_pool(pool, dc, cluster) else False
+
+    def poweroff_vms(self, vms):
+        """
+        Powers off the VM and wait for operation to complete
+
+        Args:
+            vms (list): VM instance list
+
+        """
+        to_poweroff_vms = []
+        for vm in vms:
+            status = self.get_vm_power_status(vm)
+            logger.info(f"power state of {vm.name}: {status}")
+            if status == "poweredOn":
+                to_poweroff_vms.append(vm)
+        logger.info(f"Powering off VMs: {[vm.name for vm in to_poweroff_vms]}")
+        tasks = [vm.PowerOff() for vm in to_poweroff_vms]
+        WaitForTasks(tasks, self._si)
+
+    def poweron_vms(self, vms):
+        """
+        Powers on the VM and wait for operation to complete
+
+        Args:
+            vms (list): VM instance list
+
+        """
+        to_poweron_vms = []
+        for vm in vms:
+            status = self.get_vm_power_status(vm)
+            logger.info(f"power state of {vm.name}: {status}")
+            if status == "poweredOff":
+                to_poweron_vms.append(vm)
+        logger.info(f"Powering on VMs: {[vm.name for vm in to_poweron_vms]}")
+        tasks = [vm.PowerOn() for vm in to_poweron_vms]
+        WaitForTasks(tasks, self._si)
+
+    def destroy_vms(self, vms):
+        """
+        Destroys the VM's
+
+        Args:
+             vms (list): VM instance list
+
+        """
+        self.poweroff_vms(vms)
+        logger.info(f"Destroying VM's: {[vm.name for vm in vms]}")
+        tasks = [vm.Destroy_Task() for vm in vms]
+        WaitForTasks(tasks, self._si)
+
+    def destroy_pool(self, pool, dc, cluster):
+        """
+        Deletes the Resource Pool
+
+        Args:
+            pool (str): Resource pool name
+            dc (str): Datacenter name
+            cluster (str): Cluster name
+
+        """
+        vms_in_pool = self.get_all_vms_in_pool(pool, dc, cluster)
+        logger.info(f"VM's in resource pool {pool}: {[vm.name for vm in vms_in_pool]}")
+        self.destroy_vms(vms_in_pool)
+
+        # get resource pool instance
+        pi = self.get_pool(pool, dc, cluster)
+        WaitForTask(pi.Destroy())
+        logger.info(f"Successfully deleted resource pool {pool}")
