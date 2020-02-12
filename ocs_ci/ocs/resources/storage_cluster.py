@@ -70,7 +70,7 @@ def add_capacity(capacity_string):
     ocp.patch(
         resource_name=sc['metadata']['name'],
         params=f'[{{"op": "replace", "path": "/spec/storageDeviceSets/0/count", '
-               f'"value":{capacity_to_add}}}]'
+               f'"value":{capacity_to_add + old_osd_count}}}]'
     )
 
     # cluster health check
