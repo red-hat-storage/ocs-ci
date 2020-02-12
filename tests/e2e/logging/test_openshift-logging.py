@@ -223,7 +223,9 @@ class Test_openshift_logging_on_ocs(E2ETest):
         project1_filecount = elasticsearch_pod_obj.exec_cmd_on_pod(
             command=f'es_util --query=project.{project1}.*/_count'
         )
-        assert project1_filecount['_shards']['successful'] != 0, f"No files found in project {project1}"
+        assert project1_filecount['_shards']['successful'] != 0, (
+            f"No files found in project {project1}"
+        )
         logger.info(f'Total number of files in project 1 {project1_filecount}')
 
         # Create another app_pod in new project
@@ -237,7 +239,9 @@ class Test_openshift_logging_on_ocs(E2ETest):
         project2_filecount = elasticsearch_pod_obj.exec_cmd_on_pod(
             command=f'es_util --query=project.{project2}.*/_count', out_yaml_format=True
         )
-        assert project2_filecount['_shards']['successful'] != 0, f"No files found in project {project2}"
+        assert project2_filecount['_shards']['successful'] != 0, (
+            f"No files found in project {project2}"
+        )
         logger.info(f'Total number of files in the project 2 {project2_filecount}')
 
     @pytest.mark.polarion_id("OCS-651")
@@ -262,8 +266,9 @@ class Test_openshift_logging_on_ocs(E2ETest):
         operations_index = es_pod_obj.exec_cmd_on_pod(
             command='es_util --query=.operations.*/_search?pretty', out_yaml_format=True
         )
-        assert operations_index['_shards']['failed'] == 0, "Unable to access " \
-                                                           "the logs of .operations from ES pods"
+        assert operations_index['_shards']['failed'] == 0, (
+            "Unable to access the logs of .operations from ES pods"
+        )
 
         # Creates new-project and app-pod and checks the logs are retained
         pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
