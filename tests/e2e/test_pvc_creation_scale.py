@@ -1,6 +1,5 @@
 """
-Test to measure pvc scale creation time, by creating 375 pvcs of all 4 type.
-Total pvc count would be 1500
+Test to measure pvc scale creation time. Total pvc count would be 1500
 """
 import logging
 import csv
@@ -21,12 +20,12 @@ log = logging.getLogger(__name__)
 @ignore_leftovers
 class TestPVCCreationScale(E2ETest):
     """
-    Test to verify PVC scale creation
+    Base class for PVC scale creation
     """
     @pytest.fixture()
     def namespace(self, project_factory):
         """
-        Create a project for the test
+        Create a new project
         """
         proj_obj = project_factory()
         self.namespace = proj_obj.namespace
@@ -54,7 +53,7 @@ class TestPVCCreationScale(E2ETest):
     )
     @pytest.mark.usefixtures(namespace.__name__)
     def test_1500_pvc_creation_scale(
-    self, namespace, teardown_factory, access_mode, interface
+        self, namespace, teardown_factory, access_mode, interface
     ):
         """
         Measuring PVC creation time while scaling PVC
@@ -102,9 +101,10 @@ class TestPVCCreationScale(E2ETest):
     @pytest.mark.usefixtures(namespace.__name__)
     def test_all_4_type_pvc_creation_scale(self, namespace, teardown_factory):
         """
-        Measuring PVC creation time while scaling PVC
+        Measuring PVC creation time while scaling PVC of all 4 types, Total 1500 PVCs
+        will be created, i.e. 375 each pvc type
         """
-        number_of_pvc = 20
+        number_of_pvc = 375
         log.info(f"Start creating {number_of_pvc} PVC of all 4 types")
 
         cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
