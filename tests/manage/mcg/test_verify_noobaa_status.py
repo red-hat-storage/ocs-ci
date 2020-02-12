@@ -14,6 +14,9 @@ log = logging.getLogger(__name__)
 @noobaa_cli_required
 @pytest.mark.polarion_id('OCS-2084')
 def test_verify_noobaa_status():
+    """
+    Verify noobaa status output is clean without any errors
+    """
     contents_count = [
         'CustomResourceDefinition-5', 'Namespace-1', 'ServiceAccount-1',
         'Role-1', 'RoleBinding-1', 'ClusterRole-1', 'ClusterRoleBinding-1',
