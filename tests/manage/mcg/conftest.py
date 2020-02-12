@@ -179,15 +179,16 @@ def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
 @pytest.fixture()
 def verify_rgw_restart_count(request):
     """
-    Verifies the rgw restart count at start and end of the test
+    Verifies the RGW restart count at start and end of a test
+
     """
-    logger.info("Getting the restart count before executing the test")
+    logger.info("Getting RGW pod restart count before executing the test")
     initial_count = get_rgw_restart_count()
 
     def finalizer():
         rgw_pod = get_rgw_pod()
         rgw_pod.reload()
-        logger.info("Getting restart count after executing the test")
+        logger.info("Verifying whether RGW pod changed after executing the test")
         assert rgw_pod.restart_count == initial_count, 'RGW pod restarted'
 
     request.addfinalizer(finalizer)

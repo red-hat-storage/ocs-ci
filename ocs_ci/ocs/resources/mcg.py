@@ -100,7 +100,7 @@ class MCG(object):
             )
             logger.info('Checking whether RGW pod is not present on AWS platform')
             pods = pod.get_rgw_pods()
-            assert len(pods) == 0, 'RGW pod is should not exist on AWS platform'
+            assert len(pods) == 0, 'RGW pod should not exist on AWS platform'
 
         elif config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
             logger.info('Checking for RGW pod on VSPHERE platform')

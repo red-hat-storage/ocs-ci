@@ -29,7 +29,7 @@ def pod_io(pods):
     """
     with ThreadPoolExecutor() as p:
         for pod in pods:
-            p.submit(pod.run_io, 'fs', '1G')
+            p.submit(pod.run_io, 'fs', '10G')
 
 
 @filter_insecure_request_warning
@@ -214,12 +214,12 @@ class TestBucketIO(ManageTest):
 
         """
         pvc_objs_rbd = multi_pvc_factory(
-            interface=constants.CEPHBLOCKPOOL, size=15, num_of_pvc=8
+            interface=constants.CEPHBLOCKPOOL, size=15, num_of_pvc=5
         )
         ns = pvc_objs_rbd[0].project
 
         pvc_objs_cephfs = multi_pvc_factory(
-            interface=constants.CEPHFILESYSTEM, size=15, num_of_pvc=8, project=ns
+            interface=constants.CEPHFILESYSTEM, size=15, num_of_pvc=5, project=ns
         )
 
         pods = []
@@ -236,7 +236,7 @@ class TestBucketIO(ManageTest):
         return pods
 
     @vsphere_platform_required
-    @tier1
+    @tier2
     @pytest.mark.polarion_id("OCS-2040")
     def test_write_to_bucket_rbd_cephfs(self, verify_rgw_restart_count, setup_rbd_cephfs_pods,
                                         mcg_obj, awscli_pod, bucket_factory
