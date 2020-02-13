@@ -28,26 +28,6 @@ class StorageCluster(OCP):
         )
 
 
-def count_cluster_osd():
-    """
-    The function returns the number of cluster OSDs
-
-    Returns:
-         osd_count (int): number of OSD pods in current cluster
-
-    """
-    storage_cluster_obj = StorageCluster(
-        resource_name=config.ENV_DATA['storage_cluster_name'],
-        namespace=config.ENV_DATA['cluster_namespace'],
-    )
-    storage_cluster_obj.reload_data()
-    osd_count = (
-        int(storage_cluster_obj.data['spec']['storageDeviceSets'][0]['count'])
-        * int(storage_cluster_obj.data['spec']['storageDeviceSets'][0]['replica'])
-    )
-    return osd_count
-
-
 def add_capacity(capacity_string):
     """
    Add storage capacity to the cluster
@@ -60,8 +40,7 @@ def add_capacity(capacity_string):
 
    """
     ocp = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind=constants.STORAGECLUSTER)
-    old_osd = count_cluster_osd()
-    sc = get_storage_cluster()
+    sc = ocp.get()
     old_device_set_count = sc.get('items')[0].get('spec').get('storageDeviceSets')[0].get('count')
     osd_size = parse_size_to_int(sc.get('items')[0].get('spec').get('storageDeviceSets')[0].get('dataPVCTemplate').get
                                  ('spec').get('resources').get('requests').get('storage'))
@@ -76,14 +55,7 @@ def add_capacity(capacity_string):
 
     # cluster health check
     assert utils.ceph_health_check, "Cluster is not OK"
-
-    # osd amount validation
-    new_osd_count = count_cluster_osd()
-    expected = parse_size_to_int(capacity_string) / osd_size * 3 + old_osd
-    assert utils.ceph_health_check, "Capacity was not added"
-
     log.info(f"{capacity_string} was added")
-    return True
 
 
 def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):

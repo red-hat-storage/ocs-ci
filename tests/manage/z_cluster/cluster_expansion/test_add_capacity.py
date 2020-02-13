@@ -20,8 +20,6 @@ class TestAddCapacity(ManageTest):
         ],
         argvalues=[
             pytest.param(*['2000Gi', False], marks=[polarion_id(''), tier3]),
-            pytest.param(*['6144Gi', False], marks=[polarion_id(''), tier3]),
-            pytest.param(*['2048Gi', True], marks=[polarion_id(''), tier1]),
         ]
     )
     def test_add_capacity(self, capacity, expected):
