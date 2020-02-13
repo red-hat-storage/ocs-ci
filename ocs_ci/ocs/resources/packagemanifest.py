@@ -70,7 +70,14 @@ class PackageManifest(OCP):
 
         """
         self.check_name_is_specified()
-        return self.data['status']['defaultChannel']
+        try:
+            return self.data['status']['defaultChannel']
+        except KeyError as ex:
+            log.error(
+                "Can't get default channel for package manifest. "
+                "Value of self.data attribute: " + str(self.data)
+            )
+            raise ex
 
     def get_channels(self):
         """
@@ -85,7 +92,14 @@ class PackageManifest(OCP):
 
         """
         self.check_name_is_specified()
-        return self.data['status']['channels']
+        try:
+            return self.data['status']['channels']
+        except KeyError as ex:
+            log.error(
+                "Can't get channels for package manifest. "
+                "Value of self.data attribute: " + str(self.data)
+            )
+            raise ex
 
     def get_current_csv(self, channel=None):
         """
