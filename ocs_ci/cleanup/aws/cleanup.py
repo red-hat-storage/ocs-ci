@@ -50,17 +50,25 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_to_spare):
         prefixes_to_spare (list): The cluster prefixes to spare
 
     Returns:
-        list: The cluster names (e.g ebenahar-cluster-gqtd4) to be provided to the
-            ci-cleanup script
+        tuple: List of the cluster names (e.g ebenahar-cluster-gqtd4) to be provided to the
+            ci-cleanup script and a list of VPCs that are part of cloudformations
 
     """
     aws = AWS(region_name=region_name)
     clusters_to_delete = list()
+    cloudformation_vpcs = list()
     vpcs = aws.ec2_client.describe_vpcs()['Vpcs']
     vpc_ids = [vpc['VpcId'] for vpc in vpcs]
     vpc_objs = [aws.ec2_resource.Vpc(vpc_id) for vpc_id in vpc_ids]
     for vpc_obj in vpc_objs:
-        vpc_name = [tag['Value'] for tag in vpc_obj.tags if tag['Key'] == 'Name'][0]
+        vpc_tags = vpc_obj.tags
+        vpc_cloudformation = [
+            tag['Value'] for tag in vpc_tags if tag['Key'] == 'aws:cloudformation:stack-id'
+        ]
+        if vpc_cloudformation:
+            cloudformation_vpcs.append(vpc_cloudformation)
+            continue
+        vpc_name = [tag['Value'] for tag in vpc_tags if tag['Key'] == 'Name'][0]
         cluster_name = vpc_name[:-4]
         if any(prefix not in cluster_name for prefix in prefixes_to_spare):
             vpc_instances = vpc_obj.instances.all()
@@ -74,7 +82,7 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_to_spare):
                     if running_time.seconds > time_to_delete:
                         clusters_to_delete.append(cluster_name)
                     break
-    return clusters_to_delete
+    return clusters_to_delete, cloudformation_vpcs
 
 
 def cluster_cleanup():
@@ -130,9 +138,11 @@ def aws_cleanup():
     )
     time_to_delete = time_to_delete * 60 * 60
     region = defaults.DEFAULT_AWS_REGION if not args.region else args.region[0][0]
-    clusters_to_delete = get_clusters_to_delete(
-        time_to_delete, region, prefixes_to_spare=defaults.CLUSTER_PREFIXES_TO_EXCLUDE_FROM_DELETION
+    clusters_to_delete, cloudformation_vpcs = get_clusters_to_delete(
+        time_to_delete, region,
+        prefixes_to_spare=defaults.CLUSTER_PREFIXES_TO_EXCLUDE_FROM_DELETION
     )
+
     if not clusters_to_delete:
         logger.info("No clusters to delete")
     procs = []
@@ -144,3 +154,7 @@ def aws_cleanup():
         procs.append(proc)
     for p in procs:
         p.join()
+    if cloudformation_vpcs:
+        logger.warning(
+            f"The following cloudformation VPCs were found: {cloudformation_vpcs}"
+        )
