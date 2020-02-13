@@ -1,3 +1,6 @@
+import pytest
+
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import *  # noqa: F403
 from functools import wraps
 
@@ -38,19 +41,21 @@ class EcosystemTest(BaseTest):
     pass
 
 
-def skipif_ocs_version(expr_list):
+def skipif_ocs_version(expressions):
     """
     This is a decorator to skip the test if condition evaluates to
     true based on expression
 
     Args:
-        expr_list (list): condition for which we need to check,
-            eg: ['<4.3', '>4.2'], ['<=4.3', '>=4.2']
+        expressions (str OR list): condition for which we need to check,
+            eg: A single expression string '>=4.2' OR
+                A list of expressions like ['<4.3', '>4.2'], ['<=4.3', '>=4.2']
 
     Return:
         decorated function
     """
     skip_this = True
+    expr_list = [expressions] if isinstance(expressions, str) else expressions
     for expr in expr_list:
         comparision_str = config.ENV_DATA['ocs_version'] + expr
         skip_this = skip_this and eval(comparision_str)
