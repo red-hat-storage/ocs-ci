@@ -1,7 +1,6 @@
 """
 StorageCluster related functionalities
 """
-from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ocp import OCP, log
 from ocs_ci.utility import utils
@@ -55,6 +54,8 @@ def add_capacity(capacity_string):
 
     # cluster health check
     assert utils.ceph_health_check, "Cluster is not OK"
+    # TODO - add another validations
+
     log.info(f"{capacity_string} was added")
 
 
