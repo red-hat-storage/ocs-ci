@@ -1,5 +1,5 @@
 """
-Test to measure pvc scale creation time. Total pvc count would be 1500
+Test to measure pvc scale creation & deletion time. Total pvc count would be 1500
 """
 import logging
 import csv
@@ -10,8 +10,6 @@ import threading
 from tests import helpers
 from ocs_ci.framework.testlib import scale, E2ETest, polarion_id, ignore_leftovers
 from ocs_ci.ocs import constants
-from concurrent.futures import ThreadPoolExecutor
-
 
 log = logging.getLogger(__name__)
 
@@ -52,11 +50,10 @@ class TestPVCCreationScale(E2ETest):
         ]
     )
     @pytest.mark.usefixtures(namespace.__name__)
-    def test_1500_pvc_creation_scale(
-        self, namespace, teardown_factory, access_mode, interface
-    ):
+    def test_1500_pvc_creation_scale(self, namespace, access_mode, interface):
         """
         Measuring PVC creation time while scaling PVC
+        Measure PVC deletion time after creation test
         """
         number_of_pvc = 1500
         log.info(f"Start creating {access_mode}-{interface} {number_of_pvc} PVC")
@@ -66,6 +63,7 @@ class TestPVCCreationScale(E2ETest):
         elif interface == constants.CEPHFS_INTERFACE:
             self.sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
 
+        # Create PVC
         pvc_objs = helpers.create_multiple_pvcs(
             sc_name=self.sc_obj,
             namespace=self.namespace,
@@ -73,36 +71,67 @@ class TestPVCCreationScale(E2ETest):
             size=f"{random.randrange(5, 105, 5)}Gi",
             access_mode=access_mode
         )
+
+        # Check for PVC status using threads
+        threads = list()
+        for obj in pvc_objs:
+            process = threading.Thread(
+                target=helpers.wait_for_resource_state,
+                args=(obj, constants.STATUS_BOUND, )
+            )
+            process.start()
+            threads.append(process)
+        for process in threads:
+            process.join()
+
+        # Get pvc_name, require pvc_name to fetch creation time data from log
+        pvc_name_list, pv_name_list = ([] for i in range(2))
         for pvc_obj in pvc_objs:
             pvc_obj.reload()
-            teardown_factory(pvc_obj)
-        pvc_name = list()
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            for pvc_obj in pvc_objs:
-                executor.submit(
-                    helpers.wait_for_resource_state, pvc_obj,
-                    constants.STATUS_BOUND
-                )
+            pvc_name_list.append(pvc_obj.name)
+            pv_name_list.append(pvc_obj.backed_pv)
 
-                executor.submit(pvc_obj.reload)
-                pvc_name.append(pvc_obj.name)
-
+        # Get PVC creation time
         pvc_create_time = helpers.measure_pvc_creation_time_bulk(
-            interface=interface, pvc_name_list=pvc_name
+            interface=interface, pvc_name_list=pvc_name_list
         )
 
         # TODO: Update below code with google API, to record value in spreadsheet
         # TODO: For now observing Google API limit to write more than 100 writes
-        csv_obj = csv.writer(open(f"/tmp/{self.sc_obj}-{access_mode}.csv", "w"))
+        csv_obj = csv.writer(open(f"/tmp/{self.sc_obj}-{access_mode}-create.csv", "w"))
         for k, v in pvc_create_time.items():
             csv_obj.writerow([k, v])
+        logging.info(
+            f"Create data present in /tmp/{self.sc_obj}-{access_mode}-create.csv file"
+        )
+
+        # Delete PVC
+        for obj in pvc_objs:
+            obj.delete()
+            obj.ocp.wait_for_delete(obj.name)
+
+        # Get PVC deletion time
+        pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
+            interface=interface, pv_name_list=pv_name_list
+        )
+
+        # Update result to csv file.
+        # TODO: Update below code with google API, to record value in spreadsheet
+        # TODO: For now observing Google API limit to write more than 100 writes
+        csv_obj = csv.writer(open(f"/tmp/{self.sc_obj}-{access_mode}-delete.csv", "w"))
+        for k, v in pvc_deletion_time.items():
+            csv_obj.writerow([k, v])
+        logging.info(
+            f"Delete data present in /tmp/{self.sc_obj}-{access_mode}-delete.csv file"
+        )
 
     @polarion_id('OCS-1885')
     @pytest.mark.usefixtures(namespace.__name__)
-    def test_all_4_type_pvc_creation_scale(self, namespace, teardown_factory):
+    def test_all_4_type_pvc_creation_scale(self, namespace):
         """
         Measuring PVC creation time while scaling PVC of all 4 types, Total 1500 PVCs
         will be created, i.e. 375 each pvc type
+        Measure PVC deletion time in scale env
         """
         number_of_pvc = 375
         log.info(f"Start creating {number_of_pvc} PVC of all 4 types")
@@ -110,6 +139,7 @@ class TestPVCCreationScale(E2ETest):
         cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
         rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
 
+        # Create all 4 types of PVC
         fs_pvc_obj, rbd_pvc_obj = ([] for i in range(2))
         for mode in [constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]:
             fs_pvc_obj.extend(helpers.create_multiple_pvcs(
@@ -120,11 +150,6 @@ class TestPVCCreationScale(E2ETest):
                 sc_name=rbd_sc_obj, namespace=self.namespace, number_of_pvc=number_of_pvc,
                 size=f"{random.randrange(5, 105, 5)}Gi", access_mode=mode)
             )
-
-        fs_pvc_name, rbd_pvc_name = ([] for i in range(2))
-        for fs_obj, rbd_obj in zip(fs_pvc_obj, rbd_pvc_obj):
-            fs_pvc_name.append(fs_obj.name)
-            rbd_pvc_name.append(rbd_obj.name)
 
         # Check for PVC status using threads
         threads = list()
@@ -145,6 +170,18 @@ class TestPVCCreationScale(E2ETest):
         for process in threads:
             process.join()
 
+        # Get pvc_name, require pvc_name to fetch creation time data from log
+        fs_pvc_name, rbd_pvc_name = ([] for i in range(2))
+        fs_pv_name, rbd_pv_name = ([] for i in range(2))
+        for fs_obj, rbd_obj in zip(fs_pvc_obj, rbd_pvc_obj):
+            fs_obj.reload()
+            rbd_obj.reload()
+            fs_pvc_name.append(fs_obj.name)
+            rbd_pvc_name.append(rbd_obj.name)
+            fs_pv_name.append(fs_obj.backed_pv)
+            rbd_pv_name.append(rbd_obj.backed_pv)
+
+        # Get PVC creation time
         fs_pvc_create_time = helpers.measure_pvc_creation_time_bulk(
             interface=constants.CEPHFS_INTERFACE, pvc_name_list=fs_pvc_name
         )
@@ -158,7 +195,30 @@ class TestPVCCreationScale(E2ETest):
         csv_obj = csv.writer(open("/tmp/All-type-PVC-Creation-Scale.csv", "w"))
         for k, v in fs_pvc_create_time.items():
             csv_obj.writerow([k, v])
+        logging.info(
+            f"Create data present in /tmp/All-type-PVC-Creation-Scale.csv file"
+        )
 
-        for fs_obj, rbd_obj in zip(fs_pvc_obj, rbd_pvc_obj):
-            teardown_factory(fs_obj)
-            teardown_factory(rbd_obj)
+        # Delete PVC
+        pvc_objs = fs_pvc_obj + rbd_pvc_obj
+        for obj in pvc_objs:
+            obj.delete()
+            obj.ocp.wait_for_delete(obj.name)
+
+        # Get PVC deletion time
+        fs_pvc_deletion_time = helpers. measure_pv_deletion_time_bulk(
+            interface=constants.CEPHFS_INTERFACE, pv_name_list=fs_pv_name
+        )
+        rbd_pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
+            interface=constants.CEPHBLOCKPOOL, pv_name_list=rbd_pv_name
+        )
+        fs_pvc_deletion_time.update(rbd_pvc_deletion_time)
+
+        # TODO: Update below code with google API, to record value in spreadsheet
+        # TODO: For now observing Google API limit to write more than 100 writes
+        csv_obj = csv.writer(open("/tmp/All-type-PVC-Deletion-Scale.csv", "w"))
+        for k, v in fs_pvc_deletion_time.items():
+            csv_obj.writerow([k, v])
+        logging.info(
+            f"Delete data present in /tmp/All-type-PVC-Deletion-Scale.csv file"
+        )
