@@ -581,9 +581,14 @@ class AWSUPI(AWSBase):
         pem_dst_path = "/openshift-dev.pem"
         pod.upload(rhel_pod_obj.name, pem_src_path, pem_dst_path)
         repo_dst_path = "/etc/yum.repos.d/"
-        repo_file = os.path.basename(constants.OCP4_2_REPO)
+        if self.ocp_version == '4.2':
+            repo_file = os.path.basename(constants.OCP4_2_REPO)
+            repo = constants.OCP4_2_REPO
+        elif self.ocp_version == '4.3':
+            repo_file = os.path.basename(constants.OCP4_3_REPO)
+            repo = constants.OCP4_3_REPO
         pod.upload(
-            rhel_pod_obj.name, constants.OCP4_2_REPO, repo_dst_path
+            rhel_pod_obj.name, repo, repo_dst_path
         )
         # copy the .pem file for our internal repo on all nodes
         # including ansible pod
