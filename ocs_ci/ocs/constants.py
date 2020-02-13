@@ -87,6 +87,7 @@ MACHINESETS = 'machinesets'
 STORAGECLUSTER = 'storagecluster'
 CLUSTER_OPERATOR = 'ClusterOperator'
 MONITORING = 'monitoring'
+CLUSTER_SERVICE_VERSION = 'csv'
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
