@@ -18,13 +18,7 @@ def test_verify_noobaa_status():
     """
     Verify noobaa status output is clean without any errors
     """
-    contents_count = [
-        'CustomResourceDefinition-5', 'Namespace-1', 'ServiceAccount-1',
-        'Role-1', 'RoleBinding-1', 'ClusterRole-1', 'ClusterRoleBinding-1',
-        'Deployment-1', 'NooBaa-1', 'StatefulSet-1', 'Service-2', 'Secret-3',
-        'StorageClass-1', 'BucketClass-1', 'PersistentVolumeClaim-1'
-    ]
-
+    # Get noobaa status
     noobaa_status = run_async(
         f'noobaa status -n {defaults.ROOK_CLUSTER_NAMESPACE} 2>&1'
     )
@@ -33,13 +27,13 @@ def test_verify_noobaa_status():
         f"noobaa status command failed.\nreturn code: {ret}\nstdout:\n{out}"
     )
 
-    for content in contents_count:
+    # Verify noobaa status
+    for content in defaults.NOOBAA_STATUS_CONTENT_COUNT:
         value, count = content.split('-')
         assert int(count) == out.count(f'Exists: {value} '), (
             f"Could not find expected match for {value} in noobaa status "
             f"output. noobaa status:\n{out}"
         )
-
     assert 'System Phase is \\"Ready\\"' in out, (
         f"System Phase is not 'Ready'. noobaa status:\n{out}"
     )
