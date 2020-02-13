@@ -581,10 +581,13 @@ class AWSUPI(AWSBase):
         pem_dst_path = "/openshift-dev.pem"
         pod.upload(rhel_pod_obj.name, pem_src_path, pem_dst_path)
         repo_dst_path = "/etc/yum.repos.d/"
-        if self.ocp_version == '4.2':
+        ocp_version =  ".".join(
+                config.DEPLOYMENT.get('installer_version').split('.')[:-2]
+            )
+        if ocp_version == '4.2':
             repo_file = os.path.basename(constants.OCP4_2_REPO)
             repo = constants.OCP4_2_REPO
-        elif self.ocp_version == '4.3':
+        elif ocp_version == '4.3':
             repo_file = os.path.basename(constants.OCP4_3_REPO)
             repo = constants.OCP4_3_REPO
         pod.upload(
