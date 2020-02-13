@@ -530,6 +530,11 @@ REPO_MAPPING = {
     '4.2.0': OCP4_2_REPO
 }
 
+# UPI script paths
+UPI_COMMON_BASE = 'v3-launch-templates/functionality-testing'
+UPI_4_2_BASE_PATH = os.path.join(UPI_COMMON_BASE, 'aos-4_2/hosts/')
+UPI_4_3_BASE_PATH = os.path.join(UPI_COMMON_BASE, 'aos-4_3/hosts/')
+
 # Cluster name limits
 CLUSTER_NAME_MIN_CHARACTERS = 5
 CLUSTER_NAME_MAX_CHARACTERS = 17

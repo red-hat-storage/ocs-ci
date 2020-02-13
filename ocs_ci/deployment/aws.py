@@ -298,15 +298,24 @@ class AWSUPI(AWSBase):
         def __init__(self):
             super(AWSUPI.OCPDeployment, self).__init__()
             upi_repo_name = f'openshift-misc-{config.RUN["run_id"]}'
+            self.ocp_version = ".".join(
+                config.DEPLOYMENT.get('installer_version').split('.')[:-2]
+            )
+
             self.upi_repo_path = os.path.join(
                 constants.EXTERNAL_DIR, upi_repo_name,
             )
 
-            self.upi_script_path = os.path.join(
-                self.upi_repo_path,
-                'v3-launch-templates/functionality-testing'
-                '/aos-4_3/hosts/'
-            )
+            if self.ocp_version == '4.3':
+                self.upi_script_path = os.path.join(
+                    self.upi_repo_path,
+                    constants.UPI_4_3_BASE_PATH,
+                )
+            elif self.ocp_version == '4.2':
+                self.upi_script_path = os.path.join(
+                    self.upi_repo_path,
+                    constants.UPI_4_2_BASE_PATH,
+                )
 
         def deploy_prereq(self):
             """
@@ -327,8 +336,10 @@ class AWSUPI(AWSBase):
                 'AVAILABILITY_ZONE_COUNT': str(config.ENV_DATA.get(
                     'availability_zone_count', ''
                 )),
-                'BASE_DOMAIN': config.ENV_DATA['base_domain']
             }
+            if self.ocp_version == '4.3':
+                upi_env_vars['BASE_DOMAIN'] = config.ENV_DATA['base_domain']
+
             for key, value in upi_env_vars.items():
                 if value:
                     os.environ[key] = value
