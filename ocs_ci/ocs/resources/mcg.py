@@ -630,7 +630,7 @@ class MCG(object):
                     )
         except TimeoutExpiredError:
             logger.error(
-                'The BackingStore did not reach the desired state {desired_state} within the time limit.'
+                f'The BackingStore did not reach the desired state {desired_state} within the time limit.'
             )
             assert False
 
