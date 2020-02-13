@@ -132,3 +132,11 @@ class NodeNotFoundError(Exception):
 
 class UnsupportedPlatformError(Exception):
     pass
+
+
+class UnsupportedBrowser(Exception):
+    pass
+
+
+class OpenshiftConsoleSuiteNotDefined(Exception):
+    pass
