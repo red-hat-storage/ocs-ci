@@ -8,7 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     aws_platform_required, filter_insecure_request_warning
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.constants import BS_AUTH_FAILED, BS_OPTIMAL
+from ocs_ci.ocs.constants import BS_OPTIMAL
 from tests.manage.mcg.helpers import (
     sync_object_directory
 )
@@ -140,9 +140,6 @@ def test_noobaa_postupgrade(
         command=f'sh -c \"rm -rf {LOCAL_TEMP_PATH}/*\"'
     )
 
-    # Bring B down, bring A up
-    logger.info('Blocking bucket B')
-    mcg_obj_session.toggle_aws_bucket_readwrite(backingstore2['name'])
     mcg_obj_session.check_backingstore_state(
         'backing-store-' + backingstore1['name'],
         BS_OPTIMAL,
@@ -150,7 +147,7 @@ def test_noobaa_postupgrade(
     )
     mcg_obj_session.check_backingstore_state(
         'backing-store-' + backingstore2['name'],
-        BS_AUTH_FAILED,
+        BS_OPTIMAL,
         timeout=360
     )
 
@@ -164,23 +161,4 @@ def test_noobaa_postupgrade(
         LOCAL_TEMP_PATH,
         mcg_obj_session
     )
-
-    # Checksum is compared between original and result object
-    for obj in DOWNLOADED_OBJS:
-        assert mcg_obj_session.verify_s3_object_integrity(
-            original_object_path=f'{LOCAL_TESTOBJS_DIR_PATH}/{obj}',
-            result_object_path=f'{LOCAL_TEMP_PATH}/{obj}',
-            awscli_pod=awscli_pod_session
-        ), 'Checksum comparision between original and result object failed'
-    # Bring B up
-    mcg_obj_session.toggle_aws_bucket_readwrite(
-        backingstore2['name'],
-        block=False
-    )
-    mcg_obj_session.check_backingstore_state(
-        'backing-store-' + backingstore2['name'],
-        BS_OPTIMAL,
-        timeout=360
-    )
-
     assert bucket.phase == constants.STATUS_BOUND
