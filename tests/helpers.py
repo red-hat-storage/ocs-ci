@@ -11,7 +11,6 @@ import tempfile
 import time
 import yaml
 import threading
-import pytest
 
 from ocs_ci.ocs.ocp import OCP
 
@@ -1908,27 +1907,3 @@ def modify_osd_replica_count(resource_name, replica_count):
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     resource_name = '-'.join(resource_name.split('-')[0:4])
     return ocp_obj.patch(resource_name=resource_name, params=params)
-
-
-def skipif_ocs_version(expr):
-    """
-    This is a decorator to skip the test if condition evaluates to
-    true based on expression
-
-    Args:
-        expr (str): condition for which we need to check,
-            eg: '<4.3', '>4.3'
-
-    Return:
-        decorated function
-    """
-    comparision_str = config.ENV_DATA['ocs_version'] + expr
-    # skip_this will be either True or False after eval
-    skip_this = eval(comparision_str)
-
-    def wrapper(func):
-        @pytest.mark.skipif(skip_this, reason=comparision_str)
-        def wrapped(*args, **kwargs):
-            func(*args, **kwargs)
-        return wrapped
-    return wrapper

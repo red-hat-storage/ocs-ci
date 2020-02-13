@@ -44,12 +44,12 @@ look at the
 ## Skipping tests based on ocs version
 
 You can skip a test which is not applicable for specific ocs version using
-skipif_ocs_version('expr') decorator.
+skipif_ocs_version('expr_list') decorator.
 example:
 ```python
-from tests.helpers import skipif_ocs_version
+from ocs_ci.framework.testlib import skipif_ocs_version
 
-@skipif_ocs_version('<4.3')
+@skipif_ocs_version(['>4.1','<4.3'])
 def test_fio_workload():
     pass
 ```
