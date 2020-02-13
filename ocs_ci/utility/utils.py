@@ -941,6 +941,7 @@ def get_ocs_build_number():
         str: build number for ocs operator version
 
     """
+    # Importing here to avoid circular dependency
     from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 
     build_num = ""
