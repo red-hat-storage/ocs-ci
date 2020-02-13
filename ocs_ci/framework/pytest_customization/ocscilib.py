@@ -170,9 +170,14 @@ def pytest_configure(config):
                 config._metadata['OCS operator'] = (
                     get_ocs_build_number()
                 )
-            mods = get_version_info(
-                namespace=ocsci_config.ENV_DATA['cluster_namespace']
-            )
+            try:
+                mods = get_version_info(
+                    namespace=ocsci_config.ENV_DATA['cluster_namespace']
+                )
+            except Exception as ex:
+                msg = "get_version_info failed, version report won't be complete:"
+                log.error(msg + str(ex))
+                mods = {}
             skip_list = ['ocs-operator']
             for key, val in mods.items():
                 if key not in skip_list:
