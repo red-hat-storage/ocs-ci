@@ -48,8 +48,8 @@ def skipif_ocs_version(expressions):
 
     Args:
         expressions (str OR list): condition for which we need to check,
-            eg: A single expression string '>=4.2' OR
-                A list of expressions like ['<4.3', '>4.2'], ['<=4.3', '>=4.2']
+        eg: A single expression string '>=4.2' OR
+            A list of expressions like ['<4.3', '>4.2'], ['<=4.3', '>=4.2']
 
     Return:
         decorated function
