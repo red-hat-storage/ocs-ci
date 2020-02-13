@@ -24,12 +24,9 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.ocs.resources.ocs import get_version_info
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
-    MARKETPLACE_NAMESPACE,
-    OPERATOR_CATALOG_SOURCE_NAME,
 )
 
 __all__ = [
