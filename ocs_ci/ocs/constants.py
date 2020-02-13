@@ -502,8 +502,11 @@ INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
 
 # UI Deployment constants
+HTPASSWD_SECRET_NAME = "htpass-secret"
 HTPASSWD_SECRET_YAML = "frontend/integration-tests/data/htpasswd-secret.yaml"
 HTPASSWD_PATCH_YAML = "frontend/integration-tests/data/patch-htpasswd.yaml"
+CHROME_BROWSER = "chrome"
+SUPPORTED_BROWSERS = (CHROME_BROWSER)
 
 # Inventory
 INVENTORY_TEMPLATE = "inventory.yaml.j2"
