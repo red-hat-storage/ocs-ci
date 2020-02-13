@@ -20,6 +20,7 @@ from ocs_ci.utility.utils import (
     get_ceph_version,
     get_csi_versions,
     get_testrun_name,
+    get_ocs_build_number,
 )
 from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.ocs.resources.ocs import get_version_info
@@ -168,13 +169,9 @@ def pytest_configure(config):
             config._metadata['rbdplugin'] = csi_versions.get('csi-rbdplugin')
 
             # add ocs operator version
-            ocs_catalog = CatalogSource(
-                resource_name=OPERATOR_CATALOG_SOURCE_NAME,
-                namespace=MARKETPLACE_NAMESPACE,
-            )
             if ocsci_config.REPORTING['us_ds'] == 'DS':
                 config._metadata['OCS operator'] = (
-                    ocs_catalog.get_image_name()
+                    get_ocs_build_number()
                 )
             mods = get_version_info(
                 namespace=ocsci_config.ENV_DATA['cluster_namespace']
