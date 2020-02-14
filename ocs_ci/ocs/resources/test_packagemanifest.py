@@ -7,8 +7,11 @@ from ocs_ci.ocs.exceptions import ResourceNameNotSpecifiedException
 
 
 def test_pm_null():
-    pm = PackageManifest()
-    assert pm is not None
+    """
+    Test that creation of PackageManifest object without any constructor
+    agruments works (object is created, no exceptions are raised).
+    """
+    PackageManifest()
 
 
 def test_pm_null_get_default_channel():
