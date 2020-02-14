@@ -41,6 +41,27 @@ For more details what else is possible with `pytest_marker_bugzilla` plugin
 look at the
 [project documentation](https://github.com/eanxgeek/pytest_marker_bugzilla).
 
+## Skipping tests based on ocs version
+
+You can skip a test which is not applicable for specific ocs version using
+
+```@skipif_ocs_version([expression1, expression2, ...])``` decorator.
+
+example:
+```python
+from ocs_ci.framework.testlib import skipif_ocs_version
+
+@skipif_ocs_version(['>4.1','<4.3'])
+def test_fio_workload():
+    pass
+```
+
+You can also specify a single expression in a string like:
+```python
+@skipif_ocs_version('<4.3')
+def test_fio_workload():
+    pass
+```
 
 ## Base test classes for teams
 
