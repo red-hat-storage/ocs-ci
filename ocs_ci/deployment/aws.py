@@ -302,20 +302,18 @@ class AWSUPI(AWSBase):
                 config.DEPLOYMENT.get('installer_version').split('.')[:-2]
             )
 
+            self.upi_common_base = 'v3-launch-templates/functionality-testing'
             self.upi_repo_path = os.path.join(
                 constants.EXTERNAL_DIR, upi_repo_name,
             )
-
-            if self.ocp_version == '4.3':
-                self.upi_script_path = os.path.join(
-                    self.upi_repo_path,
-                    constants.UPI_4_3_BASE_PATH,
-                )
-            elif self.ocp_version == '4.2':
-                self.upi_script_path = os.path.join(
-                    self.upi_repo_path,
-                    constants.UPI_4_2_BASE_PATH,
-                )
+            version_str = (
+                'aos-' + self.ocp_version.replace('.', '_') + '/hosts/'
+            )
+            self.upi_script_path = os.path.join(
+                self.upi_repo_path,
+                self.upi_common_base,
+                version_str,
+            )
 
         def deploy_prereq(self):
             """
@@ -335,7 +333,7 @@ class AWSUPI(AWSBase):
                 'num_workers': str(config.ENV_DATA['worker_replicas']),
                 'AVAILABILITY_ZONE_COUNT': str(config.ENV_DATA.get(
                     'availability_zone_count', ''
-                )),
+                ))
             }
             if self.ocp_version == '4.3':
                 upi_env_vars['BASE_DOMAIN'] = config.ENV_DATA['base_domain']
@@ -581,15 +579,11 @@ class AWSUPI(AWSBase):
         pem_dst_path = "/openshift-dev.pem"
         pod.upload(rhel_pod_obj.name, pem_src_path, pem_dst_path)
         repo_dst_path = "/etc/yum.repos.d/"
-        ocp_version =  ".".join(
-                config.DEPLOYMENT.get('installer_version').split('.')[:-2]
-            )
-        if ocp_version == '4.2':
-            repo_file = os.path.basename(constants.OCP4_2_REPO)
-            repo = constants.OCP4_2_REPO
-        elif ocp_version == '4.3':
-            repo_file = os.path.basename(constants.OCP4_3_REPO)
-            repo = constants.OCP4_3_REPO
+        ocp_version = ".".join(
+            config.DEPLOYMENT.get('installer_version').split('.')[:-2]
+        )
+        repo_file = os.path.basename(constants.OCP_REPO_MAP[ocp_version])
+        repo = constants.OCP_REPO_MAP[ocp_version]
         pod.upload(
             rhel_pod_obj.name, repo, repo_dst_path
         )
