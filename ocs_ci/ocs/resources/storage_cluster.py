@@ -43,20 +43,26 @@ def add_capacity(capacity_string):
     old_device_set_count = sc.get('items')[0].get('spec').get('storageDeviceSets')[0].get('count')
     osd_size = parse_size_to_int(sc.get('items')[0].get('spec').get('storageDeviceSets')[0].get('dataPVCTemplate').get
                                  ('spec').get('resources').get('requests').get('storage'))
-    capacity_to_add = parse_size_to_int(capacity_string) / osd_size + old_device_set_count
-
+    capacity_to_add = str(parse_size_to_int(capacity_string) / osd_size + old_device_set_count)
+    capacity_to_add = capacity_to_add.split(".")[0]
     # adding the storage capacity to the cluster
     ocp.patch(
-        resource_name=sc['metadata']['name'],
-        params=f'[{{"op": "replace", "path": "/spec/storageDeviceSets/0/count", '
-               f'"value":{capacity_to_add}}}]'
+        resource_name=sc['items'][0]['metadata']['name'],
+        params='{"items":[{"spec": {"storageDeviceSets":[{"count":' 
+               f"{capacity_to_add}"'}]}}]}',
+        format_type='fetch'
+
     )
+    #params=f'{{"op": "replace", "path": "items/0/spec/storageDeviceSets/0/count", 'f'"value":"{capacity_to_add}"}}',
 
     # cluster health check
-    assert utils.ceph_health_check, "Cluster is not OK"
+    if utils.ceph_health_check:
+        log.info("Cluster is not OK")
+        return True
+    else:
+        return False
     # TODO - add another validations
 
-    log.info(f"{capacity_string} was added")
 
 
 def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
@@ -85,6 +91,4 @@ def parse_size_to_int(num):
        capacity (int) : capacity in int format (Gi)
 
    """
-    place = num.find('G')
-    capacity = int(num[0, place])
-    return capacity
+    return int(num.split('G')[0])
