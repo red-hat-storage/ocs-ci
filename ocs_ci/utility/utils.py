@@ -32,6 +32,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility.retry import retry
 from bs4 import BeautifulSoup
 from paramiko import SSHClient, AutoAddPolicy
+from ocs_ci.ocs import defaults
 
 log = logging.getLogger(__name__)
 
@@ -940,17 +941,16 @@ def get_ocs_build_number():
         str: build number for ocs operator version
 
     """
-    from ocs_ci.ocs.resources.catalog_source import CatalogSource
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 
     build_num = ""
-    ocs_catalog = CatalogSource(
-        resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
-        namespace=constants.MARKETPLACE_NAMESPACE,
-    )
     if config.REPORTING['us_ds'] == 'DS':
-        build_info = ocs_catalog.get_image_name()
+        build_str = get_csvs_start_with_prefix(
+            defaults.OCS_OPERATOR_NAME, defaults.ROOK_CLUSTER_NAMESPACE,
+        )
         try:
-            return build_info.split("-")[1].split(".")[0]
+            return build_str[0]['metadata']['name'].partition('.')[2]
         except (IndexError, AttributeError):
             logging.warning("No version info found for OCS operator")
     return build_num
