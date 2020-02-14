@@ -4,7 +4,7 @@ Package manifest related functionalities
 import logging
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.utility.retry import retry
@@ -37,13 +37,27 @@ class PackageManifest(OCP):
         )
 
     def get(self, **kwargs):
+        """
+        Overloaded get method from OCP class.
+
+        Raises:
+            ResourceNotFoundError: In case the selector and resource_name
+                specified and no such resource found.
+        """
         resource_name = kwargs.get("resource_name", "")
         resource_name = resource_name if resource_name else self.resource_name
+        selector = kwargs.get('selector')
+        selector = selector if selector else self.selector
 
         data = super(PackageManifest, self).get(**kwargs)
         if type(data) == dict and (data.get('kind') == 'List'):
             items = data['items']
             data_len = len(items)
+            if data_len == 0 and selector and resource_name:
+                raise ResourceNotFoundError(
+                    f"Requested packageManifest: {resource_name} with "
+                    f"selector: {selector} not found!"
+                )
             if data_len == 1:
                 return items[0]
             if data_len > 1 and resource_name:
@@ -70,7 +84,14 @@ class PackageManifest(OCP):
 
         """
         self.check_name_is_specified()
-        return self.data['status']['defaultChannel']
+        try:
+            return self.data['status']['defaultChannel']
+        except KeyError as ex:
+            log.error(
+                "Can't get default channel for package manifest. "
+                "Value of self.data attribute: %s", str(self.data)
+            )
+            raise ex
 
     def get_channels(self):
         """
@@ -85,7 +106,14 @@ class PackageManifest(OCP):
 
         """
         self.check_name_is_specified()
-        return self.data['status']['channels']
+        try:
+            return self.data['status']['channels']
+        except KeyError as ex:
+            log.error(
+                "Can't get channels for package manifest. "
+                "Value of self.data attribute: %s", str(self.data)
+            )
+            raise ex
 
     def get_current_csv(self, channel=None):
         """

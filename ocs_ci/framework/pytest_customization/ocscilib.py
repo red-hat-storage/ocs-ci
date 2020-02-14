@@ -13,7 +13,7 @@ import pytest
 
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework.exceptions import ClusterPathNotProvidedError, ClusterNameNotProvidedError, ClusterNameLengthError
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
 from ocs_ci.utility.utils import (
     dump_config_to_file,
     get_cluster_version,
@@ -150,35 +150,62 @@ def pytest_configure(config):
         del config._metadata['Platform']
 
         config._metadata['Test Run Name'] = get_testrun_name()
+        gather_version_info_for_report(config)
 
-        try:
-            # add cluster version
-            clusterversion = get_cluster_version()
-            config._metadata['Cluster Version'] = clusterversion
 
-            # add ceph version
-            ceph_version = get_ceph_version()
-            config._metadata['Ceph Version'] = ceph_version
+def gather_version_info_for_report(config):
+    """
+    This function gather all version related info used for report.
 
-            # add csi versions
-            csi_versions = get_csi_versions()
-            config._metadata['cephfsplugin'] = csi_versions.get('csi-cephfsplugin')
-            config._metadata['rbdplugin'] = csi_versions.get('csi-rbdplugin')
+    Args:
+        config (pytest.config): Pytest config object
+    """
+    gather_version_completed = False
+    try:
+        # add cluster version
+        clusterversion = get_cluster_version()
+        config._metadata['Cluster Version'] = clusterversion
 
-            # add ocs operator version
-            if ocsci_config.REPORTING['us_ds'] == 'DS':
-                config._metadata['OCS operator'] = (
-                    get_ocs_build_number()
-                )
-            mods = get_version_info(
-                namespace=ocsci_config.ENV_DATA['cluster_namespace']
+        # add ceph version
+        ceph_version = get_ceph_version()
+        config._metadata['Ceph Version'] = ceph_version
+
+        # add csi versions
+        csi_versions = get_csi_versions()
+        config._metadata['cephfsplugin'] = csi_versions.get('csi-cephfsplugin')
+        config._metadata['rbdplugin'] = csi_versions.get('csi-rbdplugin')
+
+        # add ocs operator version
+        if ocsci_config.REPORTING['us_ds'] == 'DS':
+            config._metadata['OCS operator'] = (
+                get_ocs_build_number()
             )
-            skip_list = ['ocs-operator']
-            for key, val in mods.items():
-                if key not in skip_list:
-                    config._metadata[key] = val.rsplit('/')[-1]
-        except (FileNotFoundError, CommandFailed):
-            pass
+        mods = {}
+        mods = get_version_info(
+            namespace=ocsci_config.ENV_DATA['cluster_namespace']
+        )
+        skip_list = ['ocs-operator']
+        for key, val in mods.items():
+            if key not in skip_list:
+                config._metadata[key] = val.rsplit('/')[-1]
+        gather_version_completed = True
+    except ResourceNotFoundError as ex:
+        log.error(
+            "Problem ocurred when looking for some resource! Error: %s",
+            ex
+        )
+    except FileNotFoundError as ex:
+        log.error("File not found! Error: %s", ex)
+    except CommandFailed as ex:
+        log.error("Failed to execute command! Error: %s", ex)
+    except Exception as ex:
+        log.error("Failed to gather version info! Error: %s", ex)
+    finally:
+        if not gather_version_completed:
+            log.warning(
+                "Failed to gather version details! The report of version might"
+                "not be complete!"
+            )
 
 
 def get_cli_param(config, name_of_param, default=None):
