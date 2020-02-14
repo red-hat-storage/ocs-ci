@@ -89,7 +89,7 @@ class PackageManifest(OCP):
         except KeyError as ex:
             log.error(
                 "Can't get default channel for package manifest. "
-                "Value of self.data attribute: " + str(self.data)
+                "Value of self.data attribute: %s", str(self.data)
             )
             raise ex
 
