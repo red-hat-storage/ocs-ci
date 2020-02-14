@@ -1,6 +1,6 @@
 [openshift]
 name=RHopenshift
-baseurl=https://mirror.openshift.com/enterprise/all/4.2/v4.2.0-201910111801_2019-10-11.2/RH7-RHAOS-4.2/x86_64/os/
+baseurl=https://mirror.openshift.com/enterprise/all/4.2/latest/RH7-RHAOS-4.2/x86_64/os/
 enabled=1
 gpgcheck=0
 sslverify=0
