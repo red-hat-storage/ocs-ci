@@ -130,6 +130,10 @@ class NodeNotFoundError(Exception):
     pass
 
 
+class ResourceNotFoundError(Exception):
+    pass
+
+
 class UnsupportedPlatformError(Exception):
     pass
 
