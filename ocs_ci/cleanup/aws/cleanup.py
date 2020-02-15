@@ -38,16 +38,20 @@ def cleanup(cluster_name, cluster_id):
     run_cmd(f"{oc_bin} destroy cluster --dir {cleanup_path} --log-level=debug")
 
 
-def get_clusters_to_delete(time_to_delete, region_name, prefixes_to_spare):
+def get_clusters_to_delete(
+    time_to_delete, region_name, prefixes_to_spare, max_running_time_for_spared
+):
     """
     Get all cluster names that their EC2 instances running time is greater
-    than the specified time to delete
+    than the specified time to delete.
 
     Args:
         time_to_delete (int): The maximum time in seconds that is allowed
             for clusters to continue running
         region_name (str): The name of the AWS region to delete the resources from
         prefixes_to_spare (list): The cluster prefixes to spare
+        max_running_time_for_spared (int): The maximum time in seconds that is allowed
+            for spared clusters to continue running
 
     Returns:
         tuple: List of the cluster names (e.g ebenahar-cluster-gqtd4) to be provided to the
@@ -63,25 +67,27 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_to_spare):
     for vpc_obj in vpc_objs:
         vpc_tags = vpc_obj.tags
         vpc_cloudformation = [
-            tag['Value'] for tag in vpc_tags if tag['Key'] == 'aws:cloudformation:stack-id'
+            tag['Value'] for tag in vpc_tags if tag['Key'] == defaults.AWS_CLOUDFORMATION_TAG
         ]
         if vpc_cloudformation:
             cloudformation_vpcs.append(vpc_cloudformation)
             continue
         vpc_name = [tag['Value'] for tag in vpc_tags if tag['Key'] == 'Name'][0]
         cluster_name = vpc_name[:-4]
-        if any(prefix not in cluster_name for prefix in prefixes_to_spare):
-            vpc_instances = vpc_obj.instances.all()
-            if not vpc_instances:
-                clusters_to_delete.append(cluster_name)
-            for instance in vpc_instances:
-                if instance.state["Name"] == "running":
-                    launch_time = instance.launch_time
-                    current_time = datetime.datetime.now(launch_time.tzinfo)
-                    running_time = current_time - launch_time
-                    if running_time.seconds > time_to_delete:
-                        clusters_to_delete.append(cluster_name)
-                    break
+        vpc_instances = vpc_obj.instances.all()
+        if not vpc_instances:
+            clusters_to_delete.append(cluster_name)
+        for instance in vpc_instances:
+            if instance.state["Name"] == "running":
+                allowed_running_time = time_to_delete if any(
+                    prefix not in cluster_name for prefix in prefixes_to_spare
+                ) else max_running_time_for_spared
+                launch_time = instance.launch_time
+                current_time = datetime.datetime.now(launch_time.tzinfo)
+                running_time = current_time - launch_time
+                if running_time.seconds > allowed_running_time:
+                    clusters_to_delete.append(cluster_name)
+                break
     return clusters_to_delete, cloudformation_vpcs
 
 
@@ -108,7 +114,7 @@ def cluster_cleanup():
 
 
 def aws_cleanup():
-    parser = argparse.ArgumentParser(description='Cleanup AWS Resource')
+    parser = argparse.ArgumentParser(description='AWS overall resources cleanup according to running time')
     parser.add_argument(
         '--hours',
         type=int,
@@ -137,10 +143,11 @@ def aws_cleanup():
         "Number of hours is lower than the required minimum. Exiting"
     )
     time_to_delete = time_to_delete * 60 * 60
-    region = defaults.DEFAULT_AWS_REGION if not args.region else args.region[0][0]
+    region = defaults.AWS_REGION if not args.region else args.region[0][0]
     clusters_to_delete, cloudformation_vpcs = get_clusters_to_delete(
-        time_to_delete, region,
-        prefixes_to_spare=defaults.CLUSTER_PREFIXES_TO_EXCLUDE_FROM_DELETION
+        time_to_delete=time_to_delete, region_name=region,
+        prefixes_to_spare=defaults.CLUSTER_PREFIXES_TO_EXCLUDE_FROM_DELETION,
+        max_running_time_for_spared=defaults.MAXIMUM_CLUSTER_RUNNING_TIME_FOR_DELETION * 60 * 60
     )
 
     if not clusters_to_delete:
