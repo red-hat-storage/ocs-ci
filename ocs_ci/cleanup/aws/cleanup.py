@@ -43,7 +43,7 @@ def get_clusters_to_delete(
 ):
     """
     Get all cluster names that their EC2 instances running time is greater
-    than the specified time to delete.
+    than the specified time to delete
 
     Args:
         time_to_delete (int): The maximum time in seconds that is allowed
