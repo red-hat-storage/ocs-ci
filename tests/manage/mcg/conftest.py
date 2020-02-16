@@ -6,6 +6,8 @@ from time import sleep
 import pytest
 from botocore.exceptions import ClientError
 
+from ocs_ci.framework import config
+
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.ocs.resources.pod import get_rgw_pod
 from tests.helpers import craft_s3_command, create_unique_resource_name
@@ -182,13 +184,14 @@ def verify_rgw_restart_count(request):
     Verifies the RGW restart count at start and end of a test
 
     """
-    logger.info("Getting RGW pod restart count before executing the test")
-    initial_count = get_rgw_restart_count()
+    if config.ENV_DATA['platform'].lower() == 'vsphere':
+        logger.info("Getting RGW pod restart count before executing the test")
+        initial_count = get_rgw_restart_count()
 
-    def finalizer():
-        rgw_pod = get_rgw_pod()
-        rgw_pod.reload()
-        logger.info("Verifying whether RGW pod changed after executing the test")
-        assert rgw_pod.restart_count == initial_count, 'RGW pod restarted'
+        def finalizer():
+            rgw_pod = get_rgw_pod()
+            rgw_pod.reload()
+            logger.info("Verifying whether RGW pod changed after executing the test")
+            assert rgw_pod.restart_count == initial_count, 'RGW pod restarted'
 
-    request.addfinalizer(finalizer)
+        request.addfinalizer(finalizer)

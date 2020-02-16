@@ -29,7 +29,7 @@ def pod_io(pods):
     """
     with ThreadPoolExecutor() as p:
         for pod in pods:
-            p.submit(pod.run_io, 'fs', '10G')
+            p.submit(pod.run_io, 'fs', '1G')
 
 
 @filter_insecure_request_warning
@@ -214,12 +214,12 @@ class TestBucketIO(ManageTest):
 
         """
         pvc_objs_rbd = multi_pvc_factory(
-            interface=constants.CEPHBLOCKPOOL, size=15, num_of_pvc=5
+            interface=constants.CEPHBLOCKPOOL, size=2, num_of_pvc=5
         )
         ns = pvc_objs_rbd[0].project
 
         pvc_objs_cephfs = multi_pvc_factory(
-            interface=constants.CEPHFILESYSTEM, size=15, num_of_pvc=5, project=ns
+            interface=constants.CEPHFILESYSTEM, size=2, num_of_pvc=5, project=ns
         )
 
         pods = []
@@ -245,10 +245,10 @@ class TestBucketIO(ManageTest):
         Test RGW restarts after running s3, rbd and cephfs IOs in parallel
 
         """
+        bucketname = bucket_factory(1)[0].name
+        full_object_path = f"s3://{bucketname}"
         target_dir = '/data/'
-        downloaded_files = helpers.retrieve_test_objects_to_pod(awscli_pod, target_dir)
+        helpers.retrieve_test_objects_to_pod(awscli_pod, target_dir)
         with ThreadPoolExecutor() as p:
             p.submit(pod_io, setup_rbd_cephfs_pods)
-            p.submit(helpers.write_individual_s3_objects(
-                mcg_obj, awscli_pod, bucket_factory, downloaded_files, target_dir)
-            )
+            p.submit(helpers.sync_object_directory(awscli_pod, target_dir, full_object_path, mcg_obj))
