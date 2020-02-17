@@ -8,7 +8,7 @@ import pytest
 import threading
 
 from tests import helpers
-from ocs_ci.framework.testlib import scale, E2ETest, polarion_id, ignore_leftovers
+from ocs_ci.framework.testlib import scale, E2ETest, polarion_id
 from ocs_ci.ocs import constants
 
 log = logging.getLogger(__name__)
@@ -39,10 +39,6 @@ class TestPVCCreationDeletionScale(E2ETest):
                 marks=pytest.mark.polarion_id("OCS-2010")
             ),
             pytest.param(
-                *[constants.ACCESS_MODE_RWO, constants.CEPHFS_INTERFACE],
-                marks=pytest.mark.polarion_id("OCS-2011")
-            ),
-            pytest.param(
                 *[constants.ACCESS_MODE_RWX, constants.CEPHFS_INTERFACE],
                 marks=pytest.mark.polarion_id("OCS-2008")
             ),
@@ -54,7 +50,7 @@ class TestPVCCreationDeletionScale(E2ETest):
         Measuring PVC creation time while scaling PVC
         Measure PVC deletion time after creation test
         """
-        number_of_pvc = 10
+        number_of_pvc = 1500
         log.info(f"Start creating {access_mode}-{interface} {number_of_pvc} PVC")
 
         if interface == constants.CEPHBLOCKPOOL:
@@ -132,7 +128,7 @@ class TestPVCCreationDeletionScale(E2ETest):
         will be created, i.e. 375 each pvc type
         Measure PVC deletion time in scale env
         """
-        number_of_pvc = 5
+        number_of_pvc = 375
         log.info(f"Start creating {number_of_pvc} PVC of all 4 types")
 
         cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
