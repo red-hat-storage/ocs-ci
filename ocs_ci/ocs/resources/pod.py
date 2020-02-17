@@ -469,7 +469,7 @@ def list_ceph_images(pool_name='rbd'):
     return ct_pod.exec_ceph_cmd(ceph_cmd=f"rbd ls {pool_name}", format='json')
 
 
-def check_file_existence(pod_obj, file_path, fedora_dc=None):
+def check_file_existence(pod_obj, file_path):
     """
     Check if file exists inside the pod
 
@@ -481,7 +481,10 @@ def check_file_existence(pod_obj, file_path, fedora_dc=None):
     Returns:
         bool: True if the file exist, False otherwise
     """
-    if fedora_dc:
+    try:
+        pod_obj.exec_cmd_on_pod("find")
+    except CommandFailed:
+        logging.info("find command not found. Installing findutils")
         pod_obj.install_packages("findutils")
     ret = pod_obj.exec_cmd_on_pod(f"bash -c \"find {file_path}\"")
     if re.search(file_path, ret):
@@ -627,7 +630,7 @@ def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=None):
     else:
         FILE = TEST_FILE
     test_file = FILE + "1"
-    assert check_file_existence(pod_obj, test_file, fedora_dc), (
+    assert check_file_existence(pod_obj, test_file), (
         f"I/O failed to start inside {pod_obj.name}"
     )
 
