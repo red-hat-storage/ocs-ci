@@ -11,6 +11,16 @@ import ibm_boto3
 logger = logging.getLogger(name=__file__)
 
 
+class CloudManager(ABC):
+    aws_client, google_client, azure_client, s3comp_client = (None,) * 4
+
+    def __init__(self):
+        self.aws_client = S3Client()
+        self.google_client = GoogleClient()
+        self.azure_client = AzureClient()
+        self.s3comp_client = S3Client()
+
+
 class CloudClient(ABC):
     """
         Base abstract class for Cloud based Underlying Storage
