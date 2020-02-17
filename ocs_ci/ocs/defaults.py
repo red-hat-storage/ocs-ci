@@ -37,9 +37,9 @@ LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
 LIVE_CONTENT_SOURCE = "redhat-operators"
 
 # Noobaa status output
-NOOBAA_STATUS_CONTENT_COUNT = [
-    'CustomResourceDefinition-5', 'Namespace-1', 'ServiceAccount-1', 'Role-1',
-    'RoleBinding-1', 'ClusterRole-1', 'ClusterRoleBinding-1', 'Deployment-1',
-    'NooBaa-1', 'StatefulSet-1', 'Service-2', 'Secret-3', 'StorageClass-1',
-    'BucketClass-1', 'PersistentVolumeClaim-1'
-]
+NOOBAA_STATUS_CONTENT_COUNT = {
+    'CustomResourceDefinition': 5, 'Namespace': 1, 'ServiceAccount': 1,
+    'Role': 1, 'RoleBinding': 1, 'ClusterRole': 1, 'ClusterRoleBinding': 1,
+    'Deployment': 1, 'NooBaa': 1, 'StatefulSet': 1, 'Service': 2, 'Secret': 3,
+    'StorageClass': 1, 'BucketClass': 1, 'PersistentVolumeClaim': 1
+}

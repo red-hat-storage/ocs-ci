@@ -28,10 +28,9 @@ def test_verify_noobaa_status():
     )
 
     # Verify noobaa status
-    for content in defaults.NOOBAA_STATUS_CONTENT_COUNT:
-        value, count = content.split('-')
-        assert int(count) == out.count(f'Exists: {value} '), (
-            f"Could not find expected match for {value} in noobaa status "
+    for content, count in defaults.NOOBAA_STATUS_CONTENT_COUNT.items():
+        assert count == out.count(f'Exists: {content} '), (
+            f"Could not find expected match for {content} in noobaa status "
             f"output. noobaa status:\n{out}"
         )
     assert 'System Phase is \\"Ready\\"' in out, (
