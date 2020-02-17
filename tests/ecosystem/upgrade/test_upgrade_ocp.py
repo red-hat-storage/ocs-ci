@@ -1,11 +1,9 @@
-import pytest
 import logging
 import json
 import time
 
 from ocs_ci.ocs import ocp
-from tests import sanity_helpers
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler
+from ocs_ci.utility.utils import run_cmd
 from ocs_ci.framework.testlib import ManageTest
 
 logger = logging.getLogger(__name__)
@@ -22,14 +20,6 @@ class TestUpgradeOCP(ManageTest):
        #TODO - shell not be ERROR. can be WARNING
     """
 
-    @pytest.fixture(autouse=True)
-    def init_sanity(self):
-        """
-        init Sanity() object
-        """
-
-        self.sanity_helpers = sanity_helpers.Sanity()
-
     def test_upgrade_ocp(self):
         """
 
@@ -37,16 +27,11 @@ class TestUpgradeOCP(ManageTest):
 
         """
         target_image = "4.3.0-0.nightly-2020-02-15-174639"
-        timeout_sampler = TimeoutSampler(
-            timeout=1800,
-            sleep=60,
-            func=self.check_upgrade_completed,
-            target_version=target_image
-            )
-        self.cluster_operators = ['monitoring', 'image-registry', 'network']
-        self.sanity_helpers.health_check()
+        self.cluster_operators = self.get_all_cluster_operators()
 
         logger.info(f" OC VERSION: {self.get_current_oc_version()}")
+
+        self.get_all_cluster_operators()
 
         # Upgrade OCP
 
@@ -60,11 +45,27 @@ class TestUpgradeOCP(ManageTest):
                 ver = self.get_cluster_operator_version(ocp_operator)
                 time.sleep(30)
 
-        if not timeout_sampler.wait_for_func_status(result=True):
-            logger.info("upgrade not completed")
+    def get_all_cluster_operators(self):
+        """
+        Get all ClusterOperators names in OCP
 
-        # check cluster health
-        assert self.sanity_helpers.health_check()
+        Returns:
+            list: cluster-operator names
+
+        """
+        ocp_obj = ocp.OCP(kind='ClusterOperator')
+        operator_info = ocp_obj.get("-o name", out_yaml_format=False, all_namespaces=True)
+        operators_full_names = str(operator_info).split()
+        operator_names = list()
+        for name in operators_full_names:
+            splitted = name.split('/')
+            for part in splitted:
+                if part == 'clusteroperator.config.openshift.io':
+                    splitted.remove(part)
+            operator_names.append(splitted[0])
+
+        logger.info(f"ClusterOperators full list: {operator_names}")
+        return operator_names
 
     def get_cluster_operator_version(self, cluster_operator_name):
         """
@@ -99,14 +100,16 @@ class TestUpgradeOCP(ManageTest):
     def upgrade_ocp(self, image):
         """
         upgrade OCP version
+
         Args:
             image (str): image to be installed
 
         """
-        run_cmd(
-            f"oc adm upgrade --to-image=registry.svc.ci.openshift.org/ocp/release:{image} "
+        ocp_o = ocp.OCP()
+        ocp_o.exec_oc_cmd(
+            f"adm upgrade --to-image=registry.svc.ci.openshift.org/ocp/release:{image} "
             f"--allow-explicit-upgrade --force "
-            )
+        )
         logger.info(f"Upgrading OCP to version: {image}")
 
         return 0
