@@ -4,6 +4,7 @@ import logging
 import datetime
 import threading
 import os
+import ast
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import CLEANUP_YAML, TEMPLATE_CLEANUP_DIR
@@ -38,9 +39,7 @@ def cleanup(cluster_name, cluster_id):
     run_cmd(f"{oc_bin} destroy cluster --dir {cleanup_path} --log-level=debug")
 
 
-def get_clusters_to_delete(
-    time_to_delete, region_name, prefixes_to_spare, max_running_time_for_spared
-):
+def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare):
     """
     Get all cluster names that their EC2 instances running time is greater
     than the specified time to delete
@@ -49,9 +48,9 @@ def get_clusters_to_delete(
         time_to_delete (int): The maximum time in seconds that is allowed
             for clusters to continue running
         region_name (str): The name of the AWS region to delete the resources from
-        prefixes_to_spare (list): The cluster prefixes to spare
-        max_running_time_for_spared (int): The maximum time in seconds that is allowed
-            for spared clusters to continue running
+        prefixes_hours_to_spare (list): Dictionaries of the cluster prefixes to spare
+            along with the maximum time in seconds that is allowed for spared
+            clusters to continue running
 
     Returns:
         tuple: List of the cluster names (e.g ebenahar-cluster-gqtd4) to be provided to the
@@ -78,10 +77,12 @@ def get_clusters_to_delete(
         if not vpc_instances:
             clusters_to_delete.append(cluster_name)
         for instance in vpc_instances:
+            allowed_running_time = time_to_delete
             if instance.state["Name"] == "running":
-                allowed_running_time = time_to_delete if any(
-                    prefix not in cluster_name for prefix in prefixes_to_spare
-                ) else max_running_time_for_spared
+                for prefix, hours in prefixes_hours_to_spare.items():
+                    if prefix in cluster_name:
+                        allowed_running_time = hours * 60 * 60
+                        break
                 launch_time = instance.launch_time
                 current_time = datetime.datetime.now(launch_time.tzinfo)
                 running_time = current_time - launch_time
@@ -137,17 +138,26 @@ def aws_cleanup():
     confirmation = input(
         'Careful! This action could be highly destructive. Are you sure you want to proceed? '
     )
+    prefixes_hours = input(
+        "If you would like the cleanup to spare specific cluster prefixes, "
+        "please enter them along with the time allowed for these to be kept "
+        "running.\nPress Enter if there are no prefixes to spare.\nAn example: "
+        "{\'prefix1\': 36, \'prefix2\': 48}\" "
+    )
     assert confirmation == defaults.CONFIRMATION_ANSWER, "Wrong confirmation answer. Exiting"
     time_to_delete = args.hours[0][0]
     assert time_to_delete > defaults.MINIMUM_CLUSTER_RUNNING_TIME_FOR_DELETION, (
         "Number of hours is lower than the required minimum. Exiting"
     )
+    if not prefixes_hours:
+        prefixes_hours_to_spare = defaults.CLUSTER_PREFIXES_TO_EXCLUDE_FROM_DELETION
+    else:
+        prefixes_hours_to_spare = eval(prefixes_hours)
     time_to_delete = time_to_delete * 60 * 60
     region = defaults.AWS_REGION if not args.region else args.region[0][0]
     clusters_to_delete, cloudformation_vpcs = get_clusters_to_delete(
         time_to_delete=time_to_delete, region_name=region,
-        prefixes_to_spare=defaults.CLUSTER_PREFIXES_TO_EXCLUDE_FROM_DELETION,
-        max_running_time_for_spared=defaults.MAXIMUM_CLUSTER_RUNNING_TIME_FOR_DELETION * 60 * 60
+        prefixes_hours_to_spare=prefixes_hours_to_spare,
     )
 
     if not clusters_to_delete:
