@@ -577,6 +577,7 @@ class AWSUPI(AWSBase):
         repo = os.path.join(
             constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo"
         )
+        assert os.path.exists(repo), f"Required repo file {repo} doesn't exist!"
         repo_file = os.path.basename(repo)
         pod.upload(
             rhel_pod_obj.name, repo, repo_dst_path

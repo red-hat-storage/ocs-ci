@@ -1045,18 +1045,17 @@ def get_ocp_version(seperator=None):
 
     Args:
         seperator (str): String that would seperate major and
-        minor version nubers
+            minor version nubers
 
     Returns:
         string : If seperator is 'None', version string will be returned as is
-        eg: '4.2', '4.3'.
-        If seperator is provided then '.' in the version string would be
-        replaced by seperator and resulting string will be returned.
-        eg: If seperator is '_' then string returned would be '4_2'
+            eg: '4.2', '4.3'.
+            If seperator is provided then '.' in the version string would be
+            replaced by seperator and resulting string will be returned.
+            eg: If seperator is '_' then string returned would be '4_2'
 
     """
     char = seperator if seperator else '.'
-    log.info(config.DEPLOYMENT['installer_version'])
     return char.join(
         config.DEPLOYMENT['installer_version'].split('.')[: -2]
     )
