@@ -537,11 +537,7 @@ class CephCluster(object):
         iops_in_cluster = self.get_ceph_cluster_iops()
         osd_iops_limit = iops_per_osd * osd_count
         iops_percentage = (iops_in_cluster / osd_iops_limit) * 100
-        if iops_in_cluster >= osd_iops_limit:
-            logger.warning(f"The IOPS in the cluster is {iops_in_cluster} "
-                           f"has exceeded the limit {osd_iops_limit}")
-        else:
-            logging.info(f"The IOPS percentage of the cluster is {iops_percentage}%")
+        logging.info(f"The IOPS percentage of the cluster is {iops_percentage}%")
         return iops_percentage
 
     def get_cluster_throughput(self):
@@ -558,13 +554,13 @@ class CephCluster(object):
                 throughput_data = item.strip('client: ').split(",")
                 throughput_data = throughput_data[:2:1]
                 # Converting all B/s and KiB/s to MiB/s
-                conversion = {'B/s': 0.000000976562, 'KiB/s': 0.000976562}
+                conversion = {'B/s': 0.000000976562, 'KiB/s': 0.000976562, 'MiB/s': 1}
                 throughput = 0
                 for val in throughput_data:
                     throughput += [float(re.findall(r'\d+', val)[0]) * conversion[key]
                                    for key in conversion.keys() if key in val][0]
                     logger.info(f"The throughput is {throughput} MiB/s")
-                    return throughput
+                return throughput
 
     def get_throughput_percentage(self):
         """
@@ -576,11 +572,7 @@ class CephCluster(object):
 
         throughput_of_cluster = self.get_cluster_throughput()
         throughput_percentage = (throughput_of_cluster / constants.THROUGHPUT_LIMIT_OSD) * 100
-        if throughput_of_cluster >= constants.THROUGHPUT_LIMIT_OSD:
-            logger.warning(f"The throughput in cluster is {throughput_of_cluster}"
-                           f" has exceeded the limit {constants.THROUGHPUT_LIMIT_OSD}")
-        else:
-            logging.info(f"The throughput percentage of the cluster is {throughput_percentage}%")
+        logging.info(f"The throughput percentage of the cluster is {throughput_percentage}%")
         return throughput_percentage
 
 

@@ -381,7 +381,8 @@ RBD_INTERFACE = 'rbd'
 CEPHFS_INTERFACE = 'cephfs'
 RAW_BLOCK_DEVICE = '/dev/rbdblock'
 
-# Constant values for IOPS and Throughput
+# Constant values for IOPS and Throughput is set
+# considering gp2 interface, EBS volumes and EC2 instances
 IOPS_FOR_1TiB_OSD = 3000
 THROUGHPUT_LIMIT_OSD = 250
 
