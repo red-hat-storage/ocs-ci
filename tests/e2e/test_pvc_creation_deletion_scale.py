@@ -15,10 +15,9 @@ log = logging.getLogger(__name__)
 
 
 @scale
-@ignore_leftovers
-class TestPVCCreationScale(E2ETest):
+class TestPVCCreationDeletionScale(E2ETest):
     """
-    Base class for PVC scale creation
+    Base class for PVC scale creation and deletion
     """
     @pytest.fixture()
     def namespace(self, project_factory):
@@ -50,12 +49,12 @@ class TestPVCCreationScale(E2ETest):
         ]
     )
     @pytest.mark.usefixtures(namespace.__name__)
-    def test_1500_pvc_creation_scale(self, namespace, access_mode, interface):
+    def test_1500_pvc_creation_deletion_scale(self, namespace, access_mode, interface):
         """
         Measuring PVC creation time while scaling PVC
         Measure PVC deletion time after creation test
         """
-        number_of_pvc = 1500
+        number_of_pvc = 10
         log.info(f"Start creating {access_mode}-{interface} {number_of_pvc} PVC")
 
         if interface == constants.CEPHBLOCKPOOL:
@@ -127,13 +126,13 @@ class TestPVCCreationScale(E2ETest):
 
     @polarion_id('OCS-1885')
     @pytest.mark.usefixtures(namespace.__name__)
-    def test_all_4_type_pvc_creation_scale(self, namespace):
+    def test_all_4_type_pvc_creation_deletion_scale(self, namespace):
         """
         Measuring PVC creation time while scaling PVC of all 4 types, Total 1500 PVCs
         will be created, i.e. 375 each pvc type
         Measure PVC deletion time in scale env
         """
-        number_of_pvc = 375
+        number_of_pvc = 5
         log.info(f"Start creating {number_of_pvc} PVC of all 4 types")
 
         cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
