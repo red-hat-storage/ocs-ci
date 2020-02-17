@@ -4,7 +4,6 @@ import logging
 import datetime
 import threading
 import os
-import ast
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import CLEANUP_YAML, TEMPLATE_CLEANUP_DIR
