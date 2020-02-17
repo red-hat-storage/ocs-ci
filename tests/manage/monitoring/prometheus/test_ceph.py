@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 @tier4a
 @pytest.mark.polarion_id("OCS-903")
 @pytest.mark.skip(reason="measure_corrupt_pg fixture makes current test runs unstable")
-def test_corrupt_pg_alerts(measure_corrupt_pg):
+def corrupt_pg_alerts(measure_corrupt_pg):
     """
     Test that there are appropriate alerts when Placement group
     on one OSD is corrupted.ceph manager
