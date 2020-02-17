@@ -1039,6 +1039,29 @@ def get_csi_versions():
     return csi_versions
 
 
+def get_ocp_version(seperator=None):
+    """
+    Get current ocp version
+
+    Args:
+        seperator (str): String that would seperate major and
+        minor version nubers
+
+    Returns:
+        string : If seperator is 'None', version string will be returned as is
+        eg: '4.2', '4.3'.
+        If seperator is provided then '.' in the version string would be
+        replaced by seperator and resulting string will be returned.
+        eg: If seperator is '_' then string returned would be '4_2'
+
+    """
+    char = seperator if seperator else '.'
+
+    return f'{char}'.join(
+        config.DEPLOYMENT.get('installer_verison').split('.')[: -2]
+    )
+
+
 def parse_pgsql_logs(data):
     """
     Parse the pgsql benchmark data from ripsaw and return

@@ -476,8 +476,6 @@ config_keys_patterns_to_censor = ['passw', 'token', 'secret']
 
 # repos
 OCP4_2_REPO = os.path.join(REPO_DIR, "ocp_4_2.repo")
-OCP4_3_REPO = os.path.join(REPO_DIR, "ocp_4_3.repo")
-OCP_REPO_MAP = {'4.2': OCP4_2_REPO, '4.3': OCP4_3_REPO}
 
 # packages
 RHEL_POD_PACKAGES = ["openssh-clients", "openshift-ansible", "openshift-clients", "jq"]
