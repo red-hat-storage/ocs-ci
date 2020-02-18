@@ -476,6 +476,7 @@ config_keys_patterns_to_censor = ['passw', 'token', 'secret']
 
 # repos
 OCP4_2_REPO = os.path.join(REPO_DIR, "ocp_4_2.repo")
+OCP4_3_REPO = os.path.join(REPO_DIR, "ocp_4_3.repo")
 
 # packages
 RHEL_POD_PACKAGES = ["openssh-clients", "openshift-ansible", "openshift-clients", "jq"]
@@ -527,7 +528,8 @@ WORKER_LABEL = "node-role.kubernetes.io/worker"
 
 # Rep mapping
 REPO_MAPPING = {
-    '4.2.0': OCP4_2_REPO
+    '4.2.0': OCP4_2_REPO,
+    '4.3.0': OCP4_3_REPO
 }
 
 # Cluster name limits
