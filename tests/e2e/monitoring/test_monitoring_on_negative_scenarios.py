@@ -3,7 +3,7 @@ import time
 import pytest
 
 from ocs_ci.ocs import ocp, constants, defaults
-from ocs_ci.framework.testlib import workloads, E2ETest, ignore_leftovers, tier4
+from ocs_ci.framework.testlib import workloads, E2ETest, ignore_leftovers
 from ocs_ci.ocs.resources import pod
 from tests.helpers import wait_for_resource_state, default_storage_class, modify_osd_replica_count
 from tests.disruption_helpers import Disruptions
@@ -63,7 +63,6 @@ def wait_for_nodes_status_and_prometheus_health_check(pods):
     assert prometheus_health_check(), "Prometheus health is degraded"
 
 
-@tier4
 @ignore_leftovers
 @workloads
 class TestMonitoringBackedByOCS(E2ETest):
