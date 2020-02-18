@@ -731,6 +731,7 @@ def dc_pod_factory(
         service_account=None,
         size=None,
         custom_data=None,
+        node_name=None,
         replica_count=1,
     ):
         """
@@ -744,6 +745,7 @@ def dc_pod_factory(
             custom_data (dict): If provided then Pod object is created
                 by using these data. Parameter `pvc` is not used but reference
                 is set if provided.
+            node_name (str): The name of specific node to schedule the pod
             replica_count (int): Replica count for deployment config
         """
         if custom_data:
@@ -755,7 +757,7 @@ def dc_pod_factory(
             dc_pod_obj = helpers.create_pod(
                 interface_type=interface, pvc_name=pvc.name, do_reload=False,
                 namespace=pvc.namespace, sa_name=sa_obj.name, dc_deployment=True,
-                replica_count=replica_count
+                replica_count=replica_count, node_name=node_name
             )
         instances.append(dc_pod_obj)
         log.info(dc_pod_obj.name)
