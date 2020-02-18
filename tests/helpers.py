@@ -2233,4 +2233,3 @@ def validate_pod_oomkilled(
         )
 
     return rc
-
