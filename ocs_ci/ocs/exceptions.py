@@ -144,3 +144,7 @@ class UnsupportedBrowser(Exception):
 
 class OpenshiftConsoleSuiteNotDefined(Exception):
     pass
+
+
+class ServiceUnavailable(Exception):
+    pass
