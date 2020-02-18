@@ -1,4 +1,6 @@
+import os
 import logging
+import yaml
 from copy import deepcopy
 from tempfile import NamedTemporaryFile
 from time import sleep
@@ -129,9 +131,29 @@ def test_upgrade():
         resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
         namespace=constants.MARKETPLACE_NAMESPACE,
     )
+    version_before_upgrade = config.ENV_DATA.get("ocs_version")
+    upgrade_version = config.UPGRADE.get(
+        "upgrade_ocs_version", version_before_upgrade
+    )
+    version_change = version_before_upgrade != upgrade_version
+    if version_change:
+        version_config_file = os.path.join(
+            constants.CONF_DIR, 'ocs_version', f'ocs-{upgrade_version}.yaml'
+        )
+        assert os.path.exists(version_config_file), (
+            f"OCS version config file {version_config_file} doesn't exist!"
+        )
+        with open(
+            os.path.abspath(os.path.expanduser(version_config_file))
+        ) as file_stream:
+            custom_config_data = yaml.safe_load(file_stream)
+            config.update(custom_config_data)
     image_url = ocs_catalog.get_image_url()
     image_tag = ocs_catalog.get_image_name()
-    if config.DEPLOYMENT.get('upgrade_to_latest', True):
+    ocs_registry_image = config.UPGRADE.get('upgrade_ocs_registry_image')
+    if ocs_registry_image:
+        image_url, image_tag = ocs_registry_image.split(':')
+    elif config.UPGRADE.get('upgrade_to_latest', True) or version_change:
         new_image_tag = get_latest_ds_olm_tag()
     else:
         new_image_tag = get_next_version_available_for_upgrade(image_tag)
