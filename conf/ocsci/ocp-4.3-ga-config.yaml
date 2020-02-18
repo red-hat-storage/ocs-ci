@@ -2,8 +2,10 @@
 # This configuration contains OCP GA version related config
 
 RUN:
-  client_version: '4.2.16'
+  client_version: '4.3.1'
 
 DEPLOYMENT:
   ocp_url_template: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{version}/{file_name}-{os_type}-{version}.tar.gz"
-  installer_version: "4.2.16"
+  installer_version: "4.3.1"
+ENV_DATA:
+  vm_template: 'rhcos-4.3.0-x86_64-vmware'
