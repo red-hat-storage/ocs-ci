@@ -138,9 +138,10 @@ def aws_cleanup():
         'Careful! This action could be highly destructive. Are you sure you want to proceed? '
     )
     prefixes_hours = input(
+        "Press Enter if there are no cluster prefixes to spare.\n"
         "If you would like the cleanup to spare specific cluster prefixes, "
         "please enter them along with the time allowed for these to be kept "
-        "running.\nPress Enter if there are no prefixes to spare.\nAn example: "
+        "running, in a dictionary representation.\nAn example: "
         "{\'prefix1\': 36, \'prefix2\': 48}\" "
     )
     assert confirmation == defaults.CONFIRMATION_ANSWER, "Wrong confirmation answer. Exiting"
