@@ -284,9 +284,10 @@ def pytest_collection_modifyitems(session, config, items):
             marker = item.get_closest_marker(name="polarion_id")
             if marker:
                 polarion_id = marker.args[0]
-                item.user_properties.append(
-                    ("polarion-testcase-id", polarion_id)
-                )
+                if polarion_id:
+                    item.user_properties.append(
+                        ("polarion-testcase-id", polarion_id)
+                    )
         except IndexError:
             log.warning(
                 f"polarion_id marker found with no value for "
