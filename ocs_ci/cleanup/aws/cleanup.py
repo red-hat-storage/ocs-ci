@@ -47,8 +47,8 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
         time_to_delete (int): The maximum time in seconds that is allowed
             for clusters to continue running
         region_name (str): The name of the AWS region to delete the resources from
-        prefixes_hours_to_spare (list): Dictionaries of the cluster prefixes to spare
-            along with the maximum time in seconds that is allowed for spared
+        prefixes_hours_to_spare (dict): Dictionaries of the cluster prefixes to spare
+            along with the maximum time in hours that is allowed for spared
             clusters to continue running
 
     Returns:
