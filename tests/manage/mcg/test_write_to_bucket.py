@@ -1,10 +1,11 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 import boto3
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    filter_insecure_request_warning
+    filter_insecure_request_warning, vsphere_platform_required
 )
 from ocs_ci.framework.testlib import (
     ManageTest, tier1, tier2, tier3, acceptance
@@ -16,6 +17,19 @@ logger = logging.getLogger(__name__)
 
 PUBLIC_BUCKET = "1000genomes"
 LARGE_FILE_KEY = "1000G_2504_high_coverage/data/ERR3239276/NA06985.final.cram"
+
+
+def pod_io(pods):
+    """
+    Running IOs on rbd and cephfs pods
+
+    Args:
+        pods (Pod): List of pods
+
+    """
+    with ThreadPoolExecutor() as p:
+        for pod in pods:
+            p.submit(pod.run_io, 'fs', '1G')
 
 
 @filter_insecure_request_warning
@@ -192,3 +206,49 @@ class TestBucketIO(ManageTest):
         )
         test_set = set('test' + str(i + 1) for i in range(1000))
         assert test_set == obj_set, "File name set does not match"
+
+    @pytest.fixture()
+    def setup_rbd_cephfs_pods(self, multi_pvc_factory, pod_factory):
+        """
+        This fixture setups the required rbd and cephfs pvcs and pods
+
+        """
+        pvc_objs_rbd = multi_pvc_factory(
+            interface=constants.CEPHBLOCKPOOL, size=2, num_of_pvc=5
+        )
+        ns = pvc_objs_rbd[0].project
+
+        pvc_objs_cephfs = multi_pvc_factory(
+            interface=constants.CEPHFILESYSTEM, size=2, num_of_pvc=5, project=ns
+        )
+
+        pods = []
+        for pvc in pvc_objs_rbd:
+            pods.append(pod_factory(
+                interface=constants.CEPHBLOCKPOOL, pvc=pvc)
+            )
+
+        for pvc in pvc_objs_cephfs:
+            pods.append(pod_factory(
+                interface=constants.CEPHFILESYSTEM, pvc=pvc)
+            )
+
+        return pods
+
+    @vsphere_platform_required
+    @tier2
+    @pytest.mark.polarion_id("OCS-2040")
+    def test_write_to_bucket_rbd_cephfs(self, verify_rgw_restart_count, setup_rbd_cephfs_pods,
+                                        mcg_obj, awscli_pod, bucket_factory
+                                        ):
+        """
+        Test RGW restarts after running s3, rbd and cephfs IOs in parallel
+
+        """
+        bucketname = bucket_factory(1)[0].name
+        full_object_path = f"s3://{bucketname}"
+        target_dir = '/data/'
+        helpers.retrieve_test_objects_to_pod(awscli_pod, target_dir)
+        with ThreadPoolExecutor() as p:
+            p.submit(pod_io, setup_rbd_cephfs_pods)
+            p.submit(helpers.sync_object_directory(awscli_pod, target_dir, full_object_path, mcg_obj))
