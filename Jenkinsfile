@@ -16,6 +16,8 @@
 //   EMAIL
 //   UMB_MESSAGE
 //   DEBUG_CLUSTER
+def LAST_STAGE
+
 pipeline {
   agent { node { label "ocs-ci" }}
   environment {
@@ -29,6 +31,7 @@ pipeline {
   stages {
     stage("Setup") {
       steps {
+        script { LAST_STAGE=env.STAGE_NAME }
         sh """
           if [ ! -z '${env.EMAIL}' ]; then
             sudo yum install -y /usr/sbin/postfix
@@ -49,6 +52,7 @@ pipeline {
     }
     stage("Lint") {
       steps {
+        script { LAST_STAGE=env.STAGE_NAME }
         sh """
           source ./venv/bin/activate
           tox -e flake8
@@ -57,6 +61,7 @@ pipeline {
     }
     stage("Unit test") {
       steps {
+        script { LAST_STAGE=env.STAGE_NAME }
         sh """
           source ./venv/bin/activate
           tox -e py36
@@ -65,6 +70,7 @@ pipeline {
     }
     stage("Deploy OCP") {
       steps {
+        script { LAST_STAGE=env.STAGE_NAME }
         sh """
         source ./venv/bin/activate
         run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocp.yaml --ocsci-conf=conf/ocsci/production-aws-ipi.yaml --ocsci-conf=conf/ocsci/production_device_size.yaml --cluster-name=${env.CLUSTER_USER}-ocsci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
@@ -73,6 +79,7 @@ pipeline {
     }
     stage("Deploy OCS") {
       steps {
+        script { LAST_STAGE=env.STAGE_NAME }
         sh """
         source ./venv/bin/activate
         run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocs.yaml --ocsci-conf=conf/ocsci/production-aws-ipi.yaml --cluster-name=${env.CLUSTER_USER}-ocsci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
@@ -87,6 +94,7 @@ pipeline {
         )}"""
       }
       steps {
+        script { LAST_STAGE=env.STAGE_NAME }
         sh """
         source ./venv/bin/activate
         run-ci -m acceptance --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocsci-${env.BUILD_ID} --cluster-path=cluster --self-contained-html --html=${env.WORKSPACE}/logs/report.html --junit-xml=${env.WORKSPACE}/logs/junit.xml --collect-logs --bugzilla ${env.EMAIL_ARG}
@@ -107,6 +115,18 @@ pipeline {
         run-ci -m deployment --teardown --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocsci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
         """
       junit testResults: "logs/junit.xml", keepLongStdio: false
+    }
+    failure {
+      script {
+        if ( LAST_STAGE != "Acceptance Tests" ) {
+          emailext (
+            subject: "Job '${env.JOB_NAME}' build #${env.BUILD_ID} failed during stage '${LAST_STAGE}'",
+            body: "Build failed : ${env.BUILD_URL}",
+            from: "${env.EMAIL}",
+            to: "${env.EMAIL}"
+          )
+        }
+      }
     }
     success {
       script {
