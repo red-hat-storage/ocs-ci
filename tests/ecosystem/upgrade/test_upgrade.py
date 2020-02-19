@@ -2,6 +2,7 @@ import os
 import logging
 import yaml
 from copy import deepcopy
+from pkg_resources import parse_version
 from tempfile import NamedTemporaryFile
 from time import sleep
 
@@ -135,7 +136,14 @@ def test_upgrade():
     upgrade_version = config.UPGRADE.get(
         "upgrade_ocs_version", version_before_upgrade
     )
-    version_change = version_before_upgrade != upgrade_version
+    parsed_version_before_upgrade = parse_version(version_before_upgrade)
+    parsed_upgrade_version = parse_version(upgrade_version)
+    assert parsed_upgrade_version >= parsed_version_before_upgrade, (
+        f"Version you would like to upgrade to: {parsed_upgrade_version} "
+        f"is not higher or equal to the version you currently running: "
+        f"{parsed_version_before_upgrade}"
+    )
+    version_change = parsed_version_before_upgrade > parsed_upgrade_version
     if version_change:
         version_config_file = os.path.join(
             constants.CONF_DIR, 'ocs_version', f'ocs-{upgrade_version}.yaml'
