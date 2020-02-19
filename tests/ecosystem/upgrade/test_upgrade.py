@@ -139,11 +139,11 @@ def test_upgrade():
     parsed_version_before_upgrade = parse_version(version_before_upgrade)
     parsed_upgrade_version = parse_version(upgrade_version)
     assert parsed_upgrade_version >= parsed_version_before_upgrade, (
-        f"Version you would like to upgrade to: {parsed_upgrade_version} "
+        f"Version you would like to upgrade to: {upgrade_version} "
         f"is not higher or equal to the version you currently running: "
-        f"{parsed_version_before_upgrade}"
+        f"{version_before_upgrade}"
     )
-    version_change = parsed_version_before_upgrade > parsed_upgrade_version
+    version_change = parsed_upgrade_version > parsed_version_before_upgrade
     if version_change:
         version_config_file = os.path.join(
             constants.CONF_DIR, 'ocs_version', f'ocs-{upgrade_version}.yaml'
