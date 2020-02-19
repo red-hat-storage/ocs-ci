@@ -83,7 +83,7 @@ class TestBucketCreation:
             ),
         ]
     )
-    def test_bucket_creation(self, mcg_obj, bucket_factory, amount, interface):
+    def test_bucket_creation(self, verify_rgw_restart_count, mcg_obj, bucket_factory, amount, interface):
         """
         Test bucket creation using the S3 SDK, OC command or MCG CLI
         """

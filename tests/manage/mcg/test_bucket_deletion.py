@@ -70,7 +70,7 @@ class TestBucketDeletion:
             ),
         ]
     )
-    def test_bucket_delete(self, mcg_obj, bucket_factory, amount, interface):
+    def test_bucket_delete(self, verify_rgw_restart_count, mcg_obj, bucket_factory, amount, interface):
         """
         Test deletion of bucket using the S3 SDK, MCG CLI and OC
         """
