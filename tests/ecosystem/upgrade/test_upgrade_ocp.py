@@ -5,8 +5,14 @@ import time
 from ocs_ci.ocs import ocp
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.framework.testlib import ManageTest
+from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.exceptions import CephHealthException
 
 logger = logging.getLogger(__name__)
+
+# TODO: add automatic image finder
+# TODO: add image type validation (ga to ga , nightly to nightly, newer than current etc.)
+# TODO: receive image as external argument
 
 
 class TestUpgradeOCP(ManageTest):
@@ -14,10 +20,9 @@ class TestUpgradeOCP(ManageTest):
     1. check cluster health
     2. check OCP version
     3. perform OCP upgrade
-    4. check OCP upgrade process by images (registry, logging, monitoring)
+    4. check all OCP ClusterOperators
     5. check OCP version
-    5. check cluster health:
-       #TODO - shell not be ERROR. can be WARNING
+    5. monitor cluster health
     """
 
     def test_upgrade_ocp(self):
@@ -26,10 +31,12 @@ class TestUpgradeOCP(ManageTest):
         Tests OCS stability when upgrading OCP
 
         """
-        target_image = "4.3.0-0.nightly-2020-02-15-174639"
+        target_image = "4.3.0-0.nightly-2020-02-17-205936"
         self.cluster_operators = self.get_all_cluster_operators()
+        ceph_cluster = CephCluster()
+        ceph_cluster.enable_health_monitor()
 
-        logger.info(f" OC VERSION: {self.get_current_oc_version()}")
+        logger.info(f" oc version: {self.get_current_oc_version()}")
 
         self.get_all_cluster_operators()
 
@@ -39,11 +46,25 @@ class TestUpgradeOCP(ManageTest):
 
         # Wait for upgrade
         for ocp_operator in self.cluster_operators:
+            logger.info(f"Checking upgrade status of {ocp_operator}:")
             ver = self.get_cluster_operator_version(ocp_operator)
             logger.info(f"current {ocp_operator} version: {ver}")
-            while ver != target_image:
-                ver = self.get_cluster_operator_version(ocp_operator)
-                time.sleep(30)
+            for attempt in range(1, 100):
+                logger.info(f"***** Attempt: {attempt} out of 100 *****")
+                if ver != target_image:
+                    ver = self.get_cluster_operator_version(ocp_operator)
+                    logger.info(f"ver: {ver}, target_image: {target_image}")
+                    time.sleep(30)
+                elif ver == target_image:
+                    break
+
+        # validate cluster status and health
+        ceph_cluster.disable_health_monitor()
+        if ceph_cluster.health_error_status:
+            CephHealthException(
+                f"During upgrade hit Ceph HEALTH_ERROR: "
+                f"{ceph_cluster.health_error_status}"
+            )
 
     def get_all_cluster_operators(self):
         """
@@ -82,7 +103,11 @@ class TestUpgradeOCP(ManageTest):
         operator_info = ocp_obj.get(cluster_operator_name)
         operator_status = operator_info.get('status')
 
-        return operator_status.get('versions')[0]['version']
+        version = operator_status.get('versions')[0]['version']
+        if version.endswith('_openshift'):
+            return version[:-10]
+        else:
+            return version
 
     def get_current_oc_version(self):
         """
