@@ -15,7 +15,7 @@ from tests import helpers, disruption_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.utility.retry import retry
-from ocs_ci.framework.testlib import E2ETest, workloads, tier4, ignore_leftovers
+from ocs_ci.framework.testlib import E2ETest, workloads, tier1, ignore_leftovers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility import templating
@@ -169,7 +169,7 @@ class Test_openshift_logging_on_ocs(E2ETest):
         return elasticsearch_pod_obj
 
     @pytest.mark.polarion_id("OCS-657")
-    @workloads
+    @tier1
     def test_create_new_project_to_verify_logging(self, create_pvc_and_deploymentconfig_pod):
         """
         This function creates new project to verify logging in EFK stack
@@ -188,7 +188,7 @@ class Test_openshift_logging_on_ocs(E2ETest):
         self.validate_project_exists(pvc_obj)
 
     @pytest.mark.polarion_id("OCS-650")
-    @tier4
+    @workloads
     def test_respin_osd_pods_to_verify_logging(self, create_pvc_and_deploymentconfig_pod):
         """
         This function creates projects before and after respin of osd
@@ -245,7 +245,7 @@ class Test_openshift_logging_on_ocs(E2ETest):
         logger.info(f'Total number of files in the project 2 {project2_filecount}')
 
     @pytest.mark.polarion_id("OCS-651")
-    @tier4
+    @workloads
     def test_respin_elasticsearch_pod(self, create_pvc_and_deploymentconfig_pod):
         """
         Test to verify respin of elasticsearch pod has no functional impact
