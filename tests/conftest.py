@@ -1586,13 +1586,13 @@ def verify_rgw_restart_count_fixture(request):
     Verifies the RGW restart count at start and end of a test
     """
     if config.ENV_DATA['platform'].lower() == 'vsphere':
-        logger.info("Getting RGW pod restart count before executing the test")
+        log.info("Getting RGW pod restart count before executing the test")
         initial_count = get_rgw_restart_count()
 
         def finalizer():
             rgw_pod = get_rgw_pod()
             rgw_pod.reload()
-            logger.info("Verifying whether RGW pod changed after executing the test")
+            log.info("Verifying whether RGW pod changed after executing the test")
             assert rgw_pod.restart_count == initial_count, 'RGW pod restarted'
 
         request.addfinalizer(finalizer)
