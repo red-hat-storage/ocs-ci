@@ -13,8 +13,8 @@ def check_max_osds_per_node(max_number_osds=2):
     Args:
         max_number_osds (int): upper bound
 
-    Returns:
-        True when satisfied, raises UnexpectedBehaviour otherwise
+    Raises:
+        UnexpectedBehaviour if number of osds is exceeded
 
     """
     osd_on_node_count = {}
@@ -26,4 +26,3 @@ def check_max_osds_per_node(max_number_osds=2):
             raise UnexpectedBehaviour(
                 f"Node {node_name} runs {count} OSDs, maximum {max_number_osds} is allowed "
             )
-    return True
