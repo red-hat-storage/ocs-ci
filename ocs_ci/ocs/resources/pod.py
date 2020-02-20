@@ -23,6 +23,7 @@ from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd, check_timeout_reached
+from ocs_ci.utility.utils import check_if_executable_in_path
 
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
@@ -505,9 +506,8 @@ def check_file_existence(pod_obj, file_path):
         bool: True if the file exist, False otherwise
     """
     try:
-        pod_obj.exec_cmd_on_pod("find")
+        check_if_executable_in_path(pod_obj.exec_cmd_on_pod("which find"))
     except CommandFailed:
-        logging.info("find command not found. Installing findutils")
         pod_obj.install_packages("findutils")
     ret = pod_obj.exec_cmd_on_pod(f"bash -c \"find {file_path}\"")
     if re.search(file_path, ret):
