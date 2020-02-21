@@ -784,7 +784,8 @@ def workload_storageutilization_50p_rbd(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        supported_configuration):
     target_percentage = 0.5
     fixture_name = "workload_storageutilization_50p_rbd"
     measured_op = workload_fio_storageutilization(
@@ -806,7 +807,8 @@ def workload_storageutilization_85p_rbd(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        supported_configuration):
     target_percentage = 0.85
     fixture_name = "workload_storageutilization_85p_rbd"
     measured_op = workload_fio_storageutilization(
@@ -828,7 +830,8 @@ def workload_storageutilization_95p_rbd(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        supported_configuration):
     target_percentage = 0.95
     fixture_name = "workload_storageutilization_95p_rbd"
     measured_op = workload_fio_storageutilization(
@@ -850,7 +853,8 @@ def workload_storageutilization_50p_cephfs(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        supported_configuration):
     target_percentage = 0.5
     fixture_name = "workload_storageutilization_50p_cephfs"
     measured_op = workload_fio_storageutilization(
@@ -872,7 +876,8 @@ def workload_storageutilization_85p_cephfs(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        supported_configuration):
     target_percentage = 0.85
     fixture_name = "workload_storageutilization_85p_cephfs"
     measured_op = workload_fio_storageutilization(
@@ -894,7 +899,8 @@ def workload_storageutilization_95p_cephfs(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        supported_configuration):
     target_percentage = 0.95
     fixture_name = "workload_storageutilization_95p_cephfs"
     measured_op = workload_fio_storageutilization(
