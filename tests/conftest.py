@@ -72,9 +72,9 @@ def supported_configuration():
     node_obj = ocp.OCP(kind=constants.NODE)
     log.debug('Checking if system meets minimal requirements')
     nodes = node_obj.get().get('items')
-    for node in nodes:
-        real_cpu = int(node.get('status').get('capacity').get('cpu'))
-        real_memory = node.get('status').get('capacity').get('memory')
+    for node_info in nodes:
+        real_cpu = int(node_info.get('status').get('capacity').get('cpu'))
+        real_memory = node_info.get('status').get('capacity').get('memory')
         if real_memory.endswith('Ki'):
             real_memory = int(real_memory[0:-2]) * 2**10
         elif real_memory.endswith('Mi'):
@@ -88,7 +88,7 @@ def supported_configuration():
 
         if (real_cpu <= min_cpu or real_memory <= min_memory):
             pytest.xfail(
-                f"Node {node.get('metadata').get('name')} doesn't have "
+                f"Node {node_info.get('metadata').get('name')} doesn't have "
                 f"minimum of required reasources for running the test:\n"
                 f"{min_cpu} CPU and {min_memory} Memory\nIt has:\n{real_cpu} "
                 f"CPU and {real_memory} Memory"
