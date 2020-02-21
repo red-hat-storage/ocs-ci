@@ -765,7 +765,10 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True):
     )
 
     if ocs:
-        latest_tag = ocsci_config.DEPLOYMENT['default_latest_tag']
+        latest_tag = ocsci_config.REPORTING.get(
+            'default_ocs_must_gather_latest_tag',
+            ocsci_config.DEPLOYMENT['default_latest_tag']
+        )
         ocs_log_dir_path = os.path.join(log_dir_path, 'ocs_must_gather')
         ocs_must_gather_image = ocsci_config.REPORTING['ocs_must_gather_image']
         ocs_must_gather_image_and_tag = f"{ocs_must_gather_image}:{latest_tag}"
