@@ -104,3 +104,7 @@ ENV_DATA:
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
   # Default RHCOS image to be used for VmWare deployment
   vm_template: 'rhcos-4.3.0-x86_64-vmware'
+
+# This section is related to upgrade
+UPGRADE:
+  upgrade_to_latest: true
