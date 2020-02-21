@@ -5,3 +5,5 @@ DEPLOYMENT:
 ENV_DATA:
   logging_version: '4.2'
   ocs_version: '4.2'
+REPORTING:
+  default_ocs_must_gather_latest_tag: 'latest-4.2'
