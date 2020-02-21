@@ -634,16 +634,23 @@ def get_pod_name_by_pattern(
     return pod_list
 
 
-def setup_ceph_toolbox():
+def setup_ceph_toolbox(force_setup=False):
     """
     Setup ceph-toolbox - also checks if toolbox exists, if it exists it
     behaves as noop.
+
+    Args:
+        force_setup (bool): force setup toolbox pod
+
     """
     namespace = ocsci_config.ENV_DATA['cluster_namespace']
     ceph_toolbox = get_pod_name_by_pattern('rook-ceph-tools', namespace)
     if len(ceph_toolbox) == 1:
         log.info("Ceph toolbox already exists, skipping")
-        return
+        if force_setup:
+            log.info("Running force setup for Ceph toolbox!")
+        else:
+            return
     if ocsci_config.ENV_DATA.get("ocs_version") == '4.2':
         rook_operator = get_pod_name_by_pattern(
             'rook-ceph-operator', namespace
