@@ -6,14 +6,15 @@ from pkg_resources import parse_version
 from tempfile import NamedTemporaryFile
 from time import sleep
 
+
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import upgrade
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
 from ocs_ci.ocs.exceptions import CephHealthException, TimeoutException
 from ocs_ci.ocs.node import get_typed_nodes
 from ocs_ci.ocs.ocp import get_images
-from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -24,6 +25,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
     PackageManifest,
 )
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
+from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.utility.utils import (
     get_latest_ds_olm_tag,
     get_next_version_available_for_upgrade,
@@ -209,6 +211,9 @@ def test_upgrade():
     log.info(
         f"Waiting for CSV {csv_name_post_upgrade} to be in succeeded state"
     )
+    if version_before_upgrade == '4.2' and upgrade_version == '4.3':
+        log.info("Force creating Ceph toolbox after upgrade 4.2 -> 4.3")
+        setup_ceph_toolbox(force_setup=True)
     csv_post_upgrade.wait_for_phase("Succeeded", timeout=600)
     post_upgrade_images = get_images(csv_post_upgrade.get())
     old_images, _, _ = get_upgrade_image_info(
