@@ -21,7 +21,7 @@ There are additional prerequisites if you plan to execute AWS UPI deployments
 
 1. Install the `jq` and `awscli` system packages
 
-#### AWS UPI with RHEL workers
+##### AWS UPI with RHEL workers
 Along with AWS UPI prerequisites we need following
 
 1. openshift-dev.pem needs to be availavle to ocs-ci
@@ -117,6 +117,25 @@ If you don't want to use the shared key, you can change this value to
 > If the public key does not exist, the deployment of this public key is skipped.
 
 How to connect to the node via SSH you can find [here](./debugging.md).
+
+### Authentication Config
+
+For some services we will require additional information in order to
+successfully authenticate. This is a simple yaml file that you will need to
+create manually. For now the only service that requires this is docker hub,
+however this may be extended to other services as needed.
+
+Create a file under `ocs-ci/data/` named `auth.yaml`
+
+The format is as follows, where <YOUR_USER> is your docker hub username and
+<YOUR_TOKEN> is an access token you will have to create manually in the
+[docker hub account security page](https://hub.docker.com/settings/security).
+
+```yaml
+docker_hub:
+  user: <YOUR_USER>
+  token: <YOUR_TOKEN>
+```
 
 ## Tests
 

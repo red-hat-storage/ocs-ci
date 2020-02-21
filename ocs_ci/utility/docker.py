@@ -1,6 +1,8 @@
 import logging
+import os
 
 import requests
+import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -109,8 +111,30 @@ def get_ocs_registry_docker_image_manifests():
 
     """
     # retrieve auth token
-    docker_user = ''  # todo: retrieve from config, probably RUN section
-    docker_token = ''  # todo: retrieve from config, probably RUN section
+    config_path = os.path.join(constants.TOP_DIR, 'data', 'auth.yaml')
+    doc_url = (
+        'https://ocs-ci.readthedocs.io/en/latest/docs/getting_started.html'
+        '#authentication-config'
+    )
+    try:
+        with open(config_path) as f:
+            auth_config = yaml.safe_load(f)
+        docker_user = auth_config['docker_hub']['user']
+        docker_token = auth_config['docker_hub']['token']
+    except FileNotFoundError:
+        logger.error(
+            'Unable to find the authentication configuration at %s, '
+            'please refer to the getting started guide (%s)',
+            config_path, doc_url
+        )
+        raise
+    except KeyError:
+        logger.error(
+            'Unable to retrieve user/token for docker hub, please refer to '
+            'the getting started guide (%s) to properly setup your '
+            'authentication configuration', doc_url
+        )
+        raise
     url = 'https://auth.docker.io/token'
     params = {
         'service': 'registry.docker.io',
