@@ -53,6 +53,48 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
+@pytest.fixture()
+def supported_configuration():
+    """
+    Check that cluster nodes have enough CPU and Memory as described in:
+    https://access.redhat.com/documentation/en-us/red_hat_openshift_container_storage/4.2/html-single/planning_your_deployment/index#infrastructure-requirements_rhocs
+    This fixture is intended as a prerequisite for tests or fixtures that
+    run flaky on configurations that don't meet minimal requirements.
+
+    Minimum requirements for each starting node (OSD+MON):
+        16 CPUs
+        64 GB memory
+    Last documentation check: 2020-02-21
+    """
+    min_cpu = 16
+    min_memory = 64 * 10**9
+
+    node_obj = ocp.OCP(kind=constants.NODE)
+    log.debug('Checking if system meets minimal requirements')
+    nodes = node_obj.get().get('items')
+    for node in nodes:
+        real_cpu = int(node.get('status').get('capacity').get('cpu'))
+        real_memory = node.get('status').get('capacity').get('memory')
+        if real_memory.endswith('Ki'):
+            real_memory = int(real_memory[0:-2]) * 2**10
+        elif real_memory.endswith('Mi'):
+            real_memory = int(real_memory[0:-2]) * 2**20
+        elif real_memory.endswith('Gi'):
+            real_memory = int(real_memory[0:-2]) * 2**30
+        elif real_memory.endswith('Ti'):
+            real_memory = int(real_memory[0:-2]) * 2**40
+        else:
+            real_memory = int(real_memory)
+
+        if (real_cpu <= min_cpu or real_memory <= min_memory):
+            pytest.xfail(
+                f"Node {node.get('metadata').get('name')} doesn't have "
+                f"minimum of required reasources for running the test:\n"
+                f"{min_cpu} CPU and {min_memory} Memory\nIt has:\n{real_cpu} "
+                f"CPU and {real_memory} Memory"
+            )
+
+
 @pytest.fixture(scope='class')
 def secret_factory_class(request):
     return secret_factory_fixture(request)
