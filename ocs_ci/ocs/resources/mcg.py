@@ -99,7 +99,7 @@ class MCG(object):
                 aws_secret_access_key=self.aws_access_key
             )
             logger.info('Checking whether RGW pod is not present on AWS platform')
-            pods = pod.get_rgw_pod()
+            pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
             assert len(pods) == 0, 'RGW pod should not exist on AWS platform'
 
         elif config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
