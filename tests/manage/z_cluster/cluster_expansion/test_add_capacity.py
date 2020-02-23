@@ -29,7 +29,4 @@ class TestAddCapacity(ManageTest):
        Args:
            capacity (int):the storage capacity as deviceSet number
        """
-        ans = storage_cluster.add_capacity(capacity)
-        assert ans(
-            logger.info("Test Failed")
-        )
+        assert storage_cluster.add_capacity(capacity), logger.info("Test Failed")

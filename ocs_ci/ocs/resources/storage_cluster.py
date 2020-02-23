@@ -2,8 +2,9 @@
 StorageCluster related functionalities
 """
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.ocp import OCP, log
-from ocs_ci.utility import utils
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.pod import get_osd_pods
+from tests.helpers import wait_for_resource_state
 
 
 class StorageCluster(OCP):
@@ -51,12 +52,11 @@ def add_capacity(capacity):
         format_type='json'
     )
 
-    # cluster health check
-    if utils.ceph_health_check:
-        log.info("Cluster is not OK")
-        return True
-    return False
-    # TODO - add another validations
+    # validations
+    osd_list = get_osd_pods
+    for pod in osd_list:
+        wait_for_resource_state(pod, 'Running')
+    return True
 
 
 def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
