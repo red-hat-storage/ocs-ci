@@ -19,7 +19,7 @@ class TestAddCapacity(ManageTest):
             "capacity"
         ],
         argvalues=[
-            pytest.param(*['2040Gi'], marks=[polarion_id(''), tier3]),
+            pytest.param(*[1], marks=[polarion_id(''), tier3]),
         ]
     )
     def test_add_capacity(self, capacity):
@@ -27,11 +27,9 @@ class TestAddCapacity(ManageTest):
        Test to add variable capacity to the OSD cluster while IOs running
 
        Args:
-           capacity (String):the storage capacity of each OSD
-           expected (Boolean): Expected boolean statment from add_capacity function
+           capacity (int):the storage capacity as deviceSet number
        """
-        storage_cluster.add_capacity(capacity)
-        """print(ans)
+        ans = storage_cluster.add_capacity(capacity)
         assert ans(
             logger.info("Test Failed")
-        )"""
+        )
