@@ -3,7 +3,7 @@ import time
 import pytest
 
 from ocs_ci.ocs import ocp, constants, defaults
-from ocs_ci.framework.testlib import workloads, E2ETest, ignore_leftovers, tier4
+from ocs_ci.framework.testlib import workloads, E2ETest, ignore_leftovers
 from ocs_ci.ocs.resources import pod
 from tests.helpers import wait_for_resource_state, default_storage_class, modify_osd_replica_count
 from tests.disruption_helpers import Disruptions
@@ -63,7 +63,6 @@ def wait_for_nodes_status_and_prometheus_health_check(pods):
     assert prometheus_health_check(), "Prometheus health is degraded"
 
 
-@tier4
 @ignore_leftovers
 @workloads
 class TestMonitoringBackedByOCS(E2ETest):
@@ -193,7 +192,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             # Validate all prometheus pod is running
             POD = ocp.OCP(kind=constants.POD, namespace=defaults.OCS_MONITORING_NAMESPACE)
             assert POD.wait_for_resource(
-                condition='Running', selector='app=prometheus', timeout=60
+                condition='Running', selector='app=prometheus', timeout=180
             ), (
                 "One or more prometheus pods are not in running state"
             )
@@ -309,7 +308,9 @@ class TestMonitoringBackedByOCS(E2ETest):
 
         # Check all the prometheus pods are up
         for pod_obj in pod_obj_list:
-            wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
+            wait_for_resource_state(
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=180
+            )
 
         # Check for the created pvc metrics after restarting node where prometheus pod is hosted
         for pod_obj in pods:
@@ -358,6 +359,23 @@ class TestMonitoringBackedByOCS(E2ETest):
         # Validate all nodes are in READY state
         wait_for_nodes_status()
 
+        # Check for Ceph pods
+        pod_obj = ocp.OCP(
+            kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        )
+        assert pod_obj.wait_for_resource(
+            condition='Running', selector='app=rook-ceph-mgr',
+            timeout=600
+        )
+        assert pod_obj.wait_for_resource(
+            condition='Running', selector='app=rook-ceph-mon',
+            resource_count=3, timeout=600
+        )
+        assert pod_obj.wait_for_resource(
+            condition='Running', selector='app=rook-ceph-osd',
+            resource_count=3, timeout=600
+        )
+
         # Check the node are Ready state and check cluster is health ok
         self.sanity_helpers.health_check()
 
@@ -398,12 +416,14 @@ class TestMonitoringBackedByOCS(E2ETest):
             # Validate all nodes are in READY state
             wait_for_nodes_status()
 
-        # Check the node are Ready state and check cluster is health ok
-        self.sanity_helpers.health_check()
-
         # Check all the prometheus pods are up
         for pod_obj in prometheus_pod_obj_list:
-            wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
+            wait_for_resource_state(
+                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=180
+            )
+
+        # Check the node are Ready state and check cluster is health ok
+        self.sanity_helpers.health_check()
 
         # Check for the created pvc metrics after shutdown and recovery of prometheus nodes
         for pod_obj in pods:

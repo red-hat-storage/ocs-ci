@@ -15,7 +15,7 @@ from tests import helpers, disruption_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.utility.retry import retry
-from ocs_ci.framework.testlib import E2ETest, workloads, tier4, ignore_leftovers
+from ocs_ci.framework.testlib import E2ETest, workloads, tier1, ignore_leftovers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility import templating
@@ -23,7 +23,7 @@ from ocs_ci.utility import templating
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
 def test_fixture(request):
     """
     Setup and teardown
@@ -169,7 +169,7 @@ class Test_openshift_logging_on_ocs(E2ETest):
         return elasticsearch_pod_obj
 
     @pytest.mark.polarion_id("OCS-657")
-    @workloads
+    @tier1
     def test_create_new_project_to_verify_logging(self, create_pvc_and_deploymentconfig_pod):
         """
         This function creates new project to verify logging in EFK stack
@@ -188,7 +188,7 @@ class Test_openshift_logging_on_ocs(E2ETest):
         self.validate_project_exists(pvc_obj)
 
     @pytest.mark.polarion_id("OCS-650")
-    @tier4
+    @workloads
     def test_respin_osd_pods_to_verify_logging(self, create_pvc_and_deploymentconfig_pod):
         """
         This function creates projects before and after respin of osd
@@ -223,8 +223,10 @@ class Test_openshift_logging_on_ocs(E2ETest):
         project1_filecount = elasticsearch_pod_obj.exec_cmd_on_pod(
             command=f'es_util --query=project.{project1}.*/_count'
         )
-        assert project1_filecount['_shards']['successful'] == 0, f"No files found in project {project1}"
-        logger.info(f'The files in the project 1 {project1_filecount}')
+        assert project1_filecount['_shards']['successful'] != 0, (
+            f"No files found in project {project1}"
+        )
+        logger.info(f'Total number of files in project 1 {project1_filecount}')
 
         # Create another app_pod in new project
         pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
@@ -237,7 +239,38 @@ class Test_openshift_logging_on_ocs(E2ETest):
         project2_filecount = elasticsearch_pod_obj.exec_cmd_on_pod(
             command=f'es_util --query=project.{project2}.*/_count', out_yaml_format=True
         )
-        logger.info(f'The files in the project2 {project2_filecount}')
+        assert project2_filecount['_shards']['successful'] != 0, (
+            f"No files found in project {project2}"
+        )
+        logger.info(f'Total number of files in the project 2 {project2_filecount}')
 
-        assert project2_filecount['_shards']['successful'] == 0, f"No files found in project {project2}"
-        logger.info(f'The files in the project 2 {project2_filecount}')
+    @pytest.mark.polarion_id("OCS-651")
+    @workloads
+    def test_respin_elasticsearch_pod(self, create_pvc_and_deploymentconfig_pod):
+        """
+        Test to verify respin of elasticsearch pod has no functional impact
+        on logging backed by OCS.
+        """
+
+        elasticsearch_pod_obj = self.get_elasticsearch_pod_obj()
+
+        # Respin the elastic-search pod
+        elasticsearch_pod_obj.delete(force=True)
+
+        # Checks the health of logging cluster after a respin
+        assert ocp_logging_obj.check_health_of_clusterlogging()
+
+        # Checks .operations index
+        es_pod_obj = self.get_elasticsearch_pod_obj()
+
+        operations_index = es_pod_obj.exec_cmd_on_pod(
+            command='es_util --query=.operations.*/_search?pretty', out_yaml_format=True
+        )
+        assert operations_index['_shards']['failed'] == 0, (
+            "Unable to access the logs of .operations from ES pods"
+        )
+
+        # Creates new-project and app-pod and checks the logs are retained
+        pod_obj, pvc_obj = create_pvc_and_deploymentconfig_pod
+
+        self.validate_project_exists(pvc_obj)

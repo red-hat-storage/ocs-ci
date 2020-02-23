@@ -13,22 +13,20 @@ import pytest
 
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework.exceptions import ClusterPathNotProvidedError, ClusterNameNotProvidedError, ClusterNameLengthError
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
 from ocs_ci.utility.utils import (
     dump_config_to_file,
     get_cluster_version,
     get_ceph_version,
     get_csi_versions,
     get_testrun_name,
+    get_ocs_build_number,
 )
 from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.ocs.resources.ocs import get_version_info
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
-    MARKETPLACE_NAMESPACE,
-    OPERATOR_CATALOG_SOURCE_NAME,
 )
 
 __all__ = [
@@ -103,6 +101,27 @@ def pytest_addoption(parser):
         dest='ocs_version',
         help="ocs version for which ocs-ci to be run"
     )
+    parser.addoption(
+        '--upgrade-ocs-version',
+        dest='upgrade_ocs_version',
+        help="ocs version to upgrade (e.g. 4.3)"
+    )
+    parser.addoption(
+        '--ocs-registry-image',
+        dest='ocs_registry_image',
+        help=(
+            "ocs registry image to be used for deployment "
+            "(e.g. quay.io/rhceph-dev/ocs-olm-operator:latest-4.2)"
+        )
+    )
+    parser.addoption(
+        '--upgrade-ocs-registry-image',
+        dest='upgrade_ocs_registry_image',
+        help=(
+            "ocs registry image to be used for upgrade "
+            "(e.g. quay.io/rhceph-dev/ocs-olm-operator:latest-4.3)"
+        )
+    )
 
 
 def pytest_configure(config):
@@ -152,39 +171,62 @@ def pytest_configure(config):
         del config._metadata['Platform']
 
         config._metadata['Test Run Name'] = get_testrun_name()
+        gather_version_info_for_report(config)
 
-        try:
-            # add cluster version
-            clusterversion = get_cluster_version()
-            config._metadata['Cluster Version'] = clusterversion
 
-            # add ceph version
-            ceph_version = get_ceph_version()
-            config._metadata['Ceph Version'] = ceph_version
+def gather_version_info_for_report(config):
+    """
+    This function gather all version related info used for report.
 
-            # add csi versions
-            csi_versions = get_csi_versions()
-            config._metadata['cephfsplugin'] = csi_versions.get('csi-cephfsplugin')
-            config._metadata['rbdplugin'] = csi_versions.get('csi-rbdplugin')
+    Args:
+        config (pytest.config): Pytest config object
+    """
+    gather_version_completed = False
+    try:
+        # add cluster version
+        clusterversion = get_cluster_version()
+        config._metadata['Cluster Version'] = clusterversion
 
-            # add ocs operator version
-            ocs_catalog = CatalogSource(
-                resource_name=OPERATOR_CATALOG_SOURCE_NAME,
-                namespace=MARKETPLACE_NAMESPACE,
+        # add ceph version
+        ceph_version = get_ceph_version()
+        config._metadata['Ceph Version'] = ceph_version
+
+        # add csi versions
+        csi_versions = get_csi_versions()
+        config._metadata['cephfsplugin'] = csi_versions.get('csi-cephfsplugin')
+        config._metadata['rbdplugin'] = csi_versions.get('csi-rbdplugin')
+
+        # add ocs operator version
+        if ocsci_config.REPORTING['us_ds'] == 'DS':
+            config._metadata['OCS operator'] = (
+                get_ocs_build_number()
             )
-            if ocsci_config.REPORTING['us_ds'] == 'DS':
-                config._metadata['OCS operator'] = (
-                    ocs_catalog.get_image_name()
-                )
-            mods = get_version_info(
-                namespace=ocsci_config.ENV_DATA['cluster_namespace']
+        mods = {}
+        mods = get_version_info(
+            namespace=ocsci_config.ENV_DATA['cluster_namespace']
+        )
+        skip_list = ['ocs-operator']
+        for key, val in mods.items():
+            if key not in skip_list:
+                config._metadata[key] = val.rsplit('/')[-1]
+        gather_version_completed = True
+    except ResourceNotFoundError as ex:
+        log.error(
+            "Problem ocurred when looking for some resource! Error: %s",
+            ex
+        )
+    except FileNotFoundError as ex:
+        log.error("File not found! Error: %s", ex)
+    except CommandFailed as ex:
+        log.error("Failed to execute command! Error: %s", ex)
+    except Exception as ex:
+        log.error("Failed to gather version info! Error: %s", ex)
+    finally:
+        if not gather_version_completed:
+            log.warning(
+                "Failed to gather version details! The report of version might"
+                "not be complete!"
             )
-            skip_list = ['ocs-operator']
-            for key, val in mods.items():
-                if key not in skip_list:
-                    config._metadata[key] = val.rsplit('/')[-1]
-        except (FileNotFoundError, CommandFailed):
-            pass
 
 
 def get_cli_param(config, name_of_param, default=None):
@@ -238,6 +280,15 @@ def process_cluster_cli_params(config):
         ocsci_config.DEPLOYMENT.get('live_deployment', False)
     )
     ocsci_config.RUN['cli_params']['io_in_bg'] = get_cli_param(config, "io_in_bg", default=False)
+    upgrade_ocs_version = get_cli_param(config, "upgrade_ocs_version")
+    if upgrade_ocs_version:
+        ocsci_config.UPGRADE['upgrade_ocs_version'] = upgrade_ocs_version
+    ocs_registry_image = get_cli_param(config, "ocs_registry_image")
+    if ocs_registry_image:
+        ocsci_config.DEPLOYMENT['ocs_registry_image'] = ocs_registry_image
+    upgrade_ocs_registry_image = get_cli_param(config, "upgrade_ocs_registry_image")
+    if upgrade_ocs_registry_image:
+        ocsci_config.UPGRADE['upgrade_ocs_registry_image'] = upgrade_ocs_registry_image
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
     get_cli_param(config, 'collect-logs')
@@ -263,9 +314,10 @@ def pytest_collection_modifyitems(session, config, items):
             marker = item.get_closest_marker(name="polarion_id")
             if marker:
                 polarion_id = marker.args[0]
-                item.user_properties.append(
-                    ("polarion-testcase-id", polarion_id)
-                )
+                if polarion_id:
+                    item.user_properties.append(
+                        ("polarion-testcase-id", polarion_id)
+                    )
         except IndexError:
             log.warning(
                 f"polarion_id marker found with no value for "

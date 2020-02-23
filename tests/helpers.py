@@ -133,13 +133,26 @@ def create_pod(
         AssertionError: In case of any failure
     """
     if interface_type == constants.CEPHBLOCKPOOL:
-        pod_dict = pod_dict_path if pod_dict_path else constants.CSI_RBD_POD_YAML
         interface = constants.RBD_INTERFACE
+        if pod_dict_path:
+            pod_dict = pod_dict_path
+        else:
+            pod_dict = constants.CSI_RBD_POD_YAML
+            pull_images('nginx')
     else:
-        pod_dict = pod_dict_path if pod_dict_path else constants.CSI_CEPHFS_POD_YAML
         interface = constants.CEPHFS_INTERFACE
+        if pod_dict_path:
+            pod_dict = pod_dict_path
+        else:
+            pod_dict = constants.CSI_CEPHFS_POD_YAML
+            pull_images('nginx')
+
     if dc_deployment:
-        pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
+        if pod_dict_path:
+            pod_dict = pod_dict_path
+        else:
+            pod_dict = constants.FEDORA_DC_YAML
+            pull_images('fedora')
     pod_data = templating.load_yaml(pod_dict)
     if not pod_name:
         pod_name = create_unique_resource_name(
@@ -710,6 +723,25 @@ def get_cephfs_name():
     return result['items'][0].get('metadata').get('name')
 
 
+def pull_images(image_name):
+    """
+    Function to pull images on all nodes
+
+    Args:
+        image_name (str): Name of the container image to be pulled
+
+    Returns: None
+
+    """
+
+    node_objs = node.get_node_objs(get_worker_nodes())
+    for node_obj in node_objs:
+        logging.info(f'pulling image "{image_name}  " on node {node_obj.name}')
+        assert node_obj.ocp.exec_oc_debug_cmd(
+            node_obj.name, cmd_list=[f'podman pull {image_name}']
+        )
+
+
 def run_io_with_rados_bench(**kw):
     """ A task for radosbench
 
@@ -1109,6 +1141,37 @@ def measure_pvc_deletion_time(interface, pv_name):
     end = get_end_deletion_time(interface=interface, pv_name=pv_name)
     total = end - start
     return total.total_seconds()
+
+
+def pod_start_time(pod_obj):
+    """
+    Function to measure time taken for container(s) to get into running state
+    by measuring the difference between container's start time (when container
+    went into running state) and started time (when container was actually
+    started)
+
+    Args:
+        pod_obj(obj): pod object to measure start time
+
+    Returns:
+        containers_start_time(dict):
+        Returns the name and start time of container(s) in a pod
+
+    """
+    time_format = '%Y-%m-%dT%H:%M:%SZ'
+    containers_start_time = {}
+    start_time = pod_obj.data['status']['startTime']
+    start_time = datetime.datetime.strptime(start_time, time_format)
+    for container in range(len(pod_obj.data['status']['containerStatuses'])):
+        started_time = pod_obj.data[
+            'status']['containerStatuses'][container]['state'][
+            'running']['startedAt']
+        started_time = datetime.datetime.strptime(started_time, time_format)
+        container_name = pod_obj.data[
+            'status']['containerStatuses'][container]['name']
+        container_start_time = (started_time - start_time).seconds
+        containers_start_time[container_name] = container_start_time
+        return containers_start_time
 
 
 def get_default_storage_class():

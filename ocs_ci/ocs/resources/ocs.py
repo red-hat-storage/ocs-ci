@@ -420,3 +420,20 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
         ocs_csv.get()['spec']['install']['spec']['deployments'][0]['spec']['template']['spec']['containers'][0]['env']
     ), "CSI_ENABLE_SNAPSHOTTER value is not set to 'false'."
     log.info("Verified: CSI snapshotter is not present.")
+
+    # Verify pool crush rule is with "type": "zone"
+    if utils.get_az_count() == 3:
+        log.info("Verifying pool crush rule is with type: zone")
+        crush_dump = ct_pod.exec_ceph_cmd(
+            ceph_cmd='ceph osd crush dump', format=''
+        )
+        pool_names = [
+            constants.METADATA_POOL, constants.DEFAULT_BLOCKPOOL,
+            constants.DATA_POOL
+        ]
+        crush_rules = [rule for rule in crush_dump['rules'] if rule['rule_name'] in pool_names]
+        for crush_rule in crush_rules:
+            assert [
+                item for item in crush_rule['steps'] if item.get('type') == 'zone'
+            ], f"{crush_rule['rule_name']} is not with type as zone"
+        log.info("Verified - pool crush rule is with type: zone")

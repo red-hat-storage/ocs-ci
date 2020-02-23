@@ -76,6 +76,7 @@ REPORTING:
   us_ds: 'DS'
   ocp_must_gather_image: "quay.io/openshift/origin-must-gather"
   ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
+  default_ocs_must_gather_latest_tag: 'latest-4.3'
   gather_on_deploy_failure: true
 
 # This is the default information about environment.
@@ -103,3 +104,7 @@ ENV_DATA:
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
   # Default RHCOS image to be used for VmWare deployment
   vm_template: 'rhcos-4.3.0-x86_64-vmware'
+
+# This section is related to upgrade
+UPGRADE:
+  upgrade_to_latest: true
