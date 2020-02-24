@@ -2,6 +2,10 @@ import logging
 import pytest
 
 from subprocess import TimeoutExpired
+
+from ocs_ci.framework import config
+from ocs_ci.utility.utils import ceph_health_check
+
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import (
     drain_nodes, schedule_nodes, get_typed_nodes, wait_for_nodes_status, get_node_objs
@@ -71,6 +75,11 @@ class TestNodesMaintenance(ManageTest):
         typed_nodes = get_typed_nodes(node_type=node_type, num_of_nodes=1)
         assert typed_nodes, f"Failed to find a {node_type} node for the test"
         typed_node_name = typed_nodes[0].name
+
+        # Ceph Health check
+        assert ceph_health_check(namespace=config.ENV_DATA['cluster_namespace']), (
+            "Failed with ceph status is not Health Ok"
+        )
 
         # Maintenance the node (unschedule and drain)
         drain_nodes([typed_node_name])
