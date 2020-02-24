@@ -62,7 +62,6 @@ def label_nodes(request, with_ocs):
                 app_nodes, constants.VDBENCH_NODE_LABEL
             )
 
-
     request.addfinalizer(teardown)
 
     if with_ocs is True:
@@ -75,6 +74,20 @@ def label_nodes(request, with_ocs):
     worker_nodes = helpers.get_worker_nodes()
     # Getting list of free nodes
     free_nodes = list(set(worker_nodes) - set(ocs_nodes))
+    if not free_nodes:
+        # Getting list of current machinesets
+        log.info('Adding new worker node for the application to run on.')
+        mset = machine.get_machinesets()
+        replica_count = machine.get_replica_count(mset[0])
+        machine.add_node(mset[0], replica_count + 1)
+        machine.wait_for_new_node_to_be_ready(mset[0])
+
+        ocs_nodes = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+        worker_nodes = helpers.get_worker_nodes()
+        free_nodes = list(set(worker_nodes) - set(ocs_nodes))
+        m_set = mset[0]
+
+        # TODO: implement this for VMWare as well.
 
     if not free_nodes:
         # No free nodes -  Creating new machineset for application pods
