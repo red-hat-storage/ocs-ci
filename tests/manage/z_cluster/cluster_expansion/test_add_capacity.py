@@ -37,4 +37,4 @@ class TestAddCapacity(ManageTest):
         osd_list = get_osd_pods()
         for osd_pod in osd_list:
             wait_for_resource_state(osd_pod, 'Running')
-        assert count == len(osd_list)*3, logger.info("Test Failed")
+        assert count*3 == len(osd_list), logger.info("Test Failed")
