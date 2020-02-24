@@ -5,7 +5,6 @@ check that OCS Monitoring is configured and available as expected.
 """
 
 import logging
-import time
 
 import pytest
 
@@ -45,13 +44,6 @@ def test_monitoring_enabled():
     ct_pod = pod.get_ceph_tools_pod()
     ceph_pools = ct_pod.exec_ceph_cmd("ceph osd pool ls")
     assert len(result) == len(ceph_pools)
-
-    # TODO: remove BZ 1790558 workaround (noobaa is not immediatelly ready just
-    # after installation)
-    hack_sleep = 600  # in seconds
-    logger.info(
-        f"BZ 1790558 workaround: going to sleep for {hack_sleep} seconds")
-    time.sleep(hack_sleep)
 
     # again for a noobaa metric
     logger.info("Checking that MCG/NooBaa data are provided in OCS monitoring")
