@@ -40,8 +40,9 @@ def add_capacity(capacity):
     ocp = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind=constants.STORAGECLUSTER)
     sc = ocp.get()
     device_set_count = sc.get('items')[0].get('spec').get('storageDeviceSets')[0].get('count')
+    print("current: " + str(device_set_count))
     capacity_to_add = device_set_count + capacity
-
+    print("new total: " + str(capacity_to_add))
     # adding the storage capacity to the cluster
     params = f"""[{{"op": "replace", "path": "/spec/storageDeviceSets/0/count", "value":{capacity_to_add}}}]"""
     ocp.patch(
@@ -51,6 +52,7 @@ def add_capacity(capacity):
     )
 
     new_count = sc.get('items')[0].get('spec').get('storageDeviceSets')[0].get('count')
+    print("after add there are: (func) " + str(new_count))
     return new_count
 
 

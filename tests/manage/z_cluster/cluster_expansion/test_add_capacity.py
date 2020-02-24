@@ -21,7 +21,7 @@ class TestAddCapacity(ManageTest):
             "capacity"
         ],
         argvalues=[
-            pytest.param(*[1], marks=[polarion_id(''), tier3]),
+            pytest.param(*[2], marks=[polarion_id(''), tier3]),
         ]
     )
     def test_add_capacity(self, capacity):
@@ -31,10 +31,15 @@ class TestAddCapacity(ManageTest):
        Args:
            capacity (int):the storage capacity as deviceSet number
        """
-        print("to add: "+str(capacity))
+        print("to add: " + str(capacity))
         count = storage_cluster.add_capacity(capacity)
+        print("after add there are: (test) " + str(count))
         # validations
         osd_list = get_osd_pods()
+        print("number of osd: " + str(len(osd_list)))
+        count = 0
         for osd_pod in osd_list:
             wait_for_resource_state(osd_pod, 'Running')
-        assert count*3 == len(osd_list), logger.info("Test Failed")
+            print(str(count))
+            count += 1
+        assert count * 3 == len(osd_list), logger.info("Test Failed")
