@@ -70,8 +70,13 @@ def supported_configuration():
     min_memory = 64 * 10**9
 
     node_obj = ocp.OCP(kind=constants.NODE)
-    log.debug('Checking if system meets minimal requirements')
+    log.info('Checking if system meets minimal requirements')
     nodes = node_obj.get(selector=constants.WORKER_LABEL).get('items')
+    log.info(
+        f"Checking following nodes with worker selector (assuming that "
+        f"this is ran in CI and there are no worker nodes without OCS):\n"
+        f"{[item.get('metadata').get('name') for item in nodes]}"
+    )
     for node_info in nodes:
         real_cpu = int(node_info['status']['capacity']['cpu'])
         real_memory = node_info['status']['capacity']['memory']
