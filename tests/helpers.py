@@ -133,26 +133,13 @@ def create_pod(
         AssertionError: In case of any failure
     """
     if interface_type == constants.CEPHBLOCKPOOL:
+        pod_dict = pod_dict_path if pod_dict_path else constants.CSI_RBD_POD_YAML
         interface = constants.RBD_INTERFACE
-        if pod_dict_path:
-            pod_dict = pod_dict_path
-        else:
-            pod_dict = constants.CSI_RBD_POD_YAML
-            pull_images('nginx')
     else:
+        pod_dict = pod_dict_path if pod_dict_path else constants.CSI_CEPHFS_POD_YAML
         interface = constants.CEPHFS_INTERFACE
-        if pod_dict_path:
-            pod_dict = pod_dict_path
-        else:
-            pod_dict = constants.CSI_CEPHFS_POD_YAML
-            pull_images('nginx')
-
     if dc_deployment:
-        if pod_dict_path:
-            pod_dict = pod_dict_path
-        else:
-            pod_dict = constants.FEDORA_DC_YAML
-            pull_images('fedora')
+        pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
     pod_data = templating.load_yaml(pod_dict)
     if not pod_name:
         pod_name = create_unique_resource_name(
