@@ -21,7 +21,7 @@ class TestAddCapacity(ManageTest):
             "capacity"
         ],
         argvalues=[
-            pytest.param(*[2], marks=[polarion_id(''), tier3]),
+            pytest.param(*[1], marks=[polarion_id('OCS-1191'), tier3]),
         ]
     )
     def test_add_capacity(self, capacity):
@@ -29,17 +29,12 @@ class TestAddCapacity(ManageTest):
        Test to add variable capacity to the OSD cluster while IOs running
 
        Args:
-           capacity (int):the storage capacity as deviceSet number
+           capacity (int):the storage capacity to add as deviceSet number
        """
-        print("to add: " + str(capacity))
-        count = storage_cluster.add_capacity(capacity)
-        print("after add there are: (test) " + str(count))
+        storage_device_count = storage_cluster.add_capacity(capacity)
+
         # validations
         osd_list = get_osd_pods()
-        print("number of osd: " + str(len(osd_list)))
-        count = 0
         for osd_pod in osd_list:
             wait_for_resource_state(osd_pod, 'Running')
-            print(str(count))
-            count += 1
-        assert count * 3 == len(osd_list), logger.info("Test Failed")
+        assert storage_device_count * 3 == len(osd_list), logger.info("Test Failed")
