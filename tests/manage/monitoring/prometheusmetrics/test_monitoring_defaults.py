@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 @tier1
-@pytest.mark.post_deployment
+@pytest.mark.first
 @pytest.mark.polarion_id("OCS-1261")
 def test_monitoring_enabled():
     """
