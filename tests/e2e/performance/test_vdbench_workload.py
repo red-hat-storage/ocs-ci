@@ -42,12 +42,18 @@ def label_nodes(request):
     Fixture to label the node(s) that will run the application pod.
     That will be all workers node that do not run the OCS cluster.
     """
+
+    m_set = ''  # this will hold machine_set name that added
+
     def teardown():
         log.info('Clear label form worker (Application) nodes')
         # Getting all Application nodes
         app_nodes = machine.get_labeled_nodes(constants.APP_NODE_LABEL)
         helpers.remove_label_from_worker_node(app_nodes,
                                               constants.APP_NODE_LABEL)
+        if m_set:
+            log.info(f'Decreas {m_set} by 1')
+            machine.delete_node(m_set, 1)
 
     request.addfinalizer(teardown)
 
@@ -57,6 +63,20 @@ def label_nodes(request):
     worker_nodes = helpers.get_worker_nodes()
     # Getting list of free nodes
     free_nodes = list(set(worker_nodes) - set(ocs_nodes))
+    if not free_nodes:
+        # Getting list of current machinesets
+        log.info('Adding new worker node for the application to run on.')
+        mset = machine.get_machinesets()
+        replica_count = machine.get_replica_count(mset[0])
+        machine.add_node(mset[0], replica_count + 1)
+        machine.wait_for_new_node_to_be_ready(mset[0])
+
+        ocs_nodes = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+        worker_nodes = helpers.get_worker_nodes()
+        free_nodes = list(set(worker_nodes) - set(ocs_nodes))
+        m_set = mset[0]
+
+        # TODO: implement this for VMWare as well.
 
     log.info('Adding the app-node label to Non-OCS workers')
     log.debug(f'The Workers nodes are : {worker_nodes}')
@@ -124,7 +144,7 @@ class TestVDBenchWorkload(E2ETest):
                            9, 4, ["64k"], "random",
                            1, 4, 3, 256, 5, 600, 5]),
             pytest.param(*["VDBench-Basic.yaml",
-                           9, 4, ["4k"], "random",
+                           9, 4, ["4k", "64k"], "random",
                            1, 4, 3, 256, 5, 600, 1],
                          marks=pytest.mark.workloads()),
         ],
