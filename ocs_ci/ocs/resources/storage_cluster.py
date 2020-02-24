@@ -3,8 +3,6 @@ StorageCluster related functionalities
 """
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import get_osd_pods
-from tests.helpers import wait_for_resource_state
 
 
 class StorageCluster(OCP):
@@ -33,10 +31,10 @@ def add_capacity(capacity):
    Add storage capacity to the cluster
 
    Args:
-       capacity(int): Size of the storage to add
+       capacity(int): Size of the storage to add as number of deviceSets
 
    Returns:
-       True if capacity was added, False if not
+       New number of deviceSets
 
    """
     ocp = OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE, kind=constants.STORAGECLUSTER)
@@ -52,11 +50,8 @@ def add_capacity(capacity):
         format_type='json'
     )
 
-    # validations
-    osd_list = get_osd_pods
-    for pod in osd_list:
-        wait_for_resource_state(pod, 'Running')
-    return True
+    new_count = sc.get('items')[0].get('spec').get('storageDeviceSets')[0].get('count')
+    return new_count
 
 
 def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
