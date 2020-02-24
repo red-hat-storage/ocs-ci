@@ -428,6 +428,24 @@ def delete_node(machine_set, count):
     return True
 
 
+def delete_node(machine_set, count):
+    """
+    Delete nodes from the cluster by decreasing the number of replicas in the
+    machine set.
+    Args:
+        machine_set (str): Name of a machine set to get decrease replica count
+        count (int): Count to decrease by
+    Returns:
+        bool: True if commands executes successfully
+    """
+    replica_count = get_replica_count(machine_set) - count
+    ocp = OCP(namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
+    ocp.exec_oc_cmd(
+        f'scale --replicas={replica_count} machinesets {machine_set}'
+    )
+    return True
+
+
 def wait_for_new_node_to_be_ready(machine_set):
     """
     Wait for the new node to reach ready state
