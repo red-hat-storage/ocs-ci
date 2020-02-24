@@ -34,7 +34,7 @@ class TestAddCapacity(ManageTest):
         print("to add: "+str(capacity))
         count = storage_cluster.add_capacity(capacity)
         # validations
-        osd_list = get_osd_pods
+        osd_list = get_osd_pods()
         for osd_pod in osd_list:
             wait_for_resource_state(osd_pod, 'Running')
         assert count == len(osd_list)*3, logger.info("Test Failed")
