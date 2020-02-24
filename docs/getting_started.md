@@ -12,6 +12,9 @@
    Latest client can be downloaded from [oc-client](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/).
 4. For vSphere based installations, [terraform](https://learn.hashicorp.com/terraform/getting-started/install.html)
    and [jq]( https://stedolan.github.io/jq/download/) should be installed ( terraform version should be 0.11.13  )
+5. For UI testing follow the instructions in [openshift console](https://github.com/openshift/console#dependencies) repository.
+   After clone of repository and setting all dependencies please create configuration file with RUN section with `openshift_console_path`
+   parameter pointing to your local clone of openshift console repo. See example in `conf/ocsci/ui-testing.yaml`.
 
 #### AWS UPI
 There are additional prerequisites if you plan to execute AWS UPI deployments

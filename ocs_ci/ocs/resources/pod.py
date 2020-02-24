@@ -23,6 +23,7 @@ from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd, check_timeout_reached
+from ocs_ci.utility.utils import check_if_executable_in_path
 
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
@@ -38,6 +39,7 @@ TEXT_CONTENT = (
     "deserunt mollit anim id est laborum."
 )
 TEST_FILE = '/var/lib/www/html/test'
+FEDORA_TEST_FILE = '/mnt/test'
 
 
 class Pod(OCS):
@@ -86,6 +88,10 @@ class Pod(OCS):
     @property
     def labels(self):
         return self._labels
+
+    @property
+    def restart_count(self):
+        return self.get().get('status').get('containerStatuses')[0].get('restartCount')
 
     def __setattr__(self, key, val):
         self.__dict__[key] = val
@@ -147,7 +153,7 @@ class Pod(OCS):
             rsh_cmd, out_yaml_format, secrets=secrets, timeout=timeout, **kwargs
         )
 
-    def exec_bash_cmd_on_pod(self, command):
+    def exec_sh_cmd_on_pod(self, command, sh="bash"):
         """
         Execute a pure bash command on a pod via oc exec where you can use
         bash syntaxt like &&, ||, ;, for loop and so on.
@@ -158,7 +164,7 @@ class Pod(OCS):
         Returns:
             str: stdout of the command
         """
-        cmd = f'exec {self.name} -- bash -c "{command}"'
+        cmd = f'exec {self.name} -- {sh} -c "{command}"'
         return self.ocp.exec_oc_cmd(cmd, out_yaml_format=False)
 
     def get_labels(self):
@@ -457,6 +463,25 @@ def get_csi_provisioner_pod(interface):
     return provisioner_pod
 
 
+def get_rgw_pod(rgw_label=constants.RGW_APP_LABEL, namespace=None):
+    """
+    Fetches info about rgw pods in the cluster
+
+    Args:
+        rgw_label (str): label associated with rgw pods
+            (default: defaults.RGW_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: none)
+
+    Returns:
+        Pod object: rgw pod object
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    rgws = get_pods_having_label(rgw_label, namespace)
+    rgw_pod = Pod(**rgws[0])
+    return rgw_pod
+
+
 def list_ceph_images(pool_name='rbd'):
     """
     Args:
@@ -480,6 +505,10 @@ def check_file_existence(pod_obj, file_path):
     Returns:
         bool: True if the file exist, False otherwise
     """
+    try:
+        check_if_executable_in_path(pod_obj.exec_cmd_on_pod("which find"))
+    except CommandFailed:
+        pod_obj.install_packages("findutils")
     ret = pod_obj.exec_cmd_on_pod(f"bash -c \"find {file_path}\"")
     if re.search(file_path, ret):
         return True
@@ -573,7 +602,7 @@ def get_fio_rw_iops(pod_obj):
     )
 
 
-def run_io_in_bg(pod_obj, expect_to_fail=False):
+def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=None):
     """
     Run I/O in the background
 
@@ -581,13 +610,15 @@ def run_io_in_bg(pod_obj, expect_to_fail=False):
         pod_obj (Pod): The object of the pod
         expect_to_fail (bool): True for the command to be expected to fail
             (disruptive operations), False otherwise
+        fedora_dc(str): set to None by default. If set to True, it runs IO in
+            background on a fedora dc pod.
 
     Returns:
         Thread: A thread of the I/O execution
     """
     logger.info(f"Running I/O on pod {pod_obj.name}")
 
-    def exec_run_io_cmd(pod_obj, expect_to_fail):
+    def exec_run_io_cmd(pod_obj, expect_to_fail, fedora_dc):
         """
         Execute I/O
         """
@@ -595,9 +626,13 @@ def run_io_in_bg(pod_obj, expect_to_fail=False):
             # Writing content to a new file every 0.01 seconds.
             # Without sleep, the device will run out of space very quickly -
             # 5-10 seconds for a 5GB device
+            if fedora_dc:
+                FILE = FEDORA_TEST_FILE
+            else:
+                FILE = TEST_FILE
             pod_obj.exec_cmd_on_pod(
                 f"bash -c \"let i=0; while true; do echo {TEXT_CONTENT} "
-                f">> {TEST_FILE}$i; let i++; sleep 0.01; done\""
+                f">> {FILE}$i; let i++; sleep 0.01; done\""
             )
         # Once the pod gets deleted, the I/O execution will get terminated.
         # Hence, catching this exception
@@ -608,12 +643,16 @@ def run_io_in_bg(pod_obj, expect_to_fail=False):
                     return
             raise ex
 
-    thread = Thread(target=exec_run_io_cmd, args=(pod_obj, expect_to_fail,))
+    thread = Thread(target=exec_run_io_cmd, args=(pod_obj, expect_to_fail, fedora_dc))
     thread.start()
     time.sleep(2)
 
     # Checking file existence
-    test_file = TEST_FILE + "1"
+    if fedora_dc:
+        FILE = FEDORA_TEST_FILE
+    else:
+        FILE = TEST_FILE
+    test_file = FILE + "1"
     assert check_file_existence(pod_obj, test_file), (
         f"I/O failed to start inside {pod_obj.name}"
     )
@@ -877,7 +916,7 @@ def validate_pods_are_respinned_and_running_state(pod_objs_list):
 
     """
     for pod in pod_objs_list:
-        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING)
+        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING, timeout=180)
 
     for pod in pod_objs_list:
         pod_obj = pod.get()

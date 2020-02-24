@@ -13,13 +13,11 @@ log = logging.getLogger(__name__)
 
 @pytest.fixture(scope='function')
 def test_fixture_amq(request, storageclass_factory):
-    cephfs_sc_obj = storageclass_factory(interface=constants.CEPHFILESYSTEM, sc_name='amq-workload')
-
     # Change the above created StorageClass to default
     log.info(
-        f"Changing the default StorageClass to {cephfs_sc_obj.name}"
+        f"Changing the default StorageClass to {constants.DEFAULT_STORAGECLASS_CEPHFS}"
     )
-    helpers.change_default_storageclass(scname=cephfs_sc_obj.name)
+    helpers.change_default_storageclass(scname=constants.DEFAULT_STORAGECLASS_CEPHFS)
 
     # Confirm that the default StorageClass is changed
     tmp_default_sc = helpers.get_default_storage_class()
@@ -27,12 +25,12 @@ def test_fixture_amq(request, storageclass_factory):
         tmp_default_sc
     ) == 1, "More than 1 default storage class exist"
     log.info(f"Current Default StorageClass is:{tmp_default_sc[0]}")
-    assert tmp_default_sc[0] == cephfs_sc_obj.name, (
+    assert tmp_default_sc[0] == constants.DEFAULT_STORAGECLASS_CEPHFS, (
         "Failed to change default StorageClass"
     )
     log.info(
         f"Successfully changed the default StorageClass to "
-        f"{cephfs_sc_obj.name}"
+        f"{constants.DEFAULT_STORAGECLASS_CEPHFS}"
     )
 
     amq = AMQ()

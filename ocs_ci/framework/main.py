@@ -7,8 +7,9 @@ import pytest
 import yaml
 
 from ocs_ci import framework
-from ocs_ci.utility import utils
+from ocs_ci.ocs.constants import CONF_DIR
 from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
+from ocs_ci.utility import utils
 
 
 def check_config_requirements():
@@ -45,7 +46,15 @@ def init_ocsci_conf(arguments=None):
     """
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--ocsci-conf', action='append', default=[])
+    parser.add_argument(
+        '--ocs-version', action='store', choices=['4.2', '4.3']
+    )
     args, unknown = parser.parse_known_args(args=arguments)
+    if args.ocs_version:
+        version_config_file = os.path.join(
+            CONF_DIR, 'ocs_version', f'ocs-{args.ocs_version}.yaml'
+        )
+        args.ocsci_conf.insert(0, version_config_file)
     for config_file in args.ocsci_conf:
         with open(
             os.path.abspath(os.path.expanduser(config_file))

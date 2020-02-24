@@ -4,6 +4,7 @@ General OCS object
 import logging
 import yaml
 import tempfile
+from jsonschema import validate
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP, get_images
@@ -189,6 +190,8 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
 
     """
     from ocs_ci.ocs.node import get_typed_nodes
+    from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_all_pods
     number_of_worker_nodes = len(get_typed_nodes())
     namespace = config.ENV_DATA['cluster_namespace']
     log.info("Verifying OCS installation")
@@ -271,7 +274,7 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
         resource_count=number_of_worker_nodes,
         timeout=timeout
     )
-    # csi-rbdplugin-profisioner
+    # csi-rbdplugin-provisioner
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,
         selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
@@ -363,3 +366,74 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
     assert sc_cephfs['parameters']['csi.storage.k8s.io/node-stage-secret-name'] == constants.CEPHFS_NODE_SECRET
     assert sc_cephfs['parameters']['csi.storage.k8s.io/provisioner-secret-name'] == constants.CEPHFS_PROVISIONER_SECRET
     log.info("Verified node and provisioner secret names in storage class.")
+
+    # Verify ceph osd tree output
+    log.info(
+        "Verifying ceph osd tree output and checking for device set PVC names "
+        "in the output."
+    )
+    deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
+    ct_pod = get_ceph_tools_pod()
+    osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree', format='json')
+    schemas = {
+        'root': constants.OSD_TREE_ROOT,
+        'rack': constants.OSD_TREE_RACK,
+        'host': constants.OSD_TREE_HOST,
+        'osd': constants.OSD_TREE_OSD,
+        'region': constants.OSD_TREE_REGION,
+        'zone': constants.OSD_TREE_ZONE
+    }
+    schemas['host']['properties']['name'] = {'enum': deviceset_pvcs}
+    for item in osd_tree['nodes']:
+        validate(instance=item, schema=schemas[item['type']])
+        if item['type'] == 'host':
+            deviceset_pvcs.remove(item['name'])
+    assert not deviceset_pvcs, (
+        f"These device set PVCs are not given in ceph osd tree output "
+        f"- {deviceset_pvcs}"
+    )
+    log.info(
+        "Verified ceph osd tree output. Device set PVC names are given in the "
+        "output."
+    )
+
+    # TODO: Verify ceph osd tree output have osd listed as ssd
+    # TODO: Verify ceph osd tree output have zone or rack based on AZ
+
+    # Verify CSI snapshotter sidecar container is not present
+    log.info("Verifying CSI snapshotter is not present.")
+    provisioner_pods = get_all_pods(
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE,
+        selector=[
+            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+        ]
+    )
+    for pod_obj in provisioner_pods:
+        pod_info = pod_obj.get()
+        for container, image in get_images(data=pod_info).items():
+            assert ('snapshot' not in container) and ('snapshot' not in image), (
+                f"Snapshot container is present in {pod_obj.name} pod. "
+                f"Container {container}. Image {image}"
+            )
+    assert {'name': 'CSI_ENABLE_SNAPSHOTTER', 'value': 'false'} in (
+        ocs_csv.get()['spec']['install']['spec']['deployments'][0]['spec']['template']['spec']['containers'][0]['env']
+    ), "CSI_ENABLE_SNAPSHOTTER value is not set to 'false'."
+    log.info("Verified: CSI snapshotter is not present.")
+
+    # Verify pool crush rule is with "type": "zone"
+    if utils.get_az_count() == 3:
+        log.info("Verifying pool crush rule is with type: zone")
+        crush_dump = ct_pod.exec_ceph_cmd(
+            ceph_cmd='ceph osd crush dump', format=''
+        )
+        pool_names = [
+            constants.METADATA_POOL, constants.DEFAULT_BLOCKPOOL,
+            constants.DATA_POOL
+        ]
+        crush_rules = [rule for rule in crush_dump['rules'] if rule['rule_name'] in pool_names]
+        for crush_rule in crush_rules:
+            assert [
+                item for item in crush_rule['steps'] if item.get('type') == 'zone'
+            ], f"{crush_rule['rule_name']} is not with type as zone"
+        log.info("Verified - pool crush rule is with type: zone")

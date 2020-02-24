@@ -22,7 +22,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
-from ocs_ci.ocs import defaults
+from ocs_ci.ocs import defaults, constants
 
 
 log = logging.getLogger(__name__)
@@ -136,7 +136,7 @@ class OCP(object):
             return yaml.safe_load(out)
         return out
 
-    def exec_oc_debug_cmd(self, node, cmd_list, timeout=600):
+    def exec_oc_debug_cmd(self, node, cmd_list, timeout=300):
         """
         Function to execute "oc debug" command on OCP node
 
@@ -209,7 +209,7 @@ class OCP(object):
                 )
                 retry -= 1
                 if not retry:
-                    log.error("Number of attempts to get resource reached!")
+                    log.warning("Number of attempts to get resource reached!")
                     raise
                 else:
                     log.info(
@@ -762,7 +762,7 @@ def rsync(src, dst, node, dst_node=True, extra_params=""):
     pod_data = load_yaml(RSYNC_POD_YAML)
     pod_data['metadata']['name'] = pod_name
     pod_data['spec']['nodeName'] = node
-    pod = OCP(kind='pod')
+    pod = OCP(kind='pod', namespace=constants.DEFAULT_NAMESPACE)
     src = src if dst_node else f"{pod_name}:/host{src}"
     dst = f"{pod_name}:/host{dst}" if dst_node else dst
     try:

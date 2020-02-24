@@ -10,26 +10,25 @@ import time
 import hcl
 import yaml
 
-from .deployment import Deployment
 from ocs_ci.deployment.install_ocp_on_rhel import OCPINSTALLRHEL
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import (
-    get_node_ips, wait_for_nodes_status,
-    get_typed_worker_nodes, remove_nodes,
+    get_node_ips, get_typed_worker_nodes, remove_nodes, wait_for_nodes_status
 )
 from ocs_ci.ocs.openshift_ops import OCP
-from ocs_ci.utility.templating import Templating, dump_data_to_json
+from ocs_ci.utility.bootstrap import gather_bootstrap
+from ocs_ci.utility.templating import dump_data_to_json, Templating
 from ocs_ci.utility.utils import (
-    run_cmd, replace_content_in_file, wait_for_co,
-    clone_repo, upload_file, read_file_as_str,
-    create_directory_path, remove_keys_from_tf_variable_file,
-    convert_yaml2tfvars,
+    clone_repo, convert_yaml2tfvars, create_directory_path, read_file_as_str,
+    remove_keys_from_tf_variable_file, replace_content_in_file, run_cmd,
+    upload_file, wait_for_co
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
-
+from .deployment import Deployment
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +110,10 @@ class VSPHEREBASE(Deployment):
         config.ENV_DATA['vsphere_resource_pool'] = config.ENV_DATA.get(
             "cluster_name"
         )
+
+        # sync guest time with host
+        if config.ENV_DATA.get('sync_time_with_host'):
+            sync_time_with_host(constants.SCALEUP_VSPHERE_MACHINE_CONF, True)
 
         # get the RHCOS worker list
         self.rhcos_ips = get_node_ips()
@@ -232,6 +235,26 @@ class VSPHEREBASE(Deployment):
 
         # change root disk size
         change_vm_root_disk_size(constants.SCALEUP_VSPHERE_MACHINE_CONF)
+
+    def post_destroy_checks(self):
+        """
+        Post destroy checks on cluster
+        """
+        pool = config.ENV_DATA['cluster_name']
+        if self.vsphere.is_resource_pool_exist(
+                pool,
+                self.datacenter,
+                self.cluster
+        ):
+            logger.warning(
+                f"Resource pool {pool} exists even after destroying cluster"
+            )
+            self.vsphere.destroy_pool(pool, self.datacenter, self.cluster)
+        else:
+            logger.info(
+                f"Resource pool {pool} does not exist in "
+                f"cluster {self.cluster}"
+            )
 
 
 class VSPHEREUPI(VSPHEREBASE):
@@ -357,14 +380,6 @@ class VSPHEREUPI(VSPHEREBASE):
                 def_zone = 'provider "aws" { region = "%s" } \n' % config.ENV_DATA.get('region')
                 replace_content_in_file(constants.INSTALLER_ROUTE53, "xyz", def_zone)
 
-            # increase memory
-            if config.ENV_DATA.get('memory'):
-                replace_content_in_file(
-                    constants.INSTALLER_MACHINE_CONF,
-                    '${var.memory}',
-                    config.ENV_DATA.get('memory')
-                )
-
             # increase CPUs
             worker_num_cpus = config.ENV_DATA.get('worker_num_cpus')
             master_num_cpus = config.ENV_DATA.get('master_num_cpus')
@@ -453,12 +468,21 @@ class VSPHEREUPI(VSPHEREBASE):
             self.terraform.apply(self.terraform_var)
             os.chdir(self.previous_dir)
             logger.info("waiting for bootstrap to complete")
-            run_cmd(
-                f"{self.installer} wait-for bootstrap-complete "
-                f"--dir {self.cluster_path} "
-                f"--log-level {log_cli_level}",
-                timeout=3600
-            )
+            try:
+                run_cmd(
+                    f"{self.installer} wait-for bootstrap-complete "
+                    f"--dir {self.cluster_path} "
+                    f"--log-level {log_cli_level}",
+                    timeout=3600
+                )
+            except CommandFailed as e:
+                if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
+                    try:
+                        gather_bootstrap()
+                    except Exception as ex:
+                        logger.error(ex)
+                raise e
+
             logger.info("removing bootstrap node")
             os.chdir(self.terraform_data_dir)
             self.terraform.apply(self.terraform_var, bootstrap_complete=True)
@@ -560,6 +584,9 @@ class VSPHEREUPI(VSPHEREBASE):
         terraform.initialize(upgrade=True)
         terraform.destroy(tfvars)
         os.chdir(previous_dir)
+
+        # post destroy checks
+        self.post_destroy_checks()
 
     def destroy_scaleup_nodes(self, scale_up_terraform_data_dir, scale_up_terraform_var):
         """

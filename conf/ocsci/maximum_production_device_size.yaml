@@ -1,0 +1,5 @@
+---
+#This config file holds the disk size in GB for maximum production environments.
+ENV_DATA:
+  device_size: '4096'
+

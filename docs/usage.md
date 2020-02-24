@@ -49,8 +49,11 @@ to the pytest.
 
 ### Additional arguments:
 
-
-* `--cluster-name <name>` - name of cluster (always required for deployment) must be 5-17 characters long. 
+* `--cluster-name <name>` - name of cluster (always required for deployment) must be 5-17 characters long.
+* `--ocs-version` - version of OCS to be used (e.g. 4.2 or 4.3). If not specified, the default from ocs-ci will be used.
+* `--upgrade-ocs-version` - version of OCS to be used for upgrade (e.g. 4.2 or 4.3). If not specified, the default from ocs-ci will be used.
+* `--ocs-registry-image` - ocs registry image to be used for deployment (e.g quay.io/rhceph-dev/ocs-olm-operator:latest-4.2)
+* `--upgrade-ocs-registry-image` - ocs registry image to be used for upgrade (e.g quay.io/rhceph-dev/ocs-olm-operator:latest-4.3)
 * `--ocsci-conf` - with this configuration parameter you can overwrite the
     default OCS-CI config parameters defined in
     [default config](https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/conf/default_config.yaml).
@@ -122,6 +125,12 @@ run-ci -m deployment --ocsci-conf conf/ocsci/vsphere_upi.yaml \
     --cluster-path /home/my_user/my-ocs-dir tests/ \
     --deploy
 ```
+
+#### Deployment via UI - openshift console
+
+Please follow setup instructions mentioned in [Getting started](./getting_started.md) document.
+To enable UI deployment please pass `--ocsci-conf conf/ocsci/ui-testing.yaml` where you will have to update path to
+your clone of openshift console repository.
 
 #### Running tests on deployed environment
 

@@ -1,16 +1,20 @@
+import os
 import logging
+import yaml
 from copy import deepcopy
+from pkg_resources import parse_version
 from tempfile import NamedTemporaryFile
 from time import sleep
+
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import upgrade
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
 from ocs_ci.ocs.exceptions import CephHealthException, TimeoutException
 from ocs_ci.ocs.node import get_typed_nodes
 from ocs_ci.ocs.ocp import get_images
-from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -21,6 +25,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
     PackageManifest,
 )
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
+from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.utility.utils import (
     get_latest_ds_olm_tag,
     get_next_version_available_for_upgrade,
@@ -69,12 +74,13 @@ def get_upgrade_image_info(old_csv_images, new_csv_images):
     )
 
 
-def verify_image_versions(old_images):
+def verify_image_versions(old_images, upgrade_version):
     """
     Verify if all the images of OCS objects got upgraded
 
     Args:
         old_images (set): set with old images
+        upgrade_version (packaging.version.Version): version of OCS
 
     """
     namespace = config.ENV_DATA['cluster_namespace']
@@ -89,8 +95,11 @@ def verify_image_versions(old_images):
     )
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
+    # in 4.3 app selector nooba have those pods: noobaa-core-ID, noobaa-db-ID,
+    # noobaa-operator-ID but in 4.2 only 2: noobaa-core-ID, noobaa-operator-ID
+    nooba_pods = 2 if upgrade_version < parse_version('4.3') else 3
     verify_pods_upgraded(
-        old_images, selector=constants.NOOBAA_APP_LABEL, count=2
+        old_images, selector=constants.NOOBAA_APP_LABEL, count=nooba_pods
     )
     verify_pods_upgraded(
         old_images, selector=constants.CSI_CEPHFSPLUGIN_LABEL,
@@ -129,9 +138,36 @@ def test_upgrade():
         resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
         namespace=constants.MARKETPLACE_NAMESPACE,
     )
+    version_before_upgrade = config.ENV_DATA.get("ocs_version")
+    upgrade_version = config.UPGRADE.get(
+        "upgrade_ocs_version", version_before_upgrade
+    )
+    parsed_version_before_upgrade = parse_version(version_before_upgrade)
+    parsed_upgrade_version = parse_version(upgrade_version)
+    assert parsed_upgrade_version >= parsed_version_before_upgrade, (
+        f"Version you would like to upgrade to: {upgrade_version} "
+        f"is not higher or equal to the version you currently running: "
+        f"{version_before_upgrade}"
+    )
+    version_change = parsed_upgrade_version > parsed_version_before_upgrade
+    if version_change:
+        version_config_file = os.path.join(
+            constants.CONF_DIR, 'ocs_version', f'ocs-{upgrade_version}.yaml'
+        )
+        assert os.path.exists(version_config_file), (
+            f"OCS version config file {version_config_file} doesn't exist!"
+        )
+        with open(
+            os.path.abspath(os.path.expanduser(version_config_file))
+        ) as file_stream:
+            custom_config_data = yaml.safe_load(file_stream)
+            config.update(custom_config_data)
     image_url = ocs_catalog.get_image_url()
     image_tag = ocs_catalog.get_image_name()
-    if config.DEPLOYMENT.get('upgrade_to_latest', True):
+    ocs_registry_image = config.UPGRADE.get('upgrade_ocs_registry_image')
+    if ocs_registry_image:
+        image_url, image_tag = ocs_registry_image.split(':')
+    elif config.UPGRADE.get('upgrade_to_latest', True) or version_change:
         new_image_tag = get_latest_ds_olm_tag()
     else:
         new_image_tag = get_next_version_available_for_upgrade(image_tag)
@@ -179,12 +215,15 @@ def test_upgrade():
     log.info(
         f"Waiting for CSV {csv_name_post_upgrade} to be in succeeded state"
     )
+    if version_before_upgrade == '4.2' and upgrade_version == '4.3':
+        log.info("Force creating Ceph toolbox after upgrade 4.2 -> 4.3")
+        setup_ceph_toolbox(force_setup=True)
     csv_post_upgrade.wait_for_phase("Succeeded", timeout=600)
     post_upgrade_images = get_images(csv_post_upgrade.get())
     old_images, _, _ = get_upgrade_image_info(
         pre_upgrade_images, post_upgrade_images
     )
-    verify_image_versions(old_images)
+    verify_image_versions(old_images, parsed_upgrade_version)
     ocs_install_verification(timeout=600, skip_osd_distribution_check=True)
     ceph_cluster.disable_health_monitor()
     if ceph_cluster.health_error_status:

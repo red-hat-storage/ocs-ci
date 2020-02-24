@@ -420,7 +420,7 @@ def measure_corrupt_pg(measurement_dir):
         nonlocal dummy_deployment
 
         logger.info(f"Corrupting {pg} PG on {osd_deployment}")
-        dummy_pod.exec_bash_cmd_on_pod(
+        dummy_pod.exec_sh_cmd_on_pod(
             f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
             f"{osd_deployment.split('-')[-1]} --pgid {pg} {pool_object} "
             f"set-bytes /etc/shadow --no-mon-config"

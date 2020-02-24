@@ -3,6 +3,10 @@
 Upgrade can be performed to the:
 
 * latest one DS build (by default)
+* next one Y version, for example current `4.2` -> latest `4.3`.
+    (version passed by `--upgrade-ocs-version` param)
+* specific image:tag specified by configuration file (see the example below)
+    or cli param `--upgrade-ocs-registry-image`.
 * next one DS build from current one - `upgrade_to_latest: false` has to be
   set, see here: [upgrade_to_next_build.yaml](https://github.com/red-hat-storage/ocs-ci/tree/master/conf/ocsci/upgrade_to_next_build.yaml)
   for more details.
@@ -52,7 +56,37 @@ In the case you would like to upgrade just to the one following DS build and not
 to the latest one, please pass `conf/ocsci/upgrade_to_next_build.yaml`
 configuration file to the upgrade execution.
 
-## TODO
+For upgrade between versions like 4.2 to 4.3 you need to:
 
-Once there will be 4.3 build we will need to implement the functionality to
-specify which version is going to be used for the upgrade. Like 4.2 -> 4.3.
+* specify version of OCS you have installed with `--ocs-version` param. This will
+    load proper config for this version (default is loaded latest one version
+    specified in OCS-CI default config). Example
+* specify version of OCS you would like to upgrade to with `--upgrade-ocs-version`.
+    This will automatically load new config for specific version.
+
+Example:
+
+```bash
+run-ci tests/
+    --cluster-name kerberos_ID-ocs-deployment \
+    --cluster-path /home/my_user/my-ocs-dir \
+    -m 'pre_upgrade or upgrade or post_upgrade' --ocs-version 4.2 --upgrade-ocs-version 4.3
+```
+
+Upgrade to specific build via config file:
+
+```yaml
+UPGRADE:
+  upgrade_ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:latest-4.3"
+```
+
+Upgrade to specific build via cli option:
+
+```bash
+run-ci tests/
+    --cluster-name kerberos_ID-ocs-deployment \
+    --cluster-path /home/my_user/my-ocs-dir \
+    -m 'pre_upgrade or upgrade or post_upgrade' --ocs-version 4.2 --upgrade-ocs-version 4.3 \
+    --upgrade-ocs-registry-image 'quay.io/rhceph-dev/ocs-olm-operator:latest-4.3'
+
+```

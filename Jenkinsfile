@@ -3,9 +3,11 @@
 //   AWS_DOMAIN
 //   AWS_REGION
 //   CLUSTER_USER
-// It also requires credentials with these IDs to be present in the CI system:
-//   openshift-dev-aws-access-key-id (AWS_ACCESS_KEY_ID)
-//   openshift-dev-aws-secret-access-key (AWS_SECRET_ACCESS_KEY)
+// It also requires credentials with these IDs to be present in the CI system.
+// The openshift aws credentials are stored per user so that we can easily
+// switch to another user's credentials if need be:
+//   openshift-dev-aws-access-key-id-$CLUSTER_USER (AWS_ACCESS_KEY_ID)
+//   openshift-dev-aws-secret-access-key-$CLUSTER_USER (AWS_SECRET_ACCESS_KEY)
 //   openshift-pull-secret (PULL_SECRET)
 //   ocs-bugzilla-cfg (BUGZILLA_CFG)
 // It may also provide these optional parameters to override the framework's
@@ -13,19 +15,23 @@
 //   OCS_REGISTRY_IMAGE
 //   EMAIL
 //   UMB_MESSAGE
+//   DEBUG_CLUSTER
+def LAST_STAGE
+
 pipeline {
   agent { node { label "ocs-ci" }}
   environment {
     AWS_SHARED_CREDENTIALS_FILE = "${env.WORKSPACE}/.aws/credentials"
     AWS_CONFIG_FILE = "${env.WORKSPACE}/.aws/config"
-    AWS_ACCESS_KEY_ID = credentials('openshift-dev-aws-access-key-id')
-    AWS_SECRET_ACCESS_KEY = credentials('openshift-dev-aws-secret-access-key')
+    AWS_ACCESS_KEY_ID = credentials("openshift-dev-aws-access-key-id-${env.CLUSTER_USER}")
+    AWS_SECRET_ACCESS_KEY = credentials("openshift-dev-aws-secret-access-key-${env.CLUSTER_USER}")
     PULL_SECRET = credentials('openshift-pull-secret')
     BUGZILLA_CFG = credentials('ocs-bugzilla-cfg')
   }
   stages {
     stage("Setup") {
       steps {
+        script { LAST_STAGE=env.STAGE_NAME }
         sh """
           if [ ! -z '${env.EMAIL}' ]; then
             sudo yum install -y /usr/sbin/postfix
@@ -46,6 +52,7 @@ pipeline {
     }
     stage("Lint") {
       steps {
+        script { LAST_STAGE=env.STAGE_NAME }
         sh """
           source ./venv/bin/activate
           tox -e flake8
@@ -54,6 +61,7 @@ pipeline {
     }
     stage("Unit test") {
       steps {
+        script { LAST_STAGE=env.STAGE_NAME }
         sh """
           source ./venv/bin/activate
           tox -e py36
@@ -62,17 +70,19 @@ pipeline {
     }
     stage("Deploy OCP") {
       steps {
+        script { LAST_STAGE=env.STAGE_NAME }
         sh """
         source ./venv/bin/activate
-        run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocp.yaml --ocsci-conf=conf/ocsci/production-aws-ipi.yaml --ocsci-conf=conf/ocsci/production_device_size.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
+        run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocp.yaml --ocsci-conf=conf/ocsci/production-aws-ipi.yaml --ocsci-conf=conf/ocsci/production_device_size.yaml --cluster-name=${env.CLUSTER_USER}-ocsci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
         """
       }
     }
     stage("Deploy OCS") {
       steps {
+        script { LAST_STAGE=env.STAGE_NAME }
         sh """
         source ./venv/bin/activate
-        run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocs.yaml --ocsci-conf=conf/ocsci/production-aws-ipi.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
+        run-ci -m deployment --deploy --ocsci-conf=ocs-ci-ocs.yaml --ocsci-conf=conf/ocsci/production-aws-ipi.yaml --cluster-name=${env.CLUSTER_USER}-ocsci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
         """
       }
     }
@@ -84,9 +94,10 @@ pipeline {
         )}"""
       }
       steps {
+        script { LAST_STAGE=env.STAGE_NAME }
         sh """
         source ./venv/bin/activate
-        run-ci -m acceptance --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --self-contained-html --html=${env.WORKSPACE}/logs/report.html --junit-xml=${env.WORKSPACE}/logs/junit.xml --collect-logs --bugzilla ${env.EMAIL_ARG}
+        run-ci -m acceptance --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocsci-${env.BUILD_ID} --cluster-path=cluster --self-contained-html --html=${env.WORKSPACE}/logs/report.html --junit-xml=${env.WORKSPACE}/logs/junit.xml --collect-logs --bugzilla ${env.EMAIL_ARG}
         """
       }
     }
@@ -94,21 +105,39 @@ pipeline {
   post {
     always {
       archiveArtifacts artifacts: 'ocs-ci-*.yaml,cluster/**,logs/**', fingerprint: true
+      script {
+        if( env.DEBUG_CLUSTER in [true, 'true'] ) {
+          input(message: "Proceed with cluster teardown?")
+        }
+      }
       sh """
         source ./venv/bin/activate
-        run-ci -m deployment --teardown --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocs-ci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
+        run-ci -m deployment --teardown --ocsci-conf=ocs-ci-ocs.yaml --cluster-name=${env.CLUSTER_USER}-ocsci-${env.BUILD_ID} --cluster-path=cluster --collect-logs
         """
       junit testResults: "logs/junit.xml", keepLongStdio: false
+    }
+    failure {
+      script {
+        if ( LAST_STAGE != "Acceptance Tests" ) {
+          emailext (
+            subject: "Job '${env.JOB_NAME}' build #${env.BUILD_ID} failed during stage '${LAST_STAGE}'",
+            body: "Build failed : ${env.BUILD_URL}",
+            from: "${env.EMAIL}",
+            to: "${env.EMAIL}"
+          )
+        }
+      }
     }
     success {
       script {
         def registry_image = "${env.OCS_REGISTRY_IMAGE}"
         // quay.io/rhceph-dev/ocs-registry:4.2-58.e59ca0f.master -> 4.2-58.e59ca0f.master
         def registry_tag = registry_image.split(':')[-1]
-        // tag ocs-registry container as 'latest-stable'
-        build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-registry:latest-stable")]
+        def ocs_version = registry_tag.split('-')[0]
+        // tag ocs-registry container as 'latest-stable-$ocs_version'
+        build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-registry:latest-stable-${ocs_version}")]
         // tag ocs-olm-operator container as 'latest-stable'
-        build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-olm-operator:latest-stable")]
+        build job: 'quay-tag-image', parameters: [string(name: "SOURCE_URL", value: "${registry_image}"), string(name: "QUAY_IMAGE_TAG", value: "ocs-olm-operator:latest-stable-${ocs_version}")]
         if( env.UMB_MESSAGE in [true, 'true'] ) {
           def registry_version = registry_tag.split('-')[0]
           def properties = """
