@@ -1,3 +1,4 @@
+import base64
 import logging
 import os
 from abc import ABC, abstractmethod
@@ -8,6 +9,11 @@ from google.cloud import storage
 from google.auth.exceptions import DefaultCredentialsError
 import ibm_boto3
 
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
+from ocs_ci.utility import templating
+from tests.helpers import create_resource
+
 logger = logging.getLogger(name=__file__)
 
 
@@ -15,6 +21,7 @@ class CloudManager(ABC):
     aws_client, google_client, azure_client, s3comp_client = (None,) * 4
 
     def __init__(self):
+        # TODO: solve credentials for clients
         self.aws_client = S3Client()
         self.google_client = GoogleClient()
         self.azure_client = AzureClient()
@@ -46,6 +53,12 @@ class CloudClient(ABC):
         logger.info(f"Deleting ULS: {name}")
         self.internal_delete_uls(name)
 
+    def get_all_uls_names(self):
+        pass
+
+    def verify_uls_exists(self, uls_name):
+        pass
+
     @abstractmethod
     def internal_create_uls(self, name):
         pass
@@ -68,6 +81,16 @@ class S3Client(CloudClient):
             aws_access_key_id=key_id,
             aws_secret_access_key=access_key
         )
+        bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
+        bs_secret_data['metadata']['name'] += f'-client-secret'
+        bs_secret_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
+        bs_secret_data['data']['AWS_ACCESS_KEY_ID'] = base64.urlsafe_b64encode(
+            self.aws_access_key_id.encode('UTF-8')
+        ).decode('ascii')
+        bs_secret_data['data']['AWS_SECRET_ACCESS_KEY'] = base64.urlsafe_b64encode(
+            self.aws_access_key.encode('UTF-8')
+        ).decode('ascii')
+        self.secret = create_resource(**bs_secret_data)
 
     def internal_create_uls(self, name, region=None):
         """
@@ -98,6 +121,35 @@ class S3Client(CloudClient):
             except ClientError:
                 logger.info(f'Deletion of ULS {name} failed. Retrying...')
                 sleep(3)
+
+    def get_all_uls_names(self):
+        """
+            Returns:
+                set: A set of all bucket names
+
+        """
+        return {bucket.name for bucket in self.client.buckets.all()}
+
+    def verify_uls_exists(self, uls_name):
+        """
+           Verifies whether a uls with the given uls_name exists
+           Args:
+               uls_name : The uls name to be verified
+
+           Returns:
+                 bool: True if uls exists, False otherwise
+
+        """
+        try:
+            self.client.head_bucket(Bucket=uls_name)
+            logger.info(f"{uls_name} exists")
+            return True
+        except ClientError:
+            logger.info(f"{uls_name} does not exist")
+            return False
+
+    def get_secret(self):
+        return self.secret
 
 
 class GoogleClient(CloudClient):
@@ -137,6 +189,12 @@ class GoogleClient(CloudClient):
                 logger.info(f'Deletion of ULS {name} failed. Retrying...')
                 sleep(3)
 
+    def get_all_uls_names(self):
+        pass
+
+    def verify_uls_exists(self, uls_name):
+        pass
+
 
 class AzureClient(CloudClient):
     """
@@ -159,24 +217,9 @@ class AzureClient(CloudClient):
         """
         pass
 
-
-class IBMClient(CloudClient):
-    """
-        Implementation of a IBM Client using the IBM API
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def get_all_uls_names(self):
         pass
 
-    def internal_create_uls(self, name, region=None):
-        """
-            Creates the Underlying Storage using the IBM API
-        """
+    def verify_uls_exists(self, uls_name):
         pass
 
-    def internal_delete_uls(self, name):
-        """
-            Deletes the Underlying Storage using the IBM API
-        """
-        pass

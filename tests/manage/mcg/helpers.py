@@ -1,7 +1,9 @@
 import boto3
 
 from ocs_ci.ocs import constants
-from tests.helpers import logger, craft_s3_command
+from ocs_ci.utility import templating
+from ocs_ci.framework import config
+from tests.helpers import logger, craft_s3_command, create_resource
 
 
 def retrieve_test_objects_to_pod(podobj, target_dir):
@@ -55,3 +57,42 @@ def sync_object_directory(podobj, src, target, mcg_obj=None):
         secrets=secrets
     ), 'Failed to sync objects'
     # Todo: check that all objects were synced successfully
+
+
+def oc_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
+
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data['metadata']['name'] += f'-{backingstore_name}'
+    bs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
+    bs_data['spec']['awsS3']['secret']['name'] = cld_mgr.aws_client.get_secret()
+    bs_data['spec']['awsS3']['targetBucket'] = uls_name
+    bs_data['spec']['awsS3']['region'] = region
+    return create_resource(**bs_data)
+
+
+def cli_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def cli_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def oc_create_azure_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def cli_create_azure_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def oc_create_s3comp_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def cli_create_s3comp_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
