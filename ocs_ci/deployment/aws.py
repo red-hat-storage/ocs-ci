@@ -22,7 +22,7 @@ from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     clone_repo, create_rhelpod, get_cluster_name, get_infra_id, run_cmd,
-    TimeoutSampler
+    TimeoutSampler, get_ocp_version
 )
 from .deployment import Deployment
 
@@ -298,14 +298,17 @@ class AWSUPI(AWSBase):
         def __init__(self):
             super(AWSUPI.OCPDeployment, self).__init__()
             upi_repo_name = f'openshift-misc-{config.RUN["run_id"]}'
+
+            self.upi_common_base = 'v3-launch-templates/functionality-testing'
             self.upi_repo_path = os.path.join(
                 constants.EXTERNAL_DIR, upi_repo_name,
             )
-
             self.upi_script_path = os.path.join(
                 self.upi_repo_path,
-                'v3-launch-templates/functionality-testing'
-                '/aos-4_2/hosts/'
+                self.upi_common_base,
+                os.path.join(
+                    f"aos-{get_ocp_version('_')}", 'hosts/'
+                ),
             )
 
         def deploy_prereq(self):
@@ -326,8 +329,10 @@ class AWSUPI(AWSBase):
                 'num_workers': str(config.ENV_DATA['worker_replicas']),
                 'AVAILABILITY_ZONE_COUNT': str(config.ENV_DATA.get(
                     'availability_zone_count', ''
-                ))
+                )),
+                'BASE_DOMAIN': config.ENV_DATA['base_domain']
             }
+
             for key, value in upi_env_vars.items():
                 if value:
                     os.environ[key] = value
@@ -569,9 +574,13 @@ class AWSUPI(AWSBase):
         pem_dst_path = "/openshift-dev.pem"
         pod.upload(rhel_pod_obj.name, pem_src_path, pem_dst_path)
         repo_dst_path = "/etc/yum.repos.d/"
-        repo_file = os.path.basename(constants.OCP4_2_REPO)
+        repo = os.path.join(
+            constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo"
+        )
+        assert os.path.exists(repo), f"Required repo file {repo} doesn't exist!"
+        repo_file = os.path.basename(repo)
         pod.upload(
-            rhel_pod_obj.name, constants.OCP4_2_REPO, repo_dst_path
+            rhel_pod_obj.name, repo, repo_dst_path
         )
         # copy the .pem file for our internal repo on all nodes
         # including ansible pod

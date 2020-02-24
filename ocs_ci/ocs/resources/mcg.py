@@ -15,6 +15,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_mcg_cmd, TimeoutSampler
 from tests.helpers import create_unique_resource_name, create_resource
+from ocs_ci.ocs.resources import pod
 
 logger = logging.getLogger(name=__file__)
 
@@ -96,6 +97,19 @@ class MCG(object):
                 's3', verify=False, endpoint_url="https://s3.amazonaws.com",
                 aws_access_key_id=self.aws_access_key_id,
                 aws_secret_access_key=self.aws_access_key
+            )
+            logger.info('Checking whether RGW pod is not present on AWS platform')
+            pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
+            assert len(pods) == 0, 'RGW pod should not exist on AWS platform'
+
+        elif config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
+            logger.info('Checking for RGW pod on VSPHERE platform')
+            rgw_pod = OCP(kind=constants.POD, namespace=self.namespace)
+            assert rgw_pod.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector=constants.RGW_APP_LABEL,
+                resource_count=1,
+                timeout=60
             )
 
     def s3_get_all_bucket_names(self):

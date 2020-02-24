@@ -1039,6 +1039,28 @@ def get_csi_versions():
     return csi_versions
 
 
+def get_ocp_version(seperator=None):
+    """
+    Get current ocp version
+
+    Args:
+        seperator (str): String that would seperate major and
+            minor version nubers
+
+    Returns:
+        string : If seperator is 'None', version string will be returned as is
+            eg: '4.2', '4.3'.
+            If seperator is provided then '.' in the version string would be
+            replaced by seperator and resulting string will be returned.
+            eg: If seperator is '_' then string returned would be '4_2'
+
+    """
+    char = seperator if seperator else '.'
+    return char.join(
+        config.DEPLOYMENT['installer_version'].split('.')[: -2]
+    )
+
+
 def parse_pgsql_logs(data):
     """
     Parse the pgsql benchmark data from ripsaw and return
@@ -1316,6 +1338,20 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
     )
     latest_image = None
     tags = _req.json()['tags']
+    ocs_version = config.ENV_DATA['ocs_version']
+    upgrade_ocs_version = config.UPGRADE.get('upgrade_ocs_version')
+    use_rc_build = config.UPGRADE.get("use_rc_build")
+    previous_rc_build = config.UPGRADE.get("previous_rc_build")
+    upgrade_version_change = (
+        upgrade_ocs_version and ocs_version != upgrade_ocs_version
+    )
+    if (
+        upgrade and use_rc_build and previous_rc_build
+        and not upgrade_version_change
+    ):
+        latest_tag = previous_rc_build
+    if upgrade_version_change:
+        upgrade = False
     for tag in tags:
         if tag['name'] == latest_tag:
             latest_image = tag['image_id']
@@ -1338,8 +1374,14 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
                 continue
             if (
                 tag['name'] not in constants.LATEST_TAGS
-                and tag['image_id'] != latest_image and "rc" in tag['name']
+                and tag['image_id'] != latest_image
+                and ocs_version in tag['name']
             ):
+                if (
+                    config.UPGRADE.get("use_rc_build")
+                    and "rc" not in tag['name']
+                ):
+                    continue
                 return tag['name']
     raise TagNotFoundException(f"Couldn't find any desired tag!")
 
@@ -1375,8 +1417,14 @@ def get_next_version_available_for_upgrade(current_tag):
             break
     sliced_reversed_tags = tags[:current_tag_index]
     sliced_reversed_tags.reverse()
+    ocs_version = config.ENV_DATA['ocs_version']
     for tag in sliced_reversed_tags:
-        if tag['name'] not in constants.LATEST_TAGS and "rc" in tag['name']:
+        if (
+            tag['name'] not in constants.LATEST_TAGS
+            and ocs_version in tag['name']
+        ):
+            if config.UPGRADE.get("use_rc_build") and "rc" not in tag['name']:
+                continue
             return tag['name']
     raise TagNotFoundException(f"Couldn't find any tag!")
 

@@ -101,6 +101,27 @@ def pytest_addoption(parser):
         dest='ocs_version',
         help="ocs version for which ocs-ci to be run"
     )
+    parser.addoption(
+        '--upgrade-ocs-version',
+        dest='upgrade_ocs_version',
+        help="ocs version to upgrade (e.g. 4.3)"
+    )
+    parser.addoption(
+        '--ocs-registry-image',
+        dest='ocs_registry_image',
+        help=(
+            "ocs registry image to be used for deployment "
+            "(e.g. quay.io/rhceph-dev/ocs-olm-operator:latest-4.2)"
+        )
+    )
+    parser.addoption(
+        '--upgrade-ocs-registry-image',
+        dest='upgrade_ocs_registry_image',
+        help=(
+            "ocs registry image to be used for upgrade "
+            "(e.g. quay.io/rhceph-dev/ocs-olm-operator:latest-4.3)"
+        )
+    )
 
 
 def pytest_configure(config):
@@ -259,6 +280,15 @@ def process_cluster_cli_params(config):
         ocsci_config.DEPLOYMENT.get('live_deployment', False)
     )
     ocsci_config.RUN['cli_params']['io_in_bg'] = get_cli_param(config, "io_in_bg", default=False)
+    upgrade_ocs_version = get_cli_param(config, "upgrade_ocs_version")
+    if upgrade_ocs_version:
+        ocsci_config.UPGRADE['upgrade_ocs_version'] = upgrade_ocs_version
+    ocs_registry_image = get_cli_param(config, "ocs_registry_image")
+    if ocs_registry_image:
+        ocsci_config.DEPLOYMENT['ocs_registry_image'] = ocs_registry_image
+    upgrade_ocs_registry_image = get_cli_param(config, "upgrade_ocs_registry_image")
+    if upgrade_ocs_registry_image:
+        ocsci_config.UPGRADE['upgrade_ocs_registry_image'] = upgrade_ocs_registry_image
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
     get_cli_param(config, 'collect-logs')
@@ -284,9 +314,10 @@ def pytest_collection_modifyitems(session, config, items):
             marker = item.get_closest_marker(name="polarion_id")
             if marker:
                 polarion_id = marker.args[0]
-                item.user_properties.append(
-                    ("polarion-testcase-id", polarion_id)
-                )
+                if polarion_id:
+                    item.user_properties.append(
+                        ("polarion-testcase-id", polarion_id)
+                    )
         except IndexError:
             log.warning(
                 f"polarion_id marker found with no value for "

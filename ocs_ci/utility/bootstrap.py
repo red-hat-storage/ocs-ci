@@ -121,7 +121,9 @@ def get_node_data_aws():
         if master_pattern in node.name
     ]
     master_ips = [master.private_ips[0] for master in master_nodes]
-    data['master_ips'] = master_ips
+    data['master_ips'] = [ip for ip in master_ips if ip is not None]
+    if len(data['master_ips']) < config.ENV_DATA['master_replicas']:
+        logger.warning('IP data was not found for all master nodes')
     logger.debug(data)
     return data
 
@@ -167,8 +169,13 @@ def get_node_data_vsphere():
             master_name, datacenter, cluster, pool
         )
         master_ip = _vsphere.get_vms_ips([master_node])[0]
-        logger.info("Found master node %s with IP %s", master_name, master_ip)
-        master_ips.append(master_ip)
+        if master_ip:
+            logger.info(
+                "Found master node %s with IP %s", master_name, master_ip
+            )
+            master_ips.append(master_ip)
+        else:
+            logger.warning("Unable to find IP for node %s", master_name)
     data['master_ips'] = master_ips
     logger.debug(data)
     return data
