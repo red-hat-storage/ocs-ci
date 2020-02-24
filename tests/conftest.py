@@ -71,7 +71,7 @@ def supported_configuration():
 
     node_obj = ocp.OCP(kind=constants.NODE)
     log.debug('Checking if system meets minimal requirements')
-    nodes = node_obj.get().get('items')
+    nodes = node_obj.get(selector=constants.WORKER_LABEL).get('items')
     for node_info in nodes:
         real_cpu = int(node_info.get('status').get('capacity').get('cpu'))
         real_memory = node_info.get('status').get('capacity').get('memory')
