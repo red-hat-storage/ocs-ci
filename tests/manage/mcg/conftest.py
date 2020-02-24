@@ -10,7 +10,8 @@ from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from tests.helpers import craft_s3_command, create_unique_resource_name
 from tests.manage.mcg.helpers import oc_create_aws_backingstore, oc_create_google_backingstore, \
     oc_create_azure_backingstore, oc_create_s3comp_backingstore, cli_create_aws_backingstore, \
-    cli_create_google_backingstore, cli_create_azure_backingstore, cli_create_s3comp_backingstore
+    cli_create_google_backingstore, cli_create_azure_backingstore, cli_create_s3comp_backingstore, \
+    oc_create_pv_backingstore, cli_create_pv_backingstore
 
 logger = logging.getLogger(__name__)
 
@@ -193,13 +194,15 @@ def backingstore_factory(request, cld_mgr):
             'aws': oc_create_aws_backingstore,
             'google': oc_create_google_backingstore,
             'azure': oc_create_azure_backingstore,
-            's3comp': oc_create_s3comp_backingstore
+            's3comp': oc_create_s3comp_backingstore,
+            'pv': oc_create_pv_backingstore
         },
         'oc': {
             'aws': cli_create_aws_backingstore,
             'google': cli_create_google_backingstore,
             'azure': cli_create_azure_backingstore,
-            's3comp': cli_create_s3comp_backingstore
+            's3comp': cli_create_s3comp_backingstore,
+            'pv': cli_create_pv_backingstore
         }
     }
 
@@ -211,9 +214,13 @@ def backingstore_factory(request, cld_mgr):
             method (str): String for selecting method of backing store creation (CLI/OC)
             uls_dict (dict): Dictionary containing storage provider as key and a list of tuples
             as value.
-            each tuple contain amount as first parameter and region as second parameter.
+            for cloud backingstore: each tuple contain amount as first parameter
+            and region as second parameter.
+            for pv: each tuple contain number of volumes as first parameter
+            and size as second parameter.
             Example:
                 'aws': [(3,us-west-1),(2,eu-east-2)]
+                'pv': [(3,32,ocs-storagecluster-ceph-rbd),(2,100,ocs-storagecluster-ceph-rbd)]
 
         Returns:
             list: A list of backingstore objects.
@@ -229,17 +236,28 @@ def backingstore_factory(request, cld_mgr):
                     f'Invalid cloud type received: {cloud}. '
                     f'available types: {", ".join(cmdMap[method.lower()].keys())}'
                 )
-            region = uls_tup[1]
-            uls_names = cloud_uls_factory({cloud: uls_tup})
-            for uls_name in uls_names:
+            if cloud == 'pv':
+                vol_num, size, storage_class = uls_tup
                 backingstore_name = create_unique_resource_name(
                     resource_description='backingstore', resource_type=cloud.lower()
                 )
                 created_backingstores.append(
                     cmdMap[method.lower()][cloud.lower()](
-                        cld_mgr, backingstore_name, uls_name, region
+                        backingstore_name, vol_num, size, storage_class
                     )
                 )
+            else:
+                region = uls_tup[1]
+                uls_names = cloud_uls_factory({cloud: uls_tup})
+                for uls_name in uls_names:
+                    backingstore_name = create_unique_resource_name(
+                        resource_description='backingstore', resource_type=cloud.lower()
+                    )
+                    created_backingstores.append(
+                        cmdMap[method.lower()][cloud.lower()](
+                            cld_mgr, backingstore_name, uls_name, region
+                        )
+                    )
             return created_backingstores
 
     def backingstore_cleanup():
