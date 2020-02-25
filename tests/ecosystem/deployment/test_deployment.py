@@ -2,7 +2,7 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import deployment, destroy, polarion_id
-from ocs_ci.ocs.resources.ocs import ocs_install_verification
+from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
 from ocs_ci.utility.reporting import get_deployment_polarion_id
 from ocs_ci.utility.utils import is_cluster_running
 
