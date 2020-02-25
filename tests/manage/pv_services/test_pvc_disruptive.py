@@ -133,7 +133,11 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
                 constants.CEPHFILESYSTEM, 'create_pvc',
                 'cephfsplugin_provisioner'
             ],
-            marks=pytest.mark.polarion_id("OCS-948")
+            marks=[
+                pytest.mark.polarion_id("OCS-948"),
+                pytest.mark.bugzilla("1806419"),
+                pytest.mark.bugzilla("1793387")
+            ]
         ),
         pytest.param(
             *[
