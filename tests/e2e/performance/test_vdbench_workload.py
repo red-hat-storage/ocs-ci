@@ -37,7 +37,7 @@ def retrive_files_from_pod(pod_name, localpath, remotepath):
 
 
 @pytest.fixture(scope='function')
-def label_nodes(request):
+def label_nodes(request, with_ocs):
     """
     Fixture to label the node(s) that will run the application pod.
     That will be all workers node that do not run the OCS cluster.
@@ -46,16 +46,23 @@ def label_nodes(request):
     m_set = ''  # this will hold machine_set name that added
 
     def teardown():
+
+        if with_ocs is True:
+            return
+
         log.info('Clear label form worker (Application) nodes')
         # Getting all Application nodes
         app_nodes = machine.get_labeled_nodes(constants.APP_NODE_LABEL)
         helpers.remove_label_from_worker_node(app_nodes,
                                               constants.APP_NODE_LABEL)
         if m_set:
-            log.info(f'Decreas {m_set} by 1')
+            log.info(f'Decrease {m_set} by 1')
             machine.delete_node(m_set, 1)
 
     request.addfinalizer(teardown)
+
+    if with_ocs is True:
+        return
 
     # Getting all OCS nodes (to verify app pod wil not run on)
     ocs_nodes = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
@@ -63,6 +70,7 @@ def label_nodes(request):
     worker_nodes = helpers.get_worker_nodes()
     # Getting list of free nodes
     free_nodes = list(set(worker_nodes) - set(ocs_nodes))
+
     if not free_nodes:
         # Getting list of current machinesets
         log.info('Adding new worker node for the application to run on.')
@@ -127,37 +135,43 @@ class TestVDBenchWorkload(E2ETest):
     """
 
     @pytest.mark.parametrize(
-        argnames=['template', 'servers', 'threads', 'blocksize', 'fileio',
-                  'samples', 'width', 'depth', 'files', 'file_size', 'runtime',
-                  'pause'],
+        argnames=['template', 'with_ocs', 'servers', 'threads', 'blocksize',
+                  'fileio', 'samples', 'width', 'depth', 'files', 'file_size',
+                  'runtime', 'pause'],
         argvalues=[
-            pytest.param(*["VDBench-BCurve.yaml",
+            pytest.param(*["VDBench-BCurve.yaml", True,
                            9, 4, ["4k"], "random",
                            1, 4, 3, 256, 5, 600, 5]),
-            pytest.param(*["VDBench-BCurve.yaml",
+            pytest.param(*["VDBench-BCurve.yaml", True,
                            9, 4, ["64k"], "random",
                            1, 4, 3, 256, 5, 600, 5]),
-            pytest.param(*["VDBench-BCurve-FS.yaml",
+            pytest.param(*["VDBench-BCurve-FS.yaml", True,
                            9, 4, ["4k"], "random",
                            1, 4, 3, 256, 5, 600, 5]),
-            pytest.param(*["VDBench-BCurve-FS.yaml",
+            pytest.param(*["VDBench-BCurve-FS.yaml", True,
                            9, 4, ["64k"], "random",
                            1, 4, 3, 256, 5, 600, 5]),
-            pytest.param(*["VDBench-Basic.yaml",
-                           9, 4, ["4k", "64k"], "random",
-                           1, 4, 3, 256, 5, 600, 1],
+            #pytest.param(*["VDBench-Basic.yaml", True,
+            #               9, 4, ["4k", "64k"], "random",
+            #               1, 4, 3, 256, 5, 600, 1],
+            #             marks=pytest.mark.workloads()),
+            pytest.param(*["VDBench-Basic.yaml", True,
+                           1, 4, ["4k"], "random",
+                           1, 4, 3, 10, 1, 60, 1],
                          marks=pytest.mark.workloads()),
         ],
     )
-    def test_vdbench_workload(self, template, label_nodes, ripsaw, servers,
-                              threads, blocksize, fileio, samples, width,
-                              depth, files, file_size, runtime, pause
+    def test_vdbench_workload(self, template, with_ocs, label_nodes, ripsaw,
+                              servers, threads, blocksize, fileio, samples,
+                              width, depth, files, file_size, runtime, pause
                               ):
         """
         Run VDBench Workload
 
         Args :
             template (str) : Name of yaml file that will used as a template
+            with_ocs (bool) : This parameter will indicate if the test will
+                              run on the same nodes as the OCS
             label_nodes (fixture) : This fixture is labeling the worker(s)
                                     that will used for App. pod(s)
             ripsaw (fixture) : Fixture to deploy the ripsaw benchmarking operator
@@ -222,6 +236,9 @@ class TestVDBenchWorkload(E2ETest):
         if len(blocksize) > 0:
             sf_data['spec']['workload']['args']['bs'] = blocksize
             target_results = target_results + '-' + '_'.join(blocksize)
+        if with_ocs:
+            if sf_data['spec']['workload']['args']['pin_server']:
+                del sf_data['spec']['workload']['args']['pin_server']
 
         """
             Calculating the size of the volume that need to be test, it should
