@@ -56,7 +56,7 @@ class TestNodesMaintenance(ManageTest):
     @pytest.fixture(autouse=True)
     def health_checker(self):
         """
-        Check Ceph Health
+        Check Ceph health
 
         """
         try:
