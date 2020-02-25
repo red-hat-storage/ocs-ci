@@ -2,6 +2,7 @@ import logging
 import json
 import time
 
+from ocs_ci.framework import Config
 from ocs_ci.ocs import ocp
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.framework.testlib import ManageTest
@@ -10,9 +11,7 @@ from ocs_ci.ocs.exceptions import CephHealthException
 
 logger = logging.getLogger(__name__)
 
-# TODO: add automatic image finder
 # TODO: add image type validation (ga to ga , nightly to nightly, newer than current etc.)
-# TODO: receive image as external argument
 
 
 class TestUpgradeOCP(ManageTest):
@@ -31,13 +30,13 @@ class TestUpgradeOCP(ManageTest):
         Tests OCS stability when upgrading OCP
 
         """
-        target_image = "4.3.0-0.nightly-2020-02-17-205936"
-        self.cluster_operators = self.get_all_cluster_operators()
+        config = Config()
         ceph_cluster = CephCluster()
         ceph_cluster.enable_health_monitor()
 
+        target_image = config.OCP_UPGRADE['ocp_version']
+        self.cluster_operators = self.get_all_cluster_operators()
         logger.info(f" oc version: {self.get_current_oc_version()}")
-
         self.get_all_cluster_operators()
 
         # Upgrade OCP

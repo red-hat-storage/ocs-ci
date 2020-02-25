@@ -24,6 +24,7 @@ class Config:
     REPORTING: dict = field(default_factory=dict)
     RUN: dict = field(default_factory=dict)
     UPGRADE: dict = field(default_factory=dict)
+    OCP_UPGRADE: dict = field(default_factory=dict)
 
     def __post_init__(self):
         self.reset()
