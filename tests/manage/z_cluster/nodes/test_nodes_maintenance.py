@@ -55,13 +55,17 @@ class TestNodesMaintenance(ManageTest):
 
     @pytest.fixture(autouse=True)
     def health_checker(self):
+        """
+        Check Ceph Health
+
+        """
         try:
             status = ceph_health_check_base()
             if status:
                 logger.info("Health check passed")
-        except CephHealthException:
+        except CephHealthException as e:
             # skip because ceph is not in good health
-            pytest.skip("Ceph Health check failed")
+            pytest.skip(e)
 
     @tier1
     @pytest.mark.parametrize(
