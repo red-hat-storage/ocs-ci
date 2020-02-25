@@ -500,6 +500,87 @@ class CephCluster(object):
     def disable_health_monitor(self):
         self.health_monitor_enabled = False
 
+    def get_ceph_cluster_iops(self):
+        """
+        The function gets the IOPS from the ocs cluster
+
+        Returns:
+            Total IOPS in the cluster
+
+        """
+
+        ceph_status = self.get_ceph_status()
+        for item in ceph_status.split("\n"):
+            if 'client' in item:
+                iops = re.findall(r'\d+\.+\d+|\d\d*', item.strip())
+                iops = iops[2::1]
+                if len(iops) == 2:
+                    iops_in_cluster = float(iops[0]) + float(iops[1])
+                else:
+                    iops_in_cluster = float(iops[0])
+                logging.info(f"IOPS in the cluster is {iops_in_cluster}")
+                return iops_in_cluster
+
+    def get_iops_percentage(self, osd_size=2):
+        """
+        The function calculates the IOPS percentage
+        of the cluster depending on number of osds in the cluster
+
+        Args:
+            osd_size (int): Size of 1 OSD in Ti
+
+        Returns:
+            IOPS percentage of the OCS cluster
+
+        """
+
+        osd_count = count_cluster_osd()
+        iops_per_osd = osd_size * constants.IOPS_FOR_1TiB_OSD
+        iops_in_cluster = self.get_ceph_cluster_iops()
+        osd_iops_limit = iops_per_osd * osd_count
+        iops_percentage = (iops_in_cluster / osd_iops_limit) * 100
+        logging.info(f"The IOPS percentage of the cluster is {iops_percentage}%")
+        return iops_percentage
+
+    def get_cluster_throughput(self):
+        """
+        Function to get the throughput of ocs cluster
+
+        Returns:
+            Throughput of the cluster in MiB/s
+
+        """
+
+        ceph_status = self.get_ceph_status()
+        for item in ceph_status.split("\n"):
+            if 'client' in item:
+                throughput_data = item.strip('client: ').split(",")
+                throughput_data = throughput_data[:2:1]
+                # Converting all B/s and KiB/s to MiB/s
+                conversion = {'B/s': 0.000000976562, 'KiB/s': 0.000976562, 'MiB/s': 1}
+                throughput = 0
+                for val in throughput_data:
+                    throughput += [
+                        float(re.findall(r'\d+', val)[0]) * conversion[key]
+                        for key in conversion.keys() if key in val
+                    ][0]
+                    logger.info(f"The throughput is {throughput} MiB/s")
+                return throughput
+
+    def get_throughput_percentage(self):
+        """
+        Function to get throughput percentage of the ocs cluster
+
+        Returns:
+            Throughput percentage of the cluster
+
+        """
+
+        throughput_of_cluster = self.get_cluster_throughput()
+        throughput_percentage = (throughput_of_cluster / constants.THROUGHPUT_LIMIT_OSD) * 100
+        logging.info(f"The throughput percentage of the cluster is {throughput_percentage}%")
+        return throughput_percentage
+
 
 class HealthMonitorThread(threading.Thread):
     """
