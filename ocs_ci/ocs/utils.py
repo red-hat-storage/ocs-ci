@@ -1,4 +1,5 @@
 import datetime
+import json
 import logging
 import os
 import pickle
@@ -24,6 +25,7 @@ from ocs_ci.ocs.openstack import CephVMNode
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
+from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import create_directory_path, run_cmd
 
@@ -789,3 +791,47 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True):
             ocp_log_dir_path, ocp_must_gather_image,
             '/usr/bin/gather_service_logs worker'
         )
+
+
+def collect_prometheus_metrics(
+    metrics,
+    dir_name,
+    start,
+    stop,
+    step=1.0,
+):
+    """
+    Collects metrics from Prometheus and saves them in file in json format.
+
+    Args:
+        metrics (list): list of metrics to get from Prometheus
+        dir_name (str): directory name to store metrics. Metrics will be stored
+            in dir_name suffix with _ocs_metrics.
+        start (str): start timestamp of required datapoints
+        stop (str): stop timestamp of required datapoints
+        step (float): step of required datapoints
+    """
+    api = PrometheusAPI()
+    log_dir_path = os.path.join(
+        os.path.expanduser(ocsci_config.RUN['log_dir']),
+        f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",
+        f"{dir_name}_ocs_metrics"
+    )
+    if not os.path.exists(log_dir_path):
+        log.info(f'Creating directory {log_dir_path}')
+        os.makedirs(log_dir_path)
+
+    for metric in metrics:
+        datapoints = api.get(
+            'query_range',
+            {
+                'query': metric,
+                'start': start,
+                'end': stop,
+                'step': step
+            }
+        )
+        file_name = os.path.join(log_dir_path, f'{metric}.json')
+        log.info(f'Saving {metric} data into {file_name}')
+        with open(file_name, 'w') as outfile:
+            json.dump(datapoints.json(), outfile)
