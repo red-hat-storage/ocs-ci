@@ -74,6 +74,7 @@ def label_nodes(request, with_ocs):
     worker_nodes = helpers.get_worker_nodes()
     # Getting list of free nodes
     free_nodes = list(set(worker_nodes) - set(ocs_nodes))
+
     if not free_nodes:
         # Getting list of current machinesets
         log.info('Adding new worker node for the application to run on.')
