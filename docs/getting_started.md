@@ -60,7 +60,7 @@ necessary dependencies
 5. Install requirements with `pip install -r requirements.txt`
 6. Install pre-config to enforce commits sign-offs, flake8 compliance and more
 
-   * `pip3 install -r requirements-dev.txt`
+   * `pip install -r requirements-dev.txt`
    * `pre-commit install --hook-type pre-commit --hook-type commit-msg`
 
 ## Initial Setup
