@@ -101,7 +101,7 @@ def set_rbac(yaml_file, resource_name):
         kind=constants.ROLEBINDING, namespace='openshift-operators-redhat'
     )
 
-    rbac_role.create(yaml_file=yaml_file)
+    rbac_role.create(yaml_file=yaml_file, out_yaml_format=False)
     try:
         rbac_role.get(resource_name, out_yaml_format=True)
         rbac_rolebinding.get(resource_name, out_yaml_format=True)
