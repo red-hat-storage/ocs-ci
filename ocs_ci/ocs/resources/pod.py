@@ -602,7 +602,7 @@ def get_fio_rw_iops(pod_obj):
     )
 
 
-def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=None):
+def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=False):
     """
     Run I/O in the background
 
@@ -610,7 +610,7 @@ def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=None):
         pod_obj (Pod): The object of the pod
         expect_to_fail (bool): True for the command to be expected to fail
             (disruptive operations), False otherwise
-        fedora_dc(str): set to None by default. If set to True, it runs IO in
+        fedora_dc (bool): set to False by default. If set to True, it runs IO in
             background on a fedora dc pod.
 
     Returns:
