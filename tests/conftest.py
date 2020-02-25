@@ -91,7 +91,7 @@ def supported_configuration():
         else:
             real_memory = int(real_memory)
 
-        if (real_cpu <= min_cpu or real_memory <= min_memory):
+        if (real_cpu < min_cpu or real_memory < min_memory):
             pytest.xfail(
                 f"Node {node_info.get('metadata').get('name')} doesn't have "
                 f"minimum of required reasources for running the test:\n"
