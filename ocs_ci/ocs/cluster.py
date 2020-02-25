@@ -506,6 +506,7 @@ class CephCluster(object):
 
         Returns:
             Total IOPS in the cluster
+
         """
 
         ceph_status = self.get_ceph_status()
@@ -530,6 +531,7 @@ class CephCluster(object):
 
         Returns:
             IOPS percentage of the OCS cluster
+
         """
 
         osd_count = count_cluster_osd()
@@ -546,6 +548,7 @@ class CephCluster(object):
 
         Returns:
             Throughput of the cluster in MiB/s
+
         """
 
         ceph_status = self.get_ceph_status()
@@ -557,8 +560,10 @@ class CephCluster(object):
                 conversion = {'B/s': 0.000000976562, 'KiB/s': 0.000976562, 'MiB/s': 1}
                 throughput = 0
                 for val in throughput_data:
-                    throughput += [float(re.findall(r'\d+', val)[0]) * conversion[key]
-                                   for key in conversion.keys() if key in val][0]
+                    throughput += [
+                        float(re.findall(r'\d+', val)[0]) * conversion[key]
+                        for key in conversion.keys() if key in val
+                    ][0]
                     logger.info(f"The throughput is {throughput} MiB/s")
                 return throughput
 
@@ -568,6 +573,7 @@ class CephCluster(object):
 
         Returns:
             Throughput percentage of the cluster
+
         """
 
         throughput_of_cluster = self.get_cluster_throughput()
