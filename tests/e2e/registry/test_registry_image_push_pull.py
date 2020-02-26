@@ -1,6 +1,6 @@
 import logging
 import pytest
-from ocs_ci.framework.testlib import workloads, E2ETest, ignore_leftovers
+from ocs_ci.framework.testlib import workloads, E2ETest, ignore_leftovers, bugzilla
 from ocs_ci.ocs import ocp, registry, constants
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
@@ -16,6 +16,7 @@ class TestRegistryImagePullPush(E2ETest):
     @workloads
     @ignore_leftovers
     @pytest.mark.polarion_id("OCS-1080")
+    @pytest.mark.skip("GitHub issue https://github.com/red-hat-storage/ocs-ci/issues/1547")
     def test_registry_image_pull_push(self):
         """
         Test case to validate registry image pull and push with OCS backend

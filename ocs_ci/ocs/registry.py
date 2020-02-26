@@ -159,8 +159,10 @@ def add_role_to_user(role_type, user):
 
     """
     ocp_obj = ocp.OCP()
-    role_cmd = f"policy add-role-to-user {role_type} {user} " \
-               f"-n {constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE}"
+    role_cmd = (
+        f"policy add-role-to-user {role_type} {user} "
+        f"-n {constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE}"
+    )
     assert ocp_obj.exec_oc_cmd(command=role_cmd), 'Adding role failed'
     logger.info(f"Role_type {role_type} added to the user {user}")
 
