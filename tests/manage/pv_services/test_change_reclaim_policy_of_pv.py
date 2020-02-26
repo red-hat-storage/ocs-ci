@@ -298,6 +298,9 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
                     if ret:
                         break
             except TimeoutExpiredError as err:
-                err.message = f"{err.message}- Volume associated with PVC {pvc_name} still exists in backend"
+                err.message = (
+                    f"{err.message}- Volume associated with PVC {pvc_name} "
+                    f"still exists in backend"
+                )
                 raise
         log.info("Verified: Image/Subvolume removed from backend.")
