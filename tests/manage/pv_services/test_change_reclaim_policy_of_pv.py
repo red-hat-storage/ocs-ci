@@ -8,6 +8,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from tests.helpers import (
     wait_for_resource_state, verify_volume_deleted_in_backend
 )
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
 log = logging.getLogger(__name__)
 
@@ -286,19 +287,20 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
             "policy to Delete."
         )
 
-        # Verify PV using ceph toolbox. Image/Subvolume should be deleted.
+        # Verify PV using ceph toolbox. Wait for Image/Subvolume to be deleted.
+        pool_name = self.sc_obj.ceph_pool.name if interface == constants.CEPHBLOCKPOOL else None
         for pvc_name, uuid in pvc_uuid_map.items():
-            if interface == constants.CEPHBLOCKPOOL:
-                ret = verify_volume_deleted_in_backend(
-                    interface=interface, image_uuid=uuid,
-                    pool_name=self.sc_obj.ceph_pool.name
+            try:
+                for ret in TimeoutSampler(
+                    180, 2, verify_volume_deleted_in_backend,
+                    interface=interface, image_uuid=uuid, pool_name=pool_name
+                ):
+                    if ret:
+                        break
+            except TimeoutExpiredError as err:
+                err.message = (
+                    f"{err.message}- Volume associated with PVC {pvc_name} "
+                    f"still exists in backend"
                 )
-            if interface == constants.CEPHFILESYSTEM:
-                ret = verify_volume_deleted_in_backend(
-                    interface=interface, image_uuid=uuid
-                )
-            assert ret, (
-                f"Volume associated with PVC {pvc_name} still exists "
-                f"in backend"
-            )
+                raise
         log.info("Verified: Image/Subvolume removed from backend.")
