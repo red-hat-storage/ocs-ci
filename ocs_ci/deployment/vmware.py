@@ -681,4 +681,3 @@ def sync_time_with_host(machine_file, enable=False):
         to_change,
         sync_time
     )
-
