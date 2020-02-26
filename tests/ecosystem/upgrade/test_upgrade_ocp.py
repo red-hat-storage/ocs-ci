@@ -4,7 +4,7 @@ import time
 
 from ocs_ci.framework import Config
 from ocs_ci.ocs import ocp
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import CephHealthException
@@ -38,6 +38,12 @@ class TestUpgradeOCP(ManageTest):
         self.cluster_operators = self.get_all_cluster_operators()
         logger.info(f" oc version: {self.get_current_oc_version()}")
         self.get_all_cluster_operators()
+        upgrade_operator_timeout = TimeoutSampler(
+            timeout=27000,
+            sleep=60,
+            func=self.check_upgrade_completed,
+            target_version=target_image
+        )
 
         # Upgrade OCP
 
@@ -48,14 +54,7 @@ class TestUpgradeOCP(ManageTest):
             logger.info(f"Checking upgrade status of {ocp_operator}:")
             ver = self.get_cluster_operator_version(ocp_operator)
             logger.info(f"current {ocp_operator} version: {ver}")
-            for attempt in range(1, 100):
-                logger.info(f"***** Attempt: {attempt} out of 100 *****")
-                if ver != target_image:
-                    ver = self.get_cluster_operator_version(ocp_operator)
-                    logger.info(f"ver: {ver}, target_image: {target_image}")
-                    time.sleep(30)
-                elif ver == target_image:
-                    break
+            upgrade_operator_timeout.wait_for_func_status(result=True)
 
         # validate cluster status and health
         ceph_cluster.disable_health_monitor()
@@ -149,7 +148,10 @@ class TestUpgradeOCP(ManageTest):
             bool: True if success, False if failed
 
         """
+        logger.info(f"current version: {self.get_current_oc_version}")
         if self.get_current_oc_version() == target_version:
+            logger.info(f" cluster operator upgrade to build {target_version} completed")
             return True
 
+        logger.debug(f"upgrade not completed")
         return False
