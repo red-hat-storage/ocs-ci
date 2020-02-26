@@ -15,4 +15,4 @@ ENV_DATA:
   availability_zone_count: 3
 REPORTING:
   polarion:
-    deployment_id: 'OCS-1499'
+    deployment_id: 'OCS-1449'
