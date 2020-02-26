@@ -334,3 +334,43 @@ def get_both_osd_and_app_pod_running_node(
     common_nodes = list(set(osd_running_nodes) & set(app_pod_running_nodes))
     log.info(f"Common node is {common_nodes}")
     return common_nodes
+
+
+def get_node_resource_utilization(nodename=None, node_type='worker'):
+    """
+    Gets the node's cpu and memory utilization in percentage
+
+    Args:
+        nodename (str) : The node name
+        node_type (str) : The node type (e.g. master, worker)
+
+    Returns:
+        dict : Node name and its cpu and memory utilization in
+               percentage
+
+    """
+
+    node_names = [nodename] if nodename else [
+        node.name for node in get_typed_nodes(node_type=node_type)
+    ]
+    obj = ocp.OCP()
+    resource_utilization_all_nodes = obj.exec_oc_cmd(
+        command='adm top nodes', out_yaml_format=False
+    ).split("\n")
+    utilization_dict = {}
+
+    for node in node_names:
+        for value in resource_utilization_all_nodes:
+            if node in value:
+                value = re.findall(r'\d+', value.strip())
+                cpu_utilization = value[2]
+                log.info("The CPU utilized by the node "
+                         f"{node} is {cpu_utilization}%")
+                memory_utilization = value[4]
+                log.info("The memory utilized of the node "
+                         f"{node} is {memory_utilization}%")
+                utilization_dict[node] = {
+                    'cpu': int(cpu_utilization),
+                    'memory': int(memory_utilization)
+                }
+    return utilization_dict
