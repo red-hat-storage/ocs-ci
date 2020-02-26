@@ -76,7 +76,8 @@ def compare_dicts(before, after):
 
 def assign_get_values(
     env_status_dict, key, kind=None,
-    exclude_namespaces=(constants.MARKETPLACE_NAMESPACE,)
+    exclude_namespaces=(constants.MARKETPLACE_NAMESPACE,),
+    exclude_labels=(constants.must_gather_pod_label,)
 ):
     """
     Assigning kind status into env_status_dict
@@ -87,11 +88,18 @@ def assign_get_values(
         key (str): Name of the resource
         kind (OCP obj): OCP object for a resource
         exclude_namespaces (list or tuple): List/tuple of namespaces to ignore
+        exclude_labels (list or tuple): List/tuple of app labels to ignore
     """
     items = kind.get(all_namespaces=True)['items']
     items = [
         item for item in items if (
-            item.get('metadata').get('namespace') not in exclude_namespaces
+            (item.get('metadata').get('namespace') not in exclude_namespaces)
+            or (
+                item.get('metadata').get('labels').get('app') not in (
+                    exclude_labels
+                )
+            )
+
         )
     ]
     env_status_dict[key] = items
