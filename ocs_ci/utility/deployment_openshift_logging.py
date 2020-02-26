@@ -240,7 +240,7 @@ def create_instance_in_clusterlogging():
     )
     pod_status = pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING, resource_count=2 + es_node_count + nodes_in_cluster,
-        timeout=200, sleep=5
+        timeout=300, sleep=5
     )
     assert pod_status, "Pods are not in Running state."
     logger.info("All pods are in Running state")

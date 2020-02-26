@@ -45,7 +45,7 @@ class Terraform(object):
             cmd = f"terraform apply '-var-file={tfvars}' -auto-approve -var bootstrap_complete=true '{self.path}'"
         else:
             cmd = f"terraform apply '-var-file={tfvars}' -auto-approve '{self.path}'"
-        run_cmd(cmd)
+        run_cmd(cmd, timeout=900)
 
     def destroy(self, tfvars):
         """

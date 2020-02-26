@@ -16,7 +16,7 @@ from time import sleep
 
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
-from ocs_ci.ocs.resources import ocs
+from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
@@ -500,6 +500,87 @@ class CephCluster(object):
     def disable_health_monitor(self):
         self.health_monitor_enabled = False
 
+    def get_ceph_cluster_iops(self):
+        """
+        The function gets the IOPS from the ocs cluster
+
+        Returns:
+            Total IOPS in the cluster
+
+        """
+
+        ceph_status = self.get_ceph_status()
+        for item in ceph_status.split("\n"):
+            if 'client' in item:
+                iops = re.findall(r'\d+\.+\d+|\d\d*', item.strip())
+                iops = iops[2::1]
+                if len(iops) == 2:
+                    iops_in_cluster = float(iops[0]) + float(iops[1])
+                else:
+                    iops_in_cluster = float(iops[0])
+                logging.info(f"IOPS in the cluster is {iops_in_cluster}")
+                return iops_in_cluster
+
+    def get_iops_percentage(self, osd_size=2):
+        """
+        The function calculates the IOPS percentage
+        of the cluster depending on number of osds in the cluster
+
+        Args:
+            osd_size (int): Size of 1 OSD in Ti
+
+        Returns:
+            IOPS percentage of the OCS cluster
+
+        """
+
+        osd_count = count_cluster_osd()
+        iops_per_osd = osd_size * constants.IOPS_FOR_1TiB_OSD
+        iops_in_cluster = self.get_ceph_cluster_iops()
+        osd_iops_limit = iops_per_osd * osd_count
+        iops_percentage = (iops_in_cluster / osd_iops_limit) * 100
+        logging.info(f"The IOPS percentage of the cluster is {iops_percentage}%")
+        return iops_percentage
+
+    def get_cluster_throughput(self):
+        """
+        Function to get the throughput of ocs cluster
+
+        Returns:
+            Throughput of the cluster in MiB/s
+
+        """
+
+        ceph_status = self.get_ceph_status()
+        for item in ceph_status.split("\n"):
+            if 'client' in item:
+                throughput_data = item.strip('client: ').split(",")
+                throughput_data = throughput_data[:2:1]
+                # Converting all B/s and KiB/s to MiB/s
+                conversion = {'B/s': 0.000000976562, 'KiB/s': 0.000976562, 'MiB/s': 1}
+                throughput = 0
+                for val in throughput_data:
+                    throughput += [
+                        float(re.findall(r'\d+', val)[0]) * conversion[key]
+                        for key in conversion.keys() if key in val
+                    ][0]
+                    logger.info(f"The throughput is {throughput} MiB/s")
+                return throughput
+
+    def get_throughput_percentage(self):
+        """
+        Function to get throughput percentage of the ocs cluster
+
+        Returns:
+            Throughput percentage of the cluster
+
+        """
+
+        throughput_of_cluster = self.get_cluster_throughput()
+        throughput_percentage = (throughput_of_cluster / constants.THROUGHPUT_LIMIT_OSD) * 100
+        logging.info(f"The throughput percentage of the cluster is {throughput_percentage}%")
+        return throughput_percentage
+
 
 class HealthMonitorThread(threading.Thread):
     """
@@ -575,3 +656,90 @@ def validate_cluster_on_pvc():
                 assert claimName in pvc_names, (
                     "Ceph Internal Volume not backed by PVC"
                 )
+
+
+def count_cluster_osd():
+    """
+    The function returns the number of cluster OSDs
+
+    Returns:
+         osd_count (int): number of OSD pods in current cluster
+
+    """
+    storage_cluster_obj = storage_cluster.StorageCluster(
+        resource_name=config.ENV_DATA['storage_cluster_name'],
+        namespace=config.ENV_DATA['cluster_namespace'],
+    )
+    storage_cluster_obj.reload_data()
+    osd_count = (
+        int(storage_cluster_obj.data['spec']['storageDeviceSets'][0]['count'])
+        * int(storage_cluster_obj.data['spec']['storageDeviceSets'][0]['replica'])
+    )
+    return osd_count
+
+
+def validate_pdb_creation():
+    """
+    Validate creation of PDBs for MON, MDS and OSD pods.
+
+    Raises:
+        AssertionError: If required PDBs were not created.
+
+    """
+    pdb_obj = ocp.OCP(kind='PodDisruptionBudget')
+    item_list = pdb_obj.get().get('items')
+    pdb_list = [item['metadata']['name'] for item in item_list]
+    osd_count = count_cluster_osd()
+    pdb_required = [constants.MDS_PDB, constants.MON_PDB]
+    for num in range(osd_count):
+        pdb_required.append(constants.OSD_PDB + str(num))
+
+    pdb_list.sort()
+    pdb_required.sort()
+    for required, given in zip(pdb_required, pdb_list):
+        assert required == given, f"{required} was not created"
+
+    logger.info(f"All required PDBs created: {pdb_required}")
+
+
+def get_osd_utilization():
+    """
+    Get osd utilization value
+
+    Returns:
+        osd_filled (dict): Dict of osd name and its used value
+        i.e {'osd.1': 15.276289408185841, 'osd.0': 15.276289408185841, 'osd.2': 15.276289408185841}
+
+    """
+    osd_filled = {}
+    ceph_cmd = "ceph osd df"
+    ct_pod = pod.get_ceph_tools_pod()
+    output = ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    for osd in output.get('nodes'):
+        osd_filled[osd['name']] = osd['utilization']
+
+    return osd_filled
+
+
+def validate_osd_utilization(osd_used=80):
+    """
+    Validates osd utilization matches osd_used value
+
+    Args:
+        osd_used (int): osd used value
+
+    Returns:
+        bool: True if all osd values is equal or greater to osd_used.
+              False Otherwise.
+
+    """
+    _rc = True
+    osd_filled = get_osd_utilization()
+    for osd, value in osd_filled.items():
+        if int(value) >= osd_used:
+            logger.info(f"{osd} used value {value}")
+        else:
+            _rc = False
+            logger.warn(f"{osd} used value {value}")
+
+    return _rc

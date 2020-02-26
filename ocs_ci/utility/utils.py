@@ -32,6 +32,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility.retry import retry
 from bs4 import BeautifulSoup
 from paramiko import SSHClient, AutoAddPolicy
+from ocs_ci.ocs import defaults
 
 log = logging.getLogger(__name__)
 
@@ -730,11 +731,14 @@ class TimeoutSampler(object):
             self.last_sample_time = time.time()
             try:
                 yield self.func(*self.func_args, **self.func_kwargs)
-            except Exception:
-                pass
-
+            except Exception as ex:
+                msg = f"Exception raised during iteration: {ex}"
+                logging.error(msg)
             if self.timeout < (time.time() - self.start_time):
                 raise self.timeout_exc_cls(*self.timeout_exc_args)
+            log.info(
+                f"Going to sleep for {self.sleep} seconds"
+                " before next iteration")
             time.sleep(self.sleep)
 
     def wait_for_func_status(self, result):
@@ -759,11 +763,10 @@ class TimeoutSampler(object):
             for res in self:
                 if result == res:
                     return True
-
         except self.timeout_exc_cls:
             log.error(
-                f"({self.func.__name__}) return incorrect status after timeout"
-            )
+                f"({self.func.__name__}) return incorrect status "
+                f"after {self.timeout} second timeout")
             return False
 
 
@@ -938,17 +941,16 @@ def get_ocs_build_number():
         str: build number for ocs operator version
 
     """
-    from ocs_ci.ocs.resources.catalog_source import CatalogSource
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 
     build_num = ""
-    ocs_catalog = CatalogSource(
-        resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
-        namespace="openshift-marketplace"
-    )
     if config.REPORTING['us_ds'] == 'DS':
-        build_info = ocs_catalog.get_image_name()
+        build_str = get_csvs_start_with_prefix(
+            defaults.OCS_OPERATOR_NAME, defaults.ROOK_CLUSTER_NAMESPACE,
+        )
         try:
-            return build_info.split("-")[1].split(".")[0]
+            return build_str[0]['metadata']['name'].partition('.')[2]
         except (IndexError, AttributeError):
             logging.warning("No version info found for OCS operator")
     return build_num
@@ -1037,6 +1039,28 @@ def get_csi_versions():
     return csi_versions
 
 
+def get_ocp_version(seperator=None):
+    """
+    Get current ocp version
+
+    Args:
+        seperator (str): String that would seperate major and
+            minor version nubers
+
+    Returns:
+        string : If seperator is 'None', version string will be returned as is
+            eg: '4.2', '4.3'.
+            If seperator is provided then '.' in the version string would be
+            replaced by seperator and resulting string will be returned.
+            eg: If seperator is '_' then string returned would be '4_2'
+
+    """
+    char = seperator if seperator else '.'
+    return char.join(
+        config.DEPLOYMENT['installer_version'].split('.')[:2]
+    )
+
+
 def parse_pgsql_logs(data):
     """
     Parse the pgsql benchmark data from ripsaw and return
@@ -1118,40 +1142,86 @@ def get_testrun_name():
     """
     Prepare testrun ID for Polarion (and other reports).
 
-    Return config.REPORTING["polarion"]["testrun_name"], if configured.
-    Otherwise prepare testrun ID based on Upstream/Downstream information,
-    OCS version and used markers.
-
     Returns:
-        str: String containing testrun ID
+        str: String containing testrun name
 
     """
     markers = config.RUN['cli_params'].get('-m', '').replace(" ", "-")
     us_ds = config.REPORTING.get("us_ds")
-    us_ds = "Upstream" if us_ds.upper() == "US" else "Downstream" if us_ds.upper() == "DS" else us_ds
-    if config.REPORTING.get("testrun_name"):
-        testrun_name = config.REPORTING["testrun_name"]
-    elif markers:
-        testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}_{markers}"
-    else:
-        testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}"
-
-    # form complete testrun name that includes deployment platform and type
-    testrun_name = (
-        f"{testrun_name}-{config.ENV_DATA.get('platform').upper()}-"
-        f"{config.ENV_DATA.get('deployment_type').upper()}"
+    if us_ds.upper() == "US":
+        us_ds = "Upstream"
+    elif us_ds.upper() == "DS":
+        us_ds = "Downstream"
+    ocp_version = ".".join(
+        config.DEPLOYMENT.get('installer_version').split('.')[:-2]
     )
+    ocp_version_string = f"OCP{ocp_version}" if ocp_version else ''
+    ocs_version = config.ENV_DATA.get('ocs_version')
+    ocs_version_string = f"OCS{ocs_version}" if ocs_version else ''
+    worker_os = 'RHEL' if config.ENV_DATA.get('rhel_workers') else 'RHCOS'
+    build_user = None
+
+    if config.REPORTING.get('display_name'):
+        testrun_name = config.REPORTING.get('display_name')
+    else:
+        build_user = config.REPORTING.get('build_user')
+        testrun_name = (
+            f"{config.ENV_DATA.get('platform', '').upper()} "
+            f"{config.ENV_DATA.get('deployment_type', '').upper()} "
+            f"{get_az_count()}AZ "
+            f"{worker_os} "
+            f"{config.ENV_DATA.get('master_replicas')}M "
+            f"{config.ENV_DATA.get('worker_replicas')}W "
+            f"{markers}"
+        )
+    testrun_name = (
+        f"{ocs_version_string} {us_ds} {ocp_version_string} "
+        f"{testrun_name}"
+    )
+    if build_user:
+        testrun_name = f"{build_user} {testrun_name}"
     # replace invalid character(s) by '-'
     testrun_name = testrun_name.translate(
         str.maketrans(
             {key: '-' for key in ''' \\/.:*"<>|~!@#$?%^&'*(){}+`,=\t'''}
         )
     )
+    log.info("testrun_name: %s", testrun_name)
     return testrun_name
+
+
+def get_az_count():
+    """
+    Using a number of different configuration attributes, determine how many
+    availability zones the cluster is configured for.
+
+    Returns:
+        int: number of availability zones
+
+    """
+    if config.ENV_DATA.get('availability_zone_count'):
+        return int(config.ENV_DATA.get('availability_zone_count'))
+    elif config.ENV_DATA.get('worker_availability_zones'):
+        return len(config.ENV_DATA.get('worker_availability_zones'))
+    elif config.ENV_DATA.get('platform') == 'vsphere':
+        return 1
+    else:
+        return 3
 
 
 @retry((CephHealthException, CommandFailed), tries=20, delay=30, backoff=1)
 def ceph_health_check(namespace=None):
+    """
+    Args:
+        namespace (str): Namespace of OCS
+            (default: config.ENV_DATA['cluster_namespace'])
+
+    Returns: ceph_health_check_base with default retries of 20, delay of 30 seconds
+    """
+    return ceph_health_check_base(namespace)
+
+
+def ceph_health_check_base(namespace=None):
     """
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
@@ -1264,10 +1334,24 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
         'default_latest_tag', 'latest'
     )
     _req = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=20)
+        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=100)
     )
     latest_image = None
     tags = _req.json()['tags']
+    ocs_version = config.ENV_DATA['ocs_version']
+    upgrade_ocs_version = config.UPGRADE.get('upgrade_ocs_version')
+    use_rc_build = config.UPGRADE.get("use_rc_build")
+    previous_rc_build = config.UPGRADE.get("previous_rc_build")
+    upgrade_version_change = (
+        upgrade_ocs_version and ocs_version != upgrade_ocs_version
+    )
+    if (
+        upgrade and use_rc_build and previous_rc_build
+        and not upgrade_version_change
+    ):
+        latest_tag = previous_rc_build
+    if upgrade_version_change:
+        upgrade = False
     for tag in tags:
         if tag['name'] == latest_tag:
             latest_image = tag['image_id']
@@ -1290,8 +1374,14 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
                 continue
             if (
                 tag['name'] not in constants.LATEST_TAGS
-                and tag['image_id'] != latest_image and "rc" in tag['name']
+                and tag['image_id'] != latest_image
+                and ocs_version in tag['name']
             ):
+                if (
+                    config.UPGRADE.get("use_rc_build")
+                    and "rc" not in tag['name']
+                ):
+                    continue
                 return tag['name']
     raise TagNotFoundException(f"Couldn't find any desired tag!")
 
@@ -1327,8 +1417,14 @@ def get_next_version_available_for_upgrade(current_tag):
             break
     sliced_reversed_tags = tags[:current_tag_index]
     sliced_reversed_tags.reverse()
+    ocs_version = config.ENV_DATA['ocs_version']
     for tag in sliced_reversed_tags:
-        if tag['name'] not in constants.LATEST_TAGS and "rc" in tag['name']:
+        if (
+            tag['name'] not in constants.LATEST_TAGS
+            and ocs_version in tag['name']
+        ):
+            if config.UPGRADE.get("use_rc_build") and "rc" not in tag['name']:
+                continue
             return tag['name']
     raise TagNotFoundException(f"Couldn't find any tag!")
 
@@ -1576,3 +1672,37 @@ def get_kubeadmin_password():
     )
     with open(filename) as f:
         return f.read()
+
+
+def get_infra_id(cluster_path):
+    """
+    Get infraID from metadata.json in given cluster_path
+
+    Args:
+        cluster_path: path to cluster install directory
+
+    Returns:
+        str: metadata.json['infraID']
+
+    """
+    metadata_file = os.path.join(cluster_path, "metadata.json")
+    with open(metadata_file) as f:
+        metadata = json.load(f)
+    return metadata["infraID"]
+
+
+def get_cluster_name(cluster_path):
+    """
+    Get clusterName from metadata.json in given cluster_path
+
+    Args:
+        cluster_path: path to cluster install directory
+
+    Returns:
+        str: metadata.json['clusterName']
+
+    """
+    metadata_file = os.path.join(cluster_path, "metadata.json")
+    with open(metadata_file) as f:
+        metadata = json.load(f)
+    return metadata["clusterName"]

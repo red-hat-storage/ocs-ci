@@ -9,7 +9,7 @@ from ocs_ci.ocs.resources.pvc import get_all_pvcs, PVC
 from ocs_ci.ocs.resources.pod import get_pod_obj
 from tests import helpers
 import ocs_ci.utility.prometheus
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour, ServiceUnavailable
 from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
@@ -110,6 +110,7 @@ def get_list_pvc_objs_created_on_monitoring_pods():
     return pvc_obj_list
 
 
+@retry(ServiceUnavailable, tries=60, delay=3, backoff=1)
 def get_metrics_persistentvolumeclaims_info():
     """
     Returns the created pvc information on prometheus pod
@@ -118,14 +119,17 @@ def get_metrics_persistentvolumeclaims_info():
         response.content (dict): The pvc metrics collected on prometheus pod
 
     """
+
     prometheus = ocs_ci.utility.prometheus.PrometheusAPI()
     response = prometheus.get(
         'query?query=kube_pod_spec_volumes_persistentvolumeclaims_info'
     )
+    if response.status_code == 503:
+        raise ServiceUnavailable("Failed to handle the request")
     return json.loads(response.content.decode('utf-8'))
 
 
-@retry(UnexpectedBehaviour, tries=10, delay=3, backoff=1)
+@retry(UnexpectedBehaviour, tries=60, delay=3, backoff=1)
 def check_pvcdata_collected_on_prometheus(pvc_name):
     """
     Checks whether initially pvc related data is collected on pod
@@ -171,3 +175,39 @@ def check_ceph_health_status_metrics_on_prometheus(mgr_pod):
         [mgr_pod for health_status in ceph_health_metric.get('data').get(
             'result') if mgr_pod == health_status.get('metric').get('pod')]
     )
+
+
+def prometheus_health_check(name=constants.MONITORING, kind=constants.CLUSTER_OPERATOR):
+    """
+    Return true if the prometheus cluster is healthy
+
+    Args:
+        name (str) : Name of the resources
+        kind (str): Kind of the resource
+
+    Returns:
+        bool : True on prometheus health is ok, false otherwise
+
+    """
+    ocp_obj = OCP(kind=kind)
+    health_info = ocp_obj.get(resource_name=name)
+    health_conditions = health_info.get('status').get('conditions')
+
+    # Check prometheus is degraded
+    # If degraded, degraded value will be True, AVAILABLE is False
+    available = False
+    degraded = True
+    for i in health_conditions:
+        if {('type', 'Available'), ('status', 'True')}.issubset(set(i.items())):
+            logging.info("Prometheus cluster available value is set true")
+            available = True
+        if {('status', 'False'), ('type', 'Degraded')}.issubset(set(i.items())):
+            logging.info("Prometheus cluster degraded value is set false")
+            degraded = False
+
+    if available and not degraded:
+        logging.info("Prometheus health cluster is OK")
+        return True
+
+    logging.error(f"Prometheus cluster is degraded {health_conditions}")
+    return False

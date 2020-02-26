@@ -2,31 +2,29 @@
 This module contains platform specific methods and classes for deployment
 on AWS platform
 """
-import json
 import logging
 import os
 import shutil
 import traceback
-from subprocess import Popen, PIPE
+from subprocess import PIPE, Popen
 
 import boto3
 from botocore.exceptions import ClientError
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
-from ocs_ci.ocs import exceptions
-from ocs_ci.ocs.exceptions import SameNamePrefixClusterAlreadyExistsException
+from ocs_ci.ocs import constants, exceptions, ocp
 from ocs_ci.ocs.parallel import parallel
-from ocs_ci.utility.aws import AWS as AWSUtil
-from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import (
-    run_cmd, clone_repo, create_rhelpod, TimeoutSampler
-)
-from .deployment import Deployment
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import templating
-from ocs_ci.ocs import ocp
+from ocs_ci.utility.aws import AWS as AWSUtil
+from ocs_ci.utility.bootstrap import gather_bootstrap
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import (
+    clone_repo, create_rhelpod, get_cluster_name, get_infra_id, run_cmd,
+    TimeoutSampler, get_ocp_version
+)
+from .deployment import Deployment
 
 logger = logging.getLogger(__name__)
 
@@ -224,12 +222,20 @@ class AWSIPI(AWSBase):
             logger.info(
                 f"Openshift-installer will be using loglevel:{log_cli_level}"
             )
-            run_cmd(
-                f"{self.installer} create cluster "
-                f"--dir {self.cluster_path} "
-                f"--log-level {log_cli_level}",
-                timeout=3600
-            )
+            try:
+                run_cmd(
+                    f"{self.installer} create cluster "
+                    f"--dir {self.cluster_path} "
+                    f"--log-level {log_cli_level}",
+                    timeout=3600
+                )
+            except exceptions.CommandFailed as e:
+                if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
+                    try:
+                        gather_bootstrap()
+                    except Exception as ex:
+                        logger.error(ex)
+                raise e
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level='DEBUG'):
@@ -244,9 +250,10 @@ class AWSIPI(AWSBase):
             cluster_name = config.ENV_DATA['cluster_name']
             prefix = cluster_name.split("-")[0] + '*'
             if self.check_cluster_existence(prefix):
-                raise SameNamePrefixClusterAlreadyExistsException(
+                raise exceptions.SameNamePrefixClusterAlreadyExistsException(
                     f"Cluster with name prefix {prefix} already exists. "
-                    f"Please destroy the existing cluster for a new cluster deployment"
+                    f"Please destroy the existing cluster for a new cluster "
+                    f"deployment"
                 )
         super(AWSIPI, self).deploy_ocp(log_cli_level)
         if config.DEPLOYMENT.get('host_network'):
@@ -291,14 +298,17 @@ class AWSUPI(AWSBase):
         def __init__(self):
             super(AWSUPI.OCPDeployment, self).__init__()
             upi_repo_name = f'openshift-misc-{config.RUN["run_id"]}'
+
+            self.upi_common_base = 'v3-launch-templates/functionality-testing'
             self.upi_repo_path = os.path.join(
                 constants.EXTERNAL_DIR, upi_repo_name,
             )
-
             self.upi_script_path = os.path.join(
                 self.upi_repo_path,
-                'v3-launch-templates/functionality-testing'
-                '/aos-4_2/hosts/'
+                self.upi_common_base,
+                os.path.join(
+                    f"aos-{get_ocp_version('_')}", 'hosts/'
+                ),
             )
 
         def deploy_prereq(self):
@@ -319,8 +329,10 @@ class AWSUPI(AWSBase):
                 'num_workers': str(config.ENV_DATA['worker_replicas']),
                 'AVAILABILITY_ZONE_COUNT': str(config.ENV_DATA.get(
                     'availability_zone_count', ''
-                ))
+                )),
+                'BASE_DOMAIN': config.ENV_DATA['base_domain']
             }
+
             for key, value in upi_env_vars.items():
                 if value:
                     os.environ[key] = value
@@ -390,7 +402,7 @@ class AWSUPI(AWSBase):
                 [os.path.join(
                     self.upi_script_path, constants.UPI_INSTALL_SCRIPT
                 )],
-                stdout=PIPE, stderr=PIPE
+                stdout=PIPE, stderr=PIPE, encoding='utf-8'
             )
             stdout, stderr = proc.communicate()
 
@@ -399,6 +411,11 @@ class AWSUPI(AWSBase):
 
             if proc.returncode:
                 logger.error(stderr)
+                if constants.GATHER_BOOTSTRAP_PATTERN in stderr:
+                    try:
+                        gather_bootstrap()
+                    except Exception as ex:
+                        logger.error(ex)
                 raise exceptions.CommandFailed("upi install script failed")
             logger.info(stdout)
 
@@ -534,6 +551,13 @@ class AWSUPI(AWSBase):
                 InstanceId=inst_id,
             )
 
+    @retry(exceptions.CommandFailed, tries=15, delay=30, backoff=1)
+    def check_connection(self, rhel_pod_obj, host, pem_dst_path):
+        cmd = 'ls'
+        rhel_pod_obj.exec_cmd_on_node(
+            host, pem_dst_path, cmd, user=self.rhel_worker_user
+        )
+
     def run_ansible_playbook(self):
         """
         Bring up a helper pod (RHEL) to run openshift-ansible
@@ -550,9 +574,13 @@ class AWSUPI(AWSBase):
         pem_dst_path = "/openshift-dev.pem"
         pod.upload(rhel_pod_obj.name, pem_src_path, pem_dst_path)
         repo_dst_path = "/etc/yum.repos.d/"
-        repo_file = os.path.basename(constants.OCP4_2_REPO)
+        repo = os.path.join(
+            constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo"
+        )
+        assert os.path.exists(repo), f"Required repo file {repo} doesn't exist!"
+        repo_file = os.path.basename(repo)
         pod.upload(
-            rhel_pod_obj.name, constants.OCP4_2_REPO, repo_dst_path
+            rhel_pod_obj.name, repo, repo_dst_path
         )
         # copy the .pem file for our internal repo on all nodes
         # including ansible pod
@@ -570,6 +598,10 @@ class AWSUPI(AWSBase):
             inst.private_dns_name for node, inst in
             self.rhel_worker_list.items()
         ]
+        # Check whether every host is acceptin ssh connections
+        for host in hosts:
+            self.check_connection(rhel_pod_obj, host, pem_dst_path)
+
         for host in hosts:
             disable = "sudo yum-config-manager --disable *"
             rhel_pod_obj.exec_cmd_on_node(
@@ -860,40 +892,6 @@ class AWSUPI(AWSBase):
             logger.info("Destroying stack: %s", stack_name)
             cf.delete_stack(StackName=stack_name)
             verify_stack_deleted(stack_name)
-
-
-def get_infra_id(cluster_path):
-    """
-    Get infraID from metadata.json in given cluster_path
-
-    Args:
-        cluster_path: path to cluster install directory
-
-    Returns:
-        str: metadata.json['infraID']
-
-    """
-    metadata_file = os.path.join(cluster_path, "metadata.json")
-    with open(metadata_file) as f:
-        metadata = json.load(f)
-    return metadata["infraID"]
-
-
-def get_cluster_name(cluster_path):
-    """
-    Get clusterName from metadata.json in given cluster_path
-
-    Args:
-        cluster_path: path to cluster install directory
-
-    Returns:
-        str: metadata.json['clusterName']
-
-    """
-    metadata_file = os.path.join(cluster_path, "metadata.json")
-    with open(metadata_file) as f:
-        metadata = json.load(f)
-    return metadata["clusterName"]
 
 
 class StackStatusError(Exception):

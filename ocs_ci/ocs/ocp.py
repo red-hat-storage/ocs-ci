@@ -22,7 +22,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
-from ocs_ci.ocs import defaults
+from ocs_ci.ocs import defaults, constants
 
 
 log = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class OCP(object):
 
     def __init__(
         self, api_version='v1', kind='Service', namespace=None,
-        resource_name=''
+        resource_name='', selector=None,
     ):
         """
         Initializer function
@@ -49,12 +49,15 @@ class OCP(object):
             kind (str): TBD
             namespace (str): The name of the namespace to use
             resource_name (str): Resource name
+            selector (str): The label selector to look for. It has higher
+                priority than resource_name and is used instead of the name.
         """
         self._api_version = api_version
         self._kind = kind
         self._namespace = namespace
         self._resource_name = resource_name
         self._data = {}
+        self.selector = selector
 
     @property
     def api_version(self):
@@ -133,13 +136,14 @@ class OCP(object):
             return yaml.safe_load(out)
         return out
 
-    def exec_oc_debug_cmd(self, node, cmd_list):
+    def exec_oc_debug_cmd(self, node, cmd_list, timeout=300):
         """
         Function to execute "oc debug" command on OCP node
 
         Args:
             node (str): Node name where the command to be executed
             cmd_list (list): List of commands eg: ['cmd1', 'cmd2']
+            timeout (int): timeout for the exec_oc_cmd, defaults to 600 seconds
 
         Returns:
             out (str): Returns output of the executed command/commands
@@ -153,7 +157,7 @@ class OCP(object):
         cmd = f" || echo '{err_msg}';".join(cmd_list)
         debug_cmd = f"debug nodes/{node} -- chroot /host /bin/bash -c \"{cmd}\""
         out = str(self.exec_oc_cmd(
-            command=debug_cmd, out_yaml_format=False
+            command=debug_cmd, out_yaml_format=False, timeout=timeout
         ))
         if err_msg in out:
             raise CommandFailed
@@ -170,7 +174,7 @@ class OCP(object):
         Args:
             resource_name (str): The resource name to fetch
             out_yaml_format (bool): Adding '-o yaml' to oc command
-            selector (str): The label selector to look for
+            selector (str): The label selector to look for.
             all_namespaces (bool): Equal to oc get <resource> -A
             retry (int): Number of attempts to retry to get resource
             wait (int): Number of seconds to wait between attempts for retry
@@ -182,6 +186,9 @@ class OCP(object):
             dict: Dictionary represents a returned yaml file
         """
         resource_name = resource_name if resource_name else self.resource_name
+        selector = selector if selector else self.selector
+        if selector:
+            resource_name = ""
         command = f"get {self.kind} {resource_name}"
         if all_namespaces and not self.namespace:
             command += " -A"
@@ -197,16 +204,18 @@ class OCP(object):
                 return self.exec_oc_cmd(command)
             except CommandFailed as ex:
                 log.warning(
-                    f"Failed to get resource: {resource_name}, Error: {ex}"
+                    f"Failed to get resource: {resource_name} of kind: "
+                    f"{self.kind}, selector: {selector}, Error: {ex}"
                 )
                 retry -= 1
                 if not retry:
-                    log.error("Number of attempts to get resource reached!")
+                    log.warning("Number of attempts to get resource reached!")
                     raise
                 else:
                     log.info(
                         f"Number of attempts: {retry} to get resource: "
-                        f"{resource_name} remain! Trying again in {wait} sec."
+                        f"{resource_name}, selector: {selector}, remain! "
+                        f"Trying again in {wait} sec."
                     )
                     time.sleep(wait if wait else 1)
 
@@ -314,7 +323,7 @@ class OCP(object):
         command = f"apply -f {yaml_file}"
         return self.exec_oc_cmd(command)
 
-    def patch(self, resource_name='', params=None, type='json'):
+    def patch(self, resource_name='', params=None, format_type=''):
         """
         Applies changes to resources
 
@@ -329,7 +338,9 @@ class OCP(object):
         """
         resource_name = resource_name or self.resource_name
         params = "\'" + f"{params}" + "\'"
-        command = f"patch {self.kind} {resource_name} -n {self.namespace} -p {params} --type {type}"
+        command = f"patch {self.kind} {resource_name} -n {self.namespace} -p {params}"
+        if format_type:
+            command += f" --type {format_type}"
         log.info(f"Command: {command}")
         result = self.exec_oc_cmd(command)
         if 'patched' in result:
@@ -435,6 +446,7 @@ class OCP(object):
             f" at column name {column}"
             f" to reach desired condition {condition}"))
         resource_name = resource_name if resource_name else self.resource_name
+        selector = selector if selector else self.selector
 
         # actual status of the resource we are waiting for, setting it to None
         # now prevents UnboundLocalError raised when waiting timeouts
@@ -539,7 +551,9 @@ class OCP(object):
                 raise TimeoutError(msg)
             time.sleep(sleep)
 
-    def get_resource(self, resource_name, column, retry=0, wait=3):
+    def get_resource(
+        self, resource_name, column, retry=0, wait=3, selector=None
+    ):
         """
         Get a column value for a resource based on:
         'oc get <resource_kind> <resource_name>' command
@@ -549,15 +563,18 @@ class OCP(object):
             column (str): The name of the column to retrive
             retry (int): Number of attempts to retry to get resource
             wait (int): Number of seconds to wait beteween attempts for retry
+            selector (str): The resource selector to search with.
 
         Returns:
             str: The output returned by 'oc get' command not in the 'yaml'
                 format
         """
+        resource_name = resource_name if resource_name else self.resource_name
+        selector = selector if selector else self.selector
         # Get the resource in str format
         resource = self.get(
             resource_name=resource_name, out_yaml_format=False, retry=retry,
-            wait=wait,
+            wait=wait, selector=selector
         )
         # get the list of titles
         titles = re.sub(r'\s{2,}', ',', resource)  # noqa: W605
@@ -745,7 +762,7 @@ def rsync(src, dst, node, dst_node=True, extra_params=""):
     pod_data = load_yaml(RSYNC_POD_YAML)
     pod_data['metadata']['name'] = pod_name
     pod_data['spec']['nodeName'] = node
-    pod = OCP(kind='pod')
+    pod = OCP(kind='pod', namespace=constants.DEFAULT_NAMESPACE)
     src = src if dst_node else f"{pod_name}:/host{src}"
     dst = f"{pod_name}:/host{dst}" if dst_node else dst
     try:

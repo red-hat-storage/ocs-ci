@@ -17,13 +17,13 @@ from ocs_ci.ocs.ocp import OCP
 from uuid import uuid4
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs import constants, defaults, ocp, node
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler, run_cmd
+from ocs_ci.utility.utils import TimeoutSampler, ocsci_log_path, run_cmd
 from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
@@ -105,7 +105,7 @@ def create_pod(
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
     raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1,
-    pod_name=None
+    pod_name=None, node_selector=None
 ):
     """
     Create a pod
@@ -123,6 +123,8 @@ def create_pod(
         raw_block_device (str): raw block device for the pod
         replica_count (int): Replica count for deployment config
         pod_name (str): Name of the pod to create
+        node_selector (dict): dict of key-value pair to be used for nodeSelector field
+            eg: {'nodetype': 'app-pod'}
 
     Returns:
         Pod: A Pod instance
@@ -159,15 +161,30 @@ def create_pod(
             pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
 
     if interface_type == constants.CEPHBLOCKPOOL and raw_block_pv:
-        pod_data['spec']['containers'][0]['volumeDevices'][0]['devicePath'] = raw_block_device
-        pod_data['spec']['containers'][0]['volumeDevices'][0]['name'] = pod_data.get('spec').get('volumes')[
-            0].get('name')
+        if pod_dict_path == constants.FEDORA_DC_YAML:
+            temp_dict = [
+                {'devicePath': raw_block_device, 'name': pod_data.get('spec').get(
+                    'template').get('spec').get('volumes')[0].get('name')}
+            ]
+            del pod_data['spec']['template']['spec']['containers'][0]['volumeMounts']
+            pod_data['spec']['template']['spec']['containers'][0]['volumeDevices'] = temp_dict
+        else:
+            pod_data['spec']['containers'][0]['volumeDevices'][0]['devicePath'] = raw_block_device
+            pod_data['spec']['containers'][0]['volumeDevices'][0]['name'] = pod_data.get('spec').get('volumes')[
+                0].get('name')
 
     if node_name:
-        pod_data['spec']['nodeName'] = node_name
-    else:
-        if 'nodeName' in pod_data.get('spec'):
-            del pod_data['spec']['nodeName']
+        if dc_deployment:
+            pod_data['spec']['template']['spec']['nodeName'] = node_name
+        else:
+            pod_data['spec']['nodeName'] = node_name
+
+    if node_selector:
+        if dc_deployment:
+            pod_data['spec']['template']['spec']['nodeSelector'] = node_selector
+        else:
+            pod_data['spec']['nodeSelector'] = node_selector
+
     if sa_name and dc_deployment:
         pod_data['spec']['template']['spec']['serviceAccountName'] = sa_name
     if dc_deployment:
@@ -693,6 +710,25 @@ def get_cephfs_name():
     return result['items'][0].get('metadata').get('name')
 
 
+def pull_images(image_name):
+    """
+    Function to pull images on all nodes
+
+    Args:
+        image_name (str): Name of the container image to be pulled
+
+    Returns: None
+
+    """
+
+    node_objs = node.get_node_objs(get_worker_nodes())
+    for node_obj in node_objs:
+        logging.info(f'pulling image "{image_name}  " on node {node_obj.name}')
+        assert node_obj.ocp.exec_oc_debug_cmd(
+            node_obj.name, cmd_list=[f'podman pull {image_name}']
+        )
+
+
 def run_io_with_rados_bench(**kw):
     """ A task for radosbench
 
@@ -940,6 +976,86 @@ def measure_pvc_creation_time(interface, pvc_name):
     return total.total_seconds()
 
 
+def measure_pvc_creation_time_bulk(interface, pvc_name_list):
+    """
+    Measure PVC creation time of bulk PVC based on logs.
+
+    Args:
+        interface (str): The interface backed the PVC
+        pvc_name_list (list): List of PVC Names for measuring creation time
+
+    Returns:
+        pvc_dict (dict): Dictionary of pvc_name with creation time.
+
+    """
+    # Get the correct provisioner pod based on the interface
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    # get the logs from the csi-provisioner containers
+    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
+    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+    logs = logs.split("\n")
+
+    pvc_dict = dict()
+    format = '%H:%M:%S.%f'
+    for pvc_name in pvc_name_list:
+        # Extract the starting time for the PVC provisioning
+        start = [
+            i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)
+        ]
+        start = start[0].split(' ')[1]
+        start_time = datetime.datetime.strptime(start, format)
+        # Extract the end time for the PVC provisioning
+        end = [
+            i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)
+        ]
+        end = end[0].split(' ')[1]
+        end_time = datetime.datetime.strptime(end, format)
+        total = end_time - start_time
+        pvc_dict[pvc_name] = total.total_seconds()
+
+    return pvc_dict
+
+
+def measure_pv_deletion_time_bulk(interface, pv_name_list):
+    """
+    Measure PV deletion time of bulk PV, based on logs.
+
+    Args:
+        interface (str): The interface backed the PV
+        pv_name_list (list): List of PV Names for measuring deletion time
+
+    Returns:
+        pv_dict (dict): Dictionary of pv_name with deletion time.
+
+    """
+    # Get the correct provisioner pod based on the interface
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    # get the logs from the csi-provisioner containers
+    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
+    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+    logs = logs.split("\n")
+
+    pv_dict = dict()
+    format = '%H:%M:%S.%f'
+    for pv_name in pv_name_list:
+        # Extract the deletion start time for the PV
+        start = [
+            i for i in logs if re.search(f"delete \"{pv_name}\": started", i)
+        ]
+        start = start[0].split(' ')[1]
+        start_time = datetime.datetime.strptime(start, format)
+        # Extract the deletion end time for the PV
+        end = [
+            i for i in logs if re.search(f"delete \"{pv_name}\": succeeded", i)
+        ]
+        end = end[0].split(' ')[1]
+        end_time = datetime.datetime.strptime(end, format)
+        total = end_time - start_time
+        pv_dict[pv_name] = total.total_seconds()
+
+    return pv_dict
+
+
 def get_start_deletion_time(interface, pv_name):
     """
     Get the starting deletion time of a PVC based on provisioner logs
@@ -1012,6 +1128,37 @@ def measure_pvc_deletion_time(interface, pv_name):
     end = get_end_deletion_time(interface=interface, pv_name=pv_name)
     total = end - start
     return total.total_seconds()
+
+
+def pod_start_time(pod_obj):
+    """
+    Function to measure time taken for container(s) to get into running state
+    by measuring the difference between container's start time (when container
+    went into running state) and started time (when container was actually
+    started)
+
+    Args:
+        pod_obj(obj): pod object to measure start time
+
+    Returns:
+        containers_start_time(dict):
+        Returns the name and start time of container(s) in a pod
+
+    """
+    time_format = '%Y-%m-%dT%H:%M:%SZ'
+    containers_start_time = {}
+    start_time = pod_obj.data['status']['startTime']
+    start_time = datetime.datetime.strptime(start_time, time_format)
+    for container in range(len(pod_obj.data['status']['containerStatuses'])):
+        started_time = pod_obj.data[
+            'status']['containerStatuses'][container]['state'][
+            'running']['startedAt']
+        started_time = datetime.datetime.strptime(started_time, time_format)
+        container_name = pod_obj.data[
+            'status']['containerStatuses'][container]['name']
+        container_start_time = (started_time - start_time).seconds
+        containers_start_time[container_name] = container_start_time
+        return containers_start_time
 
 
 def get_default_storage_class():
@@ -1210,16 +1357,20 @@ def remove_scc_policy(sa_name, namespace):
     logger.info(out)
 
 
-def delete_deploymentconfig(pod_obj):
+def delete_deploymentconfig_pods(pod_obj):
     """
-    Delete deploymentconfig
+    Delete deploymentconfig pod
 
     Args:
          pod_obj (object): Pod object
     """
-    dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG)
-    dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
-    dc_ocp_obj.wait_for_delete(resource_name=pod_obj.get_labels().get('name'))
+    dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG, namespace=pod_obj.namespace)
+    pod_data_list = dc_ocp_obj.get()['items']
+    if pod_data_list:
+        for pod_data in pod_data_list:
+            if pod_obj.get_labels().get('name') == pod_data.get('metadata').get('name'):
+                dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
+                dc_ocp_obj.wait_for_delete(resource_name=pod_obj.get_labels().get('name'))
 
 
 def craft_s3_command(mcg_obj, cmd):
@@ -1308,13 +1459,13 @@ def verify_pv_mounted_on_node(node_pv_dict):
             eg: {'node1': ['pv1', 'pv3'], 'node2': ['pv5']}
     """
     existing_pvs = {}
-    for node, pvs in node_pv_dict.items():
-        cmd = f'oc debug nodes/{node} -- df'
+    for node_name, pvs in node_pv_dict.items():
+        cmd = f'oc debug nodes/{node_name} -- df'
         df_on_node = run_cmd(cmd)
-        existing_pvs[node] = []
+        existing_pvs[node_name] = []
         for pv_name in pvs:
             if f"/pv/{pv_name}/" in df_on_node:
-                existing_pvs[node].append(pv_name)
+                existing_pvs[node_name].append(pv_name)
     return existing_pvs
 
 
@@ -1370,7 +1521,9 @@ def create_multiple_pvc_parallel(
     return pvc_objs_list
 
 
-def create_pods_parallel(pvc_list, namespace, interface, raw_block_pv=False):
+def create_pods_parallel(
+    pvc_list, namespace, interface, pod_dict_path=None, sa_name=None, raw_block_pv=False, dc_deployment=False
+):
     """
     Function to create pods in parallel
 
@@ -1378,7 +1531,10 @@ def create_pods_parallel(pvc_list, namespace, interface, raw_block_pv=False):
         pvc_list (list): List of pvcs to be attached in pods
         namespace (str): The namespace for creating pod
         interface (str): The interface backed the PVC
+        pod_dict_path (str): pod_dict_path for yaml
+        sa_name (str): sa_name for providing permission
         raw_block_pv (bool): Either RAW block or not
+        dc_deployment (bool): Either DC deployment or not
 
     Returns:
         pod_objs (list): Returns list of pods created
@@ -1387,17 +1543,16 @@ def create_pods_parallel(pvc_list, namespace, interface, raw_block_pv=False):
     # Added 300 sec wait time since in scale test once the setup has more
     # PODs time taken for the pod to be up will be based on resource available
     wait_time = 300
-    if raw_block_pv:
+    if raw_block_pv and not pod_dict_path:
         pod_dict_path = constants.CSI_RBD_RAW_BLOCK_POD_YAML
-    else:
-        pod_dict_path = None
     with ThreadPoolExecutor() as executor:
         for pvc_obj in pvc_list:
             future_pod_objs.append(executor.submit(
                 create_pod, interface_type=interface,
                 pvc_name=pvc_obj.name, do_reload=False, namespace=namespace,
-                raw_block_pv=raw_block_pv, pod_dict_path=pod_dict_path)
-            )
+                raw_block_pv=raw_block_pv, pod_dict_path=pod_dict_path,
+                sa_name=sa_name, dc_deployment=dc_deployment
+            ))
     pod_objs = [pvc_obj.result() for pvc_obj in future_pod_objs]
     # Check for all the pods are in Running state
     # In above pod creation not waiting for the pod to be created because of threads usage
@@ -1640,7 +1795,7 @@ def create_dummy_osd(deployment):
     except TimeoutExpired:
         logger.info('Killing /rook/tini process')
         try:
-            dummy_pod.exec_bash_cmd_on_pod(
+            dummy_pod.exec_sh_cmd_on_pod(
                 "kill $(ps aux | grep '[/]rook/tini' | awk '{print $2}')"
             )
         except CommandFailed:
@@ -1725,3 +1880,80 @@ def remove_label_from_worker_node(node_list, label_key):
         command=f"label node {' '.join(node_list)} {label_key}-", out_yaml_format=False
     )
     logger.info(out)
+
+
+def get_pods_nodes_logs():
+    """
+    Get logs from all pods and nodes
+
+    Returns:
+        dict: node/pod name as key, logs content as value (string)
+    """
+    all_logs = {}
+    all_pods = pod.get_all_pods()
+    all_nodes = node.get_node_objs()
+
+    for node_obj in all_nodes:
+        node_name = node_obj.name
+        log_content = node.get_node_logs(node_name)
+        all_logs.update({node_name: log_content})
+
+    for pod_obj in all_pods:
+        try:
+            pod_name = pod_obj.name
+            log_content = pod.get_pod_logs(pod_name)
+            all_logs.update({pod_name: log_content})
+        except CommandFailed:
+            pass
+
+    return all_logs
+
+
+def get_logs_with_errors(errors=None):
+    """
+    From logs of all pods and nodes, get only logs
+    containing any of specified errors
+
+    Args:
+        errors (list): List of errors to look for
+
+    Returns:
+        dict: node/pod name as key, logs content as value; may be empty
+    """
+    all_logs = get_pods_nodes_logs()
+    output_logs = {}
+
+    errors_list = constants.CRITICAL_ERRORS
+
+    if errors:
+        errors_list = errors_list + errors
+
+    for name, log_content in all_logs.items():
+        for error_msg in errors_list:
+            if error_msg in log_content:
+                logger.debug(f"Found '{error_msg}' in log of {name}")
+                output_logs.update({name: log_content})
+
+                log_path = f"{ocsci_log_path()}/{name}.log"
+                with open(log_path, 'w') as fh:
+                    fh.write(log_content)
+
+    return output_logs
+
+
+def modify_osd_replica_count(resource_name, replica_count):
+    """
+    Function to modify osd replica count to 0 or 1
+
+    Args:
+        resource_name (str): Name of osd i.e, 'rook-ceph-osd-0-c9c4bc7c-bkf4b'
+        replica_count (int): osd replica count to be changed to
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    ocp_obj = ocp.OCP(kind=constants.DEPLOYMENT, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    params = f'{{"spec": {{"replicas": {replica_count}}}}}'
+    resource_name = '-'.join(resource_name.split('-')[0:4])
+    return ocp_obj.patch(resource_name=resource_name, params=params)

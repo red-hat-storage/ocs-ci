@@ -3,7 +3,6 @@ This module provides base class for different deployment
 platforms like AWS, VMWare, Baremetal etc.
 """
 import logging
-import os
 import tempfile
 import time
 
@@ -14,7 +13,7 @@ from copy import deepcopy
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults, registry
-from ocs_ci.ocs.cluster import validate_cluster_on_pvc
+from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
 from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
@@ -24,7 +23,10 @@ from ocs_ci.ocs.monitoring import (
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
-from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.ocs.resources.packagemanifest import (
+    get_selector_for_ocs_operator,
+    PackageManifest,
+)
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state
@@ -33,9 +35,12 @@ from ocs_ci.ocs.utils import (
     setup_ceph_toolbox, collect_ocs_logs
 )
 from ocs_ci.utility import templating
+from ocs_ci.utility.openshift_console import OpenshiftConsole
 from ocs_ci.utility.utils import (
-    run_cmd, ceph_health_check, is_cluster_running, get_kubeadmin_password,
+    ceph_health_check,
     get_latest_ds_olm_tag,
+    is_cluster_running,
+    run_cmd,
 )
 from tests import helpers
 
@@ -208,7 +213,7 @@ class Deployment(object):
         """
         logger.info("Adding CatalogSource")
         image = config.DEPLOYMENT.get('ocs_registry_image', '')
-        upgrade = config.DEPLOYMENT.get('upgrade', False)
+        upgrade = config.UPGRADE.get('upgrade', False)
         image_and_tag = image.split(':')
         image = image_and_tag[0]
         image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
@@ -243,7 +248,7 @@ class Deployment(object):
         run_cmd(f"oc create -f {catalog_source_manifest.name}", timeout=2400)
         catalog_source = CatalogSource(
             resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
-            namespace='openshift-marketplace',
+            namespace=constants.MARKETPLACE_NAMESPACE,
         )
         # Wait for catalog source is ready
         catalog_source.wait_for_state("READY")
@@ -269,38 +274,47 @@ class Deployment(object):
 
         # create Secret
         stage_os_secret = templating.load_yaml(
-            constants.STAGE_OPERATOR_SOURCE_SECRET_YAML
+            constants.OPERATOR_SOURCE_SECRET_YAML
         )
-        stage_os_secret['metadata']['name'] = f"secret-{stage_ns}"
+        stage_os_secret['metadata']['name'] = (
+            constants.OPERATOR_SOURCE_SECRET_NAME
+        )
         stage_os_secret['stringData']['token'] = token
         stage_secret_data_yaml = tempfile.NamedTemporaryFile(
-            mode='w+', prefix=f"secret-{stage_ns}", delete=False
+            mode='w+', prefix=constants.OPERATOR_SOURCE_SECRET_NAME,
+            delete=False,
         )
         templating.dump_data_to_temp_yaml(
             stage_os_secret, stage_secret_data_yaml.name
         )
-        run_cmd(f"oc apply -f {stage_secret_data_yaml.name}")
+        run_cmd(f"oc create -f {stage_secret_data_yaml.name}")
+        logger.info("Waiting 10 secs after secret is created")
+        time.sleep(10)
 
         logger.info("Adding Stage Operator Source")
         # create Operator Source
         stage_os = templating.load_yaml(
-            constants.STAGE_OPERATOR_SOURCE_YAML
+            constants.OPERATOR_SOURCE_YAML
         )
-        stage_os['metadata']['name'] = stage_ns
         stage_os['spec']['registryNamespace'] = stage_ns
-        stage_os['spec']['displayName'] = stage_ns
         stage_os['spec']['authorizationToken']['secretName'] = (
-            f"secret-{stage_ns}"
+            constants.OPERATOR_SOURCE_SECRET_NAME
         )
         stage_os_data_yaml = tempfile.NamedTemporaryFile(
-            mode='w+', prefix='secret', delete=False
+            mode='w+', prefix=constants.OPERATOR_SOURCE_NAME, delete=False
         )
         templating.dump_data_to_temp_yaml(
             stage_os, stage_os_data_yaml.name
         )
-        run_cmd(f"oc apply -f {stage_os_data_yaml.name}")
+        run_cmd(f"oc create -f {stage_os_data_yaml.name}")
+        catalog_source = CatalogSource(
+            resource_name=constants.OPERATOR_SOURCE_NAME,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
+        # Wait for catalog source is ready
+        catalog_source.wait_for_state("READY")
 
-    def create_operator_catalog_source(self):
+    def create_ocs_operator_source(self):
         """
         This prepare catalog or operator source for OCS deployment.
         """
@@ -315,9 +329,11 @@ class Deployment(object):
         This method subscription manifest and subscribe to OCS operator.
 
         """
+        operator_selector = get_selector_for_ocs_operator()
         # wait for package manifest
         package_manifest = PackageManifest(
-            resource_name=defaults.OCS_OPERATOR_NAME
+            resource_name=defaults.OCS_OPERATOR_NAME,
+            selector=operator_selector,
         )
         # Wait for package manifest is ready
         package_manifest.wait_for_resource(timeout=300)
@@ -341,7 +357,13 @@ class Deployment(object):
             subscription_yaml_data['spec']['channel'] = default_channel
         if config.DEPLOYMENT.get('stage'):
             subscription_yaml_data['spec']['source'] = (
-                config.DEPLOYMENT['stage_namespace']
+                constants.OPERATOR_SOURCE_NAME
+            )
+        if config.DEPLOYMENT.get('live_deployment'):
+            subscription_yaml_data['spec']['source'] = (
+                config.DEPLOYMENT.get(
+                    'live_content_source', defaults.LIVE_CONTENT_SOURCE
+                )
             )
         subscription_manifest = tempfile.NamedTemporaryFile(
             mode='w+', prefix='subscription_manifest', delete=False
@@ -361,8 +383,10 @@ class Deployment(object):
         Method for deploy OCS via OCS operator
         """
         ui_deployment = config.DEPLOYMENT.get('ui_deployment')
+        live_deployment = config.DEPLOYMENT.get('live_deployment')
         if ui_deployment:
-            self.create_operator_catalog_source()
+            if not live_deployment:
+                self.create_ocs_operator_source()
             self.deployment_with_ui()
             # Skip the rest of the deployment when deploy via UI
             return
@@ -371,10 +395,13 @@ class Deployment(object):
             self.label_and_taint_nodes()
         logger.info("Creating namespace and operator group.")
         run_cmd(f"oc create -f {constants.OLM_YAML}")
-        self.create_operator_catalog_source()
+        if not live_deployment:
+            self.create_ocs_operator_source()
         self.subscribe_ocs()
+        operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=defaults.OCS_OPERATOR_NAME
+            resource_name=defaults.OCS_OPERATOR_NAME,
+            selector=operator_selector,
         )
         channel = config.DEPLOYMENT.get('ocs_csv_channel')
         csv_name = package_manifest.get_current_csv(channel=channel)
@@ -426,45 +453,20 @@ class Deployment(object):
         """
         This method will deploy OCS with openshift-console UI test.
         """
-        # TODO: add support for other browsers
         logger.info("Deployment of OCS will be done by openshift-console")
-        console_path = config.RUN['openshift_console_path']
-        password_secret_yaml = os.path.join(
-            console_path, constants.HTPASSWD_SECRET_YAML
+        ocp_console = OpenshiftConsole(
+            config.DEPLOYMENT.get(
+                'deployment_browser', constants.CHROME_BROWSER
+            )
         )
-        patch_htpasswd_yaml = os.path.join(
-            console_path, constants.HTPASSWD_PATCH_YAML
-        )
-        with open(patch_htpasswd_yaml) as fd_patch_htpasswd:
-            content_patch_htpasswd_yaml = fd_patch_htpasswd.read()
-        run_cmd(f"oc apply -f {password_secret_yaml}", cwd=console_path)
-        run_cmd(
-            f"oc patch oauths cluster --patch "
-            f"\"{content_patch_htpasswd_yaml}\" --type=merge",
-            cwd=console_path
-        )
-        bridge_base_address = run_cmd(
-            "oc get consoles.config.openshift.io cluster -o"
-            "jsonpath='{.status.consoleURL}'"
-        )
-        chrome_branch_base = config.RUN.get("force_chrome_branch_base")
-        chrome_branch_sha = config.RUN.get("force_chrome_branch_sha256sum")
-        openshift_console_env = {
-            "BRIDGE_KUBEADMIN_PASSWORD": get_kubeadmin_password(),
-            "BRIDGE_BASE_ADDRESS": bridge_base_address,
-            "FORCE_CHROME_BRANCH_BASE": chrome_branch_base,
-            "FORCE_CHROME_BRANCH_SHA256SUM": chrome_branch_sha,
+        live_deploy = '1' if config.DEPLOYMENT.get('live_deployment') else '0'
+        env_vars = {
+            "OCS_LIVE": live_deploy,
         }
-        openshift_console_env.update(os.environ)
-        ui_deploy_output = run_cmd(
-            "./test-gui.sh ceph-storage-install", cwd=console_path,
-            env=openshift_console_env, timeout=1500,
+        ocp_console.run_openshift_console(
+            suite="ceph-storage-install", env_vars=env_vars,
+            log_suffix="ui-deployment"
         )
-        ui_deploy_log_file = os.path.expanduser(
-            os.path.join(config.RUN['log_dir'], "ui_deployment.log")
-        )
-        with open(ui_deploy_log_file, "w+") as log_fd:
-            log_fd.write(ui_deploy_output)
 
     def deploy_ocs(self):
         """
@@ -504,6 +506,9 @@ class Deployment(object):
 
         # validate ceph mon/osd volumes are backed by pvc
         validate_cluster_on_pvc()
+
+        # validate PDB creation of MON, MDS, OSD pods
+        validate_pdb_creation()
 
         # Creating toolbox pod
         setup_ceph_toolbox()

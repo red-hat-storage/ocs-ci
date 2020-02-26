@@ -9,7 +9,7 @@ import random
 from math import floor
 
 from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.utility import aws
 from ocs_ci.framework import config
@@ -21,7 +21,8 @@ from ocs_ci.utility.environment_check import (
     get_status_before_execution, get_status_after_execution
 )
 from ocs_ci.utility.utils import (
-    get_openshift_client, ocsci_log_path, get_testrun_name
+    get_openshift_client, ocsci_log_path, get_testrun_name,
+    ceph_health_check_base
 )
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
@@ -50,6 +51,53 @@ def pytest_logger_config(logger_config):
     logger_config.set_log_option_default('')
     logger_config.split_by_outcome()
     logger_config.set_formatter_class(OCSLogFormatter)
+
+
+@pytest.fixture()
+def supported_configuration():
+    """
+    Check that cluster nodes have enough CPU and Memory as described in:
+    https://access.redhat.com/documentation/en-us/red_hat_openshift_container_storage/4.2/html-single/planning_your_deployment/index#infrastructure-requirements_rhocs
+    This fixture is intended as a prerequisite for tests or fixtures that
+    run flaky on configurations that don't meet minimal requirements.
+
+    Minimum requirements for each starting node (OSD+MON):
+        16 CPUs
+        64 GB memory
+    Last documentation check: 2020-02-21
+    """
+    min_cpu = 16
+    min_memory = 64 * 10**9
+
+    node_obj = ocp.OCP(kind=constants.NODE)
+    log.info('Checking if system meets minimal requirements')
+    nodes = node_obj.get(selector=constants.WORKER_LABEL).get('items')
+    log.info(
+        f"Checking following nodes with worker selector (assuming that "
+        f"this is ran in CI and there are no worker nodes without OCS):\n"
+        f"{[item.get('metadata').get('name') for item in nodes]}"
+    )
+    for node_info in nodes:
+        real_cpu = int(node_info['status']['capacity']['cpu'])
+        real_memory = node_info['status']['capacity']['memory']
+        if real_memory.endswith('Ki'):
+            real_memory = int(real_memory[0:-2]) * 2**10
+        elif real_memory.endswith('Mi'):
+            real_memory = int(real_memory[0:-2]) * 2**20
+        elif real_memory.endswith('Gi'):
+            real_memory = int(real_memory[0:-2]) * 2**30
+        elif real_memory.endswith('Ti'):
+            real_memory = int(real_memory[0:-2]) * 2**40
+        else:
+            real_memory = int(real_memory)
+
+        if (real_cpu < min_cpu or real_memory < min_memory):
+            pytest.xfail(
+                f"Node {node_info.get('metadata').get('name')} doesn't have "
+                f"minimum of required reasources for running the test:\n"
+                f"{min_cpu} CPU and {min_memory} Memory\nIt has:\n{real_cpu} "
+                f"CPU and {real_memory} Memory"
+            )
 
 
 @pytest.fixture(scope='class')
@@ -371,12 +419,10 @@ def pvc_factory_class(
 @pytest.fixture(scope='session')
 def pvc_factory_session(
     request,
-    storageclass_factory_session,
     project_factory_session
 ):
     return pvc_factory_fixture(
         request,
-        storageclass_factory_session,
         project_factory_session
     )
 
@@ -450,10 +496,14 @@ def pvc_factory_fixture(
             project = project or active_project or project_factory()
             active_project = project
             if interface == constants.CEPHBLOCKPOOL:
-                storageclass = helpers.default_storage_class(interface_type=interface)
+                storageclass = storageclass or helpers.default_storage_class(
+                    interface_type=interface
+                )
                 active_rbd_storageclass = storageclass
             elif interface == constants.CEPHFILESYSTEM:
-                storageclass = helpers.default_storage_class(interface_type=interface)
+                storageclass = storageclass or helpers.default_storage_class(
+                    interface_type=interface
+                )
                 active_cephfs_storageclass = storageclass
 
             pvc_size = f"{size}Gi" if size else None
@@ -728,6 +778,7 @@ def dc_pod_factory(
         service_account=None,
         size=None,
         custom_data=None,
+        node_name=None,
         replica_count=1,
     ):
         """
@@ -741,6 +792,7 @@ def dc_pod_factory(
             custom_data (dict): If provided then Pod object is created
                 by using these data. Parameter `pvc` is not used but reference
                 is set if provided.
+            node_name (str): The name of specific node to schedule the pod
             replica_count (int): Replica count for deployment config
         """
         if custom_data:
@@ -752,13 +804,14 @@ def dc_pod_factory(
             dc_pod_obj = helpers.create_pod(
                 interface_type=interface, pvc_name=pvc.name, do_reload=False,
                 namespace=pvc.namespace, sa_name=sa_obj.name, dc_deployment=True,
-                replica_count=replica_count
+                replica_count=replica_count, node_name=node_name
             )
         instances.append(dc_pod_obj)
         log.info(dc_pod_obj.name)
         helpers.wait_for_resource_state(
             dc_pod_obj, constants.STATUS_RUNNING, timeout=180
         )
+        dc_pod_obj.pvc = pvc
         return dc_pod_obj
 
     def finalizer():
@@ -766,7 +819,7 @@ def dc_pod_factory(
         Delete dc pods
         """
         for instance in instances:
-            helpers.delete_deploymentconfig(instance)
+            helpers.delete_deploymentconfig_pods(instance)
 
     request.addfinalizer(finalizer)
     return factory
@@ -794,6 +847,24 @@ def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
     record_testsuite_property(
         'polarion-custom-isautomated', "True"
     )
+
+
+@pytest.fixture(scope='function', autouse=True)
+def health_checker(request):
+    node = request.node
+    # Limit the health check for tier4a, tier4b, tier4c
+    tier4_marks = ['tier4', 'tier4a', 'tier4b', 'tier4c']
+    for mark in node.iter_markers():
+        if mark.name in tier4_marks:
+            log.info("Checking for Ceph Health OK ")
+            try:
+                status = ceph_health_check_base()
+                if status:
+                    log.info("Health check passed")
+                    return
+            except CephHealthException:
+                # skip because ceph is not in good health
+                pytest.skip("Ceph Health check failed")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -1105,10 +1176,9 @@ def multi_pvc_factory_fixture(
             status_tmp = ""
 
         project = project or project_factory()
-        if interface == constants.CEPHBLOCKPOOL:
-            storageclass = helpers.default_storage_class(interface_type=interface)
-        elif interface == constants.CEPHFILESYSTEM:
-            storageclass = helpers.default_storage_class(interface_type=interface)
+        storageclass = storageclass or helpers.default_storage_class(
+            interface_type=interface
+        )
 
         access_modes = access_modes or [constants.ACCESS_MODE_RWO]
 

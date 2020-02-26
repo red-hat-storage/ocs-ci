@@ -17,6 +17,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.utility.prometheus import PrometheusAPI
+from ocs_ci.utility.utils import TimeoutSampler
 from tests import helpers
 from tests.helpers import create_unique_resource_name
 
@@ -292,8 +293,9 @@ def measure_stop_ceph_mon(measurement_dir):
     ]
 
     # check that downscaled monitors are removed as OCS should redeploy them
+    # but only when we are running this for the first time
     check_old_mons_deleted = all(mon not in mons for mon in mons_to_stop)
-    if not check_old_mons_deleted:
+    if measured_op['first_run'] and not check_old_mons_deleted:
         for mon in mons_to_stop:
             logger.info(f"Upscaling deployment {mon} back to 1")
             oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mon}")
@@ -418,7 +420,7 @@ def measure_corrupt_pg(measurement_dir):
         nonlocal dummy_deployment
 
         logger.info(f"Corrupting {pg} PG on {osd_deployment}")
-        dummy_pod.exec_bash_cmd_on_pod(
+        dummy_pod.exec_sh_cmd_on_pod(
             f"ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-"
             f"{osd_deployment.split('-')[-1]} --pgid {pg} {pool_object} "
             f"set-bytes /etc/shadow --no-mon-config"
@@ -570,10 +572,10 @@ def get_storageutilization_size(target_percentage, ceph_pool_name):
     target = total * target_percentage
     to_utilize = target - ceph_total_stored
     pvc_size = round(to_utilize / 2**30)  # GiB
-    logger.info((
-        f"fixture is going to request {pvc_size} Gi volume "
-        f"to reach {target/2**30} Gi of total cluster utilization, which "
-        f"is {target_percentage*100}% of the total capacity"))
+    logger.info(
+        f"to reach {target/2**30} Gi of total cluster utilization, "
+        f"which is {target_percentage*100}% of the total capacity, "
+        f"utilization job should request and fill {pvc_size} Gi volume")
     return pvc_size
 
 
@@ -724,6 +726,46 @@ def workload_fio_storageutilization(
         # make sure we communicate what is going to happen
         logger.info(f"going to delete {fixture_name} Job")
         fio_job_file.delete()
+        logger.info(
+            f"going to wait a bit to make sure that "
+            f"data written by {fixture_name} Job are really deleted")
+
+        def check_pvc_size():
+            """
+            Check whether data created by the Job were actually deleted.
+            """
+            # By asking again for pvc_size necessary to reach the target
+            # cluster utilization, we can see how much data were already
+            # deleted. Negative or small value of current pvc_size means that
+            # the data were not yet deleted.
+            pvc_size_tmp = get_storageutilization_size(
+                target_percentage, ceph_pool_name)
+            # If no other components were utilizing OCS storage, the space
+            # would be considered reclaimed when current pvc_size reaches
+            # it's original value again. But since this is not the case (eg.
+            # constantly growing monitoring or log data are stored there),
+            # we are ok with just 90% of the original value.
+            result = pvc_size_tmp >= pvc_size * 0.90
+            if result:
+                logger.info("storage space was reclaimed")
+            else:
+                logger.info(
+                    "storage space was not yet fully reclaimed, "
+                    f"current pvc size {pvc_size_tmp} value "
+                    f"should be close to {pvc_size}")
+            return result
+
+        check_timeout = 660  # seconds
+        check_sampler = TimeoutSampler(
+            timeout=check_timeout, sleep=30, func=check_pvc_size)
+        finished_in_time = check_sampler.wait_for_func_status(result=True)
+        if not finished_in_time:
+            error_msg = (
+                "it seems that the storage space was not reclaimed "
+                f"within {check_timeout} seconds, "
+                "this is most likely a product bug or misconfiguration")
+            logger.error(error_msg)
+            raise Exception(error_msg)
 
     return measured_op
 
@@ -742,7 +784,8 @@ def workload_storageutilization_50p_rbd(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        supported_configuration):
     target_percentage = 0.5
     fixture_name = "workload_storageutilization_50p_rbd"
     measured_op = workload_fio_storageutilization(
@@ -764,7 +807,8 @@ def workload_storageutilization_85p_rbd(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        supported_configuration):
     target_percentage = 0.85
     fixture_name = "workload_storageutilization_85p_rbd"
     measured_op = workload_fio_storageutilization(
@@ -786,7 +830,8 @@ def workload_storageutilization_95p_rbd(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        supported_configuration):
     target_percentage = 0.95
     fixture_name = "workload_storageutilization_95p_rbd"
     measured_op = workload_fio_storageutilization(
@@ -808,7 +853,8 @@ def workload_storageutilization_50p_cephfs(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        supported_configuration):
     target_percentage = 0.5
     fixture_name = "workload_storageutilization_50p_cephfs"
     measured_op = workload_fio_storageutilization(
@@ -830,7 +876,8 @@ def workload_storageutilization_85p_cephfs(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        supported_configuration):
     target_percentage = 0.85
     fixture_name = "workload_storageutilization_85p_cephfs"
     measured_op = workload_fio_storageutilization(
@@ -852,7 +899,8 @@ def workload_storageutilization_95p_cephfs(
         fio_job_dict,
         fio_configmap_dict,
         measurement_dir,
-        tmp_path):
+        tmp_path,
+        supported_configuration):
     target_percentage = 0.95
     fixture_name = "workload_storageutilization_95p_cephfs"
     measured_op = workload_fio_storageutilization(
@@ -961,5 +1009,56 @@ def measure_noobaa_exceed_bucket_quota(
                 mcg_obj.s3_endpoint
             ]
         )
+    return measured_op
 
+
+@pytest.fixture
+def workload_idle(measurement_dir):
+    """
+    This workload represents a relative long timeframe when nothing special is
+    happening, for test cases checking default status of various components
+    (eg. no error alert is reported out of sudden, ceph should be healthy ...).
+
+    Besides sheer waiting, this workload also checks that the number of ceph
+    components (OSD and MON only) is the same at start and end of this wait,
+    and passess the numbers to the test. If the number changes, something not
+    exactly expected was happening with the cluster (eg. some node got offline,
+    or cluster was expanded, ...) which doesn't match the idea of idle waiting
+    and *invalidates the expectations of this workload*. Running test cases
+    which expects idle workload in such case would be misleading, so we fail
+    the workload in such case.
+    """
+    def count_ceph_components():
+        ct_pod = pod.get_ceph_tools_pod()
+        ceph_osd_ls_list = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd ls")
+        logger.debug(f"ceph osd ls output: {ceph_osd_ls_list}")
+        # the "+ 1" is a WORKAROUND for a bug in exec_ceph_cmd()
+        # https://github.com/red-hat-storage/ocs-ci/issues/1152
+        osd_num = len(ceph_osd_ls_list) + 1
+        mon_num = len(ct_pod.exec_ceph_cmd(ceph_cmd="ceph mon metadata"))
+        logger.info(
+            f"There are {osd_num} OSDs, {mon_num} MONs")
+        return osd_num, mon_num
+
+    def do_nothing():
+        sleep_time = 60 * 15  # seconds
+        logger.info(f"idle workload is about to sleep for {sleep_time} s")
+        osd_num_1, mon_num_1 = count_ceph_components()
+        time.sleep(sleep_time)
+        osd_num_2, mon_num_2 = count_ceph_components()
+        # If this fails, we are likely observing an infra error or unsolicited
+        # interference with test cluster from the outside. It could also be a
+        # product bug, but this is less likely. See also docstring of this
+        # workload fixture.
+        msg = (
+            "Assumption that nothing serious is happening not met, "
+            "number of selected ceph components should be the same")
+        assert osd_num_1 == osd_num_2, msg
+        assert mon_num_1 == mon_num_2, msg
+        assert osd_num_1 >= 3, "OCS cluster should have at least 3 OSDs"
+        result = {'osd_num': osd_num_1, 'mon_num': mon_num_1}
+        return result
+
+    test_file = os.path.join(measurement_dir, 'measure_workload_idle.json')
+    measured_op = measure_operation(do_nothing, test_file)
     return measured_op

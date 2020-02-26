@@ -22,8 +22,7 @@ need to create the following ``reuse-workload.yaml`` config file:
     ENV_DATA:
       measurement_dir: /home/my_user/my-ocs-dir/measurement_results
 
-And then pass it to ``run-ci`` via ``--cluster-conf reuse-workload.yaml``
-option. Value of ``measurement_dir`` specifies the path where a measurement
+Value of ``measurement_dir`` specifies the path where a measurement
 file for each workload fixture is stored. First time you execute a test
 run, measurement files will be placed there. When you can run the tests again,
 workload fixtures won't be executed because the tests will use the measurements
@@ -133,4 +132,18 @@ def test_workload_cephfs(workload_storageutilization_50p_cephfs):
     """
     Purpose of this test is to make another workload fixture executed as well.
     """
+    logger.info(workload_storageutilization_50p_cephfs)
+
+
+@pytest.mark.libtest
+def test_workload_rbd_cephfs(
+    workload_storageutilization_50p_rbd,
+    workload_storageutilization_50p_cephfs
+):
+    """
+    When this test case is executed as the only test case in pytest test run,
+    it can be used to reproduce issue with workload_fio_storageutilization
+    fixtures, see https://github.com/red-hat-storage/ocs-ci/issues/1327
+    """
+    logger.info(workload_storageutilization_50p_rbd)
     logger.info(workload_storageutilization_50p_cephfs)

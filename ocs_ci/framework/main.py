@@ -7,8 +7,9 @@ import pytest
 import yaml
 
 from ocs_ci import framework
-from ocs_ci.utility import utils
+from ocs_ci.ocs.constants import CONF_DIR
 from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
+from ocs_ci.utility import utils
 
 
 def check_config_requirements():
@@ -45,20 +46,21 @@ def init_ocsci_conf(arguments=None):
     """
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--ocsci-conf', action='append', default=[])
-    # cluster-conf parameter will be deleted once we will update all the jobs
-    parser.add_argument('--cluster-conf')
+    parser.add_argument(
+        '--ocs-version', action='store', choices=['4.2', '4.3']
+    )
     args, unknown = parser.parse_known_args(args=arguments)
+    if args.ocs_version:
+        version_config_file = os.path.join(
+            CONF_DIR, 'ocs_version', f'ocs-{args.ocs_version}.yaml'
+        )
+        args.ocsci_conf.insert(0, version_config_file)
     for config_file in args.ocsci_conf:
         with open(
             os.path.abspath(os.path.expanduser(config_file))
         ) as file_stream:
             custom_config_data = yaml.safe_load(file_stream)
             framework.config.update(custom_config_data)
-    cluster_config = args.cluster_conf
-    if cluster_config:
-        with open(os.path.expanduser(cluster_config)) as file_stream:
-            cluster_config_data = yaml.safe_load(file_stream)
-            framework.config.update(cluster_config_data)
     framework.config.RUN['run_id'] = int(time.time())
     bin_dir = framework.config.RUN.get('bin_dir')
     if bin_dir:

@@ -13,6 +13,7 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import E2ETest, workloads
+from tests.helpers import get_logs_with_errors
 
 log = logging.getLogger(__name__)
 
@@ -24,9 +25,6 @@ def ripsaw(request, storageclass_factory):
         ripsaw.cleanup()
     request.addfinalizer(teardown)
 
-    # Create Ceph Block Pool backed PVC
-    storageclass_factory(sc_name='ceph-backed')
-    # Create RipSaw Operator
     ripsaw = RipSaw()
 
     return ripsaw
@@ -43,23 +41,49 @@ class TestSmallFileWorkload(E2ETest):
     """
 
     @pytest.mark.parametrize(
-        argnames=["file_size", "files", "threads", "samples"],
+        argnames=["file_size", "files", "threads", "samples", "interface"],
         argvalues=[
-            pytest.param(*[4, 50000, 4, 1], ),
-            pytest.param(*[16, 50000, 4, 1], ),
-            pytest.param(*[16, 200000, 4, 1], ),
+            pytest.param(
+                *[4, 50000, 4, 1, constants.CEPHBLOCKPOOL],
+                marks=pytest.mark.polarion_id("OCS-1295"),
+            ),
+            pytest.param(
+                *[16, 50000, 4, 1, constants.CEPHBLOCKPOOL],
+                marks=pytest.mark.polarion_id("OCS-2020"),
+            ),
+            pytest.param(
+                *[16, 200000, 4, 1, constants.CEPHBLOCKPOOL],
+                marks=pytest.mark.polarion_id("OCS-2021"),
+            ),
+            pytest.param(
+                *[4, 50000, 4, 1, constants.CEPHFILESYSTEM],
+                marks=pytest.mark.polarion_id("OCS-2022"),
+            ),
+            pytest.param(
+                *[16, 50000, 4, 1, constants.CEPHFILESYSTEM],
+                marks=pytest.mark.polarion_id("OCS-2023"),
+            ),
+            pytest.param(
+                *[16, 200000, 4, 1, constants.CEPHFILESYSTEM],
+                marks=pytest.mark.polarion_id("OCS-2024"),
+            ),
         ]
     )
     @pytest.mark.polarion_id("OCS-1295")
-    def test_smallfile_workload(self, ripsaw, file_size, files, threads, samples):
+    def test_smallfile_workload(self, ripsaw, file_size, files, threads, samples, interface):
         """
         Run SmallFile Workload
         """
         log.info("Apply Operator CRD")
         ripsaw.apply_crd('resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml')
-
-        log.info("Running SmallFile bench")
         sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
+        if interface == constants.CEPHBLOCKPOOL:
+            storageclass = constants.DEFAULT_STORAGECLASS_RBD
+        else:
+            storageclass = constants.DEFAULT_STORAGECLASS_CEPHFS
+        log.info(f"Using {storageclass} Storageclass")
+        sf_data['spec']['workload']['args']['storageclass'] = storageclass
+        log.info("Running SmallFile bench")
 
         """
             Setting up the parameters for this test
@@ -82,7 +106,7 @@ class TestSmallFileWorkload(E2ETest):
         sf_obj.create()
         # wait for benchmark pods to get created - takes a while
         for bench_pod in TimeoutSampler(
-            40, 3, get_pod_name_by_pattern, 'smallfile-client', 'my-ripsaw'
+            120, 3, get_pod_name_by_pattern, 'smallfile-client', 'my-ripsaw'
         ):
             try:
                 if bench_pod[0] is not None:
@@ -100,7 +124,7 @@ class TestSmallFileWorkload(E2ETest):
             timeout=600
         )
         start_time = time.time()
-        timeout = 900
+        timeout = 1800
         while True:
             logs = bench_pod.exec_oc_cmd(
                 f'logs {small_file_client_pod}',
@@ -113,3 +137,4 @@ class TestSmallFileWorkload(E2ETest):
             if timeout < (time.time() - start_time):
                 raise TimeoutError(f"Timed out waiting for benchmark to complete")
             time.sleep(30)
+        assert not get_logs_with_errors()
