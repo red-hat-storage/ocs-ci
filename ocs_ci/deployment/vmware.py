@@ -240,7 +240,7 @@ class VSPHEREBASE(Deployment):
         """
         Delete the extra disks from all the worker nodes
         """
-        vms = get_compute_vms()
+        vms = get_compute_vms(self.datacenter, self.cluster)
         for vm in vms:
             self.vsphere.remove_disks(vm)
 
@@ -664,7 +664,7 @@ def sync_time_with_host(machine_file, enable=False):
     )
 
 
-def get_compute_vms(self):
+def get_compute_vms(dc, cluster):
     """
     Gets the compute VM's from resource pool
 
@@ -672,9 +672,9 @@ def get_compute_vms(self):
         list: VM instance
 
     """
-    vms = self.vsphere.get_all_vms_in_pool(
+    vms = VSPHEREUtil.get_all_vms_in_pool(
         config.ENV_DATA.get("cluster_name"),
-        self.datacenter,
-        self.cluster
+        dc,
+        cluster
     )
     return [vm for vm in vms if "compute" in vm.name]
