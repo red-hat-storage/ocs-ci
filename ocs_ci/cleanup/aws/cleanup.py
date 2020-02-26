@@ -135,7 +135,10 @@ def aws_cleanup():
         '--force',
         action='store_true',
         required=False,
-        help="Skip confirmation prompt"
+        help="Force cluster cleanup. "
+             "User will not be prompted for confirmation. "
+             "WARNING: this utility is destructive, only use this option if "
+             "you know what you are doing."
     )
     parser.add_argument(
         '--skip-prefixes',
