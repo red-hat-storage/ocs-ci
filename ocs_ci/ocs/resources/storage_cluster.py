@@ -34,6 +34,7 @@ class StorageCluster(OCP):
             resource_name=resource_name, kind='StorageCluster', *args, **kwargs
         )
 
+
 def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
     """
     Perform steps necessary to verify a successful OCS installation
