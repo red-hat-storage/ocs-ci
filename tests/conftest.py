@@ -764,8 +764,8 @@ def service_account_factory(request):
 @pytest.fixture()
 def dc_pod_factory(
     request,
-    service_account_factory,
     pvc_factory,
+    service_account_factory
 ):
     """
     Create deploymentconfig pods
