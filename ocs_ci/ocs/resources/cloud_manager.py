@@ -30,7 +30,7 @@ class CloudManager(ABC):
 
 class CloudClient(ABC):
     """
-        Base abstract class for Cloud based Underlying Storage
+    Base abstract class for Cloud based Underlying Storage
     """
     client = None
 
@@ -39,16 +39,16 @@ class CloudClient(ABC):
 
     def create_uls(self, name):
         """
-            Super method that first logs the ULS creation and then calls
-            the appropriate implementation
+        Super method that first logs the Underlying Storage creation and then calls
+        the appropriate implementation
         """
-        logger.info(f"Creating ULS: {name}")
+        logger.info(f"Creating Underlying Storage: {name}")
         self.internal_create_uls(name)
 
     def delete_uls(self, name):
         """
-            Super method that first logs the ULS deletion and then calls
-            the appropriate implementation
+        Super method that first logs the Underlying Storage deletion and then calls
+        the appropriate implementation
         """
         logger.info(f"Deleting ULS: {name}")
         self.internal_delete_uls(name)
@@ -70,17 +70,21 @@ class CloudClient(ABC):
 
 class S3Client(CloudClient):
     """
-        Implementation of a S3 Client using the S3 API
+    Implementation of a S3 Client using the S3 API
     """
 
-    def __init__(self, key_id, access_key, endpoint="https://s3.amazonaws.com", verify=True,
-                 *args, **kwargs):
+    def __init__(self, key_id=None, access_key=None, endpoint="https://s3.amazonaws.com",
+                 verify=True, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.client = boto3.resource(
-            's3', verify=verify, endpoint_url=endpoint,
-            aws_access_key_id=key_id,
-            aws_secret_access_key=access_key
-        )
+        if key_id and access_key:
+            self.client = boto3.resource(
+                's3', verify=verify, endpoint_url=endpoint,
+                aws_access_key_id=key_id,
+                aws_secret_access_key=access_key
+            )
+        else:
+            self.client = boto3.resource('s3')
+        # TODO: secret credentials
         bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
         bs_secret_data['metadata']['name'] += f'-client-secret'
         bs_secret_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
@@ -94,7 +98,7 @@ class S3Client(CloudClient):
 
     def internal_create_uls(self, name, region=None):
         """
-            Creates the Underlying Storage using the S3 API
+        Creates the Underlying Storage using the S3 API
         """
         if region is None:
             self.client.create_bucket(Bucket=name)
@@ -108,7 +112,7 @@ class S3Client(CloudClient):
 
     def internal_delete_uls(self, name):
         """
-            Deletes the Underlying Storage using the S3 API
+        Deletes the Underlying Storage using the S3 API
         """
         self.client.meta.client.delete_bucket_policy(
             Bucket=name
@@ -124,21 +128,19 @@ class S3Client(CloudClient):
 
     def get_all_uls_names(self):
         """
-            Returns:
-                set: A set of all bucket names
-
+        Returns:
+            set: A set of all bucket names
         """
         return {bucket.name for bucket in self.client.buckets.all()}
 
     def verify_uls_exists(self, uls_name):
         """
-           Verifies whether a uls with the given uls_name exists
-           Args:
-               uls_name : The uls name to be verified
+       Verifies whether a Underlying Storage with the given uls_name exists
+       Args:
+           uls_name (str): The Underlying Storage name to be verified
 
-           Returns:
-                 bool: True if uls exists, False otherwise
-
+       Returns:
+             bool: True if Underlying Storage exists, False otherwise
         """
         try:
             self.client.head_bucket(Bucket=uls_name)
@@ -154,7 +156,7 @@ class S3Client(CloudClient):
 
 class GoogleClient(CloudClient):
     """
-        Implementation of a Google Client using the Google API
+    Implementation of a Google Client using the Google API
     """
 
     def __init__(self, creds=None, *args, **kwargs):
@@ -166,18 +168,18 @@ class GoogleClient(CloudClient):
         except DefaultCredentialsError:
             logger.info(f'No credentials found failing test')
 
-    def internal_create_uls(self, name, location=None):
+    def internal_create_uls(self, name, region=None):
         """
-            Creates the Underlying Storage using the Google API
+        Creates the Underlying Storage using the Google API
         """
-        if location is None:
+        if region is None:
             self.client.create_bucket(name)
         else:
-            self.client.create_bucket(name, location=location)
+            self.client.create_bucket(name, location=region)
 
     def internal_delete_uls(self, name):
         """
-            Deletes the Underlying Storage using the Google API
+        Deletes the Underlying Storage using the Google API
         """
         for _ in range(10):
             try:
@@ -186,7 +188,7 @@ class GoogleClient(CloudClient):
                 bucket.delete()
                 break
             except ClientError:  # TODO: Find relevant exception
-                logger.info(f'Deletion of ULS {name} failed. Retrying...')
+                logger.info(f'Deletion of Underlying Storage {name} failed. Retrying...')
                 sleep(3)
 
     def get_all_uls_names(self):
@@ -198,7 +200,7 @@ class GoogleClient(CloudClient):
 
 class AzureClient(CloudClient):
     """
-        Implementation of a Azure Client using the Azure API
+    Implementation of a Azure Client using the Azure API
     """
 
     def __init__(self, *args, **kwargs):
@@ -207,13 +209,13 @@ class AzureClient(CloudClient):
 
     def internal_create_uls(self, name, region=None):
         """
-            Creates the Underlying Storage using the Azure API
+        Creates the Underlying Storage using the Azure API
         """
         pass
 
     def internal_delete_uls(self, name):
         """
-            Deletes the Underlying Storage using the Azure API
+        Deletes the Underlying Storage using the Azure API
         """
         pass
 
@@ -222,4 +224,3 @@ class AzureClient(CloudClient):
 
     def verify_uls_exists(self, uls_name):
         pass
-
