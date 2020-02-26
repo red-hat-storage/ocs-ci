@@ -173,4 +173,3 @@ def get_version_info(namespace=None):
     )
     info = get_images(csv_pre.get())
     return info
-
