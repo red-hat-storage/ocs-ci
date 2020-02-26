@@ -13,6 +13,7 @@ from ocs_ci.utility import utils
 
 log = logging.getLogger(__name__)
 
+
 class StorageCluster(OCP):
     """
     This class represent StorageCluster and contains all related
