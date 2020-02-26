@@ -412,9 +412,11 @@ def delete_node(machine_set, count):
     """
     Delete nodes from the cluster by decreasing the number of replicas in the
     machine set.
+
     Args:
         machine_set (str): Name of a machine set to get decrease replica count
         count (int): Count to decrease by
+
     Returns:
         bool: True if commands executes successfully
     """
