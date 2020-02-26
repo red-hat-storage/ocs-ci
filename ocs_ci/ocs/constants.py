@@ -123,6 +123,7 @@ OCP_QE_MISC_REPO = (
 CRITICAL_ERRORS = [
     "core dumped", "oom_reaper"
 ]
+must_gather_pod_label = "must-gather"
 
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 
