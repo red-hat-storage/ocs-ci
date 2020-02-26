@@ -236,6 +236,14 @@ class VSPHEREBASE(Deployment):
         # change root disk size
         change_vm_root_disk_size(constants.SCALEUP_VSPHERE_MACHINE_CONF)
 
+    def delete_disks(self):
+        """
+        Delete the extra disks from all the worker nodes
+        """
+        vms = get_compute_vms()
+        for vm in vms:
+            self.vsphere.remove_disks(vm)
+
     def post_destroy_checks(self):
         """
         Post destroy checks on cluster
@@ -579,6 +587,10 @@ class VSPHEREUPI(VSPHEREBASE):
             and os.path.exists(f"{constants.VSPHERE_MAIN}.json")
         ):
             os.rename(f"{constants.VSPHERE_MAIN}.json", f"{constants.VSPHERE_MAIN}.json.backup")
+
+        # delete the extra disks
+        self.delete_disks()
+
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
         terraform.initialize(upgrade=True)
@@ -650,3 +662,19 @@ def sync_time_with_host(machine_file, enable=False):
         to_change,
         sync_time
     )
+
+
+def get_compute_vms(self):
+    """
+    Gets the compute VM's from resource pool
+
+    Returns:
+        list: VM instance
+
+    """
+    vms = self.vsphere.get_all_vms_in_pool(
+        config.ENV_DATA.get("cluster_name"),
+        self.datacenter,
+        self.cluster
+    )
+    return [vm for vm in vms if "compute" in vm.name]
