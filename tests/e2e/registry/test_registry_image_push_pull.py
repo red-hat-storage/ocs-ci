@@ -16,6 +16,7 @@ class TestRegistryImagePullPush(E2ETest):
     @tier1
     @ignore_leftovers
     @pytest.mark.polarion_id("OCS-1080")
+    @pytest.mark.skip("Skip this test due to https://github.com/red-hat-storage/ocs-ci/issues/1547")
     def test_registry_image_pull_push(self):
         """
         Test case to validate registry image pull and push with OCS backend

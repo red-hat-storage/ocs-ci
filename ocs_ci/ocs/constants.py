@@ -372,6 +372,9 @@ FIO_IO_RW_PARAMS_YAML = os.path.join(
 RSYNC_POD_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "rsync-pod.yaml"
 )
+MACHINESET_YAML = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "machine-set.yaml"
+)
 
 ANSIBLE_INVENTORY_YAML = os.path.join(
     "ocp-deployment", "inventory.yaml.j2"
