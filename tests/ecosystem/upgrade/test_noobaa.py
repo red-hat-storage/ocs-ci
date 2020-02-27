@@ -51,10 +51,10 @@ def test_fill_bucket(
     for obj in test_objects:
         logger.info(f'Downloading {obj.key} from AWS test bucket')
         awscli_pod_session.exec_cmd_on_pod(
-            command=f'sh -c "'
-                    f'wget -P {LOCAL_TESTOBJS_DIR_PATH} '
-                    f'https://{constants.TEST_FILES_BUCKET}.s3.amazonaws.com/'
-                    f'{obj.key}"'
+            command=(
+                f'sh -c "wget -P {LOCAL_TESTOBJS_DIR_PATH} '
+                f'https://{constants.TEST_FILES_BUCKET}.s3.amazonaws.com/{obj.key}"'
+            )
         )
         DOWNLOADED_OBJS.append(f'{obj.key}')
         # Use 3x time more objects than there is in test objects pod

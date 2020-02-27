@@ -1543,12 +1543,15 @@ def uploaded_objects_fixture(
 ):
     """
     Deletes all objects that were created as part of the test
+
     Args:
         mcg_obj (MCG): An MCG object containing the MCG S3 connection
             credentials
         awscli_pod (Pod): A pod running the AWSCLI tools
+
     Returns:
         list: An empty list of objects
+
     """
 
     uploaded_objects_paths = []
@@ -1612,9 +1615,11 @@ def bucket_factory_fixture(request, mcg_obj):
     """
     Create a bucket factory. Calling this fixture creates a new bucket(s).
     For a custom amount, provide the 'amount' parameter.
+
     Args:
         mcg_obj (MCG): An MCG object containing the MCG S3 connection
-            credentials
+        credentials
+
     """
     created_buckets = []
 
@@ -1627,13 +1632,16 @@ def bucket_factory_fixture(request, mcg_obj):
     def _create_buckets(amount=1, interface='S3', *args, **kwargs):
         """
         Creates and deletes all buckets that were created as part of the test
+
         Args:
             amount (int): The amount of buckets to create
             interface (str): The interface to use for creation of buckets.
                 S3 | OC | CLI
+
         Returns:
             list: A list of s3.Bucket objects, containing all the created
                 buckets
+
         """
         if interface.lower() not in bucketMap:
             raise RuntimeError(
