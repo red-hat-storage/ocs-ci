@@ -9,7 +9,6 @@ from ocs_ci.ocs import constants, defaults
 
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.packagemanifest import get_selector_for_ocs_operator, PackageManifest
-from ocs_ci.ocs.resources.pod import Pod
 from ocs_ci.utility import utils
 
 log = logging.getLogger(__name__)
@@ -318,7 +317,9 @@ def add_capacity(capacity):
         params=params,
         format_type='json'
     )
-    pod = Pod()
+    pod = ocp.OCP(
+        kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
+    )
     pod.ocp.wait_for_resource(timeout=180, condition=constants.STATUS_RUNNING,
                               selector='app=rook-ceph-osd', resource_count=capacity_to_add * 3)
     return True
