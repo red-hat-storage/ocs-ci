@@ -131,28 +131,49 @@ def aws_cleanup():
         required=False,
         help="The name of the AWS region to delete the resources from"
     )
+    parser.add_argument(
+        '--force',
+        action='store_true',
+        required=False,
+        help="Force cluster cleanup. "
+             "User will not be prompted for confirmation. "
+             "WARNING: this utility is destructive, only use this option if "
+             "you know what you are doing."
+    )
+    parser.add_argument(
+        '--skip-prefixes',
+        action='store_true',
+        required=False,
+        help="Skip prompt for additional prefixes to spare"
+    )
     logging.basicConfig(level=logging.DEBUG)
     args = parser.parse_args()
 
-    confirmation = input(
-        'Careful! This action could be highly destructive. Are you sure you want to proceed? '
-    )
-    prefixes_hours = input(
-        "Press Enter if there are no cluster prefixes to spare.\n"
-        "If you would like the cleanup to spare specific cluster prefixes, "
-        "please enter them along with the time allowed for these to be kept "
-        "running, in a dictionary representation.\nAn example: "
-        "{\'prefix1\': 36, \'prefix2\': 48}\" "
-    )
-    assert confirmation == defaults.CONFIRMATION_ANSWER, "Wrong confirmation answer. Exiting"
+    if not args.force:
+        confirmation = input(
+            'Careful! This action could be highly destructive. '
+            'Are you sure you want to proceed? '
+        )
+        assert confirmation == defaults.CONFIRMATION_ANSWER, (
+            "Wrong confirmation answer. Exiting"
+        )
+
+    prefixes_hours_to_spare = defaults.CLUSTER_PREFIXES_TO_EXCLUDE_FROM_DELETION
+
+    if not args.skip_prefixes:
+        prefixes_hours = input(
+            "Press Enter if there are no cluster prefixes to spare.\n"
+            "If you would like the cleanup to spare specific cluster prefixes, "
+            "please enter them along with the time allowed for these to be kept "
+            "running, in a dictionary representation.\nAn example: "
+            "{\'prefix1\': 36, \'prefix2\': 48}\" "
+        )
+        if prefixes_hours:
+            prefixes_hours_to_spare = eval(prefixes_hours)
     time_to_delete = args.hours[0][0]
     assert time_to_delete > defaults.MINIMUM_CLUSTER_RUNNING_TIME_FOR_DELETION, (
         "Number of hours is lower than the required minimum. Exiting"
     )
-    if not prefixes_hours:
-        prefixes_hours_to_spare = defaults.CLUSTER_PREFIXES_TO_EXCLUDE_FROM_DELETION
-    else:
-        prefixes_hours_to_spare = eval(prefixes_hours)
     time_to_delete = time_to_delete * 60 * 60
     region = defaults.AWS_REGION if not args.region else args.region[0][0]
     clusters_to_delete, cloudformation_vpcs = get_clusters_to_delete(
