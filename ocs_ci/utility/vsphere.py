@@ -467,3 +467,74 @@ class VSPHERE(object):
         pi = self.get_pool(pool, dc, cluster)
         WaitForTask(pi.Destroy())
         logger.info(f"Successfully deleted resource pool {pool}")
+
+    def remove_disk(self, vm, unit_number):
+        """
+        Removes the Disk from VM
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+            unit_number (int): Disk unit number to remove
+
+        """
+        disk_prefix = "Hard disk "
+        disk_label = f"{disk_prefix}{unit_number}"
+
+        virtual_disk_device = None
+        for dev in vm.config.hardware.device:
+            # choose the device based on unit number instead of
+            # deviceInfo.label. labels can change if a disk is removed
+            if (
+                isinstance(dev, vim.vm.device.VirtualDisk)
+                and dev.unitNumber == unit_number
+                and disk_prefix in dev.deviceInfo.label
+            ):
+                virtual_disk_device = dev
+        if not virtual_disk_device:
+            logger.warning(f"{disk_label} for {vm.name} could not be found")
+
+        virtual_disk_spec = vim.vm.device.VirtualDeviceSpec()
+        virtual_disk_spec.fileOperation = (
+            vim.vm.device.VirtualDeviceSpec.FileOperation.destroy
+        )
+        virtual_disk_spec.operation = (
+            vim.vm.device.VirtualDeviceSpec.Operation.remove
+        )
+        virtual_disk_spec.device = virtual_disk_device
+
+        spec = vim.vm.ConfigSpec()
+        spec.deviceChange = [virtual_disk_spec]
+        logger.info(
+            f"Removing Disk with unit number:{virtual_disk_device.unitNumber}"
+            f" from {vm.name}"
+        )
+        WaitForTask(vm.ReconfigVM_Task(spec=spec))
+
+    def remove_disks(self, vm):
+        """
+        Removes all the extra disks for a VM
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+
+        """
+        extra_disk_unit_numbers = self.get_used_unit_number(vm)
+        if extra_disk_unit_numbers:
+            for each_disk_unit_number in extra_disk_unit_numbers:
+                self.remove_disk(vm, each_disk_unit_number)
+
+    def get_used_unit_number(self, vm):
+        """
+        Gets the used unit numbers for a VM
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+
+        Returns:
+            list: list of unit numbers
+
+        """
+        return [
+            device.unitNumber for device in vm.config.hardware.device
+            if hasattr(device.backing, 'fileName') and device.unitNumber != 0
+        ]
