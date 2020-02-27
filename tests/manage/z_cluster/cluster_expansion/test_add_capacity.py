@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import ignore_leftovers, ManageTest
+from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier1
 from ocs_ci.framework.pytest_customization.marks import polarion_id, tier3
 from ocs_ci.ocs.resources import storage_cluster
 
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 @ignore_leftovers
-@tier3
+@tier1
 class TestAddCapacity(ManageTest):
     """
     Automates adding variable capacity to the cluster while IOs running

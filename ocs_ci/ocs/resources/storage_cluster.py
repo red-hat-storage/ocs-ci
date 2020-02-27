@@ -302,6 +302,7 @@ def add_capacity(capacity):
    Add storage capacity to the cluster
    Args:
         capacity(int): Size of the storage to add as number of deviceSets
+
    Returns:
         boolean : Returns True if all OSDs are in Running state
    """
@@ -328,6 +329,7 @@ def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
    Get storage cluster name
    Args:
        namespace (str): Namespace of the resource
+
    Returns:
        yaml: Storage cluster yaml
     """
