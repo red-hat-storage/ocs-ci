@@ -752,6 +752,7 @@ def get_node_resource_utilization(nodename=None, node_type='worker'):
 
     Args:
         nodename (str) : The node name
+        node_type (str) : The node type (e.g. master, worker)
 
     Returns:
         dict : Node name and its cpu and memory utilization in
