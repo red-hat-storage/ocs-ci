@@ -494,6 +494,9 @@ class VSPHERE(object):
             logger.warning(f"{disk_label} for {vm.name} could not be found")
 
         virtual_disk_spec = vim.vm.device.VirtualDeviceSpec()
+        virtual_disk_spec.fileOperation = (
+            vim.vm.device.VirtualDeviceSpec.FileOperation.destroy
+        )
         virtual_disk_spec.operation = (
             vim.vm.device.VirtualDeviceSpec.Operation.remove
         )
