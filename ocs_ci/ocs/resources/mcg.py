@@ -608,11 +608,16 @@ class MCG(object):
         """
 
         def _check_state():
-            sysinfo = self.send_rpc_query('system_api', 'read_system', params={}).json()['reply']
+            sysinfo = self.send_rpc_query(
+                'system_api', 'read_system', params={}
+            ).json()['reply']
             for pool in sysinfo.get('pools'):
                 if pool.get('name') == backingstore_name:
                     current_state = pool.get('mode')
-                    logger.info(f'Current state of backingstore {backingstore_name} is {current_state}')
+                    logger.info(
+                        f'Current state of backingstore ''{backingstore_name} '
+                        f'is {current_state}'
+                    )
                     if current_state == desired_state:
                         return True
             return False
@@ -621,16 +626,19 @@ class MCG(object):
             for reached_state in TimeoutSampler(timeout, 10, _check_state):
                 if reached_state:
                     logger.info(
-                        f'BackingStore {backingstore_name} reached state {desired_state}.'
+                        f'BackingStore {backingstore_name} reached state '
+                        f'{desired_state}.'
                     )
                     return True
                 else:
                     logger.info(
-                        f'Waiting for BackingStore {backingstore_name} to reach state {desired_state}...'
+                        f'Waiting for BackingStore {backingstore_name} to '
+                        f'reach state {desired_state}...'
                     )
         except TimeoutExpiredError:
             logger.error(
-                f'The BackingStore did not reach the desired state {desired_state} within the time limit.'
+                f'The BackingStore did not reach the desired state '
+                f'{desired_state} within the time limit.'
             )
             assert False
 
