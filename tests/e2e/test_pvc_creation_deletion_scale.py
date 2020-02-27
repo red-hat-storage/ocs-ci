@@ -45,7 +45,7 @@ class TestPVCCreationDeletionScale(E2ETest):
         ]
     )
     @pytest.mark.usefixtures(namespace.__name__)
-    def test_1500_pvc_creation_deletion_scale(self, namespace, access_mode, interface):
+    def test_multiple_pvc_creation_deletion_scale(self, namespace, access_mode, interface):
         """
         Measuring PVC creation time while scaling PVC
         Measure PVC deletion time after creation test
