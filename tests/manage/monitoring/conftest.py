@@ -662,9 +662,14 @@ def workload_fio_storageutilization(
     fio_objs = [fio_pvc_dict, fio_configmap_dict, fio_job_dict]
     fio_job_file = ObjectConfFile(fixture_name, fio_objs, project, tmp_path)
 
-    # how long do we let the job running while writing data to the volume
-    # TODO: increase this value or make it configurable
-    write_timeout = pvc_size * 30  # seconds
+    # How long do we let the job running while writing data to the volume?
+    # Based on min. fio write speed of the enviroment ...
+    fio_min_mbps = config.ENV_DATA['fio_storageutilization_min_mbps']
+    logger.info(
+        "Assuming %.2f MB/s is a minimal write speed of fio.", fio_min_mbps)
+    # ... we compute max. time we are going to wait for fio to write all data
+    min_time_to_write_gb = 1 / (fio_min_mbps / 2**10)
+    write_timeout = pvc_size * min_time_to_write_gb  # seconds
     logger.info((
         f"fixture will wait {write_timeout} seconds for the Job "
         f"to write {pvc_size} Gi data on OCS backed volume"))
