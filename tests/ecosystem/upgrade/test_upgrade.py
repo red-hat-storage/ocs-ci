@@ -18,7 +18,7 @@ from ocs_ci.ocs.ocp import get_images
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
-from ocs_ci.ocs.resources.ocs import ocs_install_verification
+from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
 from ocs_ci.ocs.resources.pod import verify_pods_upgraded
 from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
