@@ -1,6 +1,5 @@
 import logging
 import json
-import time
 
 from ocs_ci.framework import Config
 from ocs_ci.ocs import ocp
@@ -34,12 +33,12 @@ class TestUpgradeOCP(ManageTest):
         ceph_cluster = CephCluster()
         ceph_cluster.enable_health_monitor()
 
-        target_image = config.OCP_UPGRADE['ocp_version']
+        target_image = config.UPGRADE['ocp_upgrade_version']
         self.cluster_operators = self.get_all_cluster_operators()
         logger.info(f" oc version: {self.get_current_oc_version()}")
         self.get_all_cluster_operators()
         upgrade_operator_timeout = TimeoutSampler(
-            timeout=27000,
+            timeout=2700,
             sleep=60,
             func=self.check_upgrade_completed,
             target_version=target_image
