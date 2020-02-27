@@ -147,3 +147,17 @@ def test_workload_rbd_cephfs(
     """
     logger.info(workload_storageutilization_50p_rbd)
     logger.info(workload_storageutilization_50p_cephfs)
+
+
+@pytest.mark.libtest
+def test_workload_rbd_cephfs_minimal(
+    workload_storageutilization_05p_rbd,
+    workload_storageutilization_05p_cephfs
+):
+    """
+    Similar to test_workload_rbd_cephfs, but using only 5% of total OCS
+    capacity. This still test the workload, but it's bit faster and (hopefully)
+    without big impact on the cluster itself.
+    """
+    logger.info(workload_storageutilization_05p_rbd)
+    logger.info(workload_storageutilization_05p_cephfs)
