@@ -746,7 +746,7 @@ def validate_osd_utilization(osd_used=80):
     return _rc
 
 
-def get_node_resource_utilization(nodename=None):
+def get_node_resource_utilization(nodename=None, node_type='worker'):
     """
     Gets the node's cpu and memory utilization in percentage
 
@@ -760,7 +760,7 @@ def get_node_resource_utilization(nodename=None):
     """
 
     node_names = [nodename] if nodename else [
-        node.name for node in get_typed_nodes(node_type='worker')
+        node.name for node in get_typed_nodes(node_type=node_type)
     ]
     obj = ocp.OCP()
     resource_utilization_all_nodes = obj.exec_oc_cmd(
@@ -779,6 +779,7 @@ def get_node_resource_utilization(nodename=None):
                 logger.info("The memory utilized of the node "
                             f"{node} is {memory_utilization}%")
                 utilization_dict[node] = {
-                    'cpu': int(cpu_utilization), 'memory': int(memory_utilization)
+                    'cpu': int(cpu_utilization),
+                    'memory': int(memory_utilization)
                 }
     return utilization_dict
