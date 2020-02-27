@@ -249,7 +249,7 @@ class VSPHEREBASE(Deployment):
         Gets the compute VM's from resource pool
 
         Args:
-            dc ( str): Datacenter name
+            dc (str): Datacenter name
             cluster (str): Cluster name
 
         Returns:

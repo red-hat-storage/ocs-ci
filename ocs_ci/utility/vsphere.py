@@ -485,9 +485,9 @@ class VSPHERE(object):
             # choose the device based on unit number instead of
             # deviceInfo.label. labels can change if a disk is removed
             if (
-                    isinstance(dev, vim.vm.device.VirtualDisk)
-                    and dev.unitNumber == unit_number
-                    and disk_prefix in dev.deviceInfo.label
+                isinstance(dev, vim.vm.device.VirtualDisk)
+                and dev.unitNumber == unit_number
+                and disk_prefix in dev.deviceInfo.label
             ):
                 virtual_disk_device = dev
         if not virtual_disk_device:
