@@ -102,6 +102,10 @@ class NonUpgradedImagesFoundError(Exception):
     pass
 
 
+class UnexpectedImage(Exception):
+    pass
+
+
 class UnexpectedVolumeType(Exception):
     pass
 
