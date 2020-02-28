@@ -5,7 +5,7 @@ import botocore
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1, tier3, noobaa_cli_required, acceptance,
+    tier1, tier2, tier3, noobaa_cli_required, acceptance,
     performance, filter_insecure_request_warning
 )
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -29,11 +29,11 @@ class TestBucketDeletion:
         argvalues=[
             pytest.param(
                 *[3, 'S3'],
-                marks=[pytest.mark.polarion_id("OCS-1939"), tier1, acceptance]
+                marks=[pytest.mark.polarion_id("OCS-1939"), tier2]
             ),
             pytest.param(
                 *[3, 'CLI'],
-                marks=[tier1, acceptance, noobaa_cli_required,
+                marks=[tier2, noobaa_cli_required,
                        pytest.mark.polarion_id("OCS-1940")]
             ),
             pytest.param(
@@ -90,7 +90,7 @@ class TestBucketDeletion:
             ),
             pytest.param(
                 *['CLI'],
-                marks=[tier1, noobaa_cli_required,
+                marks=[tier2, noobaa_cli_required,
                        pytest.mark.polarion_id("OCS-1917")]
             ),
             pytest.param(

@@ -62,7 +62,7 @@ class TestBasicPVCOperations(ManageTest):
     with rbd pool
     """
 
-    def test_ocs_347(self, resources):
+    def test_basic_pvc_operations(self, resources):
         pod, pvc, storageclass = resources
 
         log.info("Creating RBD StorageClass")
