@@ -273,8 +273,12 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
                 f"Snapshot container is present in {pod_obj.name} pod. "
                 f"Container {container}. Image {image}"
             )
+    deployments = ocs_csv.get()['spec']['install']['spec']['deployments']
+    rook_ceph_operator_deployment = [
+        deployment_val for deployment_val in deployments if deployment_val['name'] == 'rook-ceph-operator'
+    ]
     assert {'name': 'CSI_ENABLE_SNAPSHOTTER', 'value': 'false'} in (
-        ocs_csv.get()['spec']['install']['spec']['deployments'][0]['spec']['template']['spec']['containers'][0]['env']
+        rook_ceph_operator_deployment[0]['spec']['template']['spec']['containers'][0]['env']
     ), "CSI_ENABLE_SNAPSHOTTER value is not set to 'false'."
     log.info("Verified: CSI snapshotter is not present.")
 
