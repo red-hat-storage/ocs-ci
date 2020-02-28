@@ -92,12 +92,14 @@ def supported_configuration():
             real_memory = int(real_memory)
 
         if (real_cpu < min_cpu or real_memory < min_memory):
-            pytest.xfail(
+            error_msg = (
                 f"Node {node_info.get('metadata').get('name')} doesn't have "
                 f"minimum of required reasources for running the test:\n"
                 f"{min_cpu} CPU and {min_memory} Memory\nIt has:\n{real_cpu} "
                 f"CPU and {real_memory} Memory"
             )
+            log.error(error_msg)
+            pytest.xfail(error_msg)
 
 
 @pytest.fixture(scope='class')
