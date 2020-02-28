@@ -48,7 +48,6 @@ workloads = pytest.mark.workloads
 performance = pytest.mark.performance
 scale = pytest.mark.scale
 deployment = pytest.mark.deployment
-destroy = pytest.mark.destroy
 polarion_id = pytest.mark.polarion_id
 bugzilla = pytest.mark.bugzilla
 
