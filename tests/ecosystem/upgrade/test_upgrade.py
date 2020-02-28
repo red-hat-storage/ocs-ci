@@ -164,15 +164,18 @@ def test_upgrade():
             config.update(custom_config_data)
     image_url = ocs_catalog.get_image_url()
     image_tag = ocs_catalog.get_image_name()
+    log.info(f"Current image is: {image_url}, tag: {image_tag}")
     ocs_registry_image = config.UPGRADE.get('upgrade_ocs_registry_image')
     if ocs_registry_image:
-        image_url, image_tag = ocs_registry_image.split(':')
+        image_url, new_image_tag = ocs_registry_image.split(':')
     elif config.UPGRADE.get('upgrade_to_latest', True) or version_change:
         new_image_tag = get_latest_ds_olm_tag()
     else:
         new_image_tag = get_next_version_available_for_upgrade(image_tag)
     cs_data = deepcopy(ocs_catalog.data)
-    cs_data['spec']['image'] = ':'.join([image_url, new_image_tag])
+    image_for_upgrade = ':'.join([image_url, new_image_tag])
+    log.info(f"Image: {image_for_upgrade} will be used for upgrade.")
+    cs_data['spec']['image'] = image_for_upgrade
     operator_selector = get_selector_for_ocs_operator()
     package_manifest = PackageManifest(
         resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
