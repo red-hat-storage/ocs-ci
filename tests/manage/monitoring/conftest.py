@@ -12,7 +12,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import UnexpectedVolumeType
+from ocs_ci.ocs.exceptions import UnexpectedVolumeType, TimeoutExpiredError
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
@@ -688,11 +688,28 @@ def workload_fio_storageutilization(
         # finish instead, then ask for a name of the successful pod and use it
         # to get logs ...)
         ocp_pod = ocp.OCP(kind="Pod", namespace=project.namespace)
-        ocp_pod.wait_for_resource(
-            resource_count=1,
-            condition=constants.STATUS_COMPLETED,
-            timeout=write_timeout,
-            sleep=30)
+        try:
+            ocp_pod.wait_for_resource(
+                resource_count=1,
+                condition=constants.STATUS_COMPLETED,
+                timeout=write_timeout,
+                sleep=30)
+        except TimeoutExpiredError as ex:
+            # report some high level error as well
+            msg = (
+                "Job fio failed to write %.2f Gi data on OCS backed volume "
+                "in expected time %.2f seconds.")
+            logger.error(msg, pvc_size, write_timeout)
+            # TODO: if the job is still running, report more specific error
+            # message instead of the generic one which is pushed to ex. below
+            msg += (
+                " If the fio pod were still runing "
+                "(see 'last actual status was' in some previous log message), "
+                "this is caused either by "
+                "severe product performance regression "
+                "or by a misconfiguration of the cluster (ping infra team).")
+            ex.args = ex.args + (msg,)
+            raise(ex)
         pod_data = ocp_pod.get()
 
         # explicit list of assumptions, if these assumptions are not met, the
