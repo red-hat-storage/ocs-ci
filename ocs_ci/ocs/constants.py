@@ -531,13 +531,6 @@ SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scale
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
 
-# Rep mapping
-REPO_MAPPING = {
-    '4.2.0': OCP4_2_REPO,
-    '4.3.0': OCP4_3_REPO,
-    '4.3.1': OCP4_3_REPO,
-}
-
 # Cluster name limits
 CLUSTER_NAME_MIN_CHARACTERS = 5
 CLUSTER_NAME_MAX_CHARACTERS = 17
