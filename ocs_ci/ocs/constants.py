@@ -538,7 +538,8 @@ WORKER_LABEL = "node-role.kubernetes.io/worker"
 # Rep mapping
 REPO_MAPPING = {
     '4.2.0': OCP4_2_REPO,
-    '4.3.0': OCP4_3_REPO
+    '4.3.0': OCP4_3_REPO,
+    '4.3.1': OCP4_3_REPO,
 }
 
 # Cluster name limits
