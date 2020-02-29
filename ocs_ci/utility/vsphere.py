@@ -468,13 +468,17 @@ class VSPHERE(object):
         WaitForTask(pi.Destroy())
         logger.info(f"Successfully deleted resource pool {pool}")
 
-    def remove_disk(self, vm, unit_number):
+    def remove_disk(self, vm, unit_number, datastore=True):
         """
-        Removes the Disk from VM
+        Removes the Disk from VM and datastore. By default, it will delete
+        the disk ( vmdk ) from VM and backend datastore. If datastore parameter
+        is set to False, then it will ONLY removes the disk from VM
 
         Args:
             vm (vim.VirtualMachine): VM instance
             unit_number (int): Disk unit number to remove
+            datastore (bool): Delete the disk (vmdk) from backend datastore
+                if True
 
         """
         disk_prefix = "Hard disk "
@@ -494,9 +498,10 @@ class VSPHERE(object):
             logger.warning(f"{disk_label} for {vm.name} could not be found")
 
         virtual_disk_spec = vim.vm.device.VirtualDeviceSpec()
-        virtual_disk_spec.fileOperation = (
-            vim.vm.device.VirtualDeviceSpec.FileOperation.destroy
-        )
+        if datastore:
+            virtual_disk_spec.fileOperation = (
+                vim.vm.device.VirtualDeviceSpec.FileOperation.destroy
+            )
         virtual_disk_spec.operation = (
             vim.vm.device.VirtualDeviceSpec.Operation.remove
         )
