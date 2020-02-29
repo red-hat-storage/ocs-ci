@@ -2,6 +2,10 @@ import logging
 import pytest
 
 from subprocess import TimeoutExpired
+
+from ocs_ci.ocs.exceptions import CephHealthException
+from ocs_ci.utility.utils import ceph_health_check_base
+
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import (
     drain_nodes, schedule_nodes, get_typed_nodes, wait_for_nodes_status, get_node_objs
@@ -48,6 +52,20 @@ class TestNodesMaintenance(ManageTest):
 
         """
         self.sanity_helpers = Sanity()
+
+    @pytest.fixture(autouse=True)
+    def health_checker(self):
+        """
+        Check Ceph health
+
+        """
+        try:
+            status = ceph_health_check_base()
+            if status:
+                logger.info("Health check passed")
+        except CephHealthException as e:
+            # skip because ceph is not in good health
+            pytest.skip(e)
 
     @tier1
     @pytest.mark.parametrize(
