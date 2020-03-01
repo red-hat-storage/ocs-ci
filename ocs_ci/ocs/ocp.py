@@ -386,12 +386,18 @@ class OCP(object):
             project_name (str): Name of the project to be deleted
 
         Returns:
-            bool: True in case project deletion succeeded, False otherwise
+            bool: True in case project deletion succeeded.
+
+        Raises:
+            CommandFailed: When the project deletion does not succeed.
+
         """
         command = f"oc delete project {project_name}"
         if f' "{project_name}" deleted' in run_cmd(f"{command}"):
             return True
-        return False
+        raise CommandFailed(
+            f"{project_name} was not deleted"
+        )
 
     def login(self, user, password):
         """
