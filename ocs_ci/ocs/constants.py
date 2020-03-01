@@ -34,6 +34,7 @@ TEMPLATE_VDBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "vdbench")
 TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
 TEMPLATE_COUCHBASE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase")
 TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
+TEMPLATE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_SERVER_DIR, "pillowfight")
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(
     TEMPLATE_DIR, "openshift-infra/"
@@ -337,10 +338,6 @@ COUCHBASE_WORKER_SECRET = os.path.join(
 
 COUCHBASE_WORKER_EXAMPLE = os.path.join(
     TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-example.yaml"
-)
-
-COUCHBASE_BASIC_PILLOWFIGHT = os.path.join(
-    TEMPLATE_COUCHBASE_SERVER_DIR, "basic-pillowfight.yaml"
 )
 
 NGINX_POD_YAML = os.path.join(
