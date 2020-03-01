@@ -50,39 +50,41 @@ def label_nodes(request, with_ocs):
         if with_ocs is True:
             return
 
-        log.info('Clear label form worker (Application) nodes')
-        # Getting all Application nodes
-        app_nodes = machine.get_labeled_nodes(constants.APP_NODE_LABEL)
-        helpers.remove_label_from_worker_node(app_nodes,
-                                              constants.APP_NODE_LABEL)
         if m_set:
-            log.info(f'Decrease {m_set} by 1')
-            machine.delete_node(m_set, 1)
+            log.info(f'Destroy {m_set}')
+            machine.delete_custom_machineset(m_set)
+        else:
+            log.info('Clear label form worker (Application) nodes')
+            # Getting all Application nodes
+            app_nodes = machine.get_labeled_nodes(constants.APP_NODE_LABEL)
+            log.debug(f'The application nodes are : {app_nodes}')
+            helpers.remove_label_from_worker_node(
+                app_nodes, constants.VDBENCH_NODE_LABEL
+            )
+
 
     request.addfinalizer(teardown)
 
     if with_ocs is True:
         return
 
+    # Add label to the worker nodes
+
     # Getting all OCS nodes (to verify app pod wil not run on)
     ocs_nodes = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
-    # Add label to the worker nodes
     worker_nodes = helpers.get_worker_nodes()
     # Getting list of free nodes
     free_nodes = list(set(worker_nodes) - set(ocs_nodes))
 
     if not free_nodes:
-        # Getting list of current machinesets
-        log.info('Adding new worker node for the application to run on.')
-        mset = machine.get_machinesets()
-        replica_count = machine.get_replica_count(mset[0])
-        machine.add_node(mset[0], replica_count + 1)
-        machine.wait_for_new_node_to_be_ready(mset[0])
+        # No free nodes -  Creating new machineset for application pods
+        log.info('Adding new machineset, with worker for application pod')
+        m_set = machine.create_custom_machineset(label=constants.APP_NODE_LABEL)
+        machine.wait_for_new_node_to_be_ready(m_set)
 
-        ocs_nodes = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
-        worker_nodes = helpers.get_worker_nodes()
-        free_nodes = list(set(worker_nodes) - set(ocs_nodes))
-        m_set = mset[0]
+        free_nodes = machine.get_labeled_nodes(
+            f'node-role.kubernetes.io/app={constants.APP_NODE_LABEL}'
+        )
 
         # TODO: implement this for VMWare as well.
 
@@ -151,13 +153,13 @@ class TestVDBenchWorkload(E2ETest):
             pytest.param(*["VDBench-BCurve-FS.yaml", True,
                            9, 4, ["64k"], "random",
                            1, 4, 3, 256, 5, 600, 5]),
-            # pytest.param(*["VDBench-Basic.yaml", True,
-            #               9, 4, ["4k", "64k"], "random",
-            #               1, 4, 3, 256, 5, 600, 1],
-            #             marks=pytest.mark.workloads()),
             pytest.param(*["VDBench-Basic.yaml", True,
-                           1, 4, ["4k"], "random",
-                           1, 4, 3, 10, 1, 60, 1],
+                           9, 4, ["4k", "64k"], "random",
+                           1, 4, 3, 256, 5, 600, 1],
+                         marks=pytest.mark.workloads()),
+            pytest.param(*["VDBench-Basic.yaml", False,
+                           9, 4, ["4k", "64k"], "random",
+                           1, 4, 3, 256, 5, 600, 1],
                          marks=pytest.mark.workloads()),
         ],
     )
