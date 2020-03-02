@@ -1186,7 +1186,7 @@ def wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj):
         dc_pod_obj (list): list of dc app pod objects
     """
     for pod_obj in dc_pod_obj:
-        name = pod_obj.name[:-8]
+        name = pod_obj.get_labels().get('name')
         dpod_list = get_all_pods(selector_label=f"name={name}", wait=True)
         for dpod in dpod_list:
             if '-1-deploy' not in dpod.name:

@@ -162,8 +162,8 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                         resource=pod_obj, state=constants.STATUS_RUNNING,
                         timeout=60
                     )
-                except TimeoutError as err:
-                    if "rook-ceph-drain-canary" in err:
+                except TimeoutError:
+                    if "rook-ceph-drain-canary" in pod_obj.name:
                         ocp_obj = ocp.OCP()
                         command = "label deploy -n openshift-storage -l app" \
                                   "=rook-ceph-drain-canary --overwrite=true" \
