@@ -178,6 +178,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
         # run IO and delete the resources
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.delete_resources()
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
