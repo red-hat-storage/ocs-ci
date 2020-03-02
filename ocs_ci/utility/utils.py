@@ -1068,6 +1068,7 @@ def get_ocp_repo():
 
     Returns:
         string : Path to ocp repo file
+
     """
     repo_path = os.path.join(
         constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo"
