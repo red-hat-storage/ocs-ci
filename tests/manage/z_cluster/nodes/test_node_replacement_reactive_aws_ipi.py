@@ -1,16 +1,21 @@
 import logging
 import pytest
-import random
 from ocs_ci.framework.testlib import (
     tier4, tier4b, ManageTest, aws_platform_required,
     ipi_deployment_required, ignore_leftovers)
-from ocs_ci.ocs import machine
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import machine, constants, defaults, ocp
 from ocs_ci.ocs.resources import pod
-from tests.helpers import wait_for_resource_state
+from ocs_ci.ocs.node import get_node_objs, node_network_failure
 from tests.sanity_helpers import Sanity
-from tests.helpers import get_worker_nodes
-from ocs_ci.ocs import ocp
+from tests.helpers import (
+    get_worker_nodes, label_worker_node, remove_label_from_worker_node)
+from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.ocs.node import (
+    get_osd_running_nodes, get_app_pod_running_nodes,
+    get_both_osd_and_app_pod_running_node)
+from tests import helpers
+from distutils.version import StrictVersion
+
 
 log = logging.getLogger(__name__)
 
@@ -20,10 +25,27 @@ log = logging.getLogger(__name__)
 @tier4b
 @aws_platform_required
 @ipi_deployment_required
+@pytest.mark.skipif(
+    StrictVersion(
+        get_ocp_version()
+    ) > StrictVersion(
+        '4.3'
+    ), reason="Terminate of machine behaviour is changed from 4.3"
+)
 class TestNodeReplacement(ManageTest):
     """
     Knip-894 Node replacement - AWS-IPI-Reactive
     """
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+
+        def finalizer():
+            worker_nodes = get_worker_nodes()
+            # Removing created label on all worker nodes
+            remove_label_from_worker_node(worker_nodes, label_key="dc")
+
+        request.addfinalizer(finalizer)
+
     @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
@@ -32,9 +54,30 @@ class TestNodeReplacement(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
+    @pytest.mark.parametrize(
+        argnames=["interface", "failure"],
+        argvalues=[
+            pytest.param(
+                *['rbd', 'power off'],
+                marks=pytest.mark.polarion_id("OCS-2118")
+            ),
+            pytest.param(
+                *['rbd', 'network failure'],
+                marks=pytest.mark.polarion_id("OCS-2120")
+            ),
+            pytest.param(
+                *['cephfs', 'power off'],
+                marks=pytest.mark.polarion_id("OCS-2119")
+            ),
+            pytest.param(
+                *['cephfs', 'network failure'],
+                marks=pytest.mark.polarion_id("OCS-2121")
+            ),
+        ]
+    )
     def test_node_replacement_reactive_aws_ipi(
-            self, nodes, pvc_factory, pod_factory,
-            dc_pod_factory
+        self, nodes, pvc_factory, pod_factory, dc_pod_factory,
+        failure, interface
     ):
         """
         Knip-894 Node replacement - AWS-IPI-Reactive
@@ -42,68 +85,67 @@ class TestNodeReplacement(ManageTest):
         """
         # Get worker nodes
         initial_nodes = get_worker_nodes()
-        log.info(f"Current available worker nodes are {initial_nodes}")
 
-        # Get the osd associated node
-        osd_pods_obj = pod.get_osd_pods()
-        osd_node_obj = pod.get_pod_node(random.choice(osd_pods_obj))
-        log.info(f"Selected OSD is {osd_node_obj.name}")
+        # Get OSD running nodes
+        osd_running_nodes = get_osd_running_nodes()
+        log.info(f"OSDs are running on nodes {osd_running_nodes}")
 
-        # Create fedora dc app on all the worker nodes and start IO in
-        # background
-        dc_rbd_pod_obj = []
-        for node in initial_nodes:
-            # Create app pods on all the nodes
-            dc_rbd = dc_pod_factory(
-                interface=constants.CEPHBLOCKPOOL, node_name=node)
-            if node == osd_node_obj.name:
-                pod.run_io_in_bg(dc_rbd, expect_to_fail=True, fedora_dc=True)
-            else:
-                pod.run_io_in_bg(dc_rbd, expect_to_fail=False, fedora_dc=True)
-            dc_rbd_pod_obj.append(dc_rbd)
+        # Label osd nodes with fedora app
+        label_worker_node(osd_running_nodes, label_key='dc', label_value='fedora')
 
-        dc_cephfs_pod_obj = []
-        for node in initial_nodes:
-            # Create app pods on all the nodes
-            dc_cephfs = dc_pod_factory(
-                interface=constants.CEPHFILESYSTEM, node_name=node)
-            if node == osd_node_obj.name:
-                pod.run_io_in_bg(
-                    dc_cephfs, expect_to_fail=True, fedora_dc=True
-                )
-            else:
-                pod.run_io_in_bg(
-                    dc_cephfs, expect_to_fail=False, fedora_dc=True
-                )
-            dc_cephfs_pod_obj.append(dc_cephfs)
+        # Create DC app pods
+        log.info("Creating DC based app pods")
+        if interface == 'rbd':
+            interface = constants.CEPHBLOCKPOOL
+        elif interface == 'cephfs':
+            interface = constants.CEPHFILESYSTEM
+        dc_pod_obj = []
+        for i in range(2):
+            dc_pod = dc_pod_factory(
+                interface=interface, node_selector={'dc': 'fedora'})
+            pod.run_io_in_bg(dc_pod, fedora_dc=True)
+            dc_pod_obj.append(dc_pod)
+
+        # Get app pods running nodes
+        dc_pod_node_name = get_app_pod_running_nodes(dc_pod_obj)
+        log.info(f"DC app pod running nodes are {dc_pod_node_name}")
+
+        # Get both osd and app pod running node
+        common_nodes = get_both_osd_and_app_pod_running_node(
+            osd_running_nodes, dc_pod_node_name
+        )
+        log.info(f"Both OSD and app pod is running on nodes {common_nodes}")
 
         # Get the machine name using the node name
-        machine_name = machine.get_machine_from_node_name(osd_node_obj.name)
-        log.info(f"{osd_node_obj.name} associated machine is {machine_name}")
+        machine_name = machine.get_machine_from_node_name(common_nodes[0])
+        log.info(f"{common_nodes[0]} associated machine is {machine_name}")
 
         # Get the machineset name using machine name
         machineset_name = machine.get_machineset_from_machine_name(
             machine_name
         )
         log.info(
-            f"{osd_node_obj.name} associated machineset is {machineset_name}"
+            f"{common_nodes[0]} associated machineset is {machineset_name}"
         )
 
-        # Induce failure
-        nodes.stop_nodes([osd_node_obj], wait=True)
-        log.info(f"Successfully powered off node: {osd_node_obj.name}")
+        # Get the failure node obj
+        failure_node_obj = get_node_objs(node_names=[common_nodes[0]])
 
-        # TODO - Network failure as one more failure type
+        # Induce failure on the selected failure node
+        log.info(f"Inducing failure on node {failure_node_obj[0].name}")
+        if failure == "power off":
+            # Power off AWS worker node instance
+            nodes.stop_nodes(failure_node_obj, wait=True)
+            log.info(f"Successfully powered off node: {failure_node_obj[0].name}")
+        elif failure == "network failure":
+            # Induce Network failure
+            node_network_failure(failure_node_obj)
 
         # Add annotation to the failed node
         annotation = "machine.openshift.io/exclude-node-draining=''"
-        ocp_obj = ocp.OCP(
-            kind='machine',
-            namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+        machine.add_annotation_to_machine(
+            annotation=annotation, machine_name=machine_name
         )
-        command = f"annotate machine {machine_name} {annotation}"
-        log.info(f"Adding annotation: {command}")
-        ocp_obj.exec_oc_cmd(command)
 
         # Delete the machine
         machine.delete_machine(machine_name)
@@ -130,17 +172,26 @@ class TestNodeReplacement(ManageTest):
             f"Successfully labeled {new_spun_node} with OCS storage label"
         )
 
-        # Check the pods should be in running state
-        all_pod_obj = pod.get_all_pods(wait=True)
-        for pod_obj in all_pod_obj:
-            wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=300
-            )
+        # DC app pods on the failed node will get automatically created on other
+        # running node. Waiting for all dc app pod to reach running state
+        pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj)
+        log.info("All the dc pods reached running state")
 
+        # Check all OCS pods status, they should be in running state
+        all_pod_obj = pod.get_all_pods(
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        )
+        for pod_obj in all_pod_obj:
+            if '-1-deploy' and 'ocs-deviceset' not in pod_obj.name:
+                helpers.wait_for_resource_state(
+                    resource=pod_obj, state=constants.STATUS_RUNNING,
+                    timeout=60
+                )
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
         # run IO and delete the resources
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
+        self.sanity_helpers.delete_resources()
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()

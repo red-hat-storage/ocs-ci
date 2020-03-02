@@ -485,3 +485,21 @@ def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
 
     sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
     return sc_obj.get().get('items')[0].get('metadata').get('name')
+
+
+def add_annotation_to_machine(annotation, machine_name):
+    """
+    Add annotation to the machine
+
+    Args:
+        annotation (str): Annotation to be set on the machine
+        eg: annotation = "machine.openshift.io/exclude-node-draining=''"
+        machine_name (str): machine name
+    """
+    ocp_obj = OCP(
+        kind='machine',
+        namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+    )
+    command = f"annotate machine {machine_name} {annotation}"
+    log.info(f"Adding annotation: {command} to machine {machine_name} ")
+    ocp_obj.exec_oc_cmd(command)

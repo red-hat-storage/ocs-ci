@@ -11,6 +11,8 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import machine
 import tests.helpers
 from ocs_ci.ocs import ocp
+from ocs_ci.ocs.resources import pod
+from subprocess import TimeoutExpired
 
 
 log = logging.getLogger(__name__)
@@ -268,6 +270,7 @@ def add_new_node_and_label_it(machineset_name):
     log.info(
         f"Successfully labeled {new_spun_node} with OCS storage label"
     )
+    return new_spun_node[0]
 
 
 def get_node_logs(node_name):
@@ -321,3 +324,82 @@ def get_node_resource_utilization(nodename=None, node_type='worker'):
                     'memory': int(memory_utilization)
                 }
     return utilization_dict
+
+
+def get_osd_running_nodes():
+    """
+    Gets the osd running node names
+
+    Returns:
+        list: OSD node names
+    """
+    osd_pods_obj = pod.get_osd_pods()
+    osd_node_name = []
+    for osd_node in osd_pods_obj:
+        osd_node_name.append(pod.get_pod_node(osd_node).name)
+    return osd_node_name
+
+
+def get_app_pod_running_nodes(pod_obj):
+    """
+    Gets the app pod running node names
+
+    Args:
+        pod_obj (list): List of app pod objects
+
+    Returns:
+        list: App pod running node names
+    """
+    app_pod_node_name = []
+    for node in pod_obj:
+        app_pod_node_name.append(pod.get_pod_node(node).name)
+    return app_pod_node_name
+
+
+def get_both_osd_and_app_pod_running_node(
+        osd_running_nodes, app_pod_running_nodes
+):
+    """
+     Gets both osd and app pod running node names
+
+     Args:
+         osd_running_nodes(list): List of osd running node names
+         app_pod_running_nodes(list): List of app pod running node names
+
+     Returns:
+         list: Both OSD and app pod running node names
+     """
+    common_nodes = list(set(osd_running_nodes) & set(app_pod_running_nodes))
+    log.info(f"Common node is {common_nodes}")
+    return common_nodes
+
+
+def node_network_failure(node_names, wait=True):
+    """
+    Induce node network failure
+    Bring node network interface down, making the node unresponsive
+    Args:
+        node_names (list): The names of the nodes
+        wait (bool): True in case wait for status is needed, False otherwise
+    Returns:
+        bool: True if node network fail is successful
+    """
+    if not isinstance(node_names, list):
+        node_names = [node_names]
+
+    ocp = OCP(kind='node')
+    fail_nw_cmd = "ifconfig $(route | grep default | awk '{print $(NF)}') down"
+
+    for node_name in node_names:
+        try:
+            ocp.exec_oc_debug_cmd(
+                node=node_name, cmd_list=[fail_nw_cmd], timeout=15
+            )
+        except TimeoutExpired:
+            pass
+
+    if wait:
+        wait_for_nodes_status(
+            node_names=node_names, status=constants.NODE_NOT_READY
+        )
+    return True
