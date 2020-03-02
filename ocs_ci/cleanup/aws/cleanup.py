@@ -13,6 +13,10 @@ from ocs_ci.utility.aws import AWS
 from ocs_ci.cleanup.aws import defaults
 
 
+FORMAT = (
+    '%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s'
+)
+logging.basicConfig(format=FORMAT, level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
