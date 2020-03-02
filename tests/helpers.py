@@ -1621,7 +1621,8 @@ def create_multiple_pvc_parallel(
 
 
 def create_pods_parallel(
-    pvc_list, namespace, interface, pod_dict_path=None, sa_name=None, raw_block_pv=False, dc_deployment=False
+    pvc_list, namespace, interface, pod_dict_path=None, sa_name=None, raw_block_pv=False,
+    dc_deployment=False, node_selector=None
 ):
     """
     Function to create pods in parallel
@@ -1634,6 +1635,8 @@ def create_pods_parallel(
         sa_name (str): sa_name for providing permission
         raw_block_pv (bool): Either RAW block or not
         dc_deployment (bool): Either DC deployment or not
+        node_selector (dict): dict of key-value pair to be used for nodeSelector field
+            eg: {'nodetype': 'app-pod'}
 
     Returns:
         pod_objs (list): Returns list of pods created
@@ -1650,7 +1653,7 @@ def create_pods_parallel(
                 create_pod, interface_type=interface,
                 pvc_name=pvc_obj.name, do_reload=False, namespace=namespace,
                 raw_block_pv=raw_block_pv, pod_dict_path=pod_dict_path,
-                sa_name=sa_name, dc_deployment=dc_deployment
+                sa_name=sa_name, dc_deployment=dc_deployment, node_selector=node_selector
             ))
     pod_objs = [pvc_obj.result() for pvc_obj in future_pod_objs]
     # Check for all the pods are in Running state
