@@ -139,7 +139,7 @@ class TestNodeReplacement(ManageTest):
             log.info(f"Successfully powered off node: {failure_node_obj[0].name}")
         elif failure == "network failure":
             # Induce Network failure
-            node_network_failure(failure_node_obj)
+            node_network_failure([failure_node_obj[0].name])
 
         # Add annotation to the failed node
         annotation = "machine.openshift.io/exclude-node-draining=''"
@@ -185,7 +185,7 @@ class TestNodeReplacement(ManageTest):
             if '-1-deploy' and 'ocs-deviceset' not in pod_obj.name:
                 helpers.wait_for_resource_state(
                     resource=pod_obj, state=constants.STATUS_RUNNING,
-                    timeout=60
+                    timeout=300
                 )
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
