@@ -130,30 +130,45 @@ def measure_operation(
         )
         logging_thread.start()
 
-        result = operation()
-        if measure_after:
-            start_time = time.time()
-        passed_time = time.time() - start_time
-        if minimal_time:
-            additional_time = minimal_time - passed_time
-            if additional_time > 0:
-                logger.info(f"Starting {additional_time}s sleep for the purposes of measurement.")
-                time.sleep(additional_time)
-        stop_time = time.time()
-        info['run'] = False
-        logging_thread.join()
-        results = {
-            'start': start_time,
-            'stop': stop_time,
-            'result': result,
-            'metadata': metadata,
-            'prometheus_alerts': alert_list,
-            'first_run': True,
-        }
-        logger.info(f"Results of measurement: {results}")
-        with open(result_file, 'w') as outfile:
-            logger.info(f"Dumping results of measurement into {result_file}")
-            json.dump(results, outfile)
+        try:
+            result = operation()
+        except Exception as ex:
+            # When the operation (which is being measured) fails, we need to
+            # make sure that alert harvesting thread ends and (at least)
+            # alerting data are saved into measurement dump file.
+            result = None
+            logger.error("exception raised during measured operation: %s", ex)
+            # Additional waiting for the measurement purposes is no longer
+            # necessary, and would only confuse anyone observing the failure.
+            minimal_time = 0
+            # And make sure the exception is properly processed by pytest (it
+            # would make the fixture fail).
+            raise(ex)
+        finally:
+            if measure_after:
+                start_time = time.time()
+            passed_time = time.time() - start_time
+            if minimal_time:
+                additional_time = minimal_time - passed_time
+                if additional_time > 0:
+                    logger.info(f"Starting {additional_time}s sleep for the purposes of measurement.")
+                    time.sleep(additional_time)
+            # Dumping measurement results into result file.
+            stop_time = time.time()
+            info['run'] = False
+            logging_thread.join()
+            results = {
+                'start': start_time,
+                'stop': stop_time,
+                'result': result,
+                'metadata': metadata,
+                'prometheus_alerts': alert_list,
+                'first_run': True,
+            }
+            logger.info(f"Results of measurement: {results}")
+            with open(result_file, 'w') as outfile:
+                logger.info(f"Dumping results of measurement into {result_file}")
+                json.dump(results, outfile)
     return results
 
 
