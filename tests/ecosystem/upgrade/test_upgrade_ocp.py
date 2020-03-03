@@ -3,7 +3,7 @@ import json
 
 from ocs_ci.framework import Config
 from ocs_ci.ocs import ocp
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import CephHealthException
@@ -22,6 +22,7 @@ class TestUpgradeOCP(ManageTest):
     5. check OCP version
     5. monitor cluster health
     """
+    ocp_o = ocp.OCP()
 
     def test_upgrade_ocp(self):
         """
@@ -114,7 +115,7 @@ class TestUpgradeOCP(ManageTest):
             str: current COP client version
 
         """
-        oc_json = run_cmd('oc version -o json')
+        oc_json = self.ocp_o.exec_oc_cmd('oc version -o json', out_yaml_format=False)
         oc_dict = json.loads(oc_json)
 
         return oc_dict.get("openshiftVersion")
@@ -127,8 +128,7 @@ class TestUpgradeOCP(ManageTest):
             image (str): image to be installed
 
         """
-        ocp_o = ocp.OCP()
-        ocp_o.exec_oc_cmd(
+        self.ocp_o.exec_oc_cmd(
             f"adm upgrade --to-image=registry.svc.ci.openshift.org/ocp/release:{image} "
             f"--allow-explicit-upgrade --force "
         )
