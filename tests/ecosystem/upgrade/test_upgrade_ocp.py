@@ -35,6 +35,7 @@ class TestUpgradeOCP(ManageTest):
         ceph_cluster.enable_health_monitor()
 
         target_image = config.UPGRADE['ocp_upgrade_version']
+        image_path = config.UPGRADE['ocp_upgrade_path']
         self.cluster_operators = self.get_all_cluster_operators()
         logger.info(f" oc version: {self.get_current_oc_version()}")
         self.get_all_cluster_operators()
@@ -47,7 +48,7 @@ class TestUpgradeOCP(ManageTest):
 
         # Upgrade OCP
 
-        self.upgrade_ocp(image=target_image)
+        self.upgrade_ocp(image=target_image, image_path=image_path)
 
         # Wait for upgrade
         for ocp_operator in self.cluster_operators:
@@ -116,20 +117,23 @@ class TestUpgradeOCP(ManageTest):
 
         """
         oc_json = self.ocp_o.exec_oc_cmd('version -o json', out_yaml_format=False)
+        logger.debug(f"oc_json=: {oc_json}")
         oc_dict = json.loads(oc_json)
+        logger.debug(f"oc_dict=: {oc_dict}")
 
         return oc_dict.get("openshiftVersion")
 
-    def upgrade_ocp(self, image):
+    def upgrade_ocp(self, image_path, image):
         """
         upgrade OCP version
 
         Args:
             image (str): image to be installed
+            image_path (str): path to image
 
         """
         self.ocp_o.exec_oc_cmd(
-            f"adm upgrade --to-image=registry.svc.ci.openshift.org/ocp/release:{image} "
+            f"adm upgrade --to-image={image_path}:{image} "
             f"--allow-explicit-upgrade --force "
         )
         logger.info(f"Upgrading OCP to version: {image}")
@@ -147,8 +151,12 @@ class TestUpgradeOCP(ManageTest):
             bool: True if success, False if failed
 
         """
-        logger.info(f"current version: {self.get_current_oc_version}")
-        if self.get_current_oc_version() == target_version:
+        logger.debug("Starting function: check_upgrade_competed")
+        logger.debug(f"self.get_current_oc_version: {self.get_current_oc_version()}")
+        logger.debug(f"target_version=: {target_version}")
+        logger.info(f"current version: {self.get_current_oc_version()}")
+        cur_version = self.get_current_oc_version()
+        if cur_version == target_version or target_version.startswith(cur_version):
             logger.info(f" cluster operator upgrade to build {target_version} completed")
             return True
 

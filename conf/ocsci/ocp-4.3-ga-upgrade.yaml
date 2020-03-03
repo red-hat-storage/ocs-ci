@@ -1,5 +1,6 @@
 ---
 # Use this config for upgrading of OCP 4.3 cluster
 UPGRADE:
-  ocp_upgrade_version: "quay.io/openshift-release-dev/ocp-release:4.3.3-x86_64"
+  ocp_upgrade_version: "4.3.3-x86_64"
+  ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
   upgrade_to_latest: true
