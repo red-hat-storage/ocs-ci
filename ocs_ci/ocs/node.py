@@ -1,5 +1,6 @@
 import copy
 import logging
+import re
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutExpiredError

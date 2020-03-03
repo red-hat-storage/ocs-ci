@@ -14,7 +14,7 @@ from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.utility import aws
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    deployment, destroy, ignore_leftovers
+    deployment, ignore_leftovers
 )
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.utility.environment_check import (
@@ -92,12 +92,14 @@ def supported_configuration():
             real_memory = int(real_memory)
 
         if (real_cpu < min_cpu or real_memory < min_memory):
-            pytest.xfail(
+            error_msg = (
                 f"Node {node_info.get('metadata').get('name')} doesn't have "
                 f"minimum of required reasources for running the test:\n"
                 f"{min_cpu} CPU and {min_memory} Memory\nIt has:\n{real_cpu} "
                 f"CPU and {real_memory} Memory"
             )
+            log.error(error_msg)
+            pytest.xfail(error_msg)
 
 
 @pytest.fixture(scope='class')
@@ -917,7 +919,7 @@ def cluster(request, log_cli_level):
 def environment_checker(request):
     node = request.node
     # List of marks for which we will ignore the leftover checker
-    marks_to_ignore = [m.mark for m in [deployment, destroy, ignore_leftovers]]
+    marks_to_ignore = [m.mark for m in [deployment, ignore_leftovers]]
     for mark in node.iter_markers():
         if mark in marks_to_ignore:
             return

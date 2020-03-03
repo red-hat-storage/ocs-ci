@@ -123,6 +123,7 @@ OCP_QE_MISC_REPO = (
 CRITICAL_ERRORS = [
     "core dumped", "oom_reaper"
 ]
+must_gather_pod_label = "must-gather"
 
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 
@@ -372,6 +373,9 @@ FIO_IO_RW_PARAMS_YAML = os.path.join(
 RSYNC_POD_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "rsync-pod.yaml"
 )
+MACHINESET_YAML = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "machine-set.yaml"
+)
 
 ANSIBLE_INVENTORY_YAML = os.path.join(
     "ocp-deployment", "inventory.yaml.j2"
@@ -534,7 +538,8 @@ WORKER_LABEL = "node-role.kubernetes.io/worker"
 # Rep mapping
 REPO_MAPPING = {
     '4.2.0': OCP4_2_REPO,
-    '4.3.0': OCP4_3_REPO
+    '4.3.0': OCP4_3_REPO,
+    '4.3.1': OCP4_3_REPO,
 }
 
 # Cluster name limits
