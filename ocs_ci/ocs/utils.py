@@ -806,7 +806,7 @@ def collect_prometheus_metrics(
 
     Args:
         metrics (list): list of metrics to get from Prometheus
-            (E.g. ceph_cluster_total_bytes, cluster:cpu_usage_cores:sum,
+            (E.g. ceph_cluster_total_used_bytes, cluster:cpu_usage_cores:sum,
             cluster:memory_usage_bytes:sum)
         dir_name (str): directory name to store metrics. Metrics will be stored
             in dir_name suffix with _ocs_metrics.
