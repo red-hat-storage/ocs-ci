@@ -7,7 +7,7 @@ import os
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import CLEANUP_YAML, TEMPLATE_CLEANUP_DIR
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import get_openshift_installer, run_cmd
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import AWS
 from ocs_ci.cleanup.aws import defaults
@@ -183,6 +183,8 @@ def aws_cleanup():
 
     if not clusters_to_delete:
         logger.info("No clusters to delete")
+    else:
+        get_openshift_installer()
     procs = []
     for cluster in clusters_to_delete:
         cluster_name = cluster.rsplit('-', 1)[0]
@@ -194,5 +196,6 @@ def aws_cleanup():
         p.join()
     if cloudformation_vpcs:
         logger.warning(
-            f"The following cloudformation VPCs were found: {cloudformation_vpcs}"
+            "The following cloudformation VPCs were found: %s",
+            cloudformation_vpcs
         )
