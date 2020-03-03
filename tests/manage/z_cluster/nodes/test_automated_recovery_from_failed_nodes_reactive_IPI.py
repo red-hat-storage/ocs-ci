@@ -163,6 +163,8 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                         timeout=60
                     )
                 except TimeoutError:
+                    log.info("Entering exception case")
+                    log.info(f"--------{pod_obj.name}---------")
                     if "rook-ceph-drain-canary" in pod_obj.name:
                         ocp_obj = ocp.OCP()
                         command = "label deploy -n openshift-storage -l app" \
