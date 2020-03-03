@@ -1333,9 +1333,8 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
     latest_tag = latest_tag or config.DEPLOYMENT.get(
         'default_latest_tag', 'latest'
     )
-    _req = get_ocs_olm_operator_tags()
+    tags = get_ocs_olm_operator_tags()
     latest_image = None
-    tags = _req.json()['tags']
     ocs_version = config.ENV_DATA['ocs_version']
     upgrade_ocs_version = config.UPGRADE.get('upgrade_ocs_version')
     use_rc_build = config.UPGRADE.get("use_rc_build")
@@ -1400,10 +1399,9 @@ def get_next_version_available_for_upgrade(current_tag):
         TagNotFoundException: In case no tag suitable for upgrade found
 
     """
-    req = get_ocs_olm_operator_tags()
+    tags = get_ocs_olm_operator_tags()
     if current_tag in constants.LATEST_TAGS:
         return current_tag
-    tags = req.json()['tags']
     current_tag_index = None
     for index, tag in enumerate(tags):
         if tag['name'] == current_tag:
@@ -1433,10 +1431,12 @@ def get_ocs_olm_operator_tags(limit=100):
         limit: the number of tags to limit the request to
 
     Raises:
+        FileNotFoundError: if the auth config is not found
+        KeyError: if the auth config isn't setup properly
         requests.RequestException: if the response return code is not ok
 
     Returns:
-        requests.request: response of the request
+        list: OCS OLM Operator tags
 
     """
     log.info("Retrieving OCS OLM Operator tags (limit %s)", limit)
@@ -1470,8 +1470,8 @@ def get_ocs_olm_operator_tags(limit=100):
     )
     if not resp.ok:
         raise requests.RequestException(resp.json())
-    log.debug(resp.json())
-    return resp
+    log.debug(resp.json()['tags'])
+    return resp.json()['tags']
 
 
 def check_if_executable_in_path(exec_name):
