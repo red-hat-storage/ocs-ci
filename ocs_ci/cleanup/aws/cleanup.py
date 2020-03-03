@@ -83,7 +83,7 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
             allowed_running_time = time_to_delete
             if instance.state["Name"] == "running":
                 for prefix, hours in prefixes_hours_to_spare.items():
-                    if prefix in cluster_name:
+                    if cluster_name.startswith(prefix):
                         allowed_running_time = int(hours) * 60 * 60
                         break
                 launch_time = instance.launch_time
