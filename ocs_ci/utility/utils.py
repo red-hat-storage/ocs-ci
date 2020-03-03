@@ -1206,7 +1206,7 @@ def get_az_count():
     elif config.ENV_DATA.get('platform') == 'vsphere':
         return 1
     else:
-        return 3
+        return 1
 
 
 @retry((CephHealthException, CommandFailed), tries=20, delay=30, backoff=1)
