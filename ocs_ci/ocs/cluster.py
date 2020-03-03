@@ -106,9 +106,6 @@ class CephCluster(object):
         self.mgr_count = 0
         self.osd_count = 0
         self.noobaa_count = 0
-        self.health_error_status = None
-        self.health_monitor_enabled = False
-        self.health_monitor = None
         self.scan_cluster()
         logging.info(f"Number of mons = {self.mon_count}")
         logging.info(f"Number of mds = {self.mds_count}")
@@ -486,20 +483,6 @@ class CephCluster(object):
             "ceph status", out_yaml_format=False,
         )
 
-    def enable_health_monitor(self, sleep=5):
-        """
-        Enable monitoring for ceph health status.
-
-        Args:
-            sleep (int): Number of seconds to sleep between health checks.
-
-        """
-        self.monitor = HealthMonitorThread(self, sleep)
-        self.monitor.start()
-
-    def disable_health_monitor(self):
-        self.health_monitor_enabled = False
-
     def get_ceph_cluster_iops(self):
         """
         The function gets the IOPS from the ocs cluster
@@ -582,12 +565,12 @@ class CephCluster(object):
         return throughput_percentage
 
 
-class HealthMonitorThread(threading.Thread):
+class CephHealthMonitor(threading.Thread):
     """
-    Class for monitoring ceph health status of CephCluster. If CephCluster will
-    get to HEALTH_ERROR state it will save the ceph status to
-    health_error_status variable in ceph_cluster object and will stop
-    monitoring. It's up to user how to handle the error.
+    Context manager class for monitoring ceph health status of CephCluster.
+    If CephCluster will get to HEALTH_ERROR state it will save the ceph status
+    to health_error_status variable and will stop monitoring.
+
     """
 
     def __init__(self, ceph_cluster, sleep=5):
@@ -601,19 +584,59 @@ class HealthMonitorThread(threading.Thread):
         """
         self.ceph_cluster = ceph_cluster
         self.sleep = sleep
-        super(HealthMonitorThread, self).__init__()
+        self.health_error_status = None
+        self.health_monitor_enabled = False
+        self.latest_health_status = None
+        super(CephHealthMonitor, self).__init__()
 
     def run(self):
-        self.ceph_cluster.health_monitor_enabled = True
-        while self.ceph_cluster.health_monitor_enabled and (
-            not self.ceph_cluster.health_error_status
+        self.health_monitor_enabled = True
+        while self.health_monitor_enabled and (
+            not self.health_error_status
         ):
             sleep(self.sleep)
-            health_status = self.ceph_cluster.get_ceph_health(detail=True)
-            if "HEALTH_ERROR" in health_status:
-                self.ceph_cluster.health_error_status = (
+            self.latest_health_status = self.ceph_cluster.get_ceph_health(
+                detail=True
+            )
+            if "HEALTH_ERROR" in self.latest_health_status:
+                self.health_error_status = (
                     self.ceph_cluster.get_ceph_status()
                 )
+                self.log_error_status()
+
+    def __enter__(self):
+        self.start()
+
+    def __exit__(self, exception_type, value, traceback):
+        """
+        Exit method for context manager
+
+        Raises:
+            CephHealthException: If no other exception occurred during
+                execution of context manager and HEALTH_ERROR is detected
+                during the monitoring.
+            exception_type: In case of exception raised during processing of
+                the context manager.
+
+        """
+        self.health_monitor_enabled = False
+        if self.health_error_status:
+            self.log_error_status()
+        if exception_type:
+            raise exception_type.with_traceback(value, traceback)
+        if self.health_error_status:
+            raise exceptions.CephHealthException(
+                f"During monitoring of Ceph health status hit HEALTH_ERROR: "
+                f"{self.health_error_status}"
+            )
+
+        return True
+
+    def log_error_status(self):
+        logger.error(
+            f"ERROR HEALTH STATUS DETECTED! "
+            f"Status: {self.health_error_status}"
+        )
 
 
 def validate_cluster_on_pvc():
