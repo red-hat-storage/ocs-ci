@@ -802,9 +802,12 @@ def collect_prometheus_metrics(
 ):
     """
     Collects metrics from Prometheus and saves them in file in json format.
+    Metrics can be found in OCP Console in Monitoring -> Metrics.
 
     Args:
         metrics (list): list of metrics to get from Prometheus
+            (E.g. ceph_cluster_total_bytes, cluster:cpu_usage_cores:sum,
+            cluster:memory_usage_bytes:sum)
         dir_name (str): directory name to store metrics. Metrics will be stored
             in dir_name suffix with _ocs_metrics.
         start (str): start timestamp of required datapoints

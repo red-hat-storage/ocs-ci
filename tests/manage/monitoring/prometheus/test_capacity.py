@@ -20,7 +20,9 @@ log = logging.getLogger(__name__)
             marks=[
                 pytest.mark.polarion_id("OCS-899"),
                 tier2,
-                gather_metrics_on_fail('ceph_cluster_total_bytes')
+                gather_metrics_on_fail(
+                    'ceph_cluster_total_bytes', 'cluster:memory_usage_bytes:sum'
+                )
             ]
         ),
         pytest.param(
@@ -28,7 +30,9 @@ log = logging.getLogger(__name__)
             marks=[
                 pytest.mark.polarion_id("OCS-1934"),
                 tier2,
-                gather_metrics_on_fail('ceph_cluster_total_bytes')
+                gather_metrics_on_fail(
+                    'ceph_cluster_total_bytes', 'cluster:memory_usage_bytes:sum'
+                )
             ]
         )
     ]
