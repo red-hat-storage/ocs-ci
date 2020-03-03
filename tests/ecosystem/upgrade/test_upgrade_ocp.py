@@ -115,7 +115,7 @@ class TestUpgradeOCP(ManageTest):
             str: current COP client version
 
         """
-        oc_json = self.ocp_o.exec_oc_cmd('oc version -o json', out_yaml_format=False)
+        oc_json = self.ocp_o.exec_oc_cmd('version -o json', out_yaml_format=False)
         oc_dict = json.loads(oc_json)
 
         return oc_dict.get("openshiftVersion")
