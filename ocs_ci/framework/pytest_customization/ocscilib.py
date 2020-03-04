@@ -30,7 +30,6 @@ from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MIN_CHARACTERS,
     OCP_VERSION_CONF_DIR,
 )
-from tests.helpers import collect_performance_stats
 
 __all__ = [
     "pytest_addoption",
@@ -385,6 +384,7 @@ def pytest_runtest_makereport(item, call):
         )
 
     # Get the performance metrics when tests fails for scale or performance tag
+    from tests.helpers import collect_performance_stats
     if (
         (rep.when == "setup" or rep.when == "call")
         and rep.failed
