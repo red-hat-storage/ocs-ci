@@ -2,6 +2,7 @@ import copy
 import logging
 import re
 
+from subprocess import TimeoutExpired
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
@@ -359,3 +360,36 @@ def get_node_resource_utilization_from_oc_describe(nodename=None, node_type='wor
         }
 
     return utilization_dict
+
+
+def node_network_failure(node_names, wait=True):
+    """
+    Induce node network failure
+    Bring node network interface down, making the node unresponsive
+
+    Args:
+        node_names (list): The names of the nodes
+        wait (bool): True in case wait for status is needed, False otherwise
+
+    Returns:
+        bool: True if node network fail is successful
+    """
+    if not isinstance(node_names, list):
+        node_names = [node_names]
+
+    ocp = OCP(kind='node')
+    fail_nw_cmd = "ifconfig $(route | grep default | awk '{print $(NF)}') down"
+
+    for node_name in node_names:
+        try:
+            ocp.exec_oc_debug_cmd(
+                node=node_name, cmd_list=[fail_nw_cmd], timeout=15
+            )
+        except TimeoutExpired:
+            pass
+
+    if wait:
+        wait_for_nodes_status(
+            node_names=node_names, status=constants.NODE_NOT_READY
+        )
+    return True
