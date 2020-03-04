@@ -236,6 +236,7 @@ def backingstore_factory(request, cld_mgr):
                 f'available types: {", ".join(cmdMap.keys())}'
             )
         for cloud, uls_tup in uls_dict.items():
+            backingstore_name = None
             if cloud.lower() not in cmdMap[method.lower()]:
                 raise RuntimeError(
                     f'Invalid cloud type received: {cloud}. '
@@ -246,10 +247,8 @@ def backingstore_factory(request, cld_mgr):
                 backingstore_name = create_unique_resource_name(
                     resource_description='backingstore', resource_type=cloud.lower()
                 )
-                created_backingstores.append(
-                    cmdMap[method.lower()][cloud.lower()](
-                        backingstore_name, vol_num, size, storage_class
-                    )
+                cmdMap[method.lower()][cloud.lower()](
+                    backingstore_name, vol_num, size, storage_class
                 )
             else:
                 region = uls_tup[1]
@@ -258,12 +257,12 @@ def backingstore_factory(request, cld_mgr):
                     backingstore_name = create_unique_resource_name(
                         resource_description='backingstore', resource_type=cloud.lower()
                     )
-                    created_backingstores.append(
-                        cmdMap[method.lower()][cloud.lower()](
-                            cld_mgr, backingstore_name, uls_name, region
-                        )
+
+                    cmdMap[method.lower()][cloud.lower()](
+                        cld_mgr, backingstore_name, uls_name, region
                     )
-            return created_backingstores
+            created_backingstores.append(backingstore_name)
+        return created_backingstores
 
     def backingstore_cleanup():
         for backingstore in created_backingstores:

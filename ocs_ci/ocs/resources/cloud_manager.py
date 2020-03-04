@@ -7,7 +7,6 @@ from botocore.exceptions import ClientError
 from time import sleep
 from google.cloud import storage
 from google.auth.exceptions import DefaultCredentialsError
-import ibm_boto3
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -21,11 +20,12 @@ class CloudManager(ABC):
     aws_client, google_client, azure_client, s3comp_client = (None,) * 4
 
     def __init__(self):
-        # TODO: solve credentials for clients
+        # TODO: solve credentials for clients (working with local creds for now)
         self.aws_client = S3Client()
-        self.google_client = GoogleClient()
-        self.azure_client = AzureClient()
-        self.s3comp_client = S3Client()
+        # TODO Need credentials to check
+        self.google_client = None
+        self.azure_client = None
+        self.s3comp_client = None
 
 
 class CloudClient(ABC):
@@ -82,17 +82,24 @@ class S3Client(CloudClient):
                 aws_access_key_id=key_id,
                 aws_secret_access_key=access_key
             )
+            self.access_key = key_id
+            self.secret_key = access_key
         else:
             self.client = boto3.resource('s3')
-        # TODO: secret credentials
+            # create a secret for the underlying storage to use
+            session = boto3.Session()
+            credentials = session.get_credentials()
+            credentials = credentials.get_frozen_credentials()
+            self.access_key = credentials.access_key
+            self.secret_key = credentials.secret_key
         bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
         bs_secret_data['metadata']['name'] += f'-client-secret'
         bs_secret_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
         bs_secret_data['data']['AWS_ACCESS_KEY_ID'] = base64.urlsafe_b64encode(
-            self.aws_access_key_id.encode('UTF-8')
+            self.access_key.encode('UTF-8')
         ).decode('ascii')
         bs_secret_data['data']['AWS_SECRET_ACCESS_KEY'] = base64.urlsafe_b64encode(
-            self.aws_access_key.encode('UTF-8')
+            self.secret_key.encode('UTF-8')
         ).decode('ascii')
         self.secret = create_resource(**bs_secret_data)
 
@@ -150,8 +157,14 @@ class S3Client(CloudClient):
             logger.info(f"{uls_name} does not exist")
             return False
 
-    def get_secret(self):
+    def get_oc_secret(self):
         return self.secret
+
+    def get_aws_key(self):
+        return self.access_key
+
+    def get_aws_secret(self):
+        return self.secret_key
 
 
 class GoogleClient(CloudClient):
