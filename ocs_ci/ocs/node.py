@@ -283,9 +283,9 @@ def get_node_logs(node_name):
     return node.exec_oc_debug_cmd(node_name, ["dmesg"])
 
 
-def get_node_resource_utilization(nodename=None, node_type='worker'):
+def get_node_resource_utilization_from_adm_top(nodename=None, node_type='worker'):
     """
-    Gets the node's cpu and memory utilization in percentage
+    Gets the node's cpu and memory utilization in percentage using adm top command.
 
     Args:
         nodename (str) : The node name
@@ -320,4 +320,42 @@ def get_node_resource_utilization(nodename=None, node_type='worker'):
                     'cpu': int(cpu_utilization),
                     'memory': int(memory_utilization)
                 }
+    return utilization_dict
+
+
+def get_node_resource_utilization_from_oc_describe(nodename=None, node_type='worker'):
+    """
+    Gets the node's cpu and memory utilization in percentage using oc describe node
+
+    Args:
+        nodename (str) : The node name
+        node_type (str) : The node type (e.g. master, worker)
+
+    Returns:
+        dict : Node name and its cpu and memory utilization in
+               percentage
+
+    """
+
+    node_names = [nodename] if nodename else [
+        node.name for node in get_typed_nodes(node_type=node_type)
+    ]
+    obj = ocp.OCP()
+    utilization_dict = {}
+    for node in node_names:
+        output = obj.exec_oc_cmd(
+            command=f"describe node {node}", out_yaml_format=False
+        ).split("\n")
+        for line in output:
+            if 'cpu  ' in line:
+                cpu_data = line.split(' ')
+                cpu = re.findall(r'\d+', [i for i in cpu_data if i][2])
+            if 'memory  ' in line:
+                mem_data = line.split(' ')
+                mem = re.findall(r'\d+', [i for i in mem_data if i][2])
+        utilization_dict[node] = {
+            'cpu': int(cpu[0]),
+            'memory': int(mem[0])
+        }
+
     return utilization_dict
