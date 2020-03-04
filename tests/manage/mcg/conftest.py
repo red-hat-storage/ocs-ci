@@ -254,7 +254,7 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
                     )
                 else:
                     region = uls_tup[1]
-                    uls_names = cloud_uls_factory({cloud: [uls_tup]})
+                    uls_names = cloud_uls_factory({cloud: [uls_tup]})[cloud.lower()]
                     for uls_name in uls_names:
                         backingstore_name = create_unique_resource_name(
                             resource_description='backingstore', resource_type=cloud.lower()
