@@ -10,6 +10,7 @@ from subprocess import TimeoutExpired, run, PIPE
 import tempfile
 import time
 import yaml
+import json
 import threading
 
 from ocs_ci.ocs.ocp import OCP
@@ -29,6 +30,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, ocsci_log_path, run_cmd
 from ocs_ci.framework import config
+from ocs_ci.ocs.cluster import CephCluster
 
 logger = logging.getLogger(__name__)
 
@@ -2101,3 +2103,44 @@ def modify_osd_replica_count(resource_name, replica_count):
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     resource_name = '-'.join(resource_name.split('-')[0:4])
     return ocp_obj.patch(resource_name=resource_name, params=params)
+
+
+def collect_performance_stats():
+    """
+    Collect performance stats and saves them in file in json format.
+
+    Performance stats include:
+        IOPs and throughput percentage of cluster
+        CPU, memory consumption of each nodes
+
+    """
+    log_dir_path = os.path.join(
+        os.path.expanduser(config.RUN['log_dir']),
+        f"failed_testcase_ocs_logs_{config.RUN['run_id']}",
+        "performance_stats"
+    )
+    if not os.path.exists(log_dir_path):
+        logger.info(f'Creating directory {log_dir_path}')
+        os.makedirs(log_dir_path)
+
+    ceph_obj = CephCluster()
+    performance_stats = {}
+
+    # Get iops and throughput percentage of cluster
+    iops_percentage = ceph_obj.get_iops_percentage()
+    throughput_percentage = ceph_obj.get_throughput_percentage()
+
+    # ToDo: Get iops and throughput percentage of each nodes
+
+    # Get the cpu and memory of each nodes
+    master_node_utilization = node.get_node_resource_utilization(node_type='master')
+    worker_node_utilization = node.get_node_resource_utilization(node_type='worker')
+
+    performance_stats['iops_percentage'] = iops_percentage
+    performance_stats['throughput_percentage'] = throughput_percentage
+    performance_stats['master_node_utilization'] = master_node_utilization
+    performance_stats['worker_node_utilization'] = worker_node_utilization
+
+    file_name = os.path.join(log_dir_path, 'performance')
+    with open(file_name, 'w') as outfile:
+        json.dump(performance_stats, outfile)

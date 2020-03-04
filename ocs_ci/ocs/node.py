@@ -302,6 +302,12 @@ def get_node_resource_utilization_from_adm_top(nodename=None, node_type='worker'
     node_names = [nodename] if nodename else [
         node.name for node in get_typed_nodes(node_type=node_type)
     ]
+
+    # Validate node is in Ready state
+    wait_for_nodes_status(
+        node_names, status=constants.NODE_READY, timeout=30
+    )
+
     obj = ocp.OCP()
     resource_utilization_all_nodes = obj.exec_oc_cmd(
         command='adm top nodes', out_yaml_format=False
