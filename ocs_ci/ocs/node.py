@@ -359,4 +359,3 @@ def get_node_resource_utilization_from_oc_describe(nodename=None, node_type='wor
         }
 
     return utilization_dict
-
