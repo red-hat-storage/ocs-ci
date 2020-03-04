@@ -9,6 +9,7 @@ from botocore.exceptions import ClientError
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.ocs.resources.pod import get_rgw_pod
+from ocs_ci.utility.utils import run_cmd
 from tests.helpers import craft_s3_command, create_unique_resource_name
 from tests.manage.mcg.helpers import get_rgw_restart_count
 from tests.manage.mcg.helpers import (
@@ -235,41 +236,44 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
                 f'Invalid method type received: {method}. '
                 f'available types: {", ".join(cmdMap.keys())}'
             )
-        for cloud, uls_tup in uls_dict.items():
-            backingstore_name = None
-            if cloud.lower() not in cmdMap[method.lower()]:
-                raise RuntimeError(
-                    f'Invalid cloud type received: {cloud}. '
-                    f'available types: {", ".join(cmdMap[method.lower()].keys())}'
-                )
-            if cloud == 'pv':
-                vol_num, size, storage_class = uls_tup
-                backingstore_name = create_unique_resource_name(
-                    resource_description='backingstore', resource_type=cloud.lower()
-                )
-                cmdMap[method.lower()][cloud.lower()](
-                    backingstore_name, vol_num, size, storage_class
-                )
-            else:
-                region = uls_tup[1]
-                uls_names = cloud_uls_factory({cloud: uls_tup})
-                for uls_name in uls_names:
+        for cloud, uls_lst in uls_dict.items():
+            for uls_tup in uls_lst:
+                backingstore_name = None
+                if cloud.lower() not in cmdMap[method.lower()]:
+                    raise RuntimeError(
+                        f'Invalid cloud type received: {cloud}. '
+                        f'available types: {", ".join(cmdMap[method.lower()].keys())}'
+                    )
+                if cloud == 'pv':
+                    vol_num, size, storage_class = uls_tup
                     backingstore_name = create_unique_resource_name(
                         resource_description='backingstore', resource_type=cloud.lower()
                     )
-
                     cmdMap[method.lower()][cloud.lower()](
-                        cld_mgr, backingstore_name, uls_name, region
+                        backingstore_name, vol_num, size, storage_class
                     )
-            created_backingstores.append(backingstore_name)
+                else:
+                    region = uls_tup[1]
+                    uls_names = cloud_uls_factory({cloud: [uls_tup]})
+                    for uls_name in uls_names:
+                        backingstore_name = create_unique_resource_name(
+                            resource_description='backingstore', resource_type=cloud.lower()
+                        )
+
+                        cmdMap[method.lower()][cloud.lower()](
+                            cld_mgr, backingstore_name, uls_name, region
+                        )
+                created_backingstores.append(backingstore_name)
         return created_backingstores
 
     def backingstore_cleanup():
         for backingstore in created_backingstores:
-            logger.info(f'Cleaning up uls {backingstore.name}')
-            backingstore.delete()
+            logger.info(f'Cleaning up uls {backingstore}')
+            current_namespace = config.ENV_DATA['cluster_namespace']
+            run_cmd(f'oc -n {current_namespace} delete backingstore {backingstore}',
+                    cld_mgr.aws_client.get_oc_secret())
             logger.info(
-                f"Verifying whether uls: {backingstore.name} exists after deletion"
+                f"Verifying whether uls: {backingstore} exists after deletion"
             )
             assert not backingstore.is_deleted()
 
