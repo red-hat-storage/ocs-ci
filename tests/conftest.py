@@ -22,7 +22,7 @@ from ocs_ci.utility.environment_check import (
 )
 from ocs_ci.utility.utils import (
     get_openshift_client, ocsci_log_path, get_testrun_name,
-    ceph_health_check_base
+    ceph_health_check_base, skipif_ocs_version
 )
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
@@ -51,6 +51,29 @@ def pytest_logger_config(logger_config):
     logger_config.set_log_option_default('')
     logger_config.split_by_outcome()
     logger_config.set_formatter_class(OCSLogFormatter)
+
+
+def pytest_collection_modifyitems(session, config, items):
+    """
+    A pytest hook to filter out skipped tests satisfying
+    skipif_ocs_version
+
+    Args:
+        session: pytest session
+        config: pytest config object
+        items: list of collected tests
+
+    """
+    for item in items[:]:
+        skip_marker = item.get_closest_marker("skipif_ocs_version")
+        if skip_marker:
+            skip_condition = skip_marker.args
+            log.info(skip_condition)
+            if skipif_ocs_version(skip_condition):
+                log.info(
+                    f'Test: {item} will be skipped due to {skip_condition}'
+                )
+                items.remove(item)
 
 
 @pytest.fixture()
