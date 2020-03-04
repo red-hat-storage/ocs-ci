@@ -2,7 +2,9 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier2
+from ocs_ci.framework.pytest_customization.marks import (
+    tier2, gather_metrics_on_fail
+)
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
@@ -15,11 +17,23 @@ log = logging.getLogger(__name__)
     argvalues=[
         pytest.param(
             'rbd',
-            marks=[pytest.mark.polarion_id("OCS-899"), tier2]
+            marks=[
+                pytest.mark.polarion_id("OCS-899"),
+                tier2,
+                gather_metrics_on_fail(
+                    'ceph_cluster_total_used_bytes', 'cluster:memory_usage_bytes:sum'
+                )
+            ]
         ),
         pytest.param(
             'cephfs',
-            marks=[pytest.mark.polarion_id("OCS-1934"), tier2]
+            marks=[
+                pytest.mark.polarion_id("OCS-1934"),
+                tier2,
+                gather_metrics_on_fail(
+                    'ceph_cluster_total_used_bytes', 'cluster:memory_usage_bytes:sum'
+                )
+            ]
         )
     ]
 )
