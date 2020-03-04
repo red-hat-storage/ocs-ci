@@ -2,9 +2,14 @@ import re
 import logging
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.utility import templating
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import (
+    TimeoutExpiredError, UnsupportedPlatformError,
+    ResourceNotFoundError, UnexpectedBehaviour
+)
 
 log = logging.getLogger(__name__)
 
@@ -136,6 +141,147 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
         log.info(f"{new_machine.name} is in {state} state")
         return state == constants.STATUS_RUNNING.islower()
     return False
+
+
+def create_custom_machineset(
+    role='app', instance_type='m4.xlarge', label='app-scale', zone='a'
+):
+    """
+    Function to create custom machineset works only for AWS
+    i.e. Using this user can create nodes with different instance type and role.
+    https://docs.openshift.com/container-platform/4.1/machine_management/creating-machineset.html
+
+    Args:
+        role (str): Role type to be added for node eg: it will be app,worker
+        instance_type (str): Type of aws instance
+        label (str): Label to be added to the node
+        zone (str): Machineset zone for node creation.
+
+    Returns:
+        machineset (str): Created machineset name
+
+    Raise:
+        ResourceNotFoundError: Incase machineset creation failed
+        UnsupportedPlatformError: Incase of wrong platform
+
+    """
+    # check for platform, since it's supported only for IPI
+    if config.ENV_DATA['deployment_type'] == 'ipi':
+        machinesets_obj = OCP(
+            kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+        )
+        for machine in machinesets_obj.get()['items']:
+            # Get inputs from existing machineset config.
+            region = machine.get('spec').get('template').get('spec').get(
+                'providerSpec').get('value').get('placement').get('region')
+            aws_zone = machine.get('spec').get('template').get('spec').get(
+                'providerSpec').get('value').get('placement').get('availabilityZone')
+            cls_id = machine.get('spec').get('selector').get('matchLabels').get(
+                'machine.openshift.io/cluster-api-cluster')
+            ami_id = machine.get('spec').get('template').get('spec').get(
+                'providerSpec').get('value').get('ami').get('id')
+            if aws_zone == f"{region}{zone}":
+                machineset_yaml = templating.load_yaml(constants.MACHINESET_YAML)
+
+                # Update machineset_yaml with required values.
+                machineset_yaml['metadata']['labels'][
+                    'machine.openshift.io/cluster-api-cluster'
+                ] = cls_id
+                machineset_yaml['metadata']['name'] = f"{cls_id}-{role}-{aws_zone}"
+                machineset_yaml['spec']['selector']['matchLabels'][
+                    'machine.openshift.io/cluster-api-cluster'
+                ] = cls_id
+                machineset_yaml['spec']['selector']['matchLabels'][
+                    'machine.openshift.io/cluster-api-machineset'
+                ] = f"{cls_id}-{role}-{aws_zone}"
+                machineset_yaml['spec']['template']['metadata']['labels'][
+                    'machine.openshift.io/cluster-api-cluster'
+                ] = cls_id
+                machineset_yaml['spec']['template']['metadata']['labels'][
+                    'machine.openshift.io/cluster-api-machine-role'
+                ] = role
+                machineset_yaml['spec']['template']['metadata']['labels'][
+                    'machine.openshift.io/cluster-api-machine-type'
+                ] = role
+                machineset_yaml['spec']['template']['metadata']['labels'][
+                    'machine.openshift.io/cluster-api-machineset'
+                ] = f"{cls_id}-{role}-{aws_zone}"
+                machineset_yaml['spec']['template']['spec'][
+                    'metadata'
+                ]['labels'][f"node-role.kubernetes.io/{role}"] = f"{label}"
+                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
+                    'ami'
+                ]['id'] = ami_id
+                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
+                    'iamInstanceProfile'
+                ]['id'] = f"{cls_id}-worker-profile"
+                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
+                    'instanceType'
+                ] = instance_type
+                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
+                    'placement'
+                ]['availabilityZone'] = aws_zone
+                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
+                    'placement'
+                ]['region'] = region
+                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
+                    'securityGroups'
+                ][0]['filters'][0]['values'][0] = f"{cls_id}-worker-sg"
+                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
+                    'subnet'
+                ]['filters'][0]['values'][0] = f"{cls_id}-private-{aws_zone}"
+                machineset_yaml['spec']['template']['spec']['providerSpec']['value'][
+                    'tags'
+                ][0]['name'] = f"kubernetes.io/cluster/{cls_id}"
+
+                # Create new custom machineset
+                ms_obj = OCS(**machineset_yaml)
+                ms_obj.create()
+                if check_machineset_exists(f"{cls_id}-{role}-{aws_zone}"):
+                    logging.info(f"Machineset {cls_id}-{role}-{aws_zone} created")
+                    return f"{cls_id}-{role}-{aws_zone}"
+                else:
+                    raise ResourceNotFoundError(f"Machineset resource not found")
+    else:
+        raise UnsupportedPlatformError("Functionality not supported in UPI")
+
+
+def delete_custom_machineset(machine_set):
+    """
+    Function to delete custom machineset
+
+    Args:
+        machine_set (str): Name of the machine set to be deleted
+        WARN: Make sure it's not OCS worker node machines set, if so then
+              OCS worker nodes and machine set will be deleted.
+
+    Raise:
+        UnexpectedBehaviour: Incase machineset not deleted
+
+    """
+    ocp = OCP(namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
+    ocp.exec_oc_cmd(f'delete machineset {machine_set}')
+    if not check_machineset_exists(machine_set):
+        logging.info(f"Machineset {machine_set} deleted")
+    else:
+        raise UnexpectedBehaviour(f"Machineset {machine_set} not deleted")
+
+
+def check_machineset_exists(machine_set):
+    """
+    Function to check machineset exists or not
+
+    Args:
+        machine_set (str): Name of the machine set
+
+    Returns:
+        bool: True if machineset exists, else false
+    """
+    machine_sets = get_machinesets()
+    if machine_set in machine_sets:
+        return True
+    else:
+        return False
 
 
 def get_machinesets():

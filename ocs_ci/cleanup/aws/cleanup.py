@@ -7,7 +7,7 @@ import os
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import CLEANUP_YAML, TEMPLATE_CLEANUP_DIR
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import get_openshift_installer, run_cmd
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import AWS
 from ocs_ci.cleanup.aws import defaults
@@ -80,7 +80,7 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
             if instance.state["Name"] == "running":
                 for prefix, hours in prefixes_hours_to_spare.items():
                     if prefix in cluster_name:
-                        allowed_running_time = hours * 60 * 60
+                        allowed_running_time = int(hours) * 60 * 60
                         break
                 launch_time = instance.launch_time
                 current_time = datetime.datetime.now(launch_time.tzinfo)
@@ -131,28 +131,49 @@ def aws_cleanup():
         required=False,
         help="The name of the AWS region to delete the resources from"
     )
+    parser.add_argument(
+        '--force',
+        action='store_true',
+        required=False,
+        help="Force cluster cleanup. "
+             "User will not be prompted for confirmation. "
+             "WARNING: this utility is destructive, only use this option if "
+             "you know what you are doing."
+    )
+    parser.add_argument(
+        '--skip-prefixes',
+        action='store_true',
+        required=False,
+        help="Skip prompt for additional prefixes to spare"
+    )
     logging.basicConfig(level=logging.DEBUG)
     args = parser.parse_args()
 
-    confirmation = input(
-        'Careful! This action could be highly destructive. Are you sure you want to proceed? '
-    )
-    prefixes_hours = input(
-        "Press Enter if there are no cluster prefixes to spare.\n"
-        "If you would like the cleanup to spare specific cluster prefixes, "
-        "please enter them along with the time allowed for these to be kept "
-        "running, in a dictionary representation.\nAn example: "
-        "{\'prefix1\': 36, \'prefix2\': 48}\" "
-    )
-    assert confirmation == defaults.CONFIRMATION_ANSWER, "Wrong confirmation answer. Exiting"
+    if not args.force:
+        confirmation = input(
+            'Careful! This action could be highly destructive. '
+            'Are you sure you want to proceed? '
+        )
+        assert confirmation == defaults.CONFIRMATION_ANSWER, (
+            "Wrong confirmation answer. Exiting"
+        )
+
+    prefixes_hours_to_spare = defaults.CLUSTER_PREFIXES_TO_EXCLUDE_FROM_DELETION
+
+    if not args.skip_prefixes:
+        prefixes_hours = input(
+            "Press Enter if there are no cluster prefixes to spare.\n"
+            "If you would like the cleanup to spare specific cluster prefixes, "
+            "please enter them along with the time allowed for these to be kept "
+            "running, in a dictionary representation.\nAn example: "
+            "{\'prefix1\': 36, \'prefix2\': 48}\" "
+        )
+        if prefixes_hours:
+            prefixes_hours_to_spare = eval(prefixes_hours)
     time_to_delete = args.hours[0][0]
     assert time_to_delete > defaults.MINIMUM_CLUSTER_RUNNING_TIME_FOR_DELETION, (
         "Number of hours is lower than the required minimum. Exiting"
     )
-    if not prefixes_hours:
-        prefixes_hours_to_spare = defaults.CLUSTER_PREFIXES_TO_EXCLUDE_FROM_DELETION
-    else:
-        prefixes_hours_to_spare = eval(prefixes_hours)
     time_to_delete = time_to_delete * 60 * 60
     region = defaults.AWS_REGION if not args.region else args.region[0][0]
     clusters_to_delete, cloudformation_vpcs = get_clusters_to_delete(
@@ -162,6 +183,8 @@ def aws_cleanup():
 
     if not clusters_to_delete:
         logger.info("No clusters to delete")
+    else:
+        get_openshift_installer()
     procs = []
     for cluster in clusters_to_delete:
         cluster_name = cluster.rsplit('-', 1)[0]
@@ -173,5 +196,6 @@ def aws_cleanup():
         p.join()
     if cloudformation_vpcs:
         logger.warning(
-            f"The following cloudformation VPCs were found: {cloudformation_vpcs}"
+            "The following cloudformation VPCs were found: %s",
+            cloudformation_vpcs
         )

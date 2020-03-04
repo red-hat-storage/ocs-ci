@@ -48,7 +48,6 @@ workloads = pytest.mark.workloads
 performance = pytest.mark.performance
 scale = pytest.mark.scale
 deployment = pytest.mark.deployment
-destroy = pytest.mark.destroy
 polarion_id = pytest.mark.polarion_id
 bugzilla = pytest.mark.bugzilla
 
@@ -99,6 +98,10 @@ ipi_deployment_required = pytest.mark.skipif(
 filter_insecure_request_warning = pytest.mark.filterwarnings(
     'ignore::urllib3.exceptions.InsecureRequestWarning'
 )
+
+# collect Prometheus metrics if test fails with this mark
+# specify Prometheus metric names in argument
+gather_metrics_on_fail = pytest.mark.gather_metrics_on_fail
 
 # here is the place to implement some plugins hooks which will process marks
 # if some operation needs to be done for some specific marked tests.

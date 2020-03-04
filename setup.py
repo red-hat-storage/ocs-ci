@@ -17,7 +17,7 @@ setup(
         'apache-libcloud',
         'docopt==0.6.2',
         'gevent==1.4.0',
-        'reportportal-client @ git+https://github.com/reportportal/client-Python.git@master',
+        'reportportal-client<4.0.0',
         'requests==2.21.0',
         'paramiko==2.4.2',
         'pyyaml>=4.2b1',

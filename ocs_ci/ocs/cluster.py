@@ -500,6 +500,87 @@ class CephCluster(object):
     def disable_health_monitor(self):
         self.health_monitor_enabled = False
 
+    def get_ceph_cluster_iops(self):
+        """
+        The function gets the IOPS from the ocs cluster
+
+        Returns:
+            Total IOPS in the cluster
+
+        """
+
+        ceph_status = self.get_ceph_status()
+        for item in ceph_status.split("\n"):
+            if 'client' in item:
+                iops = re.findall(r'\d+\.+\d+|\d\d*', item.strip())
+                iops = iops[2::1]
+                if len(iops) == 2:
+                    iops_in_cluster = float(iops[0]) + float(iops[1])
+                else:
+                    iops_in_cluster = float(iops[0])
+                logging.info(f"IOPS in the cluster is {iops_in_cluster}")
+                return iops_in_cluster
+
+    def get_iops_percentage(self, osd_size=2):
+        """
+        The function calculates the IOPS percentage
+        of the cluster depending on number of osds in the cluster
+
+        Args:
+            osd_size (int): Size of 1 OSD in Ti
+
+        Returns:
+            IOPS percentage of the OCS cluster
+
+        """
+
+        osd_count = count_cluster_osd()
+        iops_per_osd = osd_size * constants.IOPS_FOR_1TiB_OSD
+        iops_in_cluster = self.get_ceph_cluster_iops()
+        osd_iops_limit = iops_per_osd * osd_count
+        iops_percentage = (iops_in_cluster / osd_iops_limit) * 100
+        logging.info(f"The IOPS percentage of the cluster is {iops_percentage}%")
+        return iops_percentage
+
+    def get_cluster_throughput(self):
+        """
+        Function to get the throughput of ocs cluster
+
+        Returns:
+            Throughput of the cluster in MiB/s
+
+        """
+
+        ceph_status = self.get_ceph_status()
+        for item in ceph_status.split("\n"):
+            if 'client' in item:
+                throughput_data = item.strip('client: ').split(",")
+                throughput_data = throughput_data[:2:1]
+                # Converting all B/s and KiB/s to MiB/s
+                conversion = {'B/s': 0.000000976562, 'KiB/s': 0.000976562, 'MiB/s': 1}
+                throughput = 0
+                for val in throughput_data:
+                    throughput += [
+                        float(re.findall(r'\d+', val)[0]) * conversion[key]
+                        for key in conversion.keys() if key in val
+                    ][0]
+                    logger.info(f"The throughput is {throughput} MiB/s")
+                return throughput
+
+    def get_throughput_percentage(self):
+        """
+        Function to get throughput percentage of the ocs cluster
+
+        Returns:
+            Throughput percentage of the cluster
+
+        """
+
+        throughput_of_cluster = self.get_cluster_throughput()
+        throughput_percentage = (throughput_of_cluster / constants.THROUGHPUT_LIMIT_OSD) * 100
+        logging.info(f"The throughput percentage of the cluster is {throughput_percentage}%")
+        return throughput_percentage
+
 
 class HealthMonitorThread(threading.Thread):
     """
@@ -662,3 +743,92 @@ def validate_osd_utilization(osd_used=80):
             logger.warn(f"{osd} used value {value}")
 
     return _rc
+
+
+def get_pgs_per_osd():
+    """
+    Function to get ceph pg count per OSD
+
+    Returns:
+        osd_dict (dict): Dict of osd name and its used value
+        i.e {'osd.0': 136, 'osd.2': 136, 'osd.1': 136}
+
+    """
+    osd_dict = {}
+    ceph_cmd = "ceph osd df"
+    ct_pod = pod.get_ceph_tools_pod()
+    output = ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    for osd in output.get('nodes'):
+        osd_dict[osd['name']] = osd['pgs']
+
+    return osd_dict
+
+
+def get_balancer_eval():
+    """
+    Function to get ceph pg balancer eval value
+
+    Returns:
+        eval_out (float): Eval output of pg balancer
+
+    """
+    ceph_cmd = "ceph balancer eval"
+    ct_pod = pod.get_ceph_tools_pod()
+    eval_out = ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd).split(' ')
+    return float(eval_out[3])
+
+
+def get_pg_balancer_status():
+    """
+    Function to check pg_balancer active and mode is upmap
+
+    Returns:
+        bool: True if active and upmap is set else False
+
+    """
+    # Check either PG balancer is active or not
+    ceph_cmd = "ceph balancer status"
+    ct_pod = pod.get_ceph_tools_pod()
+    output = ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+
+    # Check 'mode' is 'upmap', based on suggestion from Ceph QE
+    # TODO: Revisit this if mode needs change.
+    if output['active'] and output['mode'] == 'upmap':
+        logging.info("PG balancer is active and mode is upmap")
+        return True
+    else:
+        logging.error("PG balancer is not active")
+        return False
+
+
+def validate_pg_balancer():
+    """
+    Validate either data is equally distributed to OSDs
+
+    Returns:
+        bool: True if osd data consumption difference is <= 2% else False
+
+    """
+    # Check OSD utilization either pg balancer is active
+    if get_pg_balancer_status():
+        eval = get_balancer_eval()
+        osd_dict = get_pgs_per_osd()
+        osd_min_pg_value = min(osd_dict.values())
+        osd_max_pg_value = max(osd_dict.values())
+        diff = osd_max_pg_value - osd_min_pg_value
+        # TODO: Revisit this if pg difference value needs change
+        # TODO: Revisit eval value if pg balancer mode changes from 'upmap'
+        if diff <= 5 and eval <= 0.02:
+            logging.info(
+                f"Eval value is {eval} and pg distribution "
+                f"difference is {diff} between high and low pgs per OSD"
+            )
+            return True
+        else:
+            logging.error(
+                f"Eval value is {eval} and pg distribution "
+                f"difference is {diff} between high and low pgs per OSD"
+            )
+            return False
+    else:
+        logging.info(f"pg_balancer is not active")

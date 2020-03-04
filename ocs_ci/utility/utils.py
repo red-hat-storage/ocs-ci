@@ -1057,7 +1057,7 @@ def get_ocp_version(seperator=None):
     """
     char = seperator if seperator else '.'
     return char.join(
-        config.DEPLOYMENT['installer_version'].split('.')[: -2]
+        config.DEPLOYMENT['installer_version'].split('.')[:2]
     )
 
 
@@ -1206,7 +1206,7 @@ def get_az_count():
     elif config.ENV_DATA.get('platform') == 'vsphere':
         return 1
     else:
-        return 3
+        return 1
 
 
 @retry((CephHealthException, CommandFailed), tries=20, delay=30, backoff=1)

@@ -6,7 +6,7 @@ import re
 import datetime
 import statistics
 import os
-from subprocess import TimeoutExpired
+from subprocess import TimeoutExpired, run, PIPE
 import tempfile
 import time
 import yaml
@@ -15,7 +15,11 @@ import threading
 from ocs_ci.ocs.ocp import OCP
 
 from uuid import uuid4
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import (
+    TimeoutExpiredError,
+    UnexpectedBehaviour,
+    UnavailableBuildException
+)
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.ocs import constants, defaults, ocp, node
 from ocs_ci.utility import templating
@@ -133,26 +137,13 @@ def create_pod(
         AssertionError: In case of any failure
     """
     if interface_type == constants.CEPHBLOCKPOOL:
+        pod_dict = pod_dict_path if pod_dict_path else constants.CSI_RBD_POD_YAML
         interface = constants.RBD_INTERFACE
-        if pod_dict_path:
-            pod_dict = pod_dict_path
-        else:
-            pod_dict = constants.CSI_RBD_POD_YAML
-            pull_images('nginx')
     else:
+        pod_dict = pod_dict_path if pod_dict_path else constants.CSI_CEPHFS_POD_YAML
         interface = constants.CEPHFS_INTERFACE
-        if pod_dict_path:
-            pod_dict = pod_dict_path
-        else:
-            pod_dict = constants.CSI_CEPHFS_POD_YAML
-            pull_images('nginx')
-
     if dc_deployment:
-        if pod_dict_path:
-            pod_dict = pod_dict_path
-        else:
-            pod_dict = constants.FEDORA_DC_YAML
-            pull_images('fedora')
+        pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
     pod_data = templating.load_yaml(pod_dict)
     if not pod_name:
         pod_name = create_unique_resource_name(
@@ -181,6 +172,13 @@ def create_pod(
             ]
             del pod_data['spec']['template']['spec']['containers'][0]['volumeMounts']
             pod_data['spec']['template']['spec']['containers'][0]['volumeDevices'] = temp_dict
+        elif pod_dict_path == constants.NGINX_POD_YAML:
+            temp_dict = [
+                {'devicePath': raw_block_device, 'name': pod_data.get('spec').get(
+                    'containers')[0].get('volumeMounts')[0].get('name')}
+            ]
+            del pod_data['spec']['containers'][0]['volumeMounts']
+            pod_data['spec']['containers'][0]['volumeDevices'] = temp_dict
         else:
             pod_data['spec']['containers'][0]['volumeDevices'][0]['devicePath'] = raw_block_device
             pod_data['spec']['containers'][0]['volumeDevices'][0]['name'] = pod_data.get('spec').get('volumes')[
@@ -886,6 +884,101 @@ def create_pods(pvc_objs, pod_factory, interface, pods_for_rwx=1, status=""):
     return pod_objs
 
 
+def create_build_from_docker_image(
+    image_name,
+    install_package,
+    namespace,
+    source_image='centos',
+    source_image_label='latest'
+):
+    """
+    Allows to create a build config using a Dockerfile specified as an argument
+    For eg., oc new-build -D $'FROM centos:7\nRUN yum install -y httpd',
+    creates a build with 'httpd' installed
+
+    Args:
+        image_name (str): Name of the image to be created
+        source_image (str): Source image to build docker image from,
+        Defaults to Centos as base image
+        namespace (str): project where build config should be created
+        source_image_label (str): Tag to use along with the image name,
+        Defaults to 'latest'
+        install_package (str): package to install over the base image
+
+    Returns:
+        OCP (obj): Returns the OCP object for the image
+        Fails on UnavailableBuildException exception if build creation
+        fails
+
+    """
+    base_image = source_image + ':' + source_image_label
+    docker_file = (f"FROM {base_image}\n "
+                   f"RUN yum install -y {install_package}\n "
+                   f"CMD tail -f /dev/null")
+    command = f"new-build -D $\'{docker_file}\' --name={image_name}"
+    kubeconfig = os.getenv('KUBECONFIG')
+
+    oc_cmd = f"oc -n {namespace} "
+
+    if kubeconfig:
+        oc_cmd += f"--kubeconfig {kubeconfig} "
+    oc_cmd += command
+    logger.info(f'Running command {oc_cmd}')
+    result = run(
+        oc_cmd,
+        stdout=PIPE,
+        stderr=PIPE,
+        timeout=15,
+        shell=True
+    )
+    if result.stderr.decode():
+        raise UnavailableBuildException(
+            f'Build creation failed with error: {result.stderr.decode()}'
+        )
+    out = result.stdout.decode()
+    logger.info(out)
+    if 'Success' in out:
+        # Build becomes ready once build pod goes into Comleted state
+        pod_obj = OCP(kind='Pod', resource_name=image_name)
+        if pod_obj.wait_for_resource(
+            condition='Completed',
+            resource_name=f'{image_name}' + '-1-build',
+            timeout=300,
+            sleep=30
+        ):
+            logger.info(f'build {image_name} ready')
+            set_image_lookup(image_name)
+            logger.info(f'image {image_name} can now be consumed')
+            image_stream_obj = OCP(
+                kind='ImageStream', resource_name=image_name
+            )
+            return image_stream_obj
+    else:
+        raise UnavailableBuildException('Build creation failed')
+
+
+def set_image_lookup(image_name):
+    """
+    Function to enable lookup, which allows reference to the image stream tag
+    in the image field of the object. Example,
+      $ oc set image-lookup mysql
+      $ oc run mysql --image=mysql
+
+    Args:
+        image_name (str): Name of the image stream to pull
+        the image locally
+
+    Returns:
+        str: output of set image-lookup command
+
+    """
+    ocp_obj = ocp.OCP(kind='ImageStream')
+    command = f'set image-lookup {image_name}'
+    logger.info(f'image lookup for image"{image_name}" is set')
+    status = ocp_obj.exec_oc_cmd(command)
+    return status
+
+
 def get_worker_nodes():
     """
     Fetches all worker nodes.
@@ -1535,7 +1628,8 @@ def create_multiple_pvc_parallel(
 
 
 def create_pods_parallel(
-    pvc_list, namespace, interface, pod_dict_path=None, sa_name=None, raw_block_pv=False, dc_deployment=False
+    pvc_list, namespace, interface, pod_dict_path=None, sa_name=None, raw_block_pv=False,
+    dc_deployment=False, node_selector=None
 ):
     """
     Function to create pods in parallel
@@ -1548,6 +1642,8 @@ def create_pods_parallel(
         sa_name (str): sa_name for providing permission
         raw_block_pv (bool): Either RAW block or not
         dc_deployment (bool): Either DC deployment or not
+        node_selector (dict): dict of key-value pair to be used for nodeSelector field
+            eg: {'nodetype': 'app-pod'}
 
     Returns:
         pod_objs (list): Returns list of pods created
@@ -1564,7 +1660,7 @@ def create_pods_parallel(
                 create_pod, interface_type=interface,
                 pvc_name=pvc_obj.name, do_reload=False, namespace=namespace,
                 raw_block_pv=raw_block_pv, pod_dict_path=pod_dict_path,
-                sa_name=sa_name, dc_deployment=dc_deployment
+                sa_name=sa_name, dc_deployment=dc_deployment, node_selector=node_selector
             ))
     pod_objs = [pvc_obj.result() for pvc_obj in future_pod_objs]
     # Check for all the pods are in Running state

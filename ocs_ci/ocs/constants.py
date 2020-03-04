@@ -123,6 +123,7 @@ OCP_QE_MISC_REPO = (
 CRITICAL_ERRORS = [
     "core dumped", "oom_reaper"
 ]
+must_gather_pod_label = "must-gather"
 
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 
@@ -376,6 +377,9 @@ FIO_IO_RW_PARAMS_YAML = os.path.join(
 RSYNC_POD_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "rsync-pod.yaml"
 )
+MACHINESET_YAML = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "machine-set.yaml"
+)
 
 ANSIBLE_INVENTORY_YAML = os.path.join(
     "ocp-deployment", "inventory.yaml.j2"
@@ -384,6 +388,11 @@ ANSIBLE_INVENTORY_YAML = os.path.join(
 RBD_INTERFACE = 'rbd'
 CEPHFS_INTERFACE = 'cephfs'
 RAW_BLOCK_DEVICE = '/dev/rbdblock'
+
+# Constant values for IOPS and Throughput is set
+# considering gp2 interface, EBS volumes and EC2 instances
+IOPS_FOR_1TiB_OSD = 3000
+THROUGHPUT_LIMIT_OSD = 250
 
 # EC2 instance statuses
 INSTANCE_PENDING = 0
@@ -533,7 +542,8 @@ WORKER_LABEL = "node-role.kubernetes.io/worker"
 # Rep mapping
 REPO_MAPPING = {
     '4.2.0': OCP4_2_REPO,
-    '4.3.0': OCP4_3_REPO
+    '4.3.0': OCP4_3_REPO,
+    '4.3.1': OCP4_3_REPO,
 }
 
 # Cluster name limits
