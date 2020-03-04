@@ -448,6 +448,36 @@ class AWS(object):
         self.stop_ec2_instances(instances=instances, wait=wait, force=force)
         self.start_ec2_instances(instances=instances, wait=wait)
 
+    def terminate_ec2_instances(self, instances, wait=True):
+        """
+        Terminate an instance
+
+        Args:
+            instances (dict): A dictionary of instance IDs and names
+            wait (bool): True in case wait for status is needed,
+                False otherwise
+        """
+        instance_ids, instance_names = zip(*instances.items())
+        logger.info(f"Terminating instances {list(instances.values())}")
+        ret = self.ec2_client.terminate_instances(InstanceIds=instance_ids)
+        terminating_instances = ret.get('TerminatingInstances')
+        for instance in terminating_instances:
+            assert instance.get('CurrentState').get('Code') in [
+                constants.INSTANCE_SHUTTING_DOWN,
+                constants.INSTANCE_TERMINATED
+            ], (
+                f"Instance {instance.get('InstanceId')} status "
+                f"is {instance.get('CurrentState').get('Code')}"
+            )
+        if wait:
+            for instance_id, instance_name in instances.items():
+                logger.info(
+                    f"Waiting for instance {instance_name} to reach status "
+                    f"terminated"
+                )
+                instance = self.get_ec2_instance(instance_id)
+                instance.wait_until_terminated()
+
     def get_ec2_instance_volumes(self, instance_id):
         """
         Get all volumes attached to an ec2 instance
