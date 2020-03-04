@@ -76,7 +76,7 @@ def oc_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
     return create_resource(**bs_data)
 
 
-def cli_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
+def cli_create_aws_backingstore(backingstore_name, uls_name, region):
     pass
 
 

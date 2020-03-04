@@ -109,7 +109,7 @@ def bucket_factory(request, mcg_obj):
     return _create_buckets
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
 def cloud_uls_factory(request, cld_mgr):
     """
         Create a Underlying Storage factory.
@@ -183,7 +183,7 @@ def cloud_uls_factory(request, cld_mgr):
     return _create_uls
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
 def backingstore_factory(request, cld_mgr):
     """
         Create a Backing Store factory.
