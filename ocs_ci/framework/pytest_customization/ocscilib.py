@@ -22,7 +22,7 @@ from ocs_ci.utility.utils import (
     get_testrun_name,
     get_ocs_build_number,
 )
-from ocs_ci.ocs.utils import collect_ocs_logs
+from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
 from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
@@ -338,3 +338,17 @@ def pytest_runtest_makereport(item, call):
     ):
         test_case_name = item.name
         collect_ocs_logs(test_case_name)
+
+    # Collect Prometheus metrics if specified in gather_metrics_on_fail marker
+    if (
+        (rep.when == "setup" or rep.when == "call")
+        and rep.failed
+        and item.get_closest_marker('gather_metrics_on_fail')
+    ):
+        metrics = item.get_closest_marker('gather_metrics_on_fail').args
+        collect_prometheus_metrics(
+            metrics,
+            f'{item.name}-{call.when}',
+            call.start,
+            call.stop
+        )
