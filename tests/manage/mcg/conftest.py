@@ -7,11 +7,16 @@ import pytest
 from botocore.exceptions import ClientError
 
 from ocs_ci.framework import config
-
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.ocs.resources.pod import get_rgw_pod
 from tests.helpers import craft_s3_command, create_unique_resource_name
 from tests.manage.mcg.helpers import get_rgw_restart_count
+from tests.manage.mcg.helpers import (
+    oc_create_aws_backingstore, oc_create_google_backingstore, oc_create_azure_backingstore,
+    oc_create_s3comp_backingstore, cli_create_aws_backingstore, cli_create_google_backingstore,
+    cli_create_azure_backingstore, cli_create_s3comp_backingstore, oc_create_pv_backingstore,
+    cli_create_pv_backingstore
+)
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +109,175 @@ def bucket_factory(request, mcg_obj):
     return _create_buckets
 
 
+@pytest.fixture(scope='class')
+def cloud_uls_factory(request, cld_mgr):
+    """
+        Create a Underlying Storage factory.
+        Calling this fixture creates a new underlying storage(s).
+
+        Args:
+            cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
+    """
+    created_uls = {
+        'aws': set(),
+        'google': set(),
+        'azure': set(),
+        's3comp': set()
+    }
+
+    ulsMap = {
+        'aws': cld_mgr.aws_client,
+        'google': cld_mgr.google_client,
+        'azure': cld_mgr.azure_client,
+        's3comp': cld_mgr.s3comp_client
+    }
+
+    def _create_uls(uls_dict):
+        """
+        Creates and deletes all underlying storage that were created as part of the test
+
+        Args:
+            uls_dict (dict): Dictionary containing storage provider as key and a list of tuples
+            as value.
+            each tuple contain amount as first parameter and region as second parameter.
+            Example:
+                'aws': [(3,us-west-1),(2,eu-east-2)]
+
+        Returns:
+            dict: A dictionary of cloud names as keys and uls names sets as value.
+        """
+        for cloud, params in uls_dict.items():
+            if cloud.lower() not in ulsMap:
+                raise RuntimeError(
+                    f'Invalid interface type received: {cloud}. '
+                    f'available types: {", ".join(ulsMap.keys())}'
+                )
+            for tup in params:
+                amount, region = tup
+                for i in range(amount):
+                    uls_name = create_unique_resource_name(
+                        resource_description='uls', resource_type=cloud.lower()
+                    )
+                    created_uls[cloud].add(
+                        ulsMap[cloud.lower()].create_uls(uls_name, region)
+                    )
+            return created_uls
+
+    def uls_cleanup():
+        for cloud, uls_set in created_uls:
+            client = ulsMap[cloud]
+            all_existing_uls = client.get_all_uls_names()
+            for uls in uls_set:
+                if uls in all_existing_uls:
+                    logger.info(f'Cleaning up uls {uls}')
+                    client.delete_uls(uls)
+                    logger.info(
+                        f"Verifying whether uls: {uls} exists after deletion"
+                    )
+                    assert not client.verify_uls_exists(uls)
+                else:
+                    logger.info(f'Underlying Storage {uls} not found.')
+
+    request.addfinalizer(uls_cleanup)
+
+    return _create_uls
+
+
+@pytest.fixture(scope='class')
+def backingstore_factory(request, cld_mgr):
+    """
+        Create a Backing Store factory.
+        Calling this fixture creates a new Backing Store(s).
+
+        Args:
+            cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
+    """
+    created_backingstores = []
+
+    cmdMap = {
+        'cli': {
+            'aws': oc_create_aws_backingstore,
+            'google': oc_create_google_backingstore,
+            'azure': oc_create_azure_backingstore,
+            's3comp': oc_create_s3comp_backingstore,
+            'pv': oc_create_pv_backingstore
+        },
+        'oc': {
+            'aws': cli_create_aws_backingstore,
+            'google': cli_create_google_backingstore,
+            'azure': cli_create_azure_backingstore,
+            's3comp': cli_create_s3comp_backingstore,
+            'pv': cli_create_pv_backingstore
+        }
+    }
+
+    def _create_backingstore(method, uls_dict):
+        """
+        Creates and deletes all underlying storage that were created as part of the test
+
+        Args:
+            method (str): String for selecting method of backing store creation (CLI/OC)
+            uls_dict (dict): Dictionary containing storage provider as key and a list of tuples
+            as value.
+            for cloud backingstore: each tuple contain amount as first parameter
+            and region as second parameter.
+            for pv: each tuple contain number of volumes as first parameter
+            and size as second parameter.
+            Example:
+                'aws': [(3,us-west-1),(2,eu-east-2)]
+                'pv': [(3,32,ocs-storagecluster-ceph-rbd),(2,100,ocs-storagecluster-ceph-rbd)]
+
+        Returns:
+            list: A list of backingstore objects.
+        """
+        if method.lower() not in cmdMap:
+            raise RuntimeError(
+                f'Invalid method type received: {method}. '
+                f'available types: {", ".join(cmdMap.keys())}'
+            )
+        for cloud, uls_tup in uls_dict.items():
+            backingstore_name = None
+            if cloud.lower() not in cmdMap[method.lower()]:
+                raise RuntimeError(
+                    f'Invalid cloud type received: {cloud}. '
+                    f'available types: {", ".join(cmdMap[method.lower()].keys())}'
+                )
+            if cloud == 'pv':
+                vol_num, size, storage_class = uls_tup
+                backingstore_name = create_unique_resource_name(
+                    resource_description='backingstore', resource_type=cloud.lower()
+                )
+                cmdMap[method.lower()][cloud.lower()](
+                    backingstore_name, vol_num, size, storage_class
+                )
+            else:
+                region = uls_tup[1]
+                uls_names = cloud_uls_factory({cloud: uls_tup})
+                for uls_name in uls_names:
+                    backingstore_name = create_unique_resource_name(
+                        resource_description='backingstore', resource_type=cloud.lower()
+                    )
+
+                    cmdMap[method.lower()][cloud.lower()](
+                        cld_mgr, backingstore_name, uls_name, region
+                    )
+            created_backingstores.append(backingstore_name)
+        return created_backingstores
+
+    def backingstore_cleanup():
+        for backingstore in created_backingstores:
+            logger.info(f'Cleaning up uls {backingstore.name}')
+            backingstore.delete()
+            logger.info(
+                f"Verifying whether uls: {backingstore.name} exists after deletion"
+            )
+            assert not backingstore.is_deleted()
+
+    request.addfinalizer(backingstore_cleanup)
+
+    return _create_backingstore
+
+
 @pytest.fixture()
 def multiregion_resources(request, mcg_obj):
     bs_objs, bs_secrets, bucketclasses, aws_buckets = (
@@ -144,11 +318,13 @@ def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
     aws_buckets, backingstore_secrets, backingstore_objects, bucketclasses = multiregion_resources
     # Define backing stores
     backingstore1 = {
-        'name': create_unique_resource_name(resource_description='testbs', resource_type='s3bucket'),
+        'name': create_unique_resource_name(resource_description='testbs',
+                                            resource_type='s3bucket'),
         'region': f'us-west-{randrange(1, 3)}'
     }
     backingstore2 = {
-        'name': create_unique_resource_name(resource_description='testbs', resource_type='s3bucket'),
+        'name': create_unique_resource_name(resource_description='testbs',
+                                            resource_type='s3bucket'),
         'region': f'us-east-2'
     }
     # Create target buckets for them
@@ -160,10 +336,12 @@ def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
     backingstore_secrets.append(backingstore_secret)
     # Create AWS-backed backing stores on NooBaa
     backingstore_obj_1 = mcg_obj.oc_create_aws_backingstore(
-        backingstore1['name'], backingstore1['name'], backingstore_secret.name, backingstore1['region']
+        backingstore1['name'], backingstore1['name'], backingstore_secret.name,
+        backingstore1['region']
     )
     backingstore_obj_2 = mcg_obj.oc_create_aws_backingstore(
-        backingstore2['name'], backingstore2['name'], backingstore_secret.name, backingstore2['region']
+        backingstore2['name'], backingstore2['name'], backingstore_secret.name,
+        backingstore2['region']
     )
     backingstore_objects.extend((backingstore_obj_1, backingstore_obj_2))
     # Create a new mirror bucketclass that'll use all the backing stores we created

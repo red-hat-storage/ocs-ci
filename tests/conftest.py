@@ -8,6 +8,7 @@ from datetime import datetime
 import random
 from math import floor
 
+from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
@@ -1380,6 +1381,16 @@ def ec2_instances(request, aws_obj):
     request.addfinalizer(finalizer)
 
     return ec2_instances
+
+
+@pytest.fixture(scope='session', autouse=True)
+def cloud_mgr():
+    """
+    Returns a cloud manager instance that'll be used throughout the session
+    Returns:
+        CloudManager: A CloudManager resource
+    """
+    return CloudManager()
 
 
 @pytest.fixture()

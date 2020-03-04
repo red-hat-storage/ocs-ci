@@ -3,6 +3,10 @@ from concurrent.futures import ThreadPoolExecutor
 import boto3
 
 from ocs_ci.ocs import constants
+from ocs_ci.utility import templating
+from ocs_ci.framework import config
+from ocs_ci.utility.utils import run_mcg_cmd
+from tests.helpers import logger, craft_s3_command, create_resource
 from ocs_ci.ocs.resources.pod import get_rgw_pod
 from tests.helpers import logger, craft_s3_command
 
@@ -29,8 +33,8 @@ def retrieve_test_objects_to_pod(podobj, target_dir):
             logger.info(f'Downloading {obj.key} from AWS test bucket')
             p.submit(podobj.exec_cmd_on_pod,
                      command=f'sh -c "'
-                     f'wget -P {target_dir} '
-                     f'https://{constants.TEST_FILES_BUCKET}.s3.amazonaws.com/{obj.key}"'
+                             f'wget -P {target_dir} '
+                             f'https://{constants.TEST_FILES_BUCKET}.s3.amazonaws.com/{obj.key}"'
                      )
             downloaded_objects.append(obj.key)
         return downloaded_objects
@@ -59,6 +63,64 @@ def sync_object_directory(podobj, src, target, mcg_obj=None):
         secrets=secrets
     ), 'Failed to sync objects'
     # Todo: check that all objects were synced successfully
+
+
+def oc_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data['metadata']['name'] += f'-{backingstore_name}'
+    bs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
+    bs_data['spec']['awsS3']['secret']['name'] = cld_mgr.aws_client.get_secret()
+    bs_data['spec']['awsS3']['targetBucket'] = uls_name
+    bs_data['spec']['awsS3']['region'] = region
+    return create_resource(**bs_data)
+
+
+def cli_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    run_mcg_cmd(f'backingstore create aws-s3 {backingstore_name} '
+                f'--access-key {cld_mgr.aws_client.get_aws_key()} '
+                f'--secret-key {cld_mgr.aws_client.get_aws_secret()} '
+                f'--target-bucket {uls_name} --region {region}'
+                )
+
+
+def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def cli_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def oc_create_azure_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def cli_create_azure_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def oc_create_s3comp_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def cli_create_s3comp_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
+    bs_data = templating.load_yaml(constants.PV_BACKINGSTORE_YAML)
+    bs_data['metadata']['name'] += f'-{backingstore_name}'
+    bs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
+    bs_data['spec']['pvPool']['resources']['requests']['storage'] = size + 'Gi'
+    bs_data['spec']['pvPool']['numVolumes'] = vol_num
+    bs_data['spec']['pvPool']['storageClass'] = storage_class
+    return create_resource(**bs_data)
+
+
+def cli_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
+    run_mcg_cmd(f'backingstore create pv-pool {backingstore_name} --num-volumes '
+                f'{vol_num} --pv-size-gb {size} --storage-class {storage_class}'
+                )
 
 
 def rm_object_recursive(podobj, target, mcg_obj, option=''):
@@ -95,7 +157,8 @@ def get_rgw_restart_count():
     return rgw_pod.restart_count
 
 
-def write_individual_s3_objects(mcg_obj, awscli_pod, bucket_factory, downloaded_files, target_dir, bucket_name=None):
+def write_individual_s3_objects(mcg_obj, awscli_pod, bucket_factory, downloaded_files, target_dir,
+                                bucket_name=None):
     """
     Writes objects one by one to an s3 bucket
 
