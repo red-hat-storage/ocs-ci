@@ -712,18 +712,17 @@ def workload_fio_storageutilization(
         except TimeoutExpiredError as ex:
             # report some high level error as well
             msg = (
-                "Job fio failed to write %.2f Gi data on OCS backed volume "
-                "in expected time %.2f seconds.")
-            logger.error(msg, pvc_size, write_timeout)
+                f"Job fio failed to write {pvc_size} Gi data on OCS backed "
+                f"volume in expected time {write_timeout} seconds.")
+            logger.error(msg)
             # TODO: if the job is still running, report more specific error
             # message instead of the generic one which is pushed to ex. below
-            msg += (
-                " If the fio pod were still runing "
-                "(see 'last actual status was' in some previous log message), "
-                "this is caused either by "
-                "severe product performance regression "
-                "or by a misconfiguration of the cluster (ping infra team).")
-            ex.args = ex.args + (msg,)
+            ex.message = msg + (
+                " If the fio pod were still runing"
+                " (see 'last actual status was' in some previous log message),"
+                " this is caused either by"
+                " severe product performance regression"
+                " or by a misconfiguration of the clusterr, ping infra team.")
             raise(ex)
         pod_data = ocp_pod.get()
 
