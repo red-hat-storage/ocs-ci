@@ -30,7 +30,6 @@ from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, ocsci_log_path, run_cmd
 from ocs_ci.framework import config
-from ocs_ci.ocs.cluster import CephCluster
 
 logger = logging.getLogger(__name__)
 
@@ -2114,6 +2113,8 @@ def collect_performance_stats():
         CPU, memory consumption of each nodes
 
     """
+    from ocs_ci.ocs.cluster import CephCluster
+
     log_dir_path = os.path.join(
         os.path.expanduser(config.RUN['log_dir']),
         f"failed_testcase_ocs_logs_{config.RUN['run_id']}",
