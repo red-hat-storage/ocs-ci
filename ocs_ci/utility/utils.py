@@ -1333,11 +1333,8 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
     latest_tag = latest_tag or config.DEPLOYMENT.get(
         'default_latest_tag', 'latest'
     )
-    _req = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=100)
-    )
+    tags = get_ocs_olm_operator_tags()
     latest_image = None
-    tags = _req.json()['tags']
     ocs_version = config.ENV_DATA['ocs_version']
     upgrade_ocs_version = config.UPGRADE.get('upgrade_ocs_version')
     use_rc_build = config.UPGRADE.get("use_rc_build")
@@ -1357,7 +1354,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
             latest_image = tag['image_id']
             break
     if not latest_image:
-        raise TagNotFoundException(f"Couldn't find latest tag!")
+        raise TagNotFoundException("Couldn't find latest tag!")
     latest_tag_found = False
     for tag in tags:
         if not upgrade:
@@ -1383,7 +1380,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
                 ):
                     continue
                 return tag['name']
-    raise TagNotFoundException(f"Couldn't find any desired tag!")
+    raise TagNotFoundException("Couldn't find any desired tag!")
 
 
 def get_next_version_available_for_upgrade(current_tag):
@@ -1402,17 +1399,14 @@ def get_next_version_available_for_upgrade(current_tag):
         TagNotFoundException: In case no tag suitable for upgrade found
 
     """
-    req = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=100)
-    )
+    tags = get_ocs_olm_operator_tags()
     if current_tag in constants.LATEST_TAGS:
         return current_tag
-    tags = req.json()['tags']
     current_tag_index = None
     for index, tag in enumerate(tags):
         if tag['name'] == current_tag:
             if index < 2:
-                raise TagNotFoundException(f"Couldn't find tag for upgrade!")
+                raise TagNotFoundException("Couldn't find tag for upgrade!")
             current_tag_index = index
             break
     sliced_reversed_tags = tags[:current_tag_index]
@@ -1426,7 +1420,58 @@ def get_next_version_available_for_upgrade(current_tag):
             if config.UPGRADE.get("use_rc_build") and "rc" not in tag['name']:
                 continue
             return tag['name']
-    raise TagNotFoundException(f"Couldn't find any tag!")
+    raise TagNotFoundException("Couldn't find any tag!")
+
+
+def get_ocs_olm_operator_tags(limit=100):
+    """
+    Query the OCS OLM Operator repo and retrieve a list of tags.
+
+    Args:
+        limit: the number of tags to limit the request to
+
+    Raises:
+        FileNotFoundError: if the auth config is not found
+        KeyError: if the auth config isn't setup properly
+        requests.RequestException: if the response return code is not ok
+
+    Returns:
+        list: OCS OLM Operator tags
+
+    """
+    log.info("Retrieving OCS OLM Operator tags (limit %s)", limit)
+    auth_file = os.path.join(constants.TOP_DIR, 'data', 'auth.yaml')
+    doc_url = (
+        'https://ocs-ci.readthedocs.io/en/latest/docs/getting_started.html'
+        '#authentication-config'
+    )
+    try:
+        with open(auth_file) as f:
+            auth_config = yaml.safe_load(f)
+        quay_access_token = auth_config['quay']['access_token']
+    except FileNotFoundError:
+        log.error(
+            'Unable to find the authentication configuration at %s, '
+            'please refer to the getting started guide (%s)',
+            auth_file, doc_url
+        )
+        raise
+    except KeyError:
+        log.error(
+            'Unable to retrieve the access token for quay, please refer to '
+            'the getting started guide (%s) to properly setup your '
+            'authentication configuration', doc_url
+        )
+        raise
+    headers = {'Authorization': f'Bearer {quay_access_token}'}
+    resp = requests.get(
+        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=limit),
+        headers=headers
+    )
+    if not resp.ok:
+        raise requests.RequestException(resp.json())
+    log.debug(resp.json()['tags'])
+    return resp.json()['tags']
 
 
 def check_if_executable_in_path(exec_name):
