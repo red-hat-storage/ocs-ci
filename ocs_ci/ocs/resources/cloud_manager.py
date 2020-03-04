@@ -37,13 +37,13 @@ class CloudClient(ABC):
     def __init__(self, *args, **kwargs):
         pass
 
-    def create_uls(self, name):
+    def create_uls(self, name, region):
         """
         Super method that first logs the Underlying Storage creation and then calls
         the appropriate implementation
         """
-        logger.info(f"Creating Underlying Storage: {name}")
-        self.internal_create_uls(name)
+        logger.info(f"Creating Underlying Storage {name} in {region}")
+        self.internal_create_uls(name, region)
 
     def delete_uls(self, name):
         """
@@ -60,7 +60,7 @@ class CloudClient(ABC):
         pass
 
     @abstractmethod
-    def internal_create_uls(self, name):
+    def internal_create_uls(self, name, region):
         pass
 
     @abstractmethod
@@ -85,7 +85,7 @@ class S3Client(CloudClient):
             self.access_key = key_id
             self.secret_key = access_key
         else:
-            self.client = boto3.resource('s3')
+            self.client = boto3.resource('s3', endpoint_url=endpoint)
             # create a secret for the underlying storage to use
             session = boto3.Session()
             credentials = session.get_credentials()

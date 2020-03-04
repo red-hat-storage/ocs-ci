@@ -184,7 +184,7 @@ def cloud_uls_factory(request, cld_mgr):
 
 
 @pytest.fixture(scope='class')
-def backingstore_factory(request, cld_mgr):
+def backingstore_factory(request, cld_mgr, cloud_uls_factory):
     """
         Create a Backing Store factory.
         Calling this fixture creates a new Backing Store(s).
