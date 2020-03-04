@@ -196,14 +196,14 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
     created_backingstores = []
 
     cmdMap = {
-        'cli': {
+        'oc': {
             'aws': oc_create_aws_backingstore,
             'google': oc_create_google_backingstore,
             'azure': oc_create_azure_backingstore,
             's3comp': oc_create_s3comp_backingstore,
             'pv': oc_create_pv_backingstore
         },
-        'oc': {
+        'cli': {
             'aws': cli_create_aws_backingstore,
             'google': cli_create_google_backingstore,
             'azure': cli_create_azure_backingstore,
@@ -267,15 +267,15 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
         return created_backingstores
 
     def backingstore_cleanup():
-        for backingstore in created_backingstores:
-            logger.info(f'Cleaning up uls {backingstore}')
+        for backingstore_name in created_backingstores:
+            logger.info(f'Cleaning up uls {backingstore_name}')
             current_namespace = config.ENV_DATA['cluster_namespace']
-            run_cmd(f'oc -n {current_namespace} delete backingstore {backingstore}',
-                    cld_mgr.aws_client.get_oc_secret())
+            run_cmd(f'oc -n {current_namespace} delete backingstore {backingstore_name}')
+            run_cmd(f'oc -n {current_namespace} delete secret {backingstore_name}')
             logger.info(
-                f"Verifying whether uls: {backingstore} exists after deletion"
+                f"Verifying whether uls: {backingstore_name} exists after deletion"
             )
-            assert not backingstore.is_deleted()
+            assert not backingstore_name.is_deleted()
 
     request.addfinalizer(backingstore_cleanup)
 
