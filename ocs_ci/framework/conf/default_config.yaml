@@ -42,6 +42,9 @@ DEPLOYMENT:
   installer_version: "4.3.0-0.nightly"
   force_download_installer: True
   force_download_client: True
+  # use skip_download_client only when you are sure that openshift-client
+  # exists in bin folder
+  skip_download_client: False
   # You can overwrite csv channel version by following parameter
   # ocs_csv_channel: "alpha"
   # you can overwrite the image for ocs operator catalog source by following parameter:

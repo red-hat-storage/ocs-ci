@@ -895,7 +895,8 @@ def cluster(request, log_cli_level):
         config.RUN['cli_params'].get('deploy')
         and config.DEPLOYMENT['force_download_client']
     )
-    get_openshift_client(force_download=force_download)
+    if not config.DEPLOYMENT['skip_download_client']:
+        get_openshift_client(force_download=force_download)
 
     if deploy:
         # Deploy cluster
