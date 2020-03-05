@@ -23,7 +23,6 @@ log = logging.getLogger(__name__)
 
 
 @scale
-@ignore_leftovers
 @pytest.mark.parametrize(
     argnames="start_io",
     argvalues=[
@@ -49,9 +48,6 @@ class TestMultiProjectScalePVCPOD(E2ETest):
     def test_multi_project_scale_pvcs_pods(self, setup_fixture, start_io):
         """
         Test case to scale PVC+POD with multi projects and reach expected PVC count
-        :param setup_fixture:
-        :param start_io:
-        :return:
         """
 
         # Set PVC count based on number of OCS workers
