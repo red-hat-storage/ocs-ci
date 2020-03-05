@@ -1061,6 +1061,21 @@ def get_ocp_version(seperator=None):
     )
 
 
+def get_ocp_repo():
+    """
+    Get ocp repo file, name will be generated dynamically based on
+    ocp version.
+
+    Returns:
+        string : Path to ocp repo file
+
+    """
+    repo_path = os.path.join(
+        constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo"
+    )
+    return repo_path
+
+
 def parse_pgsql_logs(data):
     """
     Parse the pgsql benchmark data from ripsaw and return
