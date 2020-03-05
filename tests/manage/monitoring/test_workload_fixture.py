@@ -175,7 +175,7 @@ def test_workload_rbd_cephfs_minimal(
     to a fresh just installed CI cluster.
     """
     logger.info("checking fio report results as provided by workload fixtures")
-    msg = "workload results were recorded and provided to the test"
+    msg = "workload results should be recorded and provided to the test"
     assert workload_storageutilization_05p_rbd['result'] is not None, msg
     assert workload_storageutilization_05p_cephfs['result'] is not None, msg
 
@@ -185,12 +185,12 @@ def test_workload_rbd_cephfs_minimal(
     )
     for vol_type, fio in fio_reports:
         logger.info("starting to check fio run on %s volume", vol_type)
-        msg = "single fio job were executed in each workload run"
+        msg = "single fio job should be executed in each workload run"
         assert len(fio['jobs']) == 1, msg
         logger.info(
             "fio (version %s) executed %s job on %s volume",
             fio['fio version'],
             fio['jobs'][0]['jobname'],
             vol_type)
-        msg = f"no errors are reported by fio writing on {vol_type} volume"
+        msg = f"no errors should be reported by fio writing on {vol_type} volume"
         assert fio['jobs'][0]['error'] == 0, msg
