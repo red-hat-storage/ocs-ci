@@ -430,6 +430,7 @@ OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
 OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
 MARKETPLACE_NAMESPACE = "openshift-marketplace"
+MONITORING_NAMESPACE = "openshift-monitoring"
 OPERATOR_INTERNAL_SELECTOR = "ocs-operator-internal=true"
 OPERATOR_CS_QUAY_API_QUERY = (
     'https://quay.io/api/v1/repository/rhceph-dev/ocs-olm-operator/'
