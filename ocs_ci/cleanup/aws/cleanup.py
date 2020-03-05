@@ -127,9 +127,11 @@ def aws_cleanup():
         nargs=1,
         action='append',
         required=True,
-        help="Maximum running time of the cluster (in hours). "
-             "Clusters older than this will be deleted. "
-             "The minimum is 10 hours"
+        help="""
+            Maximum running time of the cluster (in hours).
+            Clusters older than this will be deleted.
+            The minimum is 10 hours
+            """
     )
     parser.add_argument(
         '--region',
@@ -142,20 +144,24 @@ def aws_cleanup():
         '--prefix',
         action='append',
         required=False,
-        help="Additional prefix:hour combo to treat as a special rule. "
-             "Clusters starting with this prefix will only be cleaned up if "
-             "their runtime exceeds the provided hour(this takes precedence"
-             "over the value provided to --hours). "
-             "Example: --prefix foo:24 --prefix bar:48"
+        help="""
+            Additional prefix:hour combo to treat as a special rule.
+            Clusters starting with this prefix will only be cleaned up if
+            their runtime exceeds the provided hour(this takes precedence
+            over the value provided to --hours).
+            Example: --prefix foo:24 --prefix bar:48
+            """
     )
     parser.add_argument(
         '--force',
         action='store_true',
         required=False,
-        help="Force cluster cleanup. "
-             "User will not be prompted for confirmation. "
-             "WARNING: this utility is destructive, only use this option if "
-             "you know what you are doing."
+        help="""
+            Force cluster cleanup.
+            User will not be prompted for confirmation.
+            WARNING: this utility is destructive, only use this option if
+            you know what you are doing.
+            """
     )
     logging.basicConfig(level=logging.DEBUG)
     args = parser.parse_args()
