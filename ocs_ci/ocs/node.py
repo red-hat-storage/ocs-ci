@@ -440,3 +440,22 @@ def get_both_osd_and_app_pod_running_node(
     common_nodes = list(set(osd_running_nodes) & set(app_pod_running_nodes))
     log.info(f"Common node is {common_nodes}")
     return common_nodes
+
+
+def get_node_from_machine_name(machine_name):
+    """
+    Get node name from a give machine_name
+
+    node_name (str): Name of Machine
+
+    Returns:
+        obj: Object of node
+    """
+    node_list = get_node_objs()
+    matching_annotation = "openshift-machine-api/" + machine_name
+    for nodes in node_list:
+        label_dict = nodes.get().get('metadata').get('annotations')
+        for annotation in label_dict.values():
+            if annotation == matching_annotation:
+                log.info(f"Found Worker node {nodes.name} Matching with annotation {matching_annotation}")
+                return nodes
