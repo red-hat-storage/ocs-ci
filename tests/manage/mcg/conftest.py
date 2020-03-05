@@ -119,7 +119,7 @@ def cloud_uls_factory(request, cld_mgr):
         Args:
             cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
     """
-    created_uls = {
+    all_created_uls = {
         'aws': set(),
         'google': set(),
         'azure': set(),
@@ -147,6 +147,13 @@ def cloud_uls_factory(request, cld_mgr):
         Returns:
             dict: A dictionary of cloud names as keys and uls names sets as value.
         """
+        current_call_created_uls = {
+            'aws': set(),
+            'google': set(),
+            'azure': set(),
+            's3comp': set()
+        }
+
         for cloud, params in uls_dict.items():
             if cloud.lower() not in ulsMap:
                 raise RuntimeError(
@@ -159,25 +166,27 @@ def cloud_uls_factory(request, cld_mgr):
                     uls_name = create_unique_resource_name(
                         resource_description='uls', resource_type=cloud.lower()
                     )
-                    created_uls[cloud].add(
-                        ulsMap[cloud.lower()].create_uls(uls_name, region)
-                    )
-            return created_uls
+                    ulsMap[cloud.lower()].create_uls(uls_name, region)
+                    all_created_uls[cloud].add(uls_name)
+                    current_call_created_uls[cloud.lower()].add(uls_name)
+
+            return current_call_created_uls
 
     def uls_cleanup():
-        for cloud, uls_set in created_uls:
+        for cloud, uls_set in all_created_uls.items():
             client = ulsMap[cloud]
-            all_existing_uls = client.get_all_uls_names()
-            for uls in uls_set:
-                if uls in all_existing_uls:
-                    logger.info(f'Cleaning up uls {uls}')
-                    client.delete_uls(uls)
-                    logger.info(
-                        f"Verifying whether uls: {uls} exists after deletion"
-                    )
-                    assert not client.verify_uls_exists(uls)
-                else:
-                    logger.info(f'Underlying Storage {uls} not found.')
+            if client is not None:
+                all_existing_uls = client.get_all_uls_names()
+                for uls in uls_set:
+                    if uls in all_existing_uls:
+                        logger.info(f'Cleaning up uls {uls}')
+                        client.delete_uls(uls)
+                        logger.info(
+                            f"Verifying whether uls: {uls} exists after deletion"
+                        )
+                        assert not client.verify_uls_exists(uls)
+                    else:
+                        logger.info(f'Underlying Storage {uls} not found.')
 
     request.addfinalizer(uls_cleanup)
 
@@ -239,6 +248,7 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
         for cloud, uls_lst in uls_dict.items():
             for uls_tup in uls_lst:
                 backingstore_name = None
+                # Todo: Replace multiple .append calls, create names in advance, according to amountoc
                 if cloud.lower() not in cmdMap[method.lower()]:
                     raise RuntimeError(
                         f'Invalid cloud type received: {cloud}. '
@@ -249,33 +259,34 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
                     backingstore_name = create_unique_resource_name(
                         resource_description='backingstore', resource_type=cloud.lower()
                     )
+                    created_backingstores.append(backingstore_name)
                     cmdMap[method.lower()][cloud.lower()](
                         backingstore_name, vol_num, size, storage_class
                     )
                 else:
                     region = uls_tup[1]
-                    uls_names = cloud_uls_factory({cloud: [uls_tup]})[cloud.lower()]
-                    for uls_name in uls_names:
+                    uls_dict = cloud_uls_factory({cloud: [uls_tup]})
+                    for uls_name in uls_dict[cloud.lower()]:
                         backingstore_name = create_unique_resource_name(
                             resource_description='backingstore', resource_type=cloud.lower()
                         )
-
+                        created_backingstores.append(backingstore_name)
                         cmdMap[method.lower()][cloud.lower()](
                             cld_mgr, backingstore_name, uls_name, region
                         )
-                created_backingstores.append(backingstore_name)
+
         return created_backingstores
 
     def backingstore_cleanup():
         for backingstore_name in created_backingstores:
-            logger.info(f'Cleaning up uls {backingstore_name}')
+            logger.info(f'Cleaning up backingstore {backingstore_name}')
             current_namespace = config.ENV_DATA['cluster_namespace']
             run_cmd(f'oc -n {current_namespace} delete backingstore {backingstore_name}')
-            run_cmd(f'oc -n {current_namespace} delete secret {backingstore_name}')
+            # run_cmd(f'oc -n {current_namespace} delete secret backing-store-aws-s3-{backingstore_name}')
             logger.info(
                 f"Verifying whether uls: {backingstore_name} exists after deletion"
             )
-            assert not backingstore_name.is_deleted()
+            # Todo: implement deletion assertion
 
     request.addfinalizer(backingstore_cleanup)
 

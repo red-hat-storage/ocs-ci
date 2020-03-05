@@ -121,6 +121,7 @@ class S3Client(CloudClient):
         """
         Deletes the Underlying Storage using the S3 API
         """
+        # Todo: rename client to resource (or find an alternative)
         self.client.meta.client.delete_bucket_policy(
             Bucket=name
         )
@@ -150,7 +151,8 @@ class S3Client(CloudClient):
              bool: True if Underlying Storage exists, False otherwise
         """
         try:
-            self.client.head_bucket(Bucket=uls_name)
+            # Todo: rename client to resource (or find an alternative)
+            self.client.meta.client.head_bucket(Bucket=uls_name)
             logger.info(f"{uls_name} exists")
             return True
         except ClientError:

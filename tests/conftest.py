@@ -9,7 +9,7 @@ import random
 from math import floor
 
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
-from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo
+from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo, run_cmd
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.utility import aws
@@ -1384,12 +1384,17 @@ def ec2_instances(request, aws_obj):
 
 
 @pytest.fixture(scope='session', autouse=True)
-def cld_mgr():
+def cld_mgr(request):
     """
     Returns a cloud manager instance that'll be used throughout the session
     Returns:
         CloudManager: A CloudManager resource
     """
+    # Todo: Find a more elegant method
+    def finalizer():
+        run_cmd('oc -n openshift-storage delete secret backing-store-secret-client-secret')
+    request.addfinalizer(finalizer)
+
     return CloudManager()
 
 
