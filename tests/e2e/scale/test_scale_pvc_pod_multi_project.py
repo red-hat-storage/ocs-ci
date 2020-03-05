@@ -17,7 +17,7 @@ from tests import helpers
 from ocs_ci.ocs import constants, cluster, machine, node
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CephHealthException
-from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
+from ocs_ci.framework.testlib import scale, E2ETest
 
 log = logging.getLogger(__name__)
 
