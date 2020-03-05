@@ -247,7 +247,6 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
             )
         for cloud, uls_lst in uls_dict.items():
             for uls_tup in uls_lst:
-                backingstore_name = None
                 # Todo: Replace multiple .append calls, create names in advance, according to amountoc
                 if cloud.lower() not in cmdMap[method.lower()]:
                     raise RuntimeError(
@@ -282,9 +281,8 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
             logger.info(f'Cleaning up backingstore {backingstore_name}')
             current_namespace = config.ENV_DATA['cluster_namespace']
             run_cmd(f'oc -n {current_namespace} delete backingstore {backingstore_name}')
-            # run_cmd(f'oc -n {current_namespace} delete secret backing-store-aws-s3-{backingstore_name}')
             logger.info(
-                f"Verifying whether uls: {backingstore_name} exists after deletion"
+                f"Verifying whether backingstore {backingstore_name} exists after deletion"
             )
             # Todo: implement deletion assertion
 

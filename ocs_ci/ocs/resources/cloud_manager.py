@@ -160,7 +160,7 @@ class S3Client(CloudClient):
             return False
 
     def get_oc_secret(self):
-        return self.secret
+        return self.secret.name
 
     def get_aws_key(self):
         return self.access_key
