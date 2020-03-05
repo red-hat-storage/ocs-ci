@@ -2133,14 +2133,20 @@ def collect_performance_stats():
 
     # ToDo: Get iops and throughput percentage of each nodes
 
-    # Get the cpu and memory of each nodes
-    master_node_utilization = node.get_node_resource_utilization(node_type='master')
-    worker_node_utilization = node.get_node_resource_utilization(node_type='worker')
+    # Get the cpu and memory of each nodes from adm top
+    master_node_utilization_from_adm_top = node.get_node_resource_utilization_from_adm_top(node_type='master')
+    worker_node_utilization_from_adm_top = node.get_node_resource_utilization_from_adm_top(node_type='worker')
+
+    # Get the cpu and memory from describe of nodes
+    master_node_utilization_from_oc_describe = node.get_node_resource_utilization_from_oc_describe(node_type='master')
+    worker_node_utilization_from_oc_describe = node.get_node_resource_utilization_from_oc_describe(node_type='worker')
 
     performance_stats['iops_percentage'] = iops_percentage
     performance_stats['throughput_percentage'] = throughput_percentage
-    performance_stats['master_node_utilization'] = master_node_utilization
-    performance_stats['worker_node_utilization'] = worker_node_utilization
+    performance_stats['master_node_utilization'] = master_node_utilization_from_adm_top
+    performance_stats['worker_node_utilization'] = worker_node_utilization_from_adm_top
+    performance_stats['master_node_utilization_from_oc_describe'] = master_node_utilization_from_oc_describe
+    performance_stats['worker_node_utilization_from_oc_describe'] = worker_node_utilization_from_oc_describe
 
     file_name = os.path.join(log_dir_path, 'performance')
     with open(file_name, 'w') as outfile:
