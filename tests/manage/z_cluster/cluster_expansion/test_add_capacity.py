@@ -8,21 +8,12 @@ from ocs_ci.utility.utils import ceph_health_check
 
 @ignore_leftovers
 @tier1
+@polarion_id('OCS-1191')
 class TestAddCapacity(ManageTest):
     """
-   Automates adding variable capacity to the cluster while IOs running
-   """
 
-    @pytest.mark.parametrize(
-        argnames=[
-            "capacity"
-        ],
-        argvalues=[
-            pytest.param(
-                *[2000], marks=[polarion_id('OCS-1191'), tier3]
-            ),
-        ]
-    )
+    Automates adding variable capacity to the cluster while IOs running
+    """
     def test_add_capacity(self):
         """
        Test to add variable capacity to the OSD cluster while IOs running
