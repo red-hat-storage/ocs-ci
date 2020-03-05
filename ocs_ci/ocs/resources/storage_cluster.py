@@ -335,7 +335,7 @@ def add_capacity(osd_size_capacity_requested):
     new_storage_devices_sets_count = int((osd_size_capacity_requested / osd_size_existing)
                                          + old_storage_devices_sets_count)
     # adding the storage capacity to the cluster
-    params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count", 
+    params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
                 "value": {new_storage_devices_sets_count}}}]"""
     sc.patch(
         resource_name=sc.get()['items'][0]['metadata']['name'],
@@ -394,4 +394,3 @@ def get_deviceset_count():
     return int(sc.get().get('items')[0].get('spec').get(
         'storageDeviceSets')[0].get('count')
     )
-
