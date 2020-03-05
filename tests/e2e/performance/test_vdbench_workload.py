@@ -47,7 +47,7 @@ def label_nodes(request, with_ocs):
 
     def teardown():
 
-        if with_ocs is True:
+        if with_ocs:
             return
 
         if m_set != '':
@@ -64,7 +64,7 @@ def label_nodes(request, with_ocs):
 
     request.addfinalizer(teardown)
 
-    if with_ocs is True:
+    if with_ocs:
         return
 
     # Add label to the worker nodes
@@ -158,10 +158,11 @@ class TestVDBenchWorkload(E2ETest):
                          marks=pytest.mark.workloads()),
         ],
     )
-    def test_vdbench_workload(self, template, with_ocs, label_nodes, ripsaw,
-                              servers, threads, blocksize, fileio, samples,
-                              width, depth, files, file_size, runtime, pause
-                              ):
+    def test_vdbench_workload(
+        self, template, with_ocs, label_nodes, ripsaw, servers, threads,
+        blocksize, fileio, samples, width, depth, files, file_size, runtime,
+        pause
+    ):
         """
         Run VDBench Workload
 
