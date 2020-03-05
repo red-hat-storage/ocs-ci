@@ -118,15 +118,18 @@ def cluster_cleanup():
 
 
 def aws_cleanup():
-    parser = argparse.ArgumentParser(description='AWS overall resources cleanup according to running time')
+    parser = argparse.ArgumentParser(
+        description='AWS overall resources cleanup according to running time'
+    )
     parser.add_argument(
         '--hours',
         type=int,
         nargs=1,
         action='append',
         required=True,
-        help="Maximum running time of the cluster (in hours). Clusters older than this "
-             "will be deleted. The minimum is 10 hours"
+        help="Maximum running time of the cluster (in hours). "
+             "Clusters older than this will be deleted. "
+             "The minimum is 10 hours"
     )
     parser.add_argument(
         '--region',
@@ -136,6 +139,16 @@ def aws_cleanup():
         help="The name of the AWS region to delete the resources from"
     )
     parser.add_argument(
+        '--prefix',
+        action='append',
+        required=False,
+        help="Additional prefix:hour combo to treat as a special rule. "
+             "Clusters starting with this prefix will only be cleaned up if "
+             "their runtime exceeds the provided hour(this takes precedence"
+             "over the value provided to --hours). "
+             "Example: --prefix foo:24 --prefix bar:48"
+    )
+    parser.add_argument(
         '--force',
         action='store_true',
         required=False,
@@ -143,12 +156,6 @@ def aws_cleanup():
              "User will not be prompted for confirmation. "
              "WARNING: this utility is destructive, only use this option if "
              "you know what you are doing."
-    )
-    parser.add_argument(
-        '--skip-prefixes',
-        action='store_true',
-        required=False,
-        help="Skip prompt for additional prefixes to spare"
     )
     logging.basicConfig(level=logging.DEBUG)
     args = parser.parse_args()
@@ -162,20 +169,20 @@ def aws_cleanup():
             "Wrong confirmation answer. Exiting"
         )
 
-    prefixes_hours_to_spare = defaults.CLUSTER_PREFIXES_TO_EXCLUDE_FROM_DELETION
+    prefixes_hours_to_spare = defaults.CLUSTER_PREFIXES_SPECIAL_RULES
 
-    if not args.skip_prefixes:
-        prefixes_hours = input(
-            "Press Enter if there are no cluster prefixes to spare.\n"
-            "If you would like the cleanup to spare specific cluster prefixes, "
-            "please enter them along with the time allowed for these to be kept "
-            "running, in a dictionary representation.\nAn example: "
-            "{\'prefix1\': 36, \'prefix2\': 48}\" "
+    for prefix in args.prefix:
+        _prefix, _hours = prefix.split(':')
+        if not _prefix or not _hours:
+            raise
+        logger.info(
+            "Adding special rule for prefix '%s' with hours %s",
+            _prefix, _hours
         )
-        if prefixes_hours:
-            prefixes_hours_to_spare = eval(prefixes_hours)
+        prefixes_hours_to_spare.update({_prefix: int(_hours)})
+
     time_to_delete = args.hours[0][0]
-    assert time_to_delete > defaults.MINIMUM_CLUSTER_RUNNING_TIME_FOR_DELETION, (
+    assert time_to_delete > defaults.MINIMUM_CLUSTER_RUNNING_TIME, (
         "Number of hours is lower than the required minimum. Exiting"
     )
     time_to_delete = time_to_delete * 60 * 60
