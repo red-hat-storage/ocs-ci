@@ -569,7 +569,6 @@ def get_openshift_client(
 
     """
     version = version or config.RUN['client_version']
-    version = expose_nightly_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     client_binary_path = os.path.join(bin_dir, 'oc')
     if os.path.isfile(client_binary_path) and force_download:
@@ -578,6 +577,7 @@ def get_openshift_client(
         log.debug(f"Client exists ({client_binary_path}), skipping download.")
         # TODO: check client version
     else:
+        version = expose_nightly_ocp_version(version)
         log.info(f"Downloading openshift client ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
