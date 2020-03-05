@@ -108,6 +108,7 @@ ENV_DATA:
   # fixtures, which is used to compute timeout of the write job (so that
   # when actual write speed of the operation is smaller than this value, the
   # workload fixture will fail on a timeout)
+  # the default value used here is based on observations on aws clusters
   fio_storageutilization_min_mbps: 30.0
 
 # This section is related to upgrade
