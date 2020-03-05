@@ -2085,7 +2085,9 @@ def add_required_osd_count(total_osd_nos=3):
     if actual_osd_count == expected_osd_count:
         logging.info(f"Setup has OSD count as per OCS workers")
     else:
-        storage_cluster.add_capacity(int((expected_osd_count - actual_osd_count) / 3))
+        osd_size = storage_cluster.get_osd_size()
+        calc = (expected_osd_count - actual_osd_count) / len(ocs_nodes)
+        storage_cluster.add_capacity(osd_size * calc)
         logging.info(f"Now setup has expected osd count {expected_osd_count}")
     return cluster.count_cluster_osd()
 
