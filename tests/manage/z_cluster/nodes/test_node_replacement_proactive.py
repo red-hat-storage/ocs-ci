@@ -6,22 +6,22 @@ import random
 
 from tests.helpers import get_worker_nodes
 
-from ocs_ci.framework.pytest_customization.marks import tier4b
+from ocs_ci.framework.pytest_customization.marks import tier4a
 from ocs_ci.ocs.resources import pod
 
 from ocs_ci.framework.testlib import (
-    tier4, ManageTest, aws_platform_required, ignore_leftovers, ipi_deployment_required)
-from ocs_ci.ocs import machine
-from ocs_ci.ocs import constants
-from ocs_ci.ocs import ocp
-from ocs_ci.ocs import node
+    tier4, ManageTest, aws_platform_required, ignore_leftovers, ipi_deployment_required
+)
+from ocs_ci.ocs import (
+    machine, constants, ocp, node
+)
 from tests.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
 
 
 @tier4
-@tier4b
+@tier4a
 @ignore_leftovers
 @aws_platform_required
 @ipi_deployment_required
