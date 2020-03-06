@@ -298,3 +298,90 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
                 item for item in crush_rule['steps'] if item.get('type') == 'zone'
             ], f"{crush_rule['rule_name']} is not with type as zone"
         log.info("Verified - pool crush rule is with type: zone")
+
+
+def add_capacity(osd_size_capacity_requested):
+    """
+   Add storage capacity to the cluster
+   Args:
+       osd_size_capacity_requested(int): Requested osd size capacity
+
+   Returns:
+       new storage device set count (int) : Returns True if all OSDs are in Running state
+
+   Note:
+   "StoragedeviceSets->count" represents the set of 3 OSDs.
+   That is, if there are 3 OSDs in the system then count will be 1.
+   If there are 6 OSDs then count is 2 and so on.
+   By changing this value,we can add extra devices to the cluster.
+   For example, if we want to expand the cluster by 3 more osds in a cluster that already has 3 osds,
+   we can set count as 2. So, with each increase of count by 1,
+   we get 3 OSDs extra added to the cluster.
+   This is how we are going to 'add capacity' via automation.
+   As we know that OCS has 3 way replica. That is, same data is placed in 3 OSDs.
+   Because of this, the total usable capacity for apps from 3 OSDs
+   will be the size of one OSD (all osds are of same size).
+   If we want to add more capacity to the cluster then we need to add 3 OSDs of same size
+   as that of the original OSD. add_capacity needs to accept the 'capacity_to_add' as an argument.
+   From this we need to arrive at storagedeviceSets -> count and then
+   "Patch" this count to get the required capacity to add.
+   To do so, we use following formula:
+   storageDeviceSets->count = (capacity reqested / osd capacity ) + existing count storageDeviceSets
+   """
+
+    sc = get_storage_cluster()
+    old_storage_devices_sets_count = get_deviceset_count()
+    osd_size_existing = get_osd_size()
+    new_storage_devices_sets_count = int((osd_size_capacity_requested / osd_size_existing)
+                                         + old_storage_devices_sets_count)
+    # adding the storage capacity to the cluster
+    params = f"""[{{ "op": "replace", "path": "/spec/storageDeviceSets/0/count",
+                "value": {new_storage_devices_sets_count}}}]"""
+    sc.patch(
+        resource_name=sc.get()['items'][0]['metadata']['name'],
+        params=params.strip('\n'),
+        format_type='json'
+    )
+    return new_storage_devices_sets_count
+
+
+def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+  Get storage cluster name
+
+  Args:
+      namespace (str): Namespace of the resource
+
+  Returns:
+      storage cluster (obj) : Storage cluster object handler
+   """
+    sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
+    return sc_obj
+
+
+def get_osd_size():
+    """
+   Get osd size from Storage cluster
+
+   Returns:
+       int: osd size
+   """
+    sc = get_storage_cluster()
+    return int(
+        sc.get().get('items')[0].get('spec').get('storageDeviceSets')[0].get(
+            'dataPVCTemplate'
+        ).get('spec').get('resources').get('requests').get('storage')[:-2]
+    )
+
+
+def get_deviceset_count():
+    """
+   Get storageDeviceSets count  from storagecluster
+
+   Returns:
+       int: storageDeviceSets count
+   """
+    sc = get_storage_cluster()
+    return int(sc.get().get('items')[0].get('spec').get(
+        'storageDeviceSets')[0].get('count')
+    )
