@@ -12,7 +12,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import UnexpectedVolumeType
+from ocs_ci.ocs.exceptions import UnexpectedVolumeType, TimeoutExpiredError
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
@@ -130,30 +130,45 @@ def measure_operation(
         )
         logging_thread.start()
 
-        result = operation()
-        if measure_after:
-            start_time = time.time()
-        passed_time = time.time() - start_time
-        if minimal_time:
-            additional_time = minimal_time - passed_time
-            if additional_time > 0:
-                logger.info(f"Starting {additional_time}s sleep for the purposes of measurement.")
-                time.sleep(additional_time)
-        stop_time = time.time()
-        info['run'] = False
-        logging_thread.join()
-        results = {
-            'start': start_time,
-            'stop': stop_time,
-            'result': result,
-            'metadata': metadata,
-            'prometheus_alerts': alert_list,
-            'first_run': True,
-        }
-        logger.info(f"Results of measurement: {results}")
-        with open(result_file, 'w') as outfile:
-            logger.info(f"Dumping results of measurement into {result_file}")
-            json.dump(results, outfile)
+        try:
+            result = operation()
+        except Exception as ex:
+            # When the operation (which is being measured) fails, we need to
+            # make sure that alert harvesting thread ends and (at least)
+            # alerting data are saved into measurement dump file.
+            result = None
+            logger.error("exception raised during measured operation: %s", ex)
+            # Additional waiting for the measurement purposes is no longer
+            # necessary, and would only confuse anyone observing the failure.
+            minimal_time = 0
+            # And make sure the exception is properly processed by pytest (it
+            # would make the fixture fail).
+            raise(ex)
+        finally:
+            if measure_after:
+                start_time = time.time()
+            passed_time = time.time() - start_time
+            if minimal_time:
+                additional_time = minimal_time - passed_time
+                if additional_time > 0:
+                    logger.info(f"Starting {additional_time}s sleep for the purposes of measurement.")
+                    time.sleep(additional_time)
+            # Dumping measurement results into result file.
+            stop_time = time.time()
+            info['run'] = False
+            logging_thread.join()
+            results = {
+                'start': start_time,
+                'stop': stop_time,
+                'result': result,
+                'metadata': metadata,
+                'prometheus_alerts': alert_list,
+                'first_run': True,
+            }
+            logger.info(f"Results of measurement: {results}")
+            with open(result_file, 'w') as outfile:
+                logger.info(f"Dumping results of measurement into {result_file}")
+                json.dump(results, outfile)
     return results
 
 
@@ -662,9 +677,14 @@ def workload_fio_storageutilization(
     fio_objs = [fio_pvc_dict, fio_configmap_dict, fio_job_dict]
     fio_job_file = ObjectConfFile(fixture_name, fio_objs, project, tmp_path)
 
-    # how long do we let the job running while writing data to the volume
-    # TODO: increase this value or make it configurable
-    write_timeout = pvc_size * 30  # seconds
+    # How long do we let the job running while writing data to the volume?
+    # Based on min. fio write speed of the enviroment ...
+    fio_min_mbps = config.ENV_DATA['fio_storageutilization_min_mbps']
+    logger.info(
+        "Assuming %.2f MB/s is a minimal write speed of fio.", fio_min_mbps)
+    # ... we compute max. time we are going to wait for fio to write all data
+    min_time_to_write_gb = 1 / (fio_min_mbps / 2**10)
+    write_timeout = pvc_size * min_time_to_write_gb  # seconds
     logger.info((
         f"fixture will wait {write_timeout} seconds for the Job "
         f"to write {pvc_size} Gi data on OCS backed volume"))
@@ -683,11 +703,27 @@ def workload_fio_storageutilization(
         # finish instead, then ask for a name of the successful pod and use it
         # to get logs ...)
         ocp_pod = ocp.OCP(kind="Pod", namespace=project.namespace)
-        ocp_pod.wait_for_resource(
-            resource_count=1,
-            condition=constants.STATUS_COMPLETED,
-            timeout=write_timeout,
-            sleep=30)
+        try:
+            ocp_pod.wait_for_resource(
+                resource_count=1,
+                condition=constants.STATUS_COMPLETED,
+                timeout=write_timeout,
+                sleep=30)
+        except TimeoutExpiredError as ex:
+            # report some high level error as well
+            msg = (
+                f"Job fio failed to write {pvc_size} Gi data on OCS backed "
+                f"volume in expected time {write_timeout} seconds.")
+            logger.error(msg)
+            # TODO: if the job is still running, report more specific error
+            # message instead of the generic one which is pushed to ex. below
+            ex.message = msg + (
+                " If the fio pod were still runing"
+                " (see 'last actual status was' in some previous log message),"
+                " this is caused either by"
+                " severe product performance regression"
+                " or by a misconfiguration of the clusterr, ping infra team.")
+            raise(ex)
         pod_data = ocp_pod.get()
 
         # explicit list of assumptions, if these assumptions are not met, the
@@ -778,6 +814,28 @@ def workload_fio_storageutilization(
 
 
 @pytest.fixture
+def workload_storageutilization_05p_rbd(
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path):
+    target_percentage = 0.05
+    fixture_name = "workload_storageutilization_05p_rbd"
+    measured_op = workload_fio_storageutilization(
+        fixture_name,
+        target_percentage,
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path)
+    return measured_op
+
+
+@pytest.fixture
 def workload_storageutilization_50p_rbd(
         project,
         fio_pvc_dict,
@@ -834,6 +892,28 @@ def workload_storageutilization_95p_rbd(
         supported_configuration):
     target_percentage = 0.95
     fixture_name = "workload_storageutilization_95p_rbd"
+    measured_op = workload_fio_storageutilization(
+        fixture_name,
+        target_percentage,
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path)
+    return measured_op
+
+
+@pytest.fixture
+def workload_storageutilization_05p_cephfs(
+        project,
+        fio_pvc_dict,
+        fio_job_dict,
+        fio_configmap_dict,
+        measurement_dir,
+        tmp_path):
+    target_percentage = 0.05
+    fixture_name = "workload_storageutilization_05p_cephfs"
     measured_op = workload_fio_storageutilization(
         fixture_name,
         target_percentage,

@@ -401,7 +401,7 @@ def project_factory_fixture(request):
         for instance in instances:
             ocp.switch_to_default_rook_cluster_project()
             instance.delete(resource_name=instance.namespace)
-            instance.wait_for_delete(instance.namespace)
+            instance.wait_for_delete(instance.namespace, timeout=300)
 
     request.addfinalizer(finalizer)
     return factory
