@@ -12,6 +12,7 @@ ENV_DATA:
   master_memory: '16384'
   # Once we will have DC which can handle 64GB we should use those and update here
   compute_memory: '32768'
+  fio_storageutilization_min_mbps: 10.0
 REPORTING:
   polarion:
     deployment_id: 'OCS-1453'

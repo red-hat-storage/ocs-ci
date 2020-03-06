@@ -104,6 +104,12 @@ ENV_DATA:
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
   # Default RHCOS image to be used for VmWare deployment
   vm_template: 'rhcos-4.3.0-x86_64-vmware'
+  # minimal write speed of fio as used in workload_fio_storageutilization
+  # fixtures, which is used to compute timeout of the write job (so that
+  # when actual write speed of the operation is smaller than this value, the
+  # workload fixture will fail on a timeout)
+  # the default value used here is based on observations on aws clusters
+  fio_storageutilization_min_mbps: 30.0
 
 # This section is related to upgrade
 UPGRADE:

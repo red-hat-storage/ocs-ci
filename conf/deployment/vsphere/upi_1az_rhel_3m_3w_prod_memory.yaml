@@ -21,3 +21,4 @@ ENV_DATA:
   # RHEL nodes, so no need to have big number here.
   compute_memory: '16384'
   rhel_memory: '65536'
+  fio_storageutilization_min_mbps: 10.0
