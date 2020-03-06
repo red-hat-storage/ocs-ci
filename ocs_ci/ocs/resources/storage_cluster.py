@@ -307,7 +307,7 @@ def add_capacity(osd_size_capacity_requested):
        osd_size_capacity_requested(int): Requested osd size capacity
 
    Returns:
-       boolean : Returns True if all OSDs are in Running state
+       new storage device set count (int) : Returns True if all OSDs are in Running state
 
    Note:
    "StoragedeviceSets->count" represents the set of 3 OSDs.
@@ -342,16 +342,7 @@ def add_capacity(osd_size_capacity_requested):
         params=params.strip('\n'),
         format_type='json'
     )
-    pod = OCP(
-        kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
-    )
-    pod.wait_for_resource(
-        timeout=300,
-        condition=constants.STATUS_RUNNING,
-        selector='app=rook-ceph-osd',
-        resource_count=new_storage_devices_sets_count * 3
-    )
-    return True
+    return new_storage_devices_sets_count
 
 
 def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):

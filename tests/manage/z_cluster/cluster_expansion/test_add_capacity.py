@@ -1,6 +1,8 @@
-
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import polarion_id
 from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier1
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility.utils import ceph_health_check
 
@@ -20,5 +22,14 @@ class TestAddCapacity(ManageTest):
 
         osd_size = storage_cluster.get_osd_size()
         result = storage_cluster.add_capacity(osd_size)
+        pod = OCP(
+            kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
+        )
+        pod.wait_for_resource(
+            timeout=300,
+            condition=constants.STATUS_RUNNING,
+            selector='app=rook-ceph-osd',
+            resource_count=result * 3
+        )
         ceph_health = ceph_health_check()
-        assert result and ceph_health, "Test Failed, new pods failed reaching running state"
+        assert ceph_health, "Test Failed, new pods failed reaching running state"
