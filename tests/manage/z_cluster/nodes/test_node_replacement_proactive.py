@@ -3,12 +3,9 @@ import re
 
 import pytest
 import random
-
 from tests.helpers import get_worker_nodes
-
 from ocs_ci.framework.pytest_customization.marks import tier4a
 from ocs_ci.ocs.resources import pod
-
 from ocs_ci.framework.testlib import (
     tier4, ManageTest, aws_platform_required, ignore_leftovers, ipi_deployment_required
 )
@@ -30,7 +27,6 @@ class TestNodeReplacement(ManageTest):
     Knip-894 Node replacement - AWS-IPI-Proactive
 
     """
-
     @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
@@ -67,10 +63,12 @@ class TestNodeReplacement(ManageTest):
 
         # Unscheduling node
         node.unschedule_nodes([osd_node_name])
+        # Draining Node
+        node.drain_nodes([osd_node_name])
         log.info("Getting machine name from specified node name")
         machine_name = machine.get_machine_from_node_name(osd_node_name)
         log.info(f"Node {osd_node_name} associated machine is {machine_name}")
-        log.info(f"Deleting machine {machine_name}")
+        log.info(f"Deleting machine {machine_name} and waiting for new machine to come up")
         machine.delete_machine_and_check_state_of_new_spinned_machine(machine_name)
         new_machine_list = machine.get_machines()
         for machines in new_machine_list:
@@ -80,7 +78,7 @@ class TestNodeReplacement(ManageTest):
             if re.match(machines.name[:-6], machine_name):
                 new_machine_name = machines.name
         machineset_name = machine.get_machineset_from_machine_name(new_machine_name)
-        log.info("Wating for new worker node to be in ready state")
+        log.info("Waiting for new worker node to be in ready state")
         machine.wait_for_new_node_to_be_ready(machineset_name)
         new_node_obj = node.get_node_from_machine_name(new_machine_name)
         log.info("Adding ocs label to newly created worker node")
