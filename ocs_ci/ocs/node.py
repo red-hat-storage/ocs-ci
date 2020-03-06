@@ -234,7 +234,7 @@ def add_new_node_and_label_it(machineset_name):
 
     Args:
         machineset_name (str): Name of the machine set
-
+    eg: add_new_node_and_label_it("new-tdesala-zlqzn-worker-us-east-2a")
     """
     # Get the initial nodes list
     initial_nodes = tests.helpers.get_worker_nodes()
@@ -242,12 +242,16 @@ def add_new_node_and_label_it(machineset_name):
 
     # get machineset replica count
     machineset_replica_count = machine.get_replica_count(machineset_name)
+    log.info(
+        f"{machineset_name} has replica count: {machineset_replica_count}"
+    )
 
     # Increase its replica count
+    log.info("Increasing the replica count by 1")
     machine.add_node(machineset_name, count=machineset_replica_count + 1)
     log.info(
-        f"Increased {machineset_name} count "
-        f"by {machineset_replica_count + 1}"
+        f"{machineset_name} now has replica "
+        f"count: {machineset_replica_count + 1}"
     )
 
     # wait for the new node to come to ready state
