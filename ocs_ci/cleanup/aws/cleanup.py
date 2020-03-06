@@ -4,6 +4,7 @@ import logging
 import datetime
 import threading
 import os
+import re
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import CLEANUP_YAML, TEMPLATE_CLEANUP_DIR
@@ -81,16 +82,27 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
             clusters_to_delete.append(cluster_name)
         for instance in vpc_instances:
             allowed_running_time = time_to_delete
+            do_not_delete = False
             if instance.state["Name"] == "running":
                 for prefix, hours in prefixes_hours_to_spare.items():
-                    if cluster_name.startswith(prefix):
-                        allowed_running_time = int(hours) * 60 * 60
+                    # case insensitive 'startswith'
+                    if bool(re.match(prefix, cluster_name, re.I)):
+                        if hours == 'never':
+                            do_not_delete = True
+                        else:
+                            allowed_running_time = int(hours) * 60 * 60
                         break
-                launch_time = instance.launch_time
-                current_time = datetime.datetime.now(launch_time.tzinfo)
-                running_time = current_time - launch_time
-                if running_time.seconds > allowed_running_time:
-                    clusters_to_delete.append(cluster_name)
+                if do_not_delete:
+                    logger.info(
+                        "%s marked as 'do not delete' and will not be "
+                        "destroyed", cluster_name
+                    )
+                else:
+                    launch_time = instance.launch_time
+                    current_time = datetime.datetime.now(launch_time.tzinfo)
+                    running_time = current_time - launch_time
+                    if running_time.seconds > allowed_running_time:
+                        clusters_to_delete.append(cluster_name)
                 break
     return clusters_to_delete, cloudformation_vpcs
 
@@ -144,6 +156,7 @@ def aws_cleanup():
         '--prefix',
         action='append',
         required=False,
+        type=prefix_hour_mapping,
         help="""
             Additional prefix:hour combo to treat as a special rule.
             Clusters starting with this prefix will only be cleaned up if
@@ -163,7 +176,6 @@ def aws_cleanup():
             you know what you are doing.
             """
     )
-    logging.basicConfig(level=logging.DEBUG)
     args = parser.parse_args()
 
     if not args.force:
@@ -177,15 +189,13 @@ def aws_cleanup():
 
     prefixes_hours_to_spare = defaults.CLUSTER_PREFIXES_SPECIAL_RULES
 
-    for prefix in args.prefix:
-        _prefix, _hours = prefix.split(':')
-        if not _prefix or not _hours:
-            raise
-        logger.info(
-            "Adding special rule for prefix '%s' with hours %s",
-            _prefix, _hours
-        )
-        prefixes_hours_to_spare.update({_prefix: int(_hours)})
+    if args.prefix:
+        for prefix, hours in args.prefix:
+            logger.info(
+                "Adding special rule for prefix '%s' with hours %s",
+                prefix, hours
+            )
+            prefixes_hours_to_spare.update({prefix: hours})
 
     time_to_delete = args.hours[0][0]
     assert time_to_delete > defaults.MINIMUM_CLUSTER_RUNNING_TIME, (
@@ -201,6 +211,7 @@ def aws_cleanup():
     if not clusters_to_delete:
         logger.info("No clusters to delete")
     else:
+        logger.info("Deleting clusters: %s", clusters_to_delete)
         get_openshift_installer()
     procs = []
     for cluster in clusters_to_delete:
@@ -216,3 +227,33 @@ def aws_cleanup():
             "The following cloudformation VPCs were found: %s",
             cloudformation_vpcs
         )
+
+
+def prefix_hour_mapping(string):
+    """
+    Validate that the string provided to --prefix is properly formatted
+
+    Args:
+        string (str): input provided to --prefix
+
+    Raises:
+        argparse.ArgumentTypeError: if the provided string is not
+            correctly formatted
+
+    Returns:
+        str, str: prefix, hours
+    """
+    msg = (
+        f'{string} is not a properly formatted prefix:hour combination. '
+        f'See the --help for more information.'
+    )
+    try:
+        prefix, hours = string.split(':')
+        if not prefix or not hours:
+            raise argparse.ArgumentTypeError(msg)
+        # 'never' should be the only non-int value for hours
+        if hours != 'never':
+            int(hours)
+    except ValueError:
+        raise argparse.ArgumentTypeError(msg)
+    return prefix, hours
