@@ -315,10 +315,12 @@ class AWSNodes(NodesBase):
     def terminate_nodes(self, nodes, wait=True):
         """
         Terminate EC2 instances
+
         Args:
             nodes (list): The OCS objects of the nodes
             wait (bool): True for waiting the instances to terminate,
             False otherwise
+
         """
         instances = self.get_ec2_instances(nodes)
         assert instances, (

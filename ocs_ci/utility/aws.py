@@ -456,6 +456,7 @@ class AWS(object):
             instances (dict): A dictionary of instance IDs and names
             wait (bool): True in case wait for status is needed,
                 False otherwise
+
         """
         instance_ids, instance_names = zip(*instances.items())
         logger.info(f"Terminating instances {list(instances.values())}")
