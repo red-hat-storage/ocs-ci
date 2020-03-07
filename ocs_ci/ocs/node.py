@@ -424,7 +424,7 @@ def get_app_pod_running_nodes(pod_obj):
 
 
 def get_both_osd_and_app_pod_running_node(
-        osd_running_nodes, app_pod_running_nodes
+    osd_running_nodes, app_pod_running_nodes
 ):
     """
      Gets both osd and app pod running node names
