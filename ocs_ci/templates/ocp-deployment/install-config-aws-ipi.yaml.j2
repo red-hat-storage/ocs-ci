@@ -36,7 +36,7 @@ networking:
   serviceNetwork:
     - 172.30.0.0/16
 {% if fips %}
-fips: {{ fips | default('false') }}
+fips: {{ fips }}
 {% endif %}
 platform:
   aws:
