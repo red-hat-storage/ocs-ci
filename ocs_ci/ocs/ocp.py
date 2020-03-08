@@ -8,6 +8,7 @@ import shlex
 import tempfile
 import time
 import yaml
+import json
 
 from ocs_ci.ocs.constants import RSYNC_POD_YAML, STATUS_RUNNING
 from ocs_ci.ocs.exceptions import (
@@ -874,3 +875,105 @@ def verify_images_upgraded(old_images, object_data):
         f"All the images: {current_images} were successfully upgraded in: "
         f"{name}!"
     )
+
+
+def check_upgrade_completed(self, target_version):
+    """
+    Check if OCP upgrade process is completed:
+        checks if all ClusterOperator images updated
+
+    Args:
+        target_version (str): expected OCP client
+
+    Returns:
+        bool: True if success, False if failed
+
+    """
+    log.debug(f"self.get_current_oc_version: {self.get_current_oc_version()}")
+    log.debug(f"target_version=: {target_version}")
+    log.info(f"current version: {self.get_current_oc_version()}")
+    cur_version = self.get_current_oc_version()
+    if cur_version == target_version or target_version.startswith(cur_version):
+        log.info(f"cluster operator upgrade to build {target_version} completed")
+        return True
+
+    log.debug(f"upgrade not completed")
+    return False
+
+
+def upgrade_ocp(image_path, image):
+    """
+    upgrade OCP version
+
+    Args:
+        image (str): image to be installed
+        image_path (str): path to image
+
+    """
+    ocp_o = OCP()
+    ocp_o.exec_oc_cmd(
+        f"adm upgrade --to-image={image_path}:{image} "
+        f"--allow-explicit-upgrade --force "
+    )
+    log.info(f"Upgrading OCP to version: {image}")
+
+
+def get_current_oc_version():
+    """
+    Gets Current OCP client version
+
+    Returns:
+        str: current COP client version
+
+    """
+    ocp_o = OCP()
+    oc_json = ocp_o.exec_oc_cmd('version -o json', out_yaml_format=False)
+    log.debug(f"oc_json=: {oc_json}")
+    oc_dict = json.loads(oc_json)
+    log.debug(f"oc_dict=: {oc_dict}")
+
+    return oc_dict.get("openshiftVersion")
+
+
+def get_cluster_operator_version(cluster_operator_name):
+    """
+    Get image version of selected cluster operator
+
+    Args:
+        cluster_operator_name (str): ClusterOperator name
+
+    Returns:
+        str: cluster operator version: ClusterOperator image version
+
+    """
+    ocp_obj = OCP(kind='ClusterOperator')
+    operator_info = ocp_obj.get(cluster_operator_name)
+    log.debug(f"operator info: {operator_info}")
+    operator_status = operator_info.get('status')
+    version = operator_status.get('versions')[0]['version']
+    version = version.rstrip('_openshift')
+
+    return version
+
+
+def get_all_cluster_operators():
+    """
+    Get all ClusterOperators names in OCP
+
+    Returns:
+        list: cluster-operator names
+
+    """
+    ocp_obj = OCP(kind='ClusterOperator')
+    operator_info = ocp_obj.get("-o name", out_yaml_format=False, all_namespaces=True)
+    operators_full_names = str(operator_info).split()
+    operator_names = list()
+    for name in operators_full_names:
+        log.debug(f"name: {name}")
+        new_name = name.lstrip('clusteroperator.config.openshift.io').lstrip('/')
+        log.debug(f"new_name: {new_name}")
+        operator_names.append(new_name)
+
+    log.info(f"ClusterOperators full list: {operator_names}")
+
+    return operator_names
