@@ -1,15 +1,14 @@
 import logging
 import json
 
-from ocs_ci.framework import Config
 from ocs_ci.ocs import ocp
+from ocs_ci.framework import config
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import CephHealthException
 
 logger = logging.getLogger(__name__)
-
 # TODO: add image type validation (ga to ga , nightly to nightly, newer than current etc.)
 
 
@@ -30,7 +29,7 @@ class TestUpgradeOCP(ManageTest):
         Tests OCS stability when upgrading OCP
 
         """
-        config = Config()
+
         ceph_cluster = CephCluster()
         ceph_cluster.enable_health_monitor()
 
@@ -78,11 +77,8 @@ class TestUpgradeOCP(ManageTest):
         operators_full_names = str(operator_info).split()
         operator_names = list()
         for name in operators_full_names:
-            splitted = name.split('/')
-            for part in splitted:
-                if part == 'clusteroperator.config.openshift.io':
-                    splitted.remove(part)
-            operator_names.append(splitted[0])
+            new_name = name.lstrip('clusteroperator.config.openshift.io/')
+            operator_names.append(new_name)
 
         logger.info(f"ClusterOperators full list: {operator_names}")
         return operator_names
@@ -103,10 +99,9 @@ class TestUpgradeOCP(ManageTest):
         operator_status = operator_info.get('status')
 
         version = operator_status.get('versions')[0]['version']
-        if version.endswith('_openshift'):
-            return version[:-10]
-        else:
-            return version
+        version = version.rstrip('_openshift')
+
+        return version
 
     def get_current_oc_version(self):
         """
@@ -157,7 +152,7 @@ class TestUpgradeOCP(ManageTest):
         logger.info(f"current version: {self.get_current_oc_version()}")
         cur_version = self.get_current_oc_version()
         if cur_version == target_version or target_version.startswith(cur_version):
-            logger.info(f" cluster operator upgrade to build {target_version} completed")
+            logger.info(f"cluster operator upgrade to build {target_version} completed")
             return True
 
         logger.debug(f"upgrade not completed")

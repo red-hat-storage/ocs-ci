@@ -1,0 +1,5 @@
+---
+# Use this config for upgrading of OCP 4.3 cluster
+UPGRADE:
+  ocp_upgrade_path: "registry.svc.ci.openshift.org/ocp/release"
+  ocp_upgrade_version: ""

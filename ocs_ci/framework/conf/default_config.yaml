@@ -117,6 +117,4 @@ UPGRADE:
   # This default image for ocp upgrade based on GA build
   ocp_upgrade_version: "4.3.3-x86_64"
   ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
-  # This commented parameters above is for ocp upgrade based on nightly build
-  # ocp_upgrade_path: "registry.svc.ci.openshift.org/ocp/release"
-  # ocp_upgrade_image: ""
+
