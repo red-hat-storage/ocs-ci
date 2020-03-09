@@ -149,6 +149,18 @@ def test_upgrade():
             f"is not higher or equal to the version you currently running: "
             f"{version_before_upgrade}"
         )
+        operator_selector = get_selector_for_ocs_operator()
+        package_manifest = PackageManifest(
+            resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
+        )
+        channel = config.DEPLOYMENT.get('ocs_csv_channel')
+        csv_name_pre_upgrade = package_manifest.get_current_csv(channel)
+        log.info(f"CSV name before upgrade is: {csv_name_pre_upgrade}")
+        csv_pre_upgrade = CSV(
+            resource_name=csv_name_pre_upgrade,
+            namespace=namespace
+        )
+        pre_upgrade_images = get_images(csv_pre_upgrade.get())
         version_change = parsed_upgrade_version > parsed_version_before_upgrade
         if version_change:
             version_config_file = os.path.join(
@@ -176,17 +188,6 @@ def test_upgrade():
         image_for_upgrade = ':'.join([image_url, new_image_tag])
         log.info(f"Image: {image_for_upgrade} will be used for upgrade.")
         cs_data['spec']['image'] = image_for_upgrade
-        operator_selector = get_selector_for_ocs_operator()
-        package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
-        )
-        csv_name_pre_upgrade = package_manifest.get_current_csv()
-        log.info(f"CSV name before upgrade is: {csv_name_pre_upgrade}")
-        csv_pre_upgrade = CSV(
-            resource_name=csv_name_pre_upgrade,
-            namespace=namespace
-        )
-        pre_upgrade_images = get_images(csv_pre_upgrade.get())
 
         with NamedTemporaryFile() as cs_yaml:
             dump_data_to_temp_yaml(cs_data, cs_yaml.name)
@@ -204,7 +205,8 @@ def test_upgrade():
                 raise TimeoutException("No new CSV found after upgrade!")
             log.info(f"Attempt {attempt}/{attempts} to check CSV upgraded.")
             package_manifest.reload_data()
-            csv_name_post_upgrade = package_manifest.get_current_csv()
+            channel = config.DEPLOYMENT.get('ocs_csv_channel')
+            csv_name_post_upgrade = package_manifest.get_current_csv(channel)
             if csv_name_post_upgrade == csv_name_pre_upgrade:
                 log.info(f"CSV is still: {csv_name_post_upgrade}")
                 sleep(5)

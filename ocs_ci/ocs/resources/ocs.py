@@ -5,6 +5,7 @@ import logging
 import yaml
 import tempfile
 
+from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP, get_images
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.csv import CSV
@@ -166,7 +167,8 @@ def get_version_info(namespace=None):
     package_manifest = PackageManifest(
         resource_name=defaults.OCS_OPERATOR_NAME, selector=operator_selector,
     )
-    csv_name = package_manifest.get_current_csv()
+    channel = config.DEPLOYMENT.get('ocs_csv_channel')
+    csv_name = package_manifest.get_current_csv(channel)
     csv_pre = CSV(
         resource_name=csv_name,
         namespace=namespace
