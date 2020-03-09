@@ -414,12 +414,12 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     if len(r.stdout) > 0:
         log.debug(f"Command stdout: {r.stdout.decode()}")
     else:
-        log.debug(f"Command stdout is empty")
+        log.debug("Command stdout is empty")
     masked_stderr = mask_secrets(r.stderr.decode(), secrets)
     if len(r.stderr) > 0:
         log.warning(f"Command stderr: {masked_stderr}")
     else:
-        log.debug(f"Command stderr is empty")
+        log.debug("Command stderr is empty")
     log.debug(f"Command return code: {r.returncode}")
     if r.returncode and not ignore_error:
         raise CommandFailed(
