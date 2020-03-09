@@ -24,6 +24,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd, check_timeout_reached
 from ocs_ci.utility.utils import check_if_executable_in_path
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
@@ -493,6 +494,7 @@ def list_ceph_images(pool_name='rbd'):
     return ct_pod.exec_ceph_cmd(ceph_cmd=f"rbd ls {pool_name}", format='json')
 
 
+@retry(TypeError, tries=5, delay=2, backoff=1)
 def check_file_existence(pod_obj, file_path):
     """
     Check if file exists inside the pod
