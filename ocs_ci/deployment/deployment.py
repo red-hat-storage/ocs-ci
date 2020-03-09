@@ -20,6 +20,7 @@ from ocs_ci.ocs.monitoring import (
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods
 )
+from ocs_ci.ocs.node import get_typed_worker_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -36,6 +37,7 @@ from ocs_ci.ocs.utils import (
 )
 from ocs_ci.utility import templating
 from ocs_ci.utility.openshift_console import OpenshiftConsole
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
     get_latest_ds_olm_tag,
@@ -86,6 +88,7 @@ class Deployment(object):
             else:
                 try:
                     self.deploy_ocp(log_cli_level)
+                    self.post_ocp_deploy()
                 except Exception:
                     if config.REPORTING['gather_on_deploy_failure']:
                         collect_ocs_logs('deployment', ocs=False)
@@ -134,10 +137,33 @@ class Deployment(object):
         self.ocp_deployment = self.OCPDeployment()
         self.ocp_deployment.deploy_prereq()
         self.ocp_deployment.deploy(log_cli_level)
-        self.add_stage_cert()
         # logging the cluster UUID so that we can ask for it's telemetry data
         cluster_id = run_cmd("oc get clusterversion version -o jsonpath='{.spec.clusterID}'")
         logger.info(f"clusterID (UUID): {cluster_id}")
+
+    def post_ocp_deploy(self):
+        """
+        Function does post OCP deployment stuff we need to do.
+        """
+        # Workaround for #1777384 - enable container_use_cephfs on RHEL workers
+        # Ticket: RHSTOR-787, see more details in the issue: #1151
+        logger.info("Running WA for ticket: RHSTOR-787")
+        ocp_obj = ocp.OCP()
+        cmd = ['/usr/sbin/setsebool -P container_use_cephfs on']
+        workers = get_typed_worker_nodes(os_id="rhel")
+        for worker in workers:
+            cmd_list = cmd.copy()
+            node = worker.get().get('metadata').get('name')
+            logger.info(
+                f"{node} is a RHEL based worker - applying '{cmd_list}'"
+            )
+            # We saw few times there was an issue to spawn debug RHEL pod.
+            # Let's use retry decorator to make sure our CI is more stable.
+            retry(CommandFailed)(ocp_obj.exec_oc_debug_cmd)(
+                node=node, cmd_list=cmd_list
+            )
+        # end of workaround
+        self.add_stage_cert()
 
     def label_and_taint_nodes(self):
         """
