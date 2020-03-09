@@ -59,7 +59,8 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
     ocs_package_manifest = PackageManifest(
         resource_name=defaults.OCS_OPERATOR_NAME, selector=operator_selector,
     )
-    ocs_csv_name = ocs_package_manifest.get_current_csv()
+    channel = config.DEPLOYMENT.get('ocs_csv_channel')
+    ocs_csv_name = ocs_package_manifest.get_current_csv(channel=channel)
     ocs_csv = CSV(
         resource_name=ocs_csv_name, namespace=namespace
     )
