@@ -135,9 +135,8 @@ def aws_cleanup():
     )
     parser.add_argument(
         '--hours',
-        type=int,
-        nargs=1,
-        action='append',
+        type=hour_valid,
+        action='store',
         required=True,
         help="""
             Maximum running time of the cluster (in hours).
@@ -147,8 +146,7 @@ def aws_cleanup():
     )
     parser.add_argument(
         '--region',
-        nargs=1,
-        action='append',
+        action='store',
         required=False,
         help="The name of the AWS region to delete the resources from"
     )
@@ -161,8 +159,9 @@ def aws_cleanup():
             Additional prefix:hour combo to treat as a special rule.
             Clusters starting with this prefix will only be cleaned up if
             their runtime exceeds the provided hour(this takes precedence
-            over the value provided to --hours).
-            Example: --prefix foo:24 --prefix bar:48
+            over the value provided to --hours). Note: if you want to skip
+            cleanup of a cluster entirely you can use 'never' for the hour.
+            Example: --prefix foo:24 --prefix bar:48 --prefix foobar:never
             """
     )
     parser.add_argument(
@@ -197,12 +196,8 @@ def aws_cleanup():
             )
             prefixes_hours_to_spare.update({prefix: hours})
 
-    time_to_delete = args.hours[0][0]
-    assert time_to_delete > defaults.MINIMUM_CLUSTER_RUNNING_TIME, (
-        "Number of hours is lower than the required minimum. Exiting"
-    )
-    time_to_delete = time_to_delete * 60 * 60
-    region = defaults.AWS_REGION if not args.region else args.region[0][0]
+    time_to_delete = args.hours * 60 * 60
+    region = defaults.AWS_REGION if not args.region else args.region
     clusters_to_delete, cloudformation_vpcs = get_clusters_to_delete(
         time_to_delete=time_to_delete, region_name=region,
         prefixes_hours_to_spare=prefixes_hours_to_spare,
@@ -257,3 +252,35 @@ def prefix_hour_mapping(string):
     except ValueError:
         raise argparse.ArgumentTypeError(msg)
     return prefix, hours
+
+
+def hour_valid(string):
+    """
+    Validate that the hour value provided is an int and not lower than the
+        minimum allowed running time
+
+    Args:
+        string: input provided to --hours
+
+    Raises:
+        argparse.ArgumentTypeError: if the provided hours value is not an int
+            or lower than the minimum allowed running time
+
+    Returns:
+        int: valid hour value
+
+    """
+    try:
+        hours = int(string)
+        assert hours >= defaults.MINIMUM_CLUSTER_RUNNING_TIME
+    except ValueError:
+        msg = f'{string} is not an int, please provide an int value'
+        raise argparse.ArgumentTypeError(msg)
+    except AssertionError:
+        msg = (
+            f"Number of hours ({hours}) is lower than the required minimum "
+            f"({defaults.MINIMUM_CLUSTER_RUNNING_TIME})."
+        )
+        raise argparse.ArgumentTypeError(msg)
+
+    return hours
