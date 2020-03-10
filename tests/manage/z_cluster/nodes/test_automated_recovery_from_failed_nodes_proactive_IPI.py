@@ -84,7 +84,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 except ResourceWrongStatusException:
                     if 'rook-ceph-crashcollector' in pod_obj.name:
                         ocp_obj = ocp.OCP()
-                        name  = pod_obj.name[:-17]
+                        name = pod_obj.name[:-17]
                         command = f"delete deployment {name}"
                         ocp_obj.exec_oc_cmd(command=command)
                         log.info(f"Deleted deployment for pod {pod_obj.name}")
