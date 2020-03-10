@@ -283,6 +283,10 @@ class VSPHEREBASE(Deployment):
                 f"cluster {self.cluster}"
             )
 
+        # check whether folder exists in templates
+        if self.vsphere.is_folder_exists(pool, self.cluster, self.datacenter):
+            self.vsphere.destroy_folder(pool, self.cluster, self.datacenter)
+
 
 class VSPHEREUPI(VSPHEREBASE):
     """
