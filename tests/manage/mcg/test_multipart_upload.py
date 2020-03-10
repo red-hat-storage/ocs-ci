@@ -80,4 +80,3 @@ class TestS3MultipartUpload(ManageTest):
             original_object_path=f'{origin_dir}/{key}',
             result_object_path=f'{res_dir}/{key}', awscli_pod=awscli_pod
         ), 'Checksum comparision between original and result object failed'
-
