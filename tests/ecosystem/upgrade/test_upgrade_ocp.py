@@ -55,11 +55,3 @@ class TestUpgradeOCP(ManageTest):
                     logger.debug(f"sampler: {sampler}")
                     if sampler:
                         break
-
-
-
-
-
-
-
-
