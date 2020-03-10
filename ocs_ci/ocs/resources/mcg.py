@@ -84,6 +84,12 @@ class MCG(object):
             aws_secret_access_key=self.access_key
         )
 
+        self.s3_client = boto3.client(
+            's3', verify=False, endpoint_url=self.s3_endpoint,
+            aws_access_key_id=self.access_key_id,
+            aws_secret_access_key=self.access_key
+        )
+
         if config.ENV_DATA['platform'].lower() == 'aws':
             (
                 self.cred_req_obj,
@@ -618,3 +624,86 @@ class MCG(object):
                 'The BackingStore did not reach the desired state within the time limit.'
             )
             assert False
+
+    def create_multipart_upload(self, bucketname, object_key):
+        """
+        Initiates Multipart Upload
+        Args:
+            bucketname (str): Name of the bucket on which multipart upload to be initiated on
+            object_key (str): Unique object Identifier
+
+        Returns:
+            str : Multipart Upload-ID
+
+        """
+        mpu = self.s3_client.create_multipart_upload(Bucket=bucketname, Key=object_key)
+        upload_id = mpu["UploadId"]
+        return upload_id
+
+    def list_multipart_upload(self, bucketname):
+        """
+        Lists the multipart upload details on a bucket
+        Args:
+            bucketname (str): Name of the bucket
+
+        Returns:
+            dict : Dictionary containing the multipart upload details
+
+        """
+        return self.s3_client.list_multipart_uploads(Bucket=bucketname)
+
+    def list_uploaded_parts(self, bucketname, object_key, upload_id):
+        """
+        Lists uploaded parts and their ETags
+        Args:
+            bucketname (str): Name of the bucket
+            object_key (str): Unique object Identifier
+            upload_id (str): Multipart Upload-ID
+
+        Returns:
+            dict : Dictionary containing the multipart upload details
+
+        """
+        return self.s3_client.list_parts(Bucket=bucketname, Key=object_key, UploadId=upload_id)
+
+    def complete_multipart_upload(self, bucketname, object_key, upload_id, parts):
+        """
+        Completes the Multipart Upload
+        Args:
+            bucketname (str): Name of the bucket
+            object_key (str): Unique object Identifier
+            upload_id (str): Multipart Upload-ID
+            parts (list): List containing the uploaded parts which includes ETag and part number
+
+        Returns:
+            dict : Dictionary containing the completed multipart upload details
+
+        """
+        result = self.s3_client.complete_multipart_upload(
+            Bucket=bucketname,
+            Key=object_key,
+            UploadId=upload_id,
+            MultipartUpload={"Parts": parts})
+        return result
+
+    def abort_multipart_upload(self, bucketname, object_key):
+        """
+        Abort all Multipart Uploads for this Bucket
+        Args:
+            bucketname (str): Name of the bucket
+            object_key (str): Unique object Identifier
+
+        Returns:
+            list : List of aborted upload ids
+
+        """
+        aborted = []
+        multipart_list = self.s3_client.list_multipart_uploads(Bucket=bucketname)
+        print("Aborting", len(multipart_list), "uploads")
+        if "Uploads" in multipart_list:
+            for i in multipart_list["Uploads"]:
+                upload_id = i["UploadId"]
+                aborted.append(
+                    self.s3_client.abort_multipart_upload(
+                        Bucket=bucketname, Key=object_key, UploadId=upload_id))
+        return aborted

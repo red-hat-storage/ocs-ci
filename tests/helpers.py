@@ -1511,6 +1511,38 @@ def craft_s3_command(mcg_obj, cmd):
     return f"{base_command}{cmd}{string_wrapper}"
 
 
+def craft_s3_api_command(mcg_obj, cmd):
+    """
+    Crafts the AWS cli S3 API level commands including the
+    login credentials and command to be ran
+
+    Args:
+        mcg_obj: An MCG object containing the MCG S3 connection credentials
+        cmd: The AWSCLI API command to run
+
+    Returns:
+        str: The crafted command, ready to be executed on the pod
+
+    """
+    if mcg_obj:
+        base_command = (
+            f"sh -c \"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
+            f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
+            f"AWS_DEFAULT_REGION={mcg_obj.region} "
+            f"aws s3api "
+            f"--endpoint={mcg_obj.s3_endpoint} "
+            f"--no-verify-ssl "
+        )
+        string_wrapper = "\""
+    else:
+        base_command = (
+            f"aws s3api --no-verify-ssl --no-sign-request "
+        )
+        string_wrapper = ''
+
+    return f"{base_command}{cmd}{string_wrapper}"
+
+
 def wait_for_resource_count_change(
     func_to_use, previous_num, namespace, change_type='increase',
     min_difference=1, timeout=20, interval=2, **func_kwargs
