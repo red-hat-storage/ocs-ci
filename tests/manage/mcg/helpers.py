@@ -123,10 +123,11 @@ def write_individual_s3_objects(mcg_obj, awscli_pod, bucket_factory, downloaded_
 def upload_parts(mcg_obj, awscli_pod, bucketname, object_key, body_path, upload_id, uploaded_parts):
     """
     Uploads individual parts to a bucket
+
     Args:
         mcg_obj (obj): An MCG object containing the MCG S3 connection credentials
         awscli_pod (pod): A pod running the AWSCLI tools
-        bucketname: Name of the bucket to upload parts on
+        bucketname (str): Name of the bucket to upload parts on
         object_key (list): Unique object Identifier
         body_path (str): Path of the directory on the aws pod which contains the parts to be uploaded
         upload_id (str): Multipart Upload-ID
@@ -139,9 +140,12 @@ def upload_parts(mcg_obj, awscli_pod, bucketname, object_key, body_path, upload_
     parts = []
     secrets = [mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
     for count, part in enumerate(uploaded_parts, 1):
-        upload_cmd = f'upload-part --bucket {bucketname} --key {object_key}' \
-            f' --part-number {count} --body {body_path}/{part} ' \
-            f'--upload-id {upload_id}'
+        upload_cmd = (
+            f'upload-part --bucket {bucketname} --key {object_key}'
+            f' --part-number {count} --body {body_path}/{part}'
+            f' --upload-id {upload_id}'
+        )
+        # upload_cmd will return ETag, upload_id etc which is then split to get just the ETag
         part = awscli_pod.exec_cmd_on_pod(
             command=craft_s3_api_command(mcg_obj, upload_cmd), out_yaml_format=False,
             secrets=secrets

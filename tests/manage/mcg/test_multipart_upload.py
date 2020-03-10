@@ -18,7 +18,7 @@ def setup(pod_obj, bucket_factory):
 
      Args:
         pod_obj (Pod): A pod running the AWS CLI tools
-        bucket_factory: bucket_factory: Calling this fixture creates a new bucket(s)
+        bucket_factory: Calling this fixture creates a new bucket(s)
 
     Returns:
         Tuple: Returns tuple containing the params used in this test case
@@ -62,6 +62,7 @@ class TestS3MultipartUpload(ManageTest):
         logger.info(f'Listing the Multipart Upload : {mcg_obj.list_multipart_upload(bucket)}')
 
         # Uploading individual parts to the Bucket
+        logger.info(f'Uploading individual parts to the bucket {bucket}')
         uploaded_parts = helpers.upload_parts(mcg_obj, awscli_pod, bucket, key, res_dir, upload_id, parts)
 
         # Listing the Uploaded parts

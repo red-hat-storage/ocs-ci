@@ -683,7 +683,8 @@ class MCG(object):
             Bucket=bucketname,
             Key=object_key,
             UploadId=upload_id,
-            MultipartUpload={"Parts": parts})
+            MultipartUpload={"Parts": parts}
+        )
         return result
 
     def abort_multipart_upload(self, bucketname, object_key):
@@ -697,13 +698,13 @@ class MCG(object):
             list : List of aborted upload ids
 
         """
-        aborted = []
         multipart_list = self.s3_client.list_multipart_uploads(Bucket=bucketname)
-        print("Aborting", len(multipart_list), "uploads")
+        logger.info(f"Aborting{len(multipart_list)} uploads")
         if "Uploads" in multipart_list:
-            for i in multipart_list["Uploads"]:
-                upload_id = i["UploadId"]
-                aborted.append(
-                    self.s3_client.abort_multipart_upload(
-                        Bucket=bucketname, Key=object_key, UploadId=upload_id))
-        return aborted
+            return [
+                self.s3_client.abort_multipart_upload(
+                    Bucket=bucketname, Key=object_key, UploadId=upload["UploadId"]
+                ) for upload in multipart_list["Uploads"]
+            ]
+        else:
+            return None

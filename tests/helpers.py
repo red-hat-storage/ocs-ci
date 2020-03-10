@@ -1513,8 +1513,7 @@ def craft_s3_command(mcg_obj, cmd):
 
 def craft_s3_api_command(mcg_obj, cmd):
     """
-    Crafts the AWS cli S3 API level commands including the
-    login credentials and command to be ran
+    Crafts the AWS cli S3 API level commands
 
     Args:
         mcg_obj: An MCG object containing the MCG S3 connection credentials
