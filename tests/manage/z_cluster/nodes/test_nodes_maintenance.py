@@ -65,7 +65,7 @@ class TestNodesMaintenance(ManageTest):
                 logger.info("Health check passed")
         except CephHealthException as e:
             # skip because ceph is not in good health
-            pytest.skip(e)
+            pytest.skip(str(e))
 
     @tier1
     @pytest.mark.parametrize(
