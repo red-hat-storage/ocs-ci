@@ -411,8 +411,9 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout=timeout,
         **kwargs
     )
+    masked_stdout = mask_secrets(r.stdout.decode(), secrets)
     if len(r.stdout) > 0:
-        log.debug(f"Command stdout: {r.stdout.decode()}")
+        log.debug(f"Command stdout: {masked_stdout}")
     else:
         log.debug("Command stdout is empty")
     masked_stderr = mask_secrets(r.stderr.decode(), secrets)
@@ -426,7 +427,7 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
             f"Error during execution of command: {masked_cmd}."
             f"\nError is {masked_stderr}"
         )
-    return mask_secrets(r.stdout.decode(), secrets)
+    return masked_stdout
 
 
 def run_mcg_cmd(cmd, namespace=None):
