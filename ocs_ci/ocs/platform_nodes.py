@@ -312,6 +312,23 @@ class AWSNodes(NodesBase):
         )
         self.aws.restart_ec2_instances(instances=instances, wait=wait, force=force)
 
+    def terminate_nodes(self, nodes, wait=True):
+        """
+        Terminate EC2 instances
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to terminate,
+            False otherwise
+
+        """
+        instances = self.get_ec2_instances(nodes)
+        assert instances, (
+            f"Failed to terminate the "
+            f"EC2 instances for nodes {[n.name for n in nodes]}"
+        )
+        self.aws.terminate_ec2_instances(instances=instances, wait=wait)
+
     def detach_volume(self, volume):
         """
         Detach a volume from an EC2 instance
