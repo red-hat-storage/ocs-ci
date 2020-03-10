@@ -62,6 +62,20 @@ def test_run_cmd_simple_positive(caplog):
     assert caplog.records[3].message == 'Command return code: 0'
 
 
+def test_run_cmd_simple_positive_with_secrets(caplog):
+    """
+    Check simple positive use case for run_cmd, including logging,
+    when secrets are specified.
+    """
+    caplog.set_level(logging.DEBUG)
+    secrets = ["8bca8d2e-1cd6", "683c08d7-bc07"]
+    cmd = "echo -n hello 8bca8d2e-1cd6"
+    assert utils.run_cmd(cmd, secrets=secrets) == "hello *****"
+    # check that logs were satinized as well
+    for secret in secrets:
+        assert secret not in caplog.text
+
+
 def test_run_cmd_simple_negative(caplog):
     """
     Check simple negative use case for run_cmd, including logging.
@@ -83,6 +97,25 @@ def test_run_cmd_simple_negative(caplog):
         "No such file or directory\n")
     assert caplog.records[3].levelname == 'DEBUG'
     assert caplog.records[3].message == 'Command return code: 2'
+
+
+def test_run_cmd_simple_negative_with_secrets(caplog):
+    """
+    Check simple negative use case for run_cmd, including logging,
+    when secrets are specified.
+    """
+    caplog.set_level(logging.DEBUG)
+    secrets = ["8bca8d2e-1cd6", "683c08d7-bc07"]
+    cmd = "ls /tmp/this/file/683c08d7-bc07/isnotthere"
+    with pytest.raises(CommandFailed) as excinfo:
+        utils.run_cmd(cmd, secrets=secrets)
+        assert "No such file or directory" in str(excinfo.value)
+        # check that exception was sanitized
+        for secret in secrets:
+            assert secret not in str(excinfo.value)
+    # check that logs were satinized as well
+    for secret in secrets:
+        assert secret not in caplog.text
 
 
 def test_run_cmd_simple_negative_ignoreerror(caplog):
