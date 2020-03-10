@@ -4,7 +4,7 @@ import random
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import aws_platform_required
-from ocs_ci.framework.testlib import ManageTest, tier4, tier4b, bugzilla
+from ocs_ci.framework.testlib import ManageTest, tier4, tier4b
 from ocs_ci.ocs.exceptions import CommandFailed
 from tests import sanity_helpers
 
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 @tier4b
 @pytest.mark.polarion_id("OCS-1287")
 @aws_platform_required
-@bugzilla('1754287')
+@pytest.mark.skip(reason="az blocking method need to be fixed")
 class TestAvailabilityZones(ManageTest):
     """
     test availability zone failure:
