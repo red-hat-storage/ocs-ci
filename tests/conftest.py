@@ -69,7 +69,9 @@ def pytest_collection_modifyitems(session, config, items):
         if skip_marker:
             skip_condition = skip_marker.args
             log.info(skip_condition)
-            if skipif_ocs_version(skip_condition):
+            # skip_confition will be a tuple
+            # and condition will be first element in the tuple
+            if skipif_ocs_version(skip_condition[0]):
                 log.info(
                     f'Test: {item} will be skipped due to {skip_condition}'
                 )
