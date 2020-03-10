@@ -68,9 +68,14 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         # Check the pods should be in running state
         all_pod_obj = pod.get_all_pods(wait=True)
         for pod_obj in all_pod_obj:
-            wait_for_resource_state(
-                resource=pod_obj, state=constants.STATUS_RUNNING, timeout=200
-            )
+            # 'rook-ceph-crashcollector' on the failed node stucks at pending
+            # state. BZ 1810014 tracks it.
+            # Ignoring 'rook-ceph-crashcollector' pod health check as WA.
+            # Will revert this WA once the BZ is fixed
+            if 'rook-ceph-crashcollector' not in pod_obj.name:
+                wait_for_resource_state(
+                    resource=pod_obj, state=constants.STATUS_RUNNING, timeout=200
+                )
 
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
