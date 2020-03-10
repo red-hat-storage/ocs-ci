@@ -87,7 +87,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                         name  = pod_obj.name[:-17]
                         command = f"delete deployment {name}"
                         ocp_obj.exec_oc_cmd(command=command)
-                        log.info("Deleted canary pod")
+                        log.info(f"Deleted deployment for pod {pod_obj.name}")
 
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
