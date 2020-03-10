@@ -12,6 +12,8 @@ from ocs_ci.ocs.resources import pod
 from tests.helpers import wait_for_resource_state
 from tests.sanity_helpers import Sanity
 from ocs_ci.ocs.node import add_new_node_and_label_it
+from ocs_ci.ocs import ocp
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
 
 log = logging.getLogger(__name__)
@@ -68,14 +70,24 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         # Check the pods should be in running state
         all_pod_obj = pod.get_all_pods(wait=True)
         for pod_obj in all_pod_obj:
-            # 'rook-ceph-crashcollector' on the failed node stucks at pending
-            # state. BZ 1810014 tracks it.
-            # Ignoring 'rook-ceph-crashcollector' pod health check as WA.
-            # Will revert this WA once the BZ is fixed
-            if 'rook-ceph-crashcollector' not in pod_obj.name:
-                wait_for_resource_state(
-                    resource=pod_obj, state=constants.STATUS_RUNNING, timeout=200
-                )
+            if '-1-deploy' and 'ocs-deviceset' not in pod_obj.name:
+                try:
+                    wait_for_resource_state(
+                        resource=pod_obj, state=constants.STATUS_RUNNING,
+                        timeout=200
+                    )
+                # 'rook-ceph-crashcollector' on the failed node stucks at pending
+                # state. BZ 1810014 tracks it.
+                # Ignoring 'rook-ceph-crashcollector' pod health check as WA and
+                # deleting its deployment so that the pod disappears
+                # Will revert this WA once the BZ is fixed
+                except ResourceWrongStatusException:
+                    if 'rook-ceph-crashcollector' in pod_obj.name:
+                        ocp_obj = ocp.OCP()
+                        name  = pod_obj.name[:-17]
+                        command = f"delete deployment {name}"
+                        ocp_obj.exec_oc_cmd(command=command)
+                        log.info("Deleted canary pod")
 
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
