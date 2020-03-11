@@ -3,15 +3,17 @@ import logging
 import re
 
 from subprocess import TimeoutExpired
+
+from ocs_ci.ocs.machine import get_machine_objs
+
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs import constants, exceptions
+from ocs_ci.ocs import constants, exceptions, ocp
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import machine
 import tests.helpers
-from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources import pod
 
 
@@ -449,13 +451,11 @@ def get_node_from_machine_name(machine_name):
     machine_name (str): Name of Machine
 
     Returns:
-        obj: Object of node
+        str: Name of node
     """
-    node_list = get_node_objs()
-    matching_annotation = "openshift-machine-api/" + machine_name
-    for node in node_list:
-        label_dict = node.get().get('metadata').get('annotations')
-        for annotation in label_dict.values():
-            if annotation == matching_annotation:
-                log.info(f"Found Worker node {node.name} Matching with annotation {matching_annotation}")
-                return node
+    machine_objs = get_machine_objs()
+    for machine_obj in machine_objs:
+        if machine_obj.name == machine_name:
+            return machine.get().get(
+                'status'
+            ).get('addresses')[1].get('address')

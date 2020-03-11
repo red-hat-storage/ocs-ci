@@ -80,15 +80,15 @@ class TestNodeReplacement(ManageTest):
         machineset_name = machine.get_machineset_from_machine_name(new_machine_name)
         log.info("Waiting for new worker node to be in ready state")
         machine.wait_for_new_node_to_be_ready(machineset_name)
-        new_node_obj = node.get_node_from_machine_name(new_machine_name)
+        new_node_name = node.get_node_from_machine_name(new_machine_name)
         log.info("Adding ocs label to newly created worker node")
         node_obj = ocp.OCP(kind='node')
         node_obj.add_label(
-            resource_name=new_node_obj.name,
+            resource_name=new_node_name,
             label=constants.OPERATOR_NODE_LABEL
         )
         log.info(
-            f"Successfully labeled {new_node_obj.name} with OCS storage label"
+            f"Successfully labeled {new_node_name} with OCS storage label"
         )
         # Creating Resources
         log.info("Creating Resources using sanity helpers")
