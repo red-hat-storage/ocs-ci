@@ -13,7 +13,6 @@ from ocs_ci.ocs import machine
 import tests.helpers
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources import pod
-from subprocess import TimeoutExpired
 
 
 log = logging.getLogger(__name__)
