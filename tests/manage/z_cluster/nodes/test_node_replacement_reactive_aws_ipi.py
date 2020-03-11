@@ -14,6 +14,7 @@ from ocs_ci.ocs.node import (
     get_both_osd_and_app_pod_running_node, get_node_objs,
     node_network_failure)
 from tests import helpers
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
 log = logging.getLogger(__name__)
 
@@ -174,10 +175,24 @@ class TestNodeReplacement(ManageTest):
         )
         for pod_obj in all_pod_obj:
             if '-1-deploy' and 'ocs-deviceset' not in pod_obj.name:
-                helpers.wait_for_resource_state(
-                    resource=pod_obj, state=constants.STATUS_RUNNING,
-                    timeout=1800
-                )
+                try:
+                    helpers.wait_for_resource_state(
+                        resource=pod_obj, state=constants.STATUS_RUNNING,
+                        timeout=1800
+                    )
+                except ResourceWrongStatusException:
+                    # 'rook-ceph-crashcollector' on the failed node stucks at
+                    # pending state. BZ 1810014 tracks it.
+                    # Ignoring 'rook-ceph-crashcollector' pod health check as
+                    # WA and deleting its deployment so that the pod
+                    # disappears. Will revert this WA once the BZ is fixed
+                    if 'rook-ceph-crashcollector' in pod_obj.name:
+                        ocp_obj = ocp.OCP()
+                        name = pod_obj.name[:-17]
+                        command = f"delete deployment {name}"
+                        ocp_obj.exec_oc_cmd(command=command)
+                        log.info(f"Deleted deployment for pod {pod_obj.name}")
+
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
         # run IO and delete the resources
