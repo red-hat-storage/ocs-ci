@@ -300,7 +300,7 @@ def default_ceph_block_pool():
     return constants.DEFAULT_BLOCKPOOL
 
 
-def create_ceph_block_pool(pool_name=None):
+def create_ceph_block_pool(pool_name=None, failure_domain=None, verify=True):
     """
     Create a Ceph block pool
     ** This method should not be used anymore **
@@ -308,6 +308,9 @@ def create_ceph_block_pool(pool_name=None):
 
     Args:
         pool_name (str): The pool name to create
+        failure_domain (str): Failure domain name
+        verify (bool): True to verify the pool exists after creation,
+                       False otherwise
 
     Returns:
         OCS: An OCS instance for the Ceph block pool
@@ -319,13 +322,14 @@ def create_ceph_block_pool(pool_name=None):
         )
     )
     cbp_data['metadata']['namespace'] = defaults.ROOK_CLUSTER_NAMESPACE
-    cbp_data['spec']['failureDomain'] = get_failure_domin()
+    cbp_data['spec']['failureDomain'] = failure_domain or get_failure_domin()
     cbp_obj = create_resource(**cbp_data)
     cbp_obj.reload()
 
-    assert verify_block_pool_exists(cbp_obj.name), (
-        f"Block pool {cbp_obj.name} does not exist"
-    )
+    if verify:
+        assert verify_block_pool_exists(cbp_obj.name), (
+            f"Block pool {cbp_obj.name} does not exist"
+        )
     return cbp_obj
 
 
