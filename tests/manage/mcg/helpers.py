@@ -4,7 +4,7 @@ import boto3
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_rgw_pod
-from tests.helpers import logger, craft_s3_command
+from tests.helpers import logger, craft_s3_command, craft_s3_api_command
 
 
 def retrieve_test_objects_to_pod(podobj, target_dir):
@@ -118,3 +118,37 @@ def write_individual_s3_objects(mcg_obj, awscli_pod, bucket_factory, downloaded_
             command=craft_s3_command(mcg_obj, copycommand), out_yaml_format=False,
             secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
         )
+
+
+def upload_parts(mcg_obj, awscli_pod, bucketname, object_key, body_path, upload_id, uploaded_parts):
+    """
+    Uploads individual parts to a bucket
+
+    Args:
+        mcg_obj (obj): An MCG object containing the MCG S3 connection credentials
+        awscli_pod (pod): A pod running the AWSCLI tools
+        bucketname (str): Name of the bucket to upload parts on
+        object_key (list): Unique object Identifier
+        body_path (str): Path of the directory on the aws pod which contains the parts to be uploaded
+        upload_id (str): Multipart Upload-ID
+        uploaded_parts (list): list containing the name of the parts to be uploaded
+
+    Returns:
+        list: List containing the ETag of the parts
+
+    """
+    parts = []
+    secrets = [mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+    for count, part in enumerate(uploaded_parts, 1):
+        upload_cmd = (
+            f'upload-part --bucket {bucketname} --key {object_key}'
+            f' --part-number {count} --body {body_path}/{part}'
+            f' --upload-id {upload_id}'
+        )
+        # upload_cmd will return ETag, upload_id etc which is then split to get just the ETag
+        part = awscli_pod.exec_cmd_on_pod(
+            command=craft_s3_api_command(mcg_obj, upload_cmd), out_yaml_format=False,
+            secrets=secrets
+        ).split("\"")[-3].split("\\")[0]
+        parts.append({"PartNumber": count, "ETag": f'"{part}"'})
+    return parts
