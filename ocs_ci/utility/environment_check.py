@@ -95,7 +95,7 @@ def assign_get_values(
     items = [
         item for item in items if (
             (item.get('metadata').get('namespace') not in exclude_namespaces)
-            or (
+            and (
                 item.get('metadata').get('labels').get('app') not in (
                     exclude_labels
                 )
