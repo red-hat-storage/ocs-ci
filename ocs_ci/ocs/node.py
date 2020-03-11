@@ -456,6 +456,6 @@ def get_node_from_machine_name(machine_name):
     machine_objs = get_machine_objs()
     for machine_obj in machine_objs:
         if machine_obj.name == machine_name:
-            return machine.get().get(
+            return machine_obj.get().get(
                 'status'
             ).get('addresses')[1].get('address')
