@@ -29,8 +29,10 @@ def test_verify_new_cbp_creation_not_blocked_by_invalid_cbp(teardown_factory):
         f"present in pools list"
     )
 
+    log.info("Create valid ceph block pool")
     cbp_valid = helpers.create_ceph_block_pool(verify=False)
     teardown_factory(cbp_valid)
     assert helpers.verify_block_pool_exists(cbp_valid.name), (
         f"Ceph Block Pool {cbp_valid.name} is not created."
     )
+    log.info(f"Verified: {cbp_valid.name} is created")
