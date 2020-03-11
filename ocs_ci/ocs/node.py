@@ -12,6 +12,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import machine
 import tests.helpers
 from ocs_ci.ocs import ocp
+from ocs_ci.ocs.resources import pod
 
 
 log = logging.getLogger(__name__)
@@ -393,3 +394,49 @@ def node_network_failure(node_names, wait=True):
             node_names=node_names, status=constants.NODE_NOT_READY
         )
     return True
+
+
+def get_osd_running_nodes():
+    """
+    Gets the osd running node names
+
+    Returns:
+        list: OSD node names
+
+    """
+    return [
+        pod.get_pod_node(osd_node).name for osd_node in pod.get_osd_pods()
+    ]
+
+
+def get_app_pod_running_nodes(pod_obj):
+    """
+    Gets the app pod running node names
+
+    Args:
+        pod_obj (list): List of app pod objects
+
+    Returns:
+        list: App pod running node names
+
+    """
+    return [pod.get_pod_node(obj_pod).name for obj_pod in pod_obj]
+
+
+def get_both_osd_and_app_pod_running_node(
+    osd_running_nodes, app_pod_running_nodes
+):
+    """
+     Gets both osd and app pod running node names
+
+     Args:
+         osd_running_nodes(list): List of osd running node names
+         app_pod_running_nodes(list): List of app pod running node names
+
+     Returns:
+         list: Both OSD and app pod running node names
+
+     """
+    common_nodes = list(set(osd_running_nodes) & set(app_pod_running_nodes))
+    log.info(f"Common node is {common_nodes}")
+    return common_nodes
