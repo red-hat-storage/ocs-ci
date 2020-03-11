@@ -13,10 +13,7 @@ from ocs_ci.ocs import machine
 import tests.helpers
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources import pod
-<<<<<<< HEAD
-=======
 from subprocess import TimeoutExpired
->>>>>>> Node replacement - Reactive(IPI)
 
 
 log = logging.getLogger(__name__)
