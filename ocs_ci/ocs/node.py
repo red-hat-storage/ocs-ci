@@ -420,7 +420,7 @@ def get_app_pod_running_nodes(pod_obj):
         list: App pod running node names
 
     """
-    return [pod.get_pod_node(node).name for node in pod_obj]
+    return [pod.get_pod_node(obj_pod).name for obj_pod in pod_obj]
 
 
 def get_both_osd_and_app_pod_running_node(
