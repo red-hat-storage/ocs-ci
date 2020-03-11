@@ -138,6 +138,10 @@ class ResourceNotFoundError(Exception):
     pass
 
 
+class ChannelNotFound(Exception):
+    pass
+
+
 class UnsupportedPlatformError(Exception):
     pass
 
