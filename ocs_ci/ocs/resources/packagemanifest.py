@@ -4,7 +4,9 @@ Package manifest related functionalities
 import logging
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
+from ocs_ci.ocs.exceptions import (
+    CommandFailed, ChannelNotFound, ResourceNotFoundError
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.utility.retry import retry
@@ -125,13 +127,20 @@ class PackageManifest(OCP):
         Raises:
             ResourceNameNotSpecifiedException: in case the name is not
                 specified.
+            ChannelNotFound: in case the required channel doesn't exist.
 
         """
         self.check_name_is_specified()
         channel = channel if channel else self.get_default_channel()
-        for _channel in self.get_channels():
+        channels = self.get_channels()
+        for _channel in channels:
             if _channel['name'] == channel:
                 return _channel['currentCSV']
+        channel_names = [_channel['name'] for _channel in channels]
+        raise ChannelNotFound(
+            f"Channel: {channel} not found in available channels: "
+            f"{channel_names}"
+        )
 
     def wait_for_resource(
         self, resource_name='', timeout=60, sleep=3, label=None, selector=None,
