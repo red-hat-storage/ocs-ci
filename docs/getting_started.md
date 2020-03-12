@@ -21,7 +21,7 @@ There are additional prerequisites if you plan to execute AWS UPI deployments
 
 1. Install the `jq` and `awscli` system packages
 
-#### AWS UPI with RHEL workers
+##### AWS UPI with RHEL workers
 Along with AWS UPI prerequisites we need following
 
 1. openshift-dev.pem needs to be availavle to ocs-ci
@@ -88,9 +88,22 @@ and place in the `data` directory at the root level of the project.
 If there is no `data` directory, create one.
 The name of the file should be `pull-secret`.
 
+##### Nightly Builds
+
 In addition you will need to add a registry auth to your pull-secret to
 support deploying CI / Nightly builds. Please follow the instructions
 [here](https://mojo.redhat.com/docs/DOC-1204026) to do so.
+
+##### Quay Private Repos
+
+To support pulling images from the new private repositories in quay, you will
+need to add yet another registry auth to the auths section of your pull-secret.
+Ask people on ocs-qe mailing list or chat room if you don't know where to find
+the TOKEN.
+
+```json
+{"quay.io/rhceph-dev": { "auth": "TOKEN"}}
+```
 
 ### SSH key
 
@@ -121,6 +134,28 @@ If you don't want to use the shared key, you can change this value to
 > If the public key does not exist, the deployment of this public key is skipped.
 
 How to connect to the node via SSH you can find [here](./debugging.md).
+
+### Authentication Config
+
+For some services we will require additional information in order to
+successfully authenticate. This is a simple yaml file that you will need to
+create manually.
+
+Create a file under `ocs-ci/data/` named `auth.yaml`.
+
+#### Quay
+
+To authenticate with quay you will need to have an access token. You can
+generate one yourself by following [the API doc](https://docs.quay.io/api/) or
+you may use the one QE has generated already. Ask people on ocs-qe mailing list
+or chat room if you don't know where to find the access token.
+
+To enable ocs-ci to use this token, add the following to your `auth.yaml`:
+
+```yaml
+quay:
+  access_token: 'YOUR_TOKEN'
+```
 
 ## Tests
 

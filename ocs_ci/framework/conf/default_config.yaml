@@ -42,12 +42,12 @@ DEPLOYMENT:
   installer_version: "4.3.0-0.nightly"
   force_download_installer: True
   force_download_client: True
+  default_latest_tag: 'latest-4.3'
   # You can overwrite csv channel version by following parameter
-  # ocs_csv_channel: "alpha"
+  ocs_csv_channel: "stable-4.3"
   # you can overwrite the image for ocs operator catalog source by following parameter:
   # ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:4.2-32.9b6c93e.master"
   default_ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:latest-4.3"
-  default_latest_tag: 'latest-4.3'
   ocs_operator_nodes_to_label: 3
   # This is described as a WA for minimal configuration 3/3 worker/master
   # nodes. See: https://github.com/openshift/ocs-operator
@@ -104,6 +104,12 @@ ENV_DATA:
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
   # Default RHCOS image to be used for VmWare deployment
   vm_template: 'rhcos-4.3.0-x86_64-vmware'
+  # minimal write speed of fio as used in workload_fio_storageutilization
+  # fixtures, which is used to compute timeout of the write job (so that
+  # when actual write speed of the operation is smaller than this value, the
+  # workload fixture will fail on a timeout)
+  # the default value used here is based on observations on aws clusters
+  fio_storageutilization_min_mbps: 30.0
 
 # This section is related to upgrade
 UPGRADE:

@@ -2,6 +2,7 @@ import copy
 import logging
 import re
 
+from subprocess import TimeoutExpired
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
@@ -11,6 +12,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import machine
 import tests.helpers
 from ocs_ci.ocs import ocp
+from ocs_ci.ocs.resources import pod
 
 
 log = logging.getLogger(__name__)
@@ -283,9 +285,9 @@ def get_node_logs(node_name):
     return node.exec_oc_debug_cmd(node_name, ["dmesg"])
 
 
-def get_node_resource_utilization(nodename=None, node_type='worker'):
+def get_node_resource_utilization_from_adm_top(nodename=None, node_type='worker'):
     """
-    Gets the node's cpu and memory utilization in percentage
+    Gets the node's cpu and memory utilization in percentage using adm top command.
 
     Args:
         nodename (str) : The node name
@@ -321,3 +323,120 @@ def get_node_resource_utilization(nodename=None, node_type='worker'):
                     'memory': int(memory_utilization)
                 }
     return utilization_dict
+
+
+def get_node_resource_utilization_from_oc_describe(nodename=None, node_type='worker'):
+    """
+    Gets the node's cpu and memory utilization in percentage using oc describe node
+
+    Args:
+        nodename (str) : The node name
+        node_type (str) : The node type (e.g. master, worker)
+
+    Returns:
+        dict : Node name and its cpu and memory utilization in
+               percentage
+
+    """
+
+    node_names = [nodename] if nodename else [
+        node.name for node in get_typed_nodes(node_type=node_type)
+    ]
+    obj = ocp.OCP()
+    utilization_dict = {}
+    for node in node_names:
+        output = obj.exec_oc_cmd(
+            command=f"describe node {node}", out_yaml_format=False
+        ).split("\n")
+        for line in output:
+            if 'cpu  ' in line:
+                cpu_data = line.split(' ')
+                cpu = re.findall(r'\d+', [i for i in cpu_data if i][2])
+            if 'memory  ' in line:
+                mem_data = line.split(' ')
+                mem = re.findall(r'\d+', [i for i in mem_data if i][2])
+        utilization_dict[node] = {
+            'cpu': int(cpu[0]),
+            'memory': int(mem[0])
+        }
+
+    return utilization_dict
+
+
+def node_network_failure(node_names, wait=True):
+    """
+    Induce node network failure
+    Bring node network interface down, making the node unresponsive
+
+    Args:
+        node_names (list): The names of the nodes
+        wait (bool): True in case wait for status is needed, False otherwise
+
+    Returns:
+        bool: True if node network fail is successful
+    """
+    if not isinstance(node_names, list):
+        node_names = [node_names]
+
+    ocp = OCP(kind='node')
+    fail_nw_cmd = "ifconfig $(route | grep default | awk '{print $(NF)}') down"
+
+    for node_name in node_names:
+        try:
+            ocp.exec_oc_debug_cmd(
+                node=node_name, cmd_list=[fail_nw_cmd], timeout=15
+            )
+        except TimeoutExpired:
+            pass
+
+    if wait:
+        wait_for_nodes_status(
+            node_names=node_names, status=constants.NODE_NOT_READY
+        )
+    return True
+
+
+def get_osd_running_nodes():
+    """
+    Gets the osd running node names
+
+    Returns:
+        list: OSD node names
+
+    """
+    return [
+        pod.get_pod_node(osd_node).name for osd_node in pod.get_osd_pods()
+    ]
+
+
+def get_app_pod_running_nodes(pod_obj):
+    """
+    Gets the app pod running node names
+
+    Args:
+        pod_obj (list): List of app pod objects
+
+    Returns:
+        list: App pod running node names
+
+    """
+    return [pod.get_pod_node(obj_pod).name for obj_pod in pod_obj]
+
+
+def get_both_osd_and_app_pod_running_node(
+    osd_running_nodes, app_pod_running_nodes
+):
+    """
+     Gets both osd and app pod running node names
+
+     Args:
+         osd_running_nodes(list): List of osd running node names
+         app_pod_running_nodes(list): List of app pod running node names
+
+     Returns:
+         list: Both OSD and app pod running node names
+
+     """
+    common_nodes = list(set(osd_running_nodes) & set(app_pod_running_nodes))
+    log.info(f"Common node is {common_nodes}")
+    return common_nodes

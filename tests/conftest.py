@@ -23,7 +23,7 @@ from ocs_ci.utility.environment_check import (
 )
 from ocs_ci.utility.utils import (
     get_openshift_client, ocsci_log_path, get_testrun_name,
-    ceph_health_check_base
+    ceph_health_check_base, skipif_ocs_version
 )
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
@@ -31,7 +31,6 @@ from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
-from ocs_ci.ocs.node import get_typed_worker_nodes
 
 
 log = logging.getLogger(__name__)
@@ -52,6 +51,31 @@ def pytest_logger_config(logger_config):
     logger_config.set_log_option_default('')
     logger_config.split_by_outcome()
     logger_config.set_formatter_class(OCSLogFormatter)
+
+
+def pytest_collection_modifyitems(session, config, items):
+    """
+    A pytest hook to filter out skipped tests satisfying
+    skipif_ocs_version
+
+    Args:
+        session: pytest session
+        config: pytest config object
+        items: list of collected tests
+
+    """
+    for item in items[:]:
+        skip_marker = item.get_closest_marker("skipif_ocs_version")
+        if skip_marker:
+            skip_condition = skip_marker.args
+            log.info(skip_condition)
+            # skip_confition will be a tuple
+            # and condition will be first element in the tuple
+            if skipif_ocs_version(skip_condition[0]):
+                log.info(
+                    f'Test: {item} will be skipped due to {skip_condition}'
+                )
+                items.remove(item)
 
 
 @pytest.fixture()
@@ -402,7 +426,7 @@ def project_factory_fixture(request):
         for instance in instances:
             ocp.switch_to_default_rook_cluster_project()
             instance.delete(resource_name=instance.namespace)
-            instance.wait_for_delete(instance.namespace)
+            instance.wait_for_delete(instance.namespace, timeout=300)
 
     request.addfinalizer(finalizer)
     return factory
@@ -782,6 +806,7 @@ def dc_pod_factory(
         size=None,
         custom_data=None,
         node_name=None,
+        node_selector=None,
         replica_count=1,
     ):
         """
@@ -796,6 +821,8 @@ def dc_pod_factory(
                 by using these data. Parameter `pvc` is not used but reference
                 is set if provided.
             node_name (str): The name of specific node to schedule the pod
+            node_selector (dict): dict of key-value pair to be used for nodeSelector field
+                eg: {'nodetype': 'app-pod'}
             replica_count (int): Replica count for deployment config
         """
         if custom_data:
@@ -807,7 +834,8 @@ def dc_pod_factory(
             dc_pod_obj = helpers.create_pod(
                 interface_type=interface, pvc_name=pvc.name, do_reload=False,
                 namespace=pvc.namespace, sa_name=sa_obj.name, dc_deployment=True,
-                replica_count=replica_count, node_name=node_name
+                replica_count=replica_count, node_name=node_name,
+                node_selector=node_selector
             )
         instances.append(dc_pod_obj)
         log.info(dc_pod_obj.name)
@@ -901,15 +929,6 @@ def cluster(request, log_cli_level):
     if deploy:
         # Deploy cluster
         deployer.deploy_cluster(log_cli_level)
-        # Workaround for #1777384 - enable container_use_cephfs on RHEL workers
-        ocp_obj = ocp.OCP()
-        cmd = ['/usr/sbin/setsebool -P container_use_cephfs on']
-        workers = get_typed_worker_nodes(os_id="rhel")
-        for worker in workers:
-            cmd_list = cmd.copy()
-            node = worker.get().get('metadata').get('name')
-            log.info(f"{node} is a RHEL based worker - applying '{cmd_list}'")
-            ocp_obj.exec_oc_debug_cmd(node=node, cmd_list=cmd_list)
 
 
 @pytest.fixture(scope='class')

@@ -2,7 +2,8 @@
 """
 Test cases in this file are demonstrating usage of workload storage utilization
 fixtures, and are not expected to be executed in any real test run (hence
-all tests are marked with ``libtest`` marker).
+all tests are marked with ``libtest`` marker - with exception of the most
+simple test case).
 
 You can execute test cases here to run the workflow implemented in the
 fixtures. Assuming that you are in root directory of ``ocs-ci`` repository and
@@ -42,6 +43,7 @@ from datetime import datetime
 
 import pytest
 
+from ocs_ci.framework.testlib import tier1
 from ocs_ci.utility.prometheus import PrometheusAPI
 
 
@@ -147,3 +149,48 @@ def test_workload_rbd_cephfs(
     """
     logger.info(workload_storageutilization_50p_rbd)
     logger.info(workload_storageutilization_50p_cephfs)
+
+
+@tier1
+@pytest.mark.polarion_id("OCS-2125")
+def test_workload_rbd_cephfs_minimal(
+    workload_storageutilization_05p_rbd,
+    workload_storageutilization_05p_cephfs
+):
+    """
+    Similar to test_workload_rbd_cephfs, but using only 5% of total OCS
+    capacity. This still test the workload, but it's bit faster and (hopefully)
+    without big impact on the cluster itself.
+
+    In this test we are only checking whether the storage utilization workload
+    failed or not. The main point of having this included in tier1 suite is to
+    see whether we are able to actually run the fio write workload without any
+    direct failure (fio job could fail to be scheduled, fail during writing or
+    timeout when write progress is too slow ...).
+
+    Please note that reaching 5% of total OCS capacity means that workload
+    fixtures specified above will try to write data based on current cluster
+    wide storage utilization to meet the specified target. If the current
+    cluster utilization is already above 5%, this will fail. This is targeted
+    to a fresh just installed CI cluster.
+    """
+    logger.info("checking fio report results as provided by workload fixtures")
+    msg = "workload results should be recorded and provided to the test"
+    assert workload_storageutilization_05p_rbd['result'] is not None, msg
+    assert workload_storageutilization_05p_cephfs['result'] is not None, msg
+
+    fio_reports = (
+        ('rbd', workload_storageutilization_05p_rbd['result']['fio']),
+        ('cephfs', workload_storageutilization_05p_cephfs['result']['fio']),
+    )
+    for vol_type, fio in fio_reports:
+        logger.info("starting to check fio run on %s volume", vol_type)
+        msg = "single fio job should be executed in each workload run"
+        assert len(fio['jobs']) == 1, msg
+        logger.info(
+            "fio (version %s) executed %s job on %s volume",
+            fio['fio version'],
+            fio['jobs'][0]['jobname'],
+            vol_type)
+        msg = f"no errors should be reported by fio writing on {vol_type} volume"
+        assert fio['jobs'][0]['error'] == 0, msg

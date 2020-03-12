@@ -76,8 +76,9 @@ def compare_dicts(before, after):
 
 def assign_get_values(
     env_status_dict, key, kind=None,
-    exclude_namespaces=(constants.MARKETPLACE_NAMESPACE,),
-    exclude_labels=(constants.must_gather_pod_label,)
+    exclude_namespaces=(
+        constants.MARKETPLACE_NAMESPACE, constants.MONITORING_NAMESPACE
+    ), exclude_labels=(constants.must_gather_pod_label,)
 ):
     """
     Assigning kind status into env_status_dict
