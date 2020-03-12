@@ -1774,3 +1774,25 @@ def get_cluster_name(cluster_path):
     with open(metadata_file) as f:
         metadata = json.load(f)
     return metadata["clusterName"]
+
+
+def skipif_ocs_version(expressions):
+    """
+    This function evaluates the condition for test skip
+    based on expression
+
+    Args:
+        expressions (str OR list): condition for which we need to check,
+        eg: A single expression string '>=4.2' OR
+            A list of expressions like ['<4.3', '>4.2'], ['<=4.3', '>=4.2']
+
+    Return:
+        'True' if test needs to be skipped else 'False'
+    """
+    skip_this = True
+    expr_list = [expressions] if isinstance(expressions, str) else expressions
+    for expr in expr_list:
+        comparision_str = config.ENV_DATA['ocs_version'] + expr
+        skip_this = skip_this and eval(comparision_str)
+    # skip_this will be either True or False after eval
+    return skip_this
