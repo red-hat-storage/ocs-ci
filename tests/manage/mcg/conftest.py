@@ -200,6 +200,7 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
         Calling this fixture creates a new Backing Store(s).
 
         Args:
+            cloud_uls_factory: Factory for underlying storage creation
             cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
     """
     created_backingstores = []
@@ -258,6 +259,8 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
                     backingstore_name = create_unique_resource_name(
                         resource_description='backingstore', resource_type=cloud.lower()
                     )
+                    # removing characters from name (pod name length bellow 64 characters issue)
+                    backingstore_name = backingstore_name[:-16]
                     created_backingstores.append(backingstore_name)
                     cmdMap[method.lower()][cloud.lower()](
                         backingstore_name, vol_num, size, storage_class
@@ -269,6 +272,8 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
                         backingstore_name = create_unique_resource_name(
                             resource_description='backingstore', resource_type=cloud.lower()
                         )
+                        # removing characters from name (pod name length bellow 64 characters issue)
+                        backingstore_name = backingstore_name[:-16]
                         created_backingstores.append(backingstore_name)
                         cmdMap[method.lower()][cloud.lower()](
                             cld_mgr, backingstore_name, uls_name, region

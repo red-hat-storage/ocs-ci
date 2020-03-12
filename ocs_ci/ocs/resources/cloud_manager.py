@@ -17,6 +17,9 @@ logger = logging.getLogger(name=__file__)
 
 
 class CloudManager(ABC):
+    """
+    Class containing all client types
+    """
     aws_client, google_client, azure_client, s3comp_client = (None,) * 4
 
     def __init__(self):
@@ -30,7 +33,7 @@ class CloudManager(ABC):
 
 class CloudClient(ABC):
     """
-    Base abstract class for Cloud based Underlying Storage
+    Base abstract class for Cloud based API calls
     """
     client = None
 
@@ -106,6 +109,11 @@ class S3Client(CloudClient):
     def internal_create_uls(self, name, region=None):
         """
         Creates the Underlying Storage using the S3 API
+        Args:
+           name (str): The Underlying Storage name to be created
+           region (str): The region to create the Underlying Storage, if none will create at
+           `us-east-1` IMPORTANT!!! note that `us-east-1` will cause an error if used since it is
+           the default region for aws
         """
         if region is None:
             self.client.create_bucket(Bucket=name)
@@ -120,6 +128,8 @@ class S3Client(CloudClient):
     def internal_delete_uls(self, name):
         """
         Deletes the Underlying Storage using the S3 API
+        Args:
+           name (str): The Underlying Storage name to be deleted
         """
         # Todo: rename client to resource (or find an alternative)
         self.client.meta.client.delete_bucket_policy(
@@ -131,14 +141,10 @@ class S3Client(CloudClient):
                 self.client.Bucket(name).delete()
                 break
             except ClientError:
-                logger.info(f'Deletion of ULS {name} failed. Retrying...')
+                logger.info(f'Deletion of Underlying Storage {name} failed. Retrying...')
                 sleep(3)
 
     def get_all_uls_names(self):
-        """
-        Returns:
-            set: A set of all bucket names
-        """
         return {bucket.name for bucket in self.client.buckets.all()}
 
     def verify_uls_exists(self, uls_name):
@@ -186,6 +192,9 @@ class GoogleClient(CloudClient):
     def internal_create_uls(self, name, region=None):
         """
         Creates the Underlying Storage using the Google API
+        Args:
+           name (str): The Underlying Storage name to be created
+           region (str): The region to create the Underlying Storage
         """
         if region is None:
             self.client.create_bucket(name)
@@ -195,6 +204,8 @@ class GoogleClient(CloudClient):
     def internal_delete_uls(self, name):
         """
         Deletes the Underlying Storage using the Google API
+        Args:
+           name (str): The Underlying Storage name to be deleted
         """
         for _ in range(10):
             try:
@@ -225,12 +236,17 @@ class AzureClient(CloudClient):
     def internal_create_uls(self, name, region=None):
         """
         Creates the Underlying Storage using the Azure API
+        Args:
+           name (str): The Underlying Storage name to be created
+           region (str): The region to create the Underlying Storage,
         """
         pass
 
     def internal_delete_uls(self, name):
         """
         Deletes the Underlying Storage using the Azure API
+        Args:
+           name (str): The Underlying Storage name to be deleted
         """
         pass
 
