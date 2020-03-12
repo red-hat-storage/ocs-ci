@@ -4,7 +4,7 @@ from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier1
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.ocs.cluster import CephCluster
 
 
 @ignore_leftovers
@@ -12,14 +12,13 @@ from ocs_ci.utility.utils import ceph_health_check
 @polarion_id('OCS-1191')
 class TestAddCapacity(ManageTest):
     """
-
     Automates adding variable capacity to the cluster while IOs running
     """
     def test_add_capacity(self):
         """
-       Test to add variable capacity to the OSD cluster while IOs running
-       """
-
+        Test to add variable capacity to the OSD cluster while IOs running
+        """
+        self.ceph_cluster = CephCluster()
         osd_size = storage_cluster.get_osd_size()
         result = storage_cluster.add_capacity(osd_size)
         pod = OCP(
@@ -31,5 +30,4 @@ class TestAddCapacity(ManageTest):
             selector='app=rook-ceph-osd',
             resource_count=result * 3
         )
-        ceph_health = ceph_health_check()
-        assert ceph_health, "Test Failed, new pods failed reaching running state"
+        self.ceph_cluster.cluster_health_check(timeout=1200)
