@@ -543,3 +543,47 @@ class VSPHERE(object):
             device.unitNumber for device in vm.config.hardware.device
             if hasattr(device.backing, 'fileName') and device.unitNumber != 0
         ]
+
+    def check_folder_exists(self, name, cluster, dc):
+        """
+        Checks whether folder exists in Templates
+
+        Args:
+            name (str): Folder name
+            cluster (str): Cluster name
+            dc (str): Datacenter name
+
+        Returns:
+            bool: True if folder exists, False otherwise
+
+        """
+        _rc = False
+        dc = self.get_dc(dc)
+
+        vms = dc.vmFolder.childEntity
+        for vm in vms:
+            if vm.name == name:
+                _rc = True
+        return _rc
+
+    def destroy_folder(self, name, cluster, dc):
+        """
+        Removes the folder from Templates
+
+        Args:
+            name (str): Folder name
+            cluster (str): Cluster name
+            dc (str): Datacenter name
+
+        """
+        if self.check_folder_exists(name, cluster, dc):
+            dc = self.get_dc(dc)
+            vms = dc.vmFolder.childEntity
+            for vm in vms:
+                if vm.name == name:
+                    for dvm in vm.childEntity:
+                        self.poweroff_vms([dvm])
+                    logger.info(f"Destroying folder {name} in templates")
+                    WaitForTask(vm.Destroy())
+        else:
+            logger.info(f"Folder {name} doesn't exist in templates")

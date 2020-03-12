@@ -283,6 +283,9 @@ class VSPHEREBASE(Deployment):
                 f"cluster {self.cluster}"
             )
 
+        # destroy the folder in templates
+        self.vsphere.destroy_folder(pool, self.cluster, self.datacenter)
+
 
 class VSPHEREUPI(VSPHEREBASE):
     """
