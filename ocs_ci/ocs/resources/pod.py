@@ -249,7 +249,7 @@ class Pod(OCS):
 
     def run_io(
         self, storage_type, size, io_direction='rw', rw_ratio=75,
-        jobs=1, runtime=60, depth=4, rate='16k', rate_process='poisson', fio_filename=None
+        jobs=1, runtime=60, depth=4, rate='1m', rate_process='poisson', fio_filename=None
     ):
         """
         Execute FIO on a pod
@@ -272,7 +272,7 @@ class Pod(OCS):
             jobs (int): Number of jobs to execute FIO
             runtime (int): Number of seconds IO should run for
             depth (int): IO depth
-            rate (str): rate of IO default 16k, e.g. 16k
+            rate (str): rate of IO default 1m, e.g. 16k
             rate_process (str): kind of rate process default poisson, e.g. poisson
             fio_filename(str): Name of fio file created on app pod's mount point
         """
