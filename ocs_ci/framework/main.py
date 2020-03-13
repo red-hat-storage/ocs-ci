@@ -52,19 +52,22 @@ def init_ocsci_conf(arguments=None):
     parser.add_argument('--ocs-registry-image')
     args, unknown = parser.parse_known_args(args=arguments)
     ocs_version = args.ocs_version
-    if args.ocs_registry_image:
-        ocs_version = utils.get_ocs_version_from_tag(args.ocs_registry_image)
-    if ocs_version:
-        version_config_file = os.path.join(
-            CONF_DIR, 'ocs_version', f'ocs-{ocs_version}.yaml'
-        )
-        args.ocsci_conf.insert(0, version_config_file)
     for config_file in args.ocsci_conf:
         with open(
             os.path.abspath(os.path.expanduser(config_file))
         ) as file_stream:
             custom_config_data = yaml.safe_load(file_stream)
             framework.config.update(custom_config_data)
+    ocs_registry_image = args.ocs_registry_image if (
+        args.ocs_registry_image
+    ) else framework.config.DEPLOYMENT.get('ocs_registry_image')
+    if ocs_registry_image:
+        ocs_version = utils.get_ocs_version_from_tag(args.ocs_registry_image)
+    if ocs_version:
+        version_config_file = os.path.join(
+            CONF_DIR, 'ocs_version', f'ocs-{ocs_version}.yaml'
+        )
+        args.ocsci_conf.insert(0, version_config_file)
     framework.config.RUN['run_id'] = int(time.time())
     bin_dir = framework.config.RUN.get('bin_dir')
     if bin_dir:

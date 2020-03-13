@@ -1823,5 +1823,8 @@ def get_ocs_version_from_tag(tag):
             # In case of the tag: 4.2-rc we are not able use semantic version.
             log.info("X.Y-RC build detected")
             return version.rstrip("-rc")
+        if version.startswith("latest-"):
+            log.info("latest-X.Y build detected")
+            return version.lstrip("latest-")
         log.warning("Tag not parsed correctly to the version: %s", ex)
         raise
