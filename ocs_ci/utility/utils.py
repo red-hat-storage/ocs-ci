@@ -1814,17 +1814,11 @@ def get_ocs_version_from_tag(tag):
 
     """
     try:
-        version = Version(tag.split(':')[1].lstrip("latest-"))
+        version = tag.split(':')[1].lstrip("latest-")
+        version = Version.coerce(version)
         return "{major}.{minor}".format(
             major=version.major, minor=version.minor
         )
-    except ValueError as ex:
-        if version.endswith("-rc"):
-            # In case of the tag: 4.2-rc we are not able use semantic version.
-            log.info("X.Y-RC build detected")
-            return version.rstrip("-rc")
-        if version.startswith("latest-"):
-            log.info("latest-X.Y build detected")
-            return version.lstrip("latest-")
-        log.warning("Tag not parsed correctly to the version: %s", ex)
+    except ValueError:
+        log.error(f"The version: {version} couldn't be parsed!")
         raise
