@@ -193,6 +193,7 @@ class TestNodeReplacement(ManageTest):
                         pod_name = pod_obj.name
                         deployment_name = '-'.join(pod_name.split("-")[:-2])
                         command = f"delete deployment {deployment_name}"
+                        ocp_obj.exec_oc_cmd(command=command)
                         log.info(f"Deleted deployment for pod {pod_obj.name}")
 
         # Check basic cluster functionality by creating resources
