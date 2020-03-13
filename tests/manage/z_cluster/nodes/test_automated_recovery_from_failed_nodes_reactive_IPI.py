@@ -5,13 +5,13 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required, ignore_leftovers)
 from ocs_ci.ocs import machine, constants, defaults, ocp
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.node import get_node_objs, add_new_node_and_label_it
 from tests.sanity_helpers import Sanity
 from tests.helpers import (
     get_worker_nodes, label_worker_node, remove_label_from_worker_node)
 from ocs_ci.ocs.node import (
     get_osd_running_nodes, get_app_pod_running_nodes,
-    get_both_osd_and_app_pod_running_node)
+    get_both_osd_and_app_pod_running_node, get_node_objs,
+    add_new_node_and_label_it)
 from tests import helpers
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
@@ -161,7 +161,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                     # WA and deleting its deployment so that the pod
                     # disappears. Will revert this WA once the BZ is fixed
                     if 'rook-ceph-crashcollector' in pod_obj.name:
-                        ocp_obj = ocp.OCP()
+                        ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
                         name = pod_obj.name[:-17]
                         command = f"delete deployment {name}"
                         ocp_obj.exec_oc_cmd(command=command)
