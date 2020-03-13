@@ -37,6 +37,22 @@ def check_config_requirements():
         raise MissingRequiredConfigKeyError(ex)
 
 
+def load_config(config_files):
+    """
+    This function load the config files in the order defined in config_files
+    list.
+
+    Args:
+        config_files (list): config file paths
+    """
+    for config_file in config_files:
+        with open(
+            os.path.abspath(os.path.expanduser(config_file))
+        ) as file_stream:
+            custom_config_data = yaml.safe_load(file_stream)
+            framework.config.update(custom_config_data)
+
+
 def init_ocsci_conf(arguments=None):
     """
     Update the config object with any files passed via the CLI
@@ -52,12 +68,7 @@ def init_ocsci_conf(arguments=None):
     parser.add_argument('--ocs-registry-image')
     args, unknown = parser.parse_known_args(args=arguments)
     ocs_version = args.ocs_version
-    for config_file in args.ocsci_conf:
-        with open(
-            os.path.abspath(os.path.expanduser(config_file))
-        ) as file_stream:
-            custom_config_data = yaml.safe_load(file_stream)
-            framework.config.update(custom_config_data)
+    load_config(args.ocsci_conf)
     ocs_registry_image = framework.config.DEPLOYMENT.get('ocs_registry_image')
     if args.ocs_registry_image:
         ocs_registry_image = args.ocs_registry_image
@@ -67,7 +78,7 @@ def init_ocsci_conf(arguments=None):
         version_config_file = os.path.join(
             CONF_DIR, 'ocs_version', f'ocs-{ocs_version}.yaml'
         )
-        args.ocsci_conf.insert(0, version_config_file)
+        load_config([version_config_file])
     framework.config.RUN['run_id'] = int(time.time())
     bin_dir = framework.config.RUN.get('bin_dir')
     if bin_dir:
