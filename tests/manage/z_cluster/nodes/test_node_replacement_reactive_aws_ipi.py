@@ -190,9 +190,9 @@ class TestNodeReplacement(ManageTest):
                         ocp_obj = ocp.OCP(
                             namespace=defaults.ROOK_CLUSTER_NAMESPACE
                         )
-                        name = pod_obj.name[:-17]
-                        command = f"delete deployment {name}"
-                        ocp_obj.exec_oc_cmd(command=command)
+                        pod_name = pod_obj.name
+                        deployment_name = '-'.join(pod_name.split("-")[:-2])
+                        command = f"delete deployment {deployment_name}"
                         log.info(f"Deleted deployment for pod {pod_obj.name}")
 
         # Check basic cluster functionality by creating resources
