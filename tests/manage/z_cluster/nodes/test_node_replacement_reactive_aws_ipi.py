@@ -187,7 +187,9 @@ class TestNodeReplacement(ManageTest):
                     # WA and deleting its deployment so that the pod
                     # disappears. Will revert this WA once the BZ is fixed
                     if 'rook-ceph-crashcollector' in pod_obj.name:
-                        ocp_obj = ocp.OCP()
+                        ocp_obj = ocp.OCP(
+                            namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                        )
                         name = pod_obj.name[:-17]
                         command = f"delete deployment {name}"
                         ocp_obj.exec_oc_cmd(command=command)
