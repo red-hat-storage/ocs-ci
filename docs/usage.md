@@ -50,9 +50,14 @@ to the pytest.
 ### Additional arguments:
 
 * `--cluster-name <name>` - name of cluster (always required for deployment) must be 5-17 characters long.
-* `--ocs-version` - version of OCS to be used (e.g. 4.2 or 4.3). If not specified, the default from ocs-ci will be used.
+* `--ocs-version` - version of OCS to be used (e.g. 4.2 or 4.3). If not
+    specified, the default from ocs-ci will be used. If --ocs-registry-image passed
+    then this parameter is ignored and the version is parsed from the registry image.
 * `--upgrade-ocs-version` - version of OCS to be used for upgrade (e.g. 4.2 or 4.3). If not specified, the default from ocs-ci will be used.
-* `--ocs-registry-image` - ocs registry image to be used for deployment (e.g quay.io/rhceph-dev/ocs-olm-operator:latest-4.2)
+* `--ocs-registry-image` - ocs registry image to be used for deployment
+    (e.g quay.io/rhceph-dev/ocs-olm-operator:latest-4.2). In case this parameter
+    is passed, the version is parsed from the registry image name and it overwrites
+    any version passed in via --ocs-version.
 * `--upgrade-ocs-registry-image` - ocs registry image to be used for upgrade (e.g quay.io/rhceph-dev/ocs-olm-operator:latest-4.3)
 * `--ocsci-conf` - with this configuration parameter you can overwrite the
     default OCS-CI config parameters defined in
