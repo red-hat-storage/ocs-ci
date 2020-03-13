@@ -58,11 +58,11 @@ def init_ocsci_conf(arguments=None):
         ) as file_stream:
             custom_config_data = yaml.safe_load(file_stream)
             framework.config.update(custom_config_data)
-    ocs_registry_image = args.ocs_registry_image or (
-        framework.config.DEPLOYMENT.get('ocs_registry_image')
-    )
+    ocs_registry_image = framework.config.DEPLOYMENT.get('ocs_registry_image')
+    if args.ocs_registry_image:
+        ocs_registry_image = args.ocs_registry_image
     if ocs_registry_image:
-        ocs_version = utils.get_ocs_version_from_tag(args.ocs_registry_image)
+        ocs_version = utils.get_ocs_version_from_tag(ocs_registry_image)
     if ocs_version:
         version_config_file = os.path.join(
             CONF_DIR, 'ocs_version', f'ocs-{ocs_version}.yaml'
