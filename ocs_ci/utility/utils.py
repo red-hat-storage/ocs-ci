@@ -26,13 +26,14 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedOSType,
 )
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants, defaults
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from ocs_ci.ocs import constants
 from ocs_ci.utility.retry import retry
 from bs4 import BeautifulSoup
 from paramiko import SSHClient, AutoAddPolicy
-from ocs_ci.ocs import defaults
+from semantic_version import Version
+
 
 log = logging.getLogger(__name__)
 
@@ -1796,3 +1797,31 @@ def skipif_ocs_version(expressions):
         skip_this = skip_this and eval(comparision_str)
     # skip_this will be either True or False after eval
     return skip_this
+
+
+def get_ocs_version_from_tag(tag):
+    """
+    Parse major.minor version from OCS image tag.
+
+    Args:
+        tag (str): version tag from the image
+
+    Returns
+        str: Version in x.y format
+
+    Raises:
+        ValueError: In case tag which we cannot parse passed.
+
+    """
+    try:
+        version = Version(tag.split(':')[1].lstrip("latest-"))
+        return "{major}.{minor}".format(
+            major=version.major, minor=version.minor
+        )
+    except ValueError as ex:
+        if version.endswith("-rc"):
+            # In case of the tag: 4.2-rc we are not able use semantic version.
+            log.info("X.Y-RC build detected")
+            return version.rstrip("-rc")
+        log.warning("Tag not parsed correctly to the version: %s", ex)
+        raise

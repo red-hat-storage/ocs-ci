@@ -49,10 +49,14 @@ def init_ocsci_conf(arguments=None):
     parser.add_argument(
         '--ocs-version', action='store', choices=['4.2', '4.3']
     )
+    parser.add_argument('--ocs-registry-image')
     args, unknown = parser.parse_known_args(args=arguments)
-    if args.ocs_version:
+    ocs_version = args.ocs_version
+    if args.ocs_registry_image:
+        ocs_version = utils.get_ocs_version_from_tag(args.ocs_registry_image)
+    if ocs_version:
         version_config_file = os.path.join(
-            CONF_DIR, 'ocs_version', f'ocs-{args.ocs_version}.yaml'
+            CONF_DIR, 'ocs_version', f'ocs-{ocs_version}.yaml'
         )
         args.ocsci_conf.insert(0, version_config_file)
     for config_file in args.ocsci_conf:
