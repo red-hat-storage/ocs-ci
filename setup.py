@@ -26,7 +26,7 @@ setup(
         'openshift',
         'boto3',
         'munch',
-        'pytest',
+        'pytest==5.3.5',
         'pytest-reportportal==1.0.5',
         'pytest-logger',
         'dataclasses',  # For compatibility with python 3.6
