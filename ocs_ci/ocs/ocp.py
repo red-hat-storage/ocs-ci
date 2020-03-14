@@ -710,6 +710,25 @@ class OCP(object):
                 f"{phase}"
             )
 
+    def is_exist(self, resource_name=""):
+        """
+        Check if resource exists.
+
+        Raises:
+            ResourceNameNotSpecifiedException: in case the name is not
+                specified.
+
+        Returns:
+            bool: True if the resource exists False otherwise.
+
+        """
+        self.check_name_is_specified(resource_name)
+        try:
+            self.get(resource_name)
+            return True
+        except CommandFailed:
+            return False
+
 
 def switch_to_project(project_name):
     """

@@ -232,53 +232,6 @@ class Deployment(object):
             )
             _ocp.exec_oc_cmd(command=taint_cmd)
 
-    def create_catalog_source(self):
-        """
-        This prepare catalog source manifest for deploy OCS operator from
-        quay registry.
-        """
-        logger.info("Adding CatalogSource")
-        image = config.DEPLOYMENT.get('ocs_registry_image', '')
-        upgrade = config.UPGRADE.get('upgrade', False)
-        image_and_tag = image.split(':')
-        image = image_and_tag[0]
-        image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
-        if not image_tag and config.REPORTING.get("us_ds") == 'DS':
-            image_tag = get_latest_ds_olm_tag(
-                upgrade, latest_tag=config.DEPLOYMENT.get(
-                    'default_latest_tag', 'latest'
-                )
-            )
-        catalog_source_data = templating.load_yaml(
-            constants.CATALOG_SOURCE_YAML
-        )
-        cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
-        # TODO: Once needed we can also set the channel for the subscription
-        # from config.DEPLOYMENT.get('ocs_csv_channel')
-        change_cs_condition = (
-            (image or image_tag) and catalog_source_data['kind'] == 'CatalogSource'
-            and catalog_source_data['metadata']['name'] == cs_name
-        )
-        if change_cs_condition:
-            default_image = config.DEPLOYMENT['default_ocs_registry_image']
-            image = image if image else default_image.split(':')[0]
-            catalog_source_data['spec']['image'] = (
-                f"{image}:{image_tag if image_tag else 'latest'}"
-            )
-        catalog_source_manifest = tempfile.NamedTemporaryFile(
-            mode='w+', prefix='catalog_source_manifest', delete=False
-        )
-        templating.dump_data_to_temp_yaml(
-            catalog_source_data, catalog_source_manifest.name
-        )
-        run_cmd(f"oc create -f {catalog_source_manifest.name}", timeout=2400)
-        catalog_source = CatalogSource(
-            resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
-        # Wait for catalog source is ready
-        catalog_source.wait_for_state("READY")
-
     def create_stage_operator_source(self):
         """
         This prepare operator source for OCS deployment from stage.
@@ -348,7 +301,7 @@ class Deployment(object):
             # deployment from stage
             self.create_stage_operator_source()
         else:
-            self.create_catalog_source()
+            create_catalog_source()
 
     def subscribe_ocs(self):
         """
@@ -643,3 +596,58 @@ class Deployment(object):
                 f"-p {patch} "
                 f"--request-timeout=120s"
             )
+
+
+def create_catalog_source(image=None, ignore_upgrade=False):
+    """
+    This prepare catalog source manifest for deploy OCS operator from
+    quay registry.
+
+    Args:
+        image (str): Image of ocs registry.
+        ignore_upgrade (bool): Ignore upgrade parameter.
+
+    """
+    logger.info("Adding CatalogSource")
+    if not image:
+        image = config.DEPLOYMENT.get('ocs_registry_image', '')
+    if not ignore_upgrade:
+        upgrade = config.UPGRADE.get('upgrade', False)
+    else:
+        upgrade = False
+    image_and_tag = image.split(':')
+    image = image_and_tag[0]
+    image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
+    if not image_tag and config.REPORTING.get("us_ds") == 'DS':
+        image_tag = get_latest_ds_olm_tag(
+            upgrade, latest_tag=config.DEPLOYMENT.get(
+                'default_latest_tag', 'latest'
+            )
+        )
+    catalog_source_data = templating.load_yaml(
+        constants.CATALOG_SOURCE_YAML
+    )
+    cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
+    change_cs_condition = (
+        (image or image_tag) and catalog_source_data['kind'] == 'CatalogSource'
+        and catalog_source_data['metadata']['name'] == cs_name
+    )
+    if change_cs_condition:
+        default_image = config.DEPLOYMENT['default_ocs_registry_image']
+        image = image if image else default_image.split(':')[0]
+        catalog_source_data['spec']['image'] = (
+            f"{image}:{image_tag if image_tag else 'latest'}"
+        )
+    catalog_source_manifest = tempfile.NamedTemporaryFile(
+        mode='w+', prefix='catalog_source_manifest', delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        catalog_source_data, catalog_source_manifest.name
+    )
+    run_cmd(f"oc create -f {catalog_source_manifest.name}", timeout=2400)
+    catalog_source = CatalogSource(
+        resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+    # Wait for catalog source is ready
+    catalog_source.wait_for_state("READY")

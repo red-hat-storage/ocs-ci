@@ -1799,22 +1799,22 @@ def skipif_ocs_version(expressions):
     return skip_this
 
 
-def get_ocs_version_from_tag(tag):
+def get_ocs_version_from_image(image):
     """
     Parse major.minor version from OCS image tag.
 
     Args:
-        tag (str): version tag from the image
+        image (str): image in format url:tag
 
     Returns
         str: Version in x.y format
 
     Raises:
-        ValueError: In case tag which we cannot parse passed.
+        ValueError: In case of the tag which we cannot parse to version.
 
     """
     try:
-        version = tag.split(':')[1].lstrip("latest-")
+        version = image.split(':')[1].lstrip("latest-")
         version = Version.coerce(version)
         return "{major}.{minor}".format(
             major=version.major, minor=version.minor
