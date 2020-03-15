@@ -434,6 +434,7 @@ OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
 OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
 MARKETPLACE_NAMESPACE = "openshift-marketplace"
+MONITORING_NAMESPACE = "openshift-monitoring"
 OPERATOR_INTERNAL_SELECTOR = "ocs-operator-internal=true"
 OPERATOR_CS_QUAY_API_QUERY = (
     'https://quay.io/api/v1/repository/rhceph-dev/ocs-olm-operator/'
@@ -487,10 +488,6 @@ INSTALLER_DEFAULT_DNS = "1.1.1.1"
 # Config related constants
 config_keys_patterns_to_censor = ['passw', 'token', 'secret']
 
-# repos
-OCP4_2_REPO = os.path.join(REPO_DIR, "ocp_4_2.repo")
-OCP4_3_REPO = os.path.join(REPO_DIR, "ocp_4_3.repo")
-
 # packages
 RHEL_POD_PACKAGES = ["openssh-clients", "openshift-ansible", "openshift-clients", "jq"]
 
@@ -538,13 +535,6 @@ SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scale
 # labels
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
-
-# Rep mapping
-REPO_MAPPING = {
-    '4.2.0': OCP4_2_REPO,
-    '4.3.0': OCP4_3_REPO,
-    '4.3.1': OCP4_3_REPO,
-}
 
 # Cluster name limits
 CLUSTER_NAME_MIN_CHARACTERS = 5

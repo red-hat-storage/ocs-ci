@@ -24,6 +24,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd, check_timeout_reached
 from ocs_ci.utility.utils import check_if_executable_in_path
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
@@ -493,6 +494,7 @@ def list_ceph_images(pool_name='rbd'):
     return ct_pod.exec_ceph_cmd(ceph_cmd=f"rbd ls {pool_name}", format='json')
 
 
+@retry(TypeError, tries=5, delay=2, backoff=1)
 def check_file_existence(pod_obj, file_path):
     """
     Check if file exists inside the pod
@@ -1176,3 +1178,21 @@ def get_noobaa_pods(noobaa_label=constants.NOOBAA_APP_LABEL, namespace=None):
     noobaa_pods = [Pod(**noobaa) for noobaa in noobaas]
 
     return noobaa_pods
+
+
+def wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj):
+    """
+    Wait for DC app pods to reach running state
+
+    Args:
+        dc_pod_obj (list): list of dc app pod objects
+
+    """
+    for pod_obj in dc_pod_obj:
+        name = pod_obj.get_labels().get('name')
+        dpod_list = get_all_pods(selector_label=f"name={name}", wait=True)
+        for dpod in dpod_list:
+            if '-1-deploy' not in dpod.name:
+                helpers.wait_for_resource_state(
+                    dpod, constants.STATUS_RUNNING, timeout=1200
+                )

@@ -9,9 +9,8 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import upload
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.utils import (
-    create_rhelpod, get_cluster_version,
+    create_rhelpod, get_ocp_repo
 )
-from semantic_version import Version
 
 
 logger = logging.getLogger(__name__)
@@ -64,17 +63,11 @@ class OCPINSTALLRHEL(object):
         )
         self.rhelpod = create_rhelpod(
             constants.DEFAULT_NAMESPACE,
-            self.pod_name
+            self.pod_name,
+            600
         )
 
-        # map the cluster version with constants.REPO_MAPPING
-        cluster_version = get_cluster_version()
-        version_obj = Version(cluster_version)
-        version = ".".join(map(
-            str,
-            [version_obj.major, version_obj.minor, version_obj.patch]
-        ))
-        self.ocp_repo = constants.REPO_MAPPING[version]
+        self.ocp_repo = get_ocp_repo()
 
         # Upload helper files to pod for OCP installation on RHEL
         self.upload_helpers(self.ocp_repo)

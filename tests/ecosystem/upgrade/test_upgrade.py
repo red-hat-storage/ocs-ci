@@ -10,9 +10,9 @@ from time import sleep
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import upgrade
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
-from ocs_ci.ocs.exceptions import CephHealthException, TimeoutException
+from ocs_ci.ocs.exceptions import TimeoutException
 from ocs_ci.ocs.node import get_typed_nodes
 from ocs_ci.ocs.ocp import get_images
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
@@ -132,105 +132,101 @@ def verify_image_versions(old_images, upgrade_version):
 @upgrade
 def test_upgrade():
     ceph_cluster = CephCluster()
-    ceph_cluster.enable_health_monitor()
-    namespace = config.ENV_DATA['cluster_namespace']
-    ocs_catalog = CatalogSource(
-        resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
-        namespace=constants.MARKETPLACE_NAMESPACE,
-    )
-    version_before_upgrade = config.ENV_DATA.get("ocs_version")
-    upgrade_version = config.UPGRADE.get(
-        "upgrade_ocs_version", version_before_upgrade
-    )
-    parsed_version_before_upgrade = parse_version(version_before_upgrade)
-    parsed_upgrade_version = parse_version(upgrade_version)
-    assert parsed_upgrade_version >= parsed_version_before_upgrade, (
-        f"Version you would like to upgrade to: {upgrade_version} "
-        f"is not higher or equal to the version you currently running: "
-        f"{version_before_upgrade}"
-    )
-    version_change = parsed_upgrade_version > parsed_version_before_upgrade
-    if version_change:
-        version_config_file = os.path.join(
-            constants.CONF_DIR, 'ocs_version', f'ocs-{upgrade_version}.yaml'
+    with CephHealthMonitor(ceph_cluster):
+        namespace = config.ENV_DATA['cluster_namespace']
+        ocs_catalog = CatalogSource(
+            resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+            namespace=constants.MARKETPLACE_NAMESPACE,
         )
-        assert os.path.exists(version_config_file), (
-            f"OCS version config file {version_config_file} doesn't exist!"
+        version_before_upgrade = config.ENV_DATA.get("ocs_version")
+        upgrade_version = config.UPGRADE.get(
+            "upgrade_ocs_version", version_before_upgrade
         )
-        with open(
-            os.path.abspath(os.path.expanduser(version_config_file))
-        ) as file_stream:
-            custom_config_data = yaml.safe_load(file_stream)
-            config.update(custom_config_data)
-    image_url = ocs_catalog.get_image_url()
-    image_tag = ocs_catalog.get_image_name()
-    log.info(f"Current image is: {image_url}, tag: {image_tag}")
-    ocs_registry_image = config.UPGRADE.get('upgrade_ocs_registry_image')
-    if ocs_registry_image:
-        image_url, new_image_tag = ocs_registry_image.split(':')
-    elif config.UPGRADE.get('upgrade_to_latest', True) or version_change:
-        new_image_tag = get_latest_ds_olm_tag()
-    else:
-        new_image_tag = get_next_version_available_for_upgrade(image_tag)
-    cs_data = deepcopy(ocs_catalog.data)
-    image_for_upgrade = ':'.join([image_url, new_image_tag])
-    log.info(f"Image: {image_for_upgrade} will be used for upgrade.")
-    cs_data['spec']['image'] = image_for_upgrade
-    operator_selector = get_selector_for_ocs_operator()
-    package_manifest = PackageManifest(
-        resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
-    )
-    csv_name_pre_upgrade = package_manifest.get_current_csv()
-    log.info(f"CSV name before upgrade is: {csv_name_pre_upgrade}")
-    csv_pre_upgrade = CSV(
-        resource_name=csv_name_pre_upgrade,
-        namespace=namespace
-    )
-    pre_upgrade_images = get_images(csv_pre_upgrade.get())
-
-    with NamedTemporaryFile() as cs_yaml:
-        dump_data_to_temp_yaml(cs_data, cs_yaml.name)
-        ocs_catalog.apply(cs_yaml.name)
-    # Wait for package manifest is ready
-    package_manifest.wait_for_resource()
-    subscription_plan_approval = config.DEPLOYMENT.get(
-        'subscription_plan_approval'
-    )
-    if subscription_plan_approval == 'Manual':
-        wait_for_install_plan_and_approve(namespace)
-    attempts = 145
-    for attempt in range(1, attempts):
-        if attempts == attempt:
-            raise TimeoutException("No new CSV found after upgrade!")
-        log.info(f"Attempt {attempt}/{attempts} to check CSV upgraded.")
-        package_manifest.reload_data()
-        csv_name_post_upgrade = package_manifest.get_current_csv()
-        if csv_name_post_upgrade == csv_name_pre_upgrade:
-            log.info(f"CSV is still: {csv_name_post_upgrade}")
-            sleep(5)
+        parsed_version_before_upgrade = parse_version(version_before_upgrade)
+        parsed_upgrade_version = parse_version(upgrade_version)
+        assert parsed_upgrade_version >= parsed_version_before_upgrade, (
+            f"Version you would like to upgrade to: {upgrade_version} "
+            f"is not higher or equal to the version you currently running: "
+            f"{version_before_upgrade}"
+        )
+        operator_selector = get_selector_for_ocs_operator()
+        package_manifest = PackageManifest(
+            resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
+        )
+        channel = config.DEPLOYMENT.get('ocs_csv_channel')
+        csv_name_pre_upgrade = package_manifest.get_current_csv(channel)
+        log.info(f"CSV name before upgrade is: {csv_name_pre_upgrade}")
+        csv_pre_upgrade = CSV(
+            resource_name=csv_name_pre_upgrade,
+            namespace=namespace
+        )
+        pre_upgrade_images = get_images(csv_pre_upgrade.get())
+        version_change = parsed_upgrade_version > parsed_version_before_upgrade
+        if version_change:
+            version_config_file = os.path.join(
+                constants.CONF_DIR, 'ocs_version', f'ocs-{upgrade_version}.yaml'
+            )
+            assert os.path.exists(version_config_file), (
+                f"OCS version config file {version_config_file} doesn't exist!"
+            )
+            with open(
+                os.path.abspath(os.path.expanduser(version_config_file))
+            ) as file_stream:
+                custom_config_data = yaml.safe_load(file_stream)
+                config.update(custom_config_data)
+        image_url = ocs_catalog.get_image_url()
+        image_tag = ocs_catalog.get_image_name()
+        log.info(f"Current image is: {image_url}, tag: {image_tag}")
+        ocs_registry_image = config.UPGRADE.get('upgrade_ocs_registry_image')
+        if ocs_registry_image:
+            image_url, new_image_tag = ocs_registry_image.split(':')
+        elif config.UPGRADE.get('upgrade_to_latest', True) or version_change:
+            new_image_tag = get_latest_ds_olm_tag()
         else:
-            log.info(f"CSV now upgraded to: {csv_name_post_upgrade}")
-            break
-    csv_post_upgrade = CSV(
-        resource_name=csv_name_post_upgrade,
-        namespace=namespace
-    )
-    log.info(
-        f"Waiting for CSV {csv_name_post_upgrade} to be in succeeded state"
-    )
-    if version_before_upgrade == '4.2' and upgrade_version == '4.3':
-        log.info("Force creating Ceph toolbox after upgrade 4.2 -> 4.3")
-        setup_ceph_toolbox(force_setup=True)
-    csv_post_upgrade.wait_for_phase("Succeeded", timeout=600)
-    post_upgrade_images = get_images(csv_post_upgrade.get())
-    old_images, _, _ = get_upgrade_image_info(
-        pre_upgrade_images, post_upgrade_images
-    )
-    verify_image_versions(old_images, parsed_upgrade_version)
-    ocs_install_verification(timeout=600, skip_osd_distribution_check=True)
-    ceph_cluster.disable_health_monitor()
-    if ceph_cluster.health_error_status:
-        CephHealthException(
-            f"During upgrade hit Ceph HEALTH_ERROR: "
-            f"{ceph_cluster.health_error_status}"
+            new_image_tag = get_next_version_available_for_upgrade(image_tag)
+        cs_data = deepcopy(ocs_catalog.data)
+        image_for_upgrade = ':'.join([image_url, new_image_tag])
+        log.info(f"Image: {image_for_upgrade} will be used for upgrade.")
+        cs_data['spec']['image'] = image_for_upgrade
+
+        with NamedTemporaryFile() as cs_yaml:
+            dump_data_to_temp_yaml(cs_data, cs_yaml.name)
+            ocs_catalog.apply(cs_yaml.name)
+        # Wait for package manifest is ready
+        package_manifest.wait_for_resource()
+        subscription_plan_approval = config.DEPLOYMENT.get(
+            'subscription_plan_approval'
         )
+        if subscription_plan_approval == 'Manual':
+            wait_for_install_plan_and_approve(namespace)
+        attempts = 145
+        for attempt in range(1, attempts):
+            if attempts == attempt:
+                raise TimeoutException("No new CSV found after upgrade!")
+            log.info(f"Attempt {attempt}/{attempts} to check CSV upgraded.")
+            package_manifest.reload_data()
+            channel = config.DEPLOYMENT.get('ocs_csv_channel')
+            csv_name_post_upgrade = package_manifest.get_current_csv(channel)
+            if csv_name_post_upgrade == csv_name_pre_upgrade:
+                log.info(f"CSV is still: {csv_name_post_upgrade}")
+                sleep(5)
+            else:
+                log.info(f"CSV now upgraded to: {csv_name_post_upgrade}")
+                break
+        csv_post_upgrade = CSV(
+            resource_name=csv_name_post_upgrade,
+            namespace=namespace
+        )
+        log.info(
+            f"Waiting for CSV {csv_name_post_upgrade} to be in succeeded state"
+        )
+        if version_before_upgrade == '4.2' and upgrade_version == '4.3':
+            log.info("Force creating Ceph toolbox after upgrade 4.2 -> 4.3")
+            setup_ceph_toolbox(force_setup=True)
+        csv_post_upgrade.wait_for_phase("Succeeded", timeout=600)
+        post_upgrade_images = get_images(csv_post_upgrade.get())
+        old_images, _, _ = get_upgrade_image_info(
+            pre_upgrade_images, post_upgrade_images
+        )
+        verify_image_versions(old_images, parsed_upgrade_version)
+        ocs_install_verification(timeout=600, skip_osd_distribution_check=True)
