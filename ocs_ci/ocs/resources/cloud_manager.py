@@ -10,7 +10,9 @@ from google.auth.exceptions import DefaultCredentialsError
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility import templating
+from ocs_ci.utility.utils import TimeoutSampler
 from tests.helpers import create_resource
 
 logger = logging.getLogger(name=__file__)
@@ -135,14 +137,24 @@ class S3Client(CloudClient):
         self.client.meta.client.delete_bucket_policy(
             Bucket=name
         )
-        for _ in range(10):
-            try:
-                self.client.Bucket(name).objects.all().delete()
-                self.client.Bucket(name).delete()
-                break
-            except ClientError:
-                logger.info(f'Deletion of Underlying Storage {name} failed. Retrying...')
-                sleep(3)
+        sample = TimeoutSampler(
+            timeout=30, sleep=3, func=self.wait_for_delete_uls,
+            name=name
+        )
+        if not sample.wait_for_func_status(result=True):
+            logger.error(
+                f'Deletion of Underlying Storage {name} timed out. Unable to delete {name}'
+            )
+            raise TimeoutExpiredError
+        else:
+            logger.info(f'Underlying Storage {name} deleted successfully')
+
+    def wait_for_delete_uls(self, name):
+        try:
+            self.client.Bucket(name).objects.all().delete()
+            self.client.Bucket(name).delete()
+        except ClientError:
+            logger.info(f'Deletion of Underlying Storage {name} failed. Retrying...')
 
     def get_all_uls_names(self):
         return {bucket.name for bucket in self.client.buckets.all()}
