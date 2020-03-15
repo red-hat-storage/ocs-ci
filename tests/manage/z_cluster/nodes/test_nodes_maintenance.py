@@ -8,7 +8,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility.utils import ceph_health_check_base
 
-from ocs_ci.ocs import constants, machine, ocp
+from ocs_ci.ocs import constants, machine, ocp, defaults
 from ocs_ci.ocs.node import (
     drain_nodes, schedule_nodes, get_typed_nodes, wait_for_nodes_status,
     remove_nodes, get_osd_running_nodes, get_node_objs,
@@ -334,9 +334,12 @@ class TestNodesMaintenance(ManageTest):
                     # WA and deleting its deployment so that the pod
                     # disappears. Will revert this WA once the BZ is fixed
                     if 'rook-ceph-crashcollector' in pod_obj.name:
-                        ocp_obj = ocp.OCP()
-                        name = pod_obj.name[:-17]
-                        command = f"delete deployment {name}"
+                        ocp_obj = ocp.OCP(
+                            namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                        )
+                        pod_name = pod_obj.name
+                        deployment_name = '-'.join(pod_name.split("-")[:-2])
+                        command = f"delete deployment {deployment_name}"
                         ocp_obj.exec_oc_cmd(command=command)
                         log.info(f"Deleted deployment for pod {pod_obj.name}")
 
