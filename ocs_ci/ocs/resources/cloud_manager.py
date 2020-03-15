@@ -153,7 +153,7 @@ class S3Client(CloudClient):
         """
         Try to delete Underlying Storage by name
         Args:
-            name (str): the Underlying Storage name 
+            name (str): the Underlying Storage name
         """
         try:
             self.client.Bucket(name).objects.all().delete()
