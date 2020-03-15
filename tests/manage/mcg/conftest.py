@@ -142,7 +142,7 @@ def cloud_uls_factory(request, cld_mgr):
             as value.
             each tuple contain amount as first parameter and region as second parameter.
             Example:
-                'aws': [(3,us-west-1),(2,eu-east-2)]
+                'aws': [(3,us-west-1),(2,eu-west-2)]
 
         Returns:
             dict: A dictionary of cloud names as keys and uls names sets as value.
@@ -184,7 +184,8 @@ def cloud_uls_factory(request, cld_mgr):
                         logger.info(
                             f"Verifying whether uls: {uls} exists after deletion"
                         )
-                        assert not client.verify_uls_exists(uls),\
+                        sleep(5)  # wait for aws command to pass
+                        assert not client.verify_uls_exists(uls), \
                             f'Unable to delete Underlying Storage {uls}'
                     else:
                         logger.info(f'Underlying Storage {uls} not found.')
@@ -236,7 +237,7 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
             for pv: each tuple contain number of volumes as first parameter
             and size as second parameter.
             Example:
-                'aws': [(3,us-west-1),(2,eu-east-2)]
+                'aws': [(3,us-west-1),(2,eu-west-2)]
                 'pv': [(3,32,ocs-storagecluster-ceph-rbd),(2,100,ocs-storagecluster-ceph-rbd)]
 
         Returns:

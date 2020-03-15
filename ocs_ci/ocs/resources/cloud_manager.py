@@ -154,12 +154,19 @@ class S3Client(CloudClient):
         Try to delete Underlying Storage by name
         Args:
             name (str): the Underlying Storage name
+        Returns:
+            bool: True if deleted successfully
         """
-        try:
-            self.client.Bucket(name).objects.all().delete()
-            self.client.Bucket(name).delete()
-        except ClientError:
-            logger.info(f'Deletion of Underlying Storage {name} failed. Retrying...')
+        if self.verify_uls_exists(name):
+            try:
+                self.client.Bucket(name).objects.all().delete()
+                self.client.Bucket(name).delete()
+                return True
+            except ClientError:
+                logger.info(f'Deletion of Underlying Storage {name} failed. Retrying...')
+                return False
+        else:
+            return True
 
     def get_all_uls_names(self):
         return {bucket.name for bucket in self.client.buckets.all()}
