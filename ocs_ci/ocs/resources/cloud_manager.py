@@ -150,6 +150,11 @@ class S3Client(CloudClient):
             logger.info(f'Underlying Storage {name} deleted successfully')
 
     def wait_for_delete_uls(self, name):
+        """
+        Try to delete Underlying Storage by name
+        Args:
+            name (str): the Underlying Storage name 
+        """
         try:
             self.client.Bucket(name).objects.all().delete()
             self.client.Bucket(name).delete()
