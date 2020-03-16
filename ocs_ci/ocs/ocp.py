@@ -710,12 +710,13 @@ class OCP(object):
                 f"{phase}"
             )
 
-    def is_exist(self, resource_name=""):
+    def is_exist(self, resource_name="", selector=None):
         """
-        Check if resource exists.
+        Check if at least one of the resource exists.
 
         Args:
             resource_name (str): Name of the resource.
+            selector (str): Selector of the resource.
 
         Raises:
             ResourceNameNotSpecifiedException: In case the name is not
@@ -725,11 +726,18 @@ class OCP(object):
             bool: True if the resource exists False otherwise.
 
         """
+        resource_name = resource_name or self.resource_name
+        selector = selector or self.selector
+        log.info(f"Check if resource: {resource_name} exists.")
         self.check_name_is_specified(resource_name)
         try:
             self.get(resource_name)
+            log.info(f"Resource: {resource_name}, selector: {selector} found.")
             return True
         except CommandFailed:
+            log.info(
+                f"Resource: {resource_name}, selector: {selector} not found."
+            )
             return False
 
 

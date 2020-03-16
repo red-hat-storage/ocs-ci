@@ -181,6 +181,7 @@ def test_upgrade():
             namespace=constants.MARKETPLACE_NAMESPACE,
         )
         if not ocs_catalog.is_exist():
+            log.info("OCS catalog source doesn't exist. Creating new one.")
             create_catalog_source(ocs_registry_image, ignore_upgrade=True)
         image_url = ocs_catalog.get_image_url()
         image_tag = ocs_catalog.get_image_name()

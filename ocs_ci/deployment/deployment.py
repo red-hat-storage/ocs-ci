@@ -382,6 +382,7 @@ class Deployment(object):
             resource_name=defaults.OCS_OPERATOR_NAME,
             selector=operator_selector,
         )
+        package_manifest.wait_for_resource(timeout=300)
         channel = config.DEPLOYMENT.get('ocs_csv_channel')
         csv_name = package_manifest.get_current_csv(channel=channel)
         csv = CSV(resource_name=csv_name, namespace=self.namespace)
