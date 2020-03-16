@@ -199,9 +199,12 @@ def test_upgrade():
         with NamedTemporaryFile() as cs_yaml:
             dump_data_to_temp_yaml(cs_data, cs_yaml.name)
             ocs_catalog.apply(cs_yaml.name)
-        # Wait for package manifest is ready
+        # Wait for the new package manifest for upgrade.
+        operator_selector = get_selector_for_ocs_operator()
+        package_manifest = PackageManifest(
+            resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
+        )
         package_manifest.wait_for_resource()
-        package_manifest.reload_data()
         channel = config.DEPLOYMENT.get('ocs_csv_channel')
         if not channel:
             channel = package_manifest.get_default_channel()
