@@ -6,7 +6,7 @@ from pkg_resources import parse_version
 from tempfile import NamedTemporaryFile
 from time import sleep
 
-
+from ocs_ci.deployment.deployment import create_catalog_source
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import upgrade
 from ocs_ci.ocs import constants
@@ -14,7 +14,7 @@ from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
 from ocs_ci.ocs.exceptions import TimeoutException
 from ocs_ci.ocs.node import get_typed_nodes
-from ocs_ci.ocs.ocp import get_images
+from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -29,6 +29,7 @@ from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.utility.utils import (
     get_latest_ds_olm_tag,
     get_next_version_available_for_upgrade,
+    get_ocs_version_from_image,
 )
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
 
@@ -134,14 +135,15 @@ def test_upgrade():
     ceph_cluster = CephCluster()
     with CephHealthMonitor(ceph_cluster):
         namespace = config.ENV_DATA['cluster_namespace']
-        ocs_catalog = CatalogSource(
-            resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
         version_before_upgrade = config.ENV_DATA.get("ocs_version")
         upgrade_version = config.UPGRADE.get(
             "upgrade_ocs_version", version_before_upgrade
         )
+        ocs_registry_image = config.UPGRADE.get('upgrade_ocs_registry_image')
+        if ocs_registry_image:
+            upgrade_version = get_ocs_version_from_image(
+                ocs_registry_image
+            )
         parsed_version_before_upgrade = parse_version(version_before_upgrade)
         parsed_upgrade_version = parse_version(upgrade_version)
         assert parsed_upgrade_version >= parsed_version_before_upgrade, (
@@ -174,10 +176,16 @@ def test_upgrade():
             ) as file_stream:
                 custom_config_data = yaml.safe_load(file_stream)
                 config.update(custom_config_data)
+        ocs_catalog = CatalogSource(
+            resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
+        if not ocs_catalog.is_exist():
+            log.info("OCS catalog source doesn't exist. Creating new one.")
+            create_catalog_source(ocs_registry_image, ignore_upgrade=True)
         image_url = ocs_catalog.get_image_url()
         image_tag = ocs_catalog.get_image_name()
         log.info(f"Current image is: {image_url}, tag: {image_tag}")
-        ocs_registry_image = config.UPGRADE.get('upgrade_ocs_registry_image')
         if ocs_registry_image:
             image_url, new_image_tag = ocs_registry_image.split(':')
         elif config.UPGRADE.get('upgrade_to_latest', True) or version_change:
@@ -192,8 +200,33 @@ def test_upgrade():
         with NamedTemporaryFile() as cs_yaml:
             dump_data_to_temp_yaml(cs_data, cs_yaml.name)
             ocs_catalog.apply(cs_yaml.name)
-        # Wait for package manifest is ready
+        # Wait for the new package manifest for upgrade.
+        operator_selector = get_selector_for_ocs_operator()
+        package_manifest = PackageManifest(
+            resource_name=OCS_OPERATOR_NAME, selector=operator_selector,
+        )
         package_manifest.wait_for_resource()
+        channel = config.DEPLOYMENT.get('ocs_csv_channel')
+        if not channel:
+            channel = package_manifest.get_default_channel()
+
+        # update subscription
+        subscription = OCP(
+            resource_name=constants.OCS_SUBSCRIPTION,
+            kind='subscription',
+            namespace=config.ENV_DATA['cluster_namespace'],
+        )
+        subscription_data = deepcopy(subscription.data)
+        subscription_data['spec']['channel'] = channel
+        # TODO: once we GA 4.3 we will make possibility to upgrade from live
+        # 4.2 to live 4.3.
+        subscription_data['spec'][
+            'source'
+        ] = constants.OPERATOR_CATALOG_SOURCE_NAME
+        with NamedTemporaryFile() as subscription_yaml:
+            dump_data_to_temp_yaml(subscription_data, subscription_yaml.name)
+            subscription.apply(subscription_yaml.name)
+
         subscription_plan_approval = config.DEPLOYMENT.get(
             'subscription_plan_approval'
         )
@@ -204,8 +237,6 @@ def test_upgrade():
             if attempts == attempt:
                 raise TimeoutException("No new CSV found after upgrade!")
             log.info(f"Attempt {attempt}/{attempts} to check CSV upgraded.")
-            package_manifest.reload_data()
-            channel = config.DEPLOYMENT.get('ocs_csv_channel')
             csv_name_post_upgrade = package_manifest.get_current_csv(channel)
             if csv_name_post_upgrade == csv_name_pre_upgrade:
                 log.info(f"CSV is still: {csv_name_post_upgrade}")
