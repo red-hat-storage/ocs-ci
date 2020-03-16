@@ -592,7 +592,7 @@ class MCG(object):
         self,
         backingstore_name,
         desired_state,
-        timeout=180
+        timeout=600
     ):
         """
         Checks whether the backing store reached a specific state
