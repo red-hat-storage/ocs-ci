@@ -185,8 +185,9 @@ def cloud_uls_factory(request, cld_mgr):
                             f"Verifying whether uls: {uls} exists after deletion"
                         )
                         sleep(5)  # wait for aws command to pass
-                        assert not client.verify_uls_exists(uls), \
+                        assert not client.verify_uls_exists(uls), (
                             f'Unable to delete Underlying Storage {uls}'
+                        )
                     else:
                         logger.info(f'Underlying Storage {uls} not found.')
 
