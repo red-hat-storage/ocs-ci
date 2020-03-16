@@ -122,6 +122,12 @@ def pytest_addoption(parser):
             "(e.g. quay.io/rhceph-dev/ocs-olm-operator:latest-4.3)"
         )
     )
+    parser.addoption(
+        '--osd-size',
+        dest='osd_size',
+        type=int,
+        help="OSD size in GB - for 2TB pass 2048, for 0.5TB pass 512 and so on."
+    )
 
 
 def pytest_configure(config):
@@ -303,6 +309,9 @@ def process_cluster_cli_params(config):
     if get_cli_param(config, 'email') and not get_cli_param(config, '--html'):
         pytest.exit("--html option must be provided to send email reports")
     get_cli_param(config, '-m')
+    osd_size = get_cli_param(config, '--osd-size')
+    if osd_size:
+        ocsci_config.ENV_DATA['device_size'] = osd_size
 
 
 def pytest_collection_modifyitems(session, config, items):
