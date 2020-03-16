@@ -714,8 +714,11 @@ class OCP(object):
         """
         Check if resource exists.
 
+        Args:
+            resource_name (str): Name of the resource.
+
         Raises:
-            ResourceNameNotSpecifiedException: in case the name is not
+            ResourceNameNotSpecifiedException: In case the name is not
                 specified.
 
         Returns:
