@@ -73,7 +73,7 @@ def init_ocsci_conf(arguments=None):
     if args.ocs_registry_image:
         ocs_registry_image = args.ocs_registry_image
     if ocs_registry_image:
-        ocs_version = utils.get_ocs_version_from_tag(ocs_registry_image)
+        ocs_version = utils.get_ocs_version_from_image(ocs_registry_image)
     if ocs_version:
         version_config_file = os.path.join(
             CONF_DIR, 'ocs_version', f'ocs-{ocs_version}.yaml'
