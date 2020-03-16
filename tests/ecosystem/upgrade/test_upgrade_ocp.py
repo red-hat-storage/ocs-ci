@@ -38,7 +38,6 @@ class TestUpgradeOCP(ManageTest):
             logger.info(f" oc version: {ocp.get_current_oc_version()}")
 
             # Upgrade OCP
-
             ocp.upgrade_ocp(image=target_image, image_path=image_path)
 
             # Wait for upgrade
@@ -52,6 +51,9 @@ class TestUpgradeOCP(ManageTest):
                     func=ocp.check_upgrade_completed,
                     target_version=target_image
                 ):
-                    logger.debug(f"sampler: {sampler}")
+                    logger.info(
+                        f"ClusterOperator upgrade "
+                        f"{'completed!' if sampler else 'did not completed yet!'}"
+                    )
                     if sampler:
                         break

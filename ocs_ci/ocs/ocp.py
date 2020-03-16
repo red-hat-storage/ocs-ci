@@ -889,9 +889,8 @@ def check_upgrade_completed(self, target_version):
         bool: True if success, False if failed
 
     """
-    log.debug(f"self.get_current_oc_version: {self.get_current_oc_version()}")
-    log.debug(f"target_version=: {target_version}")
-    log.info(f"current version: {self.get_current_oc_version()}")
+    log.info(f"target_version=: {target_version}")
+    log.info(f"current OCP version is: {self.get_current_oc_version()}")
     cur_version = self.get_current_oc_version()
     if cur_version == target_version or target_version.startswith(cur_version):
         log.info(f"cluster operator upgrade to build {target_version} completed")
@@ -969,9 +968,9 @@ def get_all_cluster_operators():
     operators_full_names = str(operator_info).split()
     operator_names = list()
     for name in operators_full_names:
-        log.debug(f"name: {name}")
+        log.info(f"original operator name: {name}")
         new_name = name.lstrip('clusteroperator.config.openshift.io').lstrip('/')
-        log.debug(f"new_name: {new_name}")
+        log.info(f"fixed operator name: {new_name}")
         operator_names.append(new_name)
 
     log.info(f"ClusterOperators full list: {operator_names}")
