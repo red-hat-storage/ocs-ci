@@ -243,8 +243,10 @@ def get_rgw_restart_count():
     return rgw_pod.restart_count
 
 
-def write_individual_s3_objects(mcg_obj, awscli_pod, bucket_factory, downloaded_files, target_dir,
-                                bucket_name=None):
+def write_individual_s3_objects(
+    mcg_obj, awscli_pod, bucket_factory, downloaded_files, target_dir,
+    bucket_name=None
+):
     """
     Writes objects one by one to an s3 bucket
 
