@@ -731,7 +731,7 @@ class OCP(object):
         log.info(f"Check if resource: {resource_name} exists.")
         self.check_name_is_specified(resource_name)
         try:
-            self.get(resource_name)
+            self.get(resource_name, selector=selector)
             log.info(f"Resource: {resource_name}, selector: {selector} found.")
             return True
         except CommandFailed:
