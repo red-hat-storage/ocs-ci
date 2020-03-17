@@ -35,7 +35,9 @@ class StorageCluster(OCP):
         )
 
 
-def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
+def ocs_install_verification(
+    timeout=600, skip_osd_distribution_check=False, ocs_registry_image=None
+):
     """
     Perform steps necessary to verify a successful OCS installation
 
@@ -44,6 +46,8 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
             checks used in this function.
         skip_osd_distribution_check (bool): If true skip the check for osd
             distribution.
+        ocs_registry_image (str): Specific image to check if it was installed
+            properly.
 
     """
     from ocs_ci.ocs.node import get_typed_nodes
@@ -66,6 +70,29 @@ def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
     )
     log.info(f"Check if OCS operator: {ocs_csv_name} is in Succeeded phase.")
     ocs_csv.wait_for_phase(phase="Succeeded", timeout=timeout)
+    # Verify if OCS CSV has proper version.
+    csv_version = ocs_csv.data['spec']['version']
+    ocs_version = config.ENV_DATA['ocs_version']
+    log.info(
+        f"Check if OCS version: {ocs_version} matches with CSV: {csv_version}"
+    )
+    assert ocs_version in csv_version, (
+        f"OCS version: {ocs_version} mismatch with CSV version {csv_version}"
+    )
+    # Verify if OCS CSV has the same version in provided CI build.
+    ocs_registry_image = ocs_registry_image or config.DEPLOYMENT.get(
+        'ocs_registry_image'
+    )
+    if ocs_registry_image and ocs_registry_image.endswith(".ci"):
+        ocs_registry_image = ocs_registry_image.split(":")[1]
+        log.info(
+            f"Check if OCS registry image: {ocs_registry_image} matches with "
+            f"CSV: {csv_version}"
+        )
+        assert ocs_registry_image in csv_version, (
+            f"OCS registry image version: {ocs_registry_image} mismatch with "
+            f"CSV version {csv_version}"
+        )
 
     # Verify OCS Cluster Service (ocs-storagecluster) is Ready
     storage_cluster_name = config.ENV_DATA['storage_cluster_name']

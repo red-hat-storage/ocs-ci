@@ -253,4 +253,7 @@ def test_upgrade():
             pre_upgrade_images, post_upgrade_images
         )
         verify_image_versions(old_images, parsed_upgrade_version)
-        ocs_install_verification(timeout=600, skip_osd_distribution_check=True)
+        ocs_install_verification(
+            timeout=600, skip_osd_distribution_check=True,
+            ocs_registry_image=ocs_registry_image,
+        )
