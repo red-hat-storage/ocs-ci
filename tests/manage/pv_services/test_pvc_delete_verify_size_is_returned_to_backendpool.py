@@ -76,7 +76,7 @@ def fetch_used_size(exp_val=None):
         format(size_bytes / constants.GB, '.4f')
     )
     if exp_val:
-        if not abs(exp_val - used_in_gb) < 0.5:
+        if not abs(exp_val - used_in_gb) < 1.5:
             raise UnexpectedBehaviour(
                 f"Actual {used_in_gb} and expected size {exp_val} not "
                 f"matching. Retrying"
@@ -101,9 +101,6 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         # TODO: Get exact value of replica size
         replica_size = 3
 
-        used_before_creating_pvc = fetch_used_size()
-        logger.info(f"Used before creating PVC {used_before_creating_pvc}")
-
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL, size=10,
             status=constants.STATUS_BOUND
@@ -114,9 +111,12 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         )
         pvc_obj.reload()
 
-        # Write 3Gb
-        pod.run_io_and_verify_mount_point(pod_obj, bs='10M', count='300')
-        exp_size = used_before_creating_pvc + (3 * replica_size)
+        used_before_io = fetch_used_size()
+        logger.info(f"Used before IO {used_before_io}")
+
+        # Write 6Gb
+        pod.run_io_and_verify_mount_point(pod_obj, bs='10M', count='600')
+        exp_size = used_before_io + (6 * replica_size)
         used_after_io = fetch_used_size(exp_size)
         logger.info(f"Used space after IO {used_after_io}")
 
@@ -129,5 +129,5 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
         verify_pv_not_exists(
             pvc_obj, constants.DEFAULT_BLOCKPOOL, rbd_image_id
         )
-        used_after_deleting_pvc = fetch_used_size(used_before_creating_pvc)
+        used_after_deleting_pvc = fetch_used_size(used_before_io)
         logger.info(f"Used after deleting PVC {used_after_deleting_pvc}")
