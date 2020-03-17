@@ -7,12 +7,14 @@ EFK stack
 import logging
 import json
 
+from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.utility import templating
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
 from tests import helpers
+
 
 logger = logging.getLogger(__name__)
 
@@ -293,3 +295,23 @@ def check_health_of_clusterlogging():
         logger.error("Cluster logging is in Bad state")
         raise UnexpectedBehaviour
     return pod_list
+
+
+@retry(CommandFailed, tries=10, delay=10, backoff=3)
+def create_instance():
+    """
+    The function is used to create instance for
+    cluster-logging
+    """
+
+    # Create instance
+    assert create_instance_in_clusterlogging()
+
+    # Check the health of the cluster-logging
+    assert check_health_of_clusterlogging()
+
+    csv_obj = CSV(namespace=constants.OPENSHIFT_LOGGING_NAMESPACE)
+
+    # Get the CSV installed
+    get_csv = csv_obj.get(out_yaml_format=False)
+    logger.info(f'The installed CSV is {get_csv}')
