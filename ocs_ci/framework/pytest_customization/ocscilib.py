@@ -21,12 +21,14 @@ from ocs_ci.utility.utils import (
     get_csi_versions,
     get_testrun_name,
     get_ocs_build_number,
+    load_config_file,
 )
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
 from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
+    OCP_VERSION_CONF_DIR,
 )
 
 __all__ = [
@@ -105,6 +107,18 @@ def pytest_addoption(parser):
         '--upgrade-ocs-version',
         dest='upgrade_ocs_version',
         help="ocs version to upgrade (e.g. 4.3)"
+    )
+    parser.addoption(
+        '--ocp-version',
+        dest='ocp_version',
+        help="""
+        OCP version to be used for deployment. This version will be used for
+        load file from conf/ocp_version/ocp-VERSION-config.yaml. You can use
+        for example those values:
+        4.2: for nightly 4.2 OCP build
+        4.2-ga: for latest GAed 4.2 OCP build
+        4.2-ga-minus1: for latest GAed 4.2 build - 1
+        """
     )
     parser.addoption(
         '--ocs-registry-image',
@@ -312,6 +326,13 @@ def process_cluster_cli_params(config):
     osd_size = get_cli_param(config, '--osd-size')
     if osd_size:
         ocsci_config.ENV_DATA['device_size'] = osd_size
+    ocp_version = get_cli_param(config, '--ocp-version')
+    if ocp_version:
+        version_config_file = f"ocp-{ocp_version}-config.yaml"
+        version_config_file_path = os.path.join(
+            OCP_VERSION_CONF_DIR, version_config_file
+        )
+        load_config_file(version_config_file_path)
 
 
 def pytest_collection_modifyitems(session, config, items):

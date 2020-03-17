@@ -1,6 +1,5 @@
 import os
 import logging
-import yaml
 from copy import deepcopy
 from pkg_resources import parse_version
 from tempfile import NamedTemporaryFile
@@ -30,6 +29,7 @@ from ocs_ci.utility.utils import (
     get_latest_ds_olm_tag,
     get_next_version_available_for_upgrade,
     get_ocs_version_from_image,
+    load_config_file,
 )
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
 
@@ -168,14 +168,7 @@ def test_upgrade():
             version_config_file = os.path.join(
                 constants.CONF_DIR, 'ocs_version', f'ocs-{upgrade_version}.yaml'
             )
-            assert os.path.exists(version_config_file), (
-                f"OCS version config file {version_config_file} doesn't exist!"
-            )
-            with open(
-                os.path.abspath(os.path.expanduser(version_config_file))
-            ) as file_stream:
-                custom_config_data = yaml.safe_load(file_stream)
-                config.update(custom_config_data)
+            load_config_file(version_config_file)
         ocs_catalog = CatalogSource(
             resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
             namespace=constants.MARKETPLACE_NAMESPACE,

@@ -15,6 +15,7 @@ TOP_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 CONF_DIR = os.path.join(TOP_DIR, 'conf')
+OCP_VERSION_CONF_DIR = os.path.join(CONF_DIR, "ocp_version")
 TEMPLATE_DIR = os.path.join(TOP_DIR, "ocs_ci", "templates")
 TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
@@ -435,6 +436,11 @@ OPERATOR_INTERNAL_SELECTOR = "ocs-operator-internal=true"
 OPERATOR_CS_QUAY_API_QUERY = (
     'https://quay.io/api/v1/repository/rhceph-dev/ocs-olm-operator/'
     'tag/?onlyActiveTags=true&limit={tag_limit}'
+)
+
+# OCP related constants
+OPENSHIFT_UPGRADE_INFO_API = (
+    "https://api.openshift.com/api/upgrades_info/v1/graph?channel={channel}"
 )
 
 # VDbench benchmark related constants
