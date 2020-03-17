@@ -1076,7 +1076,7 @@ def get_ocp_version(seperator=None):
         config.DEPLOYMENT['installer_version']
     )
     return char.join(
-        str(str(version.major) + str(version.minor))
+        [str(version.major), str(version.minor)]
     )
 
 
@@ -1092,7 +1092,11 @@ def get_ocp_repo():
     repo_path = os.path.join(
         constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo"
     )
-    return repo_path
+    path = os.path.expanduser(repo_path)
+    assert os.path.exists(path), (
+        f"OCP repo file {path} doesn't exists!"
+    )
+    return path
 
 
 def parse_pgsql_logs(data):
