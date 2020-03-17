@@ -54,6 +54,12 @@ to the pytest.
     specified, the default from ocs-ci will be used. If --ocs-registry-image passed
     then this parameter is ignored and the version is parsed from the registry image.
 * `--upgrade-ocs-version` - version of OCS to be used for upgrade (e.g. 4.2 or 4.3). If not specified, the default from ocs-ci will be used.
+* `--ocp-version` - OCP version to be used for deployment. This version will
+    be used for load file from conf/ocp_version/ocp-VERSION-config.yaml.
+    You can use for example those values:
+  * `4.2`: for nightly 4.2 OCP build
+  * `4.2-ga`: for latest GAed 4.2 OCP build from stable channel
+  * `4.2-ga-minus1`: for latest GAed 4.2 build (stable channel) - 1
 * `--ocs-registry-image` - ocs registry image to be used for deployment
     (e.g quay.io/rhceph-dev/ocs-olm-operator:latest-4.2). In case this parameter
     is passed, the version is parsed from the registry image name and it overwrites
