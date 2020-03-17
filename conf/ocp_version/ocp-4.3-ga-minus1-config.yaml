@@ -1,5 +1,5 @@
 ---
-# Config file for OCP GA 4.2 stable channe minus 1 version
+# Config file for OCP GA 4.3 stable channel minus 1 version
 
 RUN:
   client_version: '4.3-ga'

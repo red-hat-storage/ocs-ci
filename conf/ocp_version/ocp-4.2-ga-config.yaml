@@ -8,6 +8,5 @@ DEPLOYMENT:
   ocp_url_template: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{version}/{file_name}-{os_type}-{version}.tar.gz"
   installer_version: "4.2-ga"
   ocp_channel: "stable"
-  #ocp_version_minus: 0
 ENV_DATA:
   vm_template: 'rhcos-4.2.0-x86_64-vmware'

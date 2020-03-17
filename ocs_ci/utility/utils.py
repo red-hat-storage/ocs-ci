@@ -1859,7 +1859,9 @@ def get_latest_ocp_version(channel, index=-1):
 
     Args:
         channel (str): Channel of OCP (e.g. stable-4.2 or fast-4.2)
-        index (int): Index to get from all available versions (default -1)
+        index (int): Index to get from all available versions list
+            e.g. default -1 is latest version (version[-1]). If you want to get
+            previous version pass index -2 and so on.
 
     Returns
         str: Latest OCP version for specified channel.
