@@ -1072,8 +1072,11 @@ def get_ocp_version(seperator=None):
 
     """
     char = seperator if seperator else '.'
+    version = Version.coerce(
+        config.DEPLOYMENT['installer_version']
+    )
     return char.join(
-        config.DEPLOYMENT['installer_version'].split('.')[:2]
+        str(str(version.major) + str(version.minor))
     )
 
 
