@@ -30,7 +30,10 @@ from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
-
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
+from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
+from ocs_ci.utility import templating
 
 log = logging.getLogger(__name__)
 
@@ -1505,3 +1508,59 @@ def default_storageclasses(request, teardown_factory_session):
         teardown_factory_session(sc)
         scs[constants.RECLAIM_POLICY_RETAIN].append(sc)
     return scs
+
+
+@pytest.fixture(scope='class')
+def install_logging(request):
+    """
+    Setup and teardown
+    * The setup will deploy openshift-logging in the cluster
+    * The teardown will uninstall cluster-logging from the cluster
+    """
+
+    def finalizer():
+        uninstall_cluster_logging()
+
+    request.addfinalizer(finalizer)
+
+    # Creates namespace opensift-operators-redhat
+    ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
+
+    # Creates an operator-group for elasticsearch
+    assert ocp_logging_obj.create_elasticsearch_operator_group(
+        yaml_file=constants.EO_OG_YAML,
+        resource_name='openshift-operators-redhat'
+    )
+
+    # Set RBAC policy on the project
+    assert ocp_logging_obj.set_rbac(
+        yaml_file=constants.EO_RBAC_YAML, resource_name='prometheus-k8s'
+    )
+
+    # Creates subscription for elastic-search operator
+    logging_version = config.ENV_DATA['logging_version']
+    subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
+    subscription_yaml['spec']['channel'] = logging_version
+    helpers.create_resource(**subscription_yaml)
+    assert ocp_logging_obj.get_elasticsearch_subscription()
+
+    # Creates a namespace openshift-logging
+    ocp_logging_obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
+
+    # Creates an operator-group for cluster-logging
+    assert ocp_logging_obj.create_clusterlogging_operator_group(
+        yaml_file=constants.CL_OG_YAML
+    )
+
+    # Creates subscription for cluster-logging
+    cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
+    cl_subscription['spec']['channel'] = logging_version
+    helpers.create_resource(**cl_subscription)
+    assert ocp_logging_obj.get_clusterlogging_subscription()
+
+    # Creates instance in namespace openshift-logging
+    cluster_logging_operator = OCP(
+        kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
+    log.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
+    ocp_logging_obj.create_instance()

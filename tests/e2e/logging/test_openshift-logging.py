@@ -7,102 +7,36 @@ import logging
 import pytest
 
 import random
-from ocs_ci.ocs.resources.csv import CSV
-from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.framework import config
-from ocs_ci.ocs.ocp import OCP
+
+
 from tests import helpers, disruption_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework.testlib import E2ETest, workloads, tier1, ignore_leftovers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
-from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
-from ocs_ci.utility import templating
+
 
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope='class')
-def test_fixture(request):
+@pytest.fixture()
+def setup_fixture(install_logging):
     """
-    Setup and teardown
-    * The setup will deploy openshift-logging in the cluster
-    * The teardown will uninstall cluster-logging from the cluster
+    Installs openshift-logging
     """
-
-    def finalizer():
-        teardown()
-
-    request.addfinalizer(finalizer)
-
-    # Deploys elastic-search operator on the project openshift-operators-redhat
-    ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
-    assert ocp_logging_obj.create_elasticsearch_operator_group(
-        yaml_file=constants.EO_OG_YAML,
-        resource_name='openshift-operators-redhat'
-    )
-    assert ocp_logging_obj.set_rbac(
-        yaml_file=constants.EO_RBAC_YAML, resource_name='prometheus-k8s'
-    )
-    logging_version = config.ENV_DATA['logging_version']
-    subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
-    subscription_yaml['spec']['channel'] = logging_version
-    helpers.create_resource(**subscription_yaml)
-    assert ocp_logging_obj.get_elasticsearch_subscription()
-
-    # Deploys cluster-logging operator on the project openshift-loggingno nee
-    ocp_logging_obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
-    assert ocp_logging_obj.create_clusterlogging_operator_group(
-        yaml_file=constants.CL_OG_YAML
-    )
-    cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
-    cl_subscription['spec']['channel'] = logging_version
-    helpers.create_resource(**cl_subscription)
-    assert ocp_logging_obj.get_clusterlogging_subscription()
-    cluster_logging_operator = OCP(
-        kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
-    )
-    logger.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
-
-    create_instance()
-
-
-@retry(CommandFailed, tries=10, delay=10, backoff=3)
-def create_instance():
-    """
-    The function is used to create instance for
-    cluster-logging
-    """
-
-    # Create instance
-    assert ocp_logging_obj.create_instance_in_clusterlogging()
-
-    # Check the health of the cluster-logging
-    assert ocp_logging_obj.check_health_of_clusterlogging()
-
-    csv_obj = CSV(namespace=constants.OPENSHIFT_LOGGING_NAMESPACE)
-
-    # Get the CSV installed
-    get_csv = csv_obj.get(out_yaml_format=True)
-    logger.info(f'The installed CSV is {get_csv}')
-
-
-def teardown():
-    """
-    The teardown will uninstall the openshift-logging from the cluster
-    """
-    uninstall_cluster_logging()
+    logger.info("Testcases execution post deployment of openshift-logging")
 
 
 @pytest.mark.usefixtures(
-    test_fixture.__name__
+    setup_fixture.__name__
 )
 @ignore_leftovers
-class Test_openshift_logging_on_ocs(E2ETest):
+class Testopenshiftloggingonocs(E2ETest):
     """
     The class contains tests to verify openshift-logging backed by OCS.
     """
+
     @pytest.fixture()
     def create_pvc_and_deploymentconfig_pod(self, request, pvc_factory):
         """
