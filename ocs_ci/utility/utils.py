@@ -484,12 +484,14 @@ def get_url_content(url):
     return r.content
 
 
-def expose_nightly_ocp_version(version):
+def expose_ocp_version(version):
     """
-    This helper function exposes latest nightly version of OCP. When the
-    version string ends with .nightly (e.g. 4.2.0-0.nightly) it will expose
-    the version to latest accepted OCP build
+    This helper function exposes latest nightly version or GA version of OCP.
+    When the version string ends with .nightly (e.g. 4.2.0-0.nightly) it will
+    expose the version to latest accepted OCP build
     (e.g. 4.2.0-0.nightly-2019-08-08-103722)
+    If the version ends with -ga than it will find the latest GA OCP version
+    and will expose 4.2-ga to for example 4.2.22.
 
     Args:
         version (str): Verison of OCP
@@ -498,9 +500,7 @@ def expose_nightly_ocp_version(version):
         str: Version of OCP exposed to full version if latest nighly passed
 
     """
-    if not version.endswith(".nightly"):
-        return version
-    else:
+    if version.endswith(".nightly"):
         latest_nightly_url = (
             f"https://openshift-release.svc.ci.openshift.org/api/v1/"
             f"releasestream/{version}/latest"
@@ -508,6 +508,13 @@ def expose_nightly_ocp_version(version):
         version_url_content = get_url_content(latest_nightly_url)
         version_json = json.loads(version_url_content)
         return version_json['name']
+    if version.endswith("-ga"):
+        channel = config.DEPLOYMENT.get("ocp_channel", "stable")
+        ocp_version = version.rstrip('-ga')
+        index = config.DEPLOYMENT.get('ocp_version_index', -1)
+        return get_latest_ocp_version(f"{channel}-{ocp_version}", index)
+    else:
+        return version
 
 
 def get_openshift_installer(
@@ -529,7 +536,7 @@ def get_openshift_installer(
 
     """
     version = version or config.DEPLOYMENT['installer_version']
-    version = expose_nightly_ocp_version(version)
+    version = expose_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
@@ -586,7 +593,7 @@ def get_openshift_client(
         log.debug(f"Client exists ({client_binary_path}), skipping download.")
         # TODO: check client version
     else:
-        version = expose_nightly_ocp_version(version)
+        version = expose_ocp_version(version)
         log.info(f"Downloading openshift client ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
@@ -1822,3 +1829,63 @@ def get_ocs_version_from_image(image):
     except ValueError:
         log.error(f"The version: {version} couldn't be parsed!")
         raise
+
+
+def get_available_ocp_versions(channel):
+    """
+    Find all available OCP versions for specific channel.
+
+    Args:
+        channel (str): Channel of OCP (e.g. stable-4.2 or fast-4.2)
+
+    Returns
+        list: Sorted list with OCP versions for specified channel.
+
+    """
+    headers = {'Accept': 'application/json'}
+    req = requests.get(
+        constants.OPENSHIFT_UPGRADE_INFO_API.format(channel=channel),
+        headers=headers
+    )
+    data = req.json()
+    versions = [Version(node['version']) for node in data['nodes']]
+    versions.sort()
+    return versions
+
+
+def get_latest_ocp_version(channel, index=-1):
+    """
+    Find latest OCP version for specific channel.
+
+    Args:
+        channel (str): Channel of OCP (e.g. stable-4.2 or fast-4.2)
+        index (int): Index to get from all available versions (default -1)
+
+    Returns
+        str: Latest OCP version for specified channel.
+
+    """
+    versions = get_available_ocp_versions(channel)
+    return str(versions[index])
+
+
+def load_config_file(config_file):
+    """
+    Loads config file to the ocs-ci config
+
+    Args:
+        config_file (str): Path to yaml config file.
+
+    Raises:
+        FileNotFoundError: In the case the config file not found.
+
+    """
+    config_file = os.path.expanduser(config_file)
+    assert os.path.exists(config_file), (
+        f"Config file {config_file} doesn't exist!"
+    )
+    with open(
+        os.path.abspath(os.path.expanduser(config_file)), "r"
+    ) as file_stream:
+        custom_config_data = yaml.safe_load(file_stream)
+        config.update(custom_config_data)
