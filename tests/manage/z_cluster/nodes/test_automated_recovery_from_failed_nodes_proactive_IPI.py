@@ -1,19 +1,24 @@
 import logging
 import pytest
-import random
+
 from ocs_ci.framework.testlib import (
     tier4, tier4b, ManageTest,
     aws_platform_required,
     ipi_deployment_required, ignore_leftovers
 )
-from ocs_ci.ocs import machine
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import machine, constants, defaults, ocp
 from ocs_ci.ocs.resources import pod
-from tests.helpers import wait_for_resource_state
+from tests.helpers import (
+    get_worker_nodes, label_worker_node, remove_label_from_worker_node
+)
 from tests.sanity_helpers import Sanity
-from ocs_ci.ocs.node import add_new_node_and_label_it
-from ocs_ci.ocs import ocp
+from ocs_ci.ocs.node import (
+    get_osd_running_nodes, get_app_pod_running_nodes,
+    get_both_osd_and_app_pod_running_node,
+    add_new_node_and_label_it
+)
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
+from tests import helpers
 
 
 log = logging.getLogger(__name__)
@@ -29,6 +34,16 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     Knip-678 Automated recovery from failed nodes
     """
     @pytest.fixture(autouse=True)
+    def teardown(self, request):
+
+        def finalizer():
+            worker_nodes = get_worker_nodes()
+            # Removing created label on all worker nodes
+            remove_label_from_worker_node(worker_nodes, label_key="dc")
+
+        request.addfinalizer(finalizer)
+
+    @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
         Initialize Sanity instance
@@ -36,28 +51,69 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
+    @pytest.mark.parametrize(
+        argnames=["interface"],
+        argvalues=[
+            pytest.param(
+                *['rbd'],
+                marks=pytest.mark.polarion_id("OCS-2100")
+            ),
+            pytest.param(
+                *['cephfs'],
+                marks=pytest.mark.polarion_id("OCS-2101")
+            ),
+        ]
+    )
     def test_automated_recovery_from_failed_nodes_IPI_proactive(
-            self, pvc_factory, pod_factory
+        self, interface, pvc_factory, pod_factory, dc_pod_factory
     ):
         """
         Knip-678 Automated recovery from failed nodes
         Proactive case - IPI
         """
-        # Get the osd associated node name
-        osd_pods_obj = pod.get_osd_pods()
-        osd_node_name = pod.get_pod_node(random.choice(osd_pods_obj)).name
-        log.info(f"Selected OSD is {osd_node_name}")
+        # Get OSD running nodes
+        osd_running_nodes = get_osd_running_nodes()
+        log.info(f"OSDs are running on nodes {osd_running_nodes}")
+        # Label osd nodes with fedora app
+        label_worker_node(
+            osd_running_nodes, label_key='dc', label_value='fedora'
+        )
+
+        # Create DC app pods
+        log.info("Creating DC based app pods")
+        if interface == 'rbd':
+            interface = constants.CEPHBLOCKPOOL
+        elif interface == 'cephfs':
+            interface = constants.CEPHFILESYSTEM
+        dc_pod_obj = []
+        for i in range(2):
+            dc_pod = dc_pod_factory(
+                interface=interface, node_selector={'dc': 'fedora'})
+            pod.run_io_in_bg(dc_pod, fedora_dc=True)
+            dc_pod_obj.append(dc_pod)
+
+        # Get app pods running nodes
+        dc_pod_node_name = get_app_pod_running_nodes(dc_pod_obj)
+        log.info(f"DC app pod running nodes are {dc_pod_node_name}")
+
+        # Get both osd and app pod running node
+        common_nodes = get_both_osd_and_app_pod_running_node(
+            osd_running_nodes, dc_pod_node_name
+        )
+        msg = "Common OSD and app running node(s) NOT found"
+        assert (len(common_nodes) > 0), msg
+        log.info(f"Common OSD and app pod running nodes are {common_nodes}")
 
         # Get the machine name using the node name
-        machine_name = machine.get_machine_from_node_name(osd_node_name)
-        log.info(f"{osd_node_name} associated machine is {machine_name}")
+        machine_name = machine.get_machine_from_node_name(common_nodes[0])
+        log.info(f"{common_nodes[0]} associated machine is {machine_name}")
 
         # Get the machineset name using machine name
         machineset_name = machine.get_machineset_from_machine_name(
             machine_name
         )
         log.info(
-            f"{osd_node_name} associated machineset is {machineset_name}"
+            f"{common_nodes[0]} associated machineset is {machineset_name}"
         )
 
         # Add a new node and label it
@@ -67,25 +123,36 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         machine.delete_machine(machine_name)
         log.info(f"Successfully deleted machine {machine_name}")
 
-        # Check the pods should be in running state
-        all_pod_obj = pod.get_all_pods(wait=True)
+        # DC app pods on the failed node will get automatically created on
+        # other running node. Waiting for all dc app pod to reach running
+        # state
+        pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj)
+        log.info("All the dc pods reached running state")
+
+        # Check all OCS pods status, they should be in running state
+        all_pod_obj = pod.get_all_pods(
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        )
         for pod_obj in all_pod_obj:
-            if '-1-deploy' and 'ocs-deviceset' not in pod_obj.name:
+            if '-1-deploy' not in pod_obj.name:
                 try:
-                    wait_for_resource_state(
+                    helpers.wait_for_resource_state(
                         resource=pod_obj, state=constants.STATUS_RUNNING,
                         timeout=200
                     )
-                # 'rook-ceph-crashcollector' on the failed node stucks at pending
-                # state. BZ 1810014 tracks it.
-                # Ignoring 'rook-ceph-crashcollector' pod health check as WA and
-                # deleting its deployment so that the pod disappears
-                # Will revert this WA once the BZ is fixed
                 except ResourceWrongStatusException:
+                    # 'rook-ceph-crashcollector' on the failed node stucks at
+                    # pending state. BZ 1810014 tracks it.
+                    # Ignoring 'rook-ceph-crashcollector' pod health check as
+                    # WA and deleting its deployment so that the pod
+                    # disappears. Will revert this WA once the BZ is fixed
                     if 'rook-ceph-crashcollector' in pod_obj.name:
-                        ocp_obj = ocp.OCP()
-                        name = pod_obj.name[:-17]
-                        command = f"delete deployment {name}"
+                        ocp_obj = ocp.OCP(
+                            namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                        )
+                        pod_name = pod_obj.name
+                        deployment_name = '-'.join(pod_name.split("-")[:-2])
+                        command = f"delete deployment {deployment_name}"
                         ocp_obj.exec_oc_cmd(command=command)
                         log.info(f"Deleted deployment for pod {pod_obj.name}")
 
