@@ -126,6 +126,35 @@ class MCG(object):
         """
         return {bucket.name for bucket in self.s3_resource.buckets.all()}
 
+    def read_system(self):
+        """
+        Returns:
+            dict: A dictionary with information about MCG resources
+
+        """
+        return self.send_rpc_query(
+            'system_api',
+            'read_system',
+            params={}
+        ).json()['reply']
+
+    def get_bucket_info(self, bucket_name):
+        """
+        Args:
+            bucket_name (str): Name of searched bucket
+
+        Returns:
+            dict: Information about the bucket
+
+        """
+        logger.info(f'Requesting information about bucket {bucket_name}')
+        for bucket in self.read_system().get('buckets'):
+            if bucket['name'] == bucket_name:
+                logger.debug(bucket)
+                return bucket
+        logger.warning(f'Bucket {bucket_name} was not found')
+        return None
+
     def oc_get_all_bucket_names(self):
         """
         Returns:
@@ -601,7 +630,7 @@ class MCG(object):
         """
 
         def _check_state():
-            sysinfo = self.send_rpc_query('system_api', 'read_system', params={}).json()['reply']
+            sysinfo = self.read_system()
             for pool in sysinfo.get('pools'):
                 if pool.get('name') == backingstore_name:
                     if pool.get('mode') == desired_state:
