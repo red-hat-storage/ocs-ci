@@ -3,8 +3,17 @@ from concurrent.futures import ThreadPoolExecutor
 import boto3
 
 from ocs_ci.ocs import constants
+import os
+from ocs_ci.utility import templating
+from ocs_ci.framework import config
+from ocs_ci.utility.utils import run_mcg_cmd, TimeoutSampler, run_cmd
+from tests.helpers import create_resource
 from ocs_ci.ocs.resources.pod import get_rgw_pod
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from tests.helpers import logger, craft_s3_command, craft_s3_api_command
+import logging
+
+log = logging.getLogger(__name__)
 
 
 def retrieve_test_objects_to_pod(podobj, target_dir):
@@ -152,3 +161,137 @@ def upload_parts(mcg_obj, awscli_pod, bucketname, object_key, body_path, upload_
         ).split("\"")[-3].split("\\")[0]
         parts.append({"PartNumber": count, "ETag": f'"{part}"'})
     return parts
+
+
+def oc_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new backingstore with aws underlying storage using oc create command
+    Args:
+        cld_mgr (CloudManager): holds secret for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+    """
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data['metadata']['name'] = backingstore_name
+    bs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
+    bs_data['spec']['awsS3']['secret']['name'] = cld_mgr.aws_client.get_oc_secret()
+    bs_data['spec']['awsS3']['targetBucket'] = uls_name
+    bs_data['spec']['awsS3']['region'] = region
+    create_resource(**bs_data)
+
+
+def cli_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new backingstore with aws underlying storage using noobaa cli command
+    Args:
+        cld_mgr (CloudManager): holds secret for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+    """
+    run_mcg_cmd(f'backingstore create aws-s3 {backingstore_name} '
+                f'--access-key {cld_mgr.aws_client.get_aws_key()} '
+                f'--secret-key {cld_mgr.aws_client.get_aws_secret()} '
+                f'--target-bucket {uls_name} --region {region}'
+                )
+
+
+def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def cli_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def oc_create_azure_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def cli_create_azure_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def oc_create_s3comp_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def cli_create_s3comp_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    pass
+
+
+def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
+    """
+    Create a new backingstore with pv underlying storage using oc create command
+    Args:
+        backingstore_name (str): backingstore name
+        vol_num (int): number of pv volumes
+        size (int): each volume size in GB
+        storage_class (str): which storage class to use
+    """
+    bs_data = templating.load_yaml(constants.PV_BACKINGSTORE_YAML)
+    bs_data['metadata']['name'] = backingstore_name
+    bs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
+    bs_data['spec']['pvPool']['resources']['requests']['storage'] = str(size) + 'Gi'
+    bs_data['spec']['pvPool']['numVolumes'] = vol_num
+    bs_data['spec']['pvPool']['storageClass'] = storage_class
+    create_resource(**bs_data)
+    wait_for_pv_backingstore(backingstore_name, config.ENV_DATA['cluster_namespace'])
+
+
+def cli_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
+    """
+    Create a new backingstore with pv underlying storage using noobaa cli command
+    Args:
+        backingstore_name (str): backingstore name
+        vol_num (int): number of pv volumes
+        size (int): each volume size in GB
+        storage_class (str): which storage class to use
+    """
+    run_mcg_cmd(f'backingstore create pv-pool {backingstore_name} --num-volumes '
+                f'{vol_num} --pv-size-gb {size} --storage-class {storage_class}'
+                )
+    wait_for_pv_backingstore(backingstore_name, config.ENV_DATA['cluster_namespace'])
+
+
+def wait_for_pv_backingstore(backingstore_name, namespace=None):
+    """
+    wait for existing pv backing store to reach OPTIMAL state
+    Args:
+        backingstore_name (str): backingstore name
+        namespace (str): backing store's namespace
+    """
+
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    sample = TimeoutSampler(
+        timeout=240, sleep=15, func=check_pv_backingstore_status,
+        backingstore_name=backingstore_name, namespace=namespace
+    )
+    if not sample.wait_for_func_status(result=True):
+        log.error(f'Backing Store {backingstore_name} never reached OPTIMAL state')
+        raise TimeoutExpiredError
+    else:
+        log.info(f'Backing Store {backingstore_name} created successfully')
+
+
+def check_pv_backingstore_status(backingstore_name, namespace=None):
+    """
+    check if existing pv backing store is in OPTIMAL state
+    Args:
+        backingstore_name (str): backingstore name
+        namespace (str): backing store's namespace
+    Returns:
+        bool: True if backing store is in OPTIMAL state
+    """
+    kubeconfig = os.getenv('KUBECONFIG')
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    cmd = 'oc get backingstore'
+    cmd += f' -n {namespace}'
+    if kubeconfig:
+        cmd += f" --kubeconfig {kubeconfig} "
+    cmd += f'{backingstore_name}'
+    cmd += ' -o=jsonpath=`{.status.mode.modeCode}`'
+    res = run_cmd(cmd=cmd)
+    return True if 'OPTIMAL' in res else False
+
