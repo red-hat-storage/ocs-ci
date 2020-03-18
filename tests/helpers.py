@@ -2134,12 +2134,16 @@ def collect_performance_stats():
     # ToDo: Get iops and throughput percentage of each nodes
 
     # Get the cpu and memory of each nodes from adm top
-    master_node_utilization_from_adm_top = node.get_node_resource_utilization_from_adm_top(node_type='master')
-    worker_node_utilization_from_adm_top = node.get_node_resource_utilization_from_adm_top(node_type='worker')
+    master_node_utilization_from_adm_top = \
+        node.get_node_resource_utilization_from_adm_top(node_type='master')
+    worker_node_utilization_from_adm_top = \
+        node.get_node_resource_utilization_from_adm_top(node_type='worker')
 
     # Get the cpu and memory from describe of nodes
-    master_node_utilization_from_oc_describe = node.get_node_resource_utilization_from_oc_describe(node_type='master')
-    worker_node_utilization_from_oc_describe = node.get_node_resource_utilization_from_oc_describe(node_type='worker')
+    master_node_utilization_from_oc_describe = \
+        node.get_node_resource_utilization_from_oc_describe(node_type='master')
+    worker_node_utilization_from_oc_describe = \
+        node.get_node_resource_utilization_from_oc_describe(node_type='worker')
 
     performance_stats['iops_percentage'] = iops_percentage
     performance_stats['throughput_percentage'] = throughput_percentage
