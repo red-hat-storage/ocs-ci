@@ -321,7 +321,7 @@ class TestNodesMaintenance(ManageTest):
         # Check the pods should be in running state
         all_pod_obj = pod.get_all_pods(wait=True)
         for pod_obj in all_pod_obj:
-            if '-1-deploy' and 'ocs-deviceset' not in pod_obj.name:
+            if ('-1-deploy' or 'ocs-deviceset') not in pod_obj.name:
                 try:
                     helpers.wait_for_resource_state(
                         resource=pod_obj, state=constants.STATUS_RUNNING,
