@@ -294,4 +294,3 @@ def check_pv_backingstore_status(backingstore_name, namespace=None):
     cmd += ' -o=jsonpath=`{.status.mode.modeCode}`'
     res = run_cmd(cmd=cmd)
     return True if 'OPTIMAL' in res else False
-
