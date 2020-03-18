@@ -666,9 +666,10 @@ def validate_cluster_on_pvc():
 
     mon_pods = get_pod_name_by_pattern('rook-ceph-mon', ns)
     osd_pods = get_pod_name_by_pattern('rook-ceph-osd', ns, filter='prepare')
-    assert len(mon_pods) + len(osd_pods) == len(pvc_names), (
-        "Not enough PVC's available for all Ceph Pods"
-    )
+    if not config.DEPLOYMENT.get('local_storage'):
+        assert len(mon_pods) + len(osd_pods) == len(pvc_names), (
+            "Not enough PVC's available for all Ceph Pods"
+        )
     for ceph_pod in mon_pods + osd_pods:
         out = run_cmd(f'oc -n {ns} get pods {ceph_pod} -o yaml')
         out_yaml = yaml.safe_load(out)
