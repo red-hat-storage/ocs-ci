@@ -1,25 +1,31 @@
 dist: xenial  # required for Python >= 3.7
+
 language: python
 # installation of dependencies, the rest is handled by tox
+#
+python:
+  - "3.7"
+
 install:
-  - pip install tox
+  - pip install tox-travis
 # command to run unit tests
+
 script:
   - tox
 
 matrix:
   include:
-    - python: 3.6
-      env: TOXENV=py36
     - python: 3.7
       env: TOXENV=py37
-    - python: 3.6
-      env: TOXENV=flake8
     - python: 3.7
       env: TOXENV=flake8
-    - python: 3.6
-      env: TOXENV=collectonly
     - python: 3.7
       env: TOXENV=collectonly
     - python: 3.7
       env: TOXENV=docs
+      #    - python: 3.6
+      #      env: TOXENV=py36
+      #    - python: 3.6
+      #      env: TOXENV=collectonly
+      #    - python: 3.6
+      #      env: TOXENV=flake8
