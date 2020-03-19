@@ -177,4 +177,3 @@ def gen_bucket_policy(user_list, actions_list, resources_list, effect="Allow", s
 
     logger.info(f'bucket_policy: {bucket_policy}')
     return bucket_policy
-
