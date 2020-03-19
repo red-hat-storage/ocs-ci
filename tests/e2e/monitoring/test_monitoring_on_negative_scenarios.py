@@ -83,7 +83,7 @@ class TestMonitoringBackedByOCS(E2ETest):
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
         """
-        Restart nodes that are in status NotReady or unschedulabe,
+        Restart nodes that are in status NotReady or unschedulable,
         for situations in which the test failed in between restarting
         or scheduling those nodes
 
