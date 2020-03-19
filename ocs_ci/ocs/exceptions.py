@@ -156,3 +156,11 @@ class OpenshiftConsoleSuiteNotDefined(Exception):
 
 class ServiceUnavailable(Exception):
     pass
+
+
+class InvalidStatusCode(Exception):
+    pass
+
+
+class NoBucketPolicyResponse(Exception):
+    pass
