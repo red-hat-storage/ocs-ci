@@ -78,11 +78,17 @@ log = logging.getLogger(__name__)
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'operator'],
-            marks=pytest.mark.polarion_id("OCS-934")
+            marks=[
+                pytest.mark.polarion_id("OCS-934"),
+                pytest.mark.bugzilla('1815078')
+            ]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'operator'],
-            marks=pytest.mark.polarion_id("OCS-930")
+            marks=[
+                pytest.mark.polarion_id("OCS-930"),
+                pytest.mark.bugzilla('1815078')
+            ]
         )
     ]
 )

@@ -300,19 +300,31 @@ class DisruptionBase(ManageTest):
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'delete_pvcs', 'operator'],
-            marks=pytest.mark.polarion_id("OCS-932")
+            marks=[
+                pytest.mark.polarion_id("OCS-932"),
+                pytest.mark.bugzilla('1815078')
+            ]
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'delete_pods', 'operator'],
-            marks=pytest.mark.polarion_id("OCS-931")
+            marks=[
+                pytest.mark.polarion_id("OCS-931"),
+                pytest.mark.bugzilla('1815078')
+            ]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pvcs', 'operator'],
-            marks=pytest.mark.polarion_id("OCS-926")
+            marks=[
+                pytest.mark.polarion_id("OCS-926"),
+                pytest.mark.bugzilla('1815078')
+            ]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'delete_pods', 'operator'],
-            marks=pytest.mark.polarion_id("OCS-935")
+            marks=[
+                pytest.mark.polarion_id("OCS-935"),
+                pytest.mark.bugzilla('1815078')
+            ]
         )
     ]
 )
