@@ -1023,12 +1023,14 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list):
         start = [
             i for i in logs if re.search(f"delete \"{pv_name}\": started", i)
         ]
+        logging.info(f"Print PVC end {start}, pvname {pv_name}")
         start = start[0].split(' ')[1]
         start_time = datetime.datetime.strptime(start, format)
         # Extract the deletion end time for the PV
         end = [
             i for i in logs if re.search(f"delete \"{pv_name}\": succeeded", i)
         ]
+        logging.info(f"Print PVC end {end}, pvname {pv_name}")
         end = end[0].split(' ')[1]
         end_time = datetime.datetime.strptime(end, format)
         total = end_time - start_time
