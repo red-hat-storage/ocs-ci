@@ -22,7 +22,7 @@ from ocs_ci.utility import templating
 
 logger = logging.getLogger(__name__)
 
-node_cls_map = {'AWS': AWSNode, 'vmware': VMWareNode}
+node_cls_map = {'aws': AWSNode, 'vmware': VMWareNode}
 
 
 class NodeUtils(object):
@@ -31,7 +31,7 @@ class NodeUtils(object):
         self.platform = config.ENV_DATA['platform']
         self.cluster_path = config.ENV_DATA['cluster_path']
         self.cluster_id = get_infra_id(self.cluster_path)
-        if 'AWS' in self.platform:
+        if 'aws' in self.platform:
             self.region = config.ENV_DATA['region']
 
     def prepare_nodes(self, node_config, node_t=None, num_nodes=1):
@@ -50,10 +50,10 @@ class NodeUtils(object):
         node = node_cls_map[config.ENV_DATA['platform']]
         nlist = []
         num_workers = int(os.environ.get('num_workers', 3))
-        for i in num_nodes:
-            if not node_config['zone_worker_id']:
+        for i in range(num_nodes):
+            if not node_config.get('zone_worker_id'):
                 node_config['zone_worker_id'] = (i % num_workers)
-            nlist[i] = node(node_config, node_t)
+            nlist.append(node(node_config, node_t))
             nlist[i].prepare_node()
         return nlist
 
@@ -66,7 +66,7 @@ class NodeUtils(object):
         """
         if not self.same_node_type(node_list):
             pytest.fail("All the nodes should be of same type")
-        if self.platform == 'AWS':
+        if self.platform == 'aws':
             self.attach_nodes_to_aws_cluster(node_list)
         elif self.platform == 'vmware':
             self.attach_nodes_to_vmware_cluster(node_list)
@@ -106,7 +106,7 @@ class NodeUtils(object):
         """
         rhel_pod_name = "rhel-ansible"
         rhel_pod_obj = create_rhelpod(
-            constants.DEFAULT_NAMESPACE, rhel_pod_name
+            constants.DEFAULT_NAMESPACE, rhel_pod_name, 600
         )
         timeout = 4000  # For ansible-playbook
 
@@ -311,7 +311,6 @@ class NodeUtils(object):
 
         Returns:
             True if all the nodes are of same type, else False
-
         """
         reference = node_list[0].node_t
         for node in node_list:
