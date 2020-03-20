@@ -1,3 +1,5 @@
+import pytest
+
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import polarion_id
 from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier1
@@ -5,8 +7,11 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.cluster import CephCluster
-import pytest
 from ocs_ci.ocs.resources import csv
+from ocs_ci.ocs.defaults import (
+    LOCAL_STORAGE_OPERATOR_NAMESPACE,
+    LOCAL_STORAGE_OPERATOR_NAME
+)
 
 
 @ignore_leftovers
@@ -23,9 +28,12 @@ class TestAddCapacity(ManageTest):
 
         """
         if csv.get_csvs_start_with_prefix(
-            "local-storage-operator", namespace="local-storage"
+            LOCAL_STORAGE_OPERATOR_NAME,
+            namespace=LOCAL_STORAGE_OPERATOR_NAMESPACE
         ):
-            pytest.skip("add-capacity is not supported on LSO based deployment")
+            pytest.skip(
+                "add-capacity is not supported on LSO based deployment"
+            )
 
     def test_add_capacity(self):
         """
