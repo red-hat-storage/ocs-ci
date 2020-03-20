@@ -877,10 +877,10 @@ def verify_images_upgraded(old_images, object_data):
     )
 
 
-def check_upgrade_completed(target_version):
+def confirm_cluster_operator_version(target_version):
     """
     Check if OCP upgrade process is completed:
-        checks if all ClusterOperator images updated
+    checks if all ClusterOperator images updated
 
     Args:
         target_version (str): expected OCP client
@@ -890,8 +890,8 @@ def check_upgrade_completed(target_version):
 
     """
     log.info(f"target_version=: {target_version}")
-    log.info(f"current OCP version is: {get_current_oc_version()}")
     cur_version = get_current_oc_version()
+    log.info(f"current OCP version is: {cur_version}")
     if cur_version == target_version or target_version.startswith(cur_version):
         log.info(f"cluster operator upgrade to build {target_version} completed")
         return True
@@ -909,8 +909,8 @@ def upgrade_ocp(image_path, image):
         image_path (str): path to image
 
     """
-    ocp_o = OCP()
-    ocp_o.exec_oc_cmd(
+    ocp = OCP()
+    ocp.exec_oc_cmd(
         f"adm upgrade --to-image={image_path}:{image} "
         f"--allow-explicit-upgrade --force "
     )
@@ -925,8 +925,8 @@ def get_current_oc_version():
         str: current COP client version
 
     """
-    ocp_o = OCP()
-    oc_json = ocp_o.exec_oc_cmd('version -o json', out_yaml_format=False)
+    ocp = OCP()
+    oc_json = ocp.exec_oc_cmd('version -o json', out_yaml_format=False)
     log.debug(f"oc_json=: {oc_json}")
     oc_dict = json.loads(oc_json)
     log.debug(f"oc_dict=: {oc_dict}")
@@ -945,8 +945,8 @@ def get_cluster_operator_version(cluster_operator_name):
         str: cluster operator version: ClusterOperator image version
 
     """
-    ocp_obj = OCP(kind='ClusterOperator')
-    operator_info = ocp_obj.get(cluster_operator_name)
+    ocp = OCP(kind='ClusterOperator')
+    operator_info = ocp.get(cluster_operator_name)
     log.debug(f"operator info: {operator_info}")
     operator_status = operator_info.get('status')
     version = operator_status.get('versions')[0]['version']
@@ -963,8 +963,8 @@ def get_all_cluster_operators():
         list: cluster-operator names
 
     """
-    ocp_obj = OCP(kind='ClusterOperator')
-    operator_info = ocp_obj.get("-o name", out_yaml_format=False, all_namespaces=True)
+    ocp = OCP(kind='ClusterOperator')
+    operator_info = ocp.get("-o name", out_yaml_format=False, all_namespaces=True)
     operators_full_names = str(operator_info).split()
     operator_names = list()
     for name in operators_full_names:
