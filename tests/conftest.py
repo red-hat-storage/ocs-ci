@@ -1151,7 +1151,8 @@ def multi_pvc_factory_fixture(
         access_mode_dist_ratio=None,
         status=constants.STATUS_BOUND,
         num_of_pvc=1,
-        wait_each=False
+        wait_each=False,
+        timeout=60
     ):
         """
         Args:
@@ -1196,6 +1197,7 @@ def multi_pvc_factory_fixture(
             num_of_pvc(int): Number of PVCs to be created
             wait_each(bool): True to wait for each PVC to be in status 'status'
                 before creating next PVC, False otherwise
+            timeout(int): Time in seconds to wait
 
         Returns:
             list: objects of PVC class.
@@ -1252,7 +1254,7 @@ def multi_pvc_factory_fixture(
             pvc_obj.project = project
         if status and not wait_each:
             for pvc_obj in pvc_list:
-                helpers.wait_for_resource_state(pvc_obj, status)
+                helpers.wait_for_resource_state(pvc_obj, status, timeout=timeout)
         return pvc_list
 
     return factory
