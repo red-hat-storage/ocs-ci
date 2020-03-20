@@ -15,7 +15,7 @@ from ocs_ci.ocs.monitoring import (
 )
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
-    get_typed_nodes, drain_nodes, schedule_nodes
+    get_typed_nodes, drain_nodes, schedule_nodes, get_node_objs
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
@@ -83,13 +83,36 @@ class TestMonitoringBackedByOCS(E2ETest):
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
         """
-        Restart nodes that are in status NotReady, for situations in
-        which the test failed before restarting the node after detach volume,
-        which leaves nodes in NotReady
+        Restart nodes that are in status NotReady or unschedulable,
+        for situations in which the test failed in between restarting
+        or scheduling those nodes
 
         """
 
         def finalizer():
+
+            # Validate all nodes are schedulable
+            scheduling_disabled_nodes = [
+                n.name for n in get_node_objs() if n.ocp.get_resource_status(
+                    n.name
+                ) == constants.NODE_READY_SCHEDULING_DISABLED
+            ]
+            if scheduling_disabled_nodes:
+                schedule_nodes(scheduling_disabled_nodes)
+
+            # Validate all nodes are in READY state
+            not_ready_nodes = [
+                n for n in get_node_objs() if n
+                .ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
+            ]
+            log.warning(
+                f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
+            )
+            if not_ready_nodes:
+                nodes.restart_nodes(not_ready_nodes)
+                wait_for_nodes_status()
+
+            log.info("All nodes are in Ready status")
 
             assert prometheus_health_check(), "Prometheus health is degraded"
 

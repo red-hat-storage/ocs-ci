@@ -177,6 +177,7 @@ def check_ceph_health_status_metrics_on_prometheus(mgr_pod):
     )
 
 
+@retry(AssertionError, tries=20, delay=3, backoff=1)
 def prometheus_health_check(name=constants.MONITORING, kind=constants.CLUSTER_OPERATOR):
     """
     Return true if the prometheus cluster is healthy

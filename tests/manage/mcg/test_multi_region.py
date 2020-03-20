@@ -29,7 +29,7 @@ class TestMultiRegion:
         Test bucket creation using the S3 SDK
         """
 
-        mirrored_bucket_name = multiregion_mirror_setup[0]
+        mirrored_bucket_name = multiregion_mirror_setup[0].name
         system_bucket, mirror_tier_name, mirror_attached_pools = (None,) * 3
 
         # Make sure that the bucket is up and running
