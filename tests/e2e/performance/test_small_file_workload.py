@@ -63,10 +63,6 @@ class TestSmallFileWorkload(E2ETest):
                 *[16, 50000, 4, 1, constants.CEPHFILESYSTEM],
                 marks=pytest.mark.polarion_id("OCS-2023"),
             ),
-            pytest.param(
-                *[16, 200000, 4, 1, constants.CEPHFILESYSTEM],
-                marks=pytest.mark.polarion_id("OCS-2024"),
-            ),
         ]
     )
     @pytest.mark.polarion_id("OCS-1295")
@@ -124,7 +120,7 @@ class TestSmallFileWorkload(E2ETest):
             timeout=600
         )
         start_time = time.time()
-        timeout = 1800
+        timeout = 800
         while True:
             logs = bench_pod.exec_oc_cmd(
                 f'logs {small_file_client_pod}',
