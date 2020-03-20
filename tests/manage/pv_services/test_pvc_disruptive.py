@@ -152,27 +152,45 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'create_pvc', 'operator'],
-            marks=pytest.mark.polarion_id("OCS-927")
+            marks=[
+                pytest.mark.polarion_id("OCS-927"),
+                pytest.mark.bugzilla('1815078')
+            ]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'create_pod', 'operator'],
-            marks=pytest.mark.polarion_id("OCS-925")
+            marks=[
+                pytest.mark.polarion_id("OCS-925"),
+                pytest.mark.bugzilla('1815078')
+            ]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'run_io', 'operator'],
-            marks=pytest.mark.polarion_id("OCS-928")
+            marks=[
+                pytest.mark.polarion_id("OCS-928"),
+                pytest.mark.bugzilla('1815078')
+            ]
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'create_pvc', 'operator'],
-            marks=pytest.mark.polarion_id("OCS-937")
+            marks=[
+                pytest.mark.polarion_id("OCS-937"),
+                pytest.mark.bugzilla('1815078')
+            ]
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'create_pod', 'operator'],
-            marks=pytest.mark.polarion_id("OCS-936")
+            marks=[
+                pytest.mark.polarion_id("OCS-936"),
+                pytest.mark.bugzilla('1815078')
+            ]
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'run_io', 'operator'],
-            marks=pytest.mark.polarion_id("OCS-938")
+            marks=[
+                pytest.mark.polarion_id("OCS-938"),
+                pytest.mark.bugzilla('1815078')
+            ]
         )
     ]
 )
