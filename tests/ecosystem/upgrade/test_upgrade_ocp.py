@@ -2,7 +2,7 @@ import logging
 
 from ocs_ci.ocs import ocp
 from ocs_ci.framework import config
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, get_latest_ocp_version
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 
@@ -24,7 +24,6 @@ class TestUpgradeOCP(ManageTest):
 
     def test_upgrade_ocp(self):
         """
-
         Tests OCS stability when upgrading OCP
 
         """
@@ -33,6 +32,12 @@ class TestUpgradeOCP(ManageTest):
         with CephHealthMonitor(ceph_cluster):
 
             target_image = config.UPGRADE['ocp_upgrade_version']
+            if not target_image:
+                ocp_channel = config.UPGRADE['ocp_channel']
+                ocp_upgrade_version = get_latest_ocp_version(channel=ocp_channel)
+                ocp_arch = config.UPGRADE['ocp_arch']
+                target_image = f"{ocp_upgrade_version}-{ocp_arch}"
+
             image_path = config.UPGRADE['ocp_upgrade_path']
             self.cluster_operators = ocp.get_all_cluster_operators()
             logger.info(f" oc version: {ocp.get_current_oc_version()}")
@@ -48,7 +53,7 @@ class TestUpgradeOCP(ManageTest):
                 for sampler in TimeoutSampler(
                     timeout=2700,
                     sleep=60,
-                    func=ocp.check_upgrade_completed,
+                    func=ocp.confirm_cluster_operator_version,
                     target_version=target_image
                 ):
                     logger.info(
