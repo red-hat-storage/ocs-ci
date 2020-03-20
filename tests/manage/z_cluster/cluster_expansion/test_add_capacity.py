@@ -5,6 +5,8 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.cluster import CephCluster
+import pytest
+from ocs_ci.ocs.resources import csv
 
 
 @ignore_leftovers
@@ -14,6 +16,17 @@ class TestAddCapacity(ManageTest):
     """
     Automates adding variable capacity to the cluster while IOs running
     """
+    @pytest.fixture(autouse=True)
+    def lso_deployment_check(self):
+        """
+        Check if the deployment is LSO based before starting add_capacity test
+
+        """
+        if csv.get_csvs_start_with_prefix(
+            "local-storage-operator", namespace="local-storage"
+        ):
+            pytest.skip("add-capacity is not supported on LSO based deployment")
+
     def test_add_capacity(self):
         """
         Test to add variable capacity to the OSD cluster while IOs running
