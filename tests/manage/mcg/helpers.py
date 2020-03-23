@@ -152,3 +152,203 @@ def upload_parts(mcg_obj, awscli_pod, bucketname, object_key, body_path, upload_
         ).split("\"")[-3].split("\\")[0]
         parts.append({"PartNumber": count, "ETag": f'"{part}"'})
     return parts
+
+
+def create_multipart_upload(s3_obj, bucketname, object_key):
+    """
+    Initiates Multipart Upload
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket on which multipart upload to be initiated on
+        object_key (str): Unique object Identifier
+
+    Returns:
+        str : Multipart Upload-ID
+
+    """
+    mpu = s3_obj.s3_client.create_multipart_upload(Bucket=bucketname, Key=object_key)
+    upload_id = mpu["UploadId"]
+    return upload_id
+
+
+def list_multipart_upload(s3_obj, bucketname):
+    """
+    Lists the multipart upload details on a bucket
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+
+    Returns:
+        dict : Dictionary containing the multipart upload details
+
+    """
+    return s3_obj.s3_client.list_multipart_uploads(Bucket=bucketname)
+
+
+def list_uploaded_parts(s3_obj, bucketname, object_key, upload_id):
+    """
+    Lists uploaded parts and their ETags
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        object_key (str): Unique object Identifier
+        upload_id (str): Multipart Upload-ID
+
+    Returns:
+        dict : Dictionary containing the multipart upload details
+
+    """
+    return s3_obj.s3_client.list_parts(Bucket=bucketname, Key=object_key, UploadId=upload_id)
+
+
+def complete_multipart_upload(s3_obj, bucketname, object_key, upload_id, parts):
+    """
+    Completes the Multipart Upload
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        object_key (str): Unique object Identifier
+        upload_id (str): Multipart Upload-ID
+        parts (list): List containing the uploaded parts which includes ETag and part number
+
+    Returns:
+        dict : Dictionary containing the completed multipart upload details
+
+    """
+    result = s3_obj.s3_client.complete_multipart_upload(
+        Bucket=bucketname,
+        Key=object_key,
+        UploadId=upload_id,
+        MultipartUpload={"Parts": parts}
+    )
+    return result
+
+
+def abort_all_multipart_upload(s3_obj, bucketname, object_key):
+    """
+    Abort all Multipart Uploads for this Bucket
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        object_key (str): Unique object Identifier
+
+    Returns:
+        list : List of aborted upload ids
+
+    """
+    multipart_list = s3_obj.s3_client.list_multipart_uploads(Bucket=bucketname)
+    logger.info(f"Aborting{len(multipart_list)} uploads")
+    if "Uploads" in multipart_list:
+        return [
+            s3_obj.s3_client.abort_multipart_upload(
+                Bucket=bucketname, Key=object_key, UploadId=upload["UploadId"]
+            ) for upload in multipart_list["Uploads"]
+        ]
+    else:
+        return None
+
+
+def abort_multipart(s3_obj, bucketname, object_key, upload_id):
+    """
+    Aborts a Multipart Upload for this Bucket
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        object_key (str): Unique object Identifier
+        upload_id (str): Multipart Upload-ID
+
+    Returns:
+        str : aborted upload id
+
+    """
+
+    return s3_obj.s3_client.abort_multipart_upload(Bucket=bucketname, Key=object_key, UploadId=upload_id)
+
+
+def put_bucket_policy(s3_obj, bucketname, policy):
+    """
+    Adds bucket policy to a bucket
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        policy (json): Bucket policy in Json format
+
+    Returns:
+        dict : Bucket policy response
+
+    """
+    return s3_obj.s3_client.put_bucket_policy(Bucket=bucketname, Policy=policy)
+
+
+def get_bucket_policy(s3_obj, bucketname):
+    """
+    Gets bucket policy from a bucket
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+
+    Returns:
+        dict : Get Bucket policy response
+
+    """
+    return s3_obj.s3_client.get_bucket_policy(Bucket=bucketname)
+
+
+def delete_bucket_policy(s3_obj, bucketname):
+    """
+    Deletes bucket policy
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+
+    Returns:
+        dict : Delete Bucket policy response
+
+    """
+    return s3_obj.s3_client.delete_bucket_policy(Bucket=bucketname)
+
+
+def s3_put_object(s3_obj, bucketname, object_key, data):
+    """
+    Simple Boto3 client based Put object
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        object_key (str): Unique object Identifier
+        data (str): string content to write to a new S3 object
+
+    Returns:
+        dict : Put object response
+
+    """
+    return s3_obj.s3_client.put_object(Bucket=bucketname, Key=object_key, Body=data)
+
+
+def s3_get_object(s3_obj, bucketname, object_key):
+    """
+    Simple Boto3 client based Get object
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        object_key (str): Unique object Identifier
+
+    Returns:
+        dict : Get object response
+
+    """
+    return s3_obj.s3_client.get_object(Bucket=bucketname, Key=object_key)
+
+
+def s3_delete_object(s3_obj, bucketname, object_key):
+    """
+    Simple Boto3 client based Delete object
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        object_key (str): Unique object Identifier
+
+    Returns:
+        dict : Delete object response
+
+    """
+    return s3_obj.s3_client.delete_object(Bucket=bucketname, Key=object_key)
