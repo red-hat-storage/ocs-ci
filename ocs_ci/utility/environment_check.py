@@ -7,7 +7,7 @@ import logging
 import yaml
 from gevent.threadpool import ThreadPoolExecutor
 
-from ocs_ci.ocs import ocp, constants, exceptions
+from ocs_ci.ocs import ocp, defaults, constants, exceptions
 
 log = logging.getLogger(__name__)
 
@@ -94,7 +94,9 @@ def assign_get_values(
     for item in items:
         ns = item.get('metadata', {}).get('namespace')
         app_label = item.get('metadata', {}).get('labels', {}).get('app')
-        if ns.startswith("openshift-") and ns != "openshift-storage":
+        if (ns is not None
+                and ns.startswith("openshift-")
+                and ns != defaults.ROOK_CLUSTER_NAMESPACE):
             log.debug("ignoring item in %s namespace: %s", ns, item)
             continue
         if app_label in exclude_labels:
