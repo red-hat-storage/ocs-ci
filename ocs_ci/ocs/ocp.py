@@ -968,7 +968,7 @@ def get_all_cluster_operators():
     operators_full_names = str(operator_info).split()
     operator_names = list()
     for name in operators_full_names:
-        log.info(f"original operator name: {name}")
+        log.debug(f"original operator name: {name}")
         new_name = name.lstrip('clusteroperator.config.openshift.io').lstrip('/')
         log.info(f"fixed operator name: {new_name}")
         operator_names.append(new_name)

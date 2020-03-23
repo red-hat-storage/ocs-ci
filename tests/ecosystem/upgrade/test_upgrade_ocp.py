@@ -2,7 +2,11 @@ import logging
 
 from ocs_ci.ocs import ocp
 from ocs_ci.framework import config
-from ocs_ci.utility.utils import TimeoutSampler, get_latest_ocp_version
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    get_latest_ocp_version,
+    expose_ocp_version,
+)
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 
@@ -31,18 +35,23 @@ class TestUpgradeOCP(ManageTest):
         ceph_cluster = CephCluster()
         with CephHealthMonitor(ceph_cluster):
 
-            ocp_upgrade_version = config.UPGRADE['ocp_upgrade_version']
+            ocp_upgrade_version = config.UPGRADE.get('ocp_upgrade_version')
             if not ocp_upgrade_version:
                 ocp_channel = config.UPGRADE['ocp_channel']
                 ocp_upgrade_version = get_latest_ocp_version(channel=ocp_channel)
-            ocp_arch = config.UPGRADE['ocp_arch']
-            target_image = f"{ocp_upgrade_version}-{ocp_arch}"
+                ocp_arch = config.UPGRADE['ocp_arch']
+                target_image = f"{ocp_upgrade_version}-{ocp_arch}"
+            elif ocp_upgrade_version.endswith(".nightly"):
+                target_image = expose_ocp_version(ocp_upgrade_version)
+
+            logger.info(f"Target image; {target_image}")
 
             image_path = config.UPGRADE['ocp_upgrade_path']
             self.cluster_operators = ocp.get_all_cluster_operators()
             logger.info(f" oc version: {ocp.get_current_oc_version()}")
 
             # Upgrade OCP
+            logger.info(f"full upgrade path: {image_path}:{target_image}")
             ocp.upgrade_ocp(image=target_image, image_path=image_path)
 
             # Wait for upgrade
