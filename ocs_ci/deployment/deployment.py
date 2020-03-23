@@ -15,12 +15,14 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
 from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
+from ocs_ci.ocs.machine import get_labeled_nodes
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods
 )
 from ocs_ci.ocs.node import get_typed_worker_nodes
+from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -30,8 +32,9 @@ from ocs_ci.ocs.resources.packagemanifest import (
 )
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
-    validate_pods_are_respinned_and_running_state
-)
+    validate_pods_are_respinned_and_running_state,
+    Pod, get_pvc_name, delete_pods)
+from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox, collect_ocs_logs
 )
@@ -647,17 +650,35 @@ class Deployment(object):
 
     def uninstall_osc(self):
         ocp_obj = ocp.OCP()
-        storage_classes = {'openshift-storage.rbd.csi.ceph.com',
+        provisioners = {'openshift-storage.rbd.csi.ceph.com',
                            'openshift-storage.cephfs.csi.ceph.com',
                            'openshift-storage.noobaa.io/obc'}
-        # STEP 1:List the storage classes and take a note of the storage classes with the following storage class
-        # provisioners:
+
+        # STEP 1:List the storage classes and take a note of the storage classes with the following storage classprovisioners:
+        sc_list = ocp_obj.exec_oc_cmd("get storageclasses -o yaml")
+        for storage_class in sc_list:
 
         # STEP 2: Query for PVCs and OBCs that are using the storage class provisioners listed in the previous step.
+        pvc_list = get_all_pvcs(namespace='openshift-storage')
+        pvcs_to_delete = []
+        for pvc in pvc_list:
+            for storage_class in sc_list
+                if pvc.backed_sc == storage_class:
+                    pvcs_to_delete.append(pvc)
 
         # STEP3: Follow these instructions to ensure that the PVCs listed in the previous step are deleted:
         # STEP 3.1: Determine the pod that is consuming the PVC.
+        pod_list = get_all_pods(namespace='openshift-storage')
+        pods_to_delete = []
+        for pod in pod_list:
+            for pvc in pvcs_to_delete:
+                if get_pvc_name(pod) == pvc.get('metadata').get('name'):
+                    pods_to_delete.append(pod)
+        delete_pods(pods_to_delete)
+
         # STEP 3.2: Delete the PVCs.
+        delete_pvcs(pvc_list)
+
         #Removing monitoring stack from OpenShift Container Storage
         #Removing OpenShift Container Platform registry from OpenShift Container Storage
         #Removing the cluster logging operator from OpenShift Container Storage
@@ -669,45 +690,65 @@ class Deployment(object):
         ocp_obj.exec_oc_cmd("delete project openshift-storage --wait=true --timeout=5m")
 
         # STEP 6: Delete the storage classes with an openshift-storage provisioner listed in step 1.
-        for storageclass_name in storageclass_list:
+        for storageclass_name in sc_list:
             ocp_obj.exec_oc_cmd(f"delete storageclass {storageclass_name} --wait=true --timeout=5m")
 
         # STEP 7: Remove the taint from the storage nodes.
-            ocp_obj.exec_oc_cmd("adm taint nodes --all node.ocs.openshift.io/storage-")
+        ocp_obj.exec_oc_cmd("adm taint nodes --all node.ocs.openshift.io/storage-")
 
         # STEP 8: Unlabel the storage nodes.
-            ocp_obj.exec_oc_cmd("label nodes  --all cluster.ocs.openshift.io/openshift-storage-")
-            ocp_obj.exec_oc_cmd("label nodes  --all topology.rook.io/rack-")
+        ocp_obj.exec_oc_cmd("label nodes  --all cluster.ocs.openshift.io/openshift-storage-")
+        ocp_obj.exec_oc_cmd("label nodes  --all topology.rook.io/rack-")
 
         # STEP 9: Remove CustomResourceDefinitions.
-            ocp_obj.exec_oc_cmd("delete crd backingstores.noobaa.io bucketclasses.noobaa.io"
+        ocp_obj.exec_oc_cmd("delete crd backingstores.noobaa.io bucketclasses.noobaa.io"
                                 " cephblockpools.ceph.rook.io cephclusters.ceph.rook.io "
                                 "cephfilesystems.ceph.rook.io cephnfses.ceph.rook.io "
                                 "cephobjectstores.ceph.rook.io cephobjectstoreusers.ceph.rook.io "
                                 "noobaas.noobaa.io ocsinitializations.ocs.openshift.io  "
                                 "storageclusterinitializations.ocs.openshift.io "
                                 "storageclusters.ocs.openshift.io  --wait=true --timeout=5m"
-            )
+        )
 
         # STEP 10: List the storage nodes.
+        nodes_list = get_labeled_nodes('cluster.ocs.openshift.io/openshift-storage')
 
         # STEP 11: For each node, perform the following:
-
+        for node in nodes_list:
+            ocp_obj.exec_oc_cmd(f"debug node/{node}")
+            run_cmd("chroot /host")
+            run_cmd("rm -rf /var/lib/rook")
+            run_cmd("exit")
+            run_cmd("exit")
         # STEP 12: To make sure that OpenShift Container Storage is uninstalled,
         # verify that the openshift-storage namespace no longer exists and the storage dashboard
         # no longer appears in the UI.
 
 
+
+
     def remove_monitoring_stack(self, ocp_obj):
         name_space = constants.MONITORING_NAMESPACE
+        pod_list = get_all_pods(namespace=name_space)
+        pvc_list = get_all_pvcs(namespace=name_space)
 
     def remove_OCP_registry(self, ocp_obj):
         name_space = constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
         # Edit the configs.imageregistry.operator.openshift.io object and remove the content in the storage section.
+        pvc_name =
+        if self.platform == constants.AWS_PLATFORM:
+            patch = " '{\"spec\":{\"storage\":{}}}' "
+            run_cmd(
+                f"oc patch configs.imageregistry.operator.openshift.io "
+                f"cluster --type merge --patch {patch}"
+            )
 
-        if aws:
-
-        elif vmware:
+        elif self.platform == constants.VSPHERE_PLATFORM:
+            patch = " '{\"spec\":{\"storage\":{\"emptyDir\":{}}}}' "
+            run_cmd(
+                f"oc patch configs.imageregistry.operator.openshift.io "
+                f"cluster --type merge --patch {patch}"
+            )
 
         # Delete the PVC.
 
@@ -716,4 +757,5 @@ class Deployment(object):
         # Remove the ClusterLogging instance in the namespace.
         ocp_obj.exec_oc_cmd("delete clusterlogging instance -n openshift-logging --wait=true --timeout=5m")
         # Delete PVCs.
+
 
