@@ -483,6 +483,26 @@ class CephCluster(object):
             "ceph status", out_yaml_format=False,
         )
 
+    def get_ceph_capacity(self):
+        """
+        The function gets the total storage capacity of the ocs cluster
+
+        Returns:
+            Total storage capacity in GiB (GiB is for development environment)
+
+        """
+
+        ceph_status = self.get_ceph_status()
+        for item in ceph_status.split("\n"):
+            if 'usage:' in item:
+                total_storage = re.findall(r'\d+\.+\d+|\d\d*', item.strip())
+                total_storage = float(total_storage[2])
+                unit = item.split(' ')[-2]
+                conversion = {'GiB': 1, 'TiB': 1024}
+                total_storage = total_storage * conversion[unit]
+                logging.info(f"Total Storage capacity of the cluster is {total_storage}")
+                return total_storage
+
     def get_ceph_cluster_iops(self):
         """
         The function gets the IOPS from the ocs cluster
