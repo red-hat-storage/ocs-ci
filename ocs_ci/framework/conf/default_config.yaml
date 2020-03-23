@@ -115,7 +115,7 @@ ENV_DATA:
 UPGRADE:
   upgrade_to_latest: true
   # This default image for ocp upgrade based on GA build
-  ocp_upgrade_version: "4.3.3"
+  # ocp_upgrade_version: "4.3.3"
   ocp_channel: "stable-4.3"
   ocp_arch: "x86_64"
 

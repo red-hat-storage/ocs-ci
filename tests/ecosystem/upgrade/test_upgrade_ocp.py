@@ -31,12 +31,12 @@ class TestUpgradeOCP(ManageTest):
         ceph_cluster = CephCluster()
         with CephHealthMonitor(ceph_cluster):
 
-            target_image = config.UPGRADE['ocp_upgrade_version']
-            if not target_image:
+            ocp_upgrade_version = config.UPGRADE['ocp_upgrade_version']
+            if not ocp_upgrade_version:
                 ocp_channel = config.UPGRADE['ocp_channel']
                 ocp_upgrade_version = get_latest_ocp_version(channel=ocp_channel)
-                ocp_arch = config.UPGRADE['ocp_arch']
-                target_image = f"{ocp_upgrade_version}-{ocp_arch}"
+            ocp_arch = config.UPGRADE['ocp_arch']
+            target_image = f"{ocp_upgrade_version}-{ocp_arch}"
 
             image_path = config.UPGRADE['ocp_upgrade_path']
             self.cluster_operators = ocp.get_all_cluster_operators()

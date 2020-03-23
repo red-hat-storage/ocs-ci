@@ -1,5 +1,5 @@
 ---
 # Use this config for upgrading of OCP 4.3 cluster
 UPGRADE:
-  ocp_upgrade_version: "4.3.0-0.nightly"
+  # ocp_upgrade_version: "4.3.0-0.nightly"
   ocp_arch: "x86_64"
