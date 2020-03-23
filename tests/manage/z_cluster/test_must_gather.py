@@ -75,6 +75,9 @@ class TestMustGather(ManageTest):
         Tests functionality of: oc adm must-gather
 
         """
+        # Fetch pod details
+        pods = pod.get_all_pods(namespace='openshift-storage')
+        pods = [each.name for each in pods]
 
         # Make logs root directory
         logger.info("Creating logs Directory")
@@ -89,8 +92,6 @@ class TestMustGather(ManageTest):
         # Compare running pods list to "/pods" subdirectories
         logger.info("Checking logs tree")
         logs = self.get_log_directories(directory)
-        pods = pod.get_all_pods(namespace='openshift-storage')
-        pods = [each.name for each in pods if 'must-gather' not in each.name]
         logger.info(f"Logs: {logs}")
         logger.info(f"pods list: {pods}")
         assert set(sorted(logs)) == set(sorted(pods)), (
