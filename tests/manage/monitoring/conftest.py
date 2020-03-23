@@ -274,7 +274,7 @@ def measure_stop_ceph_mon(measurement_dir):
 
     def stop_mon():
         """
-        Downscale Ceph Monitor deployments for 12 minutes. First 15 minutes
+        Downscale Ceph Monitor deployments for 14 minutes. First 15 minutes
         the alert CephMonQuorumAtRisk should be in 'Pending'. After 15 minutes
         the alert turns into 'Firing' state.
         This configuration of monitoring can be observed in ceph-mixins which
@@ -287,7 +287,7 @@ def measure_stop_ceph_mon(measurement_dir):
             str: Names of downscaled deployments
         """
         # run_time of operation
-        run_time = 60 * 12
+        run_time = 60 * 14
         nonlocal oc
         nonlocal mons_to_stop
         for mon in mons_to_stop:
