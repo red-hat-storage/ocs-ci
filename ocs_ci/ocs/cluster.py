@@ -488,7 +488,7 @@ class CephCluster(object):
         The function gets the total storage capacity of the ocs cluster
 
         Returns:
-            Total storage capacity in GiB (GiB is for development environment)
+            int : Total storage capacity in GiB (GiB is for development environment)
 
         """
 
@@ -501,7 +501,7 @@ class CephCluster(object):
                 conversion = {'GiB': 1, 'TiB': 1024}
                 total_storage = total_storage * conversion[unit]
                 logging.info(f"Total Storage capacity of the cluster is {total_storage}")
-                return total_storage
+                return int(total_storage)
 
     def get_ceph_cluster_iops(self):
         """
