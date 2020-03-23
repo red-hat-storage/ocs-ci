@@ -5,7 +5,7 @@ import re   # This is part of workaround for BZ-1766646, to be removed when fixe
 import pytest
 
 from ocs_ci.framework.testlib import ManageTest, tier1
-from ocs_ci.ocs import ocp
+from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.utility.utils import ocsci_log_path, TimeoutSampler
@@ -104,6 +104,49 @@ class TestMustGather(ManageTest):
         assert self.check_file_size(logs_dir_list), (
             "One or more log file are empty"
         )
+
+        # Find must_gather_commands directory for verification
+        for dir_root, dirs, files in os.walk(directory + "_ocs_logs"):
+            if os.path.basename(dir_root) == 'must_gather_commands':
+                logger.info(
+                    f"Found must_gather_commands directory - {dir_root}"
+                )
+                assert 'json_output' in dirs, (
+                    "json_output directory is not present in "
+                    "must_gather_commands directory."
+                )
+                assert files, (
+                    "No files present in must_gather_commands directory."
+                )
+                cmd_files_path = [
+                    os.path.join(dir_root, file_name) for file_name in files
+                ]
+                json_output_dir = os.path.join(dir_root, 'json_output')
+                break
+
+        # Verify that command output files are present as expected
+        assert sorted(constants.MUST_GATHER_COMMANDS) == sorted(files), (
+            f"Actual and expected commands output files are not matching.\n"
+            f"Actual: {files}\nExpected: {constants.MUST_GATHER_COMMANDS}"
+        )
+
+        # Verify that files for command output in json are present as expected
+        commands_json = os.listdir(json_output_dir)
+        assert sorted(constants.MUST_GATHER_COMMANDS_JSON) == sorted(commands_json), (
+            f"Actual and expected json output commands files are not "
+            f"matching.\nActual: {commands_json}\n"
+            f"Expected: {constants.MUST_GATHER_COMMANDS_JSON}"
+        )
+
+        # Verify that command output files are not empty
+        empty_files = []
+        json_cmd_files_path = [
+            os.path.join(json_output_dir, file_name) for file_name in commands_json
+        ]
+        for file_path in cmd_files_path + json_cmd_files_path:
+            if not os.path.getsize(file_path) > 0:
+                empty_files.append(file_path)
+        assert not empty_files, f"These files are empty: {empty_files}"
 
     def make_directory(self):
         """

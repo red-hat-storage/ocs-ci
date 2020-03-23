@@ -644,3 +644,28 @@ OSD_TREE_ZONE = {
 
 # gather bootstrap
 GATHER_BOOTSTRAP_PATTERN = 'openshift-install gather bootstrap --help'
+
+# must-gather commands output files
+MUST_GATHER_COMMANDS = [
+    'ceph_versions', 'ceph_status', 'ceph_report', 'ceph_pg_dump',
+    'ceph_osd_tree', 'ceph_osd_stat', 'ceph_osd_dump', 'ceph_osd_df_tree',
+    'ceph_osd_crush_show-tunables', 'ceph_osd_crush_dump', 'ceph_mon_stat',
+    'ceph_mon_dump', 'ceph_mgr_dump', 'ceph_mds_stat', 'ceph_health_detail',
+    'ceph_fs_ls', 'ceph_fs_dump', 'ceph_df', 'ceph_auth_list',
+    'ceph-volume_lvm_list'
+]
+
+MUST_GATHER_COMMANDS_JSON = [
+    'ceph_versions_--format_json-pretty', 'ceph_status_--format_json-pretty',
+    'ceph_report_--format_json-pretty', 'ceph_pg_dump_--format_json-pretty',
+    'ceph_osd_tree_--format_json-pretty', 'ceph_osd_stat_--format_json-pretty',
+    'ceph_osd_dump_--format_json-pretty',
+    'ceph_osd_df_tree_--format_json-pretty',
+    'ceph_osd_crush_show-tunables_--format_json-pretty',
+    'ceph_osd_crush_dump_--format_json-pretty',
+    'ceph_mon_stat_--format_json-pretty', 'ceph_mon_dump_--format_json-pretty',
+    'ceph_mgr_dump_--format_json-pretty', 'ceph_mds_stat_--format_json-pretty',
+    'ceph_health_detail_--format_json-pretty',
+    'ceph_fs_ls_--format_json-pretty', 'ceph_fs_dump_--format_json-pretty',
+    'ceph_df_--format_json-pretty', 'ceph_auth_list_--format_json-pretty'
+]
