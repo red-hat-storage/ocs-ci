@@ -90,13 +90,12 @@ class TestMustGather(ManageTest):
         logger.info("Checking logs tree")
         logs = self.get_log_directories(directory)
         pods = pod.get_all_pods(namespace='openshift-storage')
-        pods = [each.name for each in pods]
+        pods = [each.name for each in pods if 'must-gather' not in each.name]
         logger.info(f"Logs: {logs}")
         logger.info(f"pods list: {pods}")
         assert set(sorted(logs)) == set(sorted(pods)), (
-            "List of openshift-storage pods are not equal to list of "
-            "logs directories list of pods: {pods}"
-            f"list of log directories: {logs}"
+            f"List of openshift-storage pods are not equal to list of logs "
+            f"directories list of pods: {pods} list of log directories: {logs}"
         )
 
         # 2nd test: Verify logs file are not empty
