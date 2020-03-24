@@ -877,26 +877,27 @@ def verify_images_upgraded(old_images, object_data):
     )
 
 
-def confirm_cluster_operator_version(target_version):
+def confirm_cluster_operator_version(target_version, cluster_operator):
     """
-    Check if OCP upgrade process is completed:
-    checks if all ClusterOperator images updated
+    Check if cluster operator upgrade process is completed:
 
     Args:
+        cluster_operator: (str): ClusterOperator name
         target_version (str): expected OCP client
 
     Returns:
         bool: True if success, False if failed
 
     """
-    log.info(f"target_version=: {target_version}")
-    cur_version = get_current_oc_version()
-    log.info(f"current OCP version is: {cur_version}")
+    log.info(f"target_version: {target_version}")
+    cur_version = get_cluster_operator_version(cluster_operator)
+    log.info(f"current {cluster_operator} operator version is: {cur_version}")
     if cur_version == target_version or target_version.startswith(cur_version):
-        log.info(f"cluster operator upgrade to build {target_version} completed")
+        log.info(f"{cluster_operator} cluster operator upgrade to build"
+                 f" {target_version} completed")
         return True
 
-    log.debug(f"upgrade not completed")
+    log.debug(f"{cluster_operator} upgrade not yet completed")
     return False
 
 
