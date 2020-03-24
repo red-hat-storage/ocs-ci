@@ -7,7 +7,7 @@ from time import sleep
 
 from ocs_ci.deployment.deployment import create_catalog_source
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import upgrade
+from ocs_ci.framework.testlib import ocs_upgrade
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
@@ -130,7 +130,7 @@ def verify_image_versions(old_images, upgrade_version):
         )
 
 
-@upgrade
+@ocs_upgrade
 def test_upgrade():
     ceph_cluster = CephCluster()
     with CephHealthMonitor(ceph_cluster):
