@@ -161,9 +161,10 @@ def drain_nodes(node_names):
             f"--delete-local-data", timeout=1200
         )
     except TimeoutExpired:
-        log.info(
+        log.error(
             f"Drain command failed to complete. Ceph status: {ceph_cluster.get_ceph_status()}"
         )
+        # TODO: Add re-balance status once pull/1679 is merged
         raise
 
 

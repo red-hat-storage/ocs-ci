@@ -16,7 +16,8 @@ import base64
 from ocs_ci.ocs.ocp import OCP, verify_images_upgraded
 from tests import helpers
 from ocs_ci.ocs import workload
-from ocs_ci.ocs import constants, defaults, node
+from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed, NonUpgradedImagesFoundError
 from ocs_ci.ocs.utils import setup_ceph_toolbox
@@ -889,7 +890,7 @@ def get_pod_node(pod_obj):
 
     """
     node_name = pod_obj.get().get('spec').get('nodeName')
-    return node.get_node_objs(node_names=node_name)[0]
+    return get_node_objs(node_names=node_name)[0]
 
 
 def delete_pods(pod_objs, wait=True):
