@@ -771,8 +771,11 @@ class AWSUPINode(AWSNodes):
         config
 
         """
-        default_conf = self.read_default_config(constants.RHEL_WORKERS_CONF)
+        conf = self.read_default_config(constants.RHEL_WORKERS_CONF)
+        default_conf = conf.get('ENV_DATA')
         merge_dict(default_conf, self.node_conf)
+        logger.info("Merged dict is\n ")
+        logger.info(default_conf)
         return default_conf
 
     def prepare_upi_rhel_node(self, node_conf):
