@@ -351,6 +351,7 @@ def check_max_osds_per_node(max_number_osds=2):
                 f"Node {node_name} runs {count} OSDs, maximum {max_number_osds} is allowed "
             )
 
+
 def add_capacity(osd_size_capacity_requested):
     """
    Add storage capacity to the cluster
