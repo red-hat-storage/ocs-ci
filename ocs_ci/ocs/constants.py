@@ -501,8 +501,13 @@ PEM_PATH = "/etc/pki/ca-trust/source/anchors/"
 # Upgrade related constants, keeping some space between, so we can add
 # additional order.
 ORDER_BEFORE_UPGRADE = 10
-ORDER_UPGRADE = 20
-ORDER_AFTER_UPGRADE = 30
+ORDER_BEFORE_OCP_UPGRADE = 20
+ORDER_OCP_UPGRADE = 30
+ORDER_AFTER_OCP_UPGRADE = 40
+ORDER_BEFORE_OCS_UPGRADE = 50
+ORDER_OCS_UPGRADE = 60
+ORDER_AFTER_OCS_UPGRADE = 70
+ORDER_AFTER_UPGRADE = 80
 
 # Deployment constants
 OCS_CSV_PREFIX = 'ocs-operator'
