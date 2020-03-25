@@ -40,6 +40,10 @@ class AWSBase(Deployment):
         super(AWSBase, self).__init__()
         self.region = config.ENV_DATA['region']
         self.aws = AWSUtil(self.region)
+        if config.ENV_DATA.get('cluster_name'):
+            self.cluster_name = config.ENV_DATA['cluster_name']
+        else:
+            self.cluster_name = get_cluster_name(self.cluster_path)
 
     def create_ebs_volumes(self, worker_pattern, size=100):
         """
@@ -183,10 +187,9 @@ class AWSBase(Deployment):
 
     def destroy_volumes(self):
         try:
-            # Retrieve cluster name and AWS region from metadata
-            cluster_name = get_cluster_name(self.cluster_path)
+            # Retrieve AWS region from metadata
             # Find and delete volumes
-            volume_pattern = f"{cluster_name}*"
+            volume_pattern = f"{self.cluster_name}*"
             logger.debug(f"Finding volumes with pattern: {volume_pattern}")
             volumes = self.aws.get_volumes_by_name_pattern(volume_pattern)
             logger.debug(f"Found volumes: \n {volumes}")
