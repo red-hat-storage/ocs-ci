@@ -779,7 +779,7 @@ class AWSUPINode(AWSNodes):
         """
         Handle RHEL worker instance creation
         1. Create RHEL worker instance , copy required AWS tags from existing
-            worker instances to new RHEL instance
+        worker instances to new RHEL instance
         2. Copy IAM role from existing worker to new RHEL worker
 
         """
