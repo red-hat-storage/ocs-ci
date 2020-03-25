@@ -3,7 +3,6 @@ import logging
 import re
 
 from subprocess import TimeoutExpired
-from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
@@ -152,7 +151,6 @@ def drain_nodes(node_names):
 
     """
     ocp = OCP(kind='node')
-    ceph_cluster = CephCluster()
     node_names_str = ' '.join(node_names)
     log.info(f'Draining nodes {node_names_str}')
     try:
@@ -161,8 +159,10 @@ def drain_nodes(node_names):
             f"--delete-local-data", timeout=1200
         )
     except TimeoutExpired:
+        ct_pod = pod.get_ceph_tools_pod()
+        ceph_status = ct_pod.exec_cmd_on_pod("ceph status", out_yaml_format=False)
         log.error(
-            f"Drain command failed to complete. Ceph status: {ceph_cluster.get_ceph_status()}"
+            f"Drain command failed to complete. Ceph status: {ceph_status}"
         )
         # TODO: Add re-balance status once pull/1679 is merged
         raise
