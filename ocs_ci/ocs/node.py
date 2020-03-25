@@ -3,6 +3,7 @@ import logging
 import re
 
 from subprocess import TimeoutExpired
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
@@ -151,12 +152,19 @@ def drain_nodes(node_names):
 
     """
     ocp = OCP(kind='node')
+    ceph_cluster = CephCluster()
     node_names_str = ' '.join(node_names)
     log.info(f'Draining nodes {node_names_str}')
-    ocp.exec_oc_cmd(
-        f"adm drain {node_names_str} --force=true --ignore-daemonsets "
-        f"--delete-local-data", timeout=1200
-    )
+    try:
+        ocp.exec_oc_cmd(
+            f"adm drain {node_names_str} --force=true --ignore-daemonsets "
+            f"--delete-local-data", timeout=1200
+        )
+    except TimeoutExpired:
+        log.info(
+            f"Drain command failed to complete. Ceph status: {ceph_cluster.get_ceph_status()}"
+        )
+        raise
 
 
 def get_typed_worker_nodes(os_id="rhcos"):
