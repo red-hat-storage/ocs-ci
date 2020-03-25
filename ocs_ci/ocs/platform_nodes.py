@@ -513,6 +513,7 @@ class AWSNodes(NodesBase):
 
         Args:
             node_list (list): of AWSUPINode/AWSIPINode objects
+
         """
         if self.deployment_type.lower() == 'upi':
             self.attach_nodes_to_upi_cluster(node_list)
@@ -523,6 +524,7 @@ class AWSNodes(NodesBase):
 
         Args:
             node_list (list): of AWSUPINode objects
+
         """
         if node_list[0].node_type == 'RHEL':
             self.attach_rhel_nodes_to_upi_cluster(node_list)
@@ -533,6 +535,7 @@ class AWSNodes(NodesBase):
 
         Args:
             node_list (list): of AWSUPINode objects with RHEL os
+
         """
         rhel_pod_name = "rhel-ansible"
         rhel_pod_obj = create_rhelpod(
@@ -752,6 +755,7 @@ class AWSUPINode(AWSNodes):
     def _prepare_node(self):
         """
         Create AWS instance of the node
+
         """
         if self.node_type == 'RHEL':
             conf = self.prepare_rhel_node_conf()
@@ -765,6 +769,7 @@ class AWSUPINode(AWSNodes):
         """
         Merge default RHEL node config with the user provided
         config
+
         """
         default_conf = self.read_default_config(constants.RHEL_WORKERS_CONF)
         merge_dict(default_conf, self.node_conf)
@@ -776,6 +781,7 @@ class AWSUPINode(AWSNodes):
         1. Create RHEL worker instance , copy required AWS tags from existing
             worker instances to new RHEL instance
         2. Copy IAM role from existing worker to new RHEL worker
+
         """
         cluster_id = get_infra_id(self.cluster_path)
         num_workers = len(get_typed_worker_nodes())
