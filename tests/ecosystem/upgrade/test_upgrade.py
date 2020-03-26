@@ -30,6 +30,7 @@ from ocs_ci.utility.utils import (
     get_next_version_available_for_upgrade,
     get_ocs_version_from_image,
     load_config_file,
+    run_cmd,
 )
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
 
@@ -173,7 +174,10 @@ def test_upgrade():
             resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
             namespace=constants.MARKETPLACE_NAMESPACE,
         )
-        if not ocs_catalog.is_exist():
+        upgrade_in_current_source = config.UPGRADE.get(
+            'upgrade_in_current_source', False
+        )
+        if not ocs_catalog.is_exist() and not upgrade_in_current_source:
             log.info("OCS catalog source doesn't exist. Creating new one.")
             create_catalog_source(ocs_registry_image, ignore_upgrade=True)
         image_url = ocs_catalog.get_image_url()
@@ -209,16 +213,19 @@ def test_upgrade():
             kind='subscription',
             namespace=config.ENV_DATA['cluster_namespace'],
         )
-        subscription_data = deepcopy(subscription.data)
-        subscription_data['spec']['channel'] = channel
-        # TODO: once we GA 4.3 we will make possibility to upgrade from live
-        # 4.2 to live 4.3.
-        subscription_data['spec'][
-            'source'
-        ] = constants.OPERATOR_CATALOG_SOURCE_NAME
-        with NamedTemporaryFile() as subscription_yaml:
-            dump_data_to_temp_yaml(subscription_data, subscription_yaml.name)
-            subscription.apply(subscription_yaml.name)
+        current_ocs_source = subscription.data['spec']['source']
+        log.info(
+            f"Current OCS subscription source: {current_ocs_source}"
+        )
+        ocs_source = current_ocs_source if upgrade_in_current_source else (
+            constants.OPERATOR_CATALOG_SOURCE_NAME
+        )
+        patch_subscription_cmd = (
+            f'oc patch subscription {constants.OCS_SUBSCRIPTION} '
+            f'-n {namespace} --type merge -p \'{{"spec":{{"channel": '
+            f'"{channel}", "source": "{ocs_source}"}}}}\''
+        )
+        run_cmd(patch_subscription_cmd)
 
         subscription_plan_approval = config.DEPLOYMENT.get(
             'subscription_plan_approval'
