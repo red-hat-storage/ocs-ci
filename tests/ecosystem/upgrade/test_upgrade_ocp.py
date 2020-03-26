@@ -64,7 +64,8 @@ class TestUpgradeOCP(ManageTest):
                     timeout=2700,
                     sleep=60,
                     func=ocp.confirm_cluster_operator_version,
-                    target_version=target_image
+                    target_version=target_image,
+                    cluster_operator=ocp_operator
                 ):
                     logger.info(
                         f"ClusterOperator upgrade "
