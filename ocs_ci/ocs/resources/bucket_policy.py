@@ -5,6 +5,7 @@ import datetime
 import base64
 
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
@@ -31,8 +32,16 @@ class OBC(object):
         """
         self.obc_name = obc
         self.namespace = config.ENV_DATA['cluster_namespace']
-        obc_obj = OCP(namespace=self.namespace, kind='ObjectBucketClaim', resource_name=self.obc_name)
-        obc_results = obc_obj.get()
+        obc_obj = OCP(namespace=self.namespace, kind='ObjectBucketClaim')
+        assert obc_obj.wait_for_resource(
+            condition=constants.STATUS_BOUND,
+            resource_name=self.obc_name,
+            column='PHASE',
+            resource_count=1,
+            timeout=60
+        ), "OBC did not reach BOUND Phase, cannot initialize OBC credentials"
+        obc_resource = OCP(namespace=self.namespace, kind='ObjectBucketClaim', resource_name=self.obc_name)
+        obc_results = obc_resource.get()
         self.ob_name = obc_results.get('spec').get('ObjectBucketName')
         self.bucket_name = obc_results.get('spec').get('bucketName')
         ob_obj = OCP(namespace=self.namespace, kind='ObjectBucket', resource_name=self.ob_name).get()
