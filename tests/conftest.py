@@ -8,7 +8,7 @@ from datetime import datetime
 import random
 from math import floor
 
-from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo
+from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo, get_ocp_version
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.utility import aws
@@ -1523,6 +1523,10 @@ def install_logging(request):
 
     request.addfinalizer(finalizer)
 
+    # Checks OCP version
+
+    ocp_version = get_ocp_version()
+
     # Creates namespace opensift-operators-redhat
     ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
 
@@ -1538,9 +1542,8 @@ def install_logging(request):
     )
 
     # Creates subscription for elastic-search operator
-    logging_version = config.ENV_DATA['logging_version']
     subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
-    subscription_yaml['spec']['channel'] = logging_version
+    subscription_yaml['spec']['channel'] = ocp_version
     helpers.create_resource(**subscription_yaml)
     assert ocp_logging_obj.get_elasticsearch_subscription()
 
@@ -1554,7 +1557,7 @@ def install_logging(request):
 
     # Creates subscription for cluster-logging
     cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
-    cl_subscription['spec']['channel'] = logging_version
+    cl_subscription['spec']['channel'] = ocp_version
     helpers.create_resource(**cl_subscription)
     assert ocp_logging_obj.get_clusterlogging_subscription()
 
