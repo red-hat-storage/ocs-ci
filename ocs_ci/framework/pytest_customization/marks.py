@@ -108,3 +108,5 @@ gather_metrics_on_fail = pytest.mark.gather_metrics_on_fail
 
 # Marker for skipping tests based on OCS version
 skipif_ocs_version = pytest.mark.skipif_ocs_version
+
+skipif_lso_deployment = pytest.mark.skipif_lso_deployment

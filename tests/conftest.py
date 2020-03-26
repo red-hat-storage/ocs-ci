@@ -26,7 +26,7 @@ from ocs_ci.utility.environment_check import (
 )
 from ocs_ci.utility.utils import (
     get_openshift_client, ocsci_log_path, get_testrun_name,
-    ceph_health_check_base, skipif_ocs_version
+    ceph_health_check_base, skipif_ocs_version, skipif_lso_deployment
 )
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
@@ -66,6 +66,7 @@ def pytest_collection_modifyitems(session, config, items):
     """
     A pytest hook to filter out skipped tests satisfying
     skipif_ocs_version
+    skipif_lso_deployment
 
     Args:
         session: pytest session
@@ -74,17 +75,30 @@ def pytest_collection_modifyitems(session, config, items):
 
     """
     for item in items[:]:
-        skip_marker = item.get_closest_marker("skipif_ocs_version")
-        if skip_marker:
-            skip_condition = skip_marker.args
-            log.info(skip_condition)
-            # skip_confition will be a tuple
-            # and condition will be first element in the tuple
-            if skipif_ocs_version(skip_condition[0]):
-                log.info(
-                    f'Test: {item} will be skipped due to {skip_condition}'
-                )
-                items.remove(item)
+        skip_marker = [
+            item.get_closest_marker("skipif_ocs_version"),
+            item.get_closest_marker("skipif_lso_deployment")
+        ]
+        for marker in skip_marker:
+            if marker:
+                if marker.name == 'skipif_ocs_version':
+                    skip_condition = skip_marker[0].args
+                    log.info(skip_condition)
+                    # skip_confition will be a tuple
+                    # and condition will be first element in the tuple
+                    if skipif_ocs_version(skip_condition[0]):
+                        log.info(
+                            f'Test: {item} will be skipped due to {skip_condition}'
+                        )
+                    items.remove(item)
+                    break
+                elif marker.name == 'skipif_lso_deployment':
+                    if skipif_lso_deployment():
+                        log.info(
+                            f'Test: {item} will be skipped as the deployment is '
+                            f'LSO based'
+                        )
+                        items.remove(item)
 
 
 @pytest.fixture()

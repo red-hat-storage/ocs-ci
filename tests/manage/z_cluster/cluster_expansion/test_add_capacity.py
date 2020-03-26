@@ -1,19 +1,16 @@
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import polarion_id
+from ocs_ci.framework.pytest_customization.marks import (
+    polarion_id, skipif_lso_deployment
+)
 from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier1
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.cluster import CephCluster
-from ocs_ci.ocs.resources import csv
-from ocs_ci.ocs.defaults import (
-    LOCAL_STORAGE_OPERATOR_NAMESPACE,
-    LOCAL_STORAGE_OPERATOR_NAME
-)
 
-
+@skipif_lso_deployment
 @ignore_leftovers
 @tier1
 @polarion_id('OCS-1191')
@@ -21,20 +18,6 @@ class TestAddCapacity(ManageTest):
     """
     Automates adding variable capacity to the cluster while IOs running
     """
-    @pytest.fixture(autouse=True)
-    def lso_deployment_check(self):
-        """
-        Check if the deployment is LSO based before starting add_capacity test
-
-        """
-        if csv.get_csvs_start_with_prefix(
-            LOCAL_STORAGE_OPERATOR_NAME,
-            namespace=LOCAL_STORAGE_OPERATOR_NAMESPACE
-        ):
-            pytest.skip(
-                "add-capacity is not supported on LSO based deployment"
-            )
-
     def test_add_capacity(self):
         """
         Test to add variable capacity to the OSD cluster while IOs running

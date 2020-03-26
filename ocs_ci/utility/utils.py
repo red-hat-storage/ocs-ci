@@ -1813,6 +1813,19 @@ def skipif_ocs_version(expressions):
     return skip_this
 
 
+def skipif_lso_deployment():
+    """
+    Check if the deployment is LSO based before starting add_capacity test
+
+    """
+    from ocs_ci.ocs.resources import csv
+    if csv.get_csvs_start_with_prefix(
+        csv_prefix=defaults.LOCAL_STORAGE_OPERATOR_NAME,
+        namespace=defaults.LOCAL_STORAGE_OPERATOR_NAMESPACE
+    ):
+        return True
+
+
 def get_ocs_version_from_image(image):
     """
     Parse major.minor version from OCS image tag.
