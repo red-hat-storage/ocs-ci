@@ -915,7 +915,7 @@ def upgrade_ocp(image_path, image):
         f"adm upgrade --to-image={image_path}:{image} "
         f"--allow-explicit-upgrade --force "
     )
-    log.info(f"Upgrading OCP to version: {image}")
+    log.info(f"Upgrading OCP to version: {image} ")
 
 
 def get_current_oc_version():
