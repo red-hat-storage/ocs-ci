@@ -51,14 +51,15 @@ def measure_operation(
     Returns:
         dict: contains information about `start` and `stop` time of given
             function and its `result` and provided `metadata`
-            Example:
-            {
-                'start': 1569827653.1903834,
-                'stop': 1569828313.6469617,
-                'result': 'rook-ceph-osd-2',
-                'metadata': {'status': 'success'},
-                'prometheus_alerts': [{'labels': ...}, {...}, ...]
-            }
+            Example::
+
+                {
+                    'start': 1569827653.1903834,
+                    'stop': 1569828313.6469617,
+                    'result': 'rook-ceph-osd-2',
+                    'metadata': {'status': 'success'},
+                    'prometheus_alerts': [{'labels': ...}, {...}, ...]
+                }
     """
     def prometheus_log(info, alert_list):
         """
