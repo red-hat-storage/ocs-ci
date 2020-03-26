@@ -8,6 +8,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.cluster import CephCluster
 
+
 @skipif_lso_deployment
 @ignore_leftovers
 @tier1
