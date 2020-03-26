@@ -153,10 +153,19 @@ def drain_nodes(node_names):
     ocp = OCP(kind='node')
     node_names_str = ' '.join(node_names)
     log.info(f'Draining nodes {node_names_str}')
-    ocp.exec_oc_cmd(
-        f"adm drain {node_names_str} --force=true --ignore-daemonsets "
-        f"--delete-local-data", timeout=1200
-    )
+    try:
+        ocp.exec_oc_cmd(
+            f"adm drain {node_names_str} --force=true --ignore-daemonsets "
+            f"--delete-local-data", timeout=1200
+        )
+    except TimeoutExpired:
+        ct_pod = pod.get_ceph_tools_pod()
+        ceph_status = ct_pod.exec_cmd_on_pod("ceph status", out_yaml_format=False)
+        log.error(
+            f"Drain command failed to complete. Ceph status: {ceph_status}"
+        )
+        # TODO: Add re-balance status once pull/1679 is merged
+        raise
 
 
 def get_typed_worker_nodes(os_id="rhcos"):
