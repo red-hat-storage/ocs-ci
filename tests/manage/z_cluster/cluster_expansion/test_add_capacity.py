@@ -1,5 +1,3 @@
-import pytest
-
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     polarion_id, skipif_lso_deployment
