@@ -879,11 +879,29 @@ def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
     )
 
 
+@pytest.fixture(scope='session')
+def tier_marks_name():
+    """
+    Gets the tier mark names
+
+    Returns:
+        list: list of tier mark names
+
+    """
+    tier_marks_name = []
+    for each_tier in tier_marks:
+        try:
+            tier_marks_name.append(each_tier.name)
+        except AttributeError:
+            tier_marks_name.append(each_tier().args[0].name)
+    return tier_marks_name
+
+
 @pytest.fixture(scope='function', autouse=True)
-def health_checker(request):
+def health_checker(request, tier_marks_name):
     node = request.node
     for mark in node.iter_markers():
-        if mark.name in tier_marks:
+        if mark.name in tier_marks_name:
             log.info("Checking for Ceph Health OK ")
             try:
                 status = ceph_health_check_base()
