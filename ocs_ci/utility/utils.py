@@ -1255,8 +1255,10 @@ def ceph_health_check(namespace=None, tries=20, delay=30):
         tries (int): Number of retries
         delay (int): Delay in seconds between retries
 
-    Returns: ceph_health_check_base with default retries of 20, delay of
-        30 seconds
+    Returns:
+        bool: ceph_health_check_base return value with default retries of 20,
+            delay of 30 seconds if default values are not changed via args.
+
     """
     return retry(
         (CephHealthException, CommandFailed),
