@@ -3,11 +3,9 @@ import textwrap
 
 import pytest
 
-from ocs_ci.ocs import constants, ocp, ocp
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.resources.pod import Pod
-from ocs_ci.utility.utils import run_cmd
 
 log = logging.getLogger(__name__)
 
@@ -52,12 +50,12 @@ def create_fio_pod(
         f" storageclass"
     )
     pvc = pvc_factory(
-            project=project,
-            storageclass=storageclass,
-            access_mode=access_mode,
-            volume_mode=volume_mode,
-            size=pvc_size
-        )
+        project=project,
+        storageclass=storageclass,
+        access_mode=access_mode,
+        volume_mode=volume_mode,
+        size=pvc_size
+    )
 
     fio_job_dict['spec']['template']['spec']['volumes'][0][
         'persistentVolumeClaim'
@@ -147,8 +145,13 @@ def pre_upgrade_filesystem_pods(
         constants.RECLAIM_POLICY_DELETE,
         constants.RECLAIM_POLICY_RETAIN
     ):
+        config_name = f"{reclaim_policy}-rbd-rwo-fs-config".lower()
+        fio_configmap_dict['metadata']['name'] = config_name
         job_name = f"{reclaim_policy}-rbd-rwo-fs".lower()
         fio_job_dict['metadata']['name'] = job_name
+        fio_job_dict['spec']['template']['spec']['volumes'][1][
+            'configMap'
+        ]['name'] = config_name
         rbd_pod = create_fio_pod(
             project=fio_project,
             interface=constants.CEPHBLOCKPOOL,
@@ -168,9 +171,15 @@ def pre_upgrade_filesystem_pods(
             constants.ACCESS_MODE_RWO,
             constants.ACCESS_MODE_RWX
         ):
+            config_name = f"{reclaim_policy}-cephfs-{access_mode}-fs-config".lower()
+            fio_configmap_dict['metadata']['name'] = config_name
             job_name = f"{reclaim_policy}-cephfs-{access_mode}-fs".lower()
             fio_job_dict['metadata']['name'] = job_name
+            fio_job_dict['spec']['template']['spec']['volumes'][1][
+                'configMap'
+            ]['name'] = config_name
             cephfs_pod = create_fio_pod(
+                project=fio_project,
                 interface=constants.CEPHFILESYSTEM,
                 pvc_factory=pvc_factory_session,
                 pod_factory=pod_factory_session,
@@ -180,9 +189,8 @@ def pre_upgrade_filesystem_pods(
                 fio_configmap_dict=fio_configmap_dict,
                 pvc_size=pvc_size,
                 tmp_path=tmp_path
-
             )
-            pod.append(cephfs_pod)
+            pods.append(cephfs_pod)
 
     return pods
 
@@ -219,8 +227,13 @@ def pre_upgrade_block_pods(
             constants.ACCESS_MODE_RWX,
             constants.ACCESS_MODE_RWO
         ):
+            config_name = f"{reclaim_policy}-rbd-{access_mode}-block-config".lower()
+            fio_configmap_dict['metadata']['name'] = config_name
             job_name = f"{reclaim_policy}-rbd-{access_mode}-block".lower()
             fio_job_dict['metadata']['name'] = job_name
+            fio_job_dict['spec']['template']['spec']['volumes'][1][
+                'configMap'
+            ]['name'] = config_name
             rbd_pod = create_fio_pod(
                 project=fio_project,
                 interface=constants.CEPHBLOCKPOOL,
@@ -267,8 +280,13 @@ def post_upgrade_filesystem_pods(
         constants.RECLAIM_POLICY_DELETE,
         constants.RECLAIM_POLICY_RETAIN
     ):
+        config_name = f"{reclaim_policy}-rbd-rwo-fs-post-config".lower()
+        fio_configmap_dict['metadata']['name'] = config_name
         job_name = f"{reclaim_policy}-rbd-rwo-fs-post".lower()
         fio_job_dict['metadata']['name'] = job_name
+        fio_job_dict['spec']['template']['spec']['volumes'][1][
+            'configMap'
+        ]['name'] = config_name
         rbd_pod = create_fio_pod(
             project=fio_project,
             interface=constants.CEPHBLOCKPOOL,
@@ -289,9 +307,14 @@ def post_upgrade_filesystem_pods(
             constants.ACCESS_MODE_RWO,
             constants.ACCESS_MODE_RWX
         ):
+            config_name = f"{reclaim_policy}-cephfs-{access_mode}-fs-post-config".lower()
+            fio_configmap_dict['metadata']['name'] = config_name
             job_name = f"{reclaim_policy}-cepfs-{access_mode}-fs-post".lower()
             fio_job_dict['metadata']['name'] = job_name
-            cephfs_pods = create_fio_pod(
+            fio_job_dict['spec']['template']['spec']['volumes'][1][
+                'configMap'
+            ]['name'] = config_name
+            cephfs_pod = create_fio_pod(
                 project=fio_project,
                 interface=constants.CEPHFILESYSTEM,
                 pvc_factory=pvc_factory,
@@ -340,8 +363,13 @@ def post_upgrade_block_pods(
             constants.ACCESS_MODE_RWX,
             constants.ACCESS_MODE_RWO
         ):
+            config_name = f"{reclaim_policy}-rbd-{access_mode}-fs-post-config".lower()
+            fio_configmap_dict['metadata']['name'] = config_name
             job_name = f"{reclaim_policy}-rbd-{access_mode}-fs-post".lower()
             fio_job_dict['metadata']['name'] = job_name
+            fio_job_dict['spec']['template']['spec']['volumes'][1][
+                'configMap'
+            ]['name'] = config_name
             rbd_pod = create_fio_pod(
                 project=fio_project,
                 interface=constants.CEPHBLOCKPOOL,

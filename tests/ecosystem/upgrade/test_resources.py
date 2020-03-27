@@ -1,4 +1,3 @@
-from concurrent.futures import ThreadPoolExecutor
 import logging
 
 import pytest
@@ -50,6 +49,7 @@ def test_pod_io(
         f"Pods using block device created after upgrade: "
         f"{post_upgrade_block_pods}"
     )
+    pods = pre_upgrade_block_pods + post_upgrade_block_pods + pre_upgrade_filesystem_pods + post_upgrade_filesystem_pods
 
     for pod in pods:
         log.info(f"Checking that fio is still running")

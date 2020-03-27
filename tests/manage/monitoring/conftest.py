@@ -4,7 +4,6 @@ import logging
 import os
 import textwrap
 import time
-import yaml
 
 import pytest
 
