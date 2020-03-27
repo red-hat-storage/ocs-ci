@@ -90,6 +90,9 @@ class TestReclaimPolicy(ManageTest):
         log.info("Status of PV is Released")
         assert pvc_count + 1 == len(list_ceph_images(pool_name=self.cbp_obj.name))
         assert pv_obj.delete(resource_name=pv_name)
+        assert pv_obj.wait_for_delete(pv_name, 60), (
+            f"PV {pv_name} is not deleted"
+        )
         # TODO: deletion of ceph rbd image, blocked by BZ#1723656
 
     @pytest.mark.polarion_id("OCS-384")
@@ -108,10 +111,7 @@ class TestReclaimPolicy(ManageTest):
         pv_obj = ocp.OCP(kind='PersistentVolume', namespace=pv_namespace)
         assert pvc_obj.delete()
         pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
-        try:
-            pv_obj.get(pv_name)
-        except CommandFailed as ex:
-            assert f'persistentvolumes "{pv_name}" not found' in str(ex),\
-                "pv exists"
-            log.info("Underlying PV is deleted")
+        assert pv_obj.wait_for_delete(pv_name, 60), (
+            f"PV {pv_name} is not deleted"
+        )
         # TODO: deletion of ceph rbd image, blocked by BZ#1723656
