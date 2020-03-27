@@ -43,6 +43,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
     get_latest_ds_olm_tag,
+    get_ocp_version,
     is_cluster_running,
     run_cmd,
 )
@@ -722,7 +723,7 @@ def setup_local_storage():
     # Update local-storage-operator subscription data with channel
     for data in lso_data:
         if data['kind'] == 'Subscription':
-            data['spec']['channel'] = config.ENV_DATA.get('ocs_version')
+            data['spec']['channel'] = get_ocp_version()
 
     # Create temp yaml file and create local storage operator
     logger.info(
@@ -773,8 +774,6 @@ def setup_local_storage():
         lv_data, lv_data_yaml.name
     )
     logger.info("Creating LocalVolume CR")
-    with open(lv_data_yaml.name) as f:
-        logger.info(f.read())
     run_cmd(f"oc create -f {lv_data_yaml.name}")
     logger.info("Waiting 30 seconds for PVs to create")
     verify_pvs_created(len(worker_names))
