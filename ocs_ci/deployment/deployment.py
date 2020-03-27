@@ -14,7 +14,9 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
-from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
+from ocs_ci.ocs.exceptions import (
+    CommandFailed, UnavailableResourceException, UnsupportedPlatformError
+)
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
@@ -746,38 +748,22 @@ def setup_local_storage():
     ), "Local storage operator did not reach running phase"
 
     # Retrieve NVME device path ID for each worker node
-    dev_paths = []
-    for worker in worker_names:
-        logger.info("Retrieving device path for node: %s", worker)
-        cmd = (
-            f"oc debug nodes/{worker} "
-            f"-- chroot /host ls -la /dev/disk/by-id/"
-        )
-        out = run_cmd(cmd)
-        out_lines = out.split('\n')
-        pattern = 'nvme-nvme.1d0f-'
-        nvme_line = [line for line in out_lines if pattern in line][0]
-        device_path = [
-            part for part in nvme_line.split(' ') if pattern in part
-        ][0]
-        logger.info("Adding %s to device paths", device_path)
-        dev_paths.append(f'/dev/disk/by-id/{device_path}')
+    device_paths = get_device_paths(worker_names)
 
     # Pull local volume yaml data
-    logger.info("Pulling local volume data from yaml")
+    logger.info("Pulling LocalVolume CR data from yaml")
     lv_data = templating.load_yaml(
         constants.LOCAL_VOLUME_YAML
     )
 
     # Update local volume data with NVME IDs
     logger.info(
-        "Updating local volume data with device paths: %s",
-        dev_paths
+        "Updating LocalVolume CR data with device paths: %s",
+        device_paths
     )
     lv_data['spec']['storageClassDevices'][0][
         'devicePaths'
-    ] = dev_paths
-    logger.debug(lv_data)
+    ] = device_paths
 
     # Create temp yaml file and create local volume
     lv_data_yaml = tempfile.NamedTemporaryFile(
@@ -786,7 +772,9 @@ def setup_local_storage():
     templating.dump_data_to_temp_yaml(
         lv_data, lv_data_yaml.name
     )
-    logger.info("Creating local volume")
+    logger.info("Creating LocalVolume CR")
+    with open(lv_data_yaml.name) as f:
+        logger.info(f.read())
     run_cmd(f"oc create -f {lv_data_yaml.name}")
     logger.info("Waiting 30 seconds for PVs to create")
     verify_pvs_created(len(worker_names))
@@ -817,7 +805,41 @@ def verify_pvs_created(num_workers):
         )
     num_pvs = len(pv_json['items'])
     logger.debug("PVs, Workers: %s, %s", num_pvs, num_workers)
-    assert (num_pvs == num_workers), (
-        f'Number of PVs ({num_pvs}) does not match number of workers '
-        f'({num_workers})'
-    )
+
+
+def get_device_paths(worker_names):
+    """
+    Retrieve a list of the device paths for each worker node
+
+    Args:
+        worker_names (list): worker node names
+
+    Returns:
+        list: device path ids
+    """
+    device_paths = []
+    platform = config.ENV_DATA.get('platform').lower()
+    if platform == 'aws':
+        pattern = 'nvme-Amazon_EC2_NVMe_Instance_Storage'
+    # TODO: add patterns for vsphere and bare metal
+    else:
+        raise UnsupportedPlatformError(
+            'LSO deployment is not supported for platform: %s', platform
+        )
+    for worker in worker_names:
+        logger.info("Retrieving device path for node: %s", worker)
+        cmd = (
+            f"oc debug nodes/{worker} "
+            f"-- chroot /host ls -la /dev/disk/by-id/"
+        )
+        out = run_cmd(cmd)
+        out_lines = out.split('\n')
+        nvme_lines = [line for line in out_lines if pattern in line]
+        for nvme_line in nvme_lines:
+            device_path = [
+                part for part in nvme_line.split(' ') if pattern in part
+            ][0]
+            logger.info("Adding %s to device paths", device_path)
+            device_paths.append(f'/dev/disk/by-id/{device_path}')
+
+    return device_paths

@@ -682,6 +682,3 @@ LOCAL_STORAGE_OPERATOR = os.path.join(
 LOCAL_VOLUME_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "local-volume.yaml"
 )
-LOCAL_STORAGE_CLUSTER_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "local-storage-cluster.yaml"
-)
