@@ -263,4 +263,5 @@ def test_upgrade():
         ocs_install_verification(
             timeout=600, skip_osd_distribution_check=True,
             ocs_registry_image=ocs_registry_image,
+            post_upgrade_verification=True,
         )
