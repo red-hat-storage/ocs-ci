@@ -398,7 +398,7 @@ def get_all_pods(
     if selector:
         pods_new = [
             pod for pod in pods if
-            pod['metadata']['labels'].get(selector_label) in selector
+            selector in pod['metadata'].get('labels', {})
         ]
         pods = pods_new
     pod_objs = [Pod(**pod) for pod in pods]
