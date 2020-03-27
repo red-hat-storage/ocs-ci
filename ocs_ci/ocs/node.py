@@ -279,6 +279,7 @@ def add_new_node_and_label_it(machineset_name):
     log.info(
         f"Successfully labeled {new_spun_node} with OCS storage label"
     )
+    return new_spun_node[0]
 
 
 def get_node_logs(node_name):
