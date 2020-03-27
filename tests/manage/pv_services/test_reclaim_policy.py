@@ -4,7 +4,6 @@ from ocs_ci.framework.testlib import tier1, ManageTest
 from tests import helpers
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.resources.pod import list_ceph_images
-from ocs_ci.ocs.exceptions import CommandFailed
 from tests.fixtures import (
     create_ceph_block_pool, create_rbd_secret
 )
