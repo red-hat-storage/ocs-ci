@@ -205,19 +205,17 @@ def cluster_cleanup():
     )
     parser.add_argument(
         '--upi',
-        nargs=1,
-        action='append',
+        action='store_true',
         required=False,
-        help="Cluster name tag"
+        help="For UPI cluster deletion"
     )
     logging.basicConfig(level=logging.DEBUG)
     args = parser.parse_args()
     procs = []
     for id in args.cluster:
-        upi = args.upi[0]
         cluster_name = id[0].rsplit('-', 1)[0]
         logger.info(f"cleaning up {id[0]}")
-        proc = threading.Thread(target=cleanup, args=(cluster_name, id[0], upi))
+        proc = threading.Thread(target=cleanup, args=(cluster_name, id[0], args.upi[0]))
         proc.start()
         procs.append(proc)
     for p in procs:
