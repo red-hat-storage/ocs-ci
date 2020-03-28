@@ -177,26 +177,31 @@ def test_upgrade():
         upgrade_in_current_source = config.UPGRADE.get(
             'upgrade_in_current_source', False
         )
-        if not ocs_catalog.is_exist() and not upgrade_in_current_source:
-            log.info("OCS catalog source doesn't exist. Creating new one.")
-            create_catalog_source(ocs_registry_image, ignore_upgrade=True)
-        image_url = ocs_catalog.get_image_url()
-        image_tag = ocs_catalog.get_image_name()
-        log.info(f"Current image is: {image_url}, tag: {image_tag}")
-        if ocs_registry_image:
-            image_url, new_image_tag = ocs_registry_image.split(':')
-        elif config.UPGRADE.get('upgrade_to_latest', True) or version_change:
-            new_image_tag = get_latest_ds_olm_tag()
-        else:
-            new_image_tag = get_next_version_available_for_upgrade(image_tag)
-        cs_data = deepcopy(ocs_catalog.data)
-        image_for_upgrade = ':'.join([image_url, new_image_tag])
-        log.info(f"Image: {image_for_upgrade} will be used for upgrade.")
-        cs_data['spec']['image'] = image_for_upgrade
+        if not upgrade_in_current_source:
+            if not ocs_catalog.is_exist() and not upgrade_in_current_source:
+                log.info("OCS catalog source doesn't exist. Creating new one.")
+                create_catalog_source(ocs_registry_image, ignore_upgrade=True)
+            image_url = ocs_catalog.get_image_url()
+            image_tag = ocs_catalog.get_image_name()
+            log.info(f"Current image is: {image_url}, tag: {image_tag}")
+            if ocs_registry_image:
+                image_url, new_image_tag = ocs_registry_image.split(':')
+            elif (
+                config.UPGRADE.get('upgrade_to_latest', True) or version_change
+            ):
+                new_image_tag = get_latest_ds_olm_tag()
+            else:
+                new_image_tag = get_next_version_available_for_upgrade(
+                    image_tag
+                )
+            cs_data = deepcopy(ocs_catalog.data)
+            image_for_upgrade = ':'.join([image_url, new_image_tag])
+            log.info(f"Image: {image_for_upgrade} will be used for upgrade.")
+            cs_data['spec']['image'] = image_for_upgrade
 
-        with NamedTemporaryFile() as cs_yaml:
-            dump_data_to_temp_yaml(cs_data, cs_yaml.name)
-            ocs_catalog.apply(cs_yaml.name)
+            with NamedTemporaryFile() as cs_yaml:
+                dump_data_to_temp_yaml(cs_data, cs_yaml.name)
+                ocs_catalog.apply(cs_yaml.name)
         # Wait for the new package manifest for upgrade.
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
