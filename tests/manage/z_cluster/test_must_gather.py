@@ -92,8 +92,8 @@ class TestMustGather(ManageTest):
         # Compare running pods list to "/pods" subdirectories
         logger.info("Checking logs tree")
         logs = [
-            logs for logs in self.get_log_directories(directory) if (
-                'must-gather' not in logs
+            logs for logs in self.get_log_directories(directory) if not (
+                logs.startswith('must-gather-')
             )
         ]
         logger.info(f"Logs: {logs}")
