@@ -310,6 +310,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         # Wait for setup on pods to complete
         for pod_obj in pod_objs + rwx_pod_objs:
+            log.info(f"Waiting for IO setup to complete on pod {pod_obj.name}")
             for sample in TimeoutSampler(
                 180, 2, getattr, pod_obj, 'wl_setup_done'
             ):
@@ -434,6 +435,7 @@ class TestResourceDeletionDuringMultipleDeleteOperations(ManageTest):
 
         log.info("Fetching IO results from the pods.")
         for pod_obj in io_pods:
+            log.info(f"Fetching IO result from pod {pod_obj.name}")
             fio_result = pod_obj.get_fio_results()
             err_count = fio_result.get('jobs')[0].get('error')
             assert err_count == 0, (
