@@ -485,23 +485,23 @@ class CephCluster(object):
 
     def get_ceph_capacity(self):
         """
-        The function gets the total storage capacity of the ocs cluster
+        The function gets the total usable storage capacity of the ocs cluster.
 
         Returns:
             int : Total storage capacity in GiB (GiB is for development environment)
 
         """
+        storage_cluster_obj = storage_cluster.StorageCluster(
+            resource_name=config.ENV_DATA['storage_cluster_name'],
+            namespace=config.ENV_DATA['cluster_namespace'],
+        )
+        replica = int(storage_cluster_obj.data['spec']['storageDeviceSets'][0]['replica'])
 
-        ceph_status = self.get_ceph_status()
-        for item in ceph_status.split("\n"):
-            if 'usage:' in item:
-                total_storage = re.findall(r'\d+\.+\d+|\d\d*', item.strip())
-                total_storage = float(total_storage[2])
-                unit = item.split(' ')[-2]
-                conversion = {'GiB': 1, 'TiB': 1024}
-                total_storage = total_storage * conversion[unit]
-                logging.info(f"Total Storage capacity of the cluster is {total_storage}")
-                return int(total_storage)
+        ceph_pod = pod.get_ceph_tools_pod()
+        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+        usable_capacity = int(ceph_status['stats']['total_bytes']) / replica / constant.GB
+
+        return usable_capacity
 
     def get_ceph_cluster_iops(self):
         """
