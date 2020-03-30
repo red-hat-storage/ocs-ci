@@ -232,10 +232,8 @@ def test_upgrade():
         )
         if subscription_plan_approval == 'Manual':
             wait_for_install_plan_and_approve(namespace)
-        attempts = 145
-        for attempt in range(1, attempts):
-            if attempts == attempt:
-                raise TimeoutException("No new CSV found after upgrade!")
+        attempts = 10
+        for attempt in range(1, attempts + 1):
             log.info(f"Attempt {attempt}/{attempts} to check CSV upgraded.")
             csv_name_post_upgrade = package_manifest.get_current_csv(channel)
             if csv_name_post_upgrade == csv_name_pre_upgrade:
@@ -244,6 +242,8 @@ def test_upgrade():
             else:
                 log.info(f"CSV now upgraded to: {csv_name_post_upgrade}")
                 break
+            if attempts == attempt:
+                raise TimeoutException("No new CSV found after upgrade!")
         csv_post_upgrade = CSV(
             resource_name=csv_name_post_upgrade,
             namespace=namespace
