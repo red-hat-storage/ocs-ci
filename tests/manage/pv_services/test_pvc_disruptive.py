@@ -362,7 +362,6 @@ class TestPVCDisruption(ManageTest):
 
         logger.info("Fetching FIO results.")
         for pod_obj in pod_objs:
-            logger.info(f"Fetching FIO result from pod {pod_obj.name}")
             fio_result = pod_obj.get_fio_results()
             err_count = fio_result.get('jobs')[0].get('error')
             assert err_count == 0, (
@@ -401,7 +400,6 @@ class TestPVCDisruption(ManageTest):
 
         logger.info("Fetching FIO results from new pods")
         for pod_obj in pod_objs:
-            logger.info(f"Fetching FIO result from pod {pod_obj.name}")
             fio_result = pod_obj.get_fio_results()
             err_count = fio_result.get('jobs')[0].get('error')
             assert err_count == 0, (
