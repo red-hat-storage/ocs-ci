@@ -6,10 +6,8 @@ import boto3
 import yaml
 
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework import config, merge_dict
-from ocs_ci.utility import aws
-from ocs_ci.utility import vsphere, templating
+from ocs_ci.utility import aws, vsphere, templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.ocs.node import get_node_objs, get_typed_worker_nodes
@@ -17,7 +15,7 @@ from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
-    get_ocp_version, get_az_count
+    get_ocp_version, get_az_count, TimeoutSampler
 )
 
 
@@ -48,6 +46,7 @@ class NodesBase(object):
         self.cluster_path = config.ENV_DATA['cluster_path']
         self.platform = config.ENV_DATA['platform']
         self.deployment_type = config.ENV_DATA['deployment_type']
+        self.nodes_map = {'AWSUPINode': AWSUPINode}
 
     def get_data_volumes(self):
         raise NotImplementedError(
@@ -92,6 +91,50 @@ class NodesBase(object):
     def restart_nodes_teardown(self):
         raise NotImplementedError(
             "Restart nodes teardown functionality is not implemented"
+        )
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        """
+        Create nodes and attach them to cluster
+        Use this function if you want to do both creation/attachment in
+        a single call
+
+        Args:
+            node_conf (dict): of node configuration
+            node_type (str): type of node to be created RHCOS/RHEL
+            num_nodes (int): Number of node instances to be created
+
+        """
+        node_list = self.create_nodes(node_conf, node_type, num_nodes)
+        self.attach_nodes_to_cluster(node_list)
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        """
+        create aws instances of nodes
+
+        Args:
+            node_conf (dict): of node configuration
+            node_type (str): type of node to be created RHCOS/RHEL
+            num_nodes (int): Number of node instances to be created
+
+        Returns:
+           list: of AWSUPINode/AWSIPINode objects
+
+        """
+        node_list = []
+        node_cls = self.nodes_map[
+            f'{self.platform.upper()}{self.deployment_type.upper()}Node'
+        ]
+
+        for i in range(num_nodes):
+            node_list.append(node_cls(node_conf, node_type))
+            node_list[i]._prepare_node()
+
+        return node_list
+
+    def attach_nodes_to_cluster(self, node_list):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
         )
 
     def read_default_config(self, default_config_path):
@@ -243,7 +286,6 @@ class AWSNodes(NodesBase):
     def __init__(self):
         super(AWSNodes, self).__init__()
         self.aws = aws.AWS()
-        self.nodes_map = {'AWSUPINode': AWSUPINode}
 
     def get_ec2_instances(self, nodes):
         """
@@ -468,45 +510,6 @@ class AWSNodes(NodesBase):
         if stopped_instances:
             self.aws.start_ec2_instances(instances=stopped_instances, wait=True)
 
-    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
-        """
-        Create nodes and attach them to cluster
-        Use this function if you want to do both creation/attachment in
-        a single call
-
-        Args:
-            node_conf (dict): of node configuration
-            node_type (str): type of node to be created RHCOS/RHEL
-            num_nodes (int): Number of node instances to be created
-
-        """
-        node_list = self.create_nodes(node_conf, node_type, num_nodes)
-        self.attach_nodes_to_cluster(node_list)
-
-    def create_nodes(self, node_conf, node_type, num_nodes):
-        """
-        create aws instances of nodes
-
-        Args:
-            node_conf (dict): of node configuration
-            node_type (str): type of node to be created RHCOS/RHEL
-            num_nodes (int): Number of node instances to be created
-
-        Returns:
-           list: of AWSUPINode/AWSIPINode objects
-
-        """
-        node_list = []
-        node_cls = self.nodes_map[
-            f'{self.platform.upper()}{self.deployment_type.upper()}Node'
-        ]
-
-        for i in range(num_nodes):
-            node_list.append(node_cls(node_conf, node_type))
-            node_list[i]._prepare_node()
-
-        return node_list
-
     def attach_nodes_to_cluster(self, node_list):
         """
         Attach nodes in the list to the cluster
@@ -666,18 +669,18 @@ class AWSNodes(NodesBase):
                                     "Failed to add RHEL node"
                                 )
 
-    def get_ready_status(self, node_ent):
+    def get_ready_status(self, node_info):
         """
         Get the node 'Ready' status
 
         Args:
-            node_ent (dict): Node info which includes details
+            node_info (dict): Node info which includes details
 
         Returns:
             bool: True if node is Ready else False
 
         """
-        for cond in node_ent['status']['conditions']:
+        for cond in node_info['status']['conditions']:
             if cond['type'] == 'Ready':
                 if not cond['status'] == "True":
                     return False
@@ -760,7 +763,7 @@ class AWSUPINode(AWSNodes):
         if self.node_type == 'RHEL':
             conf = self.prepare_rhel_node_conf()
             try:
-                self.aws_instance_obj = self.prepare_upi_rhel_node(conf)
+                self.aws_instance_obj = self._prepare_upi_rhel_node(conf)
             except Exception:
                 logger.error("Failed to create RHEL node")
                 raise
@@ -778,7 +781,7 @@ class AWSUPINode(AWSNodes):
         logger.info(default_conf)
         return default_conf
 
-    def prepare_upi_rhel_node(self, node_conf):
+    def _prepare_upi_rhel_node(self, node_conf):
         """
         Handle RHEL worker instance creation
         1. Create RHEL worker instance , copy required AWS tags from existing
