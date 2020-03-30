@@ -81,10 +81,8 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 
         # Create DC app pods
         log.info("Creating DC based app pods")
-        if interface == 'rbd':
-            interface = constants.CEPHBLOCKPOOL
-        elif interface == 'cephfs':
-            interface = constants.CEPHFILESYSTEM
+        interface = constants.CEPHBLOCKPOOL if interface == 'rbd' \
+            else constants.CEPHFILESYSTEM
         dc_pod_obj = []
         for i in range(2):
             dc_pod = dc_pod_factory(
@@ -134,7 +132,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             namespace=defaults.ROOK_CLUSTER_NAMESPACE
         )
         for pod_obj in all_pod_obj:
-            if '-1-deploy' not in pod_obj.name:
+            if ('-1-deploy' or 'ocs-deviceset') not in pod_obj.name:
                 try:
                     helpers.wait_for_resource_state(
                         resource=pod_obj, state=constants.STATUS_RUNNING,
