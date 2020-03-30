@@ -488,7 +488,7 @@ def workload_fio_storageutilization(
         # Without checksum, we just need to make sure that data were deleted
         # and wait for this to happen to avoid conflicts with tests executed
         # right after this one.
-        fiojob.delete_fio_data(measured_op, fio_job_file, check_pvc_size)
+        fiojob.delete_fio_data(fio_job_file, check_pvc_size)
 
     return measured_op
 
