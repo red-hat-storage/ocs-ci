@@ -1818,6 +1818,7 @@ def skipif_lso_deployment():
     Check if the deployment is LSO based before starting add_capacity test
 
     """
+    # importing here to avoid circular imports
     from ocs_ci.ocs.resources import csv
     if csv.get_csvs_start_with_prefix(
         csv_prefix=defaults.LOCAL_STORAGE_OPERATOR_NAME,

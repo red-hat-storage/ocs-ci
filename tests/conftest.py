@@ -75,14 +75,14 @@ def pytest_collection_modifyitems(session, config, items):
 
     """
     for item in items[:]:
-        skip_marker = [
+        skip_markers = [
             item.get_closest_marker("skipif_ocs_version"),
             item.get_closest_marker("skipif_lso_deployment")
         ]
-        for marker in skip_marker:
+        for marker in skip_markers:
             if marker:
                 if marker.name == 'skipif_ocs_version':
-                    skip_condition = skip_marker[0].args
+                    skip_condition = marker.args
                     log.info(skip_condition)
                     # skip_confition will be a tuple
                     # and condition will be first element in the tuple
