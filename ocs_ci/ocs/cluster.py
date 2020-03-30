@@ -485,7 +485,9 @@ class CephCluster(object):
 
     def get_ceph_capacity(self):
         """
-        The function gets the total usable storage capacity of the ocs cluster.
+        The function gets the total mount of storage capacity of the ocs cluster.
+        the calculation is <Num of OSD> * <OSD size> / <replica number>
+        it will not take into account the current used capacity.
 
         Returns:
             int : Total storage capacity in GiB (GiB is for development environment)
