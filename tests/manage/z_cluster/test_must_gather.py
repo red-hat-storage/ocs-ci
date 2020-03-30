@@ -90,10 +90,11 @@ class TestMustGather(ManageTest):
         logger.info("Collecting logs - Done!")
 
         # Compare running pods list to "/pods" subdirectories
+        must_gather_helper = re.compile(r'must-gather-.*.-helper')
         logger.info("Checking logs tree")
         logs = [
-            logs for logs in self.get_log_directories(directory) if (
-                'must-gather' not in logs
+            logs for logs in self.get_log_directories(directory) if not (
+                must_gather_helper.match(logs)
             )
         ]
         logger.info(f"Logs: {logs}")
