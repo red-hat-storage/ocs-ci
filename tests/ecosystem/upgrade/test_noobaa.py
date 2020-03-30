@@ -109,6 +109,7 @@ def test_fill_bucket(
 @filter_insecure_request_warning
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2038")
+@pytest.mark.xfail("https://bugzilla.redhat.com/show_bug.cgi?id=1817978")
 def test_noobaa_postupgrade(
     mcg_obj_session,
     awscli_pod_session,
