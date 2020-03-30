@@ -7,13 +7,14 @@ import uuid
 
 from ocs_ci.framework.pytest_customization.marks import filter_insecure_request_warning
 from ocs_ci.ocs.exceptions import NoBucketPolicyResponse, InvalidStatusCode, UnexpectedBehaviour
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier1, skipif_ocs_version
 from ocs_ci.ocs.resources.bucket_policy import OBC, NoobaaAccount, HttpResponseParser, gen_bucket_policy
 from tests.manage.mcg import helpers
 
 logger = logging.getLogger(__name__)
 
 
+@skipif_ocs_version('<4.3')
 @filter_insecure_request_warning
 class TestS3BucketPolicy(ManageTest):
     """
