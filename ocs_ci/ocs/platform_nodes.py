@@ -126,9 +126,12 @@ class NodesBase(object):
             f'{self.platform.upper()}{self.deployment_type.upper()}Node'
         ]
 
+        rhel_cnt = len(get_typed_worker_nodes('rhel'))
+        rhcos_cnt = len(get_typed_worker_nodes('rhcos'))
         for i in range(num_nodes):
+            node_id = rhel_cnt + rhcos_cnt + i
             node_list.append(node_cls(node_conf, node_type))
-            node_list[i]._prepare_node()
+            node_list[i]._prepare_node(node_id)
 
         return node_list
 
@@ -572,7 +575,7 @@ class AWSNodes(NodesBase):
         rhel_pod_obj.install_packages("openssh-clients")
         # distribute repo file to all RHEL workers
         hosts = [
-            inst.private_dns_name for inst in
+            node.aws_instance_obj.private_dns_name for node in
             node_list
         ]
         # Check whether every host is acceptin ssh connections
@@ -635,6 +638,7 @@ class AWSNodes(NodesBase):
             cmd, out_yaml_format=False, timeout=timeout
         )
         self.verify_nodes_added(hosts)
+        rhel_pod_obj.delete()
 
     def verify_nodes_added(self, hosts):
         """
@@ -755,13 +759,17 @@ class AWSUPINode(AWSNodes):
         # cloudformation
         self.cf = boto3.client('cloudformation', region_name=self.region)
 
-    def _prepare_node(self):
+    def _prepare_node(self, node_id):
         """
         Create AWS instance of the node
+
+        Args:
+            node_id (int): Unique integer id for node
 
         """
         if self.node_type == 'RHEL':
             conf = self.prepare_rhel_node_conf()
+            conf['node_id'] = node_id
             try:
                 self.aws_instance_obj = self._prepare_upi_rhel_node(conf)
             except Exception:
@@ -790,7 +798,7 @@ class AWSUPINode(AWSNodes):
 
         """
         cluster_id = get_infra_id(self.cluster_path)
-        num_workers = len(get_typed_worker_nodes())
+        node_id = node_conf['node_id']
         if not node_conf.get('zone'):
             num_zone = get_az_count()
             zone = random.randint(0, num_zone)
@@ -826,7 +834,7 @@ class AWSUPINode(AWSNodes):
         worker_ec2 = boto3.resource('ec2', region_name=self.region)
         worker_instance = worker_ec2.Instance(inst_id)
         worker_instance.wait_until_running()
-        worker_name = f'{cluster_id}-rhel-worker-{num_workers}'
+        worker_name = f'{cluster_id}-rhel-worker-{node_id}'
         worker_ec2.create_tags(
             Resources=[inst_id],
             Tags=[
