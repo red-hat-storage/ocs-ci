@@ -17,7 +17,9 @@ def test_start_pre_upgrade_pod_io(pre_upgrade_pods_running_io):
     """
     Confirm that there are pods created before upgrade.
     """
-    assert pre_upgrade_pods_running_io
+    for pod in pre_upgrade_pods_running_io:
+        log.info("Waiting for all fio pods to come up")
+        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING, timeout=600)
 
 
 @post_upgrade
@@ -50,9 +52,6 @@ def test_pod_io(
         f"{post_upgrade_block_pods}"
     )
     pods = pre_upgrade_block_pods + post_upgrade_block_pods + pre_upgrade_filesystem_pods + post_upgrade_filesystem_pods
-
     for pod in pods:
         log.info(f"Checking that fio is still running")
-        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING, timeout=180)
-
-    fio_project.delete()
+        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING, timeout=600)
