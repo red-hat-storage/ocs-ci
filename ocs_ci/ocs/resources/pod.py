@@ -1102,8 +1102,7 @@ def upload(pod_name, localpath, remotepath, namespace=None):
         remotepath (str): Target path on the pod
 
     """
-    if not namespace:
-        namespace = constants.DEFAULT_NAMESPACE
+    namespace = namespace or constants.DEFAULT_NAMESPACE
     cmd = f"oc -n {namespace} cp {os.path.expanduser(localpath)} {pod_name}:{remotepath}"
     run_cmd(cmd)
 

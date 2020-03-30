@@ -768,7 +768,7 @@ class AWSUPINode(AWSNodes):
 
         """
         if self.node_type == 'RHEL':
-            conf = self.prepare_rhel_node_conf()
+            conf = self._prepare_rhel_node_conf()
             conf['node_id'] = node_id
             try:
                 self.aws_instance_obj = self._prepare_upi_rhel_node(conf)
@@ -776,7 +776,7 @@ class AWSUPINode(AWSNodes):
                 logger.error("Failed to create RHEL node")
                 raise
 
-    def prepare_rhel_node_conf(self):
+    def _prepare_rhel_node_conf(self):
         """
         Merge default RHEL node config with the user provided
         config
