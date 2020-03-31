@@ -14,13 +14,15 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
-from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
+from ocs_ci.ocs.exceptions import (
+    CommandFailed, UnavailableResourceException, UnsupportedPlatformError
+)
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods
 )
-from ocs_ci.ocs.node import get_typed_worker_nodes
+from ocs_ci.ocs.node import get_typed_nodes, get_typed_worker_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
@@ -41,6 +43,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
     get_latest_ds_olm_tag,
+    get_ocp_version,
     is_cluster_running,
     run_cmd,
 )
@@ -89,7 +92,8 @@ class Deployment(object):
                 try:
                     self.deploy_ocp(log_cli_level)
                     self.post_ocp_deploy()
-                except Exception:
+                except Exception as e:
+                    logger.error(e)
                     if config.REPORTING['gather_on_deploy_failure']:
                         collect_ocs_logs('deployment', ocs=False)
                     raise
@@ -97,7 +101,8 @@ class Deployment(object):
         if not config.ENV_DATA['skip_ocs_deployment']:
             try:
                 self.deploy_ocs()
-            except Exception:
+            except Exception as e:
+                logger.error(e)
                 if config.REPORTING['gather_on_deploy_failure']:
                     # Let's do the collections separately to guard against one
                     # of them failing
@@ -243,7 +248,8 @@ class Deployment(object):
                 f"{constants.OPERATOR_NODE_LABEL}"
             )
             label_cmd = (
-                f"label nodes {workers_to_label} {constants.OPERATOR_NODE_LABEL}"
+                f"label nodes {workers_to_label} "
+                f"{constants.OPERATOR_NODE_LABEL} --overwrite"
             )
             _ocp.exec_oc_cmd(command=label_cmd)
 
@@ -389,6 +395,10 @@ class Deployment(object):
         """
         ui_deployment = config.DEPLOYMENT.get('ui_deployment')
         live_deployment = config.DEPLOYMENT.get('live_deployment')
+
+        if config.DEPLOYMENT.get('local_storage'):
+            setup_local_storage()
+
         if ui_deployment:
             if not live_deployment:
                 self.create_ocs_operator_source()
@@ -424,6 +434,14 @@ class Deployment(object):
         deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
             'storage'
         ] = f"{device_size}Gi"
+
+        if config.DEPLOYMENT.get('local_storage'):
+            cluster_data['spec']['manageNodes'] = False
+            cluster_data['spec']['monDataDirHostPath'] = '/var/lib/rook'
+            cluster_data['spec']['portable'] = False
+            deviceset_data['dataPVCTemplate']['spec'][
+                'storageClassName'
+            ] = 'local-block'
 
         # Allow lower instance requests and limits for OCS deployment
         if config.DEPLOYMENT.get('allow_lower_instance_requirements'):
@@ -678,3 +696,149 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     )
     # Wait for catalog source is ready
     catalog_source.wait_for_state("READY")
+
+
+def setup_local_storage():
+    """
+    Setup the necessary resources for enabling local storage.
+
+    """
+    # Get the worker nodes
+    workers = get_typed_nodes(node_type='worker')
+    worker_names = [worker.name for worker in workers]
+    worker_names_str = " ".join(worker_names)
+    logger.debug("Workers: %s", workers)
+
+    # Label the worker nodes
+    logger.info("Labeling worker nodes")
+    run_cmd(
+        f"oc label nodes {worker_names_str} "
+        f"{constants.OPERATOR_NODE_LABEL}"
+    )
+
+    logger.info("Retrieving local-storage-operator data from yaml")
+    lso_data = list(templating.load_yaml(
+        constants.LOCAL_STORAGE_OPERATOR, multi_document=True
+    ))
+    # Update local-storage-operator subscription data with channel
+    for data in lso_data:
+        if data['kind'] == 'Subscription':
+            data['spec']['channel'] = get_ocp_version()
+
+    # Create temp yaml file and create local storage operator
+    logger.info(
+        "Creating temp yaml file with local-storage-operator data:\n %s",
+        lso_data
+    )
+    lso_data_yaml = tempfile.NamedTemporaryFile(
+        mode='w+', prefix='local_storage_operator', delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        lso_data, lso_data_yaml.name
+    )
+    logger.info("Creating local-storage-operator")
+    run_cmd(f"oc create -f {lso_data_yaml.name}")
+
+    local_storage_operator = ocp.OCP(
+        kind=constants.POD, namespace='local-storage'
+    )
+    assert local_storage_operator.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector=constants.LOCAL_STORAGE_OPERATOR_LABEL,
+        timeout=600
+    ), "Local storage operator did not reach running phase"
+
+    # Retrieve NVME device path ID for each worker node
+    device_paths = get_device_paths(worker_names)
+
+    # Pull local volume yaml data
+    logger.info("Pulling LocalVolume CR data from yaml")
+    lv_data = templating.load_yaml(
+        constants.LOCAL_VOLUME_YAML
+    )
+
+    # Update local volume data with NVME IDs
+    logger.info(
+        "Updating LocalVolume CR data with device paths: %s",
+        device_paths
+    )
+    lv_data['spec']['storageClassDevices'][0][
+        'devicePaths'
+    ] = device_paths
+
+    # Create temp yaml file and create local volume
+    lv_data_yaml = tempfile.NamedTemporaryFile(
+        mode='w+', prefix='local_volume', delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        lv_data, lv_data_yaml.name
+    )
+    logger.info("Creating LocalVolume CR")
+    run_cmd(f"oc create -f {lv_data_yaml.name}")
+    logger.info("Waiting 30 seconds for PVs to create")
+    verify_pvs_created(len(worker_names))
+
+
+@retry(AssertionError, 12, 10, 1)
+def verify_pvs_created(num_workers):
+    """
+    Verify that PVs were created and are in the Available state
+
+    Args:
+        num_workers (int): number of worker nodes in the cluster
+
+    Raises:
+        AssertionError: if any PVs are not in the Available state or if the
+            number of PVs does not match the number of workers in the cluster.
+
+    """
+    logger.info("Verifying PVs are created")
+    out = run_cmd("oc get pv -o json")
+    pv_json = json.loads(out)
+    for pv in pv_json['items']:
+        pv_state = pv['status']['phase']
+        pv_name = pv['metadata']['name']
+        logger.info("%s is %s", pv_name, pv_state)
+        assert pv_state == 'Available', (
+            f"{pv_name} not in 'Available' state. Current state is {pv_state}"
+        )
+    num_pvs = len(pv_json['items'])
+    logger.debug("PVs, Workers: %s, %s", num_pvs, num_workers)
+
+
+def get_device_paths(worker_names):
+    """
+    Retrieve a list of the device paths for each worker node
+
+    Args:
+        worker_names (list): worker node names
+
+    Returns:
+        list: device path ids
+    """
+    device_paths = []
+    platform = config.ENV_DATA.get('platform').lower()
+    if platform == 'aws':
+        pattern = 'nvme-Amazon_EC2_NVMe_Instance_Storage'
+    # TODO: add patterns for vsphere and bare metal
+    else:
+        raise UnsupportedPlatformError(
+            'LSO deployment is not supported for platform: %s', platform
+        )
+    for worker in worker_names:
+        logger.info("Retrieving device path for node: %s", worker)
+        cmd = (
+            f"oc debug nodes/{worker} "
+            f"-- chroot /host ls -la /dev/disk/by-id/"
+        )
+        out = run_cmd(cmd)
+        out_lines = out.split('\n')
+        nvme_lines = [line for line in out_lines if pattern in line]
+        for nvme_line in nvme_lines:
+            device_path = [
+                part for part in nvme_line.split(' ') if pattern in part
+            ][0]
+            logger.info("Adding %s to device paths", device_path)
+            device_paths.append(f'/dev/disk/by-id/{device_path}')
+
+    return device_paths

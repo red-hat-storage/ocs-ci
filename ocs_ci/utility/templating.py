@@ -197,11 +197,16 @@ def dump_data_to_temp_yaml(data, temp_yaml):
         str: dumped yaml data
 
     """
-    dumper = yaml.dump if type(data) == dict else yaml.dump_all
+    dumper = yaml.dump if isinstance(data, dict) else yaml.dump_all
     yaml_data = dumper(data)
     with open(temp_yaml, 'w') as yaml_file:
         yaml_file.write(yaml_data)
-    yaml_data_censored = dumper(censor_values(deepcopy(data)))
+    if isinstance(data, dict):
+        yaml_data_censored = dumper(censor_values(deepcopy(data)))
+    else:
+        yaml_data_censored = [
+            dumper(censor_values(deepcopy(doc))) for doc in data
+        ]
     logger.info(yaml_data_censored)
     return yaml_data
 
