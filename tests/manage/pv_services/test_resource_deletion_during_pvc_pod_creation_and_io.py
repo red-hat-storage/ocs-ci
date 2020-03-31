@@ -214,6 +214,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
 
         # Wait for setup on pods to complete
         for pod_obj in io_pods:
+            log.info(f"Waiting for IO setup to complete on pod {pod_obj.name}")
             for sample in TimeoutSampler(
                 180, 2, getattr, pod_obj, 'wl_setup_done'
             ):
