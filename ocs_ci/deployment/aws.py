@@ -254,9 +254,7 @@ class AWSIPI(AWSBase):
         Args:
             log_level (str): log level openshift-installer (default: DEBUG)
         """
-        super(AWSIPI, self).destroy_cluster(log_level)
-        cluster_name = self.ocp_deployment.metadata.get('clusterName')
-        destroy_volumes(cluster_name)
+        destroy_volumes(self.cluster_name)
 
 
 class AWSUPI(AWSBase):
