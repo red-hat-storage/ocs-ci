@@ -85,6 +85,7 @@ def check_query_range_result(
     bad_values=(),
     exp_metric_num=None,
     exp_delay=None,
+    exp_good_time=None,
 ):
     """
     Check that result of range query matches given expectations. Useful
@@ -106,6 +107,10 @@ def check_query_range_result(
             time range for which we should tolerate bad values. This is
             useful if you change cluster state and processing of this
             change is expected to take some time.
+        exp_good_time (int): Number of seconds during which we should see
+            good values in the metrics data. When this time passess values
+            can go bad (but can't be invalid). If not specified, good values
+            should be presend during the whole time.
 
     Returns:
         bool: True if result matches given expectations, False otherwise
@@ -145,6 +150,10 @@ def check_query_range_result(
                 if exp_delay is not None and delta.seconds < exp_delay:
                     logger.info(
                         msg + f" but within expected {exp_delay}s delay")
+                elif (exp_good_time is not None
+                        and delta.seconds >= exp_good_time):
+                    logger.info(
+                        msg + f" but after {exp_good_time}s already passed")
                 else:
                     logger.error(msg)
                     bad_value_timestamps.append(dt)
