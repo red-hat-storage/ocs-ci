@@ -7,7 +7,7 @@ from ocs_ci.utility.utils import (
     get_latest_ocp_version,
     expose_ocp_version,
 )
-from ocs_ci.framework.testlib import ManageTest, ocp_upgrade
+from ocs_ci.framework.testlib import ManageTest, ocp_upgrade, ignore_leftovers
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 # TODO: add image type validation (ga to ga , nightly to nightly, newer than current etc.)
 
 
+@ignore_leftovers
 @ocp_upgrade
 class TestUpgradeOCP(ManageTest):
     """
