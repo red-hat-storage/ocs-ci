@@ -239,6 +239,7 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
 
         # Wait for setup on pods to complete
         for pod_obj in pod_objs:
+            log.info(f"Waiting for IO setup to complete on pod {pod_obj.name}")
             for sample in TimeoutSampler(
                 180, 2, getattr, pod_obj, 'wl_setup_done'
             ):
@@ -273,6 +274,7 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
             assert err_count == 0, (
                 f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
             )
+            log.info(f"FIO is success on pod {pod_obj.name}")
         log.info("Verified FIO result on pods.")
 
         # Delete pods
@@ -311,6 +313,7 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
             assert err_count == 0, (
                 f"FIO error on pod {pod_obj.name}. FIO result: {fio_result}"
             )
+            log.info(f"FIO is success on pod {pod_obj.name}")
         log.info("Verified FIO result on new pods.")
 
         # Verify number of pods of type 'resource_to_delete'
