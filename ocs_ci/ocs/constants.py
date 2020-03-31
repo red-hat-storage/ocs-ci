@@ -674,3 +674,11 @@ MUST_GATHER_COMMANDS_JSON = [
     'ceph_fs_ls_--format_json-pretty', 'ceph_fs_dump_--format_json-pretty',
     'ceph_df_--format_json-pretty', 'ceph_auth_list_--format_json-pretty'
 ]
+
+# local storage
+LOCAL_STORAGE_OPERATOR = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "local-storage-operator.yaml"
+)
+LOCAL_VOLUME_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "local-volume.yaml"
+)
