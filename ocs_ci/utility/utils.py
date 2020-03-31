@@ -8,8 +8,10 @@ import shlex
 import string
 import subprocess
 import time
+import traceback
 from copy import deepcopy
 from shutil import which
+
 
 import requests
 import yaml
@@ -1907,3 +1909,31 @@ def load_config_file(config_file):
     ) as file_stream:
         custom_config_data = yaml.safe_load(file_stream)
         config.update(custom_config_data)
+
+
+def destroy_cluster(installer, cluster_path, log_level="DEBUG"):
+    """
+    Destroy OCP cluster specific
+
+
+    Args:
+        installer (str): The path to the installer binary
+        cluster_path (str): The path of the cluster
+        log_level (str): log level openshift-installer (default: DEBUG)
+
+    """
+    destroy_cmd = (
+        f"{installer} destroy cluster "
+        f"--dir {cluster_path} "
+        f"--log-level {log_level}"
+    )
+
+    try:
+        # Execute destroy cluster using OpenShift installer
+        log.info(f"Destroying cluster defined in {cluster_path}")
+        run_cmd(destroy_cmd)
+    except CommandFailed:
+        log.error(traceback.format_exc())
+        raise
+    except Exception:
+        log.error(traceback.format_exc())

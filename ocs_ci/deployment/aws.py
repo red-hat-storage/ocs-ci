@@ -5,11 +5,9 @@ on AWS platform
 import logging
 import os
 import shutil
-import traceback
 from subprocess import PIPE, Popen
 
 import boto3
-from botocore.exceptions import ClientError
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
@@ -17,7 +15,9 @@ from ocs_ci.ocs import constants, exceptions, ocp
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import templating
-from ocs_ci.utility.aws import AWS as AWSUtil
+from ocs_ci.utility.aws import (
+    AWS as AWSUtil, terminate_rhel_workers, destroy_volumes, get_rhel_worker_instances
+)
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -185,21 +185,6 @@ class AWSBase(Deployment):
             return True
         return False
 
-    def destroy_volumes(self):
-        try:
-            # Retrieve AWS region from metadata
-            # Find and delete volumes
-            volume_pattern = f"{self.cluster_name}*"
-            logger.debug(f"Finding volumes with pattern: {volume_pattern}")
-            volumes = self.aws.get_volumes_by_name_pattern(volume_pattern)
-            logger.debug(f"Found volumes: \n {volumes}")
-            for volume in volumes:
-                self.aws.detach_and_delete_volume(
-                    self.aws.ec2_resource.Volume(volume['id'])
-                )
-        except Exception:
-            logger.error(traceback.format_exc())
-
 
 class AWSIPI(AWSBase):
     """
@@ -269,8 +254,7 @@ class AWSIPI(AWSBase):
         Args:
             log_level (str): log level openshift-installer (default: DEBUG)
         """
-        super(AWSIPI, self).destroy_cluster(log_level)
-        self.destroy_volumes()
+        destroy_volumes(self.cluster_name)
 
 
 class AWSUPI(AWSBase):
@@ -794,68 +778,6 @@ class AWSUPI(AWSBase):
         self.create_rhel_instance()
         self.run_ansible_playbook()
 
-    def get_rhel_worker_instances(self):
-        """
-        Get list of rhel worker instance IDs
-
-        Returns:
-            list: list of instance IDs of rhel workers
-
-        """
-        rhel_workers = []
-        worker_pattern = get_infra_id(self.cluster_path) + "*rhel-worker*"
-        worker_filter = [{
-            'Name': 'tag:Name', 'Values': [worker_pattern]
-        }]
-
-        response = self.client.describe_instances(Filters=worker_filter)
-        for worker in response['Reservations']:
-            rhel_workers.append(worker['Instances'][0]['InstanceId'])
-        return rhel_workers
-
-    def terminate_rhel_workers(self, worker_list):
-        """
-        Terminate the RHEL worker instances
-
-        Args:
-            worker_list (list): Instance IDs of rhel workers
-
-        Raises:
-            exceptions.FailedToDeleteInstance: if failed to terminate
-
-        """
-        if not worker_list:
-            logger.info(
-                "No workers in list, skipping termination of RHEL workers"
-            )
-            return
-
-        logging.info(f"Terminating RHEL workers {worker_list}")
-        # Do a dry run of instance termination
-        try:
-            self.client.terminate_instances(
-                InstanceIds=worker_list,
-                DryRun=True,
-            )
-        except self.client.exceptions.ClientError as err:
-            if "DryRunOperation" in str(err):
-                logging.info("Instances can be deleted")
-            else:
-                logging.error("Some of the Instances can't be deleted")
-                raise exceptions.FailedToDeleteInstance()
-        # Actual termination call here
-        self.client.terminate_instances(
-            InstanceIds=worker_list,
-            DryRun=False,
-        )
-        try:
-            waiter = self.client.get_waiter('instance_terminated')
-            waiter.wait(InstanceIds=worker_list)
-            logging.info("Instances are terminated")
-        except self.client.exceptions.WaiterError as ex:
-            logging.error(f"Failed to terminate instances {ex}")
-            raise exceptions.FailedToDeleteInstance()
-
     def destroy_cluster(self, log_level="DEBUG"):
         """
         Destroy OCP cluster for AWS UPI
@@ -863,27 +785,24 @@ class AWSUPI(AWSBase):
         Args:
             log_level (str): log level for openshift-installer (
                 default:DEBUG)
+
         """
         cluster_name = get_cluster_name(self.cluster_path)
         if config.ENV_DATA.get('rhel_workers'):
-            self.terminate_rhel_workers(self.get_rhel_worker_instances())
-        # Destroy extra volumes
-        self.destroy_volumes()
+            terminate_rhel_workers(get_rhel_worker_instances(self.cluster_path))
 
-        # Create cloudformation client
-        cf = boto3.client('cloudformation', region_name=self.region)
+        # Destroy extra volumes
+        destroy_volumes(cluster_name)
 
         # Delete master, bootstrap, security group, and worker stacks
         suffixes = ['ma', 'bs', 'sg']
-        # TODO: read in num_workers in a better way
-        num_workers = int(os.environ.get('num_workers', 3))
+
+        num_workers = config.ENV_DATA['worker_replicas']
         for i in range(num_workers - 1, -1, -1):
             suffixes.insert(0, f'no{i}')
+
         stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
-        for stack_name in stack_names:
-            logger.info("Destroying stack: %s", stack_name)
-            cf.delete_stack(StackName=stack_name)
-            verify_stack_deleted(stack_name)
+        self.aws.delete_cloudformation_stacks(stack_names)
 
         # Call openshift-installer destroy cluster
         super(AWSUPI, self).destroy_cluster(log_level)
@@ -891,31 +810,4 @@ class AWSUPI(AWSBase):
         # Delete inf and vpc stacks
         suffixes = ['inf', 'vpc']
         stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
-        for stack_name in stack_names:
-            logger.info("Destroying stack: %s", stack_name)
-            cf.delete_stack(StackName=stack_name)
-            verify_stack_deleted(stack_name)
-
-
-class StackStatusError(Exception):
-    pass
-
-
-@retry(StackStatusError, tries=20, delay=30, backoff=1)
-def verify_stack_deleted(stack_name):
-    try:
-        cf = boto3.client(
-            'cloudformation', region_name=config.ENV_DATA['region']
-        )
-        result = cf.describe_stacks(StackName=stack_name)
-        stacks = result['Stacks']
-        for stack in stacks:
-            status = stack['StackStatus']
-            raise StackStatusError(
-                f'{stack_name} not deleted yet, current status: {status}.'
-            )
-    except ClientError as e:
-        assert f"Stack with id {stack_name} does not exist" in str(e)
-        logger.info(
-            "Received expected ClientError, stack successfully deleted"
-        )
+        self.aws.delete_cloudformation_stacks(stack_names)
