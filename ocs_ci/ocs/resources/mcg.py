@@ -288,23 +288,22 @@ class MCG(object):
             bucket_data_reduced = resp.json().get('reply').get('data').get('size_reduced')
 
             logger.info(
-                'Overall bytes stored: ' + str(bucket_data) + '. Amount reduced: ' + str(bucket_data_reduced)
+                'Overall bytes stored: ' + str(bucket_data) + '. Reduced size: ' + str(bucket_data_reduced)
             )
 
             return bucket_data, bucket_data_reduced
 
         try:
             for total_size, total_reduced in TimeoutSampler(140, 5, _retrieve_reduction_data):
-                if total_size - total_reduced > 80000000:
+                if total_size - total_reduced > 100*1024*1024:
                     logger.info(
                         'Data reduced:' + str(total_size - total_reduced)
                     )
                     return True
                 else:
                     logger.info(
-                        f'Data reduction is not yet sufficient - '
-                        f'Total size: {total_size}, Reduced: {total_reduced}.'
-                        f'Retrying in 5 seconds...'
+                        'Data reduction is not yet sufficient. '
+                        'Retrying in 5 seconds...'
                     )
         except TimeoutExpiredError:
             logger.error(
