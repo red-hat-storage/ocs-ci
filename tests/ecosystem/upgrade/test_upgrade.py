@@ -232,7 +232,7 @@ def test_upgrade():
         )
         if subscription_plan_approval == 'Manual':
             wait_for_install_plan_and_approve(namespace)
-        attempts = 10
+        attempts = 145
         for attempt in range(1, attempts + 1):
             log.info(f"Attempt {attempt}/{attempts} to check CSV upgraded.")
             csv_name_post_upgrade = package_manifest.get_current_csv(channel)
