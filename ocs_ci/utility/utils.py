@@ -1931,7 +1931,7 @@ def destroy_cluster(installer, cluster_path, log_level="DEBUG"):
     try:
         # Execute destroy cluster using OpenShift installer
         log.info(f"Destroying cluster defined in {cluster_path}")
-        run_cmd(destroy_cmd)
+        run_cmd(destroy_cmd, timeout=1200)
     except CommandFailed:
         log.error(traceback.format_exc())
         raise
