@@ -32,6 +32,9 @@ TEMPLATE_SMALLFILE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "smallfile")
 TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
 TEMPLATE_VDBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "vdbench")
 TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
+TEMPLATE_COUCHBASE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase")
+TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
+TEMPLATE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_SERVER_DIR, "pillowfight")
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(
     TEMPLATE_DIR, "openshift-infra/"
@@ -283,6 +286,58 @@ SMALLFILE_BENCHMARK_YAML = os.path.join(
 
 VDBENCH_BENCHMARK_YAML = os.path.join(
     TEMPLATE_VDBENCH_DIR, "VDBench.yaml"
+)
+
+COUCHBASE_ADMISSION_SERVICE_ACCOUNT_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionServiceAccount.yaml"
+)
+
+COUCHBASE_ADMISSION_CLUSTER_ROLE_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionClusterRole.yaml"
+)
+
+COUCHBASE_ADMISSION_CLUSTER_ROLE_BINDING_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionClusterRoleBinding.yaml"
+)
+
+COUCHBASE_ADMISSION_SECRET_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionSecret.yaml"
+)
+
+COUCHBASE_ADMISSION_DEPLOYMENT_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionDeployment.yaml"
+)
+
+COUCHBASE_ADMISSION_SERVICE_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionService.yaml"
+)
+
+COUCHBASE_MUTATING_WEBHOOK_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "MutatingWebhookConfiguration.yaml"
+)
+
+COUCHBASE_VALIDATING_WEBHOOK_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "ValidatingWebhookConfiguration.yaml"
+)
+
+COUCHBASE_CRD_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbaseCrd.yaml"
+)
+
+COUCHBASE_OPERATOR_ROLE = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "operator-role.yaml"
+)
+
+COUCHBASE_OPERATOR_DEPLOY = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "operator-deployment.yaml"
+)
+
+COUCHBASE_WORKER_SECRET = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-secret.yaml"
+)
+
+COUCHBASE_WORKER_EXAMPLE = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-example.yaml"
 )
 
 NGINX_POD_YAML = os.path.join(
