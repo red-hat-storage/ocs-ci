@@ -77,14 +77,12 @@ class TestBucketIO(ManageTest):
         # TODO: Privatize test bucket
         download_dir = '/aws/downloaded'
         helpers.retrieve_test_objects_to_pod(awscli_pod, download_dir)
-
-        bucketname = None
-        for bucket in bucket_factory(5):
-            bucketname = bucket.name
-            full_object_path = f"s3://{bucketname}"
-            helpers.sync_object_directory(
-                awscli_pod, download_dir, full_object_path, mcg_obj
-            )
+        bucket = bucket_factory(1)[0]
+        bucketname = bucket.name
+        full_object_path = f"s3://{bucketname}"
+        helpers.sync_object_directory(
+            awscli_pod, download_dir, full_object_path, mcg_obj
+        )
 
         assert mcg_obj.check_data_reduction(bucketname), (
             'Data reduction did not work as anticipated.'
