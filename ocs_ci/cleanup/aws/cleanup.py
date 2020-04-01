@@ -25,7 +25,7 @@ logging.basicConfig(format=FORMAT, level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-def cleanup(cluster_name, cluster_id, upi=False, no_instances=False):
+def cleanup(cluster_name, cluster_id, upi=False):
     """
     Cleanup existing cluster in AWS
 
@@ -33,8 +33,6 @@ def cleanup(cluster_name, cluster_id, upi=False, no_instances=False):
         cluster_name (str): Name of the cluster
         cluster_id (str): Cluster id to cleanup
         upi (bool): True for UPI cluster, False otherwise
-        no_instances (bool): True if the given cluster doesn't have running instances.
-            (has to be UPI)
 
     """
     data = {'cluster_name': cluster_name, 'cluster_id': cluster_id}
@@ -85,10 +83,9 @@ def cleanup(cluster_name, cluster_id, upi=False, no_instances=False):
         logger.info(f"Deleting stacks: {stack_names}")
         aws.delete_cloudformation_stacks(stack_names)
 
-        if not no_instances:
-            # Destroy the cluster
-            logger.info(f"cleaning up {cluster_id}")
-            destroy_cluster(installer=oc_bin, cluster_path=cleanup_path)
+        # Destroy the cluster
+        logger.info(f"cleaning up {cluster_id}")
+        destroy_cluster(installer=oc_bin, cluster_path=cleanup_path)
 
         for stack_type in ['inf', 'vpc']:
             try:
@@ -182,7 +179,6 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
         instance_dicts = aws.get_instances_by_name_pattern(vpc_name.strip('-vpc'))
         ec2_instances = [aws.get_ec2_instance(instance_dict['id']) for instance_dict in instance_dicts]
         if not ec2_instances:
-            cf_clusters_to_delete_no_instances.append(vpc_name.strip('-vpc'))
             continue
         cluster_io_tag = [
             tag['Key'] for tag in ec2_instances[0].tags if 'kubernetes.io/cluster' in tag['Key']
@@ -291,7 +287,7 @@ def aws_cleanup():
 
     time_to_delete = args.hours * 60 * 60
     region = defaults.AWS_REGION if not args.region else args.region
-    clusters_to_delete, cf_clusters_to_delete, cf_clusters_to_delete_no_instances = (
+    clusters_to_delete, cf_clusters_to_delete = (
         get_clusters_to_delete(
             time_to_delete=time_to_delete, region_name=region,
             prefixes_hours_to_spare=prefixes_hours_to_spare,
@@ -316,14 +312,6 @@ def aws_cleanup():
         cluster_name = cluster.rsplit('-', 1)[0]
         logger.info(f"Deleting UPI cluster {cluster_name}")
         proc = threading.Thread(target=cleanup, args=(cluster_name, cluster, True))
-        proc.start()
-        procs.append(proc)
-    for p in procs:
-        p.join()
-    for cluster in cf_clusters_to_delete_no_instances:
-        cluster_name = cluster
-        logger.info(f"Deleting UPI cluster (without EC2 instances) {cluster_name}")
-        proc = threading.Thread(target=cleanup, args=(cluster_name, cluster, True, True))
         proc.start()
         procs.append(proc)
     for p in procs:
