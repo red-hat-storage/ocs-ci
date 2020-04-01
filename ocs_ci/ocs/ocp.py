@@ -977,3 +977,34 @@ def get_all_cluster_operators():
     log.info(f"ClusterOperators full list: {operator_names}")
 
     return operator_names
+
+
+def verify_cluster_operator_status(cluster_operator):
+    """
+    Checks if cluster operator status is degraded or progressing,
+    as sign that upgrade not yet completed
+
+    Args:
+        cluster_operator (str): OCP cluster operator name
+
+    Returns:
+        True if cluster operator status is valid
+        False if cluster operator status is "degraded" or "progressing"
+
+    """
+    ocp = OCP()
+    oc_json = ocp.exec_oc_cmd(
+        f'get clusteroperators {cluster_operator} -o json', out_yaml_format=False
+    )
+    operator_data = json.loads(oc_json)
+    conditions = operator_data['status']['conditions']
+    for condition in conditions:
+        if condition['type'] == 'Degraded' and condition['status'] == 'True':
+            log.info(f'{cluster_operator} status is Degraded')
+            return False
+        if condition['type'] == 'Progressing' and condition['status'] == 'True':
+            log.info(f'{cluster_operator} status is Progressing')
+            return False
+    log.info(f'{cluster_operator} status is valid')
+
+    return True
