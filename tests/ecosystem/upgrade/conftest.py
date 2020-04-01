@@ -7,6 +7,7 @@ import pytest
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.resources.pod import Pod
+from tests import helpers
 
 log = logging.getLogger(__name__)
 
@@ -15,7 +16,6 @@ def create_fio_pod(
     project,
     interface,
     pvc_factory,
-    pod_factory,
     storageclass,
     access_mode,
     fio_job_dict,
@@ -25,14 +25,12 @@ def create_fio_pod(
     pvc_size=10
 ):
     """
-    Create pods for upgrade testing. pvc_factory and pod_factory have to be
-    in the same scope.
+    Create pods for upgrade testing.
 
     Args:
         project (obj): Project in which to create resources
         interface (str): CephBlockPool or CephFileSystem
         pvc_factory (function): Function for creating PVCs
-        pod_factory (function): Function for creating pods
         storageclass (obj): Storageclass to use
         access_mode (str): ReadWriteOnce, ReadOnlyMany or ReadWriteMany.
             This decides the access mode to be used for the PVC
@@ -56,7 +54,13 @@ def create_fio_pod(
         storageclass=storageclass,
         access_mode=access_mode,
         volume_mode=volume_mode,
-        size=pvc_size
+        size=pvc_size,
+        status=None
+    )
+    helpers.wait_for_resource_state(
+        pvc,
+        constants.STATUS_BOUND,
+        timeout=600
     )
 
     fio_job_dict['spec']['template']['spec']['volumes'][0][
@@ -85,7 +89,7 @@ def create_fio_pod(
     return Pod(**pod_data)
 
 
-def set_fio_dicts(job_name, fio_job_dict, fio_configmap_dict):
+def set_fio_dicts(job_name, fio_job_dict, fio_configmap_dict, mode='fs'):
     """
     Set correct names for jobs, targets, configs and volumes in fio
     dictionaries.
@@ -94,12 +98,14 @@ def set_fio_dicts(job_name, fio_job_dict, fio_configmap_dict):
         job_name (str): fio job name
         fio_job_dict (dict): instance of fio_job_dict fixture
         fio_configmap_dict (dict): instance of fio_configmap_dict fixture
+        mode (str): block or fs
 
     Returns:
         tupple: Edited fio_job_dict and fio_configmap_dict
 
     """
     config_name = f"{job_name}-config"
+    volume_name = f"{config_name}-vol"
     target_name = f"{job_name}-target"
 
     fio_configmap_dict['metadata']['name'] = config_name
@@ -114,7 +120,7 @@ def set_fio_dicts(job_name, fio_job_dict, fio_configmap_dict):
     ]['claimName'] = target_name
     fio_job_dict['spec']['template']['spec']['volumes'][1][
         'name'
-    ] = config_name
+    ] = volume_name
     fio_job_dict['spec']['template']['spec']['volumes'][1][
         'configMap'
     ]['name'] = config_name
@@ -124,7 +130,26 @@ def set_fio_dicts(job_name, fio_job_dict, fio_configmap_dict):
     ][0]['name'] = target_name
     fio_job_dict['spec']['template']['spec']['containers'][0][
         'volumeMounts'
-    ][1]['name'] = config_name
+    ][1]['name'] = volume_name
+
+    if mode == 'block':
+        # set correct path for fio volumes
+        fio_job_dict_block = copy.deepcopy(fio_job_dict)
+        job_spec = fio_job_dict_block['spec']['template']['spec']
+        job_spec['containers'][0]['volumeDevices'] = []
+        job_spec['containers'][0]['volumeDevices'].append(
+            job_spec['containers'][0]['volumeMounts'].pop(0)
+        )
+        block_path = '/dev/rbdblock'
+        # set correct path for fio volumes
+        job_spec[
+            'containers'
+        ][0]['volumeDevices'][0]['devicePath'] = block_path
+        try:
+            job_spec['containers'][0]['volumeDevices'][0].pop('mountPath')
+        except:
+            pass
+        return fio_job_dict_block, fio_configmap_dict
 
     return fio_job_dict, fio_configmap_dict
 
@@ -145,9 +170,9 @@ def fio_project(project_factory_session):
 
 
 @pytest.fixture(scope='session')
-def fio_conf():
+def fio_conf_fs():
     """
-    Basic fio configuration for upgrade utilization
+    Basic fio configuration for upgrade utilization for fs based pvcs
 
     """
     # TODO(fbalak): handle better fio size
@@ -167,14 +192,35 @@ def fio_conf():
 
 
 @pytest.fixture(scope='session')
+def fio_conf_block():
+    """
+    Basic fio configuration for upgrade utilization for block based pvcs
+
+    """
+    # TODO(fbalak): handle better fio size
+    fio_size = 1
+    return textwrap.dedent(f"""
+        [readwrite]
+        readwrite=randrw
+        buffered=1
+        blocksize=4k
+        ioengine=libaio
+        directory=/dev/rbdblock
+        size={fio_size}G
+        time_based
+        runtime=24h
+        numjobs=10
+        """)
+
+
+@pytest.fixture(scope='session')
 def pre_upgrade_filesystem_pods(
     request,
     pvc_factory_session,
-    pod_factory_session,
     default_storageclasses,
     fio_job_dict,
     fio_configmap_dict,
-    fio_conf,
+    fio_conf_fs,
     fio_project,
     tmp_path
 ):
@@ -188,7 +234,7 @@ def pre_upgrade_filesystem_pods(
     """
     pods = []
     pvc_size = 10
-    fio_configmap_dict["data"]["workload.fio"] = fio_conf
+    fio_configmap_dict["data"]["workload.fio"] = fio_conf_fs
 
     for reclaim_policy in (
         constants.RECLAIM_POLICY_DELETE,
@@ -204,7 +250,6 @@ def pre_upgrade_filesystem_pods(
             project=fio_project,
             interface=constants.CEPHBLOCKPOOL,
             pvc_factory=pvc_factory_session,
-            pod_factory=pod_factory_session,
             storageclass=default_storageclasses.get(reclaim_policy)[0],
             access_mode=constants.ACCESS_MODE_RWO,
             volume_mode=constants.VOLUME_MODE_FILESYSTEM,
@@ -229,7 +274,6 @@ def pre_upgrade_filesystem_pods(
                 project=fio_project,
                 interface=constants.CEPHFILESYSTEM,
                 pvc_factory=pvc_factory_session,
-                pod_factory=pod_factory_session,
                 storageclass=default_storageclasses.get(reclaim_policy)[1],
                 access_mode=access_mode,
                 fio_job_dict=fio_job_dict,
@@ -251,11 +295,10 @@ def pre_upgrade_filesystem_pods(
 def pre_upgrade_block_pods(
     request,
     pvc_factory_session,
-    pod_factory_session,
     default_storageclasses,
     fio_job_dict,
     fio_configmap_dict,
-    fio_conf,
+    fio_conf_block,
     fio_project,
     tmp_path
 ):
@@ -270,7 +313,7 @@ def pre_upgrade_block_pods(
     pods = []
 
     pvc_size = 10
-    fio_configmap_dict["data"]["workload.fio"] = fio_conf
+    fio_configmap_dict["data"]["workload.fio"] = fio_conf_block
 
     for reclaim_policy in (
         constants.RECLAIM_POLICY_DELETE,
@@ -281,39 +324,17 @@ def pre_upgrade_block_pods(
             constants.ACCESS_MODE_RWO
         ):
             job_name = f"{reclaim_policy}-rbd-{access_mode}-block".lower()
-            fio_job_dict, fio_configmap_dict = set_fio_dicts(
+            fio_job_dict_block, fio_configmap_dict = set_fio_dicts(
                 job_name,
                 fio_job_dict,
-                fio_configmap_dict
+                fio_configmap_dict,
+                mode='block'
             )
-
-            block_path = '/dev/rbdblock'
-            # set correct path for fio volumes
-            fio_job_dict_block = copy.deepcopy(fio_job_dict)
-            fio_job_dict_block['spec']['template']['spec'][
-                'volumeDevices'
-            ] = fio_job_dict_block['spec']['template']['spec'].pop(
-                'volumeMounts'
-            )
-            for key, _ in enumerate(fio_job_dict_block['spec'][
-                'template'
-            ]['spec']['volumeDevices']):
-                fio_job_dict_block['spec']['template']['spec'][
-                    'volumeDevices'
-                ][key]['devicePath'] = block_path
-                fio_job_dict_block['spec']['template']['spec'][
-                    'volumeDevices'
-                ][key].pop('mountPath')
-            # set correct path for fio command
-            fio_job_dict_block['spec']['template']['spec']['containers'][0][
-                'command'
-            ][2] = rbd_path
 
             rbd_pod = create_fio_pod(
                 project=fio_project,
                 interface=constants.CEPHBLOCKPOOL,
                 pvc_factory=pvc_factory_session,
-                pod_factory=pod_factory_session,
                 storageclass=default_storageclasses.get(reclaim_policy)[0],
                 access_mode=access_mode,
                 volume_mode=constants.VOLUME_MODE_BLOCK,
@@ -335,11 +356,10 @@ def pre_upgrade_block_pods(
 @pytest.fixture
 def post_upgrade_filesystem_pods(
     pvc_factory,
-    pod_factory,
     default_storageclasses,
     fio_job_dict,
     fio_configmap_dict,
-    fio_conf,
+    fio_conf_fs,
     fio_project,
     tmp_path
 ):
@@ -354,7 +374,7 @@ def post_upgrade_filesystem_pods(
     pods = []
 
     pvc_size = 10
-    fio_configmap_dict["data"]["workload.fio"] = fio_conf
+    fio_configmap_dict["data"]["workload.fio"] = fio_conf_fs
 
     for reclaim_policy in (
         constants.RECLAIM_POLICY_DELETE,
@@ -370,7 +390,6 @@ def post_upgrade_filesystem_pods(
             project=fio_project,
             interface=constants.CEPHBLOCKPOOL,
             pvc_factory=pvc_factory,
-            pod_factory=pod_factory,
             storageclass=default_storageclasses.get(reclaim_policy)[0],
             access_mode=constants.ACCESS_MODE_RWO,
             volume_mode=constants.VOLUME_MODE_FILESYSTEM,
@@ -396,7 +415,6 @@ def post_upgrade_filesystem_pods(
                 project=fio_project,
                 interface=constants.CEPHFILESYSTEM,
                 pvc_factory=pvc_factory,
-                pod_factory=pod_factory,
                 storageclass=default_storageclasses.get(reclaim_policy)[1],
                 access_mode=access_mode,
                 fio_job_dict=fio_job_dict,
@@ -418,11 +436,10 @@ def post_upgrade_filesystem_pods(
 @pytest.fixture
 def post_upgrade_block_pods(
     pvc_factory,
-    pod_factory,
     default_storageclasses,
     fio_job_dict,
     fio_configmap_dict,
-    fio_conf,
+    fio_conf_block,
     fio_project,
     tmp_path
 ):
@@ -437,7 +454,7 @@ def post_upgrade_block_pods(
     pods = []
 
     pvc_size = 10
-    fio_configmap_dict["data"]["workload.fio"] = fio_conf
+    fio_configmap_dict["data"]["workload.fio"] = fio_conf_block
 
     for reclaim_policy in (
         constants.RECLAIM_POLICY_DELETE,
@@ -448,40 +465,17 @@ def post_upgrade_block_pods(
             constants.ACCESS_MODE_RWO
         ):
             job_name = f"{reclaim_policy}-rbd-{access_mode}-fs-post".lower()
-            fio_job_dict, fio_configmap_dict = set_fio_dicts(
+            fio_job_dict_block, fio_configmap_dict = set_fio_dicts(
                 job_name,
                 fio_job_dict,
-                fio_configmap_dict
+                fio_configmap_dict,
+                mode='block'
             )
-
-            fio_job_dict_block = copy.deepcopy(fio_job_dict)
-            fio_job_dict_block['spec']['template']['spec'][
-                'volumeDevices'
-            ] = fio_job_dict_block['spec']['template']['spec'].pop(
-                'volumeMounts'
-            )
-
-            block_path = '/dev/rbdblock'
-            # set correct path for fio volumes
-            for key, _ in enumerate(fio_job_dict_block['spec'][
-                'template'
-            ]['spec']['volumeDevices']):
-                fio_job_dict_block['spec']['template']['spec'][
-                    'volumeDevices'
-                ][key]['devicePath'] = block_path
-                fio_job_dict_block['spec']['template']['spec'][
-                    'volumeDevices'
-                ][key].pop('mountPath')
-            # set correct path for fio command
-            fio_job_dict_block['spec']['template']['spec']['containers'][0][
-                'command'
-            ][2] = rbd_path
 
             rbd_pod = create_fio_pod(
                 project=fio_project,
                 interface=constants.CEPHBLOCKPOOL,
                 pvc_factory=pvc_factory,
-                pod_factory=pod_factory,
                 storageclass=default_storageclasses.get(reclaim_policy)[0],
                 access_mode=access_mode,
                 volume_mode=constants.VOLUME_MODE_BLOCK,
