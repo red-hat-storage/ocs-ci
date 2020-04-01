@@ -77,7 +77,7 @@ class TestUpgradeOCP(ManageTest):
 
             # post upgrade validation: check cluster operator status
             for ocp_operator in self.cluster_operators:
-                logger.info(f"Checking cluster status of {ocp_operator}:")
+                logger.info(f"Checking cluster status of {ocp_operator}")
                 for sampler in TimeoutSampler(
                     timeout=2700,
                     sleep=60,
