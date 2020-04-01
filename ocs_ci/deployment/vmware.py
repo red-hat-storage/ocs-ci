@@ -261,7 +261,7 @@ class VSPHEREBASE(Deployment):
             dc,
             cluster
         )
-        return [vm for vm in vms if "compute" in vm.name]
+        return [vm for vm in vms if "compute" in vm.name or "rhel" in vm.name]
 
     def post_destroy_checks(self):
         """
@@ -574,6 +574,9 @@ class VSPHEREUPI(VSPHEREBASE):
         """
         previous_dir = os.getcwd()
 
+        # delete the extra disks
+        self.delete_disks()
+
         # check whether cluster has scale-up nodes
         scale_up_terraform_data_dir = os.path.join(
             self.cluster_path,
@@ -609,9 +612,6 @@ class VSPHEREUPI(VSPHEREBASE):
             and os.path.exists(f"{constants.VSPHERE_MAIN}.json")
         ):
             os.rename(f"{constants.VSPHERE_MAIN}.json", f"{constants.VSPHERE_MAIN}.json.backup")
-
-        # delete the extra disks
-        self.delete_disks()
 
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
