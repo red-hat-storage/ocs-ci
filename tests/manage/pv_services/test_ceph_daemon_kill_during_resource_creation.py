@@ -181,7 +181,7 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
             access_modes=access_modes,
             access_modes_selection='distribute_random',
             status=constants.STATUS_BOUND, num_of_pvc=num_of_pvc,
-            wait_each=False
+            wait_each=False, timeout=90
         )
 
         if operation_to_disrupt == 'create_pvc':
