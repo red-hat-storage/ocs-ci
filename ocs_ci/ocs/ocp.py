@@ -992,10 +992,6 @@ def verify_cluster_operator_status(cluster_operator):
         is "degraded" or "progressing"
 
     """
-    # ocp = OCP()
-    # oc_json = ocp.exec_oc_cmd(
-    #     f'get clusteroperators {cluster_operator} -o json', out_yaml_format=False
-    # )
     ocp = OCP(kind='clusteroperators')
     operator_data = ocp.get(
         resource_name=f'{cluster_operator} -o json', out_yaml_format=False
