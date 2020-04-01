@@ -9,6 +9,7 @@ from tests.helpers import (
     validate_pod_oomkilled
 )
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.ocs.resources.storage_cluster import get_osd_size
 
 log = logging.getLogger(__name__)
 
@@ -60,12 +61,14 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
     ceph, cluster health is good
 
     """
-    pvc_size_gb = 300
-    io_size = 250
+
+    osd_size = get_osd_size()
+    pvc_size_gb = osd_size*1024
+    io_size_mb = f'{(pvc_size_gb/2)*1000}M'
 
     @pytest.fixture()
     def base_setup(
-        self, interface, pvc_factory, dc_pod_factory
+        self, interface, pvc_factory, pod_factory
     ):
         """
         A setup phase for the test:
@@ -76,26 +79,26 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
 
         pod_objs = get_all_pods(
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            selector=['rook-ceph-osd-prepare', 'rook-ceph-drain-canary'],
+            selector=['noobaa','rook-ceph-osd-prepare', 'rook-ceph-drain-canary'],
             exclude_selector=True
         )
 
-        # Create maxsize pvc, dc pod and run ios
+        # Create maxsize pvc, app pod and run ios
         self.sc = default_storage_class(interface_type=interface)
 
         self.pvc_obj = pvc_factory(
             interface=interface, storageclass=self.sc, size=self.pvc_size_gb,
         )
 
-        self.dc_pod_obj = dc_pod_factory(interface=interface, pvc=self.pvc_obj)
+        self.pod_obj = pod_factory(interface=interface, pvc=self.pvc_obj)
 
-        log.info(f"Running FIO to fill PVC size: {self.io_size}")
-        self.dc_pod_obj.run_io(
-            'fs', size=self.io_size, io_direction='write', runtime=60
+        log.info(f"Running FIO to fill PVC size: {self.io_size_mb}")
+        self.pod_obj.run_io(
+            'fs', size=self.io_size_mb, io_direction='write', runtime=60
         )
 
         log.info("Waiting for IO results")
-        self.dc_pod_obj.get_fio_results()
+        self.pod_obj.get_fio_results()
 
         return pod_objs
 
@@ -106,8 +109,9 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
         not OOMKILLED.
 
         """
+        pod_objs = base_setup
 
-        for pod in self.pod_obj:
+        for pod in pod_objs:
             pod_name = pod.get().get('metadata').get('name')
             restart_count = pod.get().get('status').get('containerStatuses')[0].get('restartCount')
             for item in pod.get().get('status').get('containerStatuses'):
