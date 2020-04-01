@@ -174,7 +174,6 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
 
     # Get all cloudformation based clusters to delete
     cf_clusters_to_delete = list()
-    cf_clusters_to_delete_no_instances = list()
     for vpc_name in cloudformation_vpc_names:
         instance_dicts = aws.get_instances_by_name_pattern(vpc_name.strip('-vpc'))
         ec2_instances = [aws.get_ec2_instance(instance_dict['id']) for instance_dict in instance_dicts]
@@ -187,7 +186,7 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
         if determine_cluster_deletion(ec2_instances, cluster_name):
             cf_clusters_to_delete.append(cluster_name)
 
-    return clusters_to_delete, cf_clusters_to_delete, cf_clusters_to_delete_no_instances
+    return clusters_to_delete, cf_clusters_to_delete
 
 
 def cluster_cleanup():
