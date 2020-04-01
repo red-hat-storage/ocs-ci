@@ -63,8 +63,8 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
     """
 
     osd_size = get_osd_size()
-    pvc_size_gb = osd_size*1024
-    io_size_mb = f'{(pvc_size_gb/2)*1000}M'
+    pvc_size_gb = osd_size * 1024
+    io_size_mb = f'{(pvc_size_gb / 2) * 1000}M'
 
     @pytest.fixture()
     def base_setup(
@@ -79,7 +79,7 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
 
         pod_objs = get_all_pods(
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
-            selector=['noobaa','rook-ceph-osd-prepare', 'rook-ceph-drain-canary'],
+            selector=['noobaa', 'rook-ceph-osd-prepare', 'rook-ceph-drain-canary'],
             exclude_selector=True
         )
 
