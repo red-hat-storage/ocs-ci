@@ -64,7 +64,7 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
 
     osd_size = get_osd_size()
     pvc_size_gb = osd_size * 1024
-    io_size_mb = f'{(pvc_size_gb / 2) * 1000}M'
+    io_size_mb = f'{int((pvc_size_gb / 2) * 1000)}M'
 
     @pytest.fixture()
     def base_setup(
