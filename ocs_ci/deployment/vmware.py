@@ -261,7 +261,7 @@ class VSPHEREBASE(Deployment):
             dc,
             cluster
         )
-        return [vm for vm in vms if "compute" in vm.name]
+        return [vm for vm in vms if "compute" in vm.name or "rhel" in vm.name]
 
     def post_destroy_checks(self):
         """
