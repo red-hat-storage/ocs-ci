@@ -74,3 +74,19 @@ class TestUpgradeOCP(ManageTest):
                     )
                     if sampler:
                         break
+
+            # post upgrade validation: check cluster operator status
+            for ocp_operator in self.cluster_operators:
+                logger.info(f"Checking cluster status of {ocp_operator}")
+                for sampler in TimeoutSampler(
+                    timeout=2700,
+                    sleep=60,
+                    func=ocp.verify_cluster_operator_status,
+                    cluster_operator=ocp_operator
+                ):
+                    logger.info(
+                        f"ClusterOperator status is  "
+                        f"{'valid' if sampler else 'status is not valid'}"
+                    )
+                    if sampler:
+                        break
