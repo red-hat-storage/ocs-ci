@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers, pre_upgrade, post_upgrade
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs import ocp
 from tests import helpers
 
 log = logging.getLogger(__name__)
@@ -52,6 +53,9 @@ def test_pod_io(
         f"{post_upgrade_block_pods}"
     )
     pods = pre_upgrade_block_pods + post_upgrade_block_pods + pre_upgrade_filesystem_pods + post_upgrade_filesystem_pods
+    job_obj = ocp.OCP(kind=constants.JOB, namespace=fio_project.namespace)
     for pod in pods:
         log.info(f"Checking that fio is still running")
         helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING, timeout=600)
+        job_name = pod.get_labels().get('job-name')
+        job_obj.delete(resource_name=job_name)
