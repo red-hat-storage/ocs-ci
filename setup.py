@@ -17,7 +17,7 @@ setup(
         'apache-libcloud',
         'docopt==0.6.2',
         'gevent==1.4.0',
-        'reportportal-client<4.0.0',
+        'reportportal-client==3.2.3',
         'requests==2.21.0',
         'paramiko==2.4.2',
         'pyyaml>=4.2b1',
@@ -26,7 +26,7 @@ setup(
         'boto3',
         'munch',
         'pytest==5.3.5',
-        'pytest-reportportal==1.0.5',
+        'pytest-reportportal==1.10.0',
         'pytest-logger',
         'dataclasses',  # For compatibility with python 3.6
         'pytest-html',
