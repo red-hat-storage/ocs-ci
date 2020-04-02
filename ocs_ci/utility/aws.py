@@ -862,8 +862,26 @@ def destroy_volumes(cluster_name):
         volumes = aws.get_volumes_by_name_pattern(volume_pattern)
         logger.debug(f"Found volumes: \n {volumes}")
         for volume in volumes:
-            aws.detach_and_delete_volume(
-                aws.ec2_resource.Volume(volume['id'])
-            )
+            # skip root devices for deletion
+            # EBS root device volumes are automatically deleted when
+            # the instance terminates
+            if not check_root_volume(volume):
+                aws.detach_and_delete_volume(
+                    aws.ec2_resource.Volume(volume['id'])
+                )
     except Exception:
         logger.error(traceback.format_exc())
+
+
+def check_root_volume(volume):
+    """
+    Checks whether given EBS volume is root device or not
+
+    Args:
+         volume (dict): EBS volume dictionary
+
+    Returns:
+        bool: True if EBS volume is root device, False otherwise
+
+    """
+    return True if volume['attachments'][0]['DeleteOnTermination'] else False
