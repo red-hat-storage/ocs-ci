@@ -737,3 +737,6 @@ LOCAL_STORAGE_OPERATOR = os.path.join(
 LOCAL_VOLUME_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "local-volume.yaml"
 )
+
+# All worker default config files
+RHEL_WORKERS_CONF = os.path.join(CONF_DIR, 'ocsci/aws_upi_rhel_workers.yaml')
