@@ -1,15 +1,19 @@
 import logging
+from itertools import chain
 import os
+from random import randrange
 import tempfile
+from time import sleep
 
 import pytest
+from botocore.exceptions import ClientError
 import threading
 from datetime import datetime
 import random
 from math import floor
 
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
-from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo, run_cmd
+from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo, run_cmd, get_ocp_version
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.utility import aws
@@ -27,9 +31,12 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
+from tests.manage.mcg.helpers import get_rgw_restart_count
 from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
 from ocs_ci.ocs.resources.mcg import MCG
+from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.pod import get_rgw_pod
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
@@ -1145,7 +1152,8 @@ def multi_pvc_factory_fixture(
         access_mode_dist_ratio=None,
         status=constants.STATUS_BOUND,
         num_of_pvc=1,
-        wait_each=False
+        wait_each=False,
+        timeout=60
     ):
         """
         Args:
@@ -1190,6 +1198,7 @@ def multi_pvc_factory_fixture(
             num_of_pvc(int): Number of PVCs to be created
             wait_each(bool): True to wait for each PVC to be in status 'status'
                 before creating next PVC, False otherwise
+            timeout(int): Time in seconds to wait
 
         Returns:
             list: objects of PVC class.
@@ -1246,7 +1255,7 @@ def multi_pvc_factory_fixture(
             pvc_obj.project = project
         if status and not wait_each:
             for pvc_obj in pvc_list:
-                helpers.wait_for_resource_state(pvc_obj, status)
+                helpers.wait_for_resource_state(pvc_obj, status, timeout=timeout)
         return pvc_list
 
     return factory
@@ -1422,12 +1431,22 @@ def cld_mgr(request):
 
 @pytest.fixture()
 def mcg_obj(request):
+    return mcg_obj_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def mcg_obj_session(request):
+    return mcg_obj_fixture(request)
+
+
+def mcg_obj_fixture(request):
     """
     Returns an MCG resource that's connected to the S3 endpoint
 
     Returns:
         MCG: An MCG resource
     """
+
     mcg_obj = MCG()
 
     if config.ENV_DATA['platform'].lower() == 'aws':
@@ -1440,6 +1459,15 @@ def mcg_obj(request):
 
 @pytest.fixture()
 def created_pods(request):
+    return created_pods_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def created_pods_session(request):
+    return created_pods_fixture(request)
+
+
+def created_pods_fixture(request):
     """
     Deletes all pods that were created as part of the test
 
@@ -1458,6 +1486,15 @@ def created_pods(request):
 
 @pytest.fixture()
 def awscli_pod(mcg_obj, created_pods):
+    return awscli_pod_fixture(mcg_obj, created_pods)
+
+
+@pytest.fixture(scope='session')
+def awscli_pod_session(mcg_obj_session, created_pods_session):
+    return awscli_pod_fixture(mcg_obj_session, created_pods_session)
+
+
+def awscli_pod_fixture(mcg_obj, created_pods):
     """
     Creates a new AWSCLI pod for relaying commands
 
@@ -1489,6 +1526,319 @@ def nodes():
     factory = platform_nodes.PlatformNodesFactory()
     nodes = factory.get_nodes_platform()
     return nodes
+
+
+@pytest.fixture()
+def uploaded_objects(request, mcg_obj, awscli_pod, verify_rgw_restart_count):
+    return uploaded_objects_fixture(
+        request,
+        mcg_obj,
+        awscli_pod,
+        verify_rgw_restart_count
+    )
+
+
+@pytest.fixture(scope='session')
+def uploaded_objects_session(
+    request,
+    mcg_obj_session,
+    awscli_pod_session,
+    verify_rgw_restart_count_session
+):
+    return uploaded_objects_fixture(
+        request,
+        mcg_obj_session,
+        awscli_pod_session,
+        verify_rgw_restart_count_session
+    )
+
+
+def uploaded_objects_fixture(
+    request,
+    mcg_obj,
+    awscli_pod,
+    verify_rgw_restart_count
+):
+    """
+    Deletes all objects that were created as part of the test
+
+    Args:
+        mcg_obj (MCG): An MCG object containing the MCG S3 connection
+            credentials
+        awscli_pod (Pod): A pod running the AWSCLI tools
+
+    Returns:
+        list: An empty list of objects
+
+    """
+
+    uploaded_objects_paths = []
+
+    def object_cleanup():
+        for uploaded_filename in uploaded_objects_paths:
+            log.info(f'Deleting object {uploaded_filename}')
+            awscli_pod.exec_cmd_on_pod(
+                command=helpers.craft_s3_command(
+                    mcg_obj, "rm " + uploaded_filename
+                ),
+                secrets=[
+                    mcg_obj.access_key_id,
+                    mcg_obj.access_key,
+                    mcg_obj.s3_endpoint
+                ]
+            )
+
+    request.addfinalizer(object_cleanup)
+    return uploaded_objects_paths
+
+
+@pytest.fixture()
+def verify_rgw_restart_count(request):
+    return verify_rgw_restart_count_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def verify_rgw_restart_count_session(request):
+    return verify_rgw_restart_count_fixture(request)
+
+
+def verify_rgw_restart_count_fixture(request):
+    """
+    Verifies the RGW restart count at start and end of a test
+    """
+    if config.ENV_DATA['platform'].lower() == 'vsphere':
+        log.info("Getting RGW pod restart count before executing the test")
+        initial_count = get_rgw_restart_count()
+
+        def finalizer():
+            rgw_pod = get_rgw_pod()
+            rgw_pod.reload()
+            log.info("Verifying whether RGW pod changed after executing the test")
+            assert rgw_pod.restart_count == initial_count, 'RGW pod restarted'
+
+        request.addfinalizer(finalizer)
+
+
+@pytest.fixture()
+def bucket_factory(request, mcg_obj):
+    return bucket_factory_fixture(request, mcg_obj)
+
+
+@pytest.fixture(scope='session')
+def bucket_factory_session(request, mcg_obj_session):
+    return bucket_factory_fixture(request, mcg_obj_session)
+
+
+def bucket_factory_fixture(request, mcg_obj):
+    """
+    Create a bucket factory. Calling this fixture creates a new bucket(s).
+    For a custom amount, provide the 'amount' parameter.
+
+    Args:
+        mcg_obj (MCG): An MCG object containing the MCG S3 connection
+        credentials
+
+    """
+    created_buckets = []
+
+    bucketMap = {
+        's3': S3Bucket,
+        'oc': OCBucket,
+        'cli': CLIBucket
+    }
+
+    def _create_buckets(amount=1, interface='S3', *args, **kwargs):
+        """
+        Creates and deletes all buckets that were created as part of the test
+
+        Args:
+            amount (int): The amount of buckets to create
+            interface (str): The interface to use for creation of buckets.
+                S3 | OC | CLI
+
+        Returns:
+            list: A list of s3.Bucket objects, containing all the created
+                buckets
+
+        """
+        if interface.lower() not in bucketMap:
+            raise RuntimeError(
+                f'Invalid interface type received: {interface}. '
+                f'available types: {", ".join(bucketMap.keys())}'
+            )
+        for i in range(amount):
+            bucket_name = helpers.create_unique_resource_name(
+                resource_description='bucket', resource_type=interface.lower()
+            )
+            created_buckets.append(
+                bucketMap[interface.lower()](
+                    mcg_obj,
+                    bucket_name,
+                    *args,
+                    **kwargs
+                )
+            )
+        return created_buckets
+
+    def bucket_cleanup():
+        all_existing_buckets = mcg_obj.s3_get_all_bucket_names()
+        for bucket in created_buckets:
+            if bucket.name in all_existing_buckets:
+                log.info(f'Cleaning up bucket {bucket.name}')
+                bucket.delete()
+                log.info(
+                    f"Verifying whether bucket: {bucket.name} exists after"
+                    f" deletion"
+                )
+                assert not mcg_obj.s3_verify_bucket_exists(bucket.name)
+            else:
+                log.info(f'Bucket {bucket.name} not found.')
+
+    request.addfinalizer(bucket_cleanup)
+
+    return _create_buckets
+
+
+@pytest.fixture()
+def multiregion_resources(request, mcg_obj):
+    return multiregion_resources_fixture(request, mcg_obj)
+
+
+@pytest.fixture(scope='session')
+def multiregion_resources_session(request, mcg_obj_session):
+    return multiregion_resources_fixture(request, mcg_obj_session)
+
+
+def multiregion_resources_fixture(request, mcg_obj):
+    bs_objs, bs_secrets, bucketclasses, aws_buckets = (
+        [] for _ in range(4)
+    )
+
+    # Cleans up all resources that were created for the test
+    def resource_cleanup():
+        for resource in chain(bs_secrets, bucketclasses):
+            resource.delete()
+
+        for backingstore in bs_objs:
+            backingstore.delete()
+            mcg_obj.send_rpc_query(
+                'pool_api',
+                'delete_pool',
+                {'name': backingstore.name}
+            )
+
+        for aws_bucket_name in aws_buckets:
+            mcg_obj.toggle_aws_bucket_readwrite(aws_bucket_name, block=False)
+            for _ in range(10):
+                try:
+                    mcg_obj.aws_s3_resource.Bucket(
+                        aws_bucket_name
+                    ).objects.all().delete()
+                    mcg_obj.aws_s3_resource.Bucket(aws_bucket_name).delete()
+                    break
+                except ClientError:
+                    log.info(
+                        f'Deletion of bucket {aws_bucket_name} failed. Retrying...'
+                    )
+                    sleep(3)
+
+    request.addfinalizer(resource_cleanup)
+
+    return aws_buckets, bs_secrets, bs_objs, bucketclasses
+
+
+@pytest.fixture()
+def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
+    return multiregion_mirror_setup_fixture(
+        mcg_obj,
+        multiregion_resources,
+        bucket_factory
+    )
+
+
+@pytest.fixture(scope='session')
+def multiregion_mirror_setup_session(
+    mcg_obj_session,
+    multiregion_resources_session,
+    bucket_factory_session
+):
+    return multiregion_mirror_setup_fixture(
+        mcg_obj_session,
+        multiregion_resources_session,
+        bucket_factory_session
+    )
+
+
+def multiregion_mirror_setup_fixture(
+    mcg_obj,
+    multiregion_resources,
+    bucket_factory
+):
+    # Setup
+    # Todo:
+    #  add region and amount parametrization - note that `us-east-1`
+    #  will cause an error as it is the default region. If usage of `us-east-1`
+    #  needs to be tested, keep the 'region' field out.
+    (
+        aws_buckets,
+        backingstore_secrets,
+        backingstore_objects,
+        bucketclasses
+    ) = multiregion_resources
+
+    # Define backing stores
+    backingstore1 = {
+        'name': helpers.create_unique_resource_name(
+            resource_description='testbs',
+            resource_type='s3bucket'
+        ),
+        'region': f'us-west-{randrange(1, 3)}'
+    }
+    backingstore2 = {
+        'name': helpers.create_unique_resource_name(
+            resource_description='testbs',
+            resource_type='s3bucket'
+        ),
+        'region': f'us-east-2'
+    }
+    # Create target buckets for them
+    mcg_obj.create_new_backingstore_aws_bucket(backingstore1)
+    mcg_obj.create_new_backingstore_aws_bucket(backingstore2)
+    aws_buckets.extend((backingstore1['name'], backingstore2['name']))
+    # Create a backing store secret
+    backingstore_secret = mcg_obj.create_aws_backingstore_secret(
+        backingstore1['name'] + 'secret'
+    )
+    backingstore_secrets.append(backingstore_secret)
+    # Create AWS-backed backing stores on NooBaa
+    backingstore_obj_1 = mcg_obj.oc_create_aws_backingstore(
+        backingstore1['name'],
+        backingstore1['name'],
+        backingstore_secret.name,
+        backingstore1['region']
+    )
+    backingstore_obj_2 = mcg_obj.oc_create_aws_backingstore(
+        backingstore2['name'],
+        backingstore2['name'],
+        backingstore_secret.name,
+        backingstore2['region']
+    )
+    backingstore_objects.extend((backingstore_obj_1, backingstore_obj_2))
+    # Create a new mirror bucketclass that'll use all the backing stores we
+    # created
+    bucketclass = mcg_obj.oc_create_bucketclass(
+        helpers.create_unique_resource_name(
+            resource_description='testbc',
+            resource_type='bucketclass'
+        ),
+        [backingstore.name for backingstore in backingstore_objects], 'Mirror'
+    )
+    bucketclasses.append(bucketclass)
+    # Create a NooBucket that'll use the bucket class in order to test
+    # the mirroring policy
+    bucket = bucket_factory(1, 'OC', bucketclass=bucketclass.name)[0]
+
+    return bucket, backingstore1, backingstore2
 
 
 @pytest.fixture(scope='session')
@@ -1539,6 +1889,10 @@ def install_logging(request):
 
     request.addfinalizer(finalizer)
 
+    # Checks OCP version
+
+    ocp_version = get_ocp_version()
+
     # Creates namespace opensift-operators-redhat
     ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
 
@@ -1554,9 +1908,8 @@ def install_logging(request):
     )
 
     # Creates subscription for elastic-search operator
-    logging_version = config.ENV_DATA['logging_version']
     subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
-    subscription_yaml['spec']['channel'] = logging_version
+    subscription_yaml['spec']['channel'] = ocp_version
     helpers.create_resource(**subscription_yaml)
     assert ocp_logging_obj.get_elasticsearch_subscription()
 
@@ -1570,7 +1923,7 @@ def install_logging(request):
 
     # Creates subscription for cluster-logging
     cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
-    cl_subscription['spec']['channel'] = logging_version
+    cl_subscription['spec']['channel'] = ocp_version
     helpers.create_resource(**cl_subscription)
     assert ocp_logging_obj.get_clusterlogging_subscription()
 

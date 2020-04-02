@@ -32,6 +32,9 @@ TEMPLATE_SMALLFILE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "smallfile")
 TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
 TEMPLATE_VDBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "vdbench")
 TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
+TEMPLATE_COUCHBASE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase")
+TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
+TEMPLATE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_SERVER_DIR, "pillowfight")
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(
     TEMPLATE_DIR, "openshift-infra/"
@@ -289,6 +292,58 @@ VDBENCH_BENCHMARK_YAML = os.path.join(
     TEMPLATE_VDBENCH_DIR, "VDBench.yaml"
 )
 
+COUCHBASE_ADMISSION_SERVICE_ACCOUNT_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionServiceAccount.yaml"
+)
+
+COUCHBASE_ADMISSION_CLUSTER_ROLE_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionClusterRole.yaml"
+)
+
+COUCHBASE_ADMISSION_CLUSTER_ROLE_BINDING_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionClusterRoleBinding.yaml"
+)
+
+COUCHBASE_ADMISSION_SECRET_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionSecret.yaml"
+)
+
+COUCHBASE_ADMISSION_DEPLOYMENT_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionDeployment.yaml"
+)
+
+COUCHBASE_ADMISSION_SERVICE_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionService.yaml"
+)
+
+COUCHBASE_MUTATING_WEBHOOK_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "MutatingWebhookConfiguration.yaml"
+)
+
+COUCHBASE_VALIDATING_WEBHOOK_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "ValidatingWebhookConfiguration.yaml"
+)
+
+COUCHBASE_CRD_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbaseCrd.yaml"
+)
+
+COUCHBASE_OPERATOR_ROLE = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "operator-role.yaml"
+)
+
+COUCHBASE_OPERATOR_DEPLOY = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "operator-deployment.yaml"
+)
+
+COUCHBASE_WORKER_SECRET = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-secret.yaml"
+)
+
+COUCHBASE_WORKER_EXAMPLE = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-example.yaml"
+)
+
 NGINX_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "nginx.yaml"
 )
@@ -505,8 +560,13 @@ PEM_PATH = "/etc/pki/ca-trust/source/anchors/"
 # Upgrade related constants, keeping some space between, so we can add
 # additional order.
 ORDER_BEFORE_UPGRADE = 10
-ORDER_UPGRADE = 20
-ORDER_AFTER_UPGRADE = 30
+ORDER_BEFORE_OCP_UPGRADE = 20
+ORDER_OCP_UPGRADE = 30
+ORDER_AFTER_OCP_UPGRADE = 40
+ORDER_BEFORE_OCS_UPGRADE = 50
+ORDER_OCS_UPGRADE = 60
+ORDER_AFTER_OCS_UPGRADE = 70
+ORDER_AFTER_UPGRADE = 80
 
 # Deployment constants
 OCS_CSV_PREFIX = 'ocs-operator'
@@ -648,3 +708,36 @@ OSD_TREE_ZONE = {
 
 # gather bootstrap
 GATHER_BOOTSTRAP_PATTERN = 'openshift-install gather bootstrap --help'
+
+# must-gather commands output files
+MUST_GATHER_COMMANDS = [
+    'ceph_versions', 'ceph_status', 'ceph_report', 'ceph_pg_dump',
+    'ceph_osd_tree', 'ceph_osd_stat', 'ceph_osd_dump', 'ceph_osd_df_tree',
+    'ceph_osd_crush_show-tunables', 'ceph_osd_crush_dump', 'ceph_mon_stat',
+    'ceph_mon_dump', 'ceph_mgr_dump', 'ceph_mds_stat', 'ceph_health_detail',
+    'ceph_fs_ls', 'ceph_fs_dump', 'ceph_df', 'ceph_auth_list',
+    'ceph-volume_lvm_list'
+]
+
+MUST_GATHER_COMMANDS_JSON = [
+    'ceph_versions_--format_json-pretty', 'ceph_status_--format_json-pretty',
+    'ceph_report_--format_json-pretty', 'ceph_pg_dump_--format_json-pretty',
+    'ceph_osd_tree_--format_json-pretty', 'ceph_osd_stat_--format_json-pretty',
+    'ceph_osd_dump_--format_json-pretty',
+    'ceph_osd_df_tree_--format_json-pretty',
+    'ceph_osd_crush_show-tunables_--format_json-pretty',
+    'ceph_osd_crush_dump_--format_json-pretty',
+    'ceph_mon_stat_--format_json-pretty', 'ceph_mon_dump_--format_json-pretty',
+    'ceph_mgr_dump_--format_json-pretty', 'ceph_mds_stat_--format_json-pretty',
+    'ceph_health_detail_--format_json-pretty',
+    'ceph_fs_ls_--format_json-pretty', 'ceph_fs_dump_--format_json-pretty',
+    'ceph_df_--format_json-pretty', 'ceph_auth_list_--format_json-pretty'
+]
+
+# local storage
+LOCAL_STORAGE_OPERATOR = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "local-storage-operator.yaml"
+)
+LOCAL_VOLUME_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "local-volume.yaml"
+)

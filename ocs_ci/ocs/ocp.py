@@ -8,6 +8,7 @@ import shlex
 import tempfile
 import time
 import yaml
+import json
 
 from ocs_ci.ocs.constants import RSYNC_POD_YAML, STATUS_RUNNING
 from ocs_ci.ocs.exceptions import (
@@ -374,6 +375,29 @@ class OCP(object):
         if f'Now using project "{project_name}"' in run_cmd(f"{command}"):
             return True
         return False
+
+    def delete_project(self, project_name):
+        """
+        Delete a project.  A project created by the new_project function does
+        not have a corresponding yaml file so normal resource deletion calls
+        do not work
+
+        Args:
+            project_name (str): Name of the project to be deleted
+
+        Returns:
+            bool: True in case project deletion succeeded.
+
+        Raises:
+            CommandFailed: When the project deletion does not succeed.
+
+        """
+        command = f"oc delete project {project_name}"
+        if f' "{project_name}" deleted' in run_cmd(f"{command}"):
+            return True
+        raise CommandFailed(
+            f"{project_name} was not deleted"
+        )
 
     def login(self, user, password):
         """
@@ -874,3 +898,136 @@ def verify_images_upgraded(old_images, object_data):
         f"All the images: {current_images} were successfully upgraded in: "
         f"{name}!"
     )
+
+
+def confirm_cluster_operator_version(target_version, cluster_operator):
+    """
+    Check if cluster operator upgrade process is completed:
+
+    Args:
+        cluster_operator: (str): ClusterOperator name
+        target_version (str): expected OCP client
+
+    Returns:
+        bool: True if success, False if failed
+
+    """
+    log.info(f"target_version: {target_version}")
+    cur_version = get_cluster_operator_version(cluster_operator)
+    log.info(f"current {cluster_operator} operator version is: {cur_version}")
+    if cur_version == target_version or target_version.startswith(cur_version):
+        log.info(f"{cluster_operator} cluster operator upgrade to build"
+                 f" {target_version} completed")
+        return True
+
+    log.debug(f"{cluster_operator} upgrade not yet completed")
+    return False
+
+
+def upgrade_ocp(image_path, image):
+    """
+    upgrade OCP version
+
+    Args:
+        image (str): image to be installed
+        image_path (str): path to image
+
+    """
+    ocp = OCP()
+    ocp.exec_oc_cmd(
+        f"adm upgrade --to-image={image_path}:{image} "
+        f"--allow-explicit-upgrade --force "
+    )
+    log.info(f"Upgrading OCP to version: {image} ")
+
+
+def get_current_oc_version():
+    """
+    Gets Current OCP client version
+
+    Returns:
+        str: current COP client version
+
+    """
+    ocp = OCP()
+    oc_json = ocp.exec_oc_cmd('version -o json', out_yaml_format=False)
+    log.debug(f"oc_json=: {oc_json}")
+    oc_dict = json.loads(oc_json)
+    log.debug(f"oc_dict=: {oc_dict}")
+
+    return oc_dict.get("openshiftVersion")
+
+
+def get_cluster_operator_version(cluster_operator_name):
+    """
+    Get image version of selected cluster operator
+
+    Args:
+        cluster_operator_name (str): ClusterOperator name
+
+    Returns:
+        str: cluster operator version: ClusterOperator image version
+
+    """
+    ocp = OCP(kind='ClusterOperator')
+    operator_info = ocp.get(cluster_operator_name)
+    log.debug(f"operator info: {operator_info}")
+    operator_status = operator_info.get('status')
+    version = operator_status.get('versions')[0]['version']
+    version = version.rstrip('_openshift')
+
+    return version
+
+
+def get_all_cluster_operators():
+    """
+    Get all ClusterOperators names in OCP
+
+    Returns:
+        list: cluster-operator names
+
+    """
+    ocp = OCP(kind='ClusterOperator')
+    operator_info = ocp.get("-o name", out_yaml_format=False, all_namespaces=True)
+    operators_full_names = str(operator_info).split()
+    operator_names = list()
+    for name in operators_full_names:
+        log.debug(f"original operator name: {name}")
+        new_name = name.lstrip('clusteroperator.config.openshift.io').lstrip('/')
+        log.info(f"fixed operator name: {new_name}")
+        operator_names.append(new_name)
+
+    log.info(f"ClusterOperators full list: {operator_names}")
+
+    return operator_names
+
+
+def verify_cluster_operator_status(cluster_operator):
+    """
+    Checks if cluster operator status is degraded or progressing,
+    as sign that upgrade not yet completed
+
+    Args:
+        cluster_operator (str): OCP cluster operator name
+
+    Returns:
+        bool: True if cluster operator status is valid, False if cluster operator status
+        is "degraded" or "progressing"
+
+    """
+    ocp = OCP(kind='clusteroperators')
+    operator_data = ocp.get(
+        resource_name=f'{cluster_operator} -o json', out_yaml_format=False
+    )
+    # operator_data = json.loads(oc_json)
+    conditions = operator_data['status']['conditions']
+    for condition in conditions:
+        if condition['type'] == 'Degraded' and condition['status'] == 'True':
+            log.info(f'{cluster_operator} status is Degraded')
+            return False
+        if condition['type'] == 'Progressing' and condition['status'] == 'True':
+            log.info(f'{cluster_operator} status is Progressing')
+            return False
+    log.info(f'{cluster_operator} status is valid')
+
+    return True

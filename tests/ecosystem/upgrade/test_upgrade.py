@@ -7,7 +7,7 @@ from time import sleep
 
 from ocs_ci.deployment.deployment import create_catalog_source
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import upgrade
+from ocs_ci.framework.testlib import ocs_upgrade
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
@@ -30,6 +30,7 @@ from ocs_ci.utility.utils import (
     get_next_version_available_for_upgrade,
     get_ocs_version_from_image,
     load_config_file,
+    run_cmd,
 )
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
 
@@ -130,7 +131,7 @@ def verify_image_versions(old_images, upgrade_version):
         )
 
 
-@upgrade
+@ocs_upgrade
 def test_upgrade():
     ceph_cluster = CephCluster()
     with CephHealthMonitor(ceph_cluster):
@@ -173,26 +174,34 @@ def test_upgrade():
             resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
             namespace=constants.MARKETPLACE_NAMESPACE,
         )
-        if not ocs_catalog.is_exist():
-            log.info("OCS catalog source doesn't exist. Creating new one.")
-            create_catalog_source(ocs_registry_image, ignore_upgrade=True)
-        image_url = ocs_catalog.get_image_url()
-        image_tag = ocs_catalog.get_image_name()
-        log.info(f"Current image is: {image_url}, tag: {image_tag}")
-        if ocs_registry_image:
-            image_url, new_image_tag = ocs_registry_image.split(':')
-        elif config.UPGRADE.get('upgrade_to_latest', True) or version_change:
-            new_image_tag = get_latest_ds_olm_tag()
-        else:
-            new_image_tag = get_next_version_available_for_upgrade(image_tag)
-        cs_data = deepcopy(ocs_catalog.data)
-        image_for_upgrade = ':'.join([image_url, new_image_tag])
-        log.info(f"Image: {image_for_upgrade} will be used for upgrade.")
-        cs_data['spec']['image'] = image_for_upgrade
+        upgrade_in_current_source = config.UPGRADE.get(
+            'upgrade_in_current_source', False
+        )
+        if not upgrade_in_current_source:
+            if not ocs_catalog.is_exist() and not upgrade_in_current_source:
+                log.info("OCS catalog source doesn't exist. Creating new one.")
+                create_catalog_source(ocs_registry_image, ignore_upgrade=True)
+            image_url = ocs_catalog.get_image_url()
+            image_tag = ocs_catalog.get_image_name()
+            log.info(f"Current image is: {image_url}, tag: {image_tag}")
+            if ocs_registry_image:
+                image_url, new_image_tag = ocs_registry_image.split(':')
+            elif (
+                config.UPGRADE.get('upgrade_to_latest', True) or version_change
+            ):
+                new_image_tag = get_latest_ds_olm_tag()
+            else:
+                new_image_tag = get_next_version_available_for_upgrade(
+                    image_tag
+                )
+            cs_data = deepcopy(ocs_catalog.data)
+            image_for_upgrade = ':'.join([image_url, new_image_tag])
+            log.info(f"Image: {image_for_upgrade} will be used for upgrade.")
+            cs_data['spec']['image'] = image_for_upgrade
 
-        with NamedTemporaryFile() as cs_yaml:
-            dump_data_to_temp_yaml(cs_data, cs_yaml.name)
-            ocs_catalog.apply(cs_yaml.name)
+            with NamedTemporaryFile() as cs_yaml:
+                dump_data_to_temp_yaml(cs_data, cs_yaml.name)
+                ocs_catalog.apply(cs_yaml.name)
         # Wait for the new package manifest for upgrade.
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
@@ -209,16 +218,19 @@ def test_upgrade():
             kind='subscription',
             namespace=config.ENV_DATA['cluster_namespace'],
         )
-        subscription_data = deepcopy(subscription.data)
-        subscription_data['spec']['channel'] = channel
-        # TODO: once we GA 4.3 we will make possibility to upgrade from live
-        # 4.2 to live 4.3.
-        subscription_data['spec'][
-            'source'
-        ] = constants.OPERATOR_CATALOG_SOURCE_NAME
-        with NamedTemporaryFile() as subscription_yaml:
-            dump_data_to_temp_yaml(subscription_data, subscription_yaml.name)
-            subscription.apply(subscription_yaml.name)
+        current_ocs_source = subscription.data['spec']['source']
+        log.info(
+            f"Current OCS subscription source: {current_ocs_source}"
+        )
+        ocs_source = current_ocs_source if upgrade_in_current_source else (
+            constants.OPERATOR_CATALOG_SOURCE_NAME
+        )
+        patch_subscription_cmd = (
+            f'oc patch subscription {constants.OCS_SUBSCRIPTION} '
+            f'-n {namespace} --type merge -p \'{{"spec":{{"channel": '
+            f'"{channel}", "source": "{ocs_source}"}}}}\''
+        )
+        run_cmd(patch_subscription_cmd)
 
         subscription_plan_approval = config.DEPLOYMENT.get(
             'subscription_plan_approval'
@@ -226,9 +238,7 @@ def test_upgrade():
         if subscription_plan_approval == 'Manual':
             wait_for_install_plan_and_approve(namespace)
         attempts = 145
-        for attempt in range(1, attempts):
-            if attempts == attempt:
-                raise TimeoutException("No new CSV found after upgrade!")
+        for attempt in range(1, attempts + 1):
             log.info(f"Attempt {attempt}/{attempts} to check CSV upgraded.")
             csv_name_post_upgrade = package_manifest.get_current_csv(channel)
             if csv_name_post_upgrade == csv_name_pre_upgrade:
@@ -237,6 +247,8 @@ def test_upgrade():
             else:
                 log.info(f"CSV now upgraded to: {csv_name_post_upgrade}")
                 break
+            if attempts == attempt:
+                raise TimeoutException("No new CSV found after upgrade!")
         csv_post_upgrade = CSV(
             resource_name=csv_name_post_upgrade,
             namespace=namespace
@@ -256,4 +268,5 @@ def test_upgrade():
         ocs_install_verification(
             timeout=600, skip_osd_distribution_check=True,
             ocs_registry_image=ocs_registry_image,
+            post_upgrade_verification=True,
         )

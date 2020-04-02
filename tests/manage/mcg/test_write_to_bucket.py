@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 PUBLIC_BUCKET = "1000genomes"
 LARGE_FILE_KEY = "1000G_2504_high_coverage/data/ERR3239276/NA06985.final.cram"
+FILESIZE_SKIP = pytest.mark.skip('Current test filesize is too large.')
+RUNTIME_SKIP = pytest.mark.skip('Runtime is too long; Code needs to be parallelized')
 
 
 def pod_io(pods):
@@ -75,14 +77,12 @@ class TestBucketIO(ManageTest):
         # TODO: Privatize test bucket
         download_dir = '/aws/downloaded'
         helpers.retrieve_test_objects_to_pod(awscli_pod, download_dir)
-
-        bucketname = None
-        for bucket in bucket_factory(5):
-            bucketname = bucket.name
-            full_object_path = f"s3://{bucketname}"
-            helpers.sync_object_directory(
-                awscli_pod, download_dir, full_object_path, mcg_obj
-            )
+        bucket = bucket_factory(1)[0]
+        bucketname = bucket.name
+        full_object_path = f"s3://{bucketname}"
+        helpers.sync_object_directory(
+            awscli_pod, download_dir, full_object_path, mcg_obj
+        )
 
         assert mcg_obj.check_data_reduction(bucketname), (
             'Data reduction did not work as anticipated.'
@@ -93,11 +93,11 @@ class TestBucketIO(ManageTest):
         argvalues=[
             pytest.param(
                 *[1, 'large'],
-                marks=[pytest.mark.polarion_id("OCS-1944"), tier2]
+                marks=[pytest.mark.polarion_id("OCS-1944"), tier2, FILESIZE_SKIP]
             ),
             pytest.param(
                 *[100, 'large'],
-                marks=[pytest.mark.polarion_id("OCS-1946"), tier3]
+                marks=[pytest.mark.polarion_id("OCS-1946"), tier3, FILESIZE_SKIP]
             ),
             pytest.param(
                 *[1, 'small'],
@@ -105,11 +105,11 @@ class TestBucketIO(ManageTest):
             ),
             pytest.param(
                 *[1000, 'small'],
-                marks=[pytest.mark.polarion_id("OCS-1951"), tier3]
+                marks=[pytest.mark.polarion_id("OCS-1951"), tier3, RUNTIME_SKIP]
             ),
             pytest.param(
                 *[100, 'large_small'],
-                marks=[pytest.mark.polarion_id("OCS-1952"), tier3]
+                marks=[pytest.mark.polarion_id("OCS-1952"), tier3, FILESIZE_SKIP]
             ),
         ]
     )
@@ -190,7 +190,7 @@ class TestBucketIO(ManageTest):
 
         # Touch create 1000 empty files in pod
         awscli_pod.exec_cmd_on_pod(command=f'mkdir {data_dir}')
-        command = "for i in $(seq 1 1000); do touch /data/test$i; done"
+        command = "for i in $(seq 1 100); do touch /data/test$i; done"
         awscli_pod.exec_sh_cmd_on_pod(
             command=command,
             sh='sh'
@@ -204,7 +204,7 @@ class TestBucketIO(ManageTest):
             obj.key for obj in
             mcg_obj.s3_list_all_objects_in_bucket(bucketname)
         )
-        test_set = set('test' + str(i + 1) for i in range(1000))
+        test_set = set('test' + str(i + 1) for i in range(100))
         assert test_set == obj_set, "File name set does not match"
 
     @pytest.fixture()

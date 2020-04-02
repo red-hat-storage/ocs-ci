@@ -483,6 +483,28 @@ class CephCluster(object):
             "ceph status", out_yaml_format=False,
         )
 
+    def get_ceph_capacity(self):
+        """
+        The function gets the total mount of storage capacity of the ocs cluster.
+        the calculation is <Num of OSD> * <OSD size> / <replica number>
+        it will not take into account the current used capacity.
+
+        Returns:
+            int : Total storage capacity in GiB (GiB is for development environment)
+
+        """
+        storage_cluster_obj = storage_cluster.StorageCluster(
+            resource_name=config.ENV_DATA['storage_cluster_name'],
+            namespace=config.ENV_DATA['cluster_namespace'],
+        )
+        replica = int(storage_cluster_obj.data['spec']['storageDeviceSets'][0]['replica'])
+
+        ceph_pod = pod.get_ceph_tools_pod()
+        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+        usable_capacity = int(ceph_status['stats']['total_bytes']) / replica / constant.GB
+
+        return usable_capacity
+
     def get_ceph_cluster_iops(self):
         """
         The function gets the IOPS from the ocs cluster
@@ -666,9 +688,10 @@ def validate_cluster_on_pvc():
 
     mon_pods = get_pod_name_by_pattern('rook-ceph-mon', ns)
     osd_pods = get_pod_name_by_pattern('rook-ceph-osd', ns, filter='prepare')
-    assert len(mon_pods) + len(osd_pods) == len(pvc_names), (
-        "Not enough PVC's available for all Ceph Pods"
-    )
+    if not config.DEPLOYMENT.get('local_storage'):
+        assert len(mon_pods) + len(osd_pods) == len(pvc_names), (
+            "Not enough PVC's available for all Ceph Pods"
+        )
     for ceph_pod in mon_pods + osd_pods:
         out = run_cmd(f'oc -n {ns} get pods {ceph_pod} -o yaml')
         out_yaml = yaml.safe_load(out)

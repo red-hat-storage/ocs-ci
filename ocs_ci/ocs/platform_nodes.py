@@ -111,7 +111,11 @@ class VMWareNodes(NodesBase):
             self.cluster_name, self.datacenter, self.cluster
         )
         node_names = [node.get().get('metadata').get('name') for node in nodes]
-        return [vm for vm in vms_in_pool if vm.name in node_names]
+        vms = []
+        for node in node_names:
+            node_vms = [vm for vm in vms_in_pool if vm.name in node]
+            vms.extend(node_vms)
+        return vms
 
     def get_data_volumes(self):
         raise NotImplementedError(

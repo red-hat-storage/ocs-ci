@@ -116,6 +116,7 @@ class Pod(OCS):
         Raises:
             Exception: In case of exception from FIO
         """
+        logger.info(f"Waiting for FIO results from pod {self.name}")
         try:
             result = self.fio_thread.result(FIO_TIMEOUT)
             if result:
@@ -398,7 +399,7 @@ def get_all_pods(
     if selector:
         pods_new = [
             pod for pod in pods if
-            pod['metadata']['labels'].get(selector_label) in selector
+            pod['metadata'].get('labels', {}).get(selector_label) in selector
         ]
         pods = pods_new
     pod_objs = [Pod(**pod) for pod in pods]
@@ -592,7 +593,6 @@ def get_fio_rw_iops(pod_obj):
     Args:
         pod_obj (Pod): The object of the pod
     """
-    logging.info(f"Waiting for IO results from pod {pod_obj.name}")
     fio_result = pod_obj.get_fio_results()
     logging.info(f"FIO output: {fio_result}")
     logging.info("IOPs after FIO:")

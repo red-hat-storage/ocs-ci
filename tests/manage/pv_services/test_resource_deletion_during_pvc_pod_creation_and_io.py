@@ -69,11 +69,17 @@ log = logging.getLogger(__name__)
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'operator'],
-            marks=pytest.mark.polarion_id("OCS-933")
+            marks=[
+                pytest.mark.polarion_id("OCS-933"),
+                pytest.mark.bugzilla('1815078')
+            ]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'operator'],
-            marks=pytest.mark.polarion_id("OCS-929")
+            marks=[
+                pytest.mark.polarion_id("OCS-929"),
+                pytest.mark.bugzilla('1815078')
+            ]
         )
     ]
 )
@@ -208,6 +214,7 @@ class TestResourceDeletionDuringCreationOperations(ManageTest):
 
         # Wait for setup on pods to complete
         for pod_obj in io_pods:
+            log.info(f"Waiting for IO setup to complete on pod {pod_obj.name}")
             for sample in TimeoutSampler(
                 180, 2, getattr, pod_obj, 'wl_setup_done'
             ):

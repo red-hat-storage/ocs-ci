@@ -36,7 +36,8 @@ class StorageCluster(OCP):
 
 
 def ocs_install_verification(
-    timeout=600, skip_osd_distribution_check=False, ocs_registry_image=None
+    timeout=600, skip_osd_distribution_check=False, ocs_registry_image=None,
+    post_upgrade_verification=False,
 ):
     """
     Perform steps necessary to verify a successful OCS installation
@@ -48,6 +49,8 @@ def ocs_install_verification(
             distribution.
         ocs_registry_image (str): Specific image to check if it was installed
             properly.
+        post_upgrade_verification (bool): Set to True if this function is
+            called after upgrade.
 
     """
     from ocs_ci.ocs.node import get_typed_nodes
@@ -202,7 +205,16 @@ def ocs_install_verification(
 
     # Verify ceph health
     log.info("Verifying ceph health")
-    assert utils.ceph_health_check(namespace=namespace)
+    health_check_tries = 20
+    health_check_delay = 30
+    if post_upgrade_verification:
+        # In case of upgrade with FIO we have to wait longer time to see
+        # health OK. See discussion in BZ:
+        # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
+        health_check_tries = 60
+    assert utils.ceph_health_check(
+        namespace, health_check_tries, health_check_delay
+    )
 
     # Verify StorageClasses (1 ceph-fs, 1 ceph-rbd)
     log.info("Verifying storage classes")

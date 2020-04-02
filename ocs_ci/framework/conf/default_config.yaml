@@ -97,7 +97,6 @@ ENV_DATA:
   worker_replicas: 3
   skip_ocp_deployment: false
   skip_ocs_deployment: false
-  logging_version: '4.3'
   ocs_version: '4.3'
   # uncomment to use custom directory for storing measurement data related to
   # monitoring tests, otherwise generate temporary directory for each test run
@@ -114,3 +113,8 @@ ENV_DATA:
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true
+  # This default image for ocp upgrade based on 4.3 GA build
+  # ocp_upgrade_version: "4.3.3"
+  ocp_channel: "stable-4.3"
+  ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
+  ocp_arch: "x86_64"

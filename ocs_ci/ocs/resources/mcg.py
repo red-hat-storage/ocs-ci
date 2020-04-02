@@ -288,23 +288,22 @@ class MCG(object):
             bucket_data_reduced = resp.json().get('reply').get('data').get('size_reduced')
 
             logger.info(
-                'Overall bytes stored: ' + str(bucket_data) + '. Amount reduced: ' + str(bucket_data_reduced)
+                'Overall bytes stored: ' + str(bucket_data) + '. Reduced size: ' + str(bucket_data_reduced)
             )
 
             return bucket_data, bucket_data_reduced
 
         try:
             for total_size, total_reduced in TimeoutSampler(140, 5, _retrieve_reduction_data):
-                if total_size - total_reduced > 80000000:
+                if total_size - total_reduced > 100 * 1024 * 1024:
                     logger.info(
                         'Data reduced:' + str(total_size - total_reduced)
                     )
                     return True
                 else:
                     logger.info(
-                        f'Data reduction is not yet sufficient - '
-                        f'Total size: {total_size}, Reduced: {total_reduced}.'
-                        f'Retrying in 5 seconds...'
+                        'Data reduction is not yet sufficient. '
+                        'Retrying in 5 seconds...'
                     )
         except TimeoutExpiredError:
             logger.error(
@@ -588,12 +587,19 @@ class MCG(object):
             )
             assert False
 
-    def check_backingstore_state(self, backingstore_name, desired_state):
+    def check_backingstore_state(
+        self,
+        backingstore_name,
+        desired_state,
+        timeout=600
+    ):
         """
         Checks whether the backing store reached a specific state
         Args:
-            backingstore_name: Name of the backing store to be checked
-            desired_state: The desired state of the backing store
+            backingstore_name (str): Name of the backing store to be checked
+            desired_state (str): The desired state of the backing store
+            timeout (int): Number of seconds for timeout which will be used
+            in the checks used in this function.
 
         Returns:
             bool: Whether the backing store has reached the desired state
@@ -601,110 +607,36 @@ class MCG(object):
         """
 
         def _check_state():
-            sysinfo = self.send_rpc_query('system_api', 'read_system', params={}).json()['reply']
+            sysinfo = self.send_rpc_query(
+                'system_api', 'read_system', params={}
+            ).json()['reply']
             for pool in sysinfo.get('pools'):
                 if pool.get('name') == backingstore_name:
-                    if pool.get('mode') == desired_state:
+                    current_state = pool.get('mode')
+                    logger.info(
+                        f'Current state of backingstore ''{backingstore_name} '
+                        f'is {current_state}'
+                    )
+                    if current_state == desired_state:
                         return True
             return False
 
         try:
-            for reached_state in TimeoutSampler(180, 10, _check_state):
+            for reached_state in TimeoutSampler(timeout, 10, _check_state):
                 if reached_state:
                     logger.info(
-                        f'BackingStore {backingstore_name} reached state {desired_state}.'
+                        f'BackingStore {backingstore_name} reached state '
+                        f'{desired_state}.'
                     )
                     return True
                 else:
                     logger.info(
-                        f'Waiting for BackingStore {backingstore_name} to reach state {desired_state}...'
+                        f'Waiting for BackingStore {backingstore_name} to '
+                        f'reach state {desired_state}...'
                     )
         except TimeoutExpiredError:
             logger.error(
-                'The BackingStore did not reach the desired state within the time limit.'
+                f'The BackingStore did not reach the desired state '
+                f'{desired_state} within the time limit.'
             )
             assert False
-
-    def create_multipart_upload(self, bucketname, object_key):
-        """
-        Initiates Multipart Upload
-        Args:
-            bucketname (str): Name of the bucket on which multipart upload to be initiated on
-            object_key (str): Unique object Identifier
-
-        Returns:
-            str : Multipart Upload-ID
-
-        """
-        mpu = self.s3_client.create_multipart_upload(Bucket=bucketname, Key=object_key)
-        upload_id = mpu["UploadId"]
-        return upload_id
-
-    def list_multipart_upload(self, bucketname):
-        """
-        Lists the multipart upload details on a bucket
-        Args:
-            bucketname (str): Name of the bucket
-
-        Returns:
-            dict : Dictionary containing the multipart upload details
-
-        """
-        return self.s3_client.list_multipart_uploads(Bucket=bucketname)
-
-    def list_uploaded_parts(self, bucketname, object_key, upload_id):
-        """
-        Lists uploaded parts and their ETags
-        Args:
-            bucketname (str): Name of the bucket
-            object_key (str): Unique object Identifier
-            upload_id (str): Multipart Upload-ID
-
-        Returns:
-            dict : Dictionary containing the multipart upload details
-
-        """
-        return self.s3_client.list_parts(Bucket=bucketname, Key=object_key, UploadId=upload_id)
-
-    def complete_multipart_upload(self, bucketname, object_key, upload_id, parts):
-        """
-        Completes the Multipart Upload
-        Args:
-            bucketname (str): Name of the bucket
-            object_key (str): Unique object Identifier
-            upload_id (str): Multipart Upload-ID
-            parts (list): List containing the uploaded parts which includes ETag and part number
-
-        Returns:
-            dict : Dictionary containing the completed multipart upload details
-
-        """
-        result = self.s3_client.complete_multipart_upload(
-            Bucket=bucketname,
-            Key=object_key,
-            UploadId=upload_id,
-            MultipartUpload={"Parts": parts}
-        )
-        return result
-
-    def abort_multipart_upload(self, bucketname, object_key):
-        """
-        Abort all Multipart Uploads for this Bucket
-        Args:
-            bucketname (str): Name of the bucket
-            object_key (str): Unique object Identifier
-
-        Returns:
-            list : List of aborted upload ids
-
-        """
-        multipart_list = self.s3_client.list_multipart_uploads(Bucket=bucketname)
-        logger.info(f"Aborting{len(multipart_list)} uploads")
-        if "Uploads" in multipart_list:
-            return [
-                self.s3_client.abort_multipart_upload(
-                    Bucket=bucketname, Key=object_key, UploadId=upload["UploadId"]
-                ) for upload in multipart_list["Uploads"]
-            ]
-        else:
-            return None

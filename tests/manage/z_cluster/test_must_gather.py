@@ -5,7 +5,7 @@ import re   # This is part of workaround for BZ-1766646, to be removed when fixe
 import pytest
 
 from ocs_ci.framework.testlib import ManageTest, tier1
-from ocs_ci.ocs import ocp
+from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.utils import collect_ocs_logs
 from ocs_ci.utility.utils import ocsci_log_path, TimeoutSampler
@@ -75,6 +75,9 @@ class TestMustGather(ManageTest):
         Tests functionality of: oc adm must-gather
 
         """
+        # Fetch pod details
+        pods = pod.get_all_pods(namespace='openshift-storage')
+        pods = [each.name for each in pods]
 
         # Make logs root directory
         logger.info("Creating logs Directory")
@@ -87,16 +90,18 @@ class TestMustGather(ManageTest):
         logger.info("Collecting logs - Done!")
 
         # Compare running pods list to "/pods" subdirectories
+        must_gather_helper = re.compile(r'must-gather-.*.-helper')
         logger.info("Checking logs tree")
-        logs = self.get_log_directories(directory)
-        pods = pod.get_all_pods(namespace='openshift-storage')
-        pods = [each.name for each in pods]
+        logs = [
+            logs for logs in self.get_log_directories(directory) if not (
+                must_gather_helper.match(logs)
+            )
+        ]
         logger.info(f"Logs: {logs}")
         logger.info(f"pods list: {pods}")
         assert set(sorted(logs)) == set(sorted(pods)), (
-            "List of openshift-storage pods are not equal to list of "
-            "logs directories list of pods: {pods}"
-            f"list of log directories: {logs}"
+            f"List of openshift-storage pods are not equal to list of logs "
+            f"directories list of pods: {pods} list of log directories: {logs}"
         )
 
         # 2nd test: Verify logs file are not empty
@@ -104,6 +109,49 @@ class TestMustGather(ManageTest):
         assert self.check_file_size(logs_dir_list), (
             "One or more log file are empty"
         )
+
+        # Find must_gather_commands directory for verification
+        for dir_root, dirs, files in os.walk(directory + "_ocs_logs"):
+            if os.path.basename(dir_root) == 'must_gather_commands':
+                logger.info(
+                    f"Found must_gather_commands directory - {dir_root}"
+                )
+                assert 'json_output' in dirs, (
+                    "json_output directory is not present in "
+                    "must_gather_commands directory."
+                )
+                assert files, (
+                    "No files present in must_gather_commands directory."
+                )
+                cmd_files_path = [
+                    os.path.join(dir_root, file_name) for file_name in files
+                ]
+                json_output_dir = os.path.join(dir_root, 'json_output')
+                break
+
+        # Verify that command output files are present as expected
+        assert sorted(constants.MUST_GATHER_COMMANDS) == sorted(files), (
+            f"Actual and expected commands output files are not matching.\n"
+            f"Actual: {files}\nExpected: {constants.MUST_GATHER_COMMANDS}"
+        )
+
+        # Verify that files for command output in json are present as expected
+        commands_json = os.listdir(json_output_dir)
+        assert sorted(constants.MUST_GATHER_COMMANDS_JSON) == sorted(commands_json), (
+            f"Actual and expected json output commands files are not "
+            f"matching.\nActual: {commands_json}\n"
+            f"Expected: {constants.MUST_GATHER_COMMANDS_JSON}"
+        )
+
+        # Verify that command output files are not empty
+        empty_files = []
+        json_cmd_files_path = [
+            os.path.join(json_output_dir, file_name) for file_name in commands_json
+        ]
+        for file_path in cmd_files_path + json_cmd_files_path:
+            if not os.path.getsize(file_path) > 0:
+                empty_files.append(file_path)
+        assert not empty_files, f"These files are empty: {empty_files}"
 
     def make_directory(self):
         """

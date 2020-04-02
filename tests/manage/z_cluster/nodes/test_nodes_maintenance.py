@@ -38,6 +38,7 @@ def schedule_nodes_teardown(request):
     request.addfinalizer(finalizer)
 
 
+@bugzilla('1818613')
 @ignore_leftovers
 class TestNodesMaintenance(ManageTest):
     """
