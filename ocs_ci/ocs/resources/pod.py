@@ -1092,7 +1092,7 @@ def get_operator_pods(operator_label=constants.OPERATOR_LABEL, namespace=None):
     return operator_pods
 
 
-def upload(pod_name, localpath, remotepath):
+def upload(pod_name, localpath, remotepath, namespace=None):
     """
     Upload a file to pod
 
@@ -1102,7 +1102,8 @@ def upload(pod_name, localpath, remotepath):
         remotepath (str): Target path on the pod
 
     """
-    cmd = f"oc cp {os.path.expanduser(localpath)} {pod_name}:{remotepath}"
+    namespace = namespace or constants.DEFAULT_NAMESPACE
+    cmd = f"oc -n {namespace} cp {os.path.expanduser(localpath)} {pod_name}:{remotepath}"
     run_cmd(cmd)
 
 
