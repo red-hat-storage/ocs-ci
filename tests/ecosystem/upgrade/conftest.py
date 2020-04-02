@@ -205,7 +205,7 @@ def fio_conf_block():
         buffered=1
         blocksize=4k
         ioengine=libaio
-        directory=/dev/rbdblock
+        filename=/dev/rbdblock
         size={fio_size}G
         time_based
         runtime=24h
@@ -355,6 +355,7 @@ def pre_upgrade_block_pods(
 
 @pytest.fixture
 def post_upgrade_filesystem_pods(
+    request,
     pvc_factory,
     default_storageclasses,
     fio_job_dict,
@@ -435,6 +436,7 @@ def post_upgrade_filesystem_pods(
 
 @pytest.fixture
 def post_upgrade_block_pods(
+    request,
     pvc_factory,
     default_storageclasses,
     fio_job_dict,
