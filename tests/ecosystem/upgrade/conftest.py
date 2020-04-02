@@ -147,8 +147,10 @@ def set_fio_dicts(job_name, fio_job_dict, fio_configmap_dict, mode='fs'):
         ][0]['volumeDevices'][0]['devicePath'] = block_path
         try:
             job_spec['containers'][0]['volumeDevices'][0].pop('mountPath')
-        except:
+        except KeyError:
+            # mountPath key might be missing from previous update of fio_job_dict
             pass
+
         return fio_job_dict_block, fio_configmap_dict
 
     return fio_job_dict, fio_configmap_dict
