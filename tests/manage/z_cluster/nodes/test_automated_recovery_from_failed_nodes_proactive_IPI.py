@@ -81,8 +81,10 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 
         # Create DC app pods
         log.info("Creating DC based app pods")
-        interface = constants.CEPHBLOCKPOOL if interface == 'rbd' \
+        interface = (
+            constants.CEPHBLOCKPOOL if interface == 'rbd'
             else constants.CEPHFILESYSTEM
+        )
         dc_pod_obj = []
         for i in range(2):
             dc_pod = dc_pod_factory(
