@@ -62,10 +62,6 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
 
     """
 
-    osd_size = get_osd_size()
-    pvc_size_gb = osd_size * 1024
-    io_size_mb = f'{int((pvc_size_gb / 2) * 1000)}M'
-
     @pytest.fixture()
     def base_setup(
         self, interface, pvc_factory, pod_factory
@@ -76,6 +72,9 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
         create maxsize pvc, pod and run IO
 
         """
+        osd_size = get_osd_size()
+        pvc_size_gb = osd_size * 1024
+        io_size_mb = f'{int((pvc_size_gb / 2) * 1000)}M'
 
         pod_objs = get_all_pods(
             namespace=defaults.ROOK_CLUSTER_NAMESPACE,
@@ -87,14 +86,14 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
         self.sc = default_storage_class(interface_type=interface)
 
         self.pvc_obj = pvc_factory(
-            interface=interface, storageclass=self.sc, size=self.pvc_size_gb,
+            interface=interface, storageclass=self.sc, size=pvc_size_gb,
         )
 
         self.pod_obj = pod_factory(interface=interface, pvc=self.pvc_obj)
 
-        log.info(f"Running FIO to fill PVC size: {self.io_size_mb}")
+        log.info(f"Running FIO to fill PVC size: {io_size_mb}")
         self.pod_obj.run_io(
-            'fs', size=self.io_size_mb, io_direction='write', runtime=60
+            'fs', size=io_size_mb, io_direction='write', runtime=60
         )
 
         log.info("Waiting for IO results")
