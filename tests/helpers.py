@@ -997,13 +997,14 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list):
     return pvc_dict
 
 
-def measure_pv_deletion_time_bulk(interface, pv_name_list):
+def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
     """
     Measure PV deletion time of bulk PV, based on logs.
 
     Args:
         interface (str): The interface backed the PV
         pv_name_list (list): List of PV Names for measuring deletion time
+        wait_time (int): Seconds to wait before collecting CSI log
 
     Returns:
         pv_dict (dict): Dictionary of pv_name with deletion time.
@@ -1012,6 +1013,8 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list):
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
     # get the logs from the csi-provisioner containers
+    # due to some delay in CSI log generation adding wait of 60sec
+    time.sleep(wait_time)
     logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
     logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
     logs = logs.split("\n")
