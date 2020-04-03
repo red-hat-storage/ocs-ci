@@ -30,18 +30,18 @@ class TestPVCCreationDeletionScale(E2ETest):
     @pytest.mark.parametrize(
         argnames=["access_mode", "interface"],
         argvalues=[
+            pytest.param(
+                *[constants.ACCESS_MODE_RWO, constants.CEPHBLOCKPOOL],
+                marks=pytest.mark.polarion_id("OCS-1225")
+            ),
             # pytest.param(
-            #     *[constants.ACCESS_MODE_RWO, constants.CEPHBLOCKPOOL],
-            #     marks=pytest.mark.polarion_id("OCS-1225")
+            #     *[constants.ACCESS_MODE_RWX, constants.CEPHBLOCKPOOL],
+            #     marks=pytest.mark.polarion_id("OCS-2010")
             # ),
-            pytest.param(
-                *[constants.ACCESS_MODE_RWX, constants.CEPHBLOCKPOOL],
-                marks=pytest.mark.polarion_id("OCS-2010")
-            ),
-            pytest.param(
-                *[constants.ACCESS_MODE_RWX, constants.CEPHFS_INTERFACE],
-                marks=pytest.mark.polarion_id("OCS-2008")
-            ),
+            # pytest.param(
+            #     *[constants.ACCESS_MODE_RWX, constants.CEPHFS_INTERFACE],
+            #     marks=pytest.mark.polarion_id("OCS-2008")
+            # ),
         ]
     )
     @pytest.mark.usefixtures(namespace.__name__)
