@@ -997,7 +997,7 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list):
     return pvc_dict
 
 
-def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=120):
+def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
     """
     Measure PV deletion time of bulk PV, based on logs.
 
