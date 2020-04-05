@@ -155,7 +155,7 @@ class TestMustGather(ManageTest):
 
     def make_directory(self):
         """
-        Check if directory to store must gather logs already exist
+        Checks if directory that contains must gather logs already exist
         and use new directory if so.
 
         Returns:
@@ -170,12 +170,12 @@ class TestMustGather(ManageTest):
 
         try:
             os.path.exists(directory)
-            logger.info(f'directory created successfully'
+            logger.info(f'Directory created successfully'
                         f'in path {directory}')
             return directory
-        except FileNotFoundError as e:
-            logger.error("fail to create logs directory")
-            raise e
+        except FileNotFoundError:
+            logger.error("Failed to create logs directory")
+            raise
 
     def get_log_directories(self, directory):
         """
