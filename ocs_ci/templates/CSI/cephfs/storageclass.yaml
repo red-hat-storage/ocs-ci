@@ -29,5 +29,6 @@ parameters:
   # or by setting the default mounter explicitly via --volumemounter command-line argument.
   # mounter: kernel
 reclaimPolicy: Delete
+allowVolumeExpansion: true
 mountOptions:
   - noexec
