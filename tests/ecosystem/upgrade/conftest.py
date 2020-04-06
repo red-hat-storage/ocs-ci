@@ -5,6 +5,7 @@ import textwrap
 import pytest
 
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.resources.pod import Pod
 from tests import helpers
@@ -287,7 +288,13 @@ def pre_upgrade_filesystem_pods(
 
     def teardown():
         for pod in pods:
-            pod.delete()
+            try:
+                pod.delete()
+            except CommandFailed as ex:
+                log.info(
+                    f"Command for pod deletion failed but it was probably "
+                    f"deleted: {ex}"
+                )
     request.addfinalizer(teardown)
 
     return pods
@@ -349,7 +356,13 @@ def pre_upgrade_block_pods(
 
     def teardown():
         for pod in pods:
-            pod.delete()
+            try:
+                pod.delete()
+            except CommandFailed as ex:
+                log.info(
+                    f"Command for pod deletion failed but it was probably "
+                    f"deleted: {ex}"
+                )
     request.addfinalizer(teardown)
 
     return pods
@@ -430,7 +443,13 @@ def post_upgrade_filesystem_pods(
 
     def teardown():
         for pod in pods:
-            pod.delete()
+            try:
+                pod.delete()
+            except CommandFailed as ex:
+                log.info(
+                    f"Command for pod deletion failed but it was probably "
+                    f"deleted: {ex}"
+                )
     request.addfinalizer(teardown)
 
     return pods
@@ -492,7 +511,13 @@ def post_upgrade_block_pods(
 
     def teardown():
         for pod in pods:
-            pod.delete()
+            try:
+                pod.delete()
+            except CommandFailed as ex:
+                log.info(
+                    f"Command for pod deletion failed but it was probably "
+                    f"deleted: {ex}"
+                )
     request.addfinalizer(teardown)
 
     return pods
