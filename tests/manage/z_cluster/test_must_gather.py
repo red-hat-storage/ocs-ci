@@ -155,7 +155,7 @@ class TestMustGather(ManageTest):
 
     def make_directory(self):
         """
-        Check if directory to store must gather logs already exist
+        Checks if directory that contains must gather logs already exist
         and use new directory if so.
 
         Returns:
@@ -168,7 +168,14 @@ class TestMustGather(ManageTest):
             index += 1
             directory = ocsci_log_path() + f"_{index}"
 
-        return directory
+        try:
+            os.path.exists(directory)
+            logger.info(f'Directory created successfully'
+                        f'in path {directory}')
+            return directory
+        except FileNotFoundError:
+            logger.error("Failed to create logs directory")
+            raise
 
     def get_log_directories(self, directory):
         """
@@ -198,6 +205,7 @@ class TestMustGather(ManageTest):
 
         """
         for dir_name, subdir_list, files_list in os.walk(root_directory + "_ocs_logs"):
+            logger.debug(f'dir_name: {dir_name}')
             if dir_name[-4:] == "pods":
                 return dir_name
 
