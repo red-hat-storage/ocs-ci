@@ -113,25 +113,14 @@ def set_fio_dicts(job_name, fio_job_dict, fio_configmap_dict, mode='fs'):
     fio_job_dict['metadata']['name'] = job_name
     fio_job_dict['spec']['template']['metadata']['name'] = job_name
 
-    fio_job_dict['spec']['template']['spec']['volumes'][0][
-        'name'
-    ] = target_name
-    fio_job_dict['spec']['template']['spec']['volumes'][0][
-        'persistentVolumeClaim'
-    ]['claimName'] = target_name
-    fio_job_dict['spec']['template']['spec']['volumes'][1][
-        'name'
-    ] = volume_name
-    fio_job_dict['spec']['template']['spec']['volumes'][1][
-        'configMap'
-    ]['name'] = config_name
+    job_spec = fio_job_dict['spec']['template']['spec']
+    job_spec['volumes'][0]['name'] = target_name
+    job_spec['volumes'][0]['persistentVolumeClaim']['claimName'] = target_name
+    job_spec['volumes'][1]['name'] = volume_name
+    job_spec['volumes'][1]['configMap']['name'] = config_name
 
-    fio_job_dict['spec']['template']['spec']['containers'][0][
-        'volumeMounts'
-    ][0]['name'] = target_name
-    fio_job_dict['spec']['template']['spec']['containers'][0][
-        'volumeMounts'
-    ][1]['name'] = volume_name
+    job_spec['containers'][0]['volumeMounts'][0]['name'] = target_name
+    job_spec['containers'][0]['volumeMounts'][1]['name'] = volume_name
 
     if mode == 'block':
         # set correct path for fio volumes
