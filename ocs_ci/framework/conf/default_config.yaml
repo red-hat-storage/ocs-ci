@@ -64,6 +64,7 @@ DEPLOYMENT:
   ui_deployment: False
   # Following options are defaults for deployment from live content
   live_deployment: False
+  preserve_bootstrap_node: False
 
 # Section for reporting configuration
 REPORTING:

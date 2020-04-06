@@ -1,0 +1,2 @@
+DEPLOYMENT:
+  preserve_bootstrap_node: True
