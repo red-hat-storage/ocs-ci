@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
+from tests.manage.mcg.helpers import wait_for_mcg_resource_status
 
 logger = logging.getLogger(__name__)
 
@@ -90,9 +91,9 @@ class TestBucketCreation:
         bucket_set = set(
             bucket.name for bucket in bucket_factory(amount, interface)
         )
-        assert bucket_set.issubset(
-            getattr(mcg_obj, f'{interface.lower()}_get_all_bucket_names')()
-        )
+
+        for bucketname in bucket_set:
+            assert wait_for_mcg_resource_status(bucketname, 'obc', 'PHASE', 'Bound', '3', '30')
 
     @pytest.mark.parametrize(
         argnames="amount,interface",
