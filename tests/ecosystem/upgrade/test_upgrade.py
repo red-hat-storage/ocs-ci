@@ -122,7 +122,8 @@ def verify_image_versions(old_images, upgrade_version):
     verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
     verify_pods_upgraded(old_images, selector=constants.MON_APP_LABEL, count=3)
     verify_pods_upgraded(
-        old_images, selector=constants.OSD_APP_LABEL, count=osd_count
+        old_images, selector=constants.OSD_APP_LABEL, count=osd_count,
+        timeout=1800,
     )
     verify_pods_upgraded(old_images, selector=constants.MDS_APP_LABEL, count=2)
     if config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
