@@ -366,7 +366,7 @@ def wait_for_mcg_resource_status(resource_name, resource_type, column, status, i
 
     try:
         for status_check in TimeoutSampler(
-            timeout, interval, _get_status()
+            timeout, interval, _get_status
         ):
             if status_check == status:
                 logger.info(f'{resource_name} reached status {status}.')

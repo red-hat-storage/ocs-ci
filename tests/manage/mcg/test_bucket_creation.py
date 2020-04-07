@@ -93,7 +93,7 @@ class TestBucketCreation:
         )
 
         for bucketname in bucket_set:
-            assert wait_for_mcg_resource_status(bucketname, 'obc', 'PHASE', 'Bound', '3', '30')
+            assert wait_for_mcg_resource_status(bucketname, 'obc', 'PHASE', 'Bound', 3, 30)
 
     @pytest.mark.parametrize(
         argnames="amount,interface",
