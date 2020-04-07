@@ -9,8 +9,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import run_cmd
-from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -129,7 +128,6 @@ class PVC(OCS):
             'persistentVolumeReclaimPolicy'
         )
 
-    @retry(UnexpectedBehaviour, tries=5, delay=2, backoff=1)
     def resize_pvc(self, new_size, verify=False):
         """
         Modify the capacity of PVC
@@ -150,12 +148,14 @@ class PVC(OCS):
         )
 
         if verify:
-            self.reload()
-            if self.size != new_size:
-                raise UnexpectedBehaviour(
+            for pvc_data in TimeoutSampler(20, 2, self.get):
+                capacity = pvc_data.get('status').get('capacity').get('storage')
+                if capacity == f'{new_size}Gi':
+                    break
+                log.info(
                     f"Capacity of PVC {self.name} is not {new_size}Gi as "
-                    f"expected, but {self.size}."
-            )
+                    f"expected, but {capacity}. Retrying."
+                )
             log.info(
                 f"Verified that the capacity of PVC {self.name} is changed to "
                 f"{new_size}Gi."
