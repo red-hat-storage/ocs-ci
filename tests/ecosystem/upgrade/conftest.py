@@ -64,9 +64,8 @@ def create_fio_pod(
         timeout=600
     )
 
-    fio_job_dict['spec']['template']['spec']['volumes'][0][
-        'persistentVolumeClaim'
-    ]['claimName'] = pvc.name
+    job_volume = fio_job_dict['spec']['template']['spec']['volumes'][0]
+    job_volume['persistentVolumeClaim']['claimName'] = pvc.name
     fio_objs = [fio_configmap_dict, fio_job_dict]
     job_file = ObjectConfFile(
         "fio_continuous",
@@ -81,9 +80,8 @@ def create_fio_pod(
     ocp_pod_obj = ocp.OCP(kind=constants.POD, namespace=project.namespace)
     pods = ocp_pod_obj.get()['items']
     for pod in pods:
-        if pod['spec']['volumes'][0]['persistentVolumeClaim'][
-            'claimName'
-        ] == pvc.name:
+        pod_volume = pod['spec']['volumes'][0]
+        if pod_volume['persistentVolumeClaim']['claimName'] == pvc.name:
             pod_data = pod
             break
 
@@ -132,9 +130,7 @@ def set_fio_dicts(job_name, fio_job_dict, fio_configmap_dict, mode='fs'):
         )
         block_path = '/dev/rbdblock'
         # set correct path for fio volumes
-        job_spec[
-            'containers'
-        ][0]['volumeDevices'][0]['devicePath'] = block_path
+        job_spec['containers'][0]['volumeDevices'][0]['devicePath'] = block_path
         try:
             job_spec['containers'][0]['volumeDevices'][0].pop('mountPath')
         except KeyError:
