@@ -43,6 +43,10 @@ def gather_bootstrap():
         f"--dir {gather_bootstrap_dir} --log-level debug --key {ssh_key} "
     )
     if len(master_ips) == 0:
+        logger.warning(
+            'No master IPs were found. '
+            'Adding master `None` so we still gather logs from bootstrap node'
+        )
         cmd += "--master None "
     else:
         for master in master_ips:
