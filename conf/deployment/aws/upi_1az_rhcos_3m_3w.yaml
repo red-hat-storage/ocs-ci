@@ -6,6 +6,7 @@ ENV_DATA:
   worker_replicas: 3
   master_replicas: 3
   availability_zone_count: 1
+  worker_instance_type: 'm5.4xlarge'
 REPORTING:
   polarion:
     deployment_id: 'OCS-1450'
