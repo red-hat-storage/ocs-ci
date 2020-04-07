@@ -206,8 +206,8 @@ def pre_upgrade_filesystem_pods(
     request,
     pvc_factory_session,
     default_storageclasses,
-    fio_job_dict,
-    fio_configmap_dict,
+    fio_job_dict_session,
+    fio_configmap_dict_session,
     fio_conf_fs,
     fio_project,
     tmp_path
@@ -222,7 +222,7 @@ def pre_upgrade_filesystem_pods(
     """
     pods = []
     pvc_size = 10
-    fio_configmap_dict["data"]["workload.fio"] = fio_conf_fs
+    fio_configmap_dict_session["data"]["workload.fio"] = fio_conf_fs
 
     for reclaim_policy in (
         constants.RECLAIM_POLICY_DELETE,
@@ -231,8 +231,8 @@ def pre_upgrade_filesystem_pods(
         job_name = f"{reclaim_policy}-rbd-rwo-fs".lower()
         fio_job_dict, fio_configmap_dict = set_fio_dicts(
             job_name,
-            fio_job_dict,
-            fio_configmap_dict
+            fio_job_dict_session,
+            fio_configmap_dict_session
         )
         rbd_pod = create_fio_pod(
             project=fio_project,
@@ -255,8 +255,8 @@ def pre_upgrade_filesystem_pods(
             job_name = f"{reclaim_policy}-cephfs-{access_mode}-fs".lower()
             fio_job_dict, fio_configmap_dict = set_fio_dicts(
                 job_name,
-                fio_job_dict,
-                fio_configmap_dict
+                fio_job_dict_session,
+                fio_configmap_dict_session
             )
             cephfs_pod = create_fio_pod(
                 project=fio_project,
@@ -290,8 +290,8 @@ def pre_upgrade_block_pods(
     request,
     pvc_factory_session,
     default_storageclasses,
-    fio_job_dict,
-    fio_configmap_dict,
+    fio_job_dict_session,
+    fio_configmap_dict_session,
     fio_conf_block,
     fio_project,
     tmp_path
@@ -307,7 +307,7 @@ def pre_upgrade_block_pods(
     pods = []
 
     pvc_size = 10
-    fio_configmap_dict["data"]["workload.fio"] = fio_conf_block
+    fio_configmap_dict_session["data"]["workload.fio"] = fio_conf_block
 
     for reclaim_policy in (
         constants.RECLAIM_POLICY_DELETE,
@@ -320,8 +320,8 @@ def pre_upgrade_block_pods(
             job_name = f"{reclaim_policy}-rbd-{access_mode}-block".lower()
             fio_job_dict_block, fio_configmap_dict = set_fio_dicts(
                 job_name,
-                fio_job_dict,
-                fio_configmap_dict,
+                fio_job_dict_session,
+                fio_configmap_dict_session,
                 mode='block'
             )
 
