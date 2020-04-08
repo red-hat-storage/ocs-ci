@@ -8,6 +8,7 @@ import yaml
 from gevent.threadpool import ThreadPoolExecutor
 
 from ocs_ci.ocs import ocp, defaults, constants, exceptions
+from ocs_ci.utility.utils import ceph_health_check
 
 log = logging.getLogger(__name__)
 
@@ -184,10 +185,15 @@ def get_status_after_execution():
                 'Leftovers removed'
             ].append({f"***{kind}***": kind_diff[1]})
             leftover_detected = True
-    if leftover_detected:
-        raise exceptions.ResourceLeftoversException(
-            f"\nThere are leftovers in the environment after test case:"
-            f"\nResources added:\n{yaml.dump(leftovers['Leftovers added'])}"
-            f"\nResources "
-            f"removed:\n {yaml.dump(leftovers['Leftovers removed'])}"
-        )
+    try:
+        log.info("Checking Ceph health")
+        ceph_health_check(tries=6, delay=10)
+        log.info("Ceph cluster health is OK")
+    finally:
+        if leftover_detected:
+            raise exceptions.ResourceLeftoversException(
+                f"\nThere are leftovers in the environment after test case:"
+                f"\nResources added:\n{yaml.dump(leftovers['Leftovers added'])}"
+                f"\nResources "
+                f"removed:\n {yaml.dump(leftovers['Leftovers removed'])}"
+            )
