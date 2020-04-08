@@ -147,6 +147,11 @@ def test_workload_with_checksum_verify(
     # compute timeout based on the minimal write speed
     fio_min_mbps = config.ENV_DATA['fio_storageutilization_min_mbps']
     job_timeout = fiojob.get_timeout(fio_min_mbps, pvc_size)
+    # expand job timeout because during execution of this test is high
+    # probability that there is more workload executed (from upgrade tests)
+    # that slow down write time
+    # TODO(fbalak): calculate this from actual work being executed
+    job_timeout = job_timeout * 4
 
     # deploy the Job to the cluster and start it
     job_file.create()
