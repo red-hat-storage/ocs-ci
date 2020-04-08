@@ -189,7 +189,12 @@ def write_data_via_fio(fio_job_file, write_timeout, pvc_size, target_percentage)
     # parse fio output
     fio_report = fio_to_dict(fio_output)
 
-    logger.info(fio_report)
+    logger.debug(fio_report)
+    if fio_report is not None:
+        disk_util = fio_report.get('disk_util')
+        logger.info("fio disk_util stats: %s", disk_util)
+    else:
+        logger.warning("fio report is empty")
 
     # data which will be available to the test via:
     # fixture_name['result']
