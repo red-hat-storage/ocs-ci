@@ -2,6 +2,7 @@
 Helper functions file for OCS QE
 """
 import logging
+import csv
 import re
 import datetime
 import statistics
@@ -1711,24 +1712,103 @@ def create_pods_parallel(
     return pod_objs
 
 
-def delete_objs_parallel(obj_list):
+def find_attribute_value(var_dot_list):
     """
-    Function to delete objs specified in list
+    Given a variable representation as a string,
+    return the actual object.
+    
     Args:
-        obj_list(list): List can be obj of pod, pvc, etc
+        var_dot_list (string): String representation of an object
+    
+    Returns:
+        a reference to the actual object
+
+    """
+    info = var_dot_list.split('.')
+    dvalue = vars()[info[0]]
+    for nattr in info[1:]:
+        dvalue = getattr(dvalue, nattr)
+    return dvalue
+
+#TO DO -- should make this recursive to handle multiple levels of tuples
+#TO DO -- handle poorly formatted tuples more gracefully
+def parse_handle_objs_refs(thread_parms):
+    """
+    Get dictionary of key-value pairs of parameters to pass to
+    threading.threads.  Each key is the name of a keyword
+    parameter.  Each value is a local variable or a period
+    separated python path to a remote variable.  These values
+    can be clumped in a tuple.
+    
+    Args:
+        thread_parms (dictionary): keyword indexed dictionary of
+            local and remote references represented as strings.
+    
+    Returns:
+        Keyword indexed dictionary of actual local and remote references
+    """
+    lthread_parms = {}
+    for key in thread_parms:
+        if thread_parms[key].startswith('('):
+            inner_list = []
+            inner_tuple_txt = thread_parms[key][1:-1]
+            parts = inner_tuple_txt.split(",")
+            for tpart in parts:
+                inner_list.append(find_attribute_value(tpart))
+            ret_parm = tuple(inner_list)
+        else:
+            ret_parm = find_attribute_value(thread_parms[key])
+        lthread_parms[key] = ret_parm
+    return lthread_parms
+
+
+def handle_objs_parallel(obj_list, thread_parms):
+    """
+    Function to handle objs specified in list
+    Args:
+        obj_list (list): List can be obj of pod, pvc, etc
+        thread_parms (dictionary): dictionary representation of keyword
+            parameters.  Each entry is indexed by the keyword parameter,
+            and each value is a string representation of a local variable,
+            a path reference, or a tuple of local variables
+            and path references.
 
     Returns:
-        bool: True if obj deleted else False
+        bool: True if obj handled.  If not, exception is probably thrown
 
     """
     threads = list()
+    lthread_parms = {}
+    for key in thread_parms:
+        info = thread_parms[key].split('.')
+        dvalue = vars()[info[0]]
+        for nattr in info[1:]:
+            dvalue = getattr(dvalue, nattr)
+        lthread_parms[key] = dvalue
     for obj in obj_list:
-        process = threading.Thread(target=obj.delete)
+        process = threading.Thread(**lthread_parms)
         process.start()
         threads.append(process)
     for process in threads:
         process.join()
     return True
+
+
+def delete_objs_parallel(obj_list):
+    """
+    Call handle_objs_parallel and delete the elements in obj_list
+    """
+    return handle_objs_parallel(obj_list, dict(target="obj.delete"))
+
+
+def create_pvcs_parallel(obj_list):
+    return handle_objs_parallel(
+        obj_list,
+        dict(
+            target="helpers.wait_for_resource_state",
+            args=("obj", "constants.STATUS_BOUND", )
+        )
+    )
 
 
 def memory_leak_analysis(median_dict):
@@ -2101,3 +2181,42 @@ def modify_osd_replica_count(resource_name, replica_count):
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     resource_name = '-'.join(resource_name.split('-')[0:4])
     return ocp_obj.patch(resource_name=resource_name, params=params)
+
+
+def make_csv_output(data, csv_text):
+        """
+        Write /tmp cvs data
+
+        Args:
+            data (dictionary): data to be stored as csv output
+            csv_text (dictionary): formatting data
+
+            keys in csv_text include:
+                csv_text['adjective'] -- Text added to logging.info message
+                csv_text['prefix'] -- Optional
+                csv_text['inner_data'] -- Required
+                csv_text['suffix'] -- Optional
+
+            The file name created is /tmp/prefix-inner_data-suffix.csv
+
+        """
+        # TODO: Update below code with google API, to record value in spreadsheet
+        # TODO: For now observing Google API limit to write more than 100 writes
+        inner_data_part = csv_text.get('inner_data', "")
+        prefix_part = csv_text.get('prefix', "")
+        if prefix_part:
+            if not prefix_part.endswith("-"):
+                prefix_part = prefix_part + "-"
+        suffix_part = csv_text.get('suffix', "")
+        if suffix_part:
+            if not suffix_part.startswith("-"):
+                suffix_part = "-" + suffix_part
+        file_name = f"/tmp/{prefix_part}{inner_data_part}{suffix_part}.csv"
+        adjective = csv_text.get('adjective', "")
+        csv_obj = csv.writer(open(file_name, "w"))
+        for k, v in data.items():
+            csv_obj.writerow([k, v])
+        logging.info(
+            f"{adjective} data present in f{file_name} file"
+        )
+
