@@ -165,9 +165,8 @@ def test_get_storageutilization_size_empty100percent(
         # with 100% utilization target and an empty cluster, the pvc size
         # necessary to utilize all storage space on the cluster should match
         # the value of MAX AVAIL
-        expected_pvc_size_bytes = \
-            ceph_df_json_output_clusterempty['pools'][2]['stats']['max_avail']
-        expected_pvc_size = int(expected_pvc_size_bytes / 2**30)
+        pool_stats = ceph_df_json_output_clusterempty['pools'][2]['stats']
+        expected_pvc_size = int(pool_stats['max_avail'] / 2**30)  # GiB
         assert pvc_size == expected_pvc_size
 
 
