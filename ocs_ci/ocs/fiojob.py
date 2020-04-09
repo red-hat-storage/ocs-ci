@@ -60,7 +60,7 @@ def get_storageutilization_size(target_percentage, ceph_pool_name):
     #    likely ocs-ci bug, after the release it's a product bug),
     #  - pool is missing (likely a product bug)
     # either way, the fixture can't continue ...
-    assert ceph_pool is not None, f"pool {ceph_pool_name} should exist"
+    assert ceph_pool is not None, f"Pool: {ceph_pool_name} doesn't exist!"
     # ... to compute PVC size (values in bytes)
     total = ceph_pool["stats"]["max_avail"] + ceph_total_stored
     max_avail_gi = ceph_pool['stats']['max_avail'] / 2**30
@@ -104,7 +104,9 @@ def get_timeout(fio_min_mbps, pvc_size):
       fio_min_mbps (int): minimal write speed in MiB/s
       pvc_size (int): size of PVC in GiB, which will be used to writing
 
-    Returns: write_timeout in seconds
+    Returns:
+        int: write_timeout in seconds
+
     """
     # based on min. fio write speed of the enviroment ...
     logger.info(
@@ -126,7 +128,9 @@ def wait_for_job_completion(namespace, timeout, error_msg):
     finish instead, then ask for a name of the successful pod and use it
     to get logs ...)
 
-    Returns: name of Pod resource of the finished job
+    Returns:
+        str: name of Pod resource of the finished job
+
     """
     ocp_pod = ocp.OCP(kind="Pod", namespace=namespace)
     try:
