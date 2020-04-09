@@ -143,9 +143,9 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
                     launch_time = instance.launch_time
                     current_time = datetime.datetime.now(launch_time.tzinfo)
                     running_time = current_time - launch_time
+                    logger.info(f"Instance {instance} running time is {running_time}")
                     if running_time.seconds > allowed_running_time:
                         return True
-                    logger.info(f"Instance {instance} running time is {running_time}")
         return False
 
     aws = AWS(region_name=region_name)
