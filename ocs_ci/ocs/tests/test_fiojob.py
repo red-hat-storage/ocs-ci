@@ -7,7 +7,6 @@ import textwrap
 
 import pytest
 import yaml
-import yaml.parser
 
 from ocs_ci.ocs import fiojob
 

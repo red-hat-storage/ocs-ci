@@ -14,8 +14,8 @@ fixtures (see :py:mod:`ocs_ci.utility.workloadfixture`).
 
 import logging
 import time
+
 import yaml
-import yaml.parser
 
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
