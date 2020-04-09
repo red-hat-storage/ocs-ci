@@ -145,7 +145,8 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
                     running_time = current_time - launch_time
                     if running_time.seconds > allowed_running_time:
                         return True
-            return False
+                    logger.info(f"Instance {instance} running time is {running_time}")
+        return False
 
     aws = AWS(region_name=region_name)
     clusters_to_delete = list()
@@ -175,7 +176,7 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
     # Get all cloudformation based clusters to delete
     cf_clusters_to_delete = list()
     for vpc_name in cloudformation_vpc_names:
-        instance_dicts = aws.get_instances_by_name_pattern(vpc_name.strip('-vpc'))
+        instance_dicts = aws.get_instances_by_name_pattern(f"{vpc_name.strip('-vpc')}*")
         ec2_instances = [aws.get_ec2_instance(instance_dict['id']) for instance_dict in instance_dicts]
         if not ec2_instances:
             continue
