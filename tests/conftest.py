@@ -12,7 +12,9 @@ from datetime import datetime
 import random
 from math import floor
 
-from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo, get_ocp_version
+from ocs_ci.utility.utils import (
+    TimeoutSampler, get_rook_repo, get_ocp_version, ceph_health_check
+)
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.utility import aws
@@ -910,6 +912,7 @@ def tier_marks_name():
 @pytest.fixture(scope='function', autouse=True)
 def health_checker(request, tier_marks_name):
     node = request.node
+    request.addfinalizer(ceph_health_check)
     for mark in node.iter_markers():
         if mark.name in tier_marks_name:
             log.info("Checking for Ceph Health OK ")
@@ -956,7 +959,7 @@ def cluster(request, log_cli_level):
         deployer.deploy_cluster(log_cli_level)
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
 def environment_checker(request):
     node = request.node
     # List of marks for which we will ignore the leftover checker
