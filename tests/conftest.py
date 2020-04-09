@@ -353,9 +353,8 @@ def storageclass_factory_fixture(
             sc_obj = helpers.create_resource(**custom_data)
         else:
             secret = secret or secret_factory(interface=interface)
-            ceph_pool = ceph_pool_factory(interface)
             if interface == constants.CEPHBLOCKPOOL:
-                interface_name = ceph_pool.name
+                interface_name = constants.DEFAULT_BLOCKPOOL
             elif interface == constants.CEPHFILESYSTEM:
                 interface_name = helpers.get_cephfs_data_pool_name()
 
@@ -367,7 +366,6 @@ def storageclass_factory_fixture(
                 reclaim_policy=reclaim_policy
             )
             assert sc_obj, f"Failed to create {interface} storage class"
-            sc_obj.ceph_pool = ceph_pool
             sc_obj.secret = secret
 
         instances.append(sc_obj)
