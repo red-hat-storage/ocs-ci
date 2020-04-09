@@ -57,8 +57,10 @@ def test_pod_io(
         f"{post_upgrade_block_pods}"
     )
     pods = (
-        pre_upgrade_block_pods + post_upgrade_block_pods +
-        pre_upgrade_filesystem_pods + post_upgrade_filesystem_pods
+        pre_upgrade_block_pods
+        + post_upgrade_block_pods
+        + pre_upgrade_filesystem_pods
+        + post_upgrade_filesystem_pods
     )
     job_obj = ocp.OCP(kind=constants.JOB, namespace=fio_project.namespace)
     for pod in pods:
