@@ -956,7 +956,7 @@ def cluster(request, log_cli_level):
         deployer.deploy_cluster(log_cli_level)
 
 
-@pytest.fixture(scope='class')
+@pytest.fixture()
 def environment_checker(request):
     node = request.node
     # List of marks for which we will ignore the leftover checker
