@@ -20,7 +20,11 @@ def test_start_pre_upgrade_pod_io(pre_upgrade_pods_running_io):
     """
     for pod in pre_upgrade_pods_running_io:
         log.info("Waiting for all fio pods to come up")
-        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING, timeout=600)
+        helpers.wait_for_resource_state(
+            pod,
+            constants.STATUS_RUNNING,
+            timeout=600
+        )
 
 
 @post_upgrade
@@ -52,10 +56,17 @@ def test_pod_io(
         f"Pods using block device created after upgrade: "
         f"{post_upgrade_block_pods}"
     )
-    pods = pre_upgrade_block_pods + post_upgrade_block_pods + pre_upgrade_filesystem_pods + post_upgrade_filesystem_pods
+    pods = (
+        pre_upgrade_block_pods + post_upgrade_block_pods +
+        pre_upgrade_filesystem_pods + post_upgrade_filesystem_pods
+    )
     job_obj = ocp.OCP(kind=constants.JOB, namespace=fio_project.namespace)
     for pod in pods:
         log.info(f"Checking that fio is still running")
-        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING, timeout=600)
+        helpers.wait_for_resource_state(
+            pod,
+            constants.STATUS_RUNNING,
+            timeout=600
+        )
         job_name = pod.get_labels().get('job-name')
         job_obj.delete(resource_name=job_name)
