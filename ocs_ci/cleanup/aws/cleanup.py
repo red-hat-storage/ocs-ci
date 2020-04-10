@@ -144,9 +144,9 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
                     current_time = datetime.datetime.now(launch_time.tzinfo)
                     running_time = current_time - launch_time
                     logger.info(
-                        f"Instance {instance} running time is {running_time} "
-                        f"hours while the allowed running time for it "
-                        f"is {allowed_running_time/3600} hours."
+                        f"Instance {[tag['Value'] for tag in instance.tags if tag['Key'] == 'Name'][0]} "
+                        f"(id: {instance.id}) running time is {running_time} hours while the allowed"
+                        f" running time for it is {hours} hours"
                     )
                     if running_time.seconds > allowed_running_time:
                         return True
