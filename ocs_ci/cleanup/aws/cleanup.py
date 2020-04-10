@@ -21,7 +21,7 @@ from ocs_ci.cleanup.aws import defaults
 FORMAT = (
     '%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s'
 )
-logging.basicConfig(format=FORMAT, level=logging.DEBUG)
+logging.basicConfig(format=FORMAT, level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -143,7 +143,11 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
                     launch_time = instance.launch_time
                     current_time = datetime.datetime.now(launch_time.tzinfo)
                     running_time = current_time - launch_time
-                    logger.info(f"Instance {instance} running time is {running_time} hours")
+                    logger.info(
+                        f"Instance {instance} running time is {running_time} "
+                        f"hours while the allowed running time for it "
+                        f"is {allowed_running_time/3600} hours."
+                    )
                     if running_time.seconds > allowed_running_time:
                         return True
         return False
