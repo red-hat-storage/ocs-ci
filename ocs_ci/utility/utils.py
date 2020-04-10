@@ -1299,7 +1299,7 @@ def ceph_health_check_base(namespace=None):
     )
     health = run_cmd(f"oc -n {namespace} exec {tools_pod} ceph health")
     if health.strip() == "HEALTH_OK":
-        log.info("HEALTH_OK, install successful.")
+        log.info("Ceph cluster health is HEALTH_OK.")
         return True
     else:
         raise CephHealthException(
