@@ -9,7 +9,10 @@ from ocs_ci.framework.testlib import (
 from tests.sanity_helpers import Sanity
 from tests.helpers import wait_for_ct_pod_recovery
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs, get_deviceset_pvcs
-from ocs_ci.ocs.resources.pod import get_osd_deployments, get_osd_pods, get_pod_node, get_operator_pods
+from ocs_ci.ocs.resources.pod import (
+    get_osd_deployments, get_osd_pods, get_pod_node, get_operator_pods, get_osd_prepare_pods
+)
+from ocs_ci.ocs.resources.ocs import get_job_obj
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +142,7 @@ class TestDiskFailures(ManageTest):
     @pytest.mark.polarion_id("OCS-2172")
     def test_recovery_from_volume_deletion(self, nodes, pvc_factory, pod_factory):
         """
-        Test recovery cluster recovery from disk deletion from the platform side.
+        Test cluster recovery from disk deletion from the platform side.
         Based on documented procedure detailed in
         https://bugzilla.redhat.com/show_bug.cgi?id=1787236#c16
 
@@ -175,6 +178,13 @@ class TestDiskFailures(ManageTest):
         logger.info(f"Getting the node that has the OSD pod {osd_pod.name} running on")
         osd_node = get_pod_node(osd_pod)
         volume_size = osd_pvc.size
+        osd_prepare_pods = get_osd_prepare_pods()
+        osd_prepare_pod = [
+            pod for pod in osd_prepare_pods if pod.get().get('metadata')
+            .get('labels').get(constants.CEPH_ROOK_IO_PVC_LABEL) == claim_name
+        ][0]
+        osd_prepare_job_name = osd_prepare_pod.get().get('metadata').get('labels').get('job-name')
+        osd_prepare_job = get_job_obj(osd_prepare_job_name)
 
         # Get the corresponding OSD deployment
         logger.info(f"Getting the corresponding OSD deployment for OSD PVC {claim_name}")
@@ -187,11 +197,17 @@ class TestDiskFailures(ManageTest):
         logger.info(f"Deleting volume {backing_volume} from the platform side")
         nodes.detach_volume(backing_volume, osd_node)
 
-        # Delete the OSD deployment and the OSD PVC
-        osd_deployment_name = osd_deployment.ocp.resource_name
+        # Delete the OSD deployment
+        osd_deployment_name = osd_deployment.name
         logger.info(f"Deleting OSD deployment {osd_deployment_name}")
         osd_deployment.delete()
-        osd_deployment.ocp.wait_for_delete(resource_name=osd_deployment_name)
+        osd_deployment.ocp.wait_for_delete(resource_name=osd_deployment_name, timeout=120)
+
+        # Delete the OSD prepare job
+        osd_prepare_job.delete()
+        osd_prepare_job.ocp.wait_for_delete(resource_name=osd_prepare_job_name, timeout=120)
+
+        # Delete the OSD PVC
         osd_pvc_name = osd_pvc.name
         logger.info(f"Deleting OSD PVC {osd_pvc_name}")
         osd_pvc.delete()

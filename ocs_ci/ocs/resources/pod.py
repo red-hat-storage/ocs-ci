@@ -806,6 +806,27 @@ def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
     return osd_pods
 
 
+def get_osd_prepare_pods(
+    osd_prepare_label=constants.OSD_PREPARE_APP_LABEL, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+):
+    """
+    Fetches info about osd prepare pods in the cluster
+
+    Args:
+        osd_prepare_label (str): label associated with osd prepare pods
+            (default: constants.OSD_PREPARE_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list : of osd pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    osds = get_pods_having_label(osd_prepare_label, namespace)
+    osd_pods = [Pod(**osd) for osd in osds]
+    return osd_pods
+
+
 def get_osd_deployments(osd_label=constants.OSD_APP_LABEL, namespace=None):
     """
     Fetches info about osd deployments in the cluster
