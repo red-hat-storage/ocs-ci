@@ -1,12 +1,15 @@
 import logging
 import pytest
+import random
 
 from ocs_ci.ocs import node, constants
 from ocs_ci.framework.testlib import (
-    tier4, tier4b, ignore_leftovers, ManageTest, aws_platform_required
+    tier4, tier4b, ignore_leftovers, ManageTest, aws_platform_required, vsphere_platform_required
 )
 from tests.sanity_helpers import Sanity
 from tests.helpers import wait_for_ct_pod_recovery
+from ocs_ci.ocs.resources.pvc import get_deviceset_pvs, get_deviceset_pvcs
+from ocs_ci.ocs.resources.pod import get_osd_deployments, get_osd_pods, get_pod_node, get_operator_pods
 
 logger = logging.getLogger(__name__)
 
@@ -132,13 +135,103 @@ class TestDiskFailures(ManageTest):
         self.sanity_helpers.health_check()
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
+    @vsphere_platform_required
+    @pytest.mark.polarion_id("OCS-0000")
     def test_recovery_from_volume_deletion(self, nodes, pvc_factory, pod_factory):
         """
+        Test recovery cluster recovery from disk deletion from the platform side.
+        Based on documented procedure detailed in
+        https://bugzilla.redhat.com/show_bug.cgi?id=1787236#c16
 
         """
-        # Get a data volume
-        data_volume = nodes.get_data_volumes()[0]
-        # Get the worker node according to the volume attachment
-        worker = nodes.get_node_by_attached_volume(data_volume)
+        logger.info("Picking a PV which will be deleted from the platform side")
+        osd_pvs = get_deviceset_pvs()
+        osd_pv = random.choice(osd_pvs)
+        osd_pv_name = osd_pv.ocp.resource_name
+        # get the claim name
+        logger.info(f"Getting the claim name for OSD PV {osd_pv_name}")
+        claim_name = osd_pv.get().get('spec').get('claimRef').get('name')
 
-        nodes.delete_volume(data_volume, worker)
+        # Get the backing volume name
+        logger.info(f"Getting the backing volume name for PV {osd_pv_name}")
+        backing_volume = nodes.get_data_volumes(pvs=[osd_pv])[0]
+
+        # Get the corresponding PVC
+        logger.info(f"Getting the corresponding PVC of PV {osd_pv_name}")
+        osd_pvcs = get_deviceset_pvcs()
+        osd_pvcs_count = len(osd_pvcs)
+        osd_pvc = [ds for ds in osd_pvcs if ds.get().get('metadata').get('name') == claim_name][0]
+
+        # Get the corresponding OSD pod
+        logger.info(f"Getting the corresponding OSD pod of PVC {osd_pvc.ocp.resource_name}")
+        osd_pods = get_osd_pods()
+        osd_pods_count = len(osd_pods)
+        osd_pod = [
+            osd_pod for osd_pod in osd_pods if osd_pod.get()
+            .get('metadata').get('labels').get('ceph.rook.io/pvc') == claim_name
+        ][0]
+
+        # Get the node that has the OSD pod running on
+        logger.info(f"Getting the node that has the OSD pod {osd_pod.ocp.resource_name} running on")
+        osd_node = get_pod_node(osd_pod)
+        volume_size = osd_pvc.size
+
+        # Get the corresponding OSD deployment
+        logger.info(f"Getting the corresponding OSD deployment for OSD PVC {claim_name}")
+        osd_deployment = [
+            osd_pod for osd_pod in get_osd_deployments() if osd_pod.get()
+            .get('metadata').get('labels').get('ceph.rook.io/pvc') == claim_name
+        ][0]
+
+        # Delete the volume from the platform side
+        logger.info(f"Deleting volume {backing_volume} from the platform side")
+        nodes.delete_volume(backing_volume, osd_node)
+
+        # Delete the OSD deployment and the OSD PVC
+        osd_deployment_name = osd_deployment.ocp.resource_name
+        logger.info(f"Deleting OSD deployment {osd_deployment_name}")
+        osd_deployment.delete()
+        assert osd_deployment.ocp.wait_for_delete(resource_name=osd_deployment_name), (
+            f"OSD deployment {osd_deployment_name} failed to get deleted"
+        )
+        osd_pvc_name = osd_pvc.ocp.resource_name
+        logger.info(f"Deleting OSD PVC {osd_pvc_name}")
+        osd_pvc.delete()
+        assert osd_pvc.ocp.wait_for_delete(resource_name=osd_pvc_name), (
+            f"OSD PVC {osd_pvc_name} failed to get deleted"
+        )
+
+        # Recreate a volume from the platform side
+        logger.info("Creating a replacing volume from the platform side")
+        nodes.create_and_attach_volume(osd_node, volume_size)
+
+        # Delete the rook ceph operator pod to trigger reconciliation
+        rook_operator_pod = get_operator_pods()[0]
+        logger.info(f"deleting Rook Ceph operator pod {rook_operator_pod.ocp.resource_name}")
+        rook_operator_pod.delete()
+
+        timeout = 600
+        # Wait for OSD PVC to get created and reach Bound state
+        logger.info("Waiting for a new OSD PVC to get created and reach Bound state")
+        assert osd_pvc.ocp.wait_for_resource(
+            timeout=timeout, condition=constants.STATUS_BOUND, selector=constants.OSD_PVC_GENERIC_LABEL,
+            resource_count=osd_pvcs_count
+        ), (
+            f"Cluster recovery failed after {timeout} seconds. "
+            f"Expected to have {osd_pvcs_count} OSD PVCs in status Bound. Current OSD PVCs status: "
+            f"{[pvc.ocp.get_resource(pvc.get().get('metadata').get('name'), 'STATUS') for pvc in get_deviceset_pvcs()]}"
+        )
+        # Wait for OSD pod to get created and reach Running state
+        logger.info("Waiting for a new OSD pod to get created and reach Running state")
+        assert osd_pod.ocp.wait_for_resource(
+            timeout=timeout, condition=constants.STATUS_RUNNING, selector=constants.OSD_APP_LABEL,
+            resource_count=osd_pods_count
+        ), (
+            f"Cluster recovery failed after {timeout} seconds. "
+            f"Expected to have {osd_pods_count} OSD pods in status Running. Current OSD pods status: "
+            f"{[osd_pod.ocp.get_resource(pod.get().get('metadata').get('name'), 'STATUS') for pod in get_osd_pods()]}"
+        )
+
+        # Validate cluster is still functional
+        self.sanity_helpers.health_check(tries=80)
+        self.sanity_helpers.create_resources(pvc_factory, pod_factory)

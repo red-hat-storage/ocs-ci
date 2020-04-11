@@ -590,7 +590,7 @@ class VSPHERE(object):
 
     def get_vm_and_volume_by_volume_path(self, vms, volume_path):
         """
-        Get the VM and the volume objects according to the volume path
+        Get the VM and the volume objects according to the volume path and the list of VMs
 
         Args:
             vms (list): VM (vm) objects

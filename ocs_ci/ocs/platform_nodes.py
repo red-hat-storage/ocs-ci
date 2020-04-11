@@ -198,35 +198,27 @@ class VMWareNodes(NodesBase):
             vms.extend(node_vms)
         return vms
 
-    def get_data_volumes(self):
+    def get_data_volumes(self, pvs=None):
         """
         Get the data vSphere volumes
+
+        Args:
+            pvs (list): PV OCS objects
 
         Returns:
             list: vSphere volumes
 
         """
-        pvs = get_deviceset_pvs()
+        if not pvs:
+            pvs = get_deviceset_pvs()
         return [
             pv.get().get('spec').get('vsphereVolume').get('volumePath') for pv in pvs
         ]
 
     def get_node_by_attached_volume(self, volume):
-        """
-
-        Args:
-            volume:
-
-        Returns:
-
-        """
-        ocp_nodes = get_node_objs()
-        vms = self.get_vms(ocp_nodes)
-        vm, _ = self.vsphere.get_vm_and_volume_by_volume_path(vms, volume)
-        return [
-            node for node in ocp_nodes if node.get()
-            .get('metadata').get('name') == vm.name
-        ][0]
+        raise NotImplementedError(
+            "get node by attached volume functionality is not implemented"
+        )
 
     def stop_nodes(self, nodes, force=True):
         """
@@ -285,6 +277,18 @@ class VMWareNodes(NodesBase):
         """
         vm = self.get_vms([node])[0]
         self.vsphere.delete_volume(volume, vm)
+
+    def create_and_attach_volume(self, node, size):
+        """
+        Create a new volume and attach it to the given VM
+
+        Args:
+            node (OCS): The OCS object representing the node
+            size (int): The size in GB for the new volume
+
+        """
+        vm = self.get_vms([node])[0]
+        self.vsphere.add_disk(vm, size)
 
     def attach_volume(self, node, volume):
         raise NotImplementedError(
