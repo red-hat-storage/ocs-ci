@@ -264,19 +264,22 @@ class VMWareNodes(NodesBase):
         )
         self.vsphere.restart_vms(vms, force=force)
 
-    def delete_volume(self, volume, node):
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
         """
-        Detach and delete a disk from a VM
+        Detach disk from a VM and delete from datastore if specified
 
         Args:
             volume (str): Volume path
             node (OCS): The OCS object representing the node
-
-        Returns:
+            delete_from_backend (bool): True for deleting the disk (vmdk)
+                from backend datastore, False otherwise
 
         """
         vm = self.get_vms([node])[0]
-        self.vsphere.delete_volume(volume, vm)
+        self.vsphere.remove_disk(
+            vm=vm, identifier=volume, key='volume_path',
+            datastore=delete_from_backend
+        )
 
     def create_and_attach_volume(self, node, size):
         """
@@ -445,7 +448,7 @@ class AWSNodes(NodesBase):
         )
         self.aws.terminate_ec2_instances(instances=instances, wait=wait)
 
-    def detach_volume(self, volume, node=None):
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
         """
         Detach a volume from an EC2 instance
 

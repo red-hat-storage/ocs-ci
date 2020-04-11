@@ -136,7 +136,7 @@ class TestDiskFailures(ManageTest):
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
     @vsphere_platform_required
-    @pytest.mark.polarion_id("OCS-0000")
+    @pytest.mark.polarion_id("OCS-2172")
     def test_recovery_from_volume_deletion(self, nodes, pvc_factory, pod_factory):
         """
         Test recovery cluster recovery from disk deletion from the platform side.
@@ -163,7 +163,7 @@ class TestDiskFailures(ManageTest):
         osd_pvc = [ds for ds in osd_pvcs if ds.get().get('metadata').get('name') == claim_name][0]
 
         # Get the corresponding OSD pod
-        logger.info(f"Getting the corresponding OSD pod of PVC {osd_pvc.ocp.resource_name}")
+        logger.info(f"Getting the corresponding OSD pod of PVC {osd_pvc.name}")
         osd_pods = get_osd_pods()
         osd_pods_count = len(osd_pods)
         osd_pod = [
@@ -172,7 +172,7 @@ class TestDiskFailures(ManageTest):
         ][0]
 
         # Get the node that has the OSD pod running on
-        logger.info(f"Getting the node that has the OSD pod {osd_pod.ocp.resource_name} running on")
+        logger.info(f"Getting the node that has the OSD pod {osd_pod.name} running on")
         osd_node = get_pod_node(osd_pod)
         volume_size = osd_pvc.size
 
@@ -180,26 +180,22 @@ class TestDiskFailures(ManageTest):
         logger.info(f"Getting the corresponding OSD deployment for OSD PVC {claim_name}")
         osd_deployment = [
             osd_pod for osd_pod in get_osd_deployments() if osd_pod.get()
-            .get('metadata').get('labels').get('ceph.rook.io/pvc') == claim_name
+            .get('metadata').get('labels').get(constants.CEPH_ROOK_IO_PVC_LABEL) == claim_name
         ][0]
 
         # Delete the volume from the platform side
         logger.info(f"Deleting volume {backing_volume} from the platform side")
-        nodes.delete_volume(backing_volume, osd_node)
+        nodes.detach_volume(backing_volume, osd_node)
 
         # Delete the OSD deployment and the OSD PVC
         osd_deployment_name = osd_deployment.ocp.resource_name
         logger.info(f"Deleting OSD deployment {osd_deployment_name}")
         osd_deployment.delete()
-        assert osd_deployment.ocp.wait_for_delete(resource_name=osd_deployment_name), (
-            f"OSD deployment {osd_deployment_name} failed to get deleted"
-        )
-        osd_pvc_name = osd_pvc.ocp.resource_name
+        osd_deployment.ocp.wait_for_delete(resource_name=osd_deployment_name)
+        osd_pvc_name = osd_pvc.name
         logger.info(f"Deleting OSD PVC {osd_pvc_name}")
         osd_pvc.delete()
-        assert osd_pvc.ocp.wait_for_delete(resource_name=osd_pvc_name), (
-            f"OSD PVC {osd_pvc_name} failed to get deleted"
-        )
+        osd_pvc.ocp.wait_for_delete(resource_name=osd_pvc_name)
 
         # Recreate a volume from the platform side
         logger.info("Creating a replacing volume from the platform side")
@@ -207,7 +203,7 @@ class TestDiskFailures(ManageTest):
 
         # Delete the rook ceph operator pod to trigger reconciliation
         rook_operator_pod = get_operator_pods()[0]
-        logger.info(f"deleting Rook Ceph operator pod {rook_operator_pod.ocp.resource_name}")
+        logger.info(f"deleting Rook Ceph operator pod {rook_operator_pod.name}")
         rook_operator_pod.delete()
 
         timeout = 600
