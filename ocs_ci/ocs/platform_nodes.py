@@ -73,7 +73,7 @@ class NodesBase(object):
             "Restart nodes functionality is not implemented"
         )
 
-    def detach_volume(self, volume, node):
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
         raise NotImplementedError(
             "Detach volume functionality is not implemented"
         )
