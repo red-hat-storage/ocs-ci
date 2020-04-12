@@ -77,7 +77,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
                 pod_factory(
                     interface=interface,
                     pvc=pvc_obj,
-                    status=False
+                    status=None
                 )
             )
         for pod in self.pod_objs:
@@ -224,7 +224,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
                 pod_factory(
                     interface=interface,
                     pvc=pvc_obj,
-                    status=False
+                    status=None
                 )
             )
         for pod in new_pod_objs:
