@@ -911,19 +911,29 @@ def tier_marks_name():
 
 @pytest.fixture(scope='function', autouse=True)
 def health_checker(request, tier_marks_name):
+    def finalizer():
+        try:
+            ceph_health_check_base()
+            log.info("Ceph health check passed at teardown")
+        except CephHealthException:
+            log.info("Ceph health check failed at teardown")
+            # Retrying to increase the chance the cluster health will be OK
+            # for next test
+            ceph_health_check()
+            raise
     node = request.node
-    request.addfinalizer(ceph_health_check)
+    request.addfinalizer(finalizer)
     for mark in node.iter_markers():
         if mark.name in tier_marks_name:
             log.info("Checking for Ceph Health OK ")
             try:
                 status = ceph_health_check_base()
                 if status:
-                    log.info("Health check passed")
+                    log.info("Ceph health check passed at setup")
                     return
             except CephHealthException:
                 # skip because ceph is not in good health
-                pytest.skip("Ceph Health check failed")
+                pytest.skip("Ceph health check failed at setup")
 
 
 @pytest.fixture(scope="session", autouse=True)
