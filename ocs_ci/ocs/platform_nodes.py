@@ -454,6 +454,10 @@ class AWSNodes(NodesBase):
 
         Args:
             volume (Volume): The volume to delete
+            node (OCS): The OCS object representing the node
+            delete_from_backend (bool): True for deleting the disk from the
+                storage backend, False otherwise
+
 
         """
         self.aws.detach_volume(volume)

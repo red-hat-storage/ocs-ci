@@ -171,7 +171,7 @@ class TestDiskFailures(ManageTest):
         osd_pods_count = len(osd_pods)
         osd_pod = [
             osd_pod for osd_pod in osd_pods if osd_pod.get()
-            .get('metadata').get('labels').get('ceph.rook.io/pvc') == claim_name
+            .get('metadata').get('labels').get(constants.CEPH_ROOK_IO_PVC_LABEL) == claim_name
         ][0]
 
         # Get the node that has the OSD pod running on
