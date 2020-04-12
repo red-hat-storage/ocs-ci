@@ -29,6 +29,6 @@ class TestAddCapacity(ManageTest):
             selector='app=rook-ceph-osd',
             resource_count=result * 3
         )
-        assert ceph_health_check(
+        ceph_health_check(
             namespace=config.ENV_DATA['cluster_namespace'], tries=80
-        ), f"Ceph health is not OK"
+        )
