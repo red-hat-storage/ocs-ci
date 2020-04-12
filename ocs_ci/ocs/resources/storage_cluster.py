@@ -236,7 +236,7 @@ def ocs_install_verification(
     if not skip_osd_distribution_check:
         log.info("Verifying OSDs are distributed evenly across worker nodes")
         ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
-        osds = ocp_pod_obj.get(selector=constants.OSD_APP_LABEL)
+        osds = ocp_pod_obj.get(selector=constants.OSD_APP_LABEL)['items']
         deviceset_count = get_deviceset_count()
         node_names = [osd['spec']['nodeName'] for osd in osds]
         for node in node_names:
