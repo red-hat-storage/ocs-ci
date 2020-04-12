@@ -150,7 +150,7 @@ class TestDiskFailures(ManageTest):
         logger.info("Picking a PV which will be deleted from the platform side")
         osd_pvs = get_deviceset_pvs()
         osd_pv = random.choice(osd_pvs)
-        osd_pv_name = osd_pv.ocp.resource_name
+        osd_pv_name = osd_pv.name
         # get the claim name
         logger.info(f"Getting the claim name for OSD PV {osd_pv_name}")
         claim_name = osd_pv.get().get('spec').get('claimRef').get('name')
