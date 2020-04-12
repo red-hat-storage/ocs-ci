@@ -819,7 +819,7 @@ def get_osd_prepare_pods(
             (default: defaults.ROOK_CLUSTER_NAMESPACE)
 
     Returns:
-        list : of osd pod objects
+        list: OSD prepare pod objects
     """
     namespace = namespace or config.ENV_DATA['cluster_namespace']
     osds = get_pods_having_label(osd_prepare_label, namespace)
@@ -838,7 +838,7 @@ def get_osd_deployments(osd_label=constants.OSD_APP_LABEL, namespace=None):
             (default: defaults.ROOK_CLUSTER_NAMESPACE)
 
     Returns:
-        list : of osd deployment OCS objects
+        list: OSD deployment OCS instances
     """
     namespace = namespace or config.ENV_DATA['cluster_namespace']
     osds = get_deployments_having_label(osd_label, namespace)
