@@ -657,7 +657,7 @@ class MCG(object):
 
     def exec_mcg_cmd(self, cmd, namespace=None):
         """
-        Runs the MCG CLI through the noobaa-operator pod
+        Executes an MCG CLI command through the noobaa-operator pod's CLI binary
 
         Args:
             cmd (str): The command to run
