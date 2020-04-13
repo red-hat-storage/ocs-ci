@@ -22,7 +22,8 @@ from ocs_ci.framework.testlib import (
 from tests.sanity_helpers import Sanity
 from ocs_ci.ocs.resources import pod
 from tests.helpers import (
-    label_worker_node, remove_label_from_worker_node)
+    label_worker_node, remove_label_from_worker_node
+)
 from tests import helpers
 
 
@@ -37,8 +38,10 @@ def teardown(request):
 
     """
     def finalizer():
-        # Make sure that all cluster's nodes are in 'Ready' state and if not,
-        # change them back to 'Ready' state by marking them as schedulable
+        """
+        Make sure that all cluster's nodes are in 'Ready' state and if not,
+        change them back to 'Ready' state by marking them as schedulable
+        """
         scheduling_disabled_nodes = [
             n.name for n in get_node_objs() if n.ocp.get_resource_status(
                 n.name
@@ -263,8 +266,17 @@ class TestNodesMaintenance(ManageTest):
         interface
     ):
         """
-
-        Simultaneous drain of two OCS nodes
+        OCS-2128/OCS-2129:
+        - Create PVCs and start IO on DC based app pods
+        - Add one extra node in two of the AZs and label the nodes
+          with OCS storage label
+        - Maintenance (mark as unscheduable and drain) 2 worker nodes
+          simultaneously
+        - Confirm that OCS and DC pods are in running state
+        - Remove unscheduled nodes
+        - Check cluster functionality by creating resources
+          (pools, storageclasses, PVCs, pods - both CephFS and RBD)
+        - Check cluster and Ceph health
 
         """
         # Get OSD running nodes
@@ -296,8 +308,10 @@ class TestNodesMaintenance(ManageTest):
             machine.get_machine_from_node_name(osd_running_worker_node)
             for osd_running_worker_node in osd_running_worker_nodes[:2]
         ]
-        log.info(f"{osd_running_worker_nodes} associated "
-                 f"machine are {machine_names}")
+        log.info(
+            f"{osd_running_worker_nodes} associated "
+            f"machine are {machine_names}"
+        )
 
         # Get the machineset name using machine name
         machineset_names = [
