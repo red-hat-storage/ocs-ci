@@ -304,7 +304,6 @@ class VSPHEREUPI(VSPHEREBASE):
         self.cidr = config.ENV_DATA.get('machine_cidr')
         self.vm_network = config.ENV_DATA.get('vm_network')
 
-
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
             super(VSPHEREUPI.OCPDeployment, self).__init__()
