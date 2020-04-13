@@ -2101,3 +2101,18 @@ def modify_osd_replica_count(resource_name, replica_count):
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     resource_name = '-'.join(resource_name.split('-')[0:4])
     return ocp_obj.patch(resource_name=resource_name, params=params)
+
+def checkLSO():
+    """
+    Function to check if LSO is present or not
+    {To be used for BM Cluster}
+
+    Returns: True ;if LSO present
+             False ;if LSO not present
+    """
+    command = "get localvolume -n local-storage "
+    status = OCP.exec_oc_cmd(command, out_yaml_format=False)
+    if "No resources found" in status:
+        return False
+    else:
+        return True
