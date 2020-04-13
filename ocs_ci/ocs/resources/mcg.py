@@ -668,7 +668,7 @@ class MCG(object):
 
         """
 
-        namespace = f'-n {namespace}' if namespace else ""
+        namespace = f'-n {namespace}' if namespace else f'-n {self.namespace}'
         return self.operator_pod.exec_cmd_on_pod(
             f'{constants.NOOBAA_OPERATOR_POD_CLI_PATH} {cmd} {namespace}',
             out_yaml_format=False
