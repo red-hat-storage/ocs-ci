@@ -7,11 +7,12 @@ from tests.helpers import get_worker_nodes
 from ocs_ci.framework.pytest_customization.marks import tier4a
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
-    tier4, ManageTest, aws_platform_required, ignore_leftovers, ipi_deployment_required
-)
+    tier4, ManageTest, aws_platform_required, ignore_leftovers, ipi_deployment_required,
+    config)
 from ocs_ci.ocs import (
     machine, constants, ocp, node
 )
+from ocs_ci.utility.utils import ceph_health_check
 from tests.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
@@ -97,4 +98,8 @@ class TestNodeReplacement(ManageTest):
         self.sanity_helpers.delete_resources()
         # Verify everything running fine
         log.info("Verifying All resources are Running and matches expected result")
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(cluster_check=False)
+        log.info("Verifying ceph cluster status")
+        ceph_health_check(
+            namespace=config.ENV_DATA['cluster_namespace'], tries=10,
+        )
