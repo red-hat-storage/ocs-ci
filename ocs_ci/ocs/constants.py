@@ -744,3 +744,6 @@ LOCAL_VOLUME_YAML = os.path.join(
 
 # All worker default config files
 RHEL_WORKERS_CONF = os.path.join(CONF_DIR, 'ocsci/aws_upi_rhel_workers.yaml')
+
+# Users
+NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"

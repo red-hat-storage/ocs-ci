@@ -6,16 +6,18 @@ from time import sleep
 
 import boto3
 import requests
+import urllib3
 from botocore.client import ClientError
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, registry
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_mcg_cmd, TimeoutSampler
 from tests.helpers import create_unique_resource_name, create_resource
-from ocs_ci.ocs.resources import pod
 
 logger = logging.getLogger(name=__file__)
 
@@ -35,6 +37,10 @@ class MCG(object):
         """
         Constructor for the MCG class
         """
+
+        # To clean the logs from warnings related to the lack of SSL certs
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
         self.namespace = config.ENV_DATA['cluster_namespace']
         ocp_obj = OCP(kind='noobaa', namespace=self.namespace)
         results = ocp_obj.get()
@@ -89,6 +95,14 @@ class MCG(object):
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
         )
+
+        # Give NooBaa's ServiceAccount permissions in order to execute CLI commands
+        registry.add_role_to_user(
+            'cluster-admin', constants.NOOBAA_SERVICE_ACCOUNT,
+            cluster_role=True
+        )
+
+        self.operator_pod = Pod(**get_pods_having_label(constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace)[0])
 
         if config.ENV_DATA['platform'].lower() == 'aws':
             (
@@ -640,3 +654,6 @@ class MCG(object):
                 f'{desired_state} within the time limit.'
             )
             assert False
+
+    def exec_mcg_cmd(self, cmd):
+        self.operator_pod.exec_cmd_on_pod(f'/usr/local/bin/noobaa-operator {cmd}', out_yaml_format=False)
