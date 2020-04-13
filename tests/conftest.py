@@ -913,8 +913,10 @@ def tier_marks_name():
 def health_checker(request, tier_marks_name):
     def finalizer():
         try:
-            ceph_health_check_base()
-            log.info("Ceph health check passed at teardown")
+            teardown = config.RUN['cli_params']['teardown']
+            if not teardown:
+                ceph_health_check_base()
+                log.info("Ceph health check passed at teardown")
         except CephHealthException:
             log.info("Ceph health check failed at teardown")
             # Retrying to increase the chance the cluster health will be OK
