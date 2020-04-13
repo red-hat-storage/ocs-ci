@@ -664,7 +664,7 @@ class MCG(object):
             namespace (str): The namespace to run the command in
 
         Returns:
-            str: Stdout of the command
+            str: stdout of the command
 
         """
 
