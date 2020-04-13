@@ -3,9 +3,11 @@ In this pytest plugin we will keep all our pytest marks used in our tests and
 all related hooks/plugins to markers.
 """
 import os
+
 import pytest
 from funcy import compose
 
+from ocs_ci.framework import config
 from ocs_ci.ocs.constants import (
     ORDER_BEFORE_OCS_UPGRADE,
     ORDER_BEFORE_OCP_UPGRADE,
@@ -16,8 +18,6 @@ from ocs_ci.ocs.constants import (
     ORDER_AFTER_OCS_UPGRADE,
     ORDER_AFTER_UPGRADE,
 )
-from ocs_ci.framework import config
-from ocs_ci.utility.utils import check_if_executable_in_path
 
 # tier marks
 
