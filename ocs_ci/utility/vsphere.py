@@ -468,7 +468,7 @@ class VSPHERE(object):
         WaitForTask(pi.Destroy())
         logger.info(f"Successfully deleted resource pool {pool}")
 
-    def remove_disk(self, vm, unit_number, datastore=True):
+    def remove_disk(self, vm, identifier, key='unit_number', datastore=True):
         """
         Removes the Disk from VM and datastore. By default, it will delete
         the disk ( vmdk ) from VM and backend datastore. If datastore parameter
@@ -476,27 +476,16 @@ class VSPHERE(object):
 
         Args:
             vm (vim.VirtualMachine): VM instance
-            unit_number (int): Disk unit number to remove
+            identifier (str): The value of either 'unit_number'
+                (Disk unit number to remove) or 'volume_path'
+                (The volume path in the datastore (i.e,
+                '[vsanDatastore] d4210a5e-40ce-efb8-c87e-040973d176e1/control-plane-1.vmdk')
+            key (str): Either 'unit_number' 'volume_path'
             datastore (bool): Delete the disk (vmdk) from backend datastore
                 if True
 
         """
-        disk_prefix = "Hard disk "
-        disk_label = f"{disk_prefix}{unit_number}"
-
         virtual_disk_device = None
-        for dev in vm.config.hardware.device:
-            # choose the device based on unit number instead of
-            # deviceInfo.label. labels can change if a disk is removed
-            if (
-                isinstance(dev, vim.vm.device.VirtualDisk)
-                and dev.unitNumber == unit_number
-                and disk_prefix in dev.deviceInfo.label
-            ):
-                virtual_disk_device = dev
-        if not virtual_disk_device:
-            logger.warning(f"{disk_label} for {vm.name} could not be found")
-
         virtual_disk_spec = vim.vm.device.VirtualDeviceSpec()
         if datastore:
             virtual_disk_spec.fileOperation = (
@@ -505,13 +494,39 @@ class VSPHERE(object):
         virtual_disk_spec.operation = (
             vim.vm.device.VirtualDeviceSpec.Operation.remove
         )
-        virtual_disk_spec.device = virtual_disk_device
 
+        if key == 'unit_number':
+            disk_prefix = "Hard disk "
+            for dev in vm.config.hardware.device:
+                # choose the device based on unit number instead of
+                # deviceInfo.label. labels can change if a disk is removed
+                if (
+                    isinstance(dev, vim.vm.device.VirtualDisk)
+                    and dev.unitNumber == identifier
+                    and disk_prefix in dev.deviceInfo.label
+                ):
+                    virtual_disk_device = dev
+
+        elif key == 'volume_path':
+            vm_volumes = [
+                device for device in vm.config.hardware.device if isinstance(
+                    device, vim.vm.device.VirtualDisk
+                )
+            ]
+            for vol in vm_volumes:
+                if vol.backing.fileName == identifier:
+                    virtual_disk_device = vol
+                    break
+
+        if not virtual_disk_device:
+            logger.warning(f"Volume with {key} {identifier} for {vm.name} could not be found")
+
+        virtual_disk_spec.device = virtual_disk_device
         spec = vim.vm.ConfigSpec()
         spec.deviceChange = [virtual_disk_spec]
         logger.info(
-            f"Removing Disk with unit number:{virtual_disk_device.unitNumber}"
-            f" from {vm.name}"
+            f"Detaching Disk with identifier: {identifier}"
+            f" from {vm.name} and remove from datastore={datastore}"
         )
         WaitForTask(vm.ReconfigVM_Task(spec=spec))
 
@@ -526,7 +541,7 @@ class VSPHERE(object):
         extra_disk_unit_numbers = self.get_used_unit_number(vm)
         if extra_disk_unit_numbers:
             for each_disk_unit_number in extra_disk_unit_numbers:
-                self.remove_disk(vm, each_disk_unit_number)
+                self.remove_disk(vm=vm, identifier=each_disk_unit_number)
 
     def get_used_unit_number(self, vm):
         """

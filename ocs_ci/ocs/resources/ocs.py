@@ -175,3 +175,19 @@ def get_version_info(namespace=None):
     )
     info = get_images(csv_pre.get())
     return info
+
+
+def get_job_obj(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
+    """
+    Get the job instance for the given job name
+
+    Args:
+        name (str): The name of the job
+        namespace (str): The namespace to look in
+
+    Returns:
+        OCS: A job OCS instance
+    """
+    ocp_obj = OCP(kind=constants.JOB, namespace=namespace)
+    ocp_dict = ocp_obj.get(resource_name=name)
+    return OCS(**ocp_dict)
