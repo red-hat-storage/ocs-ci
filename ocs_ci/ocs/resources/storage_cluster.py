@@ -232,14 +232,15 @@ def ocs_install_verification(
     }
     assert required_storage_classes.issubset(storage_class_names)
 
-    # Verify OSD's are distributed
+    # Verify OSDs are distributed
     if not skip_osd_distribution_check:
-        log.info("Verifying OSD's are distributed evenly across worker nodes")
+        log.info("Verifying OSDs are distributed evenly across worker nodes")
         ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
         osds = ocp_pod_obj.get(selector=constants.OSD_APP_LABEL)['items']
+        deviceset_count = get_deviceset_count()
         node_names = [osd['spec']['nodeName'] for osd in osds]
         for node in node_names:
-            assert not node_names.count(node) > 1, (
+            assert not node_names.count(node) > deviceset_count, (
                 "OSD's are not distributed evenly across worker nodes"
             )
 
