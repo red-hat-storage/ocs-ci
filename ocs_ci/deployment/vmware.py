@@ -59,6 +59,12 @@ class VSPHEREBASE(Deployment):
             constants.EXTERNAL_DIR,
             'openshift-misc'
         )
+        os.environ['TF_LOG'] = config.ENV_DATA.get('TF_LOG', "TRACE")
+        os.environ['TF_LOG_PATH'] = os.path.join(
+            config.ENV_DATA.get('cluster_path'),
+            config.ENV_DATA.get('TF_LOG_FILE')
+        )
+
         self.wait_time = 90
 
     def attach_disk(self, size=100):
@@ -297,6 +303,7 @@ class VSPHEREUPI(VSPHEREBASE):
         self.token = config.ENV_DATA.get('ipam_token')
         self.cidr = config.ENV_DATA.get('machine_cidr')
         self.vm_network = config.ENV_DATA.get('vm_network')
+
 
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
