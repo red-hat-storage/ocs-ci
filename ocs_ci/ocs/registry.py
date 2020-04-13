@@ -146,7 +146,7 @@ def get_default_route_name():
     return route_dict.get('items')[0].get('spec').get('host')
 
 
-def add_role_to_user(role_type, user, cluster_role=False, namespace=''):
+def add_role_to_user(role_type, user, cluster_role=False, namespace=None):
     """
     Function to add a cluster/regular role to user
 
@@ -170,7 +170,7 @@ def add_role_to_user(role_type, user, cluster_role=False, namespace=''):
     logger.info(f"Role_type {role_type} added to the user {user}")
 
 
-def remove_role_from_user(role_type, user, cluster_role=False, namespace=''):
+def remove_role_from_user(role_type, user, cluster_role=False, namespace=None):
     """
     Function to remove a cluster/regular role from a user
 

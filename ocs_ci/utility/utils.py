@@ -433,22 +433,6 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     return masked_stdout
 
 
-def run_mcg_cmd(cmd, namespace=None):
-    """
-    Invokes `run_cmd` with a noobaa prefix
-
-    Args:
-        cmd: The MCG command to be run
-        namespace: The namespace to use for the command
-
-    Returns:
-        str: Stdout of the command
-
-    """
-    namespace = namespace if namespace else config.ENV_DATA['cluster_namespace']
-    return run_cmd(f'noobaa -n {namespace} ' + cmd)
-
-
 def download_file(url, filename):
     """
     Download a file from a specified url

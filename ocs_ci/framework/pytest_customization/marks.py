@@ -90,11 +90,6 @@ google_api_required = pytest.mark.skipif(
     ), reason="Google API credentials don't exist"
 )
 
-noobaa_cli_required = pytest.mark.skipif(
-    not check_if_executable_in_path('noobaa'),
-    reason='MCG CLI was not found'
-)
-
 aws_platform_required = pytest.mark.skipif(
     config.ENV_DATA['platform'].lower() != 'aws',
     reason="Tests are not running on AWS deployed cluster"

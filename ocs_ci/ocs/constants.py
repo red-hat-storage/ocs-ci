@@ -747,3 +747,6 @@ RHEL_WORKERS_CONF = os.path.join(CONF_DIR, 'ocsci/aws_upi_rhel_workers.yaml')
 
 # Users
 NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
+
+# Miscellaneous
+NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"

@@ -16,7 +16,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_mcg_cmd, TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler
 from tests.helpers import create_unique_resource_name, create_resource
 
 logger = logging.getLogger(name=__file__)
@@ -157,7 +157,7 @@ class MCG(object):
             set: A set of all bucket names
 
         """
-        obc_lst = run_mcg_cmd('obc list').split('\n')[1:-1]
+        obc_lst = self.exec_mcg_cmd('obc list').split('\n')[1:-1]
         # TODO assert the bucket passed the Pending state
         return {row.split()[1] for row in obc_lst}
 
@@ -655,5 +655,21 @@ class MCG(object):
             )
             assert False
 
-    def exec_mcg_cmd(self, cmd):
-        self.operator_pod.exec_cmd_on_pod(f'/usr/local/bin/noobaa-operator {cmd}', out_yaml_format=False)
+    def exec_mcg_cmd(self, cmd, namespace=None):
+        """
+        Runs the MCG CLI through the noobaa-operator pod
+
+        Args:
+            cmd (str): The command to run
+            namespace (str): The namespace to run the command in
+
+        Returns:
+            str: Stdout of the command
+
+        """
+
+        namespace = f'-n {namespace}' if namespace else ""
+        return self.operator_pod.exec_cmd_on_pod(
+            f'{constants.NOOBAA_OPERATOR_POD_CLI_PATH} {cmd} {namespace}',
+            out_yaml_format=False
+        )
