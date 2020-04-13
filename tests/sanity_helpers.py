@@ -31,9 +31,7 @@ class Sanity:
         logger.info("Checking cluster and Ceph health")
         node.wait_for_nodes_status()
 
-        assert ceph_health_check(
-            namespace=config.ENV_DATA['cluster_namespace'], tries=tries
-        )
+        ceph_health_check(namespace=config.ENV_DATA['cluster_namespace'], tries=tries)
         if cluster_check:
             self.ceph_cluster.cluster_health_check(timeout=60)
 
