@@ -3,6 +3,11 @@ import re
 
 import pytest
 import random
+
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException
+
+from tests import helpers
+
 from tests.helpers import get_worker_nodes
 from ocs_ci.framework.pytest_customization.marks import tier4a
 from ocs_ci.ocs.resources import pod
@@ -11,7 +16,7 @@ from ocs_ci.framework.testlib import (
     config
 )
 from ocs_ci.ocs import (
-    machine, constants, ocp, node
+    machine, constants, ocp, node, defaults
 )
 from ocs_ci.utility.utils import ceph_health_check
 from tests.sanity_helpers import Sanity
@@ -99,7 +104,28 @@ class TestNodeReplacement(ManageTest):
         self.sanity_helpers.delete_resources()
         # Verify everything running fine
         log.info("Verifying All resources are Running and matches expected result")
-        self.sanity_helpers.health_check(cluster_check=False)
+        all_pod_obj = pod.get_all_pods(
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        )
+        for pod_obj in all_pod_obj:
+            if ('ocs-deviceset' or '-1-deploy') not in pod_obj.name:
+                try:
+                    helpers.wait_for_resource_state(
+                        resource=pod_obj, state=constants.STATUS_RUNNING,
+                        timeout=200
+                    )
+                except ResourceWrongStatusException:
+                    log.info("Using WA for bz 1810014")
+                    if 'rook-ceph-crashcollector' in pod_obj.name:
+                        ocp_obj = ocp.OCP(
+                            namespace=defaults.ROOK_CLUSTER_NAMESPACE
+                        )
+                        pod_name = pod_obj.name
+                        deployment_name = '-'.join(pod_name.split("-")[:-2])
+                        command = f"delete deployment {deployment_name}"
+                        ocp_obj.exec_oc_cmd(command=command)
+                        log.info(f"Deleted deployment for pod {pod_obj.name}")
+
         log.info("Verifying ceph cluster status")
         ceph_health_check(
             namespace=config.ENV_DATA['cluster_namespace'], tries=10,
