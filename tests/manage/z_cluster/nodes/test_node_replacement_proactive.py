@@ -127,6 +127,4 @@ class TestNodeReplacement(ManageTest):
                         log.info(f"Deleted deployment for pod {pod_obj.name}")
 
         log.info("Verifying ceph cluster status")
-        ceph_health_check(
-            namespace=config.ENV_DATA['cluster_namespace'], tries=10,
-        )
+        self.sanity_helpers.health_check(tries=60)
