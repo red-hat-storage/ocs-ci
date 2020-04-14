@@ -12,8 +12,7 @@ class TestRegistryImagePullPush(E2ETest):
     """
     Test to check Image push and pull worked with registry backed by OCS
     """
-
-    @workloads
+    # Remove this test from workloads due to https://github.com/red-hat-storage/ocs-ci/issues/1829
     @ignore_leftovers
     @pytest.mark.polarion_id("OCS-1080")
     @pytest.mark.skip("Skip this test due to https://github.com/red-hat-storage/ocs-ci/issues/1547")
