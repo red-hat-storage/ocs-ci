@@ -79,6 +79,7 @@ BS_OPTIMAL = 'OPTIMAL'
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
 DEPLOYMENT = "Deployment"
+JOB = "Job"
 STORAGECLASS = "StorageClass"
 PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
