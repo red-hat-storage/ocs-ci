@@ -2102,6 +2102,7 @@ def modify_osd_replica_count(resource_name, replica_count):
     resource_name = '-'.join(resource_name.split('-')[0:4])
     return ocp_obj.patch(resource_name=resource_name, params=params)
 
+
 def check_LSO():
     """
     Function to check if LSO is present or not
