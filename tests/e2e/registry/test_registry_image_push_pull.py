@@ -1,6 +1,6 @@
 import logging
 import pytest
-from ocs_ci.framework.testlib import workloads, E2ETest, ignore_leftovers
+from ocs_ci.framework.testlib import E2ETest, ignore_leftovers
 from ocs_ci.ocs import ocp, registry, constants
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
