@@ -1086,13 +1086,14 @@ def measure_pvc_creation_time(interface, pvc_name):
     return total.total_seconds()
 
 
-def measure_pvc_creation_time_bulk(interface, pvc_name_list):
+def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
     """
     Measure PVC creation time of bulk PVC based on logs.
 
     Args:
         interface (str): The interface backed the PVC
         pvc_name_list (list): List of PVC Names for measuring creation time
+        wait_time (int): Seconds to wait before collecting CSI log
 
     Returns:
         pvc_dict (dict): Dictionary of pvc_name with creation time.
@@ -1100,6 +1101,8 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list):
     """
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
+    # due to some delay in CSI log generation added wait
+    time.sleep(wait_time)
     # get the logs from the csi-provisioner containers
     logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
     logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
@@ -1126,13 +1129,14 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list):
     return pvc_dict
 
 
-def measure_pv_deletion_time_bulk(interface, pv_name_list):
+def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
     """
     Measure PV deletion time of bulk PV, based on logs.
 
     Args:
         interface (str): The interface backed the PV
         pv_name_list (list): List of PV Names for measuring deletion time
+        wait_time (int): Seconds to wait before collecting CSI log
 
     Returns:
         pv_dict (dict): Dictionary of pv_name with deletion time.
@@ -1140,6 +1144,8 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list):
     """
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
+    # due to some delay in CSI log generation added wait
+    time.sleep(wait_time)
     # get the logs from the csi-provisioner containers
     logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
     logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
