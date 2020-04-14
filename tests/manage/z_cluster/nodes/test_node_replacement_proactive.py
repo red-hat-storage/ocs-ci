@@ -13,12 +13,10 @@ from ocs_ci.framework.pytest_customization.marks import tier4a
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
     tier4, ManageTest, aws_platform_required, ignore_leftovers, ipi_deployment_required,
-    config
 )
 from ocs_ci.ocs import (
     machine, constants, ocp, node, defaults
 )
-from ocs_ci.utility.utils import ceph_health_check
 from tests.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
