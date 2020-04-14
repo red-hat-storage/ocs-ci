@@ -2110,6 +2110,7 @@ def check_LSO():
 
     Returns:
         bool: True if LSO present, False if LSO not present
+
     """
     command = "get localvolume -n local-storage "
     status = OCP.exec_oc_cmd(command, out_yaml_format=False)
