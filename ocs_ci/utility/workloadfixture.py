@@ -60,6 +60,7 @@ def measure_operation(
                     'metadata': {'status': 'success'},
                     'prometheus_alerts': [{'labels': ...}, {...}, ...]
                 }
+
     """
     def prometheus_log(info, alert_list):
         """
@@ -69,6 +70,7 @@ def measure_operation(
             info (dict): Contains run key attribute that controls thread.
                 If `info['run'] == False` then thread will stop
             alert_list (list): List to be populated with alerts
+
         """
         prometheus = PrometheusAPI()
         logger.info('Logging of all prometheus alerts started')

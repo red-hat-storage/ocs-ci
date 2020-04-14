@@ -41,6 +41,7 @@ def get_storageutilization_size(target_percentage, ceph_pool_name):
 
     Returns:
         int: pvc_size for storage utilization job (in GiB, rounded)
+
     """
     # get STORED and MAX AVAIL of given ceph pool ...
     ct_pod = pod.get_ceph_tools_pod()
