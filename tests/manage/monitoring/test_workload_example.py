@@ -80,9 +80,9 @@ def test_start_fio_job(
             condition=constants.STATUS_RUNNING,
             timeout=300,
             sleep=30)
-    except TimeoutExpiredError as ex:
+    except TimeoutExpiredError:
         logger.error("pod for fio job wasn't deployed properly")
-        raise(ex)
+        raise
 
 
 @pytest.mark.libtest
@@ -98,9 +98,9 @@ def test_stop_fio_job():
             condition=constants.STATUS_RUNNING,
             timeout=300,
             sleep=30)
-    except TimeoutExpiredError as ex:
+    except TimeoutExpiredError:
         logger.error("pod for fio job wasn't deployed properly")
-        raise(ex)
+        raise
 
     # TODO: check the activity of the job during it's whole run could via
     # prometheus query (make sure it was really running)
