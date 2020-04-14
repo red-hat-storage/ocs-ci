@@ -915,7 +915,7 @@ def health_checker(request, tier_marks_name):
         try:
             teardown = config.RUN['cli_params']['teardown']
             skip_ocs_deployment = config.ENV_DATA['skip_ocs_deployment']
-            if not ( teardown or skip_ocs_deployment ):
+            if not (teardown or skip_ocs_deployment):
                 ceph_health_check_base()
                 log.info("Ceph health check passed at teardown")
         except CephHealthException:
