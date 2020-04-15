@@ -820,6 +820,8 @@ def get_device_paths(worker_names):
     platform = config.ENV_DATA.get('platform').lower()
     if platform == 'aws':
         pattern = 'nvme-Amazon_EC2_NVMe_Instance_Storage'
+    elif platform == 'none'
+        pattern = 'scsi-'
     # TODO: add patterns for vsphere and bare metal
     else:
         raise UnsupportedPlatformError(

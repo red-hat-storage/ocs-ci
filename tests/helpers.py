@@ -2103,13 +2103,13 @@ def modify_osd_replica_count(resource_name, replica_count):
     return ocp_obj.patch(resource_name=resource_name, params=params)
 
 
-def check_LSO():
+def check_local_volume():
     """
-    Function to check if LSO is present or not
+    Function to check if Local-volume is present or not
     {To be used for BM Cluster}
 
     Returns:
-        bool: True if LSO present, False if LSO not present
+        bool: True if LV present, False if LV not present
 
     """
     command = "get localvolume -n local-storage "

@@ -10,6 +10,8 @@ from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.packagemanifest import get_selector_for_ocs_operator, PackageManifest
 from ocs_ci.utility import utils
+from tests.helpers import check_local_volume
+from ocs_ci.deployment.deployment import get_typed_nodes, get_device_paths
 
 log = logging.getLogger(__name__)
 
@@ -371,6 +373,15 @@ def add_capacity(osd_size_capacity_requested):
     storageDeviceSets->count = (capacity reqested / osd capacity ) + existing count storageDeviceSets
 
     """
+    lvpresent = check_local_volume()
+    if lvpresent:
+        workers = get_typed_nodes(node_type='worker')
+        worker_names = [worker.name for worker in workers]
+        device_paths = get_device_paths(worker_names)
+        lv_data = get_localvolume_cr()
+        lv_data['spec']['storageClassDevices'][0][
+            'devicePaths'
+        ] = device_paths
 
     sc = get_storage_cluster()
     old_storage_devices_sets_count = get_deviceset_count()
@@ -431,3 +442,16 @@ def get_deviceset_count():
     return int(sc.get().get('items')[0].get('spec').get(
         'storageDeviceSets')[0].get('count')
     )
+
+
+def get_localvolume_cr():
+    """
+    Get localvolumeCR object from local-storage
+
+    Returns:
+        dict: Dictionary represents a returned yaml file
+
+    """
+    A = OCP(kind=constants.LOCAL_VOLUME, namespace=constants.LOCAL_STORAGE_NAMESPACE)
+    lvcr = A.get('local-block')
+    return lvcr
