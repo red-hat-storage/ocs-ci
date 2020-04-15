@@ -79,6 +79,92 @@ def check_alert_list(
     logger.info(f"Alerts were triggered correctly during utilization")
 
 
+def check_query_range_result(
+    result,
+    good_values,
+    bad_values=(),
+    exp_metric_num=None,
+    exp_delay=None,
+):
+    """
+    Check that result of range query matches given expectations. Useful
+    for metrics which convey status (eg. ceph health, ceph_osd_up), so that
+    you can assume that during a given period, it's value should match
+    given single (or tuple of) value(s).
+
+    Args:
+        result (list): Data from ``query_range()`` method.
+        good_values (tuple): Tuple of values considered good
+        bad_values (tuple): Tuple of values considered bad, indicating a
+            problem (optional, use if you need to distinguish bad and
+            invalid values)
+        exp_metric_num (int): expected number of data series in the result,
+            optional (eg. for ``ceph_health_status`` this would be 1, but
+            for something like ``ceph_osd_up`` this will be a number of
+            OSDs in the cluster)
+        exp_delay (int): Number of seconds from the start of the query
+            time range for which we should tolerate bad values. This is
+            useful if you change cluster state and processing of this
+            change is expected to take some time.
+
+    Returns:
+        bool: True if result matches given expectations, False otherwise
+    """
+    logger.info("Validating a result of a range query")
+    # result of the validation
+    is_result_ok = True
+    # timestamps of values in bad_values list
+    bad_value_timestamps = []
+    # timestamps of values outside of both bad and good values list
+    invalid_value_timestamps = []
+
+    # check that result contains expected number of metric data series
+    if exp_metric_num is not None and len(result) != exp_metric_num:
+        msg = (
+            f"result doesn't contain {exp_metric_num} of series only, "
+            f"actual number data series is {len(result)}")
+        logger.error(msg)
+        is_result_ok = False
+
+    for metric in result:
+        name = metric['metric']['__name__']
+        logger.debug(f"checking metric {name}")
+        # get start of the query range for which we are processing data
+        start_ts = metric["values"][0][0]
+        start_dt = datetime.utcfromtimestamp(start_ts)
+        logger.info(f"metrics for {name} starts at {start_dt}")
+        for ts, value in metric["values"]:
+            value = int(value)
+            dt = datetime.utcfromtimestamp(ts)
+            if value in good_values:
+                logger.debug(f"{name} has good value {value} at {dt}")
+            elif value in bad_values:
+                msg = f"{name} has bad value {value} at {dt}"
+                # delta is time since start of the query range
+                delta = dt - start_dt
+                if exp_delay is not None and delta.seconds < exp_delay:
+                    logger.info(
+                        msg + f" but within expected {exp_delay}s delay")
+                else:
+                    logger.error(msg)
+                    bad_value_timestamps.append(dt)
+            else:
+                msg = f"{name} invalid (not good or bad): {value} at {dt}"
+                logger.error(msg)
+                invalid_value_timestamps.append(dt)
+
+    if bad_value_timestamps != []:
+        is_result_ok = False
+    else:
+        logger.info("No bad values detected")
+    if invalid_value_timestamps != []:
+        is_result_ok = False
+    else:
+        logger.info("No invalid values detected")
+
+    return is_result_ok
+
+
 class PrometheusAPI(object):
     """
     This is wrapper class for Prometheus API.
@@ -276,92 +362,6 @@ class PrometheusAPI(object):
             assert exp_samples - 1 <= sizes[0] <= exp_samples + 1
         # return actual result of the query
         return content["data"]["result"]
-
-    def check_query_range_result(
-        self,
-        result,
-        good_values,
-        bad_values=(),
-        exp_metric_num=None,
-        exp_delay=None,
-    ):
-        """
-        Check that result of range query matches given expectations. Useful
-        for metrics which convey status (eg. ceph health, ceph_osd_up), so that
-        you can assume that during a given period, it's value should match
-        given single (or tuple of) value(s).
-
-        Args:
-            result (list): Data from ``query_range()`` method.
-            good_values (tuple): Tuple of values considered good
-            bad_values (tuple): Tuple of values considered bad, indicating a
-                problem (optional, use if you need to distinguish bad and
-                invalid values)
-            exp_metric_num (int): expected number of data series in the result,
-                optional (eg. for ``ceph_health_status`` this would be 1, but
-                for something like ``ceph_osd_up`` this will be a number of
-                OSDs in the cluster)
-            exp_delay (int): Number of seconds from the start of the query
-                time range for which we should tolerate bad values. This is
-                useful if you change cluster state and processing of this
-                change is expected to take some time.
-
-        Returns:
-            bool: True if result matches given expectations, False otherwise
-        """
-        logger.info("Validating a result of a range query")
-        # result of the validation
-        is_result_ok = True
-        # timestamps of values in bad_values list
-        bad_value_timestamps = []
-        # timestamps of values outside of both bad and good values list
-        invalid_value_timestamps = []
-
-        # check that result contains expected number of metric data series
-        if exp_metric_num is not None and len(result) != exp_metric_num:
-            msg = (
-                f"result doesn't contain {exp_metric_num} of series only, "
-                f"actual number data series is {len(result)}")
-            logger.error(msg)
-            is_result_ok = False
-
-        for metric in result:
-            name = metric['metric']['__name__']
-            logger.debug(f"checking metric {name}")
-            # get start of the query range for which we are processing data
-            start_ts = metric["values"][0][0]
-            start_dt = datetime.utcfromtimestamp(start_ts)
-            logger.info(f"metrics for {name} starts at {start_dt}")
-            for ts, value in metric["values"]:
-                value = int(value)
-                dt = datetime.utcfromtimestamp(ts)
-                if value in good_values:
-                    logger.debug(f"{name} has good value {value} at {dt}")
-                elif value in bad_values:
-                    msg = f"{name} has bad value {value} at {dt}"
-                    # delta is time since start of the query range
-                    delta = dt - start_dt
-                    if exp_delay is not None and delta.seconds < exp_delay:
-                        logger.info(
-                            msg + f" but within expected {exp_delay}s delay")
-                    else:
-                        logger.error(msg)
-                        bad_value_timestamps.append(dt)
-                else:
-                    msg = "{name} invalid (not good or bad): {value} at {dt}"
-                    logger.error(msg)
-                    invalid_value_timestamps.append(dt)
-
-        if bad_value_timestamps != []:
-            is_result_ok = False
-        else:
-            logger.info("No bad values detected")
-        if invalid_value_timestamps != []:
-            is_result_ok = False
-        else:
-            logger.info("No invalid values detected")
-
-        return is_result_ok
 
     def wait_for_alert(self, name, state=None, timeout=1200, sleep=5):
         """

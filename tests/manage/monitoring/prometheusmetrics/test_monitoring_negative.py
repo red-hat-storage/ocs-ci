@@ -8,7 +8,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.testlib import tier3
-from ocs_ci.utility.prometheus import PrometheusAPI
+from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result
 
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
         start=measure_stop_ceph_mon['start'],
         end=measure_stop_ceph_mon['stop'],
         step=15)
-    health_validation = prometheus.check_query_range_result(
+    health_validation = check_query_range_result(
         result=health_result,
         good_values=[1],
         bad_values=[0],
@@ -54,7 +54,7 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
         start=measure_stop_ceph_mon['start'],
         end=measure_stop_ceph_mon['stop'],
         step=15)
-    mon_validation = prometheus.check_query_range_result(
+    mon_validation = check_query_range_result(
         result=mon_result,
         good_values=[0],
         bad_values=[1],
@@ -86,7 +86,7 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd):
         start=measure_stop_ceph_osd['start'],
         end=measure_stop_ceph_osd['stop'],
         step=15)
-    health_validation = prometheus.check_query_range_result(
+    health_validation = check_query_range_result(
         result=health_result,
         good_values=[1],
         bad_values=[0],
@@ -101,7 +101,7 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd):
         start=measure_stop_ceph_osd['start'],
         end=measure_stop_ceph_osd['stop'],
         step=15)
-    osd_up_validation = prometheus.check_query_range_result(
+    osd_up_validation = check_query_range_result(
         result=osd_up_result,
         good_values=[0],
         bad_values=[1],
@@ -118,7 +118,7 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd):
         start=measure_stop_ceph_osd['start'],
         end=measure_stop_ceph_osd['stop'],
         step=15)
-    osd_in_validation = prometheus.check_query_range_result(
+    osd_in_validation = check_query_range_result(
         result=osd_in_result,
         good_values=[1],
         bad_values=[0],
