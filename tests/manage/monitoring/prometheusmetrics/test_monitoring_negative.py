@@ -60,7 +60,7 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
         bad_values=[1],
         exp_metric_num=1,
         exp_delay=expected_delay)
-    mon_msg = "ceph_osd_up value should be affected by missing osd"
+    mon_msg = "ceph_mon_quorum_status value should be affected by missing mon"
     assert mon_validation, mon_msg
 
 
