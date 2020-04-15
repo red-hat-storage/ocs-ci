@@ -10,6 +10,7 @@ from botocore.exceptions import ClientError
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import CLEANUP_YAML, TEMPLATE_CLEANUP_DIR
+from ocs_ci.ocs.exceptions import ClusterIOTagNotFound
 from ocs_ci.utility.utils import get_openshift_installer, destroy_cluster
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import (
@@ -184,9 +185,18 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
         ec2_instances = [aws.get_ec2_instance(instance_dict['id']) for instance_dict in instance_dicts]
         if not ec2_instances:
             continue
-        cluster_io_tag = [
-            tag['Key'] for tag in ec2_instances[0].tags if 'kubernetes.io/cluster' in tag['Key']
-        ]
+        cluster_io_tag = None
+        for instance in ec2_instances:
+            cluster_io_tag = [
+                tag['Key'] for tag in instance.tags
+                if 'kubernetes.io/cluster' in tag['Key']
+            ]
+            if cluster_io_tag:
+                break
+        if not cluster_io_tag:
+            raise ClusterIOTagNotFound(
+                "Unable to find valid cluster IO tag from ec2 instance tags"
+            )
         cluster_name = cluster_io_tag[0].strip('kubernetes.io/cluster/')
         if determine_cluster_deletion(ec2_instances, cluster_name):
             cf_clusters_to_delete.append(cluster_name)
