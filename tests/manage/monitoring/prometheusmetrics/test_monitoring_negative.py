@@ -44,6 +44,7 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
         good_values=[1],
         bad_values=[0],
         exp_metric_num=1,
+        exp_good_time=measure_stop_ceph_mon['min_downtime'],
         exp_delay=expected_delay)
     health_msg = "health status should be affected by missing mon"
     assert health_validation, health_msg
@@ -59,6 +60,7 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
         good_values=[0],
         bad_values=[1],
         exp_metric_num=1,
+        exp_good_time=measure_stop_ceph_mon['min_downtime'],
         exp_delay=expected_delay)
     mon_msg = "ceph_mon_quorum_status value should be affected by missing mon"
     assert mon_validation, mon_msg
