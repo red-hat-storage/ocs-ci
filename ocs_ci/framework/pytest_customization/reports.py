@@ -2,6 +2,7 @@ import pytest
 import logging
 from py.xml import html
 from ocs_ci.utility.utils import email_reports
+from pytest_reportportal import RPLogHandler
 from ocs_ci.framework import config as ocsci_config
 
 
@@ -36,7 +37,10 @@ def pytest_runtest_makereport(item, call):
     extra = getattr(report, 'extra', [])
 
     if report.when == 'call':
-        log_file = logging.getLogger().handlers[1].baseFilename
+        if isinstance(logging.getLogger().handlers[1], RPLogHandler):
+            log_file = logging.getLogger().handlers[2].baseFilename
+        else:
+            log_file = logging.getLogger().handlers[1].baseFilename
         extra.append(pytest_html.extras.url(log_file, name='Log File'))
         report.extra = extra
 
