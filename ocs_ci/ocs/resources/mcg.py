@@ -38,7 +38,8 @@ class MCG(object):
         Constructor for the MCG class
         """
 
-        # To clean the logs from warnings related to the lack of SSL certs
+        # Todo: find a better solution for not being able to verify requests with a self-signed cert
+        logger.warning('Suppressing InsecureRequestWarnings')
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         self.namespace = config.ENV_DATA['cluster_namespace']
