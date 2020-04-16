@@ -5,7 +5,8 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     pre_upgrade, post_upgrade,
-    aws_platform_required, filter_insecure_request_warning
+    aws_platform_required, filter_insecure_request_warning,
+    bugzilla
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_OPTIMAL
@@ -162,3 +163,25 @@ def test_noobaa_postupgrade(
         mcg_obj_session
     )
     assert bucket.phase == constants.STATUS_BOUND
+
+
+@aws_platform_required
+@bugzilla('1820974')
+@pre_upgrade
+def test_buckets_before_upgrade(upgrade_buckets, mcg_obj_session):
+    """
+    Test that all buckets in cluster are in OPTIMAL state before upgrade.
+    """
+    for bucket in mcg_obj_session.read_system().get('buckets'):
+        assert bucket.get('mode') == BS_OPTIMAL
+
+
+@aws_platform_required
+@bugzilla('1820974')
+@post_upgrade
+def test_buckets_after_upgrade(upgrade_buckets, mcg_obj_session):
+    """
+    Test that all buckets in cluster are in OPTIMAL state after upgrade.
+    """
+    for bucket in mcg_obj_session.read_system().get('buckets'):
+        assert bucket.get('mode') == BS_OPTIMAL
