@@ -1,3 +1,5 @@
+import pytest
+
 from ocs_ci.framework.pytest_customization.marks import *  # noqa: F403
 
 

@@ -10,26 +10,25 @@ import time
 import hcl
 import yaml
 
-from .deployment import Deployment
 from ocs_ci.deployment.install_ocp_on_rhel import OCPINSTALLRHEL
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import (
-    get_node_ips, wait_for_nodes_status,
-    get_typed_worker_nodes, remove_nodes,
+    get_node_ips, get_typed_worker_nodes, remove_nodes, wait_for_nodes_status
 )
 from ocs_ci.ocs.openshift_ops import OCP
-from ocs_ci.utility.templating import Templating, dump_data_to_json
+from ocs_ci.utility.bootstrap import gather_bootstrap
+from ocs_ci.utility.templating import dump_data_to_json, Templating
 from ocs_ci.utility.utils import (
-    run_cmd, replace_content_in_file, wait_for_co,
-    clone_repo, upload_file, read_file_as_str,
-    create_directory_path, remove_keys_from_tf_variable_file,
-    convert_yaml2tfvars,
+    clone_repo, convert_yaml2tfvars, create_directory_path, read_file_as_str,
+    remove_keys_from_tf_variable_file, replace_content_in_file, run_cmd,
+    upload_file, wait_for_co
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
-
+from .deployment import Deployment
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +59,12 @@ class VSPHEREBASE(Deployment):
             constants.EXTERNAL_DIR,
             'openshift-misc'
         )
+        os.environ['TF_LOG'] = config.ENV_DATA.get('TF_LOG_LEVEL', "TRACE")
+        os.environ['TF_LOG_PATH'] = os.path.join(
+            config.ENV_DATA.get('cluster_path'),
+            config.ENV_DATA.get('TF_LOG_FILE')
+        )
+
         self.wait_time = 90
 
     def attach_disk(self, size=100):
@@ -111,6 +116,10 @@ class VSPHEREBASE(Deployment):
         config.ENV_DATA['vsphere_resource_pool'] = config.ENV_DATA.get(
             "cluster_name"
         )
+
+        # sync guest time with host
+        if config.ENV_DATA.get('sync_time_with_host'):
+            sync_time_with_host(constants.SCALEUP_VSPHERE_MACHINE_CONF, True)
 
         # get the RHCOS worker list
         self.rhcos_ips = get_node_ips()
@@ -229,6 +238,59 @@ class VSPHEREBASE(Deployment):
             constants.SCALEUP_VSPHERE_ROUTE53_VARIABLES,
             ['access_key', 'secret_key']
         )
+
+        # change root disk size
+        change_vm_root_disk_size(constants.SCALEUP_VSPHERE_MACHINE_CONF)
+
+    def delete_disks(self):
+        """
+        Delete the extra disks from all the worker nodes
+        """
+        vms = self.get_compute_vms(self.datacenter, self.cluster)
+        for vm in vms:
+            self.vsphere.remove_disks(vm)
+
+    def get_compute_vms(self, dc, cluster):
+        """
+        Gets the compute VM's from resource pool
+
+        Args:
+            dc (str): Datacenter name
+            cluster (str): Cluster name
+
+        Returns:
+            list: VM instance
+
+        """
+        vms = self.vsphere.get_all_vms_in_pool(
+            config.ENV_DATA.get("cluster_name"),
+            dc,
+            cluster
+        )
+        return [vm for vm in vms if "compute" in vm.name or "rhel" in vm.name]
+
+    def post_destroy_checks(self):
+        """
+        Post destroy checks on cluster
+        """
+        pool = config.ENV_DATA['cluster_name']
+        if self.vsphere.is_resource_pool_exist(
+                pool,
+                self.datacenter,
+                self.cluster
+        ):
+            logger.warning(
+                f"Resource pool {pool} exists even after destroying cluster"
+            )
+            self.vsphere.destroy_pool(pool, self.datacenter, self.cluster)
+        else:
+            logger.info(
+                f"Resource pool {pool} does not exist in "
+                f"cluster {self.cluster}"
+            )
+
+        # destroy the folder in templates
+        self.vsphere.destroy_folder(pool, self.cluster, self.datacenter)
 
 
 class VSPHEREUPI(VSPHEREBASE):
@@ -354,14 +416,6 @@ class VSPHEREUPI(VSPHEREBASE):
                 def_zone = 'provider "aws" { region = "%s" } \n' % config.ENV_DATA.get('region')
                 replace_content_in_file(constants.INSTALLER_ROUTE53, "xyz", def_zone)
 
-            # increase memory
-            if config.ENV_DATA.get('memory'):
-                replace_content_in_file(
-                    constants.INSTALLER_MACHINE_CONF,
-                    '${var.memory}',
-                    config.ENV_DATA.get('memory')
-                )
-
             # increase CPUs
             worker_num_cpus = config.ENV_DATA.get('worker_num_cpus')
             master_num_cpus = config.ENV_DATA.get('master_num_cpus')
@@ -376,6 +430,13 @@ class VSPHEREUPI(VSPHEREBASE):
                 # doesn't support dumping of data in HCL format
                 dump_data_to_json(obj, f"{constants.VSPHERE_MAIN}.json")
                 os.rename(constants.VSPHERE_MAIN, f"{constants.VSPHERE_MAIN}.backup")
+
+            # change root disk size
+            change_vm_root_disk_size(constants.INSTALLER_MACHINE_CONF)
+
+            # sync guest time with host
+            if config.ENV_DATA.get('sync_time_with_host'):
+                sync_time_with_host(constants.INSTALLER_MACHINE_CONF, True)
 
         def create_config(self):
             """
@@ -443,16 +504,28 @@ class VSPHEREUPI(VSPHEREBASE):
             self.terraform.apply(self.terraform_var)
             os.chdir(self.previous_dir)
             logger.info("waiting for bootstrap to complete")
-            run_cmd(
-                f"{self.installer} wait-for bootstrap-complete "
-                f"--dir {self.cluster_path} "
-                f"--log-level {log_cli_level}",
-                timeout=3600
-            )
-            logger.info("removing bootstrap node")
-            os.chdir(self.terraform_data_dir)
-            self.terraform.apply(self.terraform_var, bootstrap_complete=True)
-            os.chdir(self.previous_dir)
+            try:
+                run_cmd(
+                    f"{self.installer} wait-for bootstrap-complete "
+                    f"--dir {self.cluster_path} "
+                    f"--log-level {log_cli_level}",
+                    timeout=3600
+                )
+            except CommandFailed as e:
+                if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
+                    try:
+                        gather_bootstrap()
+                    except Exception as ex:
+                        logger.error(ex)
+                raise e
+
+            if not config.DEPLOYMENT['preserve_bootstrap_node']:
+                logger.info("removing bootstrap node")
+                os.chdir(self.terraform_data_dir)
+                self.terraform.apply(
+                    self.terraform_var, bootstrap_complete=True
+                )
+                os.chdir(self.previous_dir)
 
             OCP.set_kubeconfig(self.kubeconfig)
             # wait for image registry to show-up
@@ -510,6 +583,9 @@ class VSPHEREUPI(VSPHEREBASE):
         """
         previous_dir = os.getcwd()
 
+        # delete the extra disks
+        self.delete_disks()
+
         # check whether cluster has scale-up nodes
         scale_up_terraform_data_dir = os.path.join(
             self.cluster_path,
@@ -545,11 +621,15 @@ class VSPHEREUPI(VSPHEREBASE):
             and os.path.exists(f"{constants.VSPHERE_MAIN}.json")
         ):
             os.rename(f"{constants.VSPHERE_MAIN}.json", f"{constants.VSPHERE_MAIN}.json.backup")
+
         terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
         os.chdir(terraform_data_dir)
         terraform.initialize(upgrade=True)
         terraform.destroy(tfvars)
         os.chdir(previous_dir)
+
+        # post destroy checks
+        self.post_destroy_checks()
 
     def destroy_scaleup_nodes(self, scale_up_terraform_data_dir, scale_up_terraform_var):
         """
@@ -577,3 +657,39 @@ class VSPHEREUPI(VSPHEREBASE):
         os.chdir(scale_up_terraform_data_dir)
         terraform_scale_up.initialize(upgrade=True)
         terraform_scale_up.destroy(scale_up_terraform_var)
+
+
+def change_vm_root_disk_size(machine_file):
+    """
+    Change the root disk size of VM from constants.CURRENT_VM_ROOT_DISK_SIZE
+    to constants.VM_ROOT_DISK_SIZE
+
+    Args:
+         machine_file (str): machine file to change the disk size
+    """
+    disk_size_prefix = "size             = "
+    current_vm_root_disk_size = f"{disk_size_prefix}{constants.CURRENT_VM_ROOT_DISK_SIZE}"
+    vm_root_disk_size = f"{disk_size_prefix}{constants.VM_ROOT_DISK_SIZE}"
+    replace_content_in_file(
+        machine_file,
+        current_vm_root_disk_size,
+        vm_root_disk_size
+    )
+
+
+def sync_time_with_host(machine_file, enable=False):
+    """
+    Syncs the guest time with host
+
+    Args:
+         machine_file (str): machine file to sync the guest time with host
+         enable (bool): True to sync guest time with host
+    """
+    to_change = 'enable_disk_uuid = "true"'
+    sync_time = f"{to_change} sync_time_with_host = \"{enable}\""
+
+    replace_content_in_file(
+        machine_file,
+        to_change,
+        sync_time
+    )

@@ -16,7 +16,7 @@ from time import sleep
 
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
-from ocs_ci.ocs.resources import ocs
+from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
@@ -92,19 +92,20 @@ class CephCluster(object):
         self.tool_selector = constant.TOOL_APP_LABEL
         self.mgr_selector = constant.MGR_APP_LABEL
         self.osd_selector = constant.OSD_APP_LABEL
+        self.noobaa_selector = constant.NOOBAA_APP_LABEL
+        self.noobaa_core_selector = constant.NOOBAA_CORE_POD_LABEL
         self.mons = []
         self._ceph_pods = []
         self.mdss = []
         self.mgrs = []
         self.osds = []
+        self.noobaas = []
         self.toolbox = None
         self.mds_count = 0
         self.mon_count = 0
         self.mgr_count = 0
         self.osd_count = 0
-        self.health_error_status = None
-        self.health_monitor_enabled = False
-        self.health_monitor = None
+        self.noobaa_count = 0
         self.scan_cluster()
         logging.info(f"Number of mons = {self.mon_count}")
         logging.info(f"Number of mds = {self.mds_count}")
@@ -137,6 +138,7 @@ class CephCluster(object):
         self.mdss = pod.get_mds_pods(self.mds_selector, self.namespace)
         self.mgrs = pod.get_mgr_pods(self.mgr_selector, self.namespace)
         self.osds = pod.get_osd_pods(self.osd_selector, self.namespace)
+        self.noobaas = pod.get_noobaa_pods(self.noobaa_selector, self.namespace)
         self.toolbox = pod.get_ceph_tools_pod()
 
         # set port attrib on mon pods
@@ -157,6 +159,7 @@ class CephCluster(object):
         self.mds_count = len(self.mdss)
         self.mgr_count = len(self.mgrs)
         self.osd_count = len(self.osds)
+        self.noobaa_count = len(self.noobaas)
 
     @staticmethod
     def set_port(pod):
@@ -234,6 +237,8 @@ class CephCluster(object):
         except exceptions.MDSCountException as e:
             logger.error(e)
             raise exceptions.CephHealthException("Cluster health is NOT OK")
+
+        self.noobaa_health_check()
         # TODO: OSD and MGR health check
         logger.info("Cluster HEALTH_OK")
         # This scan is for reconcilation on *.count
@@ -333,6 +338,21 @@ class CephCluster(object):
                 f"Failed to achieve desired MDS count"
                 f" {count}"
             )
+
+    def noobaa_health_check(self):
+        """
+        Noobaa health check based on pods status
+        """
+        timeout = 10 * len(self.pods)
+        assert self.POD.wait_for_resource(
+            condition='Running', selector=self.noobaa_selector,
+            timeout=timeout, sleep=3,
+        ), "Failed to achieve desired Noobaa Operator Status"
+
+        assert self.POD.wait_for_resource(
+            condition='Running', selector=self.noobaa_core_selector,
+            timeout=timeout, sleep=3,
+        ), "Failed to achieve desired Noobaa Core Status"
 
     def get_admin_key(self):
         """
@@ -463,27 +483,116 @@ class CephCluster(object):
             "ceph status", out_yaml_format=False,
         )
 
-    def enable_health_monitor(self, sleep=5):
+    def get_ceph_capacity(self):
         """
-        Enable monitoring for ceph health status.
+        The function gets the total mount of storage capacity of the ocs cluster.
+        the calculation is <Num of OSD> * <OSD size> / <replica number>
+        it will not take into account the current used capacity.
+
+        Returns:
+            int : Total storage capacity in GiB (GiB is for development environment)
+
+        """
+        storage_cluster_obj = storage_cluster.StorageCluster(
+            resource_name=config.ENV_DATA['storage_cluster_name'],
+            namespace=config.ENV_DATA['cluster_namespace'],
+        )
+        replica = int(storage_cluster_obj.data['spec']['storageDeviceSets'][0]['replica'])
+
+        ceph_pod = pod.get_ceph_tools_pod()
+        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+        usable_capacity = int(ceph_status['stats']['total_bytes']) / replica / constant.GB
+
+        return usable_capacity
+
+    def get_ceph_cluster_iops(self):
+        """
+        The function gets the IOPS from the ocs cluster
+
+        Returns:
+            Total IOPS in the cluster
+
+        """
+
+        ceph_status = self.get_ceph_status()
+        for item in ceph_status.split("\n"):
+            if 'client' in item:
+                iops = re.findall(r'\d+\.+\d+|\d\d*', item.strip())
+                iops = iops[2::1]
+                if len(iops) == 2:
+                    iops_in_cluster = float(iops[0]) + float(iops[1])
+                else:
+                    iops_in_cluster = float(iops[0])
+                logging.info(f"IOPS in the cluster is {iops_in_cluster}")
+                return iops_in_cluster
+
+    def get_iops_percentage(self, osd_size=2):
+        """
+        The function calculates the IOPS percentage
+        of the cluster depending on number of osds in the cluster
 
         Args:
-            sleep (int): Number of seconds to sleep between health checks.
+            osd_size (int): Size of 1 OSD in Ti
+
+        Returns:
+            IOPS percentage of the OCS cluster
 
         """
-        self.monitor = HealthMonitorThread(self, sleep)
-        self.monitor.start()
 
-    def disable_health_monitor(self):
-        self.health_monitor_enabled = False
+        osd_count = count_cluster_osd()
+        iops_per_osd = osd_size * constants.IOPS_FOR_1TiB_OSD
+        iops_in_cluster = self.get_ceph_cluster_iops()
+        osd_iops_limit = iops_per_osd * osd_count
+        iops_percentage = (iops_in_cluster / osd_iops_limit) * 100
+        logging.info(f"The IOPS percentage of the cluster is {iops_percentage}%")
+        return iops_percentage
+
+    def get_cluster_throughput(self):
+        """
+        Function to get the throughput of ocs cluster
+
+        Returns:
+            Throughput of the cluster in MiB/s
+
+        """
+
+        ceph_status = self.get_ceph_status()
+        for item in ceph_status.split("\n"):
+            if 'client' in item:
+                throughput_data = item.strip('client: ').split(",")
+                throughput_data = throughput_data[:2:1]
+                # Converting all B/s and KiB/s to MiB/s
+                conversion = {'B/s': 0.000000976562, 'KiB/s': 0.000976562, 'MiB/s': 1}
+                throughput = 0
+                for val in throughput_data:
+                    throughput += [
+                        float(re.findall(r'\d+', val)[0]) * conversion[key]
+                        for key in conversion.keys() if key in val
+                    ][0]
+                    logger.info(f"The throughput is {throughput} MiB/s")
+                return throughput
+
+    def get_throughput_percentage(self):
+        """
+        Function to get throughput percentage of the ocs cluster
+
+        Returns:
+            Throughput percentage of the cluster
+
+        """
+
+        throughput_of_cluster = self.get_cluster_throughput()
+        throughput_percentage = (throughput_of_cluster / constants.THROUGHPUT_LIMIT_OSD) * 100
+        logging.info(f"The throughput percentage of the cluster is {throughput_percentage}%")
+        return throughput_percentage
 
 
-class HealthMonitorThread(threading.Thread):
+class CephHealthMonitor(threading.Thread):
     """
-    Class for monitoring ceph health status of CephCluster. If CephCluster will
-    get to HEALTH_ERROR state it will save the ceph status to
-    health_error_status variable in ceph_cluster object and will stop
-    monitoring. It's up to user how to handle the error.
+    Context manager class for monitoring ceph health status of CephCluster.
+    If CephCluster will get to HEALTH_ERROR state it will save the ceph status
+    to health_error_status variable and will stop monitoring.
+
     """
 
     def __init__(self, ceph_cluster, sleep=5):
@@ -497,19 +606,59 @@ class HealthMonitorThread(threading.Thread):
         """
         self.ceph_cluster = ceph_cluster
         self.sleep = sleep
-        super(HealthMonitorThread, self).__init__()
+        self.health_error_status = None
+        self.health_monitor_enabled = False
+        self.latest_health_status = None
+        super(CephHealthMonitor, self).__init__()
 
     def run(self):
-        self.ceph_cluster.health_monitor_enabled = True
-        while self.ceph_cluster.health_monitor_enabled and (
-            not self.ceph_cluster.health_error_status
+        self.health_monitor_enabled = True
+        while self.health_monitor_enabled and (
+            not self.health_error_status
         ):
             sleep(self.sleep)
-            health_status = self.ceph_cluster.get_ceph_health(detail=True)
-            if "HEALTH_ERROR" in health_status:
-                self.ceph_cluster.health_error_status = (
+            self.latest_health_status = self.ceph_cluster.get_ceph_health(
+                detail=True
+            )
+            if "HEALTH_ERROR" in self.latest_health_status:
+                self.health_error_status = (
                     self.ceph_cluster.get_ceph_status()
                 )
+                self.log_error_status()
+
+    def __enter__(self):
+        self.start()
+
+    def __exit__(self, exception_type, value, traceback):
+        """
+        Exit method for context manager
+
+        Raises:
+            CephHealthException: If no other exception occurred during
+                execution of context manager and HEALTH_ERROR is detected
+                during the monitoring.
+            exception_type: In case of exception raised during processing of
+                the context manager.
+
+        """
+        self.health_monitor_enabled = False
+        if self.health_error_status:
+            self.log_error_status()
+        if exception_type:
+            raise exception_type.with_traceback(value, traceback)
+        if self.health_error_status:
+            raise exceptions.CephHealthException(
+                f"During monitoring of Ceph health status hit HEALTH_ERROR: "
+                f"{self.health_error_status}"
+            )
+
+        return True
+
+    def log_error_status(self):
+        logger.error(
+            f"ERROR HEALTH STATUS DETECTED! "
+            f"Status: {self.health_error_status}"
+        )
 
 
 def validate_cluster_on_pvc():
@@ -539,9 +688,10 @@ def validate_cluster_on_pvc():
 
     mon_pods = get_pod_name_by_pattern('rook-ceph-mon', ns)
     osd_pods = get_pod_name_by_pattern('rook-ceph-osd', ns, filter='prepare')
-    assert len(mon_pods) + len(osd_pods) == len(pvc_names), (
-        "Not enough PVC's available for all Ceph Pods"
-    )
+    if not config.DEPLOYMENT.get('local_storage'):
+        assert len(mon_pods) + len(osd_pods) == len(pvc_names), (
+            "Not enough PVC's available for all Ceph Pods"
+        )
     for ceph_pod in mon_pods + osd_pods:
         out = run_cmd(f'oc -n {ns} get pods {ceph_pod} -o yaml')
         out_yaml = yaml.safe_load(out)
@@ -552,3 +702,179 @@ def validate_cluster_on_pvc():
                 assert claimName in pvc_names, (
                     "Ceph Internal Volume not backed by PVC"
                 )
+
+
+def count_cluster_osd():
+    """
+    The function returns the number of cluster OSDs
+
+    Returns:
+         osd_count (int): number of OSD pods in current cluster
+
+    """
+    storage_cluster_obj = storage_cluster.StorageCluster(
+        resource_name=config.ENV_DATA['storage_cluster_name'],
+        namespace=config.ENV_DATA['cluster_namespace'],
+    )
+    storage_cluster_obj.reload_data()
+    osd_count = (
+        int(storage_cluster_obj.data['spec']['storageDeviceSets'][0]['count'])
+        * int(storage_cluster_obj.data['spec']['storageDeviceSets'][0]['replica'])
+    )
+    return osd_count
+
+
+def validate_pdb_creation():
+    """
+    Validate creation of PDBs for MON, MDS and OSD pods.
+
+    Raises:
+        AssertionError: If required PDBs were not created.
+
+    """
+    pdb_obj = ocp.OCP(kind='PodDisruptionBudget')
+    item_list = pdb_obj.get().get('items')
+    pdb_list = [item['metadata']['name'] for item in item_list]
+    osd_count = count_cluster_osd()
+    pdb_required = [constants.MDS_PDB, constants.MON_PDB]
+    for num in range(osd_count):
+        pdb_required.append(constants.OSD_PDB + str(num))
+
+    pdb_list.sort()
+    pdb_required.sort()
+    for required, given in zip(pdb_required, pdb_list):
+        assert required == given, f"{required} was not created"
+
+    logger.info(f"All required PDBs created: {pdb_required}")
+
+
+def get_osd_utilization():
+    """
+    Get osd utilization value
+
+    Returns:
+        osd_filled (dict): Dict of osd name and its used value
+        i.e {'osd.1': 15.276289408185841, 'osd.0': 15.276289408185841, 'osd.2': 15.276289408185841}
+
+    """
+    osd_filled = {}
+    ceph_cmd = "ceph osd df"
+    ct_pod = pod.get_ceph_tools_pod()
+    output = ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    for osd in output.get('nodes'):
+        osd_filled[osd['name']] = osd['utilization']
+
+    return osd_filled
+
+
+def validate_osd_utilization(osd_used=80):
+    """
+    Validates osd utilization matches osd_used value
+
+    Args:
+        osd_used (int): osd used value
+
+    Returns:
+        bool: True if all osd values is equal or greater to osd_used.
+              False Otherwise.
+
+    """
+    _rc = True
+    osd_filled = get_osd_utilization()
+    for osd, value in osd_filled.items():
+        if int(value) >= osd_used:
+            logger.info(f"{osd} used value {value}")
+        else:
+            _rc = False
+            logger.warn(f"{osd} used value {value}")
+
+    return _rc
+
+
+def get_pgs_per_osd():
+    """
+    Function to get ceph pg count per OSD
+
+    Returns:
+        osd_dict (dict): Dict of osd name and its used value
+        i.e {'osd.0': 136, 'osd.2': 136, 'osd.1': 136}
+
+    """
+    osd_dict = {}
+    ceph_cmd = "ceph osd df"
+    ct_pod = pod.get_ceph_tools_pod()
+    output = ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+    for osd in output.get('nodes'):
+        osd_dict[osd['name']] = osd['pgs']
+
+    return osd_dict
+
+
+def get_balancer_eval():
+    """
+    Function to get ceph pg balancer eval value
+
+    Returns:
+        eval_out (float): Eval output of pg balancer
+
+    """
+    ceph_cmd = "ceph balancer eval"
+    ct_pod = pod.get_ceph_tools_pod()
+    eval_out = ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd).split(' ')
+    return float(eval_out[3])
+
+
+def get_pg_balancer_status():
+    """
+    Function to check pg_balancer active and mode is upmap
+
+    Returns:
+        bool: True if active and upmap is set else False
+
+    """
+    # Check either PG balancer is active or not
+    ceph_cmd = "ceph balancer status"
+    ct_pod = pod.get_ceph_tools_pod()
+    output = ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd)
+
+    # Check 'mode' is 'upmap', based on suggestion from Ceph QE
+    # TODO: Revisit this if mode needs change.
+    if output['active'] and output['mode'] == 'upmap':
+        logging.info("PG balancer is active and mode is upmap")
+        return True
+    else:
+        logging.error("PG balancer is not active")
+        return False
+
+
+def validate_pg_balancer():
+    """
+    Validate either data is equally distributed to OSDs
+
+    Returns:
+        bool: True if osd data consumption difference is <= 2% else False
+
+    """
+    # Check OSD utilization either pg balancer is active
+    if get_pg_balancer_status():
+        eval = get_balancer_eval()
+        osd_dict = get_pgs_per_osd()
+        osd_min_pg_value = min(osd_dict.values())
+        osd_max_pg_value = max(osd_dict.values())
+        diff = osd_max_pg_value - osd_min_pg_value
+        # TODO: Revisit this if pg difference value needs change
+        # TODO: Revisit eval value if pg balancer mode changes from 'upmap'
+        if diff <= 5 and eval <= 0.02:
+            logging.info(
+                f"Eval value is {eval} and pg distribution "
+                f"difference is {diff} between high and low pgs per OSD"
+            )
+            return True
+        else:
+            logging.error(
+                f"Eval value is {eval} and pg distribution "
+                f"difference is {diff} between high and low pgs per OSD"
+            )
+            return False
+    else:
+        logging.info(f"pg_balancer is not active")

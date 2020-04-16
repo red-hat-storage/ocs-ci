@@ -102,6 +102,10 @@ class NonUpgradedImagesFoundError(Exception):
     pass
 
 
+class UnexpectedImage(Exception):
+    pass
+
+
 class UnexpectedVolumeType(Exception):
     pass
 
@@ -119,4 +123,48 @@ class FailedToDeleteInstance(Exception):
 
 
 class NoInstallPlanForApproveFoundException(Exception):
+    pass
+
+
+class NoobaaConditionException(Exception):
+    pass
+
+
+class NodeNotFoundError(Exception):
+    pass
+
+
+class ResourceNotFoundError(Exception):
+    pass
+
+
+class ChannelNotFound(Exception):
+    pass
+
+
+class UnsupportedPlatformError(Exception):
+    pass
+
+
+class UnsupportedBrowser(Exception):
+    pass
+
+
+class OpenshiftConsoleSuiteNotDefined(Exception):
+    pass
+
+
+class ServiceUnavailable(Exception):
+    pass
+
+
+class InvalidStatusCode(Exception):
+    pass
+
+
+class NoBucketPolicyResponse(Exception):
+    pass
+
+
+class ClusterIOTagNotFound(Exception):
     pass

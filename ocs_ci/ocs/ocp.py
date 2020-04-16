@@ -8,6 +8,7 @@ import shlex
 import tempfile
 import time
 import yaml
+import json
 
 from ocs_ci.ocs.constants import RSYNC_POD_YAML, STATUS_RUNNING
 from ocs_ci.ocs.exceptions import (
@@ -22,7 +23,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
-from ocs_ci.ocs import defaults
+from ocs_ci.ocs import defaults, constants
 
 
 log = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ class OCP(object):
 
     def __init__(
         self, api_version='v1', kind='Service', namespace=None,
-        resource_name=''
+        resource_name='', selector=None,
     ):
         """
         Initializer function
@@ -49,12 +50,15 @@ class OCP(object):
             kind (str): TBD
             namespace (str): The name of the namespace to use
             resource_name (str): Resource name
+            selector (str): The label selector to look for. It has higher
+                priority than resource_name and is used instead of the name.
         """
         self._api_version = api_version
         self._kind = kind
         self._namespace = namespace
         self._resource_name = resource_name
         self._data = {}
+        self.selector = selector
 
     @property
     def api_version(self):
@@ -133,13 +137,14 @@ class OCP(object):
             return yaml.safe_load(out)
         return out
 
-    def exec_oc_debug_cmd(self, node, cmd_list):
+    def exec_oc_debug_cmd(self, node, cmd_list, timeout=300):
         """
         Function to execute "oc debug" command on OCP node
 
         Args:
             node (str): Node name where the command to be executed
             cmd_list (list): List of commands eg: ['cmd1', 'cmd2']
+            timeout (int): timeout for the exec_oc_cmd, defaults to 600 seconds
 
         Returns:
             out (str): Returns output of the executed command/commands
@@ -153,7 +158,7 @@ class OCP(object):
         cmd = f" || echo '{err_msg}';".join(cmd_list)
         debug_cmd = f"debug nodes/{node} -- chroot /host /bin/bash -c \"{cmd}\""
         out = str(self.exec_oc_cmd(
-            command=debug_cmd, out_yaml_format=False
+            command=debug_cmd, out_yaml_format=False, timeout=timeout
         ))
         if err_msg in out:
             raise CommandFailed
@@ -162,7 +167,7 @@ class OCP(object):
 
     def get(
         self, resource_name='', out_yaml_format=True, selector=None,
-        all_namespaces=False
+        all_namespaces=False, retry=0, wait=3
     ):
         """
         Get command - 'oc get <resource>'
@@ -170,8 +175,10 @@ class OCP(object):
         Args:
             resource_name (str): The resource name to fetch
             out_yaml_format (bool): Adding '-o yaml' to oc command
-            selector (str): The label selector to look for
+            selector (str): The label selector to look for.
             all_namespaces (bool): Equal to oc get <resource> -A
+            retry (int): Number of attempts to retry to get resource
+            wait (int): Number of seconds to wait between attempts for retry
 
         Example:
             get('my-pv1')
@@ -180,6 +187,9 @@ class OCP(object):
             dict: Dictionary represents a returned yaml file
         """
         resource_name = resource_name if resource_name else self.resource_name
+        selector = selector if selector else self.selector
+        if selector:
+            resource_name = ""
         command = f"get {self.kind} {resource_name}"
         if all_namespaces and not self.namespace:
             command += " -A"
@@ -189,7 +199,26 @@ class OCP(object):
             command += f" --selector={selector}"
         if out_yaml_format:
             command += " -o yaml"
-        return self.exec_oc_cmd(command)
+        retry += 1
+        while retry:
+            try:
+                return self.exec_oc_cmd(command)
+            except CommandFailed as ex:
+                log.warning(
+                    f"Failed to get resource: {resource_name} of kind: "
+                    f"{self.kind}, selector: {selector}, Error: {ex}"
+                )
+                retry -= 1
+                if not retry:
+                    log.warning("Number of attempts to get resource reached!")
+                    raise
+                else:
+                    log.info(
+                        f"Number of attempts: {retry} to get resource: "
+                        f"{resource_name}, selector: {selector}, remain! "
+                        f"Trying again in {wait} sec."
+                    )
+                    time.sleep(wait if wait else 1)
 
     def describe(self, resource_name='', selector=None, all_namespaces=False):
         """
@@ -295,7 +324,7 @@ class OCP(object):
         command = f"apply -f {yaml_file}"
         return self.exec_oc_cmd(command)
 
-    def patch(self, resource_name='', params=None, type='json'):
+    def patch(self, resource_name='', params=None, format_type=''):
         """
         Applies changes to resources
 
@@ -310,7 +339,9 @@ class OCP(object):
         """
         resource_name = resource_name or self.resource_name
         params = "\'" + f"{params}" + "\'"
-        command = f"patch {self.kind} {resource_name} -n {self.namespace} -p {params} --type {type}"
+        command = f"patch {self.kind} {resource_name} -n {self.namespace} -p {params}"
+        if format_type:
+            command += f" --type {format_type}"
         log.info(f"Command: {command}")
         result = self.exec_oc_cmd(command)
         if 'patched' in result:
@@ -345,6 +376,29 @@ class OCP(object):
             return True
         return False
 
+    def delete_project(self, project_name):
+        """
+        Delete a project.  A project created by the new_project function does
+        not have a corresponding yaml file so normal resource deletion calls
+        do not work
+
+        Args:
+            project_name (str): Name of the project to be deleted
+
+        Returns:
+            bool: True in case project deletion succeeded.
+
+        Raises:
+            CommandFailed: When the project deletion does not succeed.
+
+        """
+        command = f"oc delete project {project_name}"
+        if f' "{project_name}" deleted' in run_cmd(f"{command}"):
+            return True
+        raise CommandFailed(
+            f"{project_name} was not deleted"
+        )
+
     def login(self, user, password):
         """
         Logs user in
@@ -357,6 +411,20 @@ class OCP(object):
             str: output of login command
         """
         command = f"oc login -u {user} -p {password}"
+        status = run_cmd(command)
+        return status
+
+    def login_as_sa(self):
+        """
+        Logs in as system:admin
+
+        Returns:
+            str: output of login command
+        """
+        kubeconfig = os.getenv('KUBECONFIG')
+        command = f"oc login -u system:admin "
+        if kubeconfig:
+            command += f"--kubeconfig {kubeconfig}"
         status = run_cmd(command)
         return status
 
@@ -402,6 +470,7 @@ class OCP(object):
             f" at column name {column}"
             f" to reach desired condition {condition}"))
         resource_name = resource_name if resource_name else self.resource_name
+        selector = selector if selector else self.selector
 
         # actual status of the resource we are waiting for, setting it to None
         # now prevents UnboundLocalError raised when waiting timeouts
@@ -414,7 +483,10 @@ class OCP(object):
 
                 # Only 1 resource expected to be returned
                 if resource_name:
-                    status = self.get_resource(resource_name, column)
+                    retry = int(timeout / sleep if sleep else timeout / 1)
+                    status = self.get_resource(
+                        resource_name, column, retry=retry, wait=sleep,
+                    )
                     if status == condition:
                         return True
                     log.info((
@@ -503,7 +575,9 @@ class OCP(object):
                 raise TimeoutError(msg)
             time.sleep(sleep)
 
-    def get_resource(self, resource_name, column):
+    def get_resource(
+        self, resource_name, column, retry=0, wait=3, selector=None
+    ):
         """
         Get a column value for a resource based on:
         'oc get <resource_kind> <resource_name>' command
@@ -511,13 +585,21 @@ class OCP(object):
         Args:
             resource_name (str): The name of the resource to get its column value
             column (str): The name of the column to retrive
+            retry (int): Number of attempts to retry to get resource
+            wait (int): Number of seconds to wait beteween attempts for retry
+            selector (str): The resource selector to search with.
 
         Returns:
             str: The output returned by 'oc get' command not in the 'yaml'
                 format
         """
+        resource_name = resource_name if resource_name else self.resource_name
+        selector = selector if selector else self.selector
         # Get the resource in str format
-        resource = self.get(resource_name=resource_name, out_yaml_format=False)
+        resource = self.get(
+            resource_name=resource_name, out_yaml_format=False, retry=retry,
+            wait=wait, selector=selector
+        )
         # get the list of titles
         titles = re.sub(r'\s{2,}', ',', resource)  # noqa: W605
         titles = titles.split(',')
@@ -652,6 +734,36 @@ class OCP(object):
                 f"{phase}"
             )
 
+    def is_exist(self, resource_name="", selector=None):
+        """
+        Check if at least one of the resource exists.
+
+        Args:
+            resource_name (str): Name of the resource.
+            selector (str): Selector of the resource.
+
+        Raises:
+            ResourceNameNotSpecifiedException: In case the name is not
+                specified.
+
+        Returns:
+            bool: True if the resource exists False otherwise.
+
+        """
+        resource_name = resource_name or self.resource_name
+        selector = selector or self.selector
+        log.info(f"Check if resource: {resource_name} exists.")
+        self.check_name_is_specified(resource_name)
+        try:
+            self.get(resource_name, selector=selector)
+            log.info(f"Resource: {resource_name}, selector: {selector} found.")
+            return True
+        except CommandFailed:
+            log.info(
+                f"Resource: {resource_name}, selector: {selector} not found."
+            )
+            return False
+
 
 def switch_to_project(project_name):
     """
@@ -704,7 +816,7 @@ def rsync(src, dst, node, dst_node=True, extra_params=""):
     pod_data = load_yaml(RSYNC_POD_YAML)
     pod_data['metadata']['name'] = pod_name
     pod_data['spec']['nodeName'] = node
-    pod = OCP(kind='pod')
+    pod = OCP(kind='pod', namespace=constants.DEFAULT_NAMESPACE)
     src = src if dst_node else f"{pod_name}:/host{src}"
     dst = f"{pod_name}:/host{dst}" if dst_node else dst
     try:
@@ -786,3 +898,136 @@ def verify_images_upgraded(old_images, object_data):
         f"All the images: {current_images} were successfully upgraded in: "
         f"{name}!"
     )
+
+
+def confirm_cluster_operator_version(target_version, cluster_operator):
+    """
+    Check if cluster operator upgrade process is completed:
+
+    Args:
+        cluster_operator: (str): ClusterOperator name
+        target_version (str): expected OCP client
+
+    Returns:
+        bool: True if success, False if failed
+
+    """
+    log.info(f"target_version: {target_version}")
+    cur_version = get_cluster_operator_version(cluster_operator)
+    log.info(f"current {cluster_operator} operator version is: {cur_version}")
+    if cur_version == target_version or target_version.startswith(cur_version):
+        log.info(f"{cluster_operator} cluster operator upgrade to build"
+                 f" {target_version} completed")
+        return True
+
+    log.debug(f"{cluster_operator} upgrade not yet completed")
+    return False
+
+
+def upgrade_ocp(image_path, image):
+    """
+    upgrade OCP version
+
+    Args:
+        image (str): image to be installed
+        image_path (str): path to image
+
+    """
+    ocp = OCP()
+    ocp.exec_oc_cmd(
+        f"adm upgrade --to-image={image_path}:{image} "
+        f"--allow-explicit-upgrade --force "
+    )
+    log.info(f"Upgrading OCP to version: {image} ")
+
+
+def get_current_oc_version():
+    """
+    Gets Current OCP client version
+
+    Returns:
+        str: current COP client version
+
+    """
+    ocp = OCP()
+    oc_json = ocp.exec_oc_cmd('version -o json', out_yaml_format=False)
+    log.debug(f"oc_json=: {oc_json}")
+    oc_dict = json.loads(oc_json)
+    log.debug(f"oc_dict=: {oc_dict}")
+
+    return oc_dict.get("openshiftVersion")
+
+
+def get_cluster_operator_version(cluster_operator_name):
+    """
+    Get image version of selected cluster operator
+
+    Args:
+        cluster_operator_name (str): ClusterOperator name
+
+    Returns:
+        str: cluster operator version: ClusterOperator image version
+
+    """
+    ocp = OCP(kind='ClusterOperator')
+    operator_info = ocp.get(cluster_operator_name)
+    log.debug(f"operator info: {operator_info}")
+    operator_status = operator_info.get('status')
+    version = operator_status.get('versions')[0]['version']
+    version = version.rstrip('_openshift')
+
+    return version
+
+
+def get_all_cluster_operators():
+    """
+    Get all ClusterOperators names in OCP
+
+    Returns:
+        list: cluster-operator names
+
+    """
+    ocp = OCP(kind='ClusterOperator')
+    operator_info = ocp.get("-o name", out_yaml_format=False, all_namespaces=True)
+    operators_full_names = str(operator_info).split()
+    operator_names = list()
+    for name in operators_full_names:
+        log.debug(f"original operator name: {name}")
+        new_name = name.lstrip('clusteroperator.config.openshift.io').lstrip('/')
+        log.info(f"fixed operator name: {new_name}")
+        operator_names.append(new_name)
+
+    log.info(f"ClusterOperators full list: {operator_names}")
+
+    return operator_names
+
+
+def verify_cluster_operator_status(cluster_operator):
+    """
+    Checks if cluster operator status is degraded or progressing,
+    as sign that upgrade not yet completed
+
+    Args:
+        cluster_operator (str): OCP cluster operator name
+
+    Returns:
+        bool: True if cluster operator status is valid, False if cluster operator status
+        is "degraded" or "progressing"
+
+    """
+    ocp = OCP(kind='clusteroperators')
+    operator_data = ocp.get(
+        resource_name=f'{cluster_operator} -o json', out_yaml_format=False
+    )
+    # operator_data = json.loads(oc_json)
+    conditions = operator_data['status']['conditions']
+    for condition in conditions:
+        if condition['type'] == 'Degraded' and condition['status'] == 'True':
+            log.info(f'{cluster_operator} status is Degraded')
+            return False
+        if condition['type'] == 'Progressing' and condition['status'] == 'True':
+            log.info(f'{cluster_operator} status is Progressing')
+            return False
+    log.info(f'{cluster_operator} status is valid')
+
+    return True

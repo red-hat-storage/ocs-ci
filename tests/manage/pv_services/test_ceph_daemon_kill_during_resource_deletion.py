@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import ManageTest, tier4
+from ocs_ci.framework.testlib import ManageTest, tier4, tier4b
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
@@ -15,8 +15,8 @@ from ocs_ci.ocs.resources.pod import (
     get_operator_pods, delete_pods
 )
 from tests.helpers import (
-    verify_volume_deleted_in_backend,
-    wait_for_resource_count_change
+    verify_volume_deleted_in_backend, wait_for_resource_count_change,
+    default_ceph_block_pool
 )
 from tests import disruption_helpers
 
@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 
 
 @tier4
+@tier4b
 @pytest.mark.parametrize(
     argnames=['interface', 'operation_to_disrupt', 'resource_name'],
     argvalues=[
@@ -160,7 +161,6 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
         Kill 'resource_name' daemon while deletion of PVCs/pods is progressing
         """
         pvc_objs, self.pod_objs = setup_base
-        sc_obj = pvc_objs[0].storageclass
         self.namespace = pvc_objs[0].project.namespace
         pod_functions = {
             'mds': partial(get_mds_pods), 'mon': partial(get_mon_pods),
@@ -303,11 +303,12 @@ class TestDaemonKillDuringPodPvcDeletion(ManageTest):
         log.info("Verified: PVs are deleted.")
 
         # Verify PV using ceph toolbox. Image/Subvolume should be deleted.
+        pool_name = default_ceph_block_pool()
         for pvc_name, uuid in pvc_uuid_map.items():
             if interface == constants.CEPHBLOCKPOOL:
                 ret = verify_volume_deleted_in_backend(
                     interface=interface, image_uuid=uuid,
-                    pool_name=sc_obj.ceph_pool.name
+                    pool_name=pool_name
                 )
             if interface == constants.CEPHFILESYSTEM:
                 ret = verify_volume_deleted_in_backend(

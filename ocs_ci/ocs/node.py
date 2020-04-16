@@ -1,12 +1,21 @@
 import copy
 import logging
+import re
+
+from subprocess import TimeoutExpired
+
+from ocs_ci.ocs.machine import get_machine_objs
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs import constants, exceptions
+from ocs_ci.ocs import constants, exceptions, ocp
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs import machine
+import tests.helpers
+from ocs_ci.ocs.resources import pod
+
 
 log = logging.getLogger(__name__)
 
@@ -26,13 +35,15 @@ def get_node_objs(node_names=None):
     nodes_obj = OCP(kind='node')
     node_dicts = nodes_obj.get()['items']
     if not node_names:
-        return [OCS(**node_obj) for node_obj in node_dicts]
+        nodes = [OCS(**node_obj) for node_obj in node_dicts]
     else:
-        return [
+        nodes = [
             OCS(**node_obj) for node_obj in node_dicts if (
                 node_obj.get('metadata').get('name') in node_names
             )
         ]
+    assert nodes, "Failed to get the nodes OCS objects"
+    return nodes
 
 
 def get_typed_nodes(node_type='worker', num_of_nodes=None):
@@ -48,11 +59,9 @@ def get_typed_nodes(node_type='worker', num_of_nodes=None):
         list: The nodes OCP instances
 
     """
-    nodes = get_node_objs()
-
     typed_nodes = [
-        n for n in nodes if node_type in n.get().get('metadata')
-        .get('annotations').get('machineconfiguration.openshift.io/currentConfig')
+        node for node in get_node_objs() if node
+        .ocp.get_resource(resource_name=node.name, column='ROLES') == node_type
     ]
     if num_of_nodes:
         typed_nodes = typed_nodes[:num_of_nodes]
@@ -146,10 +155,19 @@ def drain_nodes(node_names):
     ocp = OCP(kind='node')
     node_names_str = ' '.join(node_names)
     log.info(f'Draining nodes {node_names_str}')
-    ocp.exec_oc_cmd(
-        f"adm drain {node_names_str} --force=true --ignore-daemonsets "
-        f"--delete-local-data"
-    )
+    try:
+        ocp.exec_oc_cmd(
+            f"adm drain {node_names_str} --force=true --ignore-daemonsets "
+            f"--delete-local-data", timeout=1200
+        )
+    except TimeoutExpired:
+        ct_pod = pod.get_ceph_tools_pod()
+        ceph_status = ct_pod.exec_cmd_on_pod("ceph status", out_yaml_format=False)
+        log.error(
+            f"Drain command failed to complete. Ceph status: {ceph_status}"
+        )
+        # TODO: Add re-balance status once pull/1679 is merged
+        raise
 
 
 def get_typed_worker_nodes(os_id="rhcos"):
@@ -219,3 +237,239 @@ def get_node_ips(node_type='worker'):
         ]
     else:
         raise NotImplementedError
+
+
+def add_new_node_and_label_it(machineset_name):
+    """
+    Add a new node and label it
+
+    Args:
+        machineset_name (str): Name of the machine set
+    eg: add_new_node_and_label_it("new-tdesala-zlqzn-worker-us-east-2a")
+    """
+    # Get the initial nodes list
+    initial_nodes = tests.helpers.get_worker_nodes()
+    log.info(f"Current available worker nodes are {initial_nodes}")
+
+    # get machineset replica count
+    machineset_replica_count = machine.get_replica_count(machineset_name)
+    log.info(
+        f"{machineset_name} has replica count: {machineset_replica_count}"
+    )
+
+    # Increase its replica count
+    log.info("Increasing the replica count by 1")
+    machine.add_node(machineset_name, count=machineset_replica_count + 1)
+    log.info(
+        f"{machineset_name} now has replica "
+        f"count: {machineset_replica_count + 1}"
+    )
+
+    # wait for the new node to come to ready state
+    log.info("Waiting for the new node to be in ready state")
+    machine.wait_for_new_node_to_be_ready(machineset_name)
+
+    # Get the node name of new spun node
+    nodes_after_new_spun_node = tests.helpers.get_worker_nodes()
+    new_spun_node = list(
+        set(nodes_after_new_spun_node) - set(initial_nodes)
+    )
+    log.info(f"New spun node is {new_spun_node}")
+
+    # Label it
+    node_obj = ocp.OCP(kind='node')
+    node_obj.add_label(
+        resource_name=new_spun_node[0],
+        label=constants.OPERATOR_NODE_LABEL
+    )
+    log.info(
+        f"Successfully labeled {new_spun_node} with OCS storage label"
+    )
+    return new_spun_node[0]
+
+
+def get_node_logs(node_name):
+    """
+    Get logs from a given node
+
+    pod_name (str): Name of the node
+
+    Returns:
+        str: Output of 'dmesg' run on node
+    """
+    node = OCP(kind='node')
+    return node.exec_oc_debug_cmd(node_name, ["dmesg"])
+
+
+def get_node_resource_utilization_from_adm_top(nodename=None, node_type='worker'):
+    """
+    Gets the node's cpu and memory utilization in percentage using adm top command.
+
+    Args:
+        nodename (str) : The node name
+        node_type (str) : The node type (e.g. master, worker)
+
+    Returns:
+        dict : Node name and its cpu and memory utilization in
+               percentage
+
+    """
+
+    node_names = [nodename] if nodename else [
+        node.name for node in get_typed_nodes(node_type=node_type)
+    ]
+    obj = ocp.OCP()
+    resource_utilization_all_nodes = obj.exec_oc_cmd(
+        command='adm top nodes', out_yaml_format=False
+    ).split("\n")
+    utilization_dict = {}
+
+    for node in node_names:
+        for value in resource_utilization_all_nodes:
+            if node in value:
+                value = re.findall(r'\d+', value.strip())
+                cpu_utilization = value[2]
+                log.info("The CPU utilized by the node "
+                         f"{node} is {cpu_utilization}%")
+                memory_utilization = value[4]
+                log.info("The memory utilized of the node "
+                         f"{node} is {memory_utilization}%")
+                utilization_dict[node] = {
+                    'cpu': int(cpu_utilization),
+                    'memory': int(memory_utilization)
+                }
+    return utilization_dict
+
+
+def get_node_resource_utilization_from_oc_describe(nodename=None, node_type='worker'):
+    """
+    Gets the node's cpu and memory utilization in percentage using oc describe node
+
+    Args:
+        nodename (str) : The node name
+        node_type (str) : The node type (e.g. master, worker)
+
+    Returns:
+        dict : Node name and its cpu and memory utilization in
+               percentage
+
+    """
+
+    node_names = [nodename] if nodename else [
+        node.name for node in get_typed_nodes(node_type=node_type)
+    ]
+    obj = ocp.OCP()
+    utilization_dict = {}
+    for node in node_names:
+        output = obj.exec_oc_cmd(
+            command=f"describe node {node}", out_yaml_format=False
+        ).split("\n")
+        for line in output:
+            if 'cpu  ' in line:
+                cpu_data = line.split(' ')
+                cpu = re.findall(r'\d+', [i for i in cpu_data if i][2])
+            if 'memory  ' in line:
+                mem_data = line.split(' ')
+                mem = re.findall(r'\d+', [i for i in mem_data if i][2])
+        utilization_dict[node] = {
+            'cpu': int(cpu[0]),
+            'memory': int(mem[0])
+        }
+
+    return utilization_dict
+
+
+def node_network_failure(node_names, wait=True):
+    """
+    Induce node network failure
+    Bring node network interface down, making the node unresponsive
+
+    Args:
+        node_names (list): The names of the nodes
+        wait (bool): True in case wait for status is needed, False otherwise
+
+    Returns:
+        bool: True if node network fail is successful
+    """
+    if not isinstance(node_names, list):
+        node_names = [node_names]
+
+    ocp = OCP(kind='node')
+    fail_nw_cmd = "ifconfig $(route | grep default | awk '{print $(NF)}') down"
+
+    for node_name in node_names:
+        try:
+            ocp.exec_oc_debug_cmd(
+                node=node_name, cmd_list=[fail_nw_cmd], timeout=15
+            )
+        except TimeoutExpired:
+            pass
+
+    if wait:
+        wait_for_nodes_status(
+            node_names=node_names, status=constants.NODE_NOT_READY
+        )
+    return True
+
+
+def get_osd_running_nodes():
+    """
+    Gets the osd running node names
+
+    Returns:
+        list: OSD node names
+
+    """
+    return [
+        pod.get_pod_node(osd_node).name for osd_node in pod.get_osd_pods()
+    ]
+
+
+def get_app_pod_running_nodes(pod_obj):
+    """
+    Gets the app pod running node names
+
+    Args:
+        pod_obj (list): List of app pod objects
+
+    Returns:
+        list: App pod running node names
+
+    """
+    return [pod.get_pod_node(obj_pod).name for obj_pod in pod_obj]
+
+
+def get_both_osd_and_app_pod_running_node(
+    osd_running_nodes, app_pod_running_nodes
+):
+    """
+     Gets both osd and app pod running node names
+
+     Args:
+         osd_running_nodes(list): List of osd running node names
+         app_pod_running_nodes(list): List of app pod running node names
+
+     Returns:
+         list: Both OSD and app pod running node names
+
+     """
+    common_nodes = list(set(osd_running_nodes) & set(app_pod_running_nodes))
+    log.info(f"Common node is {common_nodes}")
+    return common_nodes
+
+
+def get_node_from_machine_name(machine_name):
+    """
+    Get node name from a given machine_name
+
+    machine_name (str): Name of Machine
+
+    Returns:
+        str: Name of node
+    """
+    machine_objs = get_machine_objs()
+    for machine_obj in machine_objs:
+        if machine_obj.name == machine_name:
+            return machine_obj.get().get(
+                'status'
+            ).get('addresses')[1].get('address')

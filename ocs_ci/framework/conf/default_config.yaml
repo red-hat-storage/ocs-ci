@@ -3,8 +3,6 @@
 # by:
 #
 # * --ocsci-conf file.yaml parameter.
-# * --cluster-conf cluster.yaml parameter - this will be rendered under
-#   ENV_DATA section
 #
 # Each section in this file will be available as an attribute of the
 # framework.config object.
@@ -21,7 +19,7 @@ RUN:
   cli_params: {}  # this will be filled with CLI parameters data
   # If the client version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version
-  client_version: '4.2.0-0.nightly'
+  client_version: '4.3.0-0.nightly'
   bin_dir: './bin'
   google_api_secret: '~/.ocs-ci/google_api_secret.json'
   rook_branch: "master"
@@ -41,15 +39,15 @@ DEPLOYMENT:
   # if the installer version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version. You can also use the
   # specific build version like: "4.2.0-0.nightly-2019-08-06-195545"
-  installer_version: "4.2.0-0.nightly"
+  installer_version: "4.3.0-0.nightly"
   force_download_installer: True
   force_download_client: True
+  default_latest_tag: 'latest-4.3'
   # You can overwrite csv channel version by following parameter
-  # ocs_csv_channel: "alpha"
+  ocs_csv_channel: "stable-4.3"
   # you can overwrite the image for ocs operator catalog source by following parameter:
-  # ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:4.2-32.9b6c93e.master"
-  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:4.2-rc"
-  default_latest_tag: '4.2-rc'
+  # ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:4.2-32.9b6c93e.master"
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:latest-4.3"
   ocs_operator_nodes_to_label: 3
   # This is described as a WA for minimal configuration 3/3 worker/master
   # nodes. See: https://github.com/openshift/ocs-operator
@@ -64,6 +62,9 @@ DEPLOYMENT:
   # UI deployment is not part of this framework, it will just do preparation
   # steps for openshift-console.
   ui_deployment: False
+  # Following options are defaults for deployment from live content
+  live_deployment: False
+  preserve_bootstrap_node: False
 
 # Section for reporting configuration
 REPORTING:
@@ -76,10 +77,10 @@ REPORTING:
   us_ds: 'DS'
   ocp_must_gather_image: "quay.io/openshift/origin-must-gather"
   ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
+  default_ocs_must_gather_latest_tag: 'latest-4.3'
   gather_on_deploy_failure: true
 
-# This is the default information about environment. Will be overwritten with
-# --cluster-conf file.yaml data you will pass to the pytest.
+# This is the default information about environment.
 ENV_DATA:
   cluster_name: null  # will be changed in ocscilib plugin
   storage_cluster_name: 'ocs-storagecluster'
@@ -97,7 +98,27 @@ ENV_DATA:
   worker_replicas: 3
   skip_ocp_deployment: false
   skip_ocs_deployment: false
-  logging_version: '4.2'
+  ocs_version: '4.3'
   # uncomment to use custom directory for storing measurement data related to
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
+  # Default RHCOS image to be used for VmWare deployment
+  vm_template: 'rhcos-4.3.0-x86_64-vmware'
+  # minimal write speed of fio as used in workload_fio_storageutilization
+  # fixtures, which is used to compute timeout of the write job (so that
+  # when actual write speed of the operation is smaller than this value, the
+  # workload fixture will fail on a timeout)
+  # the default value used here is based on observations on aws clusters
+  fio_storageutilization_min_mbps: 30.0
+  # terraform environment variables
+  TF_LOG_LEVEL: TRACE
+  TF_LOG_FILE: "terraform.log"
+
+# This section is related to upgrade
+UPGRADE:
+  upgrade_to_latest: true
+  # This default image for ocp upgrade based on 4.3 GA build
+  # ocp_upgrade_version: "4.3.3"
+  ocp_channel: "stable-4.3"
+  ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
+  ocp_arch: "x86_64"

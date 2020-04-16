@@ -3,25 +3,33 @@ This module provides base class for different deployment
 platforms like AWS, VMWare, Baremetal etc.
 """
 import logging
-import os
 import tempfile
 import time
+
+import json
+import requests
 from copy import deepcopy
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults, registry
-from ocs_ci.ocs.cluster import validate_cluster_on_pvc
-from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
+from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
+from ocs_ci.ocs.exceptions import (
+    CommandFailed, UnavailableResourceException, UnsupportedPlatformError
+)
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
     validate_pvc_created_and_bound_on_monitoring_pods,
     validate_pvc_are_mounted_on_monitoring_pods
 )
+from ocs_ci.ocs.node import get_typed_nodes, get_typed_worker_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
-from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.ocs.resources.packagemanifest import (
+    get_selector_for_ocs_operator,
+    PackageManifest,
+)
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     validate_pods_are_respinned_and_running_state
@@ -30,9 +38,14 @@ from ocs_ci.ocs.utils import (
     setup_ceph_toolbox, collect_ocs_logs
 )
 from ocs_ci.utility import templating
+from ocs_ci.utility.openshift_console import OpenshiftConsole
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
-    run_cmd, ceph_health_check, is_cluster_running, get_kubeadmin_password,
+    ceph_health_check,
     get_latest_ds_olm_tag,
+    get_ocp_version,
+    is_cluster_running,
+    run_cmd,
 )
 from tests import helpers
 
@@ -78,7 +91,9 @@ class Deployment(object):
             else:
                 try:
                     self.deploy_ocp(log_cli_level)
-                except Exception:
+                    self.post_ocp_deploy()
+                except Exception as e:
+                    logger.error(e)
                     if config.REPORTING['gather_on_deploy_failure']:
                         collect_ocs_logs('deployment', ocs=False)
                     raise
@@ -86,7 +101,8 @@ class Deployment(object):
         if not config.ENV_DATA['skip_ocs_deployment']:
             try:
                 self.deploy_ocs()
-            except Exception:
+            except Exception as e:
+                logger.error(e)
                 if config.REPORTING['gather_on_deploy_failure']:
                     # Let's do the collections separately to guard against one
                     # of them failing
@@ -95,6 +111,25 @@ class Deployment(object):
                 raise
         else:
             logger.warning("OCS deployment will be skipped")
+
+    def add_stage_cert(self):
+        """
+        Deploy stage certificate to the cluster.
+        """
+        logger.info("Create configmap stage-registry-config with stage CA.")
+        run_cmd(
+            f"oc -n openshift-config create configmap stage-registry-config"
+            f" --from-file=registry.stage.redhat.io={constants.STAGE_CA_FILE}"
+        )
+
+        logger.info("Add stage-registry-config to additionalTrustedCA.")
+        additional_trusted_ca_patch = (
+            '{"spec":{"additionalTrustedCA":{"name":"stage-registry-config"}}}'
+        )
+        run_cmd(
+            f"oc patch image.config.openshift.io cluster --type=merge"
+            f" -p '{additional_trusted_ca_patch}'"
+        )
 
     def deploy_ocp(self, log_cli_level='DEBUG'):
         """
@@ -110,6 +145,56 @@ class Deployment(object):
         # logging the cluster UUID so that we can ask for it's telemetry data
         cluster_id = run_cmd("oc get clusterversion version -o jsonpath='{.spec.clusterID}'")
         logger.info(f"clusterID (UUID): {cluster_id}")
+
+    def post_ocp_deploy(self):
+        """
+        Function does post OCP deployment stuff we need to do.
+        """
+        # Workaround for #1777384 - enable container_use_cephfs on RHEL workers
+        # Ticket: RHSTOR-787, see more details in the issue: #1151
+        logger.info("Running WA for ticket: RHSTOR-787")
+        ocp_obj = ocp.OCP()
+        cmd = ['/usr/sbin/setsebool -P container_use_cephfs on']
+        workers = get_typed_worker_nodes(os_id="rhel")
+        for worker in workers:
+            cmd_list = cmd.copy()
+            node = worker.get().get('metadata').get('name')
+            logger.info(
+                f"{node} is a RHEL based worker - applying '{cmd_list}'"
+            )
+            # We saw few times there was an issue to spawn debug RHEL pod.
+            # Let's use retry decorator to make sure our CI is more stable.
+            retry(CommandFailed)(ocp_obj.exec_oc_debug_cmd)(
+                node=node, cmd_list=cmd_list
+            )
+        # end of workaround
+        self.set_registry_to_managed_state()
+        self.add_stage_cert()
+
+    def set_registry_to_managed_state(self):
+        """
+        In order to be able to deploy from stage we need to change
+        image registry config to Managed state.
+        More described in BZs:
+        https://bugzilla.redhat.com/show_bug.cgi?id=1806593
+        https://bugzilla.redhat.com/show_bug.cgi?id=1807471#c3
+        We need to change to managed state as described here:
+        https://github.com/red-hat-storage/ocs-ci/issues/1436
+        So this is not suppose to be deleted as WA case we really need to do
+        this operation for OCS deployment as was originally done here:
+        https://github.com/red-hat-storage/ocs-ci/pull/1437
+        Currently it has to be moved here to enable CA certificate to be
+        properly propagated for the stage deployment as mentioned in BZ.
+        """
+        if(config.ENV_DATA['platform'] not in constants.CLOUD_PLATFORMS):
+            run_cmd(
+                f'oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p '
+                f'\'{{"spec":{{"storage": {{"emptyDir":{{}}}}}}}}\''
+            )
+            run_cmd(
+                f'oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p '
+                f'\'{{"spec":{{"managementState": "Managed"}}}}\''
+            )
 
     def label_and_taint_nodes(self):
         """
@@ -163,7 +248,8 @@ class Deployment(object):
                 f"{constants.OPERATOR_NODE_LABEL}"
             )
             label_cmd = (
-                f"label nodes {workers_to_label} {constants.OPERATOR_NODE_LABEL}"
+                f"label nodes {workers_to_label} "
+                f"{constants.OPERATOR_NODE_LABEL} --overwrite"
             )
             _ocp.exec_oc_cmd(command=label_cmd)
 
@@ -178,58 +264,91 @@ class Deployment(object):
             )
             _ocp.exec_oc_cmd(command=taint_cmd)
 
-    def create_catalog_source(self):
+    def create_stage_operator_source(self):
         """
-        This prepare catalog source manifest for deploy OCS operator from
-        quay registry.
+        This prepare operator source for OCS deployment from stage.
         """
-        logger.info("Adding CatalogSource")
-        image = config.DEPLOYMENT.get('ocs_registry_image', '')
-        upgrade = config.DEPLOYMENT.get('upgrade', False)
-        image_and_tag = image.split(':')
-        image = image_and_tag[0]
-        image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
-        if not image_tag and config.REPORTING.get("us_ds") == 'DS':
-            image_tag = get_latest_ds_olm_tag(
-                upgrade, latest_tag=config.DEPLOYMENT.get(
-                    'default_latest_tag', 'latest'
-                )
-            )
-        catalog_source_data = templating.load_yaml(
-            constants.CATALOG_SOURCE_YAML
+        logger.info("Adding Stage Secret")
+        # generate quay token
+        credentials = {
+            "user": {
+                "username": config.DEPLOYMENT["stage_quay_username"],
+                "password": config.DEPLOYMENT["stage_quay_password"],
+            }
+        }
+        token = requests.post(
+            url='https://quay.io/cnr/api/v1/users/login',
+            data=json.dumps(credentials),
+            headers={'Content-Type': 'application/json'},
+        ).json()['token']
+        stage_ns = config.DEPLOYMENT["stage_namespace"]
+
+        # create Secret
+        stage_os_secret = templating.load_yaml(
+            constants.OPERATOR_SOURCE_SECRET_YAML
         )
-        cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
-        # TODO: Once needed we can also set the channel for the subscription
-        # from config.DEPLOYMENT.get('ocs_csv_channel')
-        change_cs_condition = (
-            (image or image_tag) and catalog_source_data['kind'] == 'CatalogSource'
-            and catalog_source_data['metadata']['name'] == cs_name
+        stage_os_secret['metadata']['name'] = (
+            constants.OPERATOR_SOURCE_SECRET_NAME
         )
-        if change_cs_condition:
-            default_image = config.DEPLOYMENT['default_ocs_registry_image']
-            image = image if image else default_image.split(':')[0]
-            catalog_source_data['spec']['image'] = (
-                f"{image}:{image_tag if image_tag else 'latest'}"
-            )
-        catalog_source_manifest = tempfile.NamedTemporaryFile(
-            mode='w+', prefix='catalog_source_manifest', delete=False
+        stage_os_secret['stringData']['token'] = token
+        stage_secret_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix=constants.OPERATOR_SOURCE_SECRET_NAME,
+            delete=False,
         )
         templating.dump_data_to_temp_yaml(
-            catalog_source_data, catalog_source_manifest.name
+            stage_os_secret, stage_secret_data_yaml.name
         )
-        run_cmd(f"oc create -f {catalog_source_manifest.name}", timeout=2400)
+        run_cmd(f"oc create -f {stage_secret_data_yaml.name}")
+        logger.info("Waiting 10 secs after secret is created")
+        time.sleep(10)
+
+        logger.info("Adding Stage Operator Source")
+        # create Operator Source
+        stage_os = templating.load_yaml(
+            constants.OPERATOR_SOURCE_YAML
+        )
+        stage_os['spec']['registryNamespace'] = stage_ns
+        stage_os['spec']['authorizationToken']['secretName'] = (
+            constants.OPERATOR_SOURCE_SECRET_NAME
+        )
+        stage_os_data_yaml = tempfile.NamedTemporaryFile(
+            mode='w+', prefix=constants.OPERATOR_SOURCE_NAME, delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            stage_os, stage_os_data_yaml.name
+        )
+        run_cmd(f"oc create -f {stage_os_data_yaml.name}")
         catalog_source = CatalogSource(
-            resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
-            namespace='openshift-marketplace',
+            resource_name=constants.OPERATOR_SOURCE_NAME,
+            namespace=constants.MARKETPLACE_NAMESPACE,
         )
         # Wait for catalog source is ready
         catalog_source.wait_for_state("READY")
+
+    def create_ocs_operator_source(self):
+        """
+        This prepare catalog or operator source for OCS deployment.
+        """
+        if config.DEPLOYMENT.get('stage'):
+            # deployment from stage
+            self.create_stage_operator_source()
+        else:
+            create_catalog_source()
 
     def subscribe_ocs(self):
         """
         This method subscription manifest and subscribe to OCS operator.
 
         """
+        operator_selector = get_selector_for_ocs_operator()
+        # wait for package manifest
+        package_manifest = PackageManifest(
+            resource_name=defaults.OCS_OPERATOR_NAME,
+            selector=operator_selector,
+        )
+        # Wait for package manifest is ready
+        package_manifest.wait_for_resource(timeout=300)
+        default_channel = package_manifest.get_default_channel()
         subscription_yaml_data = templating.load_yaml(
             constants.SUBSCRIPTION_YAML
         )
@@ -240,9 +359,23 @@ class Deployment(object):
             subscription_yaml_data['spec']['installPlanApproval'] = (
                 subscription_plan_approval
             )
-        channel = config.DEPLOYMENT.get('ocs_csv_channel')
-        if channel:
-            subscription_yaml_data['spec']['channel'] = channel
+        custom_channel = config.DEPLOYMENT.get('ocs_csv_channel')
+        if custom_channel:
+            logger.info(f"Custom channel will be used: {custom_channel}")
+            subscription_yaml_data['spec']['channel'] = custom_channel
+        else:
+            logger.info(f"Default channel will be used: {default_channel}")
+            subscription_yaml_data['spec']['channel'] = default_channel
+        if config.DEPLOYMENT.get('stage'):
+            subscription_yaml_data['spec']['source'] = (
+                constants.OPERATOR_SOURCE_NAME
+            )
+        if config.DEPLOYMENT.get('live_deployment'):
+            subscription_yaml_data['spec']['source'] = (
+                config.DEPLOYMENT.get(
+                    'live_content_source', defaults.LIVE_CONTENT_SOURCE
+                )
+            )
         subscription_manifest = tempfile.NamedTemporaryFile(
             mode='w+', prefix='subscription_manifest', delete=False
         )
@@ -250,13 +383,6 @@ class Deployment(object):
             subscription_yaml_data, subscription_manifest.name
         )
         run_cmd(f"oc create -f {subscription_manifest.name}")
-        # wait for package manifest
-        package_manifest = PackageManifest(
-            resource_name=defaults.OCS_OPERATOR_NAME
-        )
-        # Wait for package manifest is ready
-        package_manifest.wait_for_resource(timeout=300)
-        channel = config.DEPLOYMENT.get('ocs_csv_channel')
         subscription_plan_approval = config.DEPLOYMENT.get(
             'subscription_plan_approval'
         )
@@ -268,8 +394,14 @@ class Deployment(object):
         Method for deploy OCS via OCS operator
         """
         ui_deployment = config.DEPLOYMENT.get('ui_deployment')
+        live_deployment = config.DEPLOYMENT.get('live_deployment')
+
+        if config.DEPLOYMENT.get('local_storage'):
+            setup_local_storage()
+
         if ui_deployment:
-            self.create_catalog_source()
+            if not live_deployment:
+                self.create_ocs_operator_source()
             self.deployment_with_ui()
             # Skip the rest of the deployment when deploy via UI
             return
@@ -278,11 +410,15 @@ class Deployment(object):
             self.label_and_taint_nodes()
         logger.info("Creating namespace and operator group.")
         run_cmd(f"oc create -f {constants.OLM_YAML}")
-        self.create_catalog_source()
+        if not live_deployment:
+            self.create_ocs_operator_source()
         self.subscribe_ocs()
+        operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=defaults.OCS_OPERATOR_NAME
+            resource_name=defaults.OCS_OPERATOR_NAME,
+            selector=operator_selector,
         )
+        package_manifest.wait_for_resource(timeout=300)
         channel = config.DEPLOYMENT.get('ocs_csv_channel')
         csv_name = package_manifest.get_current_csv(channel=channel)
         csv = CSV(resource_name=csv_name, namespace=self.namespace)
@@ -298,6 +434,14 @@ class Deployment(object):
         deviceset_data['dataPVCTemplate']['spec']['resources']['requests'][
             'storage'
         ] = f"{device_size}Gi"
+
+        if config.DEPLOYMENT.get('local_storage'):
+            cluster_data['spec']['manageNodes'] = False
+            cluster_data['spec']['monDataDirHostPath'] = '/var/lib/rook'
+            cluster_data['spec']['portable'] = False
+            deviceset_data['dataPVCTemplate']['spec'][
+                'storageClassName'
+            ] = 'local-block'
 
         # Allow lower instance requests and limits for OCS deployment
         if config.DEPLOYMENT.get('allow_lower_instance_requirements'):
@@ -333,45 +477,20 @@ class Deployment(object):
         """
         This method will deploy OCS with openshift-console UI test.
         """
-        # TODO: add support for other browsers
         logger.info("Deployment of OCS will be done by openshift-console")
-        console_path = config.RUN['openshift_console_path']
-        password_secret_yaml = os.path.join(
-            console_path, constants.HTPASSWD_SECRET_YAML
+        ocp_console = OpenshiftConsole(
+            config.DEPLOYMENT.get(
+                'deployment_browser', constants.CHROME_BROWSER
+            )
         )
-        patch_htpasswd_yaml = os.path.join(
-            console_path, constants.HTPASSWD_PATCH_YAML
-        )
-        with open(patch_htpasswd_yaml) as fd_patch_htpasswd:
-            content_patch_htpasswd_yaml = fd_patch_htpasswd.read()
-        run_cmd(f"oc apply -f {password_secret_yaml}", cwd=console_path)
-        run_cmd(
-            f"oc patch oauths cluster --patch "
-            f"\"{content_patch_htpasswd_yaml}\" --type=merge",
-            cwd=console_path
-        )
-        bridge_base_address = run_cmd(
-            "oc get consoles.config.openshift.io cluster -o"
-            "jsonpath='{.status.consoleURL}'"
-        )
-        chrome_branch_base = config.RUN.get("force_chrome_branch_base")
-        chrome_branch_sha = config.RUN.get("force_chrome_branch_sha256sum")
-        openshift_console_env = {
-            "BRIDGE_KUBEADMIN_PASSWORD": get_kubeadmin_password(),
-            "BRIDGE_BASE_ADDRESS": bridge_base_address,
-            "FORCE_CHROME_BRANCH_BASE": chrome_branch_base,
-            "FORCE_CHROME_BRANCH_SHA256SUM": chrome_branch_sha,
+        live_deploy = '1' if config.DEPLOYMENT.get('live_deployment') else '0'
+        env_vars = {
+            "OCS_LIVE": live_deploy,
         }
-        openshift_console_env.update(os.environ)
-        ui_deploy_output = run_cmd(
-            "./test-gui.sh ceph-storage-install", cwd=console_path,
-            env=openshift_console_env, timeout=900,
+        ocp_console.run_openshift_console(
+            suite="ceph-storage-install", env_vars=env_vars,
+            log_suffix="ui-deployment"
         )
-        ui_deploy_log_file = os.path.expanduser(
-            os.path.join(config.RUN['log_dir'], "ui_deployment.log")
-        )
-        with open(ui_deploy_log_file, "w+") as log_fd:
-            log_fd.write(ui_deploy_output)
 
     def deploy_ocs(self):
         """
@@ -412,6 +531,9 @@ class Deployment(object):
         # validate ceph mon/osd volumes are backed by pvc
         validate_cluster_on_pvc()
 
+        # validate PDB creation of MON, MDS, OSD pods
+        validate_pdb_creation()
+
         # Creating toolbox pod
         setup_ceph_toolbox()
 
@@ -435,7 +557,7 @@ class Deployment(object):
         # Change monitoring backend to OCS
         if config.ENV_DATA.get('monitoring_enabled') and config.ENV_DATA.get('persistent-monitoring'):
 
-            sc_name = f"{config.ENV_DATA['storage_cluster_name']}-{constants.DEFAULT_SC_RBD}"
+            sc = helpers.default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
 
             # Get the list of monitoring pods
             pods_list = get_all_pods(
@@ -447,7 +569,7 @@ class Deployment(object):
             # storage class and telemeter server (if the url is specified in a
             # config file)
             create_configmap_cluster_monitoring_pod(
-                sc_name=sc_name,
+                sc_name=sc.name,
                 telemeter_server_url=config.ENV_DATA.get("telemeter_server_url"))
 
             # Take some time to respin the pod
@@ -519,3 +641,204 @@ class Deployment(object):
                 f"-p {patch} "
                 f"--request-timeout=120s"
             )
+
+
+def create_catalog_source(image=None, ignore_upgrade=False):
+    """
+    This prepare catalog source manifest for deploy OCS operator from
+    quay registry.
+
+    Args:
+        image (str): Image of ocs registry.
+        ignore_upgrade (bool): Ignore upgrade parameter.
+
+    """
+    logger.info("Adding CatalogSource")
+    if not image:
+        image = config.DEPLOYMENT.get('ocs_registry_image', '')
+    if not ignore_upgrade:
+        upgrade = config.UPGRADE.get('upgrade', False)
+    else:
+        upgrade = False
+    image_and_tag = image.split(':')
+    image = image_and_tag[0]
+    image_tag = image_and_tag[1] if len(image_and_tag) == 2 else None
+    if not image_tag and config.REPORTING.get("us_ds") == 'DS':
+        image_tag = get_latest_ds_olm_tag(
+            upgrade, latest_tag=config.DEPLOYMENT.get(
+                'default_latest_tag', 'latest'
+            )
+        )
+    catalog_source_data = templating.load_yaml(
+        constants.CATALOG_SOURCE_YAML
+    )
+    cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
+    change_cs_condition = (
+        (image or image_tag) and catalog_source_data['kind'] == 'CatalogSource'
+        and catalog_source_data['metadata']['name'] == cs_name
+    )
+    if change_cs_condition:
+        default_image = config.DEPLOYMENT['default_ocs_registry_image']
+        image = image if image else default_image.split(':')[0]
+        catalog_source_data['spec']['image'] = (
+            f"{image}:{image_tag if image_tag else 'latest'}"
+        )
+    catalog_source_manifest = tempfile.NamedTemporaryFile(
+        mode='w+', prefix='catalog_source_manifest', delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        catalog_source_data, catalog_source_manifest.name
+    )
+    run_cmd(f"oc create -f {catalog_source_manifest.name}", timeout=2400)
+    catalog_source = CatalogSource(
+        resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+    # Wait for catalog source is ready
+    catalog_source.wait_for_state("READY")
+
+
+def setup_local_storage():
+    """
+    Setup the necessary resources for enabling local storage.
+
+    """
+    # Get the worker nodes
+    workers = get_typed_nodes(node_type='worker')
+    worker_names = [worker.name for worker in workers]
+    worker_names_str = " ".join(worker_names)
+    logger.debug("Workers: %s", workers)
+
+    # Label the worker nodes
+    logger.info("Labeling worker nodes")
+    run_cmd(
+        f"oc label nodes {worker_names_str} "
+        f"{constants.OPERATOR_NODE_LABEL}"
+    )
+
+    logger.info("Retrieving local-storage-operator data from yaml")
+    lso_data = list(templating.load_yaml(
+        constants.LOCAL_STORAGE_OPERATOR, multi_document=True
+    ))
+    # Update local-storage-operator subscription data with channel
+    for data in lso_data:
+        if data['kind'] == 'Subscription':
+            data['spec']['channel'] = get_ocp_version()
+
+    # Create temp yaml file and create local storage operator
+    logger.info(
+        "Creating temp yaml file with local-storage-operator data:\n %s",
+        lso_data
+    )
+    lso_data_yaml = tempfile.NamedTemporaryFile(
+        mode='w+', prefix='local_storage_operator', delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        lso_data, lso_data_yaml.name
+    )
+    logger.info("Creating local-storage-operator")
+    run_cmd(f"oc create -f {lso_data_yaml.name}")
+
+    local_storage_operator = ocp.OCP(
+        kind=constants.POD, namespace='local-storage'
+    )
+    assert local_storage_operator.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector=constants.LOCAL_STORAGE_OPERATOR_LABEL,
+        timeout=600
+    ), "Local storage operator did not reach running phase"
+
+    # Retrieve NVME device path ID for each worker node
+    device_paths = get_device_paths(worker_names)
+
+    # Pull local volume yaml data
+    logger.info("Pulling LocalVolume CR data from yaml")
+    lv_data = templating.load_yaml(
+        constants.LOCAL_VOLUME_YAML
+    )
+
+    # Update local volume data with NVME IDs
+    logger.info(
+        "Updating LocalVolume CR data with device paths: %s",
+        device_paths
+    )
+    lv_data['spec']['storageClassDevices'][0][
+        'devicePaths'
+    ] = device_paths
+
+    # Create temp yaml file and create local volume
+    lv_data_yaml = tempfile.NamedTemporaryFile(
+        mode='w+', prefix='local_volume', delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        lv_data, lv_data_yaml.name
+    )
+    logger.info("Creating LocalVolume CR")
+    run_cmd(f"oc create -f {lv_data_yaml.name}")
+    logger.info("Waiting 30 seconds for PVs to create")
+    verify_pvs_created(len(worker_names))
+
+
+@retry(AssertionError, 12, 10, 1)
+def verify_pvs_created(num_workers):
+    """
+    Verify that PVs were created and are in the Available state
+
+    Args:
+        num_workers (int): number of worker nodes in the cluster
+
+    Raises:
+        AssertionError: if any PVs are not in the Available state or if the
+            number of PVs does not match the number of workers in the cluster.
+
+    """
+    logger.info("Verifying PVs are created")
+    out = run_cmd("oc get pv -o json")
+    pv_json = json.loads(out)
+    for pv in pv_json['items']:
+        pv_state = pv['status']['phase']
+        pv_name = pv['metadata']['name']
+        logger.info("%s is %s", pv_name, pv_state)
+        assert pv_state == 'Available', (
+            f"{pv_name} not in 'Available' state. Current state is {pv_state}"
+        )
+    num_pvs = len(pv_json['items'])
+    logger.debug("PVs, Workers: %s, %s", num_pvs, num_workers)
+
+
+def get_device_paths(worker_names):
+    """
+    Retrieve a list of the device paths for each worker node
+
+    Args:
+        worker_names (list): worker node names
+
+    Returns:
+        list: device path ids
+    """
+    device_paths = []
+    platform = config.ENV_DATA.get('platform').lower()
+    if platform == 'aws':
+        pattern = 'nvme-Amazon_EC2_NVMe_Instance_Storage'
+    # TODO: add patterns for vsphere and bare metal
+    else:
+        raise UnsupportedPlatformError(
+            'LSO deployment is not supported for platform: %s', platform
+        )
+    for worker in worker_names:
+        logger.info("Retrieving device path for node: %s", worker)
+        cmd = (
+            f"oc debug nodes/{worker} "
+            f"-- chroot /host ls -la /dev/disk/by-id/"
+        )
+        out = run_cmd(cmd)
+        out_lines = out.split('\n')
+        nvme_lines = [line for line in out_lines if pattern in line]
+        for nvme_line in nvme_lines:
+            device_path = [
+                part for part in nvme_line.split(' ') if pattern in part
+            ][0]
+            logger.info("Adding %s to device paths", device_path)
+            device_paths.append(f'/dev/disk/by-id/{device_path}')
+
+    return device_paths

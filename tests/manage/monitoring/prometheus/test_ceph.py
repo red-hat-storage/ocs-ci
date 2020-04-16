@@ -1,15 +1,18 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import tier4
+from ocs_ci.framework.testlib import tier4, tier4a
 from ocs_ci.ocs import constants
 from ocs_ci.utility import prometheus
+from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
 
 @tier4
+@tier4a
 @pytest.mark.polarion_id("OCS-903")
+@pytest.mark.skip(reason="measure_corrupt_pg fixture makes current test runs unstable")
 def test_corrupt_pg_alerts(measure_corrupt_pg):
     """
     Test that there are appropriate alerts when Placement group
@@ -52,7 +55,9 @@ def test_corrupt_pg_alerts(measure_corrupt_pg):
 
 
 @tier4
+@tier4a
 @pytest.mark.polarion_id("OCS-898")
+@pytest.mark.skip(reason="measure_corrupt_pg fixture makes current test runs unstable")
 def test_ceph_health(measure_stop_ceph_mon, measure_corrupt_pg):
     """
     Test that there are appropriate alerts for Ceph health triggered.
@@ -99,3 +104,8 @@ def test_ceph_health(measure_stop_ceph_mon, measure_corrupt_pg):
         measure_end_time=measure_corrupt_pg.get('stop'),
         time_min=pg_wait
     )
+
+
+def teardown_module():
+    ocs_obj = OCP()
+    ocs_obj.login_as_sa()

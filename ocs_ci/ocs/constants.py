@@ -14,6 +14,8 @@ import os
 TOP_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
+CONF_DIR = os.path.join(TOP_DIR, 'conf')
+OCP_VERSION_CONF_DIR = os.path.join(CONF_DIR, "ocp_version")
 TEMPLATE_DIR = os.path.join(TOP_DIR, "ocs_ci", "templates")
 TEMPLATE_CLEANUP_DIR = os.path.join(TEMPLATE_DIR, "cleanup")
 REPO_DIR = os.path.join(TOP_DIR, "ocs_ci", "repos")
@@ -28,7 +30,11 @@ TEMPLATE_WORKLOAD_DIR = os.path.join(TEMPLATE_DIR, "workloads")
 TEMPLATE_FIO_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fio")
 TEMPLATE_SMALLFILE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "smallfile")
 TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
+TEMPLATE_VDBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "vdbench")
 TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
+TEMPLATE_COUCHBASE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase")
+TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
+TEMPLATE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_SERVER_DIR, "pillowfight")
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(
     TEMPLATE_DIR, "openshift-infra/"
@@ -73,6 +79,7 @@ BS_OPTIMAL = 'OPTIMAL'
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
 DEPLOYMENT = "Deployment"
+JOB = "Job"
 STORAGECLASS = "StorageClass"
 PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
@@ -83,6 +90,10 @@ DEPLOYMENTCONFIG = "deploymentconfig"
 CONFIG = "Config"
 MACHINESETS = 'machinesets'
 STORAGECLUSTER = 'storagecluster'
+CLUSTER_OPERATOR = 'ClusterOperator'
+MONITORING = 'monitoring'
+CLUSTER_SERVICE_VERSION = 'csv'
+JOB = 'job'
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -115,18 +126,27 @@ MOUNT_POINT = '/var/lib/www/html'
 OCP_QE_MISC_REPO = (
     "http://git.host.prod.eng.bos.redhat.com/git/openshift-misc.git"
 )
+CRITICAL_ERRORS = [
+    "core dumped", "oom_reaper"
+]
+must_gather_pod_label = "must-gather"
 
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
-DEFAULT_SECRET = 'rook-ceph-csi'
-DEFAULT_BLOCKPOOL = 'rbd'
-DEFAULT_SC_RBD = 'ceph-rbd'
-DEFAULT_SC_CEPHFS = "cephfs"
+DEFAULT_CLUSTERNAME = 'ocs-storagecluster'
+DEFAULT_BLOCKPOOL = f'{DEFAULT_CLUSTERNAME}-cephblockpool'
+METADATA_POOL = f'{DEFAULT_CLUSTERNAME}-cephfilesystem-metadata'
+DATA_POOL = f'{DEFAULT_CLUSTERNAME}-cephfilesystem-data0'
 DEFAULT_ROUTE_CRT = "router-certs-default"
 DEFAULT_NAMESPACE = "default"
 IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
+IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
+
+# Default StorageClass
+DEFAULT_STORAGECLASS_CEPHFS = f'{DEFAULT_CLUSTERNAME}-cephfs'
+DEFAULT_STORAGECLASS_RBD = f'{DEFAULT_CLUSTERNAME}-ceph-rbd'
 
 # encoded value of 'admin'
 ADMIN_USER = 'admin'
@@ -148,6 +168,7 @@ MDS_APP_LABEL = "app=rook-ceph-mds"
 TOOL_APP_LABEL = "app=rook-ceph-tools"
 MGR_APP_LABEL = "app=rook-ceph-mgr"
 OSD_APP_LABEL = "app=rook-ceph-osd"
+OSD_PREPARE_APP_LABEL = "app=rook-ceph-osd-prepare"
 RGW_APP_LABEL = "app=rook-ceph-rgw"
 OPERATOR_LABEL = "app=rook-ceph-operator"
 CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = "app=csi-cephfsplugin-provisioner"
@@ -157,8 +178,12 @@ CSI_RBDPLUGIN_LABEL = "app=csi-rbdplugin"
 OCS_OPERATOR_LABEL = "name=ocs-operator"
 LOCAL_STORAGE_OPERATOR_LABEL = "name=local-storage-operator"
 NOOBAA_APP_LABEL = "app=noobaa"
+NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
+NOOBAA_OPERATOR_POD_LABEL = "noobaa-operator=deployment"
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
+OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
+CEPH_ROOK_IO_PVC_LABEL = 'ceph.rook.io/pvc'
 
 
 # YAML paths
@@ -264,6 +289,62 @@ SMALLFILE_BENCHMARK_YAML = os.path.join(
     TEMPLATE_SMALLFILE_DIR, "SmallFile.yaml"
 )
 
+VDBENCH_BENCHMARK_YAML = os.path.join(
+    TEMPLATE_VDBENCH_DIR, "VDBench.yaml"
+)
+
+COUCHBASE_ADMISSION_SERVICE_ACCOUNT_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionServiceAccount.yaml"
+)
+
+COUCHBASE_ADMISSION_CLUSTER_ROLE_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionClusterRole.yaml"
+)
+
+COUCHBASE_ADMISSION_CLUSTER_ROLE_BINDING_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionClusterRoleBinding.yaml"
+)
+
+COUCHBASE_ADMISSION_SECRET_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionSecret.yaml"
+)
+
+COUCHBASE_ADMISSION_DEPLOYMENT_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionDeployment.yaml"
+)
+
+COUCHBASE_ADMISSION_SERVICE_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionService.yaml"
+)
+
+COUCHBASE_MUTATING_WEBHOOK_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "MutatingWebhookConfiguration.yaml"
+)
+
+COUCHBASE_VALIDATING_WEBHOOK_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "ValidatingWebhookConfiguration.yaml"
+)
+
+COUCHBASE_CRD_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbaseCrd.yaml"
+)
+
+COUCHBASE_OPERATOR_ROLE = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "operator-role.yaml"
+)
+
+COUCHBASE_OPERATOR_DEPLOY = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "operator-deployment.yaml"
+)
+
+COUCHBASE_WORKER_SECRET = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-secret.yaml"
+)
+
+COUCHBASE_WORKER_EXAMPLE = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-example.yaml"
+)
+
 NGINX_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "nginx.yaml"
 )
@@ -315,6 +396,18 @@ STORAGE_CLUSTER_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "storage-cluster.yaml"
 )
 
+OPERATOR_SOURCE_SECRET_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "operator-source-secret.yaml"
+)
+
+OPERATOR_SOURCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "operator-source.yaml"
+)
+
+OPERATOR_SOURCE_NAME = "ocs-operatorsource"
+
+OPERATOR_SOURCE_SECRET_NAME = "ocs-operatorsource-secret"
+
 # Openshift-logging clusterlogging operator deployment yamls
 CL_NAMESPACE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_CLO, "cl-namespace.yaml"
@@ -341,6 +434,9 @@ FIO_IO_RW_PARAMS_YAML = os.path.join(
 RSYNC_POD_YAML = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "rsync-pod.yaml"
 )
+MACHINESET_YAML = os.path.join(
+    TEMPLATE_OPENSHIFT_INFRA_DIR, "machine-set.yaml"
+)
 
 ANSIBLE_INVENTORY_YAML = os.path.join(
     "ocp-deployment", "inventory.yaml.j2"
@@ -348,7 +444,12 @@ ANSIBLE_INVENTORY_YAML = os.path.join(
 # constants
 RBD_INTERFACE = 'rbd'
 CEPHFS_INTERFACE = 'cephfs'
-RAW_BLOCK_DEVICE = '/dev/block'
+RAW_BLOCK_DEVICE = '/dev/rbdblock'
+
+# Constant values for IOPS and Throughput is set
+# considering gp2 interface, EBS volumes and EC2 instances
+IOPS_FOR_1TiB_OSD = 3000
+THROUGHPUT_LIMIT_OSD = 250
 
 # EC2 instance statuses
 INSTANCE_PENDING = 0
@@ -357,6 +458,10 @@ INSTANCE_STOPPED = 80
 INSTANCE_RUNNING = 16
 INSTANCE_SHUTTING_DOWN = 32
 INSTANCE_TERMINATED = 48
+
+# vSphere VM power statuses
+VM_POWERED_OFF = 'poweredOff'
+VM_POWERED_ON = 'poweredOn'
 
 # Node statuses
 NODE_READY = 'Ready'
@@ -375,6 +480,9 @@ ALERT_MGRISABSENT = 'CephMgrIsAbsent'
 ALERT_MONQUORUMATRISK = 'CephMonQuorumAtRisk'
 ALERT_OSDDISKNOTRESPONDING = 'CephOSDDiskNotResponding'
 ALERT_PGREPAIRTAKINGTOOLONG = 'CephPGRepairTakingTooLong'
+ALERT_BUCKETREACHINGQUOTASTATE = 'NooBaaBucketReachingQuotaState'
+ALERT_BUCKETERRORSTATE = 'NooBaaBucketErrorState'
+ALERT_BUCKETEXCEEDINGQUOTASTATE = 'NooBaaBucketExceedingQuotaState'
 ALERT_CLUSTERNEARFULL = 'CephClusterNearFull'
 ALERT_CLUSTERCRITICALLYFULL = 'CephClusterCriticallyFull'
 
@@ -382,14 +490,28 @@ ALERT_CLUSTERCRITICALLYFULL = 'CephClusterCriticallyFull'
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
 OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
+MARKETPLACE_NAMESPACE = "openshift-marketplace"
+MONITORING_NAMESPACE = "openshift-monitoring"
+OPERATOR_INTERNAL_SELECTOR = "ocs-operator-internal=true"
 OPERATOR_CS_QUAY_API_QUERY = (
-    'https://quay.io/api/v1/repository/rhceph-dev/ocs-registry/'
+    'https://quay.io/api/v1/repository/rhceph-dev/ocs-olm-operator/'
     'tag/?onlyActiveTags=true&limit={tag_limit}'
 )
+
+# OCP related constants
+OPENSHIFT_UPGRADE_INFO_API = (
+    "https://api.openshift.com/api/upgrades_info/v1/graph?channel={channel}"
+)
+
+# VDbench benchmark related constants
+APP_NODE_LABEL = 'app-node'
+VDBENCH_NODE_LABEL = 'vdbench'
+VDBENCH_RESULTS_FILE = '/tmp/Results.tar.gz'
 
 # Platforms
 AWS_PLATFORM = 'aws'
 VSPHERE_PLATFORM = 'vsphere'
+CLOUD_PLATFORMS = (AWS_PLATFORM)
 
 # Default SC based on platforms
 DEFAULT_SC_AWS = "gp2"
@@ -419,6 +541,7 @@ SCALEUP_VSPHERE_MAIN = os.path.join(SCALEUP_VSPHERE_DIR, "main.tf")
 SCALEUP_VSPHERE_VARIABLES = os.path.join(SCALEUP_VSPHERE_DIR, "variables.tf")
 SCALEUP_VSPHERE_ROUTE53 = os.path.join(SCALEUP_VSPHERE_DIR, "route53/vsphere-rhel-dns.tf")
 SCALEUP_VSPHERE_ROUTE53_VARIABLES = os.path.join(SCALEUP_VSPHERE_DIR, "route53/variables.tf")
+SCALEUP_VSPHERE_MACHINE_CONF = os.path.join(SCALEUP_VSPHERE_DIR, "machines/vsphere-rhel-machine.tf")
 TERRAFORM_VARS = "terraform.tfvars"
 VM_DISK_TYPE = "thin"
 VM_DISK_MODE = "persistent"
@@ -426,9 +549,6 @@ INSTALLER_DEFAULT_DNS = "1.1.1.1"
 
 # Config related constants
 config_keys_patterns_to_censor = ['passw', 'token', 'secret']
-
-# repos
-OCP4_2_REPO = os.path.join(REPO_DIR, "ocp_4_2.repo")
 
 # packages
 RHEL_POD_PACKAGES = ["openssh-clients", "openshift-ansible", "openshift-clients", "jq"]
@@ -441,19 +561,31 @@ PEM_PATH = "/etc/pki/ca-trust/source/anchors/"
 # Upgrade related constants, keeping some space between, so we can add
 # additional order.
 ORDER_BEFORE_UPGRADE = 10
-ORDER_UPGRADE = 20
-ORDER_AFTER_UPGRADE = 30
+ORDER_BEFORE_OCP_UPGRADE = 20
+ORDER_OCP_UPGRADE = 30
+ORDER_AFTER_OCP_UPGRADE = 40
+ORDER_BEFORE_OCS_UPGRADE = 50
+ORDER_OCS_UPGRADE = 60
+ORDER_AFTER_OCS_UPGRADE = 70
+ORDER_AFTER_UPGRADE = 80
 
 # Deployment constants
 OCS_CSV_PREFIX = 'ocs-operator'
 LOCAL_STORAGE_CSV_PREFIX = 'local-storage-operator'
-LATEST_TAGS = ('latest', 'latest-stable', '4.2-rc')
+LATEST_TAGS = (
+    'latest', 'latest-stable', '4.2-rc', 'latest-4.2', 'latest-stable-4.2',
+    '4.3-rc', 'latest-4.3', 'latest-stable-4.3',
+)
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
+OCS_SUBSCRIPTION = "ocs-subscription"
 
 # UI Deployment constants
+HTPASSWD_SECRET_NAME = "htpass-secret"
 HTPASSWD_SECRET_YAML = "frontend/integration-tests/data/htpasswd-secret.yaml"
 HTPASSWD_PATCH_YAML = "frontend/integration-tests/data/patch-htpasswd.yaml"
+CHROME_BROWSER = "chrome"
+SUPPORTED_BROWSERS = (CHROME_BROWSER)
 
 # Inventory
 INVENTORY_TEMPLATE = "inventory.yaml.j2"
@@ -472,11 +604,144 @@ SCALEUP_ANSIBLE_PLAYBOOK = "/usr/share/ansible/openshift-ansible/playbooks/scale
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
 
-# Rep mapping
-REPO_MAPPING = {
-    '4.2.0': OCP4_2_REPO
-}
-
 # Cluster name limits
 CLUSTER_NAME_MIN_CHARACTERS = 5
 CLUSTER_NAME_MAX_CHARACTERS = 17
+
+STAGE_CA_FILE = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "stage-ca.crt"
+)
+
+# PDB NAMES
+MDS_PDB = "rook-ceph-mds-ocs-storagecluster-cephfilesystem"
+OSD_PDB = "rook-ceph-osd-"
+MON_PDB = "rook-ceph-mon-pdb"
+
+# Root Disk size
+CURRENT_VM_ROOT_DISK_SIZE = '60'
+VM_ROOT_DISK_SIZE = '120'
+
+# Secrets
+RBD_PROVISIONER_SECRET = 'rook-csi-rbd-provisioner'
+RBD_NODE_SECRET = 'rook-csi-rbd-node'
+CEPHFS_PROVISIONER_SECRET = 'rook-csi-cephfs-provisioner'
+CEPHFS_NODE_SECRET = 'rook-csi-cephfs-node'
+
+# JSON Schema
+OSD_TREE_ROOT = {
+    'type': 'object',
+    'properties': {
+        'id': {'type': 'integer'}, 'name': {'const': 'default'},
+        'type': {'const': 'root'}, 'type_id': {'const': 11},
+        'children': {'type': 'array', 'items': {'type': 'integer'}}
+    },
+    'required': ['children', 'id', 'name', 'type', 'type_id'],
+    'additionalProperties': False
+}
+
+OSD_TREE_RACK = {
+    'type': 'object',
+    'properties': {
+        'id': {'type': 'integer'}, 'name': {'type': 'string'},
+        'type': {'const': 'rack'}, 'type_id': {'const': 3},
+        'pool_weights': {'type': 'object'},
+        'children': {'type': 'array', 'items': {'type': 'integer'}}
+    },
+    'required': ['children', 'id', 'name', 'pool_weights', 'type', 'type_id'],
+    'additionalProperties': False
+}
+
+OSD_TREE_HOST = {
+    'type': 'object',
+    'properties': {
+        'id': {'type': 'integer'}, 'name': {'type': 'string'},
+        'type': {'const': 'host'}, 'type_id': {'const': 1},
+        'pool_weights': {'type': 'object'},
+        'children': {'type': 'array', 'items': {'type': 'integer'}}
+    },
+    'required': ['children', 'id', 'name', 'pool_weights', 'type', 'type_id'],
+    'additionalProperties': False
+}
+
+OSD_TREE_OSD = {
+    'type': 'object',
+    'properties': {
+        'id': {'type': 'integer'}, 'device_class': {'type': 'string'},
+        'name': {'pattern': 'osd[.][0-9]+'}, 'type': {'const': 'osd'},
+        'type_id': {'const': 0},
+        'crush_weight': {'type': 'number'},
+        'depth': {'type': 'integer'}, 'pool_weights': {'type': 'object'},
+        'exists': {'type': 'integer'}, 'status': {'const': 'up'},
+        'reweight': {'type': 'integer'},
+        'primary_affinity': {'type': 'integer'}
+    },
+    'required': [
+        'crush_weight', 'depth', 'device_class', 'exists', 'id', 'name',
+        'pool_weights', 'primary_affinity', 'reweight', 'status', 'type',
+        'type_id'
+    ],
+    'additionalProperties': False
+}
+
+OSD_TREE_REGION = {
+    'type': 'object',
+    'properties': {
+        'id': {'type': 'integer'}, 'name': {'type': 'string'},
+        'type': {'const': 'region'}, 'type_id': {'const': 10},
+        'pool_weights': {'type': 'object'},
+        'children': {'type': 'array', 'items': {'type': 'integer'}}
+    },
+    'required': ['children', 'id', 'name', 'pool_weights', 'type', 'type_id'],
+    'additionalProperties': False
+}
+
+OSD_TREE_ZONE = {
+    'type': 'object',
+    'properties': {
+        'id': {'type': 'integer'}, 'name': {'type': 'string'},
+        'type': {'const': 'zone'}, 'type_id': {'const': 9},
+        'pool_weights': {'type': 'object'},
+        'children': {'type': 'array', 'items': {'type': 'integer'}}
+    },
+    'required': ['children', 'id', 'name', 'pool_weights', 'type', 'type_id'],
+    'additionalProperties': False
+}
+
+# gather bootstrap
+GATHER_BOOTSTRAP_PATTERN = 'openshift-install gather bootstrap --help'
+
+# must-gather commands output files
+MUST_GATHER_COMMANDS = [
+    'ceph_versions', 'ceph_status', 'ceph_report', 'ceph_pg_dump',
+    'ceph_osd_tree', 'ceph_osd_stat', 'ceph_osd_dump', 'ceph_osd_df_tree',
+    'ceph_osd_crush_show-tunables', 'ceph_osd_crush_dump', 'ceph_mon_stat',
+    'ceph_mon_dump', 'ceph_mgr_dump', 'ceph_mds_stat', 'ceph_health_detail',
+    'ceph_fs_ls', 'ceph_fs_dump', 'ceph_df', 'ceph_auth_list',
+    'ceph-volume_lvm_list'
+]
+
+MUST_GATHER_COMMANDS_JSON = [
+    'ceph_versions_--format_json-pretty', 'ceph_status_--format_json-pretty',
+    'ceph_report_--format_json-pretty', 'ceph_pg_dump_--format_json-pretty',
+    'ceph_osd_tree_--format_json-pretty', 'ceph_osd_stat_--format_json-pretty',
+    'ceph_osd_dump_--format_json-pretty',
+    'ceph_osd_df_tree_--format_json-pretty',
+    'ceph_osd_crush_show-tunables_--format_json-pretty',
+    'ceph_osd_crush_dump_--format_json-pretty',
+    'ceph_mon_stat_--format_json-pretty', 'ceph_mon_dump_--format_json-pretty',
+    'ceph_mgr_dump_--format_json-pretty', 'ceph_mds_stat_--format_json-pretty',
+    'ceph_health_detail_--format_json-pretty',
+    'ceph_fs_ls_--format_json-pretty', 'ceph_fs_dump_--format_json-pretty',
+    'ceph_df_--format_json-pretty', 'ceph_auth_list_--format_json-pretty'
+]
+
+# local storage
+LOCAL_STORAGE_OPERATOR = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "local-storage-operator.yaml"
+)
+LOCAL_VOLUME_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "local-volume.yaml"
+)
+
+# All worker default config files
+RHEL_WORKERS_CONF = os.path.join(CONF_DIR, 'ocsci/aws_upi_rhel_workers.yaml')

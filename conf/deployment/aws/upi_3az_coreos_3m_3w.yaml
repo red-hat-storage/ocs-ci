@@ -1,8 +1,0 @@
----
-ENV_DATA:
-  platform: 'aws'
-  deployment_type: 'upi'
-  region: 'us-east-2'
-  worker_replicas: 3
-  master_replicas: 3
-  availability_zone_count: 3

@@ -5,7 +5,6 @@ metadata:
   name: demo-pod
   namespace: default
 spec:
-  nodeName: foo-node
   containers:
    - name: web-server
      image: nginx

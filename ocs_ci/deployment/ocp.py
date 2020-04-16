@@ -4,7 +4,6 @@ This module provides base class for OCP deployment.
 import logging
 import os
 import json
-import traceback
 
 import pytest
 import yaml
@@ -13,7 +12,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility import utils, templating, system
-from ocs_ci.utility.utils import run_cmd
 
 
 logger = logging.getLogger(__name__)
@@ -172,23 +170,13 @@ class OCPDeployment:
 
         Args:
             log_level (str): log level openshift-installer (default: DEBUG)
+
         """
-        logger.info("Destroying the cluster")
-        destroy_cmd = (
-            f"{self.installer} destroy cluster "
-            f"--dir {self.cluster_path} "
-            f"--log-level {log_level}"
+        # Retrieve cluster metadata
+        metadata_file = os.path.join(self.cluster_path, "metadata.json")
+        with open(metadata_file) as f:
+            self.metadata = json.loads(f.read())
+        utils.destroy_cluster(
+            installer=self.installer, cluster_path=self.cluster_path,
+            log_level=log_level
         )
-
-        try:
-            # Retrieve cluster metadata
-            metadata_file = os.path.join(self.cluster_path, "metadata.json")
-            with open(metadata_file) as f:
-                self.metadata = json.loads(f.read())
-
-            # Execute destroy cluster using OpenShift installer
-            logger.info(f"Destroying cluster defined in {self.cluster_path}")
-            run_cmd(destroy_cmd)
-
-        except Exception:
-            logger.error(traceback.format_exc())

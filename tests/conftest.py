@@ -1,34 +1,50 @@
 import logging
+from itertools import chain
 import os
+from random import randrange
 import tempfile
+import textwrap
+from time import sleep
+import yaml
 
 import pytest
+from botocore.exceptions import ClientError
 import threading
 from datetime import datetime
 import random
 from math import floor
 
-from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.utility.utils import (
+    TimeoutSampler, get_rook_repo, get_ocp_version, ceph_health_check
+)
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.utility import aws
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    deployment, destroy, ignore_leftovers
+    deployment, ignore_leftovers, tier_marks
 )
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.utility.environment_check import (
     get_status_before_execution, get_status_after_execution
 )
 from ocs_ci.utility.utils import (
-    get_openshift_client, ocsci_log_path, get_testrun_name
+    get_openshift_client, ocsci_log_path, get_testrun_name,
+    ceph_health_check_base, skipif_ocs_version
 )
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
+from tests.manage.mcg.helpers import get_rgw_restart_count
 from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
+from ocs_ci.ocs.resources.mcg import MCG
+from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.pod import get_rgw_pod
 from ocs_ci.ocs.resources.pvc import PVC
-
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
+from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
+from ocs_ci.utility import templating
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +66,79 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
+def pytest_collection_modifyitems(session, config, items):
+    """
+    A pytest hook to filter out skipped tests satisfying
+    skipif_ocs_version
+
+    Args:
+        session: pytest session
+        config: pytest config object
+        items: list of collected tests
+
+    """
+    for item in items[:]:
+        skip_marker = item.get_closest_marker("skipif_ocs_version")
+        if skip_marker:
+            skip_condition = skip_marker.args
+            # skip_condition will be a tuple
+            # and condition will be first element in the tuple
+            if skipif_ocs_version(skip_condition[0]):
+                log.info(
+                    f'Test: {item} will be skipped due to {skip_condition}'
+                )
+                items.remove(item)
+
+
+@pytest.fixture()
+def supported_configuration():
+    """
+    Check that cluster nodes have enough CPU and Memory as described in:
+    https://access.redhat.com/documentation/en-us/red_hat_openshift_container_storage/4.2/html-single/planning_your_deployment/index#infrastructure-requirements_rhocs
+    This fixture is intended as a prerequisite for tests or fixtures that
+    run flaky on configurations that don't meet minimal requirements.
+
+    Minimum requirements for each starting node (OSD+MON):
+        16 CPUs
+        64 GB memory
+    Last documentation check: 2020-02-21
+    """
+    min_cpu = 16
+    min_memory = 64 * 10**9
+
+    node_obj = ocp.OCP(kind=constants.NODE)
+    log.info('Checking if system meets minimal requirements')
+    nodes = node_obj.get(selector=constants.WORKER_LABEL).get('items')
+    log.info(
+        f"Checking following nodes with worker selector (assuming that "
+        f"this is ran in CI and there are no worker nodes without OCS):\n"
+        f"{[item.get('metadata').get('name') for item in nodes]}"
+    )
+    for node_info in nodes:
+        real_cpu = int(node_info['status']['capacity']['cpu'])
+        real_memory = node_info['status']['capacity']['memory']
+        if real_memory.endswith('Ki'):
+            real_memory = int(real_memory[0:-2]) * 2**10
+        elif real_memory.endswith('Mi'):
+            real_memory = int(real_memory[0:-2]) * 2**20
+        elif real_memory.endswith('Gi'):
+            real_memory = int(real_memory[0:-2]) * 2**30
+        elif real_memory.endswith('Ti'):
+            real_memory = int(real_memory[0:-2]) * 2**40
+        else:
+            real_memory = int(real_memory)
+
+        if (real_cpu < min_cpu or real_memory < min_memory):
+            error_msg = (
+                f"Node {node_info.get('metadata').get('name')} doesn't have "
+                f"minimum of required reasources for running the test:\n"
+                f"{min_cpu} CPU and {min_memory} Memory\nIt has:\n{real_cpu} "
+                f"CPU and {real_memory} Memory"
+            )
+            log.error(error_msg)
+            pytest.xfail(error_msg)
+
+
 @pytest.fixture(scope='class')
 def secret_factory_class(request):
     return secret_factory_fixture(request)
@@ -69,6 +158,8 @@ def secret_factory_fixture(request):
     """
     Secret factory. Calling this fixture creates a new secret.
     RBD based is default.
+    ** This method should not be used anymore **
+    ** This method is for internal testing only **
     """
     instances = []
 
@@ -119,6 +210,11 @@ def log_ocs_version(cluster):
      * ocs_version file in cluster path directory (for copy pasting into bug
        reports)
     """
+    teardown = config.RUN['cli_params'].get('teardown')
+    deploy = config.RUN['cli_params'].get('deploy')
+    if teardown and not deploy:
+        log.info("Skipping version reporting for teardown.")
+        return
     cluster_version, image_dict = get_ocs_version()
     file_name = os.path.join(
         config.ENV_DATA['cluster_path'],
@@ -147,6 +243,8 @@ def ceph_pool_factory_fixture(request):
     """
     Create a Ceph pool factory.
     Calling this fixture creates new Ceph pool instance.
+    ** This method should not be used anymore **
+    ** This method is for internal testing only **
     """
     instances = []
 
@@ -225,6 +323,10 @@ def storageclass_factory_fixture(
     """
     Create a storage class factory. Default is RBD based.
     Calling this fixture creates new storage class instance.
+
+    ** This method should not be used anymore **
+    ** This method is for internal testing only **
+
     """
     instances = []
 
@@ -254,9 +356,8 @@ def storageclass_factory_fixture(
             sc_obj = helpers.create_resource(**custom_data)
         else:
             secret = secret or secret_factory(interface=interface)
-            ceph_pool = ceph_pool_factory(interface)
             if interface == constants.CEPHBLOCKPOOL:
-                interface_name = ceph_pool.name
+                interface_name = constants.DEFAULT_BLOCKPOOL
             elif interface == constants.CEPHFILESYSTEM:
                 interface_name = helpers.get_cephfs_data_pool_name()
 
@@ -268,7 +369,6 @@ def storageclass_factory_fixture(
                 reclaim_policy=reclaim_policy
             )
             assert sc_obj, f"Failed to create {interface} storage class"
-            sc_obj.ceph_pool = ceph_pool
             sc_obj.secret = secret
 
         instances.append(sc_obj)
@@ -336,7 +436,7 @@ def project_factory_fixture(request):
         for instance in instances:
             ocp.switch_to_default_rook_cluster_project()
             instance.delete(resource_name=instance.namespace)
-            instance.wait_for_delete(instance.namespace)
+            instance.wait_for_delete(instance.namespace, timeout=300)
 
     request.addfinalizer(finalizer)
     return factory
@@ -345,12 +445,10 @@ def project_factory_fixture(request):
 @pytest.fixture(scope='class')
 def pvc_factory_class(
     request,
-    storageclass_factory_class,
     project_factory_class
 ):
     return pvc_factory_fixture(
         request,
-        storageclass_factory_class,
         project_factory_class
     )
 
@@ -358,12 +456,10 @@ def pvc_factory_class(
 @pytest.fixture(scope='session')
 def pvc_factory_session(
     request,
-    storageclass_factory_session,
     project_factory_session
 ):
     return pvc_factory_fixture(
         request,
-        storageclass_factory_session,
         project_factory_session
     )
 
@@ -371,19 +467,16 @@ def pvc_factory_session(
 @pytest.fixture(scope='function')
 def pvc_factory(
     request,
-    storageclass_factory,
     project_factory
 ):
     return pvc_factory_fixture(
         request,
-        storageclass_factory,
         project_factory,
     )
 
 
 def pvc_factory_fixture(
     request,
-    storageclass_factory,
     project_factory
 ):
     """
@@ -440,17 +533,16 @@ def pvc_factory_fixture(
             project = project or active_project or project_factory()
             active_project = project
             if interface == constants.CEPHBLOCKPOOL:
-                storageclass = (
-                    storageclass or active_rbd_storageclass
-                    or storageclass_factory(interface)
+                storageclass = storageclass or helpers.default_storage_class(
+                    interface_type=interface
                 )
                 active_rbd_storageclass = storageclass
             elif interface == constants.CEPHFILESYSTEM:
-                storageclass = (
-                    storageclass or active_cephfs_storageclass
-                    or storageclass_factory(interface)
+                storageclass = storageclass or helpers.default_storage_class(
+                    interface_type=interface
                 )
                 active_cephfs_storageclass = storageclass
+
             pvc_size = f"{size}Gi" if size else None
 
             pvc_obj = helpers.create_pvc(
@@ -636,13 +728,13 @@ def teardown_factory_fixture(request):
         """
         for instance in instances[::-1]:
             if not instance.is_deleted:
+                reclaim_policy = instance.reclaim_policy if instance.kind == constants.PVC else None
                 instance.delete()
                 instance.ocp.wait_for_delete(
                     instance.name
                 )
-                if instance.kind == constants.PVC:
-                    if instance.reclaim_policy == constants.RECLAIM_POLICY_DELETE:
-                        helpers.validate_pv_delete(instance.backed_pv)
+                if reclaim_policy == constants.RECLAIM_POLICY_DELETE:
+                    helpers.validate_pv_delete(instance.backed_pv)
     request.addfinalizer(finalizer)
     return factory
 
@@ -709,8 +801,8 @@ def service_account_factory(request):
 @pytest.fixture()
 def dc_pod_factory(
     request,
-    service_account_factory,
     pvc_factory,
+    service_account_factory
 ):
     """
     Create deploymentconfig pods
@@ -723,6 +815,8 @@ def dc_pod_factory(
         service_account=None,
         size=None,
         custom_data=None,
+        node_name=None,
+        node_selector=None,
         replica_count=1,
     ):
         """
@@ -736,6 +830,9 @@ def dc_pod_factory(
             custom_data (dict): If provided then Pod object is created
                 by using these data. Parameter `pvc` is not used but reference
                 is set if provided.
+            node_name (str): The name of specific node to schedule the pod
+            node_selector (dict): dict of key-value pair to be used for nodeSelector field
+                eg: {'nodetype': 'app-pod'}
             replica_count (int): Replica count for deployment config
         """
         if custom_data:
@@ -747,13 +844,15 @@ def dc_pod_factory(
             dc_pod_obj = helpers.create_pod(
                 interface_type=interface, pvc_name=pvc.name, do_reload=False,
                 namespace=pvc.namespace, sa_name=sa_obj.name, dc_deployment=True,
-                replica_count=replica_count
+                replica_count=replica_count, node_name=node_name,
+                node_selector=node_selector
             )
         instances.append(dc_pod_obj)
         log.info(dc_pod_obj.name)
         helpers.wait_for_resource_state(
             dc_pod_obj, constants.STATUS_RUNNING, timeout=180
         )
+        dc_pod_obj.pvc = pvc
         return dc_pod_obj
 
     def finalizer():
@@ -761,7 +860,7 @@ def dc_pod_factory(
         Delete dc pods
         """
         for instance in instances:
-            helpers.delete_deploymentconfig(instance)
+            helpers.delete_deploymentconfig_pods(instance)
 
     request.addfinalizer(finalizer)
     return factory
@@ -789,6 +888,54 @@ def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
     record_testsuite_property(
         'polarion-custom-isautomated', "True"
     )
+
+
+@pytest.fixture(scope='session')
+def tier_marks_name():
+    """
+    Gets the tier mark names
+
+    Returns:
+        list: list of tier mark names
+
+    """
+    tier_marks_name = []
+    for each_tier in tier_marks:
+        try:
+            tier_marks_name.append(each_tier.name)
+        except AttributeError:
+            tier_marks_name.append(each_tier().args[0].name)
+    return tier_marks_name
+
+
+@pytest.fixture(scope='function', autouse=True)
+def health_checker(request, tier_marks_name):
+    def finalizer():
+        try:
+            teardown = config.RUN['cli_params']['teardown']
+            skip_ocs_deployment = config.ENV_DATA['skip_ocs_deployment']
+            if not (teardown or skip_ocs_deployment):
+                ceph_health_check_base()
+                log.info("Ceph health check passed at teardown")
+        except CephHealthException:
+            log.info("Ceph health check failed at teardown")
+            # Retrying to increase the chance the cluster health will be OK
+            # for next test
+            ceph_health_check()
+            raise
+    node = request.node
+    request.addfinalizer(finalizer)
+    for mark in node.iter_markers():
+        if mark.name in tier_marks_name:
+            log.info("Checking for Ceph Health OK ")
+            try:
+                status = ceph_health_check_base()
+                if status:
+                    log.info("Ceph health check passed at setup")
+                    return
+            except CephHealthException:
+                # skip because ceph is not in good health
+                pytest.skip("Ceph health check failed at setup")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -828,7 +975,7 @@ def cluster(request, log_cli_level):
 def environment_checker(request):
     node = request.node
     # List of marks for which we will ignore the leftover checker
-    marks_to_ignore = [m.mark for m in [deployment, destroy, ignore_leftovers]]
+    marks_to_ignore = [m.mark for m in [deployment, ignore_leftovers]]
     for mark in node.iter_markers():
         if mark in marks_to_ignore:
             return
@@ -984,12 +1131,10 @@ def interface_iterate(request):
 
 @pytest.fixture(scope='class')
 def multi_pvc_factory_class(
-    storageclass_factory_class,
     project_factory_class,
     pvc_factory_class
 ):
     return multi_pvc_factory_fixture(
-        storageclass_factory_class,
         project_factory_class,
         pvc_factory_class
     )
@@ -997,28 +1142,24 @@ def multi_pvc_factory_class(
 
 @pytest.fixture(scope='session')
 def multi_pvc_factory_session(
-    storageclass_factory_session,
     project_factory_session,
     pvc_factory_session
 ):
     return multi_pvc_factory_fixture(
-        storageclass_factory_session,
         project_factory_session,
         pvc_factory_session
     )
 
 
 @pytest.fixture(scope='function')
-def multi_pvc_factory(storageclass_factory, project_factory, pvc_factory):
+def multi_pvc_factory(project_factory, pvc_factory):
     return multi_pvc_factory_fixture(
-        storageclass_factory,
         project_factory,
         pvc_factory
     )
 
 
 def multi_pvc_factory_fixture(
-    storageclass_factory,
     project_factory,
     pvc_factory
 ):
@@ -1041,7 +1182,8 @@ def multi_pvc_factory_fixture(
         access_mode_dist_ratio=None,
         status=constants.STATUS_BOUND,
         num_of_pvc=1,
-        wait_each=False
+        wait_each=False,
+        timeout=60
     ):
         """
         Args:
@@ -1086,6 +1228,7 @@ def multi_pvc_factory_fixture(
             num_of_pvc(int): Number of PVCs to be created
             wait_each(bool): True to wait for each PVC to be in status 'status'
                 before creating next PVC, False otherwise
+            timeout(int): Time in seconds to wait
 
         Returns:
             list: objects of PVC class.
@@ -1097,7 +1240,9 @@ def multi_pvc_factory_fixture(
             status_tmp = ""
 
         project = project or project_factory()
-        storageclass = storageclass or storageclass_factory(interface)
+        storageclass = storageclass or helpers.default_storage_class(
+            interface_type=interface
+        )
 
         access_modes = access_modes or [constants.ACCESS_MODE_RWO]
 
@@ -1140,7 +1285,7 @@ def multi_pvc_factory_fixture(
             pvc_obj.project = project
         if status and not wait_each:
             for pvc_obj in pvc_list:
-                helpers.wait_for_resource_state(pvc_obj, status)
+                helpers.wait_for_resource_state(pvc_obj, status, timeout=timeout)
         return pvc_list
 
     return factory
@@ -1300,6 +1445,91 @@ def ec2_instances(request, aws_obj):
 
 
 @pytest.fixture()
+def mcg_obj(request):
+    return mcg_obj_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def mcg_obj_session(request):
+    return mcg_obj_fixture(request)
+
+
+def mcg_obj_fixture(request):
+    """
+    Returns an MCG resource that's connected to the S3 endpoint
+
+    Returns:
+        MCG: An MCG resource
+    """
+
+    mcg_obj = MCG()
+
+    if config.ENV_DATA['platform'].lower() == 'aws':
+        def finalizer():
+            mcg_obj.cred_req_obj.delete()
+        request.addfinalizer(finalizer)
+
+    return mcg_obj
+
+
+@pytest.fixture()
+def created_pods(request):
+    return created_pods_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def created_pods_session(request):
+    return created_pods_fixture(request)
+
+
+def created_pods_fixture(request):
+    """
+    Deletes all pods that were created as part of the test
+
+    Returns:
+        list: An empty list of pods
+    """
+    created_pods_objects = []
+
+    def pod_cleanup():
+        for pod in created_pods_objects:
+            log.info(f'Deleting pod {pod.name}')
+            pod.delete()
+    request.addfinalizer(pod_cleanup)
+    return created_pods_objects
+
+
+@pytest.fixture()
+def awscli_pod(mcg_obj, created_pods):
+    return awscli_pod_fixture(mcg_obj, created_pods)
+
+
+@pytest.fixture(scope='session')
+def awscli_pod_session(mcg_obj_session, created_pods_session):
+    return awscli_pod_fixture(mcg_obj_session, created_pods_session)
+
+
+def awscli_pod_fixture(mcg_obj, created_pods):
+    """
+    Creates a new AWSCLI pod for relaying commands
+
+    Args:
+        created_pods (Fixture/list): A fixture used to keep track of created
+             pods and clean them up in the teardown
+
+    Returns:
+        pod: A pod running the AWS CLI
+    """
+    awscli_pod_obj = helpers.create_pod(
+        namespace=mcg_obj.namespace,
+        pod_dict_path=constants.AWSCLI_POD_YAML
+    )
+    helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
+    created_pods.append(awscli_pod_obj)
+    return awscli_pod_obj
+
+
+@pytest.fixture()
 def nodes():
     """
     Return an instance of the relevant platform nodes class
@@ -1311,6 +1541,319 @@ def nodes():
     factory = platform_nodes.PlatformNodesFactory()
     nodes = factory.get_nodes_platform()
     return nodes
+
+
+@pytest.fixture()
+def uploaded_objects(request, mcg_obj, awscli_pod, verify_rgw_restart_count):
+    return uploaded_objects_fixture(
+        request,
+        mcg_obj,
+        awscli_pod,
+        verify_rgw_restart_count
+    )
+
+
+@pytest.fixture(scope='session')
+def uploaded_objects_session(
+    request,
+    mcg_obj_session,
+    awscli_pod_session,
+    verify_rgw_restart_count_session
+):
+    return uploaded_objects_fixture(
+        request,
+        mcg_obj_session,
+        awscli_pod_session,
+        verify_rgw_restart_count_session
+    )
+
+
+def uploaded_objects_fixture(
+    request,
+    mcg_obj,
+    awscli_pod,
+    verify_rgw_restart_count
+):
+    """
+    Deletes all objects that were created as part of the test
+
+    Args:
+        mcg_obj (MCG): An MCG object containing the MCG S3 connection
+            credentials
+        awscli_pod (Pod): A pod running the AWSCLI tools
+
+    Returns:
+        list: An empty list of objects
+
+    """
+
+    uploaded_objects_paths = []
+
+    def object_cleanup():
+        for uploaded_filename in uploaded_objects_paths:
+            log.info(f'Deleting object {uploaded_filename}')
+            awscli_pod.exec_cmd_on_pod(
+                command=helpers.craft_s3_command(
+                    mcg_obj, "rm " + uploaded_filename
+                ),
+                secrets=[
+                    mcg_obj.access_key_id,
+                    mcg_obj.access_key,
+                    mcg_obj.s3_endpoint
+                ]
+            )
+
+    request.addfinalizer(object_cleanup)
+    return uploaded_objects_paths
+
+
+@pytest.fixture()
+def verify_rgw_restart_count(request):
+    return verify_rgw_restart_count_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def verify_rgw_restart_count_session(request):
+    return verify_rgw_restart_count_fixture(request)
+
+
+def verify_rgw_restart_count_fixture(request):
+    """
+    Verifies the RGW restart count at start and end of a test
+    """
+    if config.ENV_DATA['platform'].lower() == 'vsphere':
+        log.info("Getting RGW pod restart count before executing the test")
+        initial_count = get_rgw_restart_count()
+
+        def finalizer():
+            rgw_pod = get_rgw_pod()
+            rgw_pod.reload()
+            log.info("Verifying whether RGW pod changed after executing the test")
+            assert rgw_pod.restart_count == initial_count, 'RGW pod restarted'
+
+        request.addfinalizer(finalizer)
+
+
+@pytest.fixture()
+def bucket_factory(request, mcg_obj):
+    return bucket_factory_fixture(request, mcg_obj)
+
+
+@pytest.fixture(scope='session')
+def bucket_factory_session(request, mcg_obj_session):
+    return bucket_factory_fixture(request, mcg_obj_session)
+
+
+def bucket_factory_fixture(request, mcg_obj):
+    """
+    Create a bucket factory. Calling this fixture creates a new bucket(s).
+    For a custom amount, provide the 'amount' parameter.
+
+    Args:
+        mcg_obj (MCG): An MCG object containing the MCG S3 connection
+        credentials
+
+    """
+    created_buckets = []
+
+    bucketMap = {
+        's3': S3Bucket,
+        'oc': OCBucket,
+        'cli': CLIBucket
+    }
+
+    def _create_buckets(amount=1, interface='S3', *args, **kwargs):
+        """
+        Creates and deletes all buckets that were created as part of the test
+
+        Args:
+            amount (int): The amount of buckets to create
+            interface (str): The interface to use for creation of buckets.
+                S3 | OC | CLI
+
+        Returns:
+            list: A list of s3.Bucket objects, containing all the created
+                buckets
+
+        """
+        if interface.lower() not in bucketMap:
+            raise RuntimeError(
+                f'Invalid interface type received: {interface}. '
+                f'available types: {", ".join(bucketMap.keys())}'
+            )
+        for i in range(amount):
+            bucket_name = helpers.create_unique_resource_name(
+                resource_description='bucket', resource_type=interface.lower()
+            )
+            created_buckets.append(
+                bucketMap[interface.lower()](
+                    mcg_obj,
+                    bucket_name,
+                    *args,
+                    **kwargs
+                )
+            )
+        return created_buckets
+
+    def bucket_cleanup():
+        all_existing_buckets = mcg_obj.s3_get_all_bucket_names()
+        for bucket in created_buckets:
+            if bucket.name in all_existing_buckets:
+                log.info(f'Cleaning up bucket {bucket.name}')
+                bucket.delete()
+                log.info(
+                    f"Verifying whether bucket: {bucket.name} exists after"
+                    f" deletion"
+                )
+                assert not mcg_obj.s3_verify_bucket_exists(bucket.name)
+            else:
+                log.info(f'Bucket {bucket.name} not found.')
+
+    request.addfinalizer(bucket_cleanup)
+
+    return _create_buckets
+
+
+@pytest.fixture()
+def multiregion_resources(request, mcg_obj):
+    return multiregion_resources_fixture(request, mcg_obj)
+
+
+@pytest.fixture(scope='session')
+def multiregion_resources_session(request, mcg_obj_session):
+    return multiregion_resources_fixture(request, mcg_obj_session)
+
+
+def multiregion_resources_fixture(request, mcg_obj):
+    bs_objs, bs_secrets, bucketclasses, aws_buckets = (
+        [] for _ in range(4)
+    )
+
+    # Cleans up all resources that were created for the test
+    def resource_cleanup():
+        for resource in chain(bs_secrets, bucketclasses):
+            resource.delete()
+
+        for backingstore in bs_objs:
+            backingstore.delete()
+            mcg_obj.send_rpc_query(
+                'pool_api',
+                'delete_pool',
+                {'name': backingstore.name}
+            )
+
+        for aws_bucket_name in aws_buckets:
+            mcg_obj.toggle_aws_bucket_readwrite(aws_bucket_name, block=False)
+            for _ in range(10):
+                try:
+                    mcg_obj.aws_s3_resource.Bucket(
+                        aws_bucket_name
+                    ).objects.all().delete()
+                    mcg_obj.aws_s3_resource.Bucket(aws_bucket_name).delete()
+                    break
+                except ClientError:
+                    log.info(
+                        f'Deletion of bucket {aws_bucket_name} failed. Retrying...'
+                    )
+                    sleep(3)
+
+    request.addfinalizer(resource_cleanup)
+
+    return aws_buckets, bs_secrets, bs_objs, bucketclasses
+
+
+@pytest.fixture()
+def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
+    return multiregion_mirror_setup_fixture(
+        mcg_obj,
+        multiregion_resources,
+        bucket_factory
+    )
+
+
+@pytest.fixture(scope='session')
+def multiregion_mirror_setup_session(
+    mcg_obj_session,
+    multiregion_resources_session,
+    bucket_factory_session
+):
+    return multiregion_mirror_setup_fixture(
+        mcg_obj_session,
+        multiregion_resources_session,
+        bucket_factory_session
+    )
+
+
+def multiregion_mirror_setup_fixture(
+    mcg_obj,
+    multiregion_resources,
+    bucket_factory
+):
+    # Setup
+    # Todo:
+    #  add region and amount parametrization - note that `us-east-1`
+    #  will cause an error as it is the default region. If usage of `us-east-1`
+    #  needs to be tested, keep the 'region' field out.
+    (
+        aws_buckets,
+        backingstore_secrets,
+        backingstore_objects,
+        bucketclasses
+    ) = multiregion_resources
+
+    # Define backing stores
+    backingstore1 = {
+        'name': helpers.create_unique_resource_name(
+            resource_description='testbs',
+            resource_type='s3bucket'
+        ),
+        'region': f'us-west-{randrange(1, 3)}'
+    }
+    backingstore2 = {
+        'name': helpers.create_unique_resource_name(
+            resource_description='testbs',
+            resource_type='s3bucket'
+        ),
+        'region': f'us-east-2'
+    }
+    # Create target buckets for them
+    mcg_obj.create_new_backingstore_aws_bucket(backingstore1)
+    mcg_obj.create_new_backingstore_aws_bucket(backingstore2)
+    aws_buckets.extend((backingstore1['name'], backingstore2['name']))
+    # Create a backing store secret
+    backingstore_secret = mcg_obj.create_aws_backingstore_secret(
+        backingstore1['name'] + 'secret'
+    )
+    backingstore_secrets.append(backingstore_secret)
+    # Create AWS-backed backing stores on NooBaa
+    backingstore_obj_1 = mcg_obj.oc_create_aws_backingstore(
+        backingstore1['name'],
+        backingstore1['name'],
+        backingstore_secret.name,
+        backingstore1['region']
+    )
+    backingstore_obj_2 = mcg_obj.oc_create_aws_backingstore(
+        backingstore2['name'],
+        backingstore2['name'],
+        backingstore_secret.name,
+        backingstore2['region']
+    )
+    backingstore_objects.extend((backingstore_obj_1, backingstore_obj_2))
+    # Create a new mirror bucketclass that'll use all the backing stores we
+    # created
+    bucketclass = mcg_obj.oc_create_bucketclass(
+        helpers.create_unique_resource_name(
+            resource_description='testbc',
+            resource_type='bucketclass'
+        ),
+        [backingstore.name for backingstore in backingstore_objects], 'Mirror'
+    )
+    bucketclasses.append(bucketclass)
+    # Create a NooBucket that'll use the bucket class in order to test
+    # the mirroring policy
+    bucket = bucket_factory(1, 'OC', bucketclass=bucketclass.name)[0]
+
+    return bucket, backingstore1, backingstore2
 
 
 @pytest.fixture(scope='session')
@@ -1346,3 +1889,174 @@ def default_storageclasses(request, teardown_factory_session):
         teardown_factory_session(sc)
         scs[constants.RECLAIM_POLICY_RETAIN].append(sc)
     return scs
+
+
+@pytest.fixture(scope='class')
+def install_logging(request):
+    """
+    Setup and teardown
+    * The setup will deploy openshift-logging in the cluster
+    * The teardown will uninstall cluster-logging from the cluster
+    """
+
+    def finalizer():
+        uninstall_cluster_logging()
+
+    request.addfinalizer(finalizer)
+
+    # Checks OCP version
+
+    ocp_version = get_ocp_version()
+
+    # Creates namespace opensift-operators-redhat
+    ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
+
+    # Creates an operator-group for elasticsearch
+    assert ocp_logging_obj.create_elasticsearch_operator_group(
+        yaml_file=constants.EO_OG_YAML,
+        resource_name='openshift-operators-redhat'
+    )
+
+    # Set RBAC policy on the project
+    assert ocp_logging_obj.set_rbac(
+        yaml_file=constants.EO_RBAC_YAML, resource_name='prometheus-k8s'
+    )
+
+    # Creates subscription for elastic-search operator
+    subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
+    subscription_yaml['spec']['channel'] = ocp_version
+    helpers.create_resource(**subscription_yaml)
+    assert ocp_logging_obj.get_elasticsearch_subscription()
+
+    # Creates a namespace openshift-logging
+    ocp_logging_obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
+
+    # Creates an operator-group for cluster-logging
+    assert ocp_logging_obj.create_clusterlogging_operator_group(
+        yaml_file=constants.CL_OG_YAML
+    )
+
+    # Creates subscription for cluster-logging
+    cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
+    cl_subscription['spec']['channel'] = ocp_version
+    helpers.create_resource(**cl_subscription)
+    assert ocp_logging_obj.get_clusterlogging_subscription()
+
+    # Creates instance in namespace openshift-logging
+    cluster_logging_operator = OCP(
+        kind=constants.POD, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
+    log.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
+    ocp_logging_obj.create_instance()
+
+
+@pytest.fixture
+def fio_pvc_dict():
+    return fio_pvc_dict_fixture()
+
+
+@pytest.fixture(scope='session')
+def fio_pvc_dict_session():
+    return fio_pvc_dict_fixture()
+
+
+def fio_pvc_dict_fixture():
+    """
+    PVC template for fio workloads.
+    Note that all 'None' values needs to be defined before usage.
+    """
+    # TODO(fbalak): load dictionary fixtures from one place
+    template = textwrap.dedent("""
+        kind: PersistentVolumeClaim
+        apiVersion: v1
+        metadata:
+          name: fio-target
+        spec:
+          storageClassName: None
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: None
+        """)
+    pvc_dict = yaml.safe_load(template)
+    return pvc_dict
+
+
+@pytest.fixture
+def fio_configmap_dict():
+    return fio_configmap_dict_fixture()
+
+
+@pytest.fixture(scope='session')
+def fio_configmap_dict_session():
+    return fio_configmap_dict_fixture()
+
+
+def fio_configmap_dict_fixture():
+    """
+    ConfigMap template for fio workloads.
+    Note that you need to add actual configuration to workload.fio file.
+    """
+    # TODO(fbalak): load dictionary fixtures from one place
+    template = textwrap.dedent("""
+        kind: ConfigMap
+        apiVersion: v1
+        metadata:
+          name: fio-config
+        data:
+          workload.fio: |
+            # here comes workload configuration
+        """)
+    cm_dict = yaml.safe_load(template)
+    return cm_dict
+
+
+@pytest.fixture
+def fio_job_dict():
+    return fio_job_dict_fixture()
+
+
+@pytest.fixture(scope='session')
+def fio_job_dict_session():
+    return fio_job_dict_fixture()
+
+
+def fio_job_dict_fixture():
+    """
+    Job template for fio workloads.
+    """
+    # TODO(fbalak): load dictionary fixtures from one place
+    template = textwrap.dedent("""
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: fio
+        spec:
+          backoffLimit: 1
+          template:
+            metadata:
+              name: fio
+            spec:
+              containers:
+                - name: fio
+                  image: quay.io/johnstrunk/fs-performance:latest
+                  command:
+                    - "/usr/bin/fio"
+                    - "--output-format=json"
+                    - "/etc/fio/workload.fio"
+                  volumeMounts:
+                    - name: fio-target
+                      mountPath: /mnt/target
+                    - name: fio-config-volume
+                      mountPath: /etc/fio
+              restartPolicy: Never
+              volumes:
+                - name: fio-target
+                  persistentVolumeClaim:
+                    claimName: fio-target
+                - name: fio-config-volume
+                  configMap:
+                    name: fio-config
+        """)
+    job_dict = yaml.safe_load(template)
+    return job_dict

@@ -49,19 +49,30 @@ to the pytest.
 
 ### Additional arguments:
 
-
-* `--cluster-name <name>` - name of cluster (always required for deployment) must be 5-17 characters long. 
+* `--cluster-name <name>` - name of cluster (always required for deployment) must be 5-17 characters long.
+* `--ocs-version` - version of OCS to be used (e.g. 4.2 or 4.3). If not
+    specified, the default from ocs-ci will be used. If --ocs-registry-image passed
+    then this parameter is ignored and the version is parsed from the registry image.
+* `--upgrade-ocs-version` - version of OCS to be used for upgrade (e.g. 4.2 or 4.3). If not specified, the default from ocs-ci will be used.
+* `--ocp-version` - OCP version to be used for deployment. This version will
+    be used for load file from conf/ocp_version/ocp-VERSION-config.yaml.
+    You can use for example those values:
+  * `4.2`: for nightly 4.2 OCP build
+  * `4.2-ga`: for latest GAed 4.2 OCP build from stable channel
+  * `4.2-ga-minus1`: for latest GAed 4.2 build (stable channel) - 1
+* `--ocs-registry-image` - ocs registry image to be used for deployment
+    (e.g quay.io/rhceph-dev/ocs-olm-operator:latest-4.2). In case this parameter
+    is passed, the version is parsed from the registry image name and it overwrites
+    any version passed in via --ocs-version.
+* `--upgrade-ocs-registry-image` - ocs registry image to be used for upgrade (e.g quay.io/rhceph-dev/ocs-olm-operator:latest-4.3)
 * `--ocsci-conf` - with this configuration parameter you can overwrite the
     default OCS-CI config parameters defined in
     [default config](https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/conf/default_config.yaml).
     This is the repeatable parameter and you can use it multiple times for
     adding multiple config files. (The last one overwrites previous config!)
-* `--cluster-conf` - with this configuration you can overwrite the default
-    parameters for cluster and deployment. See the example of such file
-    [here](https://github.com/red-hat-storage/ocs-ci/tree/master/conf/ocs_basic_install.yml). This parameter is obsolete and going
-    to be repleced by the --ocsci-conf parameter.
 * `--deploy` - if this is given and a cluster can not be accessed from the
     provided `--cluster-path` then a new test cluster will be deployed.
+* `--live-deploy` - OCS-CI will use live content to deploy OCS.
 * `--teardown` - if this is given the testing cluster will be destroyed after
     the test have completed, regardless of if the tests passed or failed.
 * `--html` - to generate html reports of the test run
@@ -97,14 +108,12 @@ that can be used to access an existing cluster.
 
 If you would like to deploy new cluster you can run following command:
 ```bash
-run-ci -m deployment --ocsci-conf conf/ocsci/custom_config.yaml \
-    --cluster-conf conf/ocs_basic_install.yml \
+run-ci -m deployment --ocsci-conf conf/path_to_config_to_be_used.yaml \
     --cluster-name kerberos_ID-ocs-deployment \
     --cluster-path /home/my_user/my-ocs-dir tests/ \
     --deploy
  ```
-of course you can utilize your cluster to add `--cluster-conf` parameter or
-you can omit --cluster-name if you would like to use default
+of course you can omit --cluster-name if you would like to use default
 values.
 
 Note that during deployment, openshift command line tools like `oc` and
@@ -127,6 +136,12 @@ run-ci -m deployment --ocsci-conf conf/ocsci/vsphere_upi.yaml \
     --cluster-path /home/my_user/my-ocs-dir tests/ \
     --deploy
 ```
+
+#### Deployment via UI - openshift console
+
+Please follow setup instructions mentioned in [Getting started](./getting_started.md) document.
+To enable UI deployment please pass `--ocsci-conf conf/ocsci/ui-testing.yaml` where you will have to update path to
+your clone of openshift console repository.
 
 #### Running tests on deployed environment
 

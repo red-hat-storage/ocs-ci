@@ -6,7 +6,8 @@ import copy
 import logging
 import yaml
 from gevent.threadpool import ThreadPoolExecutor
-from ocs_ci.ocs import ocp, constants, exceptions
+
+from ocs_ci.ocs import ocp, defaults, constants, exceptions
 
 log = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ def compare_dicts(before, after):
 
 def assign_get_values(
     env_status_dict, key, kind=None,
-    exclude_namespaces=('openshift-marketplace',)
+    exclude_labels=(constants.must_gather_pod_label,)
 ):
     """
     Assigning kind status into env_status_dict
@@ -85,15 +86,28 @@ def assign_get_values(
             copy.deepcopy(ENV_STATUS_DICT)
         key (str): Name of the resource
         kind (OCP obj): OCP object for a resource
-        exclude_namespaces (list or tuple): List/tuple of namespaces to ignore
+        exclude_labels (list or tuple): List/tuple of app labels to ignore
     """
     items = kind.get(all_namespaces=True)['items']
-    items = [
-        item for item in items if (
-            item.get('metadata').get('namespace') not in exclude_namespaces
-        )
-    ]
-    env_status_dict[key] = items
+    items_filtered = []
+
+    for item in items:
+        ns = item.get('metadata', {}).get('namespace')
+        app_label = item.get('metadata', {}).get('labels', {}).get('app')
+        if (ns is not None
+                and ns.startswith("openshift-")
+                and ns != defaults.ROOK_CLUSTER_NAMESPACE):
+            log.debug("ignoring item in %s namespace: %s", ns, item)
+            continue
+        if app_label in exclude_labels:
+            log.debug("ignoring item with app label %s: %s", app_label, item)
+            continue
+        items_filtered.append(item)
+
+    ignored = len(items) - len(items_filtered)
+    log.debug("total %d items are ignored during invironment check", ignored)
+
+    env_status_dict[key] = items_filtered
 
 
 def get_environment_status(env_dict):

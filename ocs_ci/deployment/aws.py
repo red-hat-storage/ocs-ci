@@ -2,31 +2,29 @@
 This module contains platform specific methods and classes for deployment
 on AWS platform
 """
-import json
 import logging
 import os
 import shutil
-import traceback
-from subprocess import Popen, PIPE
+from subprocess import PIPE, Popen
 
 import boto3
-from botocore.exceptions import ClientError
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
-from ocs_ci.ocs import exceptions
-from ocs_ci.ocs.exceptions import SameNamePrefixClusterAlreadyExistsException
+from ocs_ci.ocs import constants, exceptions, ocp
 from ocs_ci.ocs.parallel import parallel
-from ocs_ci.utility.aws import AWS as AWSUtil
-from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import (
-    run_cmd, clone_repo, create_rhelpod, TimeoutSampler
-)
-from .deployment import Deployment
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import templating
-from ocs_ci.ocs import ocp
+from ocs_ci.utility.aws import (
+    AWS as AWSUtil, terminate_rhel_workers, destroy_volumes, get_rhel_worker_instances
+)
+from ocs_ci.utility.bootstrap import gather_bootstrap
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import (
+    clone_repo, create_rhelpod, get_cluster_name, get_infra_id, run_cmd,
+    TimeoutSampler, get_ocp_version
+)
+from .deployment import Deployment
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +40,10 @@ class AWSBase(Deployment):
         super(AWSBase, self).__init__()
         self.region = config.ENV_DATA['region']
         self.aws = AWSUtil(self.region)
+        if config.ENV_DATA.get('cluster_name'):
+            self.cluster_name = config.ENV_DATA['cluster_name']
+        else:
+            self.cluster_name = get_cluster_name(self.cluster_path)
 
     def create_ebs_volumes(self, worker_pattern, size=100):
         """
@@ -183,22 +185,6 @@ class AWSBase(Deployment):
             return True
         return False
 
-    def destroy_volumes(self):
-        try:
-            # Retrieve cluster name and AWS region from metadata
-            cluster_name = self.ocp_deployment.metadata.get('clusterName')
-            # Find and delete volumes
-            volume_pattern = f"{cluster_name}*"
-            logger.debug(f"Finding volumes with pattern: {volume_pattern}")
-            volumes = self.aws.get_volumes_by_name_pattern(volume_pattern)
-            logger.debug(f"Found volumes: \n {volumes}")
-            for volume in volumes:
-                self.aws.detach_and_delete_volume(
-                    self.aws.ec2_resource.Volume(volume['id'])
-                )
-        except Exception:
-            logger.error(traceback.format_exc())
-
 
 class AWSIPI(AWSBase):
     """
@@ -212,6 +198,18 @@ class AWSIPI(AWSBase):
         def __init__(self):
             super(AWSIPI.OCPDeployment, self).__init__()
 
+        def deploy_prereq(self):
+            """
+            Overriding deploy_prereq from parent. Perform all necessary
+            prerequisites for AWSIPI here.
+            """
+            super(AWSIPI.OCPDeployment, self).deploy_prereq()
+            if config.DEPLOYMENT['preserve_bootstrap_node']:
+                logger.info("Setting ENV VAR to preserve bootstrap node")
+                os.environ['OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP'] = 'True'
+                assert os.getenv(
+                    'OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP') == 'True'
+
         def deploy(self, log_cli_level='DEBUG'):
             """
             Deployment specific to OCP cluster on this platform
@@ -224,12 +222,20 @@ class AWSIPI(AWSBase):
             logger.info(
                 f"Openshift-installer will be using loglevel:{log_cli_level}"
             )
-            run_cmd(
-                f"{self.installer} create cluster "
-                f"--dir {self.cluster_path} "
-                f"--log-level {log_cli_level}",
-                timeout=3600
-            )
+            try:
+                run_cmd(
+                    f"{self.installer} create cluster "
+                    f"--dir {self.cluster_path} "
+                    f"--log-level {log_cli_level}",
+                    timeout=3600
+                )
+            except exceptions.CommandFailed as e:
+                if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
+                    try:
+                        gather_bootstrap()
+                    except Exception as ex:
+                        logger.error(ex)
+                raise e
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level='DEBUG'):
@@ -244,9 +250,10 @@ class AWSIPI(AWSBase):
             cluster_name = config.ENV_DATA['cluster_name']
             prefix = cluster_name.split("-")[0] + '*'
             if self.check_cluster_existence(prefix):
-                raise SameNamePrefixClusterAlreadyExistsException(
+                raise exceptions.SameNamePrefixClusterAlreadyExistsException(
                     f"Cluster with name prefix {prefix} already exists. "
-                    f"Please destroy the existing cluster for a new cluster deployment"
+                    f"Please destroy the existing cluster for a new cluster "
+                    f"deployment"
                 )
         super(AWSIPI, self).deploy_ocp(log_cli_level)
         if config.DEPLOYMENT.get('host_network'):
@@ -259,8 +266,8 @@ class AWSIPI(AWSBase):
         Args:
             log_level (str): log level openshift-installer (default: DEBUG)
         """
+        destroy_volumes(self.cluster_name)
         super(AWSIPI, self).destroy_cluster(log_level)
-        self.destroy_volumes()
 
 
 class AWSUPI(AWSBase):
@@ -285,20 +292,23 @@ class AWSUPI(AWSBase):
             self.client = boto3.client(
                 'ec2', region_name=config.ENV_DATA['region']
             )
-            self.cf = boto3.client('cloudformation')
+            self.cf = boto3.client('cloudformation', region_name=self.region)
 
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
             super(AWSUPI.OCPDeployment, self).__init__()
             upi_repo_name = f'openshift-misc-{config.RUN["run_id"]}'
+
+            self.upi_common_base = 'v3-launch-templates/functionality-testing'
             self.upi_repo_path = os.path.join(
                 constants.EXTERNAL_DIR, upi_repo_name,
             )
-
             self.upi_script_path = os.path.join(
                 self.upi_repo_path,
-                'v3-launch-templates/functionality-testing'
-                '/aos-4_2/hosts/'
+                self.upi_common_base,
+                os.path.join(
+                    f"aos-{get_ocp_version('_')}", 'hosts/'
+                ),
             )
 
         def deploy_prereq(self):
@@ -319,8 +329,14 @@ class AWSUPI(AWSBase):
                 'num_workers': str(config.ENV_DATA['worker_replicas']),
                 'AVAILABILITY_ZONE_COUNT': str(config.ENV_DATA.get(
                     'availability_zone_count', ''
-                ))
+                )),
+                'BASE_DOMAIN': config.ENV_DATA['base_domain'],
+                'remove_bootstrap': 'yes'
             }
+            if config.DEPLOYMENT['preserve_bootstrap_node']:
+                logger.info("Setting ENV VAR to preserve bootstrap node")
+                upi_env_vars['remove_bootstrap'] = 'No'
+
             for key, value in upi_env_vars.items():
                 if value:
                     os.environ[key] = value
@@ -390,7 +406,7 @@ class AWSUPI(AWSBase):
                 [os.path.join(
                     self.upi_script_path, constants.UPI_INSTALL_SCRIPT
                 )],
-                stdout=PIPE, stderr=PIPE
+                stdout=PIPE, stderr=PIPE, encoding='utf-8'
             )
             stdout, stderr = proc.communicate()
 
@@ -399,6 +415,11 @@ class AWSUPI(AWSBase):
 
             if proc.returncode:
                 logger.error(stderr)
+                if constants.GATHER_BOOTSTRAP_PATTERN in stderr:
+                    try:
+                        gather_bootstrap()
+                    except Exception as ex:
+                        logger.error(ex)
                 raise exceptions.CommandFailed("upi install script failed")
             logger.info(stdout)
 
@@ -438,7 +459,7 @@ class AWSUPI(AWSBase):
         stack_name = f'{self.cluster_name}-{suffix}'
         resource = self.cf.list_stack_resources(StackName=stack_name)
         worker_id = self.get_worker_resource_id(resource)
-        ec2 = boto3.resource('ec2')
+        ec2 = boto3.resource('ec2', region_name=self.region)
         worker_instance = ec2.Instance(worker_id)
         self.worker_vpc = worker_instance.vpc.id
         self.worker_subnet = worker_instance.subnet.id
@@ -516,7 +537,7 @@ class AWSUPI(AWSBase):
                 KeyName='openshift-dev'
             )
             inst_id = response['Instances'][0]['InstanceId']
-            worker_ec2 = boto3.resource('ec2')
+            worker_ec2 = boto3.resource('ec2', region_name=self.region)
             worker_instance = worker_ec2.Instance(inst_id)
             worker_instance.wait_until_running()
             worker_name = f'{cluster_id}-rhel-worker-{i}'
@@ -534,6 +555,13 @@ class AWSUPI(AWSBase):
                 InstanceId=inst_id,
             )
 
+    @retry(exceptions.CommandFailed, tries=15, delay=30, backoff=1)
+    def check_connection(self, rhel_pod_obj, host, pem_dst_path):
+        cmd = 'ls'
+        rhel_pod_obj.exec_cmd_on_node(
+            host, pem_dst_path, cmd, user=self.rhel_worker_user
+        )
+
     def run_ansible_playbook(self):
         """
         Bring up a helper pod (RHEL) to run openshift-ansible
@@ -550,9 +578,13 @@ class AWSUPI(AWSBase):
         pem_dst_path = "/openshift-dev.pem"
         pod.upload(rhel_pod_obj.name, pem_src_path, pem_dst_path)
         repo_dst_path = "/etc/yum.repos.d/"
-        repo_file = os.path.basename(constants.OCP4_2_REPO)
+        repo = os.path.join(
+            constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo"
+        )
+        assert os.path.exists(repo), f"Required repo file {repo} doesn't exist!"
+        repo_file = os.path.basename(repo)
         pod.upload(
-            rhel_pod_obj.name, constants.OCP4_2_REPO, repo_dst_path
+            rhel_pod_obj.name, repo, repo_dst_path
         )
         # copy the .pem file for our internal repo on all nodes
         # including ansible pod
@@ -570,6 +602,10 @@ class AWSUPI(AWSBase):
             inst.private_dns_name for node, inst in
             self.rhel_worker_list.items()
         ]
+        # Check whether every host is acceptin ssh connections
+        for host in hosts:
+            self.check_connection(rhel_pod_obj, host, pem_dst_path)
+
         for host in hosts:
             disable = "sudo yum-config-manager --disable *"
             rhel_pod_obj.exec_cmd_on_node(
@@ -759,68 +795,6 @@ class AWSUPI(AWSBase):
         self.create_rhel_instance()
         self.run_ansible_playbook()
 
-    def get_rhel_worker_instances(self):
-        """
-        Get list of rhel worker instance IDs
-
-        Returns:
-            list: list of instance IDs of rhel workers
-
-        """
-        rhel_workers = []
-        worker_pattern = get_infra_id(self.cluster_path) + "*rhel-worker*"
-        worker_filter = [{
-            'Name': 'tag:Name', 'Values': [worker_pattern]
-        }]
-
-        response = self.client.describe_instances(Filters=worker_filter)
-        for worker in response['Reservations']:
-            rhel_workers.append(worker['Instances'][0]['InstanceId'])
-        return rhel_workers
-
-    def terminate_rhel_workers(self, worker_list):
-        """
-        Terminate the RHEL worker instances
-
-        Args:
-            worker_list (list): Instance IDs of rhel workers
-
-        Raises:
-            exceptions.FailedToDeleteInstance: if failed to terminate
-
-        """
-        if not worker_list:
-            logger.info(
-                "No workers in list, skipping termination of RHEL workers"
-            )
-            return
-
-        logging.info(f"Terminating RHEL workers {worker_list}")
-        # Do a dry run of instance termination
-        try:
-            self.client.terminate_instances(
-                InstanceIds=worker_list,
-                DryRun=True,
-            )
-        except self.client.exceptions.ClientError as err:
-            if "DryRunOperation" in str(err):
-                logging.info("Instances can be deleted")
-            else:
-                logging.error("Some of the Instances can't be deleted")
-                raise exceptions.FailedToDeleteInstance()
-        # Actual termination call here
-        self.client.terminate_instances(
-            InstanceIds=worker_list,
-            DryRun=False,
-        )
-        try:
-            waiter = self.client.get_waiter('instance_terminated')
-            waiter.wait(InstanceIds=worker_list)
-            logging.info("Instances are terminated")
-        except self.client.exceptions.WaiterError as ex:
-            logging.error(f"Failed to terminate instances {ex}")
-            raise exceptions.FailedToDeleteInstance()
-
     def destroy_cluster(self, log_level="DEBUG"):
         """
         Destroy OCP cluster for AWS UPI
@@ -828,27 +802,24 @@ class AWSUPI(AWSBase):
         Args:
             log_level (str): log level for openshift-installer (
                 default:DEBUG)
+
         """
         cluster_name = get_cluster_name(self.cluster_path)
         if config.ENV_DATA.get('rhel_workers'):
-            self.terminate_rhel_workers(self.get_rhel_worker_instances())
-        # Destroy extra volumes
-        self.destroy_volumes()
+            terminate_rhel_workers(get_rhel_worker_instances(self.cluster_path))
 
-        # Create cloudformation client
-        cf = boto3.client('cloudformation')
+        # Destroy extra volumes
+        destroy_volumes(cluster_name)
 
         # Delete master, bootstrap, security group, and worker stacks
         suffixes = ['ma', 'bs', 'sg']
-        # TODO: read in num_workers in a better way
-        num_workers = int(os.environ.get('num_workers', 3))
+
+        num_workers = config.ENV_DATA['worker_replicas']
         for i in range(num_workers - 1, -1, -1):
             suffixes.insert(0, f'no{i}')
+
         stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
-        for stack_name in stack_names:
-            logger.info("Destroying stack: %s", stack_name)
-            cf.delete_stack(StackName=stack_name)
-            verify_stack_deleted(stack_name)
+        self.aws.delete_cloudformation_stacks(stack_names)
 
         # Call openshift-installer destroy cluster
         super(AWSUPI, self).destroy_cluster(log_level)
@@ -856,63 +827,4 @@ class AWSUPI(AWSBase):
         # Delete inf and vpc stacks
         suffixes = ['inf', 'vpc']
         stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
-        for stack_name in stack_names:
-            logger.info("Destroying stack: %s", stack_name)
-            cf.delete_stack(StackName=stack_name)
-            verify_stack_deleted(stack_name)
-
-
-def get_infra_id(cluster_path):
-    """
-    Get infraID from metadata.json in given cluster_path
-
-    Args:
-        cluster_path: path to cluster install directory
-
-    Returns:
-        str: metadata.json['infraID']
-
-    """
-    metadata_file = os.path.join(cluster_path, "metadata.json")
-    with open(metadata_file) as f:
-        metadata = json.load(f)
-    return metadata["infraID"]
-
-
-def get_cluster_name(cluster_path):
-    """
-    Get clusterName from metadata.json in given cluster_path
-
-    Args:
-        cluster_path: path to cluster install directory
-
-    Returns:
-        str: metadata.json['clusterName']
-
-    """
-    metadata_file = os.path.join(cluster_path, "metadata.json")
-    with open(metadata_file) as f:
-        metadata = json.load(f)
-    return metadata["clusterName"]
-
-
-class StackStatusError(Exception):
-    pass
-
-
-@retry(StackStatusError, tries=20, delay=30, backoff=1)
-def verify_stack_deleted(stack_name):
-    try:
-        cf = boto3.client('cloudformation')
-        result = cf.describe_stacks(StackName=stack_name)
-        stacks = result['Stacks']
-        for stack in stacks:
-            status = stack['StackStatus']
-            raise StackStatusError(
-                f'{stack_name} not deleted yet, current status: {status}.'
-            )
-    except ClientError as e:
-        assert f"Stack with id {stack_name} does not exist" in str(e)
-        logger.info(
-            "Received expected ClientError, stack successfully deleted"
-        )
+        self.aws.delete_cloudformation_stacks(stack_names)

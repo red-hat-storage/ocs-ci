@@ -24,17 +24,16 @@ class Sanity:
         self.pod_objs = list()
         self.ceph_cluster = CephCluster()
 
-    def health_check(self):
+    def health_check(self, cluster_check=True, tries=20):
         """
         Perform Ceph and cluster health checks
         """
         logger.info("Checking cluster and Ceph health")
         node.wait_for_nodes_status()
 
-        assert ceph_health_check(
-            namespace=config.ENV_DATA['cluster_namespace']
-        )
-        self.ceph_cluster.cluster_health_check(timeout=60)
+        ceph_health_check(namespace=config.ENV_DATA['cluster_namespace'], tries=tries)
+        if cluster_check:
+            self.ceph_cluster.cluster_health_check(timeout=60)
 
     def create_resources(self, pvc_factory, pod_factory, run_io=True):
         """

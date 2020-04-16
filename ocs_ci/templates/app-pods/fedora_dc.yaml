@@ -10,6 +10,8 @@ spec:
       labels:
         name: fedorapod
     spec:
+      securityContext:
+        fsGroup: 2000
       serviceAccountName: admin
       restartPolicy: Always
       volumes:
@@ -21,13 +23,10 @@ spec:
         image: fedora
         resources:
           limits:
-            memory: "500Mi"
+            memory: "800Mi"
             cpu: "150m"
         command: ["/bin/bash", "-ce", "tail -f /dev/null" ]
         imagePullPolicy: IfNotPresent
-        securityContext:
-          capabilities: {}
-          privileged: true
         volumeMounts:
         - mountPath: /mnt
           name: fedora-vol

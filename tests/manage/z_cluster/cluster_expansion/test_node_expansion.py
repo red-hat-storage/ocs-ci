@@ -18,6 +18,7 @@ class TestAddNode(ManageTest):
     """
     Automates adding worker nodes to the cluster while IOs
     """
+
     def test_add_node(self):
         """
         Test for adding worker nodes to the cluster while IOs
@@ -25,27 +26,35 @@ class TestAddNode(ManageTest):
         dt = config.ENV_DATA['deployment_type']
         if dt == 'ipi':
             before_replica_counts = dict()
-            count = 2
             machines = machine_utils.get_machinesets()
             for machine in machines:
-                before_replica_counts.update({machine: machine_utils.get_replica_count(machine)})
-            worker_nodes_before = helpers.get_worker_nodes()
-            logger.info(f'The worker nodes number before adding a new node is {len(worker_nodes_before)}')
+                before_replica_counts.update(
+                    {machine: machine_utils.get_replica_count(machine)}
+                )
+                logger.info(machine_utils.get_replica_count(machine))
+            logger.info(f'The worker nodes number before {len(helpers.get_worker_nodes())}')
             after_replica_counts = dict()
+            total_count = 0
             for machine in machines:
-                machine_utils.add_node(machine, count=count)
-                after_replica_counts.update(({machine: machine_utils.get_replica_count(machine)}))
+                machine_utils.add_node(
+                    machine, count=machine_utils.get_replica_count(machine) + 1
+                )
+                after_replica_counts.update(
+                    ({machine: machine_utils.get_replica_count(machine)})
+                )
+                total_count += machine_utils.get_replica_count(machine)
+                logger.info(total_count)
             logger.info(after_replica_counts)
             for sample in TimeoutSampler(
-                timeout=300, sleep=3, func=helpers.get_worker_nodes
+                timeout=600, sleep=6, func=helpers.get_worker_nodes
             ):
-                if len(sample) == count * len(machines):
+                if len(sample) == total_count:
                     break
 
-            worker_nodes_after = helpers.get_worker_nodes()
-            logger.info(f'The worker nodes number after adding a new node is {len(worker_nodes_after)}')
+            logger.info(f'The worker nodes number after {len(helpers.get_worker_nodes())}')
             wait_for_nodes_status(
-                node_names=worker_nodes_after, status=constants.NODE_READY
+                node_names=helpers.get_worker_nodes(),
+                status=constants.NODE_READY
             )
         else:
             pytest.skip("UPI not yet supported")

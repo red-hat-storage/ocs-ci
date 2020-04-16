@@ -7,10 +7,11 @@ import ssl
 import atexit
 
 from pyVmomi import vim, vmodl
-from pyVim.task import WaitForTask
+from pyVim.task import WaitForTask, WaitForTasks
 from pyVim.connect import Disconnect, SmartStubAdapter, VimSessionOrientedStub
 from ocs_ci.ocs.exceptions import VMMaxDisksReachedException
-from ocs_ci.ocs.constants import GB2KB, VM_DISK_TYPE, VM_DISK_MODE
+from ocs_ci.ocs.constants import GB2KB, VM_DISK_TYPE, VM_DISK_MODE, VM_POWERED_OFF
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -288,3 +289,316 @@ class VSPHERE(object):
         """
         for _ in range(int(num_disks)):
             self.add_disk(vm, size, disk_type)
+
+    def get_vm_power_status(self, vm):
+        """
+        Get the VM power status
+
+        Args:
+            vm (vm): VM object
+
+        Returns:
+            str: VM power status
+
+        """
+        return vm.summary.runtime.powerState
+
+    def get_vms_ips(self, vms):
+        """
+        Get VMs IPs
+
+        Args:
+            vms (list): VM (vm) objects
+
+        Returns:
+            list: VMs IPs
+
+        """
+        return [vm.summary.guest.ipAddress for vm in vms]
+
+    def stop_vms(self, vms, force=True):
+        """
+        Stop VMs
+
+        Args:
+            vms (list): VM (vm) objects
+            force (bool): True for VM ungraceful power off, False for
+                graceful VM shutdown
+
+        """
+        if force:
+            logger.info(f"Powering off VMs: {[vm.name for vm in vms]}")
+            tasks = [vm.PowerOff() for vm in vms]
+            WaitForTasks(tasks, self._si)
+
+        else:
+            logger.info(f"Gracefully shutting down VMs: {[vm.name for vm in vms]}")
+
+            # Can't use WaitForTasks as it requires VMWare tools installed
+            # on the guests to check for Shutdown task completion
+            _ = [vm.ShutdownGuest() for vm in vms]
+
+            def get_vms_power_status(vms):
+                return [self.get_vm_power_status(vm) for vm in vms]
+
+            for statuses in TimeoutSampler(600, 5, get_vms_power_status, vms):
+                logger.info(
+                    f"Waiting for VMs {[vm.name for vm in vms]} to power off. "
+                    f"Current VMs statuses: {statuses}"
+                )
+                if all(status == VM_POWERED_OFF for status in statuses):
+                    logger.info("All VMs reached poweredOff off status")
+                    break
+
+    def start_vms(self, vms, wait=True):
+        """
+        Start VMs
+
+        Args:
+            vms (list): VM (vm) objects
+            wait (bool): Wait for VMs to start
+
+        """
+        logger.info(f"Powering on VMs: {[vm.name for vm in vms]}")
+        tasks = [vm.PowerOn() for vm in vms]
+        WaitForTasks(tasks, self._si)
+
+        if wait:
+            for ips in TimeoutSampler(240, 3, self.get_vms_ips, vms):
+                logger.info(
+                    f"Waiting for VMs {[vm.name for vm in vms]} to power on "
+                    f"based on network connectivity. Current VMs IPs: {ips}"
+                )
+                if not (None in ips or '<unset>' in ips):
+                    break
+
+    def restart_vms(self, vms, force=True):
+        """
+        Restart VMs
+
+        Args:
+            vms (list): VM (vm) objects
+            force (bool): True for VM ungraceful power off, False for
+                graceful VM shutdown
+
+        """
+        self.stop_vms(vms, force=force)
+        self.start_vms(vms)
+
+    def is_resource_pool_exist(self, pool, dc, cluster):
+        """
+        Check whether resource pool exists in cluster or not
+
+        Args:
+            pool (str): Resource pool name
+            dc (str): Datacenter name
+            cluster (str): Cluster name
+
+        Returns:
+            bool: True if resource pool exists, otherwise False
+
+        """
+        return True if self.get_pool(pool, dc, cluster) else False
+
+    def poweroff_vms(self, vms):
+        """
+        Powers off the VM and wait for operation to complete
+
+        Args:
+            vms (list): VM instance list
+
+        """
+        to_poweroff_vms = []
+        for vm in vms:
+            status = self.get_vm_power_status(vm)
+            logger.info(f"power state of {vm.name}: {status}")
+            if status == "poweredOn":
+                to_poweroff_vms.append(vm)
+        logger.info(f"Powering off VMs: {[vm.name for vm in to_poweroff_vms]}")
+        tasks = [vm.PowerOff() for vm in to_poweroff_vms]
+        WaitForTasks(tasks, self._si)
+
+    def poweron_vms(self, vms):
+        """
+        Powers on the VM and wait for operation to complete
+
+        Args:
+            vms (list): VM instance list
+
+        """
+        to_poweron_vms = []
+        for vm in vms:
+            status = self.get_vm_power_status(vm)
+            logger.info(f"power state of {vm.name}: {status}")
+            if status == "poweredOff":
+                to_poweron_vms.append(vm)
+        logger.info(f"Powering on VMs: {[vm.name for vm in to_poweron_vms]}")
+        tasks = [vm.PowerOn() for vm in to_poweron_vms]
+        WaitForTasks(tasks, self._si)
+
+    def destroy_vms(self, vms):
+        """
+        Destroys the VM's
+
+        Args:
+             vms (list): VM instance list
+
+        """
+        self.poweroff_vms(vms)
+        logger.info(f"Destroying VM's: {[vm.name for vm in vms]}")
+        tasks = [vm.Destroy_Task() for vm in vms]
+        WaitForTasks(tasks, self._si)
+
+    def destroy_pool(self, pool, dc, cluster):
+        """
+        Deletes the Resource Pool
+
+        Args:
+            pool (str): Resource pool name
+            dc (str): Datacenter name
+            cluster (str): Cluster name
+
+        """
+        vms_in_pool = self.get_all_vms_in_pool(pool, dc, cluster)
+        logger.info(f"VM's in resource pool {pool}: {[vm.name for vm in vms_in_pool]}")
+        self.destroy_vms(vms_in_pool)
+
+        # get resource pool instance
+        pi = self.get_pool(pool, dc, cluster)
+        WaitForTask(pi.Destroy())
+        logger.info(f"Successfully deleted resource pool {pool}")
+
+    def remove_disk(self, vm, identifier, key='unit_number', datastore=True):
+        """
+        Removes the Disk from VM and datastore. By default, it will delete
+        the disk ( vmdk ) from VM and backend datastore. If datastore parameter
+        is set to False, then it will ONLY removes the disk from VM
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+            identifier (str): The value of either 'unit_number'
+                (Disk unit number to remove) or 'volume_path'
+                (The volume path in the datastore (i.e,
+                '[vsanDatastore] d4210a5e-40ce-efb8-c87e-040973d176e1/control-plane-1.vmdk')
+            key (str): Either 'unit_number' 'volume_path'
+            datastore (bool): Delete the disk (vmdk) from backend datastore
+                if True
+
+        """
+        virtual_disk_device = None
+        virtual_disk_spec = vim.vm.device.VirtualDeviceSpec()
+        if datastore:
+            virtual_disk_spec.fileOperation = (
+                vim.vm.device.VirtualDeviceSpec.FileOperation.destroy
+            )
+        virtual_disk_spec.operation = (
+            vim.vm.device.VirtualDeviceSpec.Operation.remove
+        )
+
+        if key == 'unit_number':
+            disk_prefix = "Hard disk "
+            for dev in vm.config.hardware.device:
+                # choose the device based on unit number instead of
+                # deviceInfo.label. labels can change if a disk is removed
+                if (
+                    isinstance(dev, vim.vm.device.VirtualDisk)
+                    and dev.unitNumber == identifier
+                    and disk_prefix in dev.deviceInfo.label
+                ):
+                    virtual_disk_device = dev
+
+        elif key == 'volume_path':
+            vm_volumes = [
+                device for device in vm.config.hardware.device if isinstance(
+                    device, vim.vm.device.VirtualDisk
+                )
+            ]
+            for vol in vm_volumes:
+                if vol.backing.fileName == identifier:
+                    virtual_disk_device = vol
+                    break
+
+        if not virtual_disk_device:
+            logger.warning(f"Volume with {key} {identifier} for {vm.name} could not be found")
+
+        virtual_disk_spec.device = virtual_disk_device
+        spec = vim.vm.ConfigSpec()
+        spec.deviceChange = [virtual_disk_spec]
+        logger.info(
+            f"Detaching Disk with identifier: {identifier}"
+            f" from {vm.name} and remove from datastore={datastore}"
+        )
+        WaitForTask(vm.ReconfigVM_Task(spec=spec))
+
+    def remove_disks(self, vm):
+        """
+        Removes all the extra disks for a VM
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+
+        """
+        extra_disk_unit_numbers = self.get_used_unit_number(vm)
+        if extra_disk_unit_numbers:
+            for each_disk_unit_number in extra_disk_unit_numbers:
+                self.remove_disk(vm=vm, identifier=each_disk_unit_number)
+
+    def get_used_unit_number(self, vm):
+        """
+        Gets the used unit numbers for a VM
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+
+        Returns:
+            list: list of unit numbers
+
+        """
+        return [
+            device.unitNumber for device in vm.config.hardware.device
+            if hasattr(device.backing, 'fileName') and device.unitNumber != 0
+        ]
+
+    def check_folder_exists(self, name, cluster, dc):
+        """
+        Checks whether folder exists in Templates
+
+        Args:
+            name (str): Folder name
+            cluster (str): Cluster name
+            dc (str): Datacenter name
+
+        Returns:
+            bool: True if folder exists, False otherwise
+
+        """
+        _rc = False
+        dc = self.get_dc(dc)
+
+        vms = dc.vmFolder.childEntity
+        for vm in vms:
+            if vm.name == name:
+                _rc = True
+        return _rc
+
+    def destroy_folder(self, name, cluster, dc):
+        """
+        Removes the folder from Templates
+
+        Args:
+            name (str): Folder name
+            cluster (str): Cluster name
+            dc (str): Datacenter name
+
+        """
+        if self.check_folder_exists(name, cluster, dc):
+            dc = self.get_dc(dc)
+            vms = dc.vmFolder.childEntity
+            for vm in vms:
+                if vm.name == name:
+                    for dvm in vm.childEntity:
+                        self.poweroff_vms([dvm])
+                    logger.info(f"Destroying folder {name} in templates")
+                    WaitForTask(vm.Destroy())
+        else:
+            logger.info(f"Folder {name} doesn't exist in templates")

@@ -1,4 +1,5 @@
 import datetime
+import json
 import logging
 import os
 import pickle
@@ -14,18 +15,19 @@ from libcloud.common.types import LibcloudError
 from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
 
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.utility.retry import retry
+from ocs_ci.framework import config as ocsci_config
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.openstack import CephVMNode
 from ocs_ci.ocs.parallel import parallel
-from ocs_ci.utility.utils import create_directory_path, run_cmd
-from ocs_ci.ocs import constants
-from ocs_ci.framework import config as ocsci_config
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
+from ocs_ci.utility.prometheus import PrometheusAPI
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import create_directory_path, run_cmd
 
 log = logging.getLogger(__name__)
 
@@ -634,26 +636,47 @@ def get_pod_name_by_pattern(
     return pod_list
 
 
-def setup_ceph_toolbox():
+def setup_ceph_toolbox(force_setup=False):
     """
     Setup ceph-toolbox - also checks if toolbox exists, if it exists it
     behaves as noop.
+
+    Args:
+        force_setup (bool): force setup toolbox pod
+
     """
     namespace = ocsci_config.ENV_DATA['cluster_namespace']
     ceph_toolbox = get_pod_name_by_pattern('rook-ceph-tools', namespace)
     if len(ceph_toolbox) == 1:
         log.info("Ceph toolbox already exists, skipping")
-        return
-    rook_operator = get_pod_name_by_pattern('rook-ceph-operator', namespace)
-    out = run_cmd(
-        f'oc -n {namespace} get pods {rook_operator[0]} -o yaml',
-    )
-    version = yaml.safe_load(out)
-    rook_version = version['spec']['containers'][0]['image']
-    tool_box_data = templating.load_yaml(constants.TOOL_POD_YAML)
-    tool_box_data['spec']['template']['spec']['containers'][0]['image'] = rook_version
-    rook_toolbox = OCS(**tool_box_data)
-    rook_toolbox.create()
+        if force_setup:
+            log.info("Running force setup for Ceph toolbox!")
+        else:
+            return
+    if ocsci_config.ENV_DATA.get("ocs_version") == '4.2':
+        rook_operator = get_pod_name_by_pattern(
+            'rook-ceph-operator', namespace
+        )
+        out = run_cmd(
+            f'oc -n {namespace} get pods {rook_operator[0]} -o yaml',
+        )
+        version = yaml.safe_load(out)
+        rook_version = version['spec']['containers'][0]['image']
+        tool_box_data = templating.load_yaml(constants.TOOL_POD_YAML)
+        tool_box_data['spec']['template']['spec']['containers'][0][
+            'image'
+        ] = rook_version
+        rook_toolbox = OCS(**tool_box_data)
+        rook_toolbox.create()
+    else:
+        # for OCS >= 4.3 there is new toolbox pod deployment done here:
+        # https://github.com/openshift/ocs-operator/pull/207/
+        log.info("starting ceph toolbox pod")
+        run_cmd(
+            'oc patch ocsinitialization ocsinit -n openshift-storage --type '
+            'json --patch  \'[{ "op": "replace", "path": '
+            '"/spec/enableCephTools", "value": true }]\''
+        )
 
 
 def apply_oc_resource(
@@ -738,7 +761,7 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True):
         'KUBECONFIG' in os.environ
         or os.path.exists(os.path.expanduser('~/.kube/config'))
     ):
-        log.warn(
+        log.warning(
             "Cannot find $KUBECONFIG or ~/.kube/config; "
             "skipping log collection"
         )
@@ -751,12 +774,67 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True):
     )
 
     if ocs:
-        run_must_gather(os.path.join(log_dir_path, 'ocs_must_gather'),
-                        ocsci_config.REPORTING['ocs_must_gather_image'])
+        latest_tag = ocsci_config.REPORTING.get(
+            'default_ocs_must_gather_latest_tag',
+            ocsci_config.DEPLOYMENT['default_latest_tag']
+        )
+        ocs_log_dir_path = os.path.join(log_dir_path, 'ocs_must_gather')
+        ocs_must_gather_image = ocsci_config.REPORTING['ocs_must_gather_image']
+        ocs_must_gather_image_and_tag = f"{ocs_must_gather_image}:{latest_tag}"
+        run_must_gather(ocs_log_dir_path, ocs_must_gather_image_and_tag)
 
     if ocp:
         ocp_log_dir_path = os.path.join(log_dir_path, 'ocp_must_gather')
         ocp_must_gather_image = ocsci_config.REPORTING['ocp_must_gather_image']
         run_must_gather(ocp_log_dir_path, ocp_must_gather_image)
-        run_must_gather(ocp_log_dir_path, ocp_must_gather_image,
-                        '/usr/bin/gather_service_logs worker')
+        run_must_gather(
+            ocp_log_dir_path, ocp_must_gather_image,
+            '/usr/bin/gather_service_logs worker'
+        )
+
+
+def collect_prometheus_metrics(
+    metrics,
+    dir_name,
+    start,
+    stop,
+    step=1.0,
+):
+    """
+    Collects metrics from Prometheus and saves them in file in json format.
+    Metrics can be found in OCP Console in Monitoring -> Metrics.
+
+    Args:
+        metrics (list): list of metrics to get from Prometheus
+            (E.g. ceph_cluster_total_used_bytes, cluster:cpu_usage_cores:sum,
+            cluster:memory_usage_bytes:sum)
+        dir_name (str): directory name to store metrics. Metrics will be stored
+            in dir_name suffix with _ocs_metrics.
+        start (str): start timestamp of required datapoints
+        stop (str): stop timestamp of required datapoints
+        step (float): step of required datapoints
+    """
+    api = PrometheusAPI()
+    log_dir_path = os.path.join(
+        os.path.expanduser(ocsci_config.RUN['log_dir']),
+        f"failed_testcase_ocs_logs_{ocsci_config.RUN['run_id']}",
+        f"{dir_name}_ocs_metrics"
+    )
+    if not os.path.exists(log_dir_path):
+        log.info(f'Creating directory {log_dir_path}')
+        os.makedirs(log_dir_path)
+
+    for metric in metrics:
+        datapoints = api.get(
+            'query_range',
+            {
+                'query': metric,
+                'start': start,
+                'end': stop,
+                'step': step
+            }
+        )
+        file_name = os.path.join(log_dir_path, f'{metric}.json')
+        log.info(f'Saving {metric} data into {file_name}')
+        with open(file_name, 'w') as outfile:
+            json.dump(datapoints.json(), outfile)

@@ -17,4 +17,5 @@ compute_ignition: '{{ compute_ignition }}'
 ipam: {{ ipam | default('139.178.89.254') }}
 ipam_token: {{ ipam_token }}
 vm_network: {{ vm_network | default('VLAN_172') }}
-memory: {{ memory | default('16384') }}
+master_memory: {{ master_memory | default('16384') }}
+compute_memory: {{ compute_memory | default('16384') }}

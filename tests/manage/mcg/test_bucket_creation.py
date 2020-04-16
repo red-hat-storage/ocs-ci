@@ -5,9 +5,8 @@ import botocore
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1, tier2, tier3, noobaa_cli_required,
-    filter_insecure_request_warning, acceptance,
-    aws_platform_required
+    tier1, tier3, noobaa_cli_required, filter_insecure_request_warning,
+    acceptance, performance
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
@@ -20,6 +19,8 @@ class TestBucketCreation:
     """
     Test creation of a bucket
     """
+    ERRATIC_TIMEOUTS_SKIP_REASON = 'Skipped because of erratic timeouts'
+
     @pytest.mark.parametrize(
         argnames="amount,interface",
         argvalues=[
@@ -28,52 +29,61 @@ class TestBucketCreation:
                 marks=[pytest.mark.polarion_id("OCS-1298"), tier1, acceptance]
             ),
             pytest.param(
-                *[3, 'CLI'],
-                marks=[tier1, acceptance, noobaa_cli_required,
-                       pytest.mark.polarion_id("OCS-1298")]
+                *[100, 'S3'],
+                marks=[
+                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    performance, pytest.mark.polarion_id("OCS-1823")
+                ]
+            ),
+            pytest.param(
+                *[1000, 'S3'],
+                marks=[
+                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    performance, pytest.mark.polarion_id("OCS-1824")
+                ]
             ),
             pytest.param(
                 *[3, 'OC'],
                 marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1298")]
             ),
             pytest.param(
-                *[100, 'S3'],
-                marks=[tier2, pytest.mark.polarion_id("OCS-1823")]
-            ),
-            pytest.param(
-                *[1000, 'S3'],
-                marks=[
-                    tier2, aws_platform_required,
-                    pytest.mark.polarion_id("OCS-1824")
-                ]
-            ),
-            pytest.param(
-                *[100, 'CLI'],
-                marks=[tier2, noobaa_cli_required,
-                       pytest.mark.polarion_id("OCS-1825")]
-            ),
-            pytest.param(
-                *[1000, 'CLI'],
-                marks=[
-                    tier2, noobaa_cli_required,
-                    aws_platform_required,
-                    pytest.mark.polarion_id("OCS-1828")
-                ]
-            ),
-            pytest.param(
                 *[100, 'OC'],
-                marks=[tier2, pytest.mark.polarion_id("OCS-1826")]
+                marks=[
+                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    performance, pytest.mark.polarion_id("OCS-1826")
+                ]
             ),
             pytest.param(
                 *[1000, 'OC'],
                 marks=[
-                    tier2, aws_platform_required,
-                    pytest.mark.polarion_id("OCS-1827")
+                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    performance, pytest.mark.polarion_id("OCS-1827")
+                ]
+            ),
+            pytest.param(
+                *[3, 'CLI'],
+                marks=[
+                    tier1, acceptance, noobaa_cli_required,
+                    pytest.mark.polarion_id("OCS-1298")
+                ]
+            ),
+            pytest.param(
+                *[100, 'CLI'],
+                marks=[
+                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    performance, noobaa_cli_required, pytest.mark.polarion_id("OCS-1825")
+                ]
+            ),
+            pytest.param(
+                *[1000, 'CLI'],
+                marks=[
+                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
+                    performance, noobaa_cli_required, pytest.mark.polarion_id("OCS-1828")
                 ]
             ),
         ]
     )
-    def test_bucket_creation(self, mcg_obj, bucket_factory, amount, interface):
+    def test_bucket_creation(self, verify_rgw_restart_count, mcg_obj, bucket_factory, amount, interface):
         """
         Test bucket creation using the S3 SDK, OC command or MCG CLI
         """

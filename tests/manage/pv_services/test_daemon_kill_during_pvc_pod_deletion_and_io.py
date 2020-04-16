@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import ManageTest, tier4
+from ocs_ci.framework.testlib import ManageTest, tier4, tier4b
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs, delete_pvcs
@@ -15,7 +15,8 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 from tests.helpers import (
     verify_volume_deleted_in_backend, wait_for_resource_state,
-    wait_for_resource_count_change, verify_pv_mounted_on_node
+    wait_for_resource_count_change, verify_pv_mounted_on_node,
+    default_ceph_block_pool
 )
 from tests import disruption_helpers
 
@@ -23,6 +24,7 @@ log = logging.getLogger(__name__)
 
 
 @tier4
+@tier4b
 @pytest.mark.parametrize(
     argnames=['interface', 'resource_name'],
     argvalues=[
@@ -168,7 +170,6 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         and IO are progressing
         """
         pvc_objs, pod_objs, rwx_pod_objs = setup_base
-        sc_obj = pvc_objs[0].storageclass
         namespace = pvc_objs[0].project.namespace
 
         num_of_pods_to_delete = 10
@@ -283,6 +284,7 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
 
         # Wait for setup on pods to complete
         for pod_obj in pod_objs + rwx_pod_objs:
+            log.info(f"Waiting for IO setup to complete on pod {pod_obj.name}")
             for sample in TimeoutSampler(
                 180, 2, getattr, pod_obj, 'wl_setup_done'
             ):
@@ -393,11 +395,12 @@ class TestDaemonKillDuringMultipleDeleteOperations(ManageTest):
         log.info("Verified: PVs are deleted.")
 
         # Verify PV using ceph toolbox. Image/Subvolume should be deleted.
+        pool_name = default_ceph_block_pool()
         for pvc_name, uuid in pvc_uuid_map.items():
             if interface == constants.CEPHBLOCKPOOL:
                 ret = verify_volume_deleted_in_backend(
                     interface=interface, image_uuid=uuid,
-                    pool_name=sc_obj.ceph_pool.name
+                    pool_name=pool_name
                 )
             if interface == constants.CEPHFILESYSTEM:
                 ret = verify_volume_deleted_in_backend(

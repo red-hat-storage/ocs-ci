@@ -13,21 +13,22 @@ import pytest
 
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework.exceptions import ClusterPathNotProvidedError, ClusterNameNotProvidedError, ClusterNameLengthError
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
 from ocs_ci.utility.utils import (
     dump_config_to_file,
     get_cluster_version,
     get_ceph_version,
-    get_rook_version,
     get_csi_versions,
     get_testrun_name,
+    get_ocs_build_number,
+    load_config_file,
 )
-from ocs_ci.ocs.utils import collect_ocs_logs
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
+from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs.constants import (
-    OPERATOR_CATALOG_SOURCE_NAME,
+    CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
-    CLUSTER_NAME_MAX_CHARACTERS
+    OCP_VERSION_CONF_DIR,
 )
 
 __all__ = [
@@ -46,11 +47,6 @@ def pytest_addoption(parser):
         dest='ocsci_conf',
         action="append",
         help="Path to config file of OCS CI",
-    )
-    parser.addoption(
-        '--cluster-conf',
-        dest='cluster_conf',
-        help="Path to cluster configuration yaml file",
     )
     parser.addoption(
         '--cluster-path',
@@ -77,6 +73,13 @@ def pytest_addoption(parser):
         help="If provided a test cluster will be deployed on AWS to use for testing",
     )
     parser.addoption(
+        '--live-deploy',
+        dest='live_deploy',
+        action="store_true",
+        default=False,
+        help="Deploy OCS from live registry like a customer",
+    )
+    parser.addoption(
         '--email',
         dest='email',
         help="Email ID to send results",
@@ -94,6 +97,50 @@ def pytest_addoption(parser):
         action="store_true",
         default=False,
         help="Run IO in the background",
+    )
+    parser.addoption(
+        '--ocs-version',
+        dest='ocs_version',
+        help="ocs version for which ocs-ci to be run"
+    )
+    parser.addoption(
+        '--upgrade-ocs-version',
+        dest='upgrade_ocs_version',
+        help="ocs version to upgrade (e.g. 4.3)"
+    )
+    parser.addoption(
+        '--ocp-version',
+        dest='ocp_version',
+        help="""
+        OCP version to be used for deployment. This version will be used for
+        load file from conf/ocp_version/ocp-VERSION-config.yaml. You can use
+        for example those values:
+        4.2: for nightly 4.2 OCP build
+        4.2-ga: for latest GAed 4.2 OCP build
+        4.2-ga-minus1: for latest GAed 4.2 build - 1
+        """
+    )
+    parser.addoption(
+        '--ocs-registry-image',
+        dest='ocs_registry_image',
+        help=(
+            "ocs registry image to be used for deployment "
+            "(e.g. quay.io/rhceph-dev/ocs-olm-operator:latest-4.2)"
+        )
+    )
+    parser.addoption(
+        '--upgrade-ocs-registry-image',
+        dest='upgrade_ocs_registry_image',
+        help=(
+            "ocs registry image to be used for upgrade "
+            "(e.g. quay.io/rhceph-dev/ocs-olm-operator:latest-4.3)"
+        )
+    )
+    parser.addoption(
+        '--osd-size',
+        dest='osd_size',
+        type=int,
+        help="OSD size in GB - for 2TB pass 2048, for 0.5TB pass 512 and so on."
     )
 
 
@@ -118,15 +165,22 @@ def pytest_configure(config):
             f"Dump of the consolidated config file is located here: "
             f"{config_file}"
         )
-        # Add OCS related versions to the html report and remove extraneous metadata
+        # Add OCS related versions to the html report and remove
+        # extraneous metadata
         markers_arg = config.getoption('-m')
         if ocsci_config.RUN['cli_params'].get('teardown') or (
             "deployment" in markers_arg
             and ocsci_config.RUN['cli_params'].get('deploy')
         ):
             log.info(
-                "Skiping versions collecting because: Deploy or destroy of "
+                "Skipping versions collecting because: Deploy or destroy of "
                 "cluster is performed."
+            )
+            return
+        elif ocsci_config.ENV_DATA['skip_ocs_deployment']:
+            log.info(
+                "Skipping version collection because we skipped "
+                "the OCS deployment"
             )
             return
         print("Collecting Cluster versions")
@@ -137,37 +191,62 @@ def pytest_configure(config):
         del config._metadata['Platform']
 
         config._metadata['Test Run Name'] = get_testrun_name()
+        gather_version_info_for_report(config)
 
-        try:
-            # add cluster version
-            clusterversion = get_cluster_version()
-            config._metadata['Cluster Version'] = clusterversion
 
-            # add ceph version
-            ceph_version = get_ceph_version()
-            config._metadata['Ceph Version'] = ceph_version
+def gather_version_info_for_report(config):
+    """
+    This function gather all version related info used for report.
 
-            # add rook version
-            rook_version = get_rook_version()
-            config._metadata['Rook Version'] = rook_version
+    Args:
+        config (pytest.config): Pytest config object
+    """
+    gather_version_completed = False
+    try:
+        # add cluster version
+        clusterversion = get_cluster_version()
+        config._metadata['Cluster Version'] = clusterversion
 
-            # add csi versions
-            csi_versions = get_csi_versions()
-            config._metadata['csi-provisioner'] = csi_versions.get('csi-provisioner')
-            config._metadata['cephfsplugin'] = csi_versions.get('csi-cephfsplugin')
-            config._metadata['rbdplugin'] = csi_versions.get('csi-rbdplugin')
+        # add ceph version
+        ceph_version = get_ceph_version()
+        config._metadata['Ceph Version'] = ceph_version
 
-            # add ocs operator version
-            ocs_catalog = CatalogSource(
-                resource_name=OPERATOR_CATALOG_SOURCE_NAME,
-                namespace="openshift-marketplace"
+        # add csi versions
+        csi_versions = get_csi_versions()
+        config._metadata['cephfsplugin'] = csi_versions.get('csi-cephfsplugin')
+        config._metadata['rbdplugin'] = csi_versions.get('csi-rbdplugin')
+
+        # add ocs operator version
+        if ocsci_config.REPORTING['us_ds'] == 'DS':
+            config._metadata['OCS operator'] = (
+                get_ocs_build_number()
             )
-            if ocsci_config.REPORTING['us_ds'] == 'DS':
-                config._metadata['OCS operator'] = (
-                    ocs_catalog.get_image_name()
-                )
-        except (FileNotFoundError, CommandFailed):
-            pass
+        mods = {}
+        mods = get_version_info(
+            namespace=ocsci_config.ENV_DATA['cluster_namespace']
+        )
+        skip_list = ['ocs-operator']
+        for key, val in mods.items():
+            if key not in skip_list:
+                config._metadata[key] = val.rsplit('/')[-1]
+        gather_version_completed = True
+    except ResourceNotFoundError as ex:
+        log.error(
+            "Problem ocurred when looking for some resource! Error: %s",
+            ex
+        )
+    except FileNotFoundError as ex:
+        log.error("File not found! Error: %s", ex)
+    except CommandFailed as ex:
+        log.error("Failed to execute command! Error: %s", ex)
+    except Exception as ex:
+        log.error("Failed to gather version info! Error: %s", ex)
+    finally:
+        if not gather_version_completed:
+            log.warning(
+                "Failed to gather version details! The report of version might"
+                "not be complete!"
+            )
 
 
 def get_cli_param(config, name_of_param, default=None):
@@ -216,7 +295,20 @@ def process_cluster_cli_params(config):
     cluster_name = get_cli_param(config, 'cluster_name')
     ocsci_config.RUN['cli_params']['teardown'] = get_cli_param(config, "teardown", default=False)
     ocsci_config.RUN['cli_params']['deploy'] = get_cli_param(config, "deploy", default=False)
+    live_deployment = get_cli_param(config, "live_deploy", default=False)
+    ocsci_config.DEPLOYMENT['live_deployment'] = live_deployment or (
+        ocsci_config.DEPLOYMENT.get('live_deployment', False)
+    )
     ocsci_config.RUN['cli_params']['io_in_bg'] = get_cli_param(config, "io_in_bg", default=False)
+    upgrade_ocs_version = get_cli_param(config, "upgrade_ocs_version")
+    if upgrade_ocs_version:
+        ocsci_config.UPGRADE['upgrade_ocs_version'] = upgrade_ocs_version
+    ocs_registry_image = get_cli_param(config, "ocs_registry_image")
+    if ocs_registry_image:
+        ocsci_config.DEPLOYMENT['ocs_registry_image'] = ocs_registry_image
+    upgrade_ocs_registry_image = get_cli_param(config, "upgrade_ocs_registry_image")
+    if upgrade_ocs_registry_image:
+        ocsci_config.UPGRADE['upgrade_ocs_registry_image'] = upgrade_ocs_registry_image
     ocsci_config.ENV_DATA['cluster_name'] = cluster_name
     ocsci_config.ENV_DATA['cluster_path'] = cluster_path
     get_cli_param(config, 'collect-logs')
@@ -231,6 +323,16 @@ def process_cluster_cli_params(config):
     if get_cli_param(config, 'email') and not get_cli_param(config, '--html'):
         pytest.exit("--html option must be provided to send email reports")
     get_cli_param(config, '-m')
+    osd_size = get_cli_param(config, '--osd-size')
+    if osd_size:
+        ocsci_config.ENV_DATA['device_size'] = osd_size
+    ocp_version = get_cli_param(config, '--ocp-version')
+    if ocp_version:
+        version_config_file = f"ocp-{ocp_version}-config.yaml"
+        version_config_file_path = os.path.join(
+            OCP_VERSION_CONF_DIR, version_config_file
+        )
+        load_config_file(version_config_file_path)
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -242,9 +344,10 @@ def pytest_collection_modifyitems(session, config, items):
             marker = item.get_closest_marker(name="polarion_id")
             if marker:
                 polarion_id = marker.args[0]
-                item.user_properties.append(
-                    ("polarion-testcase-id", polarion_id)
-                )
+                if polarion_id:
+                    item.user_properties.append(
+                        ("polarion-testcase-id", polarion_id)
+                    )
         except IndexError:
             log.warning(
                 f"polarion_id marker found with no value for "
@@ -265,3 +368,17 @@ def pytest_runtest_makereport(item, call):
     ):
         test_case_name = item.name
         collect_ocs_logs(test_case_name)
+
+    # Collect Prometheus metrics if specified in gather_metrics_on_fail marker
+    if (
+        (rep.when == "setup" or rep.when == "call")
+        and rep.failed
+        and item.get_closest_marker('gather_metrics_on_fail')
+    ):
+        metrics = item.get_closest_marker('gather_metrics_on_fail').args
+        collect_prometheus_metrics(
+            metrics,
+            f'{item.name}-{call.when}',
+            call.start,
+            call.stop
+        )

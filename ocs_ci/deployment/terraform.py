@@ -30,7 +30,7 @@ class Terraform(object):
             cmd = f"terraform init -upgrade {self.path}"
         else:
             cmd = f"terraform init {self.path}"
-        run_cmd(cmd)
+        run_cmd(cmd, timeout=1200)
 
     def apply(self, tfvars, bootstrap_complete=False):
         """
@@ -45,7 +45,7 @@ class Terraform(object):
             cmd = f"terraform apply '-var-file={tfvars}' -auto-approve -var bootstrap_complete=true '{self.path}'"
         else:
             cmd = f"terraform apply '-var-file={tfvars}' -auto-approve '{self.path}'"
-        run_cmd(cmd)
+        run_cmd(cmd, timeout=1500)
 
     def destroy(self, tfvars):
         """
@@ -56,7 +56,10 @@ class Terraform(object):
 
         """
         logger.info("Destroying the cluster")
-        run_cmd(f"terraform destroy '-var-file={tfvars}' -auto-approve {self.path}")
+        run_cmd(
+            f"terraform destroy '-var-file={tfvars}' -auto-approve {self.path}",
+            timeout=1200,
+        )
 
     def output(self, tfstate, module, json_format=True):
         """

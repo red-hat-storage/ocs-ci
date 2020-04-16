@@ -6,11 +6,13 @@ import yaml
 import tempfile
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, get_images
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.csv import CSV
-from ocs_ci.ocs.resources.packagemanifest import PackageManifest
-from ocs_ci.ocs.resources.storage_cluster import StorageCluster
+from ocs_ci.ocs.resources.packagemanifest import (
+    get_selector_for_ocs_operator,
+    PackageManifest,
+)
 from ocs_ci.utility import utils
 from ocs_ci.utility import templating
 
@@ -115,6 +117,14 @@ class OCS(object):
             bool: True if deleted, False otherwise
 
         """
+        # Avoid accidental delete of default storageclass and secret
+        if (
+            self.name == constants.DEFAULT_STORAGECLASS_CEPHFS
+            or self.name == constants.DEFAULT_STORAGECLASS_RBD
+        ):
+            log.info(f"Attempt to delete default Secret or StorageClass")
+            return
+
         if self._is_deleted:
             log.info(
                 f"Attempt to remove resource: {self.name} which is"
@@ -152,164 +162,32 @@ class OCS(object):
         utils.delete_file(self.temp_yaml.name)
 
 
-def ocs_install_verification(timeout=600, skip_osd_distribution_check=False):
+def get_version_info(namespace=None):
+    operator_selector = get_selector_for_ocs_operator()
+    package_manifest = PackageManifest(
+        resource_name=defaults.OCS_OPERATOR_NAME, selector=operator_selector,
+    )
+    channel = config.DEPLOYMENT.get('ocs_csv_channel')
+    csv_name = package_manifest.get_current_csv(channel)
+    csv_pre = CSV(
+        resource_name=csv_name,
+        namespace=namespace
+    )
+    info = get_images(csv_pre.get())
+    return info
+
+
+def get_job_obj(name, namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     """
-    Perform steps necessary to verify a successful OCS installation
+    Get the job instance for the given job name
 
     Args:
-        timeout (int): Number of seconds for timeout which will be used in the
-            checks used in this function.
-        skip_osd_distribution_check (bool): If true skip the check for osd
-            distribution.
+        name (str): The name of the job
+        namespace (str): The namespace to look in
 
+    Returns:
+        OCS: A job OCS instance
     """
-    from ocs_ci.ocs.node import get_typed_nodes
-    number_of_worker_nodes = len(get_typed_nodes())
-    namespace = config.ENV_DATA['cluster_namespace']
-    log.info("Verifying OCS installation")
-
-    # Verify OCS CSV is in Succeeded phase
-    log.info("verifying ocs csv")
-    ocs_package_manifest = PackageManifest(
-        resource_name=defaults.OCS_OPERATOR_NAME
-    )
-    ocs_csv_name = ocs_package_manifest.get_current_csv()
-    ocs_csv = CSV(
-        resource_name=ocs_csv_name, namespace=namespace
-    )
-    log.info(f"Check if OCS operator: {ocs_csv_name} is in Succeeded phase.")
-    ocs_csv.wait_for_phase(phase="Succeeded", timeout=timeout)
-
-    # Verify OCS Cluster Service (ocs-storagecluster) is Ready
-    storage_cluster_name = config.ENV_DATA['storage_cluster_name']
-    log.info("Verifying status of storage cluster: %s", storage_cluster_name)
-    storage_cluster = StorageCluster(
-        resource_name=storage_cluster_name,
-        namespace=namespace,
-    )
-    log.info(
-        f"Check if StorageCluster: {storage_cluster_name} is in"
-        f"Succeeded phase"
-    )
-    storage_cluster.wait_for_phase(phase='Ready', timeout=timeout)
-
-    # Verify pods in running state and proper counts
-    log.info("Verifying pod states and counts")
-    pod = OCP(
-        kind=constants.POD, namespace=namespace
-    )
-    # ocs-operator
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.OCS_OPERATOR_LABEL,
-        timeout=timeout
-    )
-    # rook-ceph-operator
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.OPERATOR_LABEL,
-        timeout=timeout
-    )
-    # noobaa
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.NOOBAA_APP_LABEL,
-        resource_count=2,
-        timeout=timeout
-    )
-    # mons
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.MON_APP_LABEL,
-        resource_count=3,
-        timeout=timeout
-    )
-    # csi-cephfsplugin
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_CEPHFSPLUGIN_LABEL,
-        resource_count=number_of_worker_nodes,
-        timeout=timeout
-    )
-    # csi-cephfsplugin-provisioner
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-        resource_count=2,
-        timeout=timeout
-    )
-    # csi-rbdplugin
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_RBDPLUGIN_LABEL,
-        resource_count=number_of_worker_nodes,
-        timeout=timeout
-    )
-    # csi-rbdplugin-profisioner
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
-        resource_count=2,
-        timeout=timeout
-    )
-    # osds
-    osd_count = storage_cluster.data['spec']['storageDeviceSets'][0]['count']
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.OSD_APP_LABEL,
-        resource_count=osd_count,
-        timeout=timeout
-    )
-    # mgr
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.MGR_APP_LABEL,
-        timeout=timeout
-    )
-    # mds
-    assert pod.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector=constants.MDS_APP_LABEL,
-        resource_count=2,
-        timeout=timeout
-    )
-
-    # rgw check only for VmWare
-    if config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
-        assert pod.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            selector=constants.RGW_APP_LABEL,
-            resource_count=1,
-            timeout=timeout
-        )
-
-    # Verify ceph health
-    log.info("Verifying ceph health")
-    assert utils.ceph_health_check(namespace=namespace)
-
-    # Verify StorageClasses (1 ceph-fs, 1 ceph-rbd)
-    log.info("Verifying storage classes")
-    storage_class = OCP(
-        kind=constants.STORAGECLASS, namespace=namespace
-    )
-    storage_cluster_name = config.ENV_DATA['storage_cluster_name']
-    required_storage_classes = {
-        f'{storage_cluster_name}-cephfs',
-        f'{storage_cluster_name}-ceph-rbd'
-    }
-    storage_classes = storage_class.get()
-    storage_class_names = {
-        item['metadata']['name'] for item in storage_classes['items']
-    }
-    assert required_storage_classes.issubset(storage_class_names)
-
-    # Verify OSD's are distributed
-    if not skip_osd_distribution_check:
-        log.info("Verifying OSD's are distributed evenly across worker nodes")
-        ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
-        osds = ocp_pod_obj.get(selector=constants.OSD_APP_LABEL)['items']
-        node_names = [osd['spec']['nodeName'] for osd in osds]
-        for node in node_names:
-            assert not node_names.count(node) > 1, (
-                "OSD's are not distributed evenly across worker nodes"
-            )
+    ocp_obj = OCP(kind=constants.JOB, namespace=namespace)
+    ocp_dict = ocp_obj.get(resource_name=name)
+    return OCS(**ocp_dict)

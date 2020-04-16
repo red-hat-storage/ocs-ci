@@ -23,6 +23,7 @@ class Config:
     ENV_DATA: dict = field(default_factory=dict)
     REPORTING: dict = field(default_factory=dict)
     RUN: dict = field(default_factory=dict)
+    UPGRADE: dict = field(default_factory=dict)
 
     def __post_init__(self):
         self.reset()

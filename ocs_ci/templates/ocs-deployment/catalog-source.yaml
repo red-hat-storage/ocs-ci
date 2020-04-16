@@ -4,11 +4,13 @@ kind: CatalogSource
 metadata:
   name: ocs-catalogsource
   namespace: openshift-marketplace
+  labels:
+      ocs-operator-internal: "true"
 spec:
   displayName: Openshift Container Storage
   icon:
     base64data: ""
     mediatype: ""
-  image: quay.io/rhceph-dev/ocs-registry:latest
+  image: quay.io/rhceph-dev/ocs-olm-operator:latest
   publisher: Red Hat
   sourceType: grpc

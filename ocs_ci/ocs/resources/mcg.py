@@ -15,6 +15,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_mcg_cmd, TimeoutSampler
 from tests.helpers import create_unique_resource_name, create_resource
+from ocs_ci.ocs.resources import pod
 
 logger = logging.getLogger(name=__file__)
 
@@ -83,6 +84,12 @@ class MCG(object):
             aws_secret_access_key=self.access_key
         )
 
+        self.s3_client = boto3.client(
+            's3', verify=False, endpoint_url=self.s3_endpoint,
+            aws_access_key_id=self.access_key_id,
+            aws_secret_access_key=self.access_key
+        )
+
         if config.ENV_DATA['platform'].lower() == 'aws':
             (
                 self.cred_req_obj,
@@ -96,6 +103,19 @@ class MCG(object):
                 's3', verify=False, endpoint_url="https://s3.amazonaws.com",
                 aws_access_key_id=self.aws_access_key_id,
                 aws_secret_access_key=self.aws_access_key
+            )
+            logger.info('Checking whether RGW pod is not present on AWS platform')
+            pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
+            assert len(pods) == 0, 'RGW pod should not exist on AWS platform'
+
+        elif config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
+            logger.info('Checking for RGW pod on VSPHERE platform')
+            rgw_pod = OCP(kind=constants.POD, namespace=self.namespace)
+            assert rgw_pod.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                selector=constants.RGW_APP_LABEL,
+                resource_count=1,
+                timeout=60
             )
 
     def s3_get_all_bucket_names(self):
@@ -268,23 +288,22 @@ class MCG(object):
             bucket_data_reduced = resp.json().get('reply').get('data').get('size_reduced')
 
             logger.info(
-                'Overall bytes stored: ' + str(bucket_data) + '. Amount reduced: ' + str(bucket_data_reduced)
+                'Overall bytes stored: ' + str(bucket_data) + '. Reduced size: ' + str(bucket_data_reduced)
             )
 
             return bucket_data, bucket_data_reduced
 
         try:
-            for total_size, total_reduced in TimeoutSampler(300, 10, _retrieve_reduction_data):
-                if total_size - total_reduced > 80000000:
+            for total_size, total_reduced in TimeoutSampler(300, 5, _retrieve_reduction_data):
+                if total_size - total_reduced > 100 * 1024 * 1024:
                     logger.info(
                         'Data reduced:' + str(total_size - total_reduced)
                     )
                     return True
                 else:
                     logger.info(
-                        f'Data reduction is not yet sufficient - '
-                        f'Total size: {total_size}, Reduced: {total_reduced}.'
-                        f'Retrying in 5 seconds...'
+                        'Data reduction is not yet sufficient. '
+                        'Retrying in 5 seconds...'
                     )
         except TimeoutExpiredError:
             logger.error(
@@ -328,7 +347,9 @@ class MCG(object):
                     aws_access_key_id=aws_access_key_id,
                     aws_secret_access_key=aws_access_key
                 )
-                test_bucket = s3_res.create_bucket(Bucket='noobaa-test-creds-verification')
+                test_bucket = s3_res.create_bucket(
+                    Bucket=create_unique_resource_name('cred-verify', 's3-bucket')
+                )
                 test_bucket.delete()
                 return True
 
@@ -566,12 +587,19 @@ class MCG(object):
             )
             assert False
 
-    def check_backingstore_state(self, backingstore_name, desired_state):
+    def check_backingstore_state(
+        self,
+        backingstore_name,
+        desired_state,
+        timeout=600
+    ):
         """
         Checks whether the backing store reached a specific state
         Args:
-            backingstore_name: Name of the backing store to be checked
-            desired_state: The desired state of the backing store
+            backingstore_name (str): Name of the backing store to be checked
+            desired_state (str): The desired state of the backing store
+            timeout (int): Number of seconds for timeout which will be used
+            in the checks used in this function.
 
         Returns:
             bool: Whether the backing store has reached the desired state
@@ -579,26 +607,36 @@ class MCG(object):
         """
 
         def _check_state():
-            sysinfo = self.send_rpc_query('system_api', 'read_system', params={}).json()['reply']
+            sysinfo = self.send_rpc_query(
+                'system_api', 'read_system', params={}
+            ).json()['reply']
             for pool in sysinfo.get('pools'):
                 if pool.get('name') == backingstore_name:
-                    if pool.get('mode') == desired_state:
+                    current_state = pool.get('mode')
+                    logger.info(
+                        f'Current state of backingstore ''{backingstore_name} '
+                        f'is {current_state}'
+                    )
+                    if current_state == desired_state:
                         return True
             return False
 
         try:
-            for reached_state in TimeoutSampler(600, 40, _check_state):
+            for reached_state in TimeoutSampler(timeout, 10, _check_state):
                 if reached_state:
                     logger.info(
-                        f'BackingStore {backingstore_name} reached state {desired_state}.'
+                        f'BackingStore {backingstore_name} reached state '
+                        f'{desired_state}.'
                     )
                     return True
                 else:
                     logger.info(
-                        f'Waiting for BackingStore {backingstore_name} to reach state {desired_state}...'
+                        f'Waiting for BackingStore {backingstore_name} to '
+                        f'reach state {desired_state}...'
                     )
         except TimeoutExpiredError:
             logger.error(
-                'The BackingStore did not reach the desired state within the time limit.'
+                f'The BackingStore did not reach the desired state '
+                f'{desired_state} within the time limit.'
             )
             assert False

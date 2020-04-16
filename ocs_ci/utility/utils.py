@@ -8,8 +8,10 @@ import shlex
 import string
 import subprocess
 import time
+import traceback
 from copy import deepcopy
 from shutil import which
+
 
 import requests
 import yaml
@@ -26,12 +28,14 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedOSType,
 )
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants, defaults
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from ocs_ci.ocs import constants
 from ocs_ci.utility.retry import retry
 from bs4 import BeautifulSoup
 from paramiko import SSHClient, AutoAddPolicy
+from semantic_version import Version
+
 
 log = logging.getLogger(__name__)
 
@@ -410,15 +414,23 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout=timeout,
         **kwargs
     )
-    log.debug(f"Command output: {r.stdout.decode()}")
-    if r.stderr and not r.returncode:
-        log.warning(f"Command warning: {mask_secrets(r.stderr.decode(), secrets)}")
+    masked_stdout = mask_secrets(r.stdout.decode(), secrets)
+    if len(r.stdout) > 0:
+        log.debug(f"Command stdout: {masked_stdout}")
+    else:
+        log.debug("Command stdout is empty")
+    masked_stderr = mask_secrets(r.stderr.decode(), secrets)
+    if len(r.stderr) > 0:
+        log.warning(f"Command stderr: {masked_stderr}")
+    else:
+        log.debug("Command stderr is empty")
+    log.debug(f"Command return code: {r.returncode}")
     if r.returncode and not ignore_error:
         raise CommandFailed(
             f"Error during execution of command: {masked_cmd}."
-            f"\nError is {mask_secrets(r.stderr.decode(), secrets)}"
+            f"\nError is {masked_stderr}"
         )
-    return mask_secrets(r.stdout.decode(), secrets)
+    return masked_stdout
 
 
 def run_mcg_cmd(cmd, namespace=None):
@@ -474,12 +486,14 @@ def get_url_content(url):
     return r.content
 
 
-def expose_nightly_ocp_version(version):
+def expose_ocp_version(version):
     """
-    This helper function exposes latest nightly version of OCP. When the
-    version string ends with .nightly (e.g. 4.2.0-0.nightly) it will expose
-    the version to latest accepted OCP build
+    This helper function exposes latest nightly version or GA version of OCP.
+    When the version string ends with .nightly (e.g. 4.2.0-0.nightly) it will
+    expose the version to latest accepted OCP build
     (e.g. 4.2.0-0.nightly-2019-08-08-103722)
+    If the version ends with -ga than it will find the latest GA OCP version
+    and will expose 4.2-ga to for example 4.2.22.
 
     Args:
         version (str): Verison of OCP
@@ -488,9 +502,7 @@ def expose_nightly_ocp_version(version):
         str: Version of OCP exposed to full version if latest nighly passed
 
     """
-    if not version.endswith(".nightly"):
-        return version
-    else:
+    if version.endswith(".nightly"):
         latest_nightly_url = (
             f"https://openshift-release.svc.ci.openshift.org/api/v1/"
             f"releasestream/{version}/latest"
@@ -498,6 +510,13 @@ def expose_nightly_ocp_version(version):
         version_url_content = get_url_content(latest_nightly_url)
         version_json = json.loads(version_url_content)
         return version_json['name']
+    if version.endswith("-ga"):
+        channel = config.DEPLOYMENT.get("ocp_channel", "stable")
+        ocp_version = version.rstrip('-ga')
+        index = config.DEPLOYMENT.get('ocp_version_index', -1)
+        return get_latest_ocp_version(f"{channel}-{ocp_version}", index)
+    else:
+        return version
 
 
 def get_openshift_installer(
@@ -519,7 +538,7 @@ def get_openshift_installer(
 
     """
     version = version or config.DEPLOYMENT['installer_version']
-    version = expose_nightly_ocp_version(version)
+    version = expose_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
@@ -568,7 +587,6 @@ def get_openshift_client(
 
     """
     version = version or config.RUN['client_version']
-    version = expose_nightly_ocp_version(version)
     bin_dir = os.path.expanduser(bin_dir or config.RUN['bin_dir'])
     client_binary_path = os.path.join(bin_dir, 'oc')
     if os.path.isfile(client_binary_path) and force_download:
@@ -577,6 +595,7 @@ def get_openshift_client(
         log.debug(f"Client exists ({client_binary_path}), skipping download.")
         # TODO: check client version
     else:
+        version = expose_ocp_version(version)
         log.info(f"Downloading openshift client ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
@@ -637,7 +656,7 @@ def get_openshift_mirror_url(file_name, version):
         os_type=os_type,
     )
     sample = TimeoutSampler(
-        timeout=180, sleep=5, func=ensure_nightly_build_availability,
+        timeout=540, sleep=5, func=ensure_nightly_build_availability,
         build_url=url,
     )
     if not sample.wait_for_func_status(result=True):
@@ -730,11 +749,14 @@ class TimeoutSampler(object):
             self.last_sample_time = time.time()
             try:
                 yield self.func(*self.func_args, **self.func_kwargs)
-            except Exception:
-                pass
-
+            except Exception as ex:
+                msg = f"Exception raised during iteration: {ex}"
+                logging.error(msg)
             if self.timeout < (time.time() - self.start_time):
                 raise self.timeout_exc_cls(*self.timeout_exc_args)
+            log.info(
+                f"Going to sleep for {self.sleep} seconds"
+                " before next iteration")
             time.sleep(self.sleep)
 
     def wait_for_func_status(self, result):
@@ -759,11 +781,10 @@ class TimeoutSampler(object):
             for res in self:
                 if result == res:
                     return True
-
         except self.timeout_exc_cls:
             log.error(
-                f"({self.func.__name__}) return incorrect status after timeout"
-            )
+                f"({self.func.__name__}) return incorrect status "
+                f"after {self.timeout} second timeout")
             return False
 
 
@@ -938,17 +959,16 @@ def get_ocs_build_number():
         str: build number for ocs operator version
 
     """
-    from ocs_ci.ocs.resources.catalog_source import CatalogSource
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 
     build_num = ""
-    ocs_catalog = CatalogSource(
-        resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
-        namespace="openshift-marketplace"
-    )
     if config.REPORTING['us_ds'] == 'DS':
-        build_info = ocs_catalog.get_image_name()
+        build_str = get_csvs_start_with_prefix(
+            defaults.OCS_OPERATOR_NAME, defaults.ROOK_CLUSTER_NAMESPACE,
+        )
         try:
-            return build_info.split("-")[1].split(".")[0]
+            return build_str[0]['metadata']['name'].partition('.')[2]
         except (IndexError, AttributeError):
             logging.warning("No version info found for OCS operator")
     return build_num
@@ -1037,6 +1057,50 @@ def get_csi_versions():
     return csi_versions
 
 
+def get_ocp_version(seperator=None):
+    """
+    Get current ocp version
+
+    Args:
+        seperator (str): String that would seperate major and
+            minor version nubers
+
+    Returns:
+        string : If seperator is 'None', version string will be returned as is
+            eg: '4.2', '4.3'.
+            If seperator is provided then '.' in the version string would be
+            replaced by seperator and resulting string will be returned.
+            eg: If seperator is '_' then string returned would be '4_2'
+
+    """
+    char = seperator if seperator else '.'
+    version = Version.coerce(
+        config.DEPLOYMENT['installer_version']
+    )
+    return char.join(
+        [str(version.major), str(version.minor)]
+    )
+
+
+def get_ocp_repo():
+    """
+    Get ocp repo file, name will be generated dynamically based on
+    ocp version.
+
+    Returns:
+        string : Path to ocp repo file
+
+    """
+    repo_path = os.path.join(
+        constants.REPO_DIR, f"ocp_{get_ocp_version('_')}.repo"
+    )
+    path = os.path.expanduser(repo_path)
+    assert os.path.exists(path), (
+        f"OCP repo file {path} doesn't exists!"
+    )
+    return path
+
+
 def parse_pgsql_logs(data):
     """
     Parse the pgsql benchmark data from ripsaw and return
@@ -1118,40 +1182,95 @@ def get_testrun_name():
     """
     Prepare testrun ID for Polarion (and other reports).
 
-    Return config.REPORTING["polarion"]["testrun_name"], if configured.
-    Otherwise prepare testrun ID based on Upstream/Downstream information,
-    OCS version and used markers.
-
     Returns:
-        str: String containing testrun ID
+        str: String containing testrun name
 
     """
     markers = config.RUN['cli_params'].get('-m', '').replace(" ", "-")
     us_ds = config.REPORTING.get("us_ds")
-    us_ds = "Upstream" if us_ds.upper() == "US" else "Downstream" if us_ds.upper() == "DS" else us_ds
-    if config.REPORTING.get("testrun_name"):
-        testrun_name = config.REPORTING["testrun_name"]
-    elif markers:
-        testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}_{markers}"
-    else:
-        testrun_name = f"OCS_{us_ds}_{config.REPORTING.get('testrun_name_part', '')}"
-
-    # form complete testrun name that includes deployment platform and type
-    testrun_name = (
-        f"{testrun_name}-{config.ENV_DATA.get('platform').upper()}-"
-        f"{config.ENV_DATA.get('deployment_type').upper()}"
+    if us_ds.upper() == "US":
+        us_ds = "Upstream"
+    elif us_ds.upper() == "DS":
+        us_ds = "Downstream"
+    ocp_version = ".".join(
+        config.DEPLOYMENT.get('installer_version').split('.')[:-2]
     )
+    ocp_version_string = f"OCP{ocp_version}" if ocp_version else ''
+    ocs_version = config.ENV_DATA.get('ocs_version')
+    ocs_version_string = f"OCS{ocs_version}" if ocs_version else ''
+    worker_os = 'RHEL' if config.ENV_DATA.get('rhel_workers') else 'RHCOS'
+    build_user = None
+
+    if config.REPORTING.get('display_name'):
+        testrun_name = config.REPORTING.get('display_name')
+    else:
+        build_user = config.REPORTING.get('build_user')
+        testrun_name = (
+            f"{config.ENV_DATA.get('platform', '').upper()} "
+            f"{config.ENV_DATA.get('deployment_type', '').upper()} "
+            f"{get_az_count()}AZ "
+            f"{worker_os} "
+            f"{config.ENV_DATA.get('master_replicas')}M "
+            f"{config.ENV_DATA.get('worker_replicas')}W "
+            f"{markers}"
+        )
+    testrun_name = (
+        f"{ocs_version_string} {us_ds} {ocp_version_string} "
+        f"{testrun_name}"
+    )
+    if build_user:
+        testrun_name = f"{build_user} {testrun_name}"
     # replace invalid character(s) by '-'
     testrun_name = testrun_name.translate(
         str.maketrans(
             {key: '-' for key in ''' \\/.:*"<>|~!@#$?%^&'*(){}+`,=\t'''}
         )
     )
+    log.info("testrun_name: %s", testrun_name)
     return testrun_name
 
 
-@retry((CephHealthException, CommandFailed), tries=20, delay=30, backoff=1)
-def ceph_health_check(namespace=None):
+def get_az_count():
+    """
+    Using a number of different configuration attributes, determine how many
+    availability zones the cluster is configured for.
+
+    Returns:
+        int: number of availability zones
+
+    """
+    if config.ENV_DATA.get('availability_zone_count'):
+        return int(config.ENV_DATA.get('availability_zone_count'))
+    elif config.ENV_DATA.get('worker_availability_zones'):
+        return len(config.ENV_DATA.get('worker_availability_zones'))
+    elif config.ENV_DATA.get('platform') == 'vsphere':
+        return 1
+    else:
+        return 1
+
+
+def ceph_health_check(namespace=None, tries=20, delay=30):
+    """
+    Args:
+        namespace (str): Namespace of OCS
+            (default: config.ENV_DATA['cluster_namespace'])
+        tries (int): Number of retries
+        delay (int): Delay in seconds between retries
+
+    Returns:
+        bool: ceph_health_check_base return value with default retries of 20,
+            delay of 30 seconds if default values are not changed via args.
+
+    """
+    return retry(
+        (CephHealthException, CommandFailed),
+        tries=tries,
+        delay=delay,
+        backoff=1
+    )(ceph_health_check_base)(namespace)
+
+
+def ceph_health_check_base(namespace=None):
     """
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
@@ -1180,7 +1299,7 @@ def ceph_health_check(namespace=None):
     )
     health = run_cmd(f"oc -n {namespace} exec {tools_pod} ceph health")
     if health.strip() == "HEALTH_OK":
-        log.info("HEALTH_OK, install successful.")
+        log.info("Ceph cluster health is HEALTH_OK.")
         return True
     else:
         raise CephHealthException(
@@ -1263,17 +1382,28 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
     latest_tag = latest_tag or config.DEPLOYMENT.get(
         'default_latest_tag', 'latest'
     )
-    _req = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=20)
-    )
+    tags = get_ocs_olm_operator_tags()
     latest_image = None
-    tags = _req.json()['tags']
+    ocs_version = config.ENV_DATA['ocs_version']
+    upgrade_ocs_version = config.UPGRADE.get('upgrade_ocs_version')
+    use_rc_build = config.UPGRADE.get("use_rc_build")
+    previous_rc_build = config.UPGRADE.get("previous_rc_build")
+    upgrade_version_change = (
+        upgrade_ocs_version and ocs_version != upgrade_ocs_version
+    )
+    if (
+        upgrade and use_rc_build and previous_rc_build
+        and not upgrade_version_change
+    ):
+        latest_tag = previous_rc_build
+    if upgrade_version_change:
+        upgrade = False
     for tag in tags:
         if tag['name'] == latest_tag:
             latest_image = tag['image_id']
             break
     if not latest_image:
-        raise TagNotFoundException(f"Couldn't find latest tag!")
+        raise TagNotFoundException("Couldn't find latest tag!")
     latest_tag_found = False
     for tag in tags:
         if not upgrade:
@@ -1291,9 +1421,15 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
             if (
                 tag['name'] not in constants.LATEST_TAGS
                 and tag['image_id'] != latest_image
+                and ocs_version in tag['name']
             ):
+                if (
+                    config.UPGRADE.get("use_rc_build")
+                    and "rc" not in tag['name']
+                ):
+                    continue
                 return tag['name']
-    raise TagNotFoundException(f"Couldn't find any desired tag!")
+    raise TagNotFoundException("Couldn't find any desired tag!")
 
 
 def get_next_version_available_for_upgrade(current_tag):
@@ -1312,25 +1448,79 @@ def get_next_version_available_for_upgrade(current_tag):
         TagNotFoundException: In case no tag suitable for upgrade found
 
     """
-    req = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=100)
-    )
+    tags = get_ocs_olm_operator_tags()
     if current_tag in constants.LATEST_TAGS:
         return current_tag
-    tags = req.json()['tags']
     current_tag_index = None
     for index, tag in enumerate(tags):
         if tag['name'] == current_tag:
             if index < 2:
-                raise TagNotFoundException(f"Couldn't find tag for upgrade!")
+                raise TagNotFoundException("Couldn't find tag for upgrade!")
             current_tag_index = index
             break
     sliced_reversed_tags = tags[:current_tag_index]
     sliced_reversed_tags.reverse()
+    ocs_version = config.ENV_DATA['ocs_version']
     for tag in sliced_reversed_tags:
-        if tag['name'] not in constants.LATEST_TAGS:
+        if (
+            tag['name'] not in constants.LATEST_TAGS
+            and ocs_version in tag['name']
+        ):
+            if config.UPGRADE.get("use_rc_build") and "rc" not in tag['name']:
+                continue
             return tag['name']
-    raise TagNotFoundException(f"Couldn't find any tag!")
+    raise TagNotFoundException("Couldn't find any tag!")
+
+
+def get_ocs_olm_operator_tags(limit=100):
+    """
+    Query the OCS OLM Operator repo and retrieve a list of tags.
+
+    Args:
+        limit: the number of tags to limit the request to
+
+    Raises:
+        FileNotFoundError: if the auth config is not found
+        KeyError: if the auth config isn't setup properly
+        requests.RequestException: if the response return code is not ok
+
+    Returns:
+        list: OCS OLM Operator tags
+
+    """
+    log.info("Retrieving OCS OLM Operator tags (limit %s)", limit)
+    auth_file = os.path.join(constants.TOP_DIR, 'data', 'auth.yaml')
+    doc_url = (
+        'https://ocs-ci.readthedocs.io/en/latest/docs/getting_started.html'
+        '#authentication-config'
+    )
+    try:
+        with open(auth_file) as f:
+            auth_config = yaml.safe_load(f)
+        quay_access_token = auth_config['quay']['access_token']
+    except FileNotFoundError:
+        log.error(
+            'Unable to find the authentication configuration at %s, '
+            'please refer to the getting started guide (%s)',
+            auth_file, doc_url
+        )
+        raise
+    except KeyError:
+        log.error(
+            'Unable to retrieve the access token for quay, please refer to '
+            'the getting started guide (%s) to properly setup your '
+            'authentication configuration', doc_url
+        )
+        raise
+    headers = {'Authorization': f'Bearer {quay_access_token}'}
+    resp = requests.get(
+        constants.OPERATOR_CS_QUAY_API_QUERY.format(tag_limit=limit),
+        headers=headers
+    )
+    if not resp.ok:
+        raise requests.RequestException(resp.json())
+    log.debug(resp.json()['tags'])
+    return resp.json()['tags']
 
 
 def check_if_executable_in_path(exec_name):
@@ -1430,17 +1620,25 @@ def wait_for_co(operator):
 
 def censor_values(data_to_censor):
     """
-    This function censor values in dictionary keys that match pattern defined
-    in config_keys_patterns_to_censor in constants.
+    This function censor string and numeric values in dictionary based on
+    keys that match pattern defined in config_keys_patterns_to_censor in
+    constants. It is performed recursively for nested dictionaries.
 
     Args:
         data_to_censor (dict): Data to censor.
 
+    Returns:
+        dict: filtered data
+
     """
     for key in data_to_censor:
-        for pattern in constants.config_keys_patterns_to_censor:
-            if pattern in key:
-                data_to_censor[key] = '*' * 5
+        if isinstance(data_to_censor[key], dict):
+            censor_values(data_to_censor[key])
+        elif isinstance(data_to_censor[key], (str, int, float)):
+            for pattern in constants.config_keys_patterns_to_censor:
+                if pattern in key.lower():
+                    data_to_censor[key] = '*' * 5
+    return data_to_censor
 
 
 def dump_config_to_file(file_path):
@@ -1452,8 +1650,7 @@ def dump_config_to_file(file_path):
 
     """
     config_copy = deepcopy(config.to_dict())
-    for key in config_copy:
-        censor_values(config_copy[key])
+    censor_values(config_copy)
     with open(file_path, "w+") as fs:
         yaml.safe_dump(config_copy, fs)
 
@@ -1569,3 +1766,174 @@ def get_kubeadmin_password():
     )
     with open(filename) as f:
         return f.read()
+
+
+def get_infra_id(cluster_path):
+    """
+    Get infraID from metadata.json in given cluster_path
+
+    Args:
+        cluster_path: path to cluster install directory
+
+    Returns:
+        str: metadata.json['infraID']
+
+    """
+    metadata_file = os.path.join(cluster_path, "metadata.json")
+    with open(metadata_file) as f:
+        metadata = json.load(f)
+    return metadata["infraID"]
+
+
+def get_cluster_name(cluster_path):
+    """
+    Get clusterName from metadata.json in given cluster_path
+
+    Args:
+        cluster_path: path to cluster install directory
+
+    Returns:
+        str: metadata.json['clusterName']
+
+    """
+    metadata_file = os.path.join(cluster_path, "metadata.json")
+    with open(metadata_file) as f:
+        metadata = json.load(f)
+    return metadata["clusterName"]
+
+
+def skipif_ocs_version(expressions):
+    """
+    This function evaluates the condition for test skip
+    based on expression
+
+    Args:
+        expressions (str OR list): condition for which we need to check,
+        eg: A single expression string '>=4.2' OR
+            A list of expressions like ['<4.3', '>4.2'], ['<=4.3', '>=4.2']
+
+    Return:
+        'True' if test needs to be skipped else 'False'
+    """
+    skip_this = True
+    expr_list = [expressions] if isinstance(expressions, str) else expressions
+    for expr in expr_list:
+        comparision_str = config.ENV_DATA['ocs_version'] + expr
+        skip_this = skip_this and eval(comparision_str)
+    # skip_this will be either True or False after eval
+    return skip_this
+
+
+def get_ocs_version_from_image(image):
+    """
+    Parse major.minor version from OCS image tag.
+
+    Args:
+        image (str): image in format url:tag
+
+    Returns
+        str: Version in x.y format
+
+    Raises:
+        ValueError: In case of the tag which we cannot parse to version.
+
+    """
+    try:
+        version = image.split(':')[1].lstrip("latest-")
+        version = Version.coerce(version)
+        return "{major}.{minor}".format(
+            major=version.major, minor=version.minor
+        )
+    except ValueError:
+        log.error(f"The version: {version} couldn't be parsed!")
+        raise
+
+
+def get_available_ocp_versions(channel):
+    """
+    Find all available OCP versions for specific channel.
+
+    Args:
+        channel (str): Channel of OCP (e.g. stable-4.2 or fast-4.2)
+
+    Returns
+        list: Sorted list with OCP versions for specified channel.
+
+    """
+    headers = {'Accept': 'application/json'}
+    req = requests.get(
+        constants.OPENSHIFT_UPGRADE_INFO_API.format(channel=channel),
+        headers=headers
+    )
+    data = req.json()
+    versions = [Version(node['version']) for node in data['nodes']]
+    versions.sort()
+    return versions
+
+
+def get_latest_ocp_version(channel, index=-1):
+    """
+    Find latest OCP version for specific channel.
+
+    Args:
+        channel (str): Channel of OCP (e.g. stable-4.2 or fast-4.2)
+        index (int): Index to get from all available versions list
+            e.g. default -1 is latest version (version[-1]). If you want to get
+            previous version pass index -2 and so on.
+
+    Returns
+        str: Latest OCP version for specified channel.
+
+    """
+    versions = get_available_ocp_versions(channel)
+    return str(versions[index])
+
+
+def load_config_file(config_file):
+    """
+    Loads config file to the ocs-ci config
+
+    Args:
+        config_file (str): Path to yaml config file.
+
+    Raises:
+        FileNotFoundError: In the case the config file not found.
+
+    """
+    config_file = os.path.expanduser(config_file)
+    assert os.path.exists(config_file), (
+        f"Config file {config_file} doesn't exist!"
+    )
+    with open(
+        os.path.abspath(os.path.expanduser(config_file)), "r"
+    ) as file_stream:
+        custom_config_data = yaml.safe_load(file_stream)
+        config.update(custom_config_data)
+
+
+def destroy_cluster(installer, cluster_path, log_level="DEBUG"):
+    """
+    Destroy OCP cluster specific
+
+
+    Args:
+        installer (str): The path to the installer binary
+        cluster_path (str): The path of the cluster
+        log_level (str): log level openshift-installer (default: DEBUG)
+
+    """
+    destroy_cmd = (
+        f"{installer} destroy cluster "
+        f"--dir {cluster_path} "
+        f"--log-level {log_level}"
+    )
+
+    try:
+        # Execute destroy cluster using OpenShift installer
+        log.info(f"Destroying cluster defined in {cluster_path}")
+        run_cmd(destroy_cmd, timeout=1200)
+    except CommandFailed:
+        log.error(traceback.format_exc())
+        raise
+    except Exception:
+        log.error(traceback.format_exc())

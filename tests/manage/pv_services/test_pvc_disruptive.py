@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from functools import partial
 
-from ocs_ci.framework.testlib import ManageTest, tier4
+from ocs_ci.framework.testlib import ManageTest, tier4, tier4a
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pvc import get_all_pvcs
@@ -18,6 +18,7 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
 
 
 @tier4
+@tier4a
 @pytest.mark.parametrize(
     argnames=["interface", "operation_to_disrupt", "resource_to_delete"],
     argvalues=[
@@ -132,7 +133,11 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
                 constants.CEPHFILESYSTEM, 'create_pvc',
                 'cephfsplugin_provisioner'
             ],
-            marks=pytest.mark.polarion_id("OCS-948")
+            marks=[
+                pytest.mark.polarion_id("OCS-948"),
+                pytest.mark.bugzilla("1806419"),
+                pytest.mark.bugzilla("1793387")
+            ]
         ),
         pytest.param(
             *[
@@ -147,27 +152,45 @@ DISRUPTION_OPS = disruption_helpers.Disruptions()
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'create_pvc', 'operator'],
-            marks=pytest.mark.polarion_id("OCS-927")
+            marks=[
+                pytest.mark.polarion_id("OCS-927"),
+                pytest.mark.bugzilla('1815078')
+            ]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'create_pod', 'operator'],
-            marks=pytest.mark.polarion_id("OCS-925")
+            marks=[
+                pytest.mark.polarion_id("OCS-925"),
+                pytest.mark.bugzilla('1815078')
+            ]
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, 'run_io', 'operator'],
-            marks=pytest.mark.polarion_id("OCS-928")
+            marks=[
+                pytest.mark.polarion_id("OCS-928"),
+                pytest.mark.bugzilla('1815078')
+            ]
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'create_pvc', 'operator'],
-            marks=pytest.mark.polarion_id("OCS-937")
+            marks=[
+                pytest.mark.polarion_id("OCS-937"),
+                pytest.mark.bugzilla('1815078')
+            ]
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'create_pod', 'operator'],
-            marks=pytest.mark.polarion_id("OCS-936")
+            marks=[
+                pytest.mark.polarion_id("OCS-936"),
+                pytest.mark.bugzilla('1815078')
+            ]
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, 'run_io', 'operator'],
-            marks=pytest.mark.polarion_id("OCS-938")
+            marks=[
+                pytest.mark.polarion_id("OCS-938"),
+                pytest.mark.bugzilla('1815078')
+            ]
         )
     ]
 )
@@ -176,15 +199,13 @@ class TestPVCDisruption(ManageTest):
     Base class for PVC related disruption tests
     """
     @pytest.fixture(autouse=True)
-    def setup(self, interface, storageclass_factory, project_factory):
+    def setup(self, project_factory):
         """
-        Create StorageClass and Project for the test
+        Create Project for the test
 
         Returns:
-            OCS: An OCS instance of the storage class
             OCP: An OCP instance of project
         """
-        self.sc_obj = storageclass_factory(interface=interface)
         self.proj_obj = project_factory()
 
     def test_pvc_disruptive(
@@ -243,11 +264,11 @@ class TestPVCDisruption(ManageTest):
         # Start creation of PVCs
         bulk_pvc_create = executor.submit(
             multi_pvc_factory, interface=interface,
-            project=self.proj_obj, storageclass=self.sc_obj, size=5,
+            project=self.proj_obj, size=5,
             access_modes=access_modes,
             access_modes_selection='distribute_random',
             status=constants.STATUS_BOUND, num_of_pvc=num_of_pvc,
-            wait_each=False
+            wait_each=False, timeout=90
         )
 
         if operation_to_disrupt == 'create_pvc':
@@ -309,6 +330,9 @@ class TestPVCDisruption(ManageTest):
 
         # Wait for setup on pods to complete
         for pod_obj in pod_objs:
+            logger.info(
+                f"Waiting for IO setup to complete on pod {pod_obj.name}"
+            )
             for sample in TimeoutSampler(
                 180, 2, getattr, pod_obj, 'wl_setup_done'
             ):

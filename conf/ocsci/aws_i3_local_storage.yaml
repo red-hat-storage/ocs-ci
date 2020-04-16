@@ -1,0 +1,8 @@
+---
+DEPLOYMENT:
+  local_storage: true
+
+ENV_DATA:
+  platform: 'aws'
+  worker_instance_type: 'i3en.2xlarge'
+  device_size: 2300  # Value pulled from here: https://bugzilla.redhat.com/show_bug.cgi?id=1812557#c27

@@ -35,7 +35,12 @@ class PVC(OCS):
             int: PVC size
         """
         #  [:-2] -> to remove the 'Gi' from the size (e.g. '5Gi --> '5')
-        return int(self.data.get('status').get('capacity').get('storage')[:-2])
+        unformatted_size = self.data.get('status').get('capacity').get('storage')
+        units = unformatted_size[-2:]
+        if units == 'Ti':
+            return int(unformatted_size[:-2]) * 1024
+        elif units == 'Gi':
+            return int(unformatted_size[:-2])
 
     @property
     def status(self):
@@ -113,21 +118,14 @@ class PVC(OCS):
     @property
     def reclaim_policy(self):
         """
-        Returns the reclaim policy of pvc in namespace
+        Get the reclaim policy of PV associated with the PVC
 
         Returns:
-            str: Reclaim policy Reclaim or Delete
+            str: Reclaim policy. eg: Reclaim, Delete
         """
-
-        data = dict()
-        data['api_version'] = self.api_version
-        data['kind'] = 'StorageClass'
-        data['metadata'] = {
-            'name': self.backed_sc, 'namespace': self.namespace
-        }
-        sc_obj = OCS(**data)
-        sc_obj.reload()
-        return sc_obj.get().get('reclaimPolicy')
+        return self.backed_pv_obj.get().get('spec').get(
+            'persistentVolumeReclaimPolicy'
+        )
 
     def resize_pvc(self, new_size, verify=False):
         """
@@ -205,6 +203,28 @@ def get_all_pvc_objs(namespace=None, selector=None):
     return [PVC(**pvc) for pvc in all_pvcs['items']]
 
 
+def get_deviceset_pvcs():
+    """
+    Get the deviceset PVCs
+
+    Returns:
+        list: The deviceset PVCs OCS objects
+
+    Raises:
+        AssertionError: In case the deviceset PVCs are not found
+
+    """
+    ocs_pvc_obj = get_all_pvc_objs(
+        namespace=config.ENV_DATA['cluster_namespace']
+    )
+    deviceset_pvcs = []
+    for pvc_obj in ocs_pvc_obj:
+        if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME):
+            deviceset_pvcs.append(pvc_obj)
+    assert deviceset_pvcs, "Failed to find the deviceset PVCs"
+    return deviceset_pvcs
+
+
 def get_deviceset_pvs():
     """
     Get the deviceset PVs
@@ -216,10 +236,5 @@ def get_deviceset_pvs():
         AssertionError: In case the deviceset PVCs are not found
 
     """
-    ocs_pvc_obj = get_all_pvc_objs(namespace=config.ENV_DATA['cluster_namespace'])
-    deviceset_pvcs = []
-    for pvc_obj in ocs_pvc_obj:
-        if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME):
-            deviceset_pvcs.append(pvc_obj)
-    assert deviceset_pvcs, "Failed to find the deviceset PVCs"
+    deviceset_pvcs = get_deviceset_pvcs()
     return [pvc.backed_pv_obj for pvc in deviceset_pvcs]

@@ -3,7 +3,6 @@ kind: Pod
 metadata:
   name: test-raw-block-pod
 spec:
-  nodeName: foo
   containers:
     - name: my-container
       image: nginx
@@ -11,7 +10,7 @@ spec:
          capabilities:
            add: ["SYS_ADMIN"]
       volumeDevices:
-        - devicePath: /dev/block
+        - devicePath: /dev/rbdblock
           name: my-volume
       imagePullPolicy: IfNotPresent
   volumes:

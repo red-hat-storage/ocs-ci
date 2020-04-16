@@ -22,7 +22,7 @@ def get_crush_map():
     file_decomp = '/tmp/crush_decomp'
     ct_pod.exec_ceph_cmd(f"ceph osd getcrushmap -o {file_comp}")
     ct_pod.exec_ceph_cmd(f"crushtool -d {file_comp} -o {file_decomp}")
-    return ct_pod.exec_bash_cmd_on_pod(f"cat {file_decomp}")
+    return ct_pod.exec_sh_cmd_on_pod(f"cat {file_decomp}")
 
 
 @pytest.fixture(scope='session')

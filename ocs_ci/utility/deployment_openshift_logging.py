@@ -7,12 +7,14 @@ EFK stack
 import logging
 import json
 
+from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.utility import templating
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
 from tests import helpers
+
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +103,7 @@ def set_rbac(yaml_file, resource_name):
         kind=constants.ROLEBINDING, namespace='openshift-operators-redhat'
     )
 
-    rbac_role.create(yaml_file=yaml_file)
+    rbac_role.create(yaml_file=yaml_file, out_yaml_format=False)
     try:
         rbac_role.get(resource_name, out_yaml_format=True)
         rbac_rolebinding.get(resource_name, out_yaml_format=True)
@@ -240,7 +242,7 @@ def create_instance_in_clusterlogging():
     )
     pod_status = pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING, resource_count=2 + es_node_count + nodes_in_cluster,
-        timeout=200, sleep=5
+        timeout=300, sleep=5
     )
     assert pod_status, "Pods are not in Running state."
     logger.info("All pods are in Running state")
@@ -293,3 +295,23 @@ def check_health_of_clusterlogging():
         logger.error("Cluster logging is in Bad state")
         raise UnexpectedBehaviour
     return pod_list
+
+
+@retry(CommandFailed, tries=10, delay=10, backoff=3)
+def create_instance():
+    """
+    The function is used to create instance for
+    cluster-logging
+    """
+
+    # Create instance
+    assert create_instance_in_clusterlogging()
+
+    # Check the health of the cluster-logging
+    assert check_health_of_clusterlogging()
+
+    csv_obj = CSV(namespace=constants.OPENSHIFT_LOGGING_NAMESPACE)
+
+    # Get the CSV installed
+    get_csv = csv_obj.get(out_yaml_format=False)
+    logger.info(f'The installed CSV is {get_csv}')

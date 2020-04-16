@@ -22,11 +22,12 @@ from ocs_ci.ocs.exceptions import CommandFailed, NonUpgradedImagesFoundError
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler, check_timeout_reached
+from ocs_ci.utility.utils import run_cmd, check_timeout_reached
+from ocs_ci.utility.utils import check_if_executable_in_path
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 FIO_TIMEOUT = 600
-
 
 TEXT_CONTENT = (
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
@@ -39,6 +40,7 @@ TEXT_CONTENT = (
     "deserunt mollit anim id est laborum."
 )
 TEST_FILE = '/var/lib/www/html/test'
+FEDORA_TEST_FILE = '/mnt/test'
 
 
 class Pod(OCS):
@@ -88,6 +90,10 @@ class Pod(OCS):
     def labels(self):
         return self._labels
 
+    @property
+    def restart_count(self):
+        return self.get().get('status').get('containerStatuses')[0].get('restartCount')
+
     def __setattr__(self, key, val):
         self.__dict__[key] = val
 
@@ -110,15 +116,12 @@ class Pod(OCS):
         Raises:
             Exception: In case of exception from FIO
         """
+        logger.info(f"Waiting for FIO results from pod {self.name}")
         try:
-            if self.fio_thread.running():
-                for sample in TimeoutSampler(
-                    timeout=FIO_TIMEOUT, sleep=3, func=self.fio_thread.done
-                ):
-                    if sample:
-                        return yaml.safe_load(self.fio_thread.result())
-            if self.fio_thread and self.fio_thread.done():
-                return yaml.safe_load(self.fio_thread.result())
+            result = self.fio_thread.result(FIO_TIMEOUT)
+            if result:
+                return yaml.safe_load(result)
+            raise CommandFailed(f"FIO execution results: {result}.")
 
         except CommandFailed as ex:
             logger.exception(f"FIO failed: {ex}")
@@ -152,7 +155,7 @@ class Pod(OCS):
             rsh_cmd, out_yaml_format, secrets=secrets, timeout=timeout, **kwargs
         )
 
-    def exec_bash_cmd_on_pod(self, command):
+    def exec_sh_cmd_on_pod(self, command, sh="bash"):
         """
         Execute a pure bash command on a pod via oc exec where you can use
         bash syntaxt like &&, ||, ;, for loop and so on.
@@ -163,7 +166,7 @@ class Pod(OCS):
         Returns:
             str: stdout of the command
         """
-        cmd = f'exec {self.name} -- bash -c "{command}"'
+        cmd = f'exec {self.name} -- {sh} -c "{command}"'
         return self.ocp.exec_oc_cmd(cmd, out_yaml_format=False)
 
     def get_labels(self):
@@ -247,7 +250,7 @@ class Pod(OCS):
 
     def run_io(
         self, storage_type, size, io_direction='rw', rw_ratio=75,
-        jobs=1, runtime=60, depth=4, fio_filename=None
+        jobs=1, runtime=60, depth=4, rate='1m', rate_process='poisson', fio_filename=None
     ):
         """
         Execute FIO on a pod
@@ -270,6 +273,8 @@ class Pod(OCS):
             jobs (int): Number of jobs to execute FIO
             runtime (int): Number of seconds IO should run for
             depth (int): IO depth
+            rate (str): rate of IO default 1m, e.g. 16k
+            rate_process (str): kind of rate process default poisson, e.g. poisson
             fio_filename(str): Name of fio file created on app pod's mount point
         """
         if not self.wl_setup_done:
@@ -290,6 +295,8 @@ class Pod(OCS):
         if fio_filename:
             self.io_params['filename'] = fio_filename
         self.io_params['iodepth'] = depth
+        self.io_params['rate'] = rate
+        self.io_params['rate_process'] = rate_process
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
     def run_git_clone(self):
@@ -300,7 +307,10 @@ class Pod(OCS):
         work_load = 'jenkins'
 
         wl = workload.WorkLoad(
-            name=name, work_load=work_load, pod=self
+            name=name,
+            work_load=work_load,
+            pod=self,
+            path=self.get_storage_path()
         )
         assert wl.setup(), "Setup up for git failed"
         wl.run()
@@ -360,7 +370,9 @@ class Pod(OCS):
 
 # Helper functions for Pods
 
-def get_all_pods(namespace=None, selector=None, selector_label='app'):
+def get_all_pods(
+        namespace=None, selector=None, selector_label='app', wait=False
+):
     """
     Get all pods in a namespace.
 
@@ -376,11 +388,18 @@ def get_all_pods(namespace=None, selector=None, selector_label='app'):
 
     """
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    # In case of >4 worker nodes node failures automatic failover of pods to
+    # other nodes will happen.
+    # So, we are waiting for the pods to come up on new node
+    if wait:
+        wait_time = 180
+        logger.info(f"Waiting for {wait_time}s for the pods to stabilize")
+        time.sleep(wait_time)
     pods = ocp_pod_obj.get()['items']
     if selector:
         pods_new = [
             pod for pod in pods if
-            pod['metadata']['labels'].get(selector_label) in selector
+            pod['metadata'].get('labels', {}).get(selector_label) in selector
         ]
         pods = pods_new
     pod_objs = [Pod(**pod) for pod in pods]
@@ -397,11 +416,16 @@ def get_ceph_tools_pod():
     ocp_pod_obj = OCP(
         kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
     )
-    # setup ceph_toolbox pod if the cluster has been setup by some other CI
-    setup_ceph_toolbox()
     ct_pod_items = ocp_pod_obj.get(
         selector='app=rook-ceph-tools'
     )['items']
+    if not ct_pod_items:
+        # setup ceph_toolbox pod if the cluster has been setup by some other CI
+        setup_ceph_toolbox()
+        ct_pod_items = ocp_pod_obj.get(
+            selector='app=rook-ceph-tools'
+        )['items']
+
     assert ct_pod_items, "No Ceph tools pod found"
 
     # In the case of node failure, the CT pod will be recreated with the old
@@ -418,40 +442,46 @@ def get_ceph_tools_pod():
     return ceph_pod
 
 
-def get_rbd_provisioner_pod():
+def get_csi_provisioner_pod(interface):
     """
-    Get the RBD provisioner pod
-
+    Get the provisioner pod based on interface
     Returns:
-        Pod object: The RBD provisioner pod object
+        Pod object: The provisioner pod object based on iterface
     """
     ocp_pod_obj = OCP(
         kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
     )
-    rbd_provision_pod_items = ocp_pod_obj.get(
-        selector='app=csi-rbdplugin-provisioner'
+    selector = 'app=csi-rbdplugin-provisioner' if (
+        interface == constants.CEPHBLOCKPOOL
+    ) else 'app=csi-cephfsplugin-provisioner'
+    provision_pod_items = ocp_pod_obj.get(
+        selector=selector
     )['items']
-    assert rbd_provision_pod_items, "No RBD provisioner pod found"
-    ceph_pod = Pod(**rbd_provision_pod_items[0])
-    return ceph_pod
+    assert provision_pod_items, f"No {interface} provisioner pod found"
+    provisioner_pod = (
+        Pod(**provision_pod_items[0]).name,
+        Pod(**provision_pod_items[1]).name
+    )
+    return provisioner_pod
 
 
-def get_cephfs_provisioner_pod():
+def get_rgw_pod(rgw_label=constants.RGW_APP_LABEL, namespace=None):
     """
-    Get the cephfs provisioner pod
+    Fetches info about rgw pods in the cluster
+
+    Args:
+        rgw_label (str): label associated with rgw pods
+            (default: defaults.RGW_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: none)
 
     Returns:
-        Pod object: The cephfs provisioner pod object
+        Pod object: rgw pod object
     """
-    ocp_pod_obj = OCP(
-        kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
-    )
-    cephfs_provision_pod_items = ocp_pod_obj.get(
-        selector='app=csi-cephfsplugin-provisioner'
-    )['items']
-    assert cephfs_provision_pod_items, "No cephfs provisioner pod found"
-    ceph_pod = Pod(**cephfs_provision_pod_items[0])
-    return ceph_pod
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    rgws = get_pods_having_label(rgw_label, namespace)
+    rgw_pod = Pod(**rgws[0])
+    return rgw_pod
 
 
 def list_ceph_images(pool_name='rbd'):
@@ -465,6 +495,7 @@ def list_ceph_images(pool_name='rbd'):
     return ct_pod.exec_ceph_cmd(ceph_cmd=f"rbd ls {pool_name}", format='json')
 
 
+@retry(TypeError, tries=5, delay=2, backoff=1)
 def check_file_existence(pod_obj, file_path):
     """
     Check if file exists inside the pod
@@ -477,6 +508,10 @@ def check_file_existence(pod_obj, file_path):
     Returns:
         bool: True if the file exist, False otherwise
     """
+    try:
+        check_if_executable_in_path(pod_obj.exec_cmd_on_pod("which find"))
+    except CommandFailed:
+        pod_obj.install_packages("findutils")
     ret = pod_obj.exec_cmd_on_pod(f"bash -c \"find {file_path}\"")
     if re.search(file_path, ret):
         return True
@@ -558,8 +593,8 @@ def get_fio_rw_iops(pod_obj):
     Args:
         pod_obj (Pod): The object of the pod
     """
-    logging.info(f"Waiting for IO results from pod {pod_obj.name}")
     fio_result = pod_obj.get_fio_results()
+    logging.info(f"FIO output: {fio_result}")
     logging.info("IOPs after FIO:")
     logging.info(
         f"Read: {fio_result.get('jobs')[0].get('read').get('iops')}"
@@ -569,7 +604,7 @@ def get_fio_rw_iops(pod_obj):
     )
 
 
-def run_io_in_bg(pod_obj, expect_to_fail=False):
+def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=False):
     """
     Run I/O in the background
 
@@ -577,13 +612,15 @@ def run_io_in_bg(pod_obj, expect_to_fail=False):
         pod_obj (Pod): The object of the pod
         expect_to_fail (bool): True for the command to be expected to fail
             (disruptive operations), False otherwise
+        fedora_dc (bool): set to False by default. If set to True, it runs IO in
+            background on a fedora dc pod.
 
     Returns:
         Thread: A thread of the I/O execution
     """
     logger.info(f"Running I/O on pod {pod_obj.name}")
 
-    def exec_run_io_cmd(pod_obj, expect_to_fail):
+    def exec_run_io_cmd(pod_obj, expect_to_fail, fedora_dc):
         """
         Execute I/O
         """
@@ -591,9 +628,13 @@ def run_io_in_bg(pod_obj, expect_to_fail=False):
             # Writing content to a new file every 0.01 seconds.
             # Without sleep, the device will run out of space very quickly -
             # 5-10 seconds for a 5GB device
+            if fedora_dc:
+                FILE = FEDORA_TEST_FILE
+            else:
+                FILE = TEST_FILE
             pod_obj.exec_cmd_on_pod(
                 f"bash -c \"let i=0; while true; do echo {TEXT_CONTENT} "
-                f">> {TEST_FILE}$i; let i++; sleep 0.01; done\""
+                f">> {FILE}$i; let i++; sleep 0.01; done\""
             )
         # Once the pod gets deleted, the I/O execution will get terminated.
         # Hence, catching this exception
@@ -604,12 +645,16 @@ def run_io_in_bg(pod_obj, expect_to_fail=False):
                     return
             raise ex
 
-    thread = Thread(target=exec_run_io_cmd, args=(pod_obj, expect_to_fail,))
+    thread = Thread(target=exec_run_io_cmd, args=(pod_obj, expect_to_fail, fedora_dc))
     thread.start()
     time.sleep(2)
 
     # Checking file existence
-    test_file = TEST_FILE + "1"
+    if fedora_dc:
+        FILE = FEDORA_TEST_FILE
+    else:
+        FILE = TEST_FILE
+    test_file = FILE + "1"
     assert check_file_existence(pod_obj, test_file), (
         f"I/O failed to start inside {pod_obj.name}"
     )
@@ -666,6 +711,22 @@ def get_pods_having_label(label, namespace):
     """
     ocp_pod = OCP(kind=constants.POD, namespace=namespace)
     pods = ocp_pod.get(selector=label).get('items')
+    return pods
+
+
+def get_deployments_having_label(label, namespace):
+    """
+    Fetches deployment resources with given label in given namespace
+
+    Args:
+        label (str): label which deployments might have
+        namespace (str): Namespace in which to be looked up
+
+    Return:
+        list: deployment OCP instances
+    """
+    ocp_deployment = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+    pods = ocp_deployment.get(selector=label).get('items')
     return pods
 
 
@@ -743,6 +804,46 @@ def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
     osds = get_pods_having_label(osd_label, namespace)
     osd_pods = [Pod(**osd) for osd in osds]
     return osd_pods
+
+
+def get_osd_prepare_pods(
+    osd_prepare_label=constants.OSD_PREPARE_APP_LABEL, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+):
+    """
+    Fetches info about osd prepare pods in the cluster
+
+    Args:
+        osd_prepare_label (str): label associated with osd prepare pods
+            (default: constants.OSD_PREPARE_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list: OSD prepare pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    osds = get_pods_having_label(osd_prepare_label, namespace)
+    osd_pods = [Pod(**osd) for osd in osds]
+    return osd_pods
+
+
+def get_osd_deployments(osd_label=constants.OSD_APP_LABEL, namespace=None):
+    """
+    Fetches info about osd deployments in the cluster
+
+    Args:
+        osd_label (str): label associated with osd deployments
+            (default: defaults.OSD_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list: OSD deployment OCS instances
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    osds = get_deployments_having_label(osd_label, namespace)
+    osd_deployments = [OCS(**osd) for osd in osds]
+    return osd_deployments
 
 
 def get_pod_count(label, namespace=None):
@@ -873,7 +974,7 @@ def validate_pods_are_respinned_and_running_state(pod_objs_list):
 
     """
     for pod in pod_objs_list:
-        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING)
+        helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING, timeout=180)
 
     for pod in pod_objs_list:
         pod_obj = pod.get()
@@ -1047,7 +1148,7 @@ def get_operator_pods(operator_label=constants.OPERATOR_LABEL, namespace=None):
     return operator_pods
 
 
-def upload(pod_name, localpath, remotepath):
+def upload(pod_name, localpath, remotepath, namespace=None):
     """
     Upload a file to pod
 
@@ -1057,7 +1158,8 @@ def upload(pod_name, localpath, remotepath):
         remotepath (str): Target path on the pod
 
     """
-    cmd = f"oc cp {os.path.expanduser(localpath)} {pod_name}:{remotepath}"
+    namespace = namespace or constants.DEFAULT_NAMESPACE
+    cmd = f"oc -n {namespace} cp {os.path.expanduser(localpath)} {pod_name}:{remotepath}"
     run_cmd(cmd)
 
 
@@ -1113,3 +1215,41 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
             logger.error(f"Found pods: {pods_len} but expected: {count}!")
         elif pod_count == count:
             return
+
+
+def get_noobaa_pods(noobaa_label=constants.NOOBAA_APP_LABEL, namespace=None):
+    """
+    Fetches info about noobaa pods in the cluster
+
+    Args:
+        noobaa_label (str): label associated with osd pods
+            (default: defaults.NOOBAA_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list : of noobaa pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    noobaas = get_pods_having_label(noobaa_label, namespace)
+    noobaa_pods = [Pod(**noobaa) for noobaa in noobaas]
+
+    return noobaa_pods
+
+
+def wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj):
+    """
+    Wait for DC app pods to reach running state
+
+    Args:
+        dc_pod_obj (list): list of dc app pod objects
+
+    """
+    for pod_obj in dc_pod_obj:
+        name = pod_obj.get_labels().get('name')
+        dpod_list = get_all_pods(selector_label=f"name={name}", wait=True)
+        for dpod in dpod_list:
+            if '-1-deploy' not in dpod.name:
+                helpers.wait_for_resource_state(
+                    dpod, constants.STATUS_RUNNING, timeout=1200
+                )

@@ -6,3 +6,4 @@ DEPLOYMENT:
 ENV_DATA:
   worker_num_cpus: '12'
   master_num_cpus: '4'
+  fio_storageutilization_min_mbps: 10.0
