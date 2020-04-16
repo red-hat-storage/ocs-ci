@@ -1752,10 +1752,10 @@ def bucket_factory_fixture(request, mcg_obj):
 @pytest.fixture(scope='class')
 def cloud_uls_factory(request, cld_mgr):
     """
-        Create a Underlying Storage factory.
-        Calling this fixture creates a new underlying storage(s).
-        Args:
-            cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
+     Create a Underlying Storage factory.
+     Calling this fixture creates a new underlying storage(s).
+     Args:
+        cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
     """
     all_created_uls = {
         'aws': set(),
