@@ -14,7 +14,7 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest, workloads
+from ocs_ci.framework.testlib import E2ETest
 from tests import helpers
 from ocs_ci.ocs import machine, node
 
@@ -137,9 +137,8 @@ class TestVDBenchWorkload(E2ETest):
     """
 
     @pytest.mark.parametrize('template', [
-            pytest.param("VDBench-Basic.yaml", marks=pytest.mark.workloads()),
-            pytest.param("VDBench-Basic-FS.yaml", marks=pytest.mark.workloads())
-        ]
+        pytest.param("VDBench-Basic.yaml", marks=pytest.mark.workloads()),
+        pytest.param("VDBench-Basic-FS.yaml", marks=pytest.mark.workloads())]
     )
     @pytest.mark.parametrize('load', [15, 35, 70])
     @pytest.mark.parametrize(
@@ -195,7 +194,7 @@ class TestVDBenchWorkload(E2ETest):
         log.info('Calculating Storage size....')
         ceph_cluster = CephCluster()
         total_capacity = ceph_cluster.get_ceph_capacity()
-        assert  (total_capacity > constants.VDBENCH_MIN_CAPACITY), \
+        assert (total_capacity > constants.VDBENCH_MIN_CAPACITY), \
             "Storage capacity is too low for performance testing"
         log.info(f'The Total usable capacity is {total_capacity}')
 
@@ -207,12 +206,12 @@ class TestVDBenchWorkload(E2ETest):
             total_dirs = width ** depth
             log.info(f'The total dirs in the tree {total_dirs}')
             log.info(f'Going to run with {load} % of the capacity load.')
-            tested_capacity = round(total_capacity * 1024 * load /  100)
+            tested_capacity = round(total_capacity * 1024 * load / 100)
             log.info(f'Tested capacity is {tested_capacity} MB')
-            servers = round (tested_capacity / capacity_per_pod)
+            servers = round(tested_capacity / capacity_per_pod)
 
             """
-                To spread the application pods evenly on all workers or application nods and at least 2 app pods 
+                To spread the application pods evenly on all workers or application nods and at least 2 app pods
                 per node.
             """
             nodes = len(node.get_typed_nodes(node_type=constants.WORKER_MACHINE))
@@ -226,7 +225,7 @@ class TestVDBenchWorkload(E2ETest):
             files = round(tested_capacity / servers / total_dirs)
             total_files = round(files * servers * total_dirs)
             log.info(f'number of pods is {servers}')
-            log.info (f'Going to create {total_files} files !')
+            log.info(f'Going to create {total_files} files !')
             log.info(f'number of files in dir is {files}')
 
         """
