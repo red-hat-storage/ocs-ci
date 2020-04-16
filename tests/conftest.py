@@ -47,7 +47,12 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility import templating
-from tests.manage.mcg.helpers import *
+from tests.manage.mcg.helpers import (
+    oc_create_aws_backingstore, oc_create_google_backingstore, oc_create_azure_backingstore,
+    oc_create_s3comp_backingstore, oc_create_pv_backingstore, cli_create_aws_backingstore,
+    cli_create_google_backingstore, cli_create_azure_backingstore, cli_create_s3comp_backingstore,
+    cli_create_pv_backingstore
+)
 
 log = logging.getLogger(__name__)
 
@@ -107,7 +112,7 @@ def supported_configuration():
     Last documentation check: 2020-02-21
     """
     min_cpu = 16
-    min_memory = 64 * 10**9
+    min_memory = 64 * 10 ** 9
 
     node_obj = ocp.OCP(kind=constants.NODE)
     log.info('Checking if system meets minimal requirements')
@@ -121,13 +126,13 @@ def supported_configuration():
         real_cpu = int(node_info['status']['capacity']['cpu'])
         real_memory = node_info['status']['capacity']['memory']
         if real_memory.endswith('Ki'):
-            real_memory = int(real_memory[0:-2]) * 2**10
+            real_memory = int(real_memory[0:-2]) * 2 ** 10
         elif real_memory.endswith('Mi'):
-            real_memory = int(real_memory[0:-2]) * 2**20
+            real_memory = int(real_memory[0:-2]) * 2 ** 20
         elif real_memory.endswith('Gi'):
-            real_memory = int(real_memory[0:-2]) * 2**30
+            real_memory = int(real_memory[0:-2]) * 2 ** 30
         elif real_memory.endswith('Ti'):
-            real_memory = int(real_memory[0:-2]) * 2**40
+            real_memory = int(real_memory[0:-2]) * 2 ** 40
         else:
             real_memory = int(real_memory)
 
@@ -738,6 +743,7 @@ def teardown_factory_fixture(request):
                 )
                 if reclaim_policy == constants.RECLAIM_POLICY_DELETE:
                     helpers.validate_pv_delete(instance.backed_pv)
+
     request.addfinalizer(finalizer)
     return factory
 
@@ -767,8 +773,10 @@ def service_account_factory(request):
         if active_service_account_obj and not service_account:
             return active_service_account_obj
         elif service_account:
-            sa_obj = helpers.get_serviceaccount_obj(sa_name=service_account, namespace=project.namespace)
-            if not helpers.validate_scc_policy(sa_name=service_account, namespace=project.namespace):
+            sa_obj = helpers.get_serviceaccount_obj(sa_name=service_account,
+                                                    namespace=project.namespace)
+            if not helpers.validate_scc_policy(sa_name=service_account,
+                                               namespace=project.namespace):
                 helpers.add_scc_policy(sa_name=service_account, namespace=project.namespace)
             sa_obj.project = project
             active_service_account_obj = sa_obj
@@ -926,6 +934,7 @@ def health_checker(request, tier_marks_name):
             # for next test
             ceph_health_check()
             raise
+
     node = request.node
     request.addfinalizer(finalizer)
     for mark in node.iter_markers():
@@ -959,6 +968,7 @@ def cluster(request, log_cli_level):
     if teardown:
         def cluster_teardown_finalizer():
             deployer.destroy_cluster(log_cli_level)
+
         request.addfinalizer(cluster_teardown_finalizer)
         log.info("Will teardown cluster because --teardown was provided")
 
@@ -1175,6 +1185,7 @@ def multi_pvc_factory_fixture(
     3. Create PVCs based on the specified distribution number of access modes.
        The order of PVC creation is independent of access mode.
     """
+
     def factory(
         interface=constants.CEPHBLOCKPOOL,
         project=None,
@@ -1319,6 +1330,7 @@ def memory_leak_function(request):
             helpers.memory_leak_analysis(median_dict)
             ....
     """
+
     def finalizer():
         """
         Finalizer to stop memory leak data capture thread and cleanup the files
@@ -1380,6 +1392,7 @@ def memory_leak_function(request):
                                 f.write(str(datetime.now()))
                                 f.write(' ')
                                 f.write(line)
+
     log.info(f"Start memory leak data capture in the test background")
     thread = threading.Thread(target=run_memory_leak_in_bg)
     thread.start()
@@ -1454,9 +1467,11 @@ def cld_mgr(request):
     Returns:
         CloudManager: A CloudManager resource
     """
+
     # Todo: Find a more elegant method
     def finalizer():
         run_cmd('oc -n openshift-storage delete secret backing-store-secret-client-secret')
+
     request.addfinalizer(finalizer)
 
     return CloudManager()
@@ -1485,6 +1500,7 @@ def mcg_obj_fixture(request):
     if config.ENV_DATA['platform'].lower() == 'aws':
         def finalizer():
             mcg_obj.cred_req_obj.delete()
+
         request.addfinalizer(finalizer)
 
     return mcg_obj
@@ -1513,6 +1529,7 @@ def created_pods_fixture(request):
         for pod in created_pods_objects:
             log.info(f'Deleting pod {pod.name}')
             pod.delete()
+
     request.addfinalizer(pod_cleanup)
     return created_pods_objects
 
