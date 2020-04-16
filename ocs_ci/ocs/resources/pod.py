@@ -714,6 +714,22 @@ def get_pods_having_label(label, namespace):
     return pods
 
 
+def get_deployments_having_label(label, namespace):
+    """
+    Fetches deployment resources with given label in given namespace
+
+    Args:
+        label (str): label which deployments might have
+        namespace (str): Namespace in which to be looked up
+
+    Return:
+        list: deployment OCP instances
+    """
+    ocp_deployment = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+    pods = ocp_deployment.get(selector=label).get('items')
+    return pods
+
+
 def get_mds_pods(mds_label=constants.MDS_APP_LABEL, namespace=None):
     """
     Fetches info about mds pods in the cluster
@@ -788,6 +804,46 @@ def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
     osds = get_pods_having_label(osd_label, namespace)
     osd_pods = [Pod(**osd) for osd in osds]
     return osd_pods
+
+
+def get_osd_prepare_pods(
+    osd_prepare_label=constants.OSD_PREPARE_APP_LABEL, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+):
+    """
+    Fetches info about osd prepare pods in the cluster
+
+    Args:
+        osd_prepare_label (str): label associated with osd prepare pods
+            (default: constants.OSD_PREPARE_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list: OSD prepare pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    osds = get_pods_having_label(osd_prepare_label, namespace)
+    osd_pods = [Pod(**osd) for osd in osds]
+    return osd_pods
+
+
+def get_osd_deployments(osd_label=constants.OSD_APP_LABEL, namespace=None):
+    """
+    Fetches info about osd deployments in the cluster
+
+    Args:
+        osd_label (str): label associated with osd deployments
+            (default: defaults.OSD_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list: OSD deployment OCS instances
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    osds = get_deployments_having_label(osd_label, namespace)
+    osd_deployments = [OCS(**osd) for osd in osds]
+    return osd_deployments
 
 
 def get_pod_count(label, namespace=None):
@@ -1092,7 +1148,7 @@ def get_operator_pods(operator_label=constants.OPERATOR_LABEL, namespace=None):
     return operator_pods
 
 
-def upload(pod_name, localpath, remotepath):
+def upload(pod_name, localpath, remotepath, namespace=None):
     """
     Upload a file to pod
 
@@ -1102,7 +1158,8 @@ def upload(pod_name, localpath, remotepath):
         remotepath (str): Target path on the pod
 
     """
-    cmd = f"oc cp {os.path.expanduser(localpath)} {pod_name}:{remotepath}"
+    namespace = namespace or constants.DEFAULT_NAMESPACE
+    cmd = f"oc -n {namespace} cp {os.path.expanduser(localpath)} {pod_name}:{remotepath}"
     run_cmd(cmd)
 
 

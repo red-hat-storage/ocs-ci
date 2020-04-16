@@ -10,6 +10,7 @@ from botocore.exceptions import ClientError
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import CLEANUP_YAML, TEMPLATE_CLEANUP_DIR
+from ocs_ci.ocs.exceptions import ClusterIOTagNotFound
 from ocs_ci.utility.utils import get_openshift_installer, destroy_cluster
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import (
@@ -143,9 +144,14 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
                     launch_time = instance.launch_time
                     current_time = datetime.datetime.now(launch_time.tzinfo)
                     running_time = current_time - launch_time
+                    logger.info(
+                        f"Instance {[tag['Value'] for tag in instance.tags if tag['Key'] == 'Name'][0]} "
+                        f"(id: {instance.id}) running time is {running_time} hours while the allowed"
+                        f" running time for it is {allowed_running_time/3600} hours"
+                    )
                     if running_time.seconds > allowed_running_time:
                         return True
-            return False
+        return False
 
     aws = AWS(region_name=region_name)
     clusters_to_delete = list()
@@ -175,13 +181,22 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
     # Get all cloudformation based clusters to delete
     cf_clusters_to_delete = list()
     for vpc_name in cloudformation_vpc_names:
-        instance_dicts = aws.get_instances_by_name_pattern(vpc_name.strip('-vpc'))
+        instance_dicts = aws.get_instances_by_name_pattern(f"{vpc_name.strip('-vpc')}*")
         ec2_instances = [aws.get_ec2_instance(instance_dict['id']) for instance_dict in instance_dicts]
         if not ec2_instances:
             continue
-        cluster_io_tag = [
-            tag['Key'] for tag in ec2_instances[0].tags if 'kubernetes.io/cluster' in tag['Key']
-        ]
+        cluster_io_tag = None
+        for instance in ec2_instances:
+            cluster_io_tag = [
+                tag['Key'] for tag in instance.tags
+                if 'kubernetes.io/cluster' in tag['Key']
+            ]
+            if cluster_io_tag:
+                break
+        if not cluster_io_tag:
+            raise ClusterIOTagNotFound(
+                "Unable to find valid cluster IO tag from ec2 instance tags"
+            )
         cluster_name = cluster_io_tag[0].strip('kubernetes.io/cluster/')
         if determine_cluster_deletion(ec2_instances, cluster_name):
             cf_clusters_to_delete.append(cluster_name)

@@ -164,3 +164,7 @@ class InvalidStatusCode(Exception):
 
 class NoBucketPolicyResponse(Exception):
     pass
+
+
+class ClusterIOTagNotFound(Exception):
+    pass

@@ -15,7 +15,7 @@ from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework.testlib import E2ETest, workloads, tier1, ignore_leftovers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
-
+from ocs_ci.utility.utils import get_ocp_version
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,13 @@ def setup_fixture(install_logging):
     logger.info("Testcases execution post deployment of openshift-logging")
 
 
+@pytest.mark.skipif(
+    get_ocp_version() == "4.4",
+    reason=(
+        "Skipping logging tests on OCP 4.4 cause of W/A issue: "
+        "https://github.com/red-hat-storage/ocs-ci/issues/1833"
+    )
+)
 @pytest.mark.usefixtures(
     setup_fixture.__name__
 )
