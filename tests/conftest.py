@@ -35,6 +35,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
+from tests.helpers import create_unique_resource_name
 from tests.manage.mcg.helpers import get_rgw_restart_count
 from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
 from ocs_ci.ocs.resources.mcg import MCG
@@ -46,6 +47,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility import templating
+from tests.manage.mcg.helpers import *
 
 log = logging.getLogger(__name__)
 
@@ -1728,6 +1730,189 @@ def bucket_factory_fixture(request, mcg_obj):
     request.addfinalizer(bucket_cleanup)
 
     return _create_buckets
+
+
+@pytest.fixture(scope='class')
+def cloud_uls_factory(request, cld_mgr):
+    """
+        Create a Underlying Storage factory.
+        Calling this fixture creates a new underlying storage(s).
+        Args:
+            cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
+    """
+    all_created_uls = {
+        'aws': set(),
+        'google': set(),
+        'azure': set(),
+        's3comp': set()
+    }
+
+    ulsMap = {
+        'aws': cld_mgr.aws_client,
+        'google': cld_mgr.google_client,
+        'azure': cld_mgr.azure_client,
+        's3comp': cld_mgr.s3comp_client
+    }
+
+    def _create_uls(uls_dict):
+        """
+        Creates and deletes all underlying storage that were created as part of the test
+        Args:
+            uls_dict (dict): Dictionary containing storage provider as key and a list of tuples
+            as value.
+            each tuple contain amount as first parameter and region as second parameter.
+            Example:
+                'aws': [(3,us-west-1),(2,eu-west-2)]
+        Returns:
+            dict: A dictionary of cloud names as keys and uls names sets as value.
+        """
+        current_call_created_uls = {
+            'aws': set(),
+            'google': set(),
+            'azure': set(),
+            's3comp': set()
+        }
+
+        for cloud, params in uls_dict.items():
+            if cloud.lower() not in ulsMap:
+                raise RuntimeError(
+                    f'Invalid interface type received: {cloud}. '
+                    f'available types: {", ".join(ulsMap.keys())}'
+                )
+            for tup in params:
+                amount, region = tup
+                for i in range(amount):
+                    uls_name = create_unique_resource_name(
+                        resource_description='uls', resource_type=cloud.lower()
+                    )
+                    ulsMap[cloud.lower()].create_uls(uls_name, region)
+                    all_created_uls[cloud].add(uls_name)
+                    current_call_created_uls[cloud.lower()].add(uls_name)
+
+            return current_call_created_uls
+
+    def uls_cleanup():
+        for cloud, uls_set in all_created_uls.items():
+            client = ulsMap[cloud]
+            if client is not None:
+                all_existing_uls = client.get_all_uls_names()
+                for uls in uls_set:
+                    if uls in all_existing_uls:
+                        log.info(f'Cleaning up uls {uls}')
+                        client.delete_uls(uls)
+                        log.info(
+                            f"Verifying whether uls: {uls} exists after deletion"
+                        )
+                        sleep(5)  # wait for aws command to pass
+                        assert not client.verify_uls_exists(uls), (
+                            f'Unable to delete Underlying Storage {uls}'
+                        )
+                    else:
+                        log.info(f'Underlying Storage {uls} not found.')
+
+    request.addfinalizer(uls_cleanup)
+
+    return _create_uls
+
+
+@pytest.fixture(scope='class')
+def backingstore_factory(request, cld_mgr, cloud_uls_factory):
+    """
+        Create a Backing Store factory.
+        Calling this fixture creates a new Backing Store(s).
+        Args:
+            cloud_uls_factory: Factory for underlying storage creation
+            cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
+    """
+    created_backingstores = []
+
+    cmdMap = {
+        'oc': {
+            'aws': oc_create_aws_backingstore,
+            'google': oc_create_google_backingstore,
+            'azure': oc_create_azure_backingstore,
+            's3comp': oc_create_s3comp_backingstore,
+            'pv': oc_create_pv_backingstore
+        },
+        'cli': {
+            'aws': cli_create_aws_backingstore,
+            'google': cli_create_google_backingstore,
+            'azure': cli_create_azure_backingstore,
+            's3comp': cli_create_s3comp_backingstore,
+            'pv': cli_create_pv_backingstore
+        }
+    }
+
+    def _create_backingstore(method, uls_dict):
+        """
+        Creates and deletes all underlying storage that were created as part of the test
+        Args:
+            method (str): String for selecting method of backing store creation (CLI/OC)
+            uls_dict (dict): Dictionary containing storage provider as key and a list of tuples
+            as value.
+            for cloud backingstore: each tuple contain amount as first parameter
+            and region as second parameter.
+            for pv: each tuple contain number of volumes as first parameter
+            and size as second parameter.
+            Example:
+                'aws': [(3,us-west-1),(2,eu-west-2)]
+                'pv': [(3,32,ocs-storagecluster-ceph-rbd),(2,100,ocs-storagecluster-ceph-rbd)]
+        Returns:
+            list: A list of backingstore objects.
+        """
+        if method.lower() not in cmdMap:
+            raise RuntimeError(
+                f'Invalid method type received: {method}. '
+                f'available types: {", ".join(cmdMap.keys())}'
+            )
+        for cloud, uls_lst in uls_dict.items():
+            for uls_tup in uls_lst:
+                # Todo: Replace multiple .append calls, create names in advance, according to amountoc
+                if cloud.lower() not in cmdMap[method.lower()]:
+                    raise RuntimeError(
+                        f'Invalid cloud type received: {cloud}. '
+                        f'available types: {", ".join(cmdMap[method.lower()].keys())}'
+                    )
+                if cloud == 'pv':
+                    vol_num, size, storage_class = uls_tup
+                    backingstore_name = create_unique_resource_name(
+                        resource_description='backingstore', resource_type=cloud.lower()
+                    )
+                    # removing characters from name (pod name length bellow 64 characters issue)
+                    backingstore_name = backingstore_name[:-16]
+                    created_backingstores.append(backingstore_name)
+                    cmdMap[method.lower()][cloud.lower()](
+                        backingstore_name, vol_num, size, storage_class
+                    )
+                else:
+                    region = uls_tup[1]
+                    uls_dict = cloud_uls_factory({cloud: [uls_tup]})
+                    for uls_name in uls_dict[cloud.lower()]:
+                        backingstore_name = create_unique_resource_name(
+                            resource_description='backingstore', resource_type=cloud.lower()
+                        )
+                        # removing characters from name (pod name length bellow 64 characters issue)
+                        backingstore_name = backingstore_name[:-16]
+                        created_backingstores.append(backingstore_name)
+                        cmdMap[method.lower()][cloud.lower()](
+                            cld_mgr, backingstore_name, uls_name, region
+                        )
+
+        return created_backingstores
+
+    def backingstore_cleanup():
+        for backingstore_name in created_backingstores:
+            log.info(f'Cleaning up backingstore {backingstore_name}')
+            current_namespace = config.ENV_DATA['cluster_namespace']
+            run_cmd(f'oc -n {current_namespace} delete backingstore {backingstore_name}')
+            log.info(
+                f"Verifying whether backingstore {backingstore_name} exists after deletion"
+            )
+            # Todo: implement deletion assertion
+
+    request.addfinalizer(backingstore_cleanup)
+
+    return _create_backingstore
 
 
 @pytest.fixture()
