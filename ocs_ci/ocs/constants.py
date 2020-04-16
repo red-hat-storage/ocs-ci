@@ -502,6 +502,11 @@ OPENSHIFT_UPGRADE_INFO_API = (
 APP_NODE_LABEL = 'app-node'
 VDBENCH_NODE_LABEL = 'vdbench'
 VDBENCH_RESULTS_FILE = '/tmp/Results.tar.gz'
+VDBENCH_WIDTH = 4  # the width of the directory tree  that will be created
+VDBENCH_DEPTH = 4  # the depth of the directory tree  that will be created
+VDBENCH_FILE_SIZE = 1  # the file size in MB that will be created
+VDBENCH_CAP_PER_POD = 80000  # the Maximum capacity (in MB) per pod in the test
+VDBENCH_MIN_CAPACITY = 300  # minimum storage capacity (in GB) for the test to run
 
 # Platforms
 AWS_PLATFORM = 'aws'
