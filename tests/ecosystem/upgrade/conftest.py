@@ -517,11 +517,19 @@ def pre_upgrade_pods_running_io(
 
 
 @pytest.fixture(scope='session')
-def upgrade_buckets(bucket_factory_session, awscli_pod_session, mcg_obj_session):
+def upgrade_buckets(
+    bucket_factory_session,
+    awscli_pod_session,
+    mcg_obj_session
+):
     """
+    Additional NooBaa buckets that are created for upgrade testing. First
+    bucket is populated with data and quota to 1 PB is set.
+
     Returns:
         list: list of buckets that should survive OCS and OCP upgrade.
-            First one has bucket quota set to 1PB and is populated with 3.5 GB.
+            First one has bucket quota set to 1 PB and is populated
+            with 3.5 GB.
 
     """
     buckets = bucket_factory_session(amount=3)
