@@ -738,6 +738,9 @@ def measure_noobaa_exceed_bucket_quota(
             }
         }
     )
+    bucket_info = mcg_obj.get_bucket_info(bucket.name)
+    logger.info(f"Bucket {bucket.name} storage: {bucket_info['storage']}")
+    logger.info(f"Bucket {bucket.name} data: {bucket_info['data']}")
 
     def teardown():
         """
@@ -785,6 +788,11 @@ def measure_noobaa_exceed_bucket_quota(
         'measure_noobaa_exceed__bucket_quota.json'
     )
     measured_op = measure_operation(exceed_bucket_quota, test_file)
+
+    bucket_info = mcg_obj.get_bucket_info(bucket.name)
+    logger.info(f"Bucket {bucket.name} storage: {bucket_info['storage']}")
+    logger.info(f"Bucket {bucket.name} data: {bucket_info['data']}")
+
     logger.info(f"Deleting data from bucket {bucket_name}")
     for i in range(1, 6):
         awscli_pod.exec_cmd_on_pod(
