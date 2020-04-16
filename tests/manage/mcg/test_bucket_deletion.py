@@ -197,7 +197,6 @@ class TestBucketDeletion:
 
     @pytest.mark.bugzilla("1753109")
     @pytest.mark.polarion_id("OCS-1924")
-    @tier3
     def test_s3_bucket_delete_1t_objects(self, mcg_obj, awscli_pod):
         """
         Test with deletion of bucket has 1T objects stored in.
