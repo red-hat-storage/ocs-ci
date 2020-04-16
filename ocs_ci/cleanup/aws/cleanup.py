@@ -194,7 +194,7 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
                 break
         if not cluster_io_tag:
             continue
-        cluster_name = cluster_io_tag[0].strip('kubernetes.io/cluster/')
+        cluster_name = cluster_io_tag[0].replace('kubernetes.io/cluster/', '')
         if determine_cluster_deletion(ec2_instances, cluster_name):
             cf_clusters_to_delete.append(cluster_name)
 
