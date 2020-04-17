@@ -3,7 +3,7 @@ from ocs_ci.framework.pytest_customization.marks import polarion_id
 from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier1
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import storage_cluster, pod
+from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility.utils import ceph_health_check
 
 
