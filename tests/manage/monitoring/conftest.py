@@ -123,6 +123,9 @@ def measure_stop_ceph_mon(measurement_dir):
     logger.info(f"Monitors to stop: {mons_to_stop}")
     logger.info(f"Monitors left to run: {mons[:split_index]}")
 
+    # run_time of operation
+    run_time = 60 * 14
+
     def stop_mon():
         """
         Downscale Ceph Monitor deployments for 14 minutes. First 15 minutes
@@ -137,8 +140,6 @@ def measure_stop_ceph_mon(measurement_dir):
         Returns:
             str: Names of downscaled deployments
         """
-        # run_time of operation
-        run_time = 60 * 14
         nonlocal oc
         nonlocal mons_to_stop
         for mon in mons_to_stop:
@@ -150,6 +151,9 @@ def measure_stop_ceph_mon(measurement_dir):
 
     test_file = os.path.join(measurement_dir, 'measure_stop_ceph_mon.json')
     measured_op = measure_operation(stop_mon, test_file)
+
+    # expected minimal downtime of a mon inflicted by this fixture
+    measured_op['min_downtime'] = run_time - (60 * 2)
 
     # get new list of monitors to make sure that new monitors were deployed
     mon_deployments = oc.get(selector=constants.MON_APP_LABEL)['items']
