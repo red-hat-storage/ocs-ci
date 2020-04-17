@@ -1,3 +1,4 @@
+import os
 import logging
 import time
 import boto3
@@ -33,6 +34,7 @@ class AWS(object):
     _ec2_client = None
     _ec2_resource = None
     _region_name = None
+    _s3_client = None
 
     def __init__(self, region_name=None):
         """
@@ -70,6 +72,22 @@ class AWS(object):
                 region_name=self._region_name,
             )
         return self._ec2_resource
+
+    @property
+    def s3_client(self):
+        """
+        Property for s3 client
+
+        Returns:
+            boto3.resource instance of s3
+
+        """
+        if not self._s3_client:
+            self._s3_client = boto3.resource(
+                's3',
+                region_name=self._region_name,
+            )
+        return self._s3_client
 
     def get_ec2_instance(self, instance_id):
         """
@@ -724,6 +742,107 @@ class AWS(object):
             self.cf_client.delete_stack(StackName=stack_name)
         for stack_name in stack_names:
             verify_stack_deleted(stack_name)
+
+    def upload_file_to_s3_bucket(self, bucket_name, object_key, file_path):
+        """
+        Upload objects to s3 bucket
+
+        Args:
+            bucket_name (str): Name of a valid s3 bucket
+            object_key (str): the key for the s3 object
+            file_path (str): path for the file to be uploaded
+        """
+        self.s3_client.Bucket(bucket_name).upload_file(object_key, file_path)
+
+    def get_s3_bucket_object_url(self, bucket_name, object_key):
+        """
+        Get s3 bucket object url
+
+        Args:
+            bucket_name (str): Name of a valid s3 bucket
+            object_key (str): Name of the key for s3 object
+
+        Returns:
+            s3_url (str): An s3 url
+
+        """
+        s3_url = os.path.join(
+            f'https://{bucket_name}.s3.{self._region_name}.amazonws.com',
+            f'{object_key}'
+        )
+        return s3_url
+
+    def get_stack_instance_id(self, stack_name, logical_id):
+        """
+        Get the instance id associated with the cloudformation stack
+
+        Args:
+            stack_name (str): Name of the cloudformation stack
+            logical_id (str):  LogicalResourceId of the resource
+                ex: "Worker0"
+
+        Returns:
+            instance_id (str): Id of the instance
+
+        """
+        resource = self.cf_client(
+            StackName=stack_name, LogicalResourceId=logical_id
+        )
+        return resource.get('StackResourceDetail').get('PhysicalResourceId')
+
+    def get_stack_params(self, stack_name, param_name):
+        """
+        Get value of a particular param
+
+        Args:
+            stack_name (str): AWS cloudformation stack name
+            param_name (str): Stack parameter name
+
+        Returns:
+            str: Parameter value
+
+        """
+        stack_description = self.cf_client(
+            StackName=stack_name
+        )
+        params = stack_description.get('Stacks')[0].get('Parameters')
+        for param_dict in params:
+            if param_dict.get('ParameterKey') == param_name:
+                return param_dict.get('ParameterValue')
+
+    def get_worker_ignition_location(self, stack_name):
+        """
+        Get the ignition location from given stack
+
+        Args:
+            stack_name (str): AWS cloudformation stack name
+
+        Returns:
+            ignition_location (str): An AWS URL ignition location
+
+        """
+        param_name = 'IgnitionLocation'
+        ignition_loction = self.get_stack_params(
+            stack_name, param_name
+        )
+        return ignition_loction
+
+    def get_worker_instance_profile_name(self, stack_name):
+        """
+        Get the worker instance profile name
+
+        Args:
+            stack_name (str): AWS cloudformation stack name
+
+        Returns:
+            worker_instance_profile_name (str): instance profile name
+
+        """
+        param_name = 'WorkerInstanceProfileName'
+        worker_instance_profile_name = self.get_stack_params(
+            stack_name, param_name
+        )
+        return worker_instance_profile_name
 
 
 def get_instances_ids_and_names(instances):

@@ -4,6 +4,8 @@ import random
 
 import boto3
 import yaml
+import json
+import re
 
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
@@ -12,10 +14,11 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.ocs.node import get_node_objs, get_typed_worker_nodes
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources import pod, ocs
 from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
-    get_ocp_version, get_az_count, TimeoutSampler
+    get_ocp_version, get_az_count, TimeoutSampler,
+    download_file, delete_file
 )
 
 
@@ -577,6 +580,10 @@ class AWSNodes(NodesBase):
         """
         if node_list[0].node_type == 'RHEL':
             self.attach_rhel_nodes_to_upi_cluster(node_list)
+        elif node_list[0].node_type == 'RHCOS':
+            # Nothing to do, as create stack
+            # itself would have attached the node
+            pass
 
     def attach_rhel_nodes_to_upi_cluster(self, node_list):
         """
@@ -800,7 +807,8 @@ class AWSUPINode(AWSNodes):
             'ec2', region_name=self.region
         )
         # cloudformation
-        self.cf = boto3.client('cloudformation', region_name=self.region)
+        self.cf = self.aws.cf_client
+        self.infra_id = get_infra_id(self.cluster_path)
 
     def _prepare_node(self, node_id):
         """
@@ -818,6 +826,271 @@ class AWSUPINode(AWSNodes):
             except Exception:
                 logger.error("Failed to create RHEL node")
                 raise
+        elif self.node_type == 'RHCOS':
+            conf = self._prepare_rhcos_node_conf()
+            conf['node_id'] = node_id
+            try:
+                self.aws_instance_obj = self._prepare_upi_rhcos_node(conf)
+            except Exception:
+                logger.error("Failed to create RHCOS node")
+                raise
+            self.approve_pending_csr()
+
+    def _prepare_rhcos_node_conf(self):
+        """
+        Merge default RHCOS node configuration for rhcos node
+        along with the user provided config
+
+        Returns:
+            conf (dict): A dictionary of merged user and default values
+
+        """
+        conf = self.read_default_config(constants.RHCOS_WORKER_CONF)
+        default_conf = conf.get('ENV_DATA')
+        merge_dict(default_conf, self.node_conf)
+        logger.info(f"Config after merge is {default_conf}")
+        return default_conf
+
+    def _prepare_upi_rhcos_node(self, conf):
+        """
+        Handle RHCOS worker instance creation using cloudformation template,
+        Create RHCOS instance with ami same as master
+
+        Args:
+            conf (dict): configuration for node
+
+        Returns:
+           awsinstance object
+
+        """
+        worker_template_path = self.get_rhcos_worker_template()
+        self.bucket_name = constants.AWS_S3_UPI_BUCKET
+        self.template_obj_key = 'workertemplate'
+        self.add_cert_to_template(worker_template_path)
+        self.aws.upload_file_to_s3_bucket(
+            self.bucket_name, self.template_obj_key, worker_template_path
+        )
+        s3_url = self.aws.get_s3_bucket_object_url(
+            self.bucket_name, self.template_obj_key
+        )
+        self.create_stack(conf, s3_url)
+        instance_id = self.aws.get_stack_instance_id(
+            self.stack_name, constants.AWS_WORKER_LOGICAL_RESOURCE_ID
+        )
+
+        delete_file(worker_template_path)
+        return self.aws.get_ec2_instance(instance_id)
+
+    def create_stack(self, conf, s3_url):
+        """
+        Create a new cloudformation stack for worker creation
+
+        Args:
+            conf (dict): of worker configuration
+            s3_url (str): An aws url for accessing s3 object
+        """
+        index = conf['node_id']
+        stack_name = f"{self.cluster_name}-no{index}"
+
+        try:
+            response = self.cf.create_stack(
+                StackName=stack_name,
+                TemplateURL=s3_url,
+                Parameters=self.build_stack_params(index, conf),
+                Capabilities='CAPABILITY_NAMED_IAM'
+            )
+        except Exception:
+            logger.error("Cloudformation Stack creation failed")
+            raise
+        self.cf.get_waiter('stack_create_complete').wait(StackName=stack_name)
+        logger.info(f"Stack {stack_name} created successfuly")
+        self.stack_name = stack_name
+        self.stack_id = response['StackId']
+        logger.info(f"Stackid = {self.stack_id}")
+
+    def build_stack_params(self, index, conf):
+        """
+        Build all the params required for a stack creation
+
+        Args:
+            index (int): An integer index for this stack
+            conf (dict): Node config
+
+        Returns:
+            list: of param dicts
+
+        """
+        param_list = []
+        pk = 'ParameterKey'
+        pv = 'ParameterValue'
+
+        param_list.append({pk: 'Index', pv: index})
+        param_list.append({pk: 'InfrastructureName', pv: self.infra_id})
+        param_list.append({pk: 'RhcosAmi', pv: self.worker_image_id})
+        param_list.append(
+            {
+                pk: 'IgnitionLocation', pv: self.worker_ignition_location
+            }
+        )
+        param_list.append({pk: 'Subnet', pv: self.worker_subnet})
+        param_list.append(
+            {
+                pk: 'WorkerSecurityGroupId', pv: self.worker_security_group
+            }
+        )
+        param_list.append(
+            {
+                pk: 'WorkerInstanceProfileName', pv: self.worker_instance_profile
+            }
+        )
+        param_list.append(
+            {
+                pk: 'WorkerInstanceType', pv: conf['worker_instance_type']
+            }
+        )
+
+        return param_list
+
+    def add_cert_to_template(self, worker_template_path):
+        """
+        Add cert to worker template
+
+        Args:
+            worker_template_path (str): Path where template file is located
+
+        """
+        worker_ignition_path = os.path.join(
+            self.cluster_path,
+            constants.WORKER_IGN
+        )
+        cert = self.get_cert_content(worker_ignition_path)
+        self.update_template_with_cert(worker_template_path, cert)
+
+    @retry(exceptions.PendingCSRException, tries=4, delay=10, backoff=1)
+    def approve_pending_csr(self):
+        """
+        After node addition csr could be in pending state,we have to
+        approve it
+
+        Raises:
+            exceptions.PendingCSRException
+
+        """
+        cmd = "adm certificate approve"
+        self.get_csr_resource()
+        for item in self.csr_conf.data.get('items'):
+            cmd = f"{cmd} {item.get('metadata').get('name')}"
+            self.csr_conf.ocp.exec_oc_cmd(cmd)
+
+        try:
+            self.check_no_pending_csr()
+            logger.info("All the csrs approved")
+        except exceptions.PendingCSRException:
+            logger.error("Failed to approve all the CSR")
+            raise
+
+    @retry(exceptions.PendingCSRException, tries=2, delay=300, backoff=1)
+    def check_no_pending_csr(self):
+        """
+        Check whether we have any pending csrs
+
+        Raises:
+            exceptions.PendingCSRException
+
+        """
+        # Load the latest state of csr
+        self.csr_conf.get()
+        pending = False
+        for item in self.csr_conf.data.get('items'):
+            if item.get('status') == {}:
+                logger.warning(f"{item.get('metadata').get('name')} is not Approved")
+                pending = True
+        if pending:
+            raise exceptions.PendingCSRException("Some of the csrs are in 'Pending' state")
+
+    def get_csr_resource(self):
+        """
+        Get the csr data into OCS object
+        """
+        self.csr_conf = ocs.OCS(
+            **ocp.OCP(kind='csr', namespace=constants.DEFAULT_NAMESPACE).get()
+        )
+        self.csr_conf.get()
+
+    def update_template_with_cert(self, worker_template_path, cert):
+        """
+        Update the template file with cert provided
+
+        Args:
+            worker_template_path (str): template file path
+            cert (str): Certificate body
+
+        """
+        search_str = "ABC...xYz=="
+        with open(worker_template_path, "r+") as fp:
+            orig_content = fp.read()
+            final_content = re.sub(
+                r'{}'.format(search_str),
+                r'{}'.format(cert),
+                orig_content
+            )
+            fp.truncate()
+            logger.info(final_content)
+            fp.write(final_content)
+
+    def get_cert_content(self, worker_ignition_path):
+        """
+        Get the certificate content from worker ignition file
+
+        Args:
+            worker_ignition_path (str): Path of the worker ignition file
+
+        Returns:
+            formatted_cert (str): certificate content
+
+        """
+        assert os.path.exists(worker_ignition_path)
+        with open(worker_ignition_path, "r") as fp:
+            content = json.loads(fp.read())
+            cert_content = (
+                content.get
+                ('ignition').get
+                ('security').get
+                ('tls').get
+                ('certificateAuthorities')[0].get
+                ('source')
+            )
+            formatted_cert = cert_content.split(',')[1]
+        return formatted_cert
+
+    def get_rhcos_worker_template(self):
+        """
+        Download template and keep it locally
+
+        Returns:
+            path (str): local path to template file
+
+        """
+        common_base = 'v3-launch-templates/functionality-testing'
+        ocp_version = get_ocp_version('_')
+        relative_template_path = os.path.join(
+            f'aos-{ocp_version}',
+            f'hosts/upi_on_aws-cloudformation-templates'
+        )
+
+        template_url = os.path.join(
+            f'{constants.OCP_QE_MISC_REPO}',
+            'plain',
+            f'{common_base}',
+            f'{relative_template_path}',
+            f'{constants.AWS_WORKER_NODE_TEMPLATE}'
+        )
+        logger.info(f"Getting template from url {template_url}")
+        tmp_file = os.path.join(
+            '/tmp', constants.AWS_WORKER_NODE_TEMPLATE
+        )
+        download_file(template_url, tmp_file)
+        return tmp_file
 
     def _prepare_rhel_node_conf(self):
         """
@@ -910,6 +1183,14 @@ class AWSUPINode(AWSNodes):
         self.worker_security_group = worker_instance.security_groups
         self.worker_iam_role = worker_instance.iam_instance_profile
         self.worker_tag = self.get_kube_tag(worker_instance.tags)
+        self.worker_image_id = worker_instance.image.id  # AMI id
+        # TODO: Get the following values
+        self.worker_instance_profile = self.aws.get_worker_instance_profile_name(
+            stack_name
+        )
+        self.worker_ignition_location = self.aws.get_worker_ignition_location(
+            stack_name
+        )
         del self.worker_iam_role['Id']
 
     def get_kube_tag(self, tags):
