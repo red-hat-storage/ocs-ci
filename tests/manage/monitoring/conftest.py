@@ -360,6 +360,31 @@ def workload_fio_storageutilization(
     pvc_size = \
         fiojob.get_storageutilization_size(target_percentage, ceph_pool_name)
 
+    # To handle use case of test_workload_rbd_cephfs_minimal which writes data
+    # to reach a small fraction of the total capacity only (eg. 5%), the test
+    # is going increase the target 2x and try again.
+    if pvc_size <= 0 and target_percentage <= 0.10:
+        new_target_percentage = 2 * target_percentage
+        logger.info(
+            "increasing storage utilization target percentage from %.2f to %.2f",
+            target_percentage,
+            new_target_percentage)
+        target_percentage = new_target_percentage
+        pvc_size = fiojob.get_storageutilization_size(
+            target_percentage,
+            ceph_pool_name)
+    # If this is still not enough, the test will be skipped, because the idea
+    # of tests reaching a small total utilization is to do just that.
+    # Moreover this will also skip this test case for any other utilization
+    # level, which is easier to read in the test report than the actual
+    # failure with negative pvc size.
+    if pvc_size <= 0:
+        skip_msg = (
+            "current total storage utilization is too high, "
+            f"the target utilization {target_percentage*100}% is already met")
+        logger.warning(skip_msg)
+        pytest.skip(skip_msg)
+
     fio_conf = textwrap.dedent("""
         [simple-write]
         readwrite=write
