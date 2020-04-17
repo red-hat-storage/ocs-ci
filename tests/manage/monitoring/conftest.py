@@ -357,6 +357,21 @@ def workload_fio_storageutilization(
         f"using {storage_class_name} storage class "
         f"backed by {ceph_pool_name} ceph pool"))
 
+    # log ceph mon_osd_*_ratio values for QE team to understand behaviour of
+    # ceph cluster during high utilization levels (for expected values, consult
+    # BZ 1775432 and check that there is no more recent BZ or JIRA in this
+    # area)
+    ceph_full_ratios = [
+        'mon_osd_full_ratio',
+        'mon_osd_backfillfull_ratio',
+        'mon_osd_nearfull_ratio',
+    ]
+    ct_pod = pod.get_ceph_tools_pod()
+    for ceph_ratio in ceph_full_ratios:
+        logger.info("checking value of %s", ceph_ratio)
+        value = ct_pod.exec_ceph_cmd(f'ceph config get mon.* {ceph_ratio}')
+        logger.info(f"{ceph_ratio} is {value}")
+
     pvc_size = \
         fiojob.get_storageutilization_size(target_percentage, ceph_pool_name)
 
