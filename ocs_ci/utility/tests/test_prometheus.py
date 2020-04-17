@@ -105,6 +105,21 @@ def query_range_result_delay_60s(query_range_result_ok):
     return query_range_data
 
 
+@pytest.fixture
+def query_range_result_bad_last_90s(query_range_result_ok):
+    """
+    Range query data with bad values in last 6 values (last 90s of the
+    measurement).
+    """
+    query_range_data = query_range_result_ok
+    # insert bad value "0" for last 90s in both metrics
+    for i in range(2):
+        for j in range(10, 16):
+            value_tuple = query_range_data[i]['values'][j]
+            value_tuple[1] = "0"
+    return query_range_data
+
+
 def test_check_query_range_result_null():
     """
     The function does't throw any exception and returns true when executed
@@ -176,3 +191,21 @@ def test_check_query_range_result_exp_delay(query_range_result_delay_60s):
         bad_values=[0],
         exp_delay=60)
     assert result2, "taking exp_delay into account, validation should pass"
+
+
+def test_check_query_range_result_exp_good_time(query_range_result_bad_last_90s):
+    """
+    Check that exp_good_time is taken into account, so that initial bad values
+    are ignored if appear after the good time passess.
+    """
+    result1 = check_query_range_result(
+        query_range_result_bad_last_90s,
+        good_values=[1],
+        bad_values=[0])
+    assert not result1, "without exp_good_time validation should fail"
+    result2 = check_query_range_result(
+        query_range_result_bad_last_90s,
+        good_values=[1],
+        bad_values=[0],
+        exp_good_time=150)
+    assert result2, "taking exp_good_time into account, validation should pass"
