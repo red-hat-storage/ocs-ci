@@ -98,7 +98,14 @@ class TestPvcAssignPodNode(ManageTest):
         Test assign nodeName to a pod using RWX pvc
         """
         worker_nodes_list = helpers.get_worker_nodes()
-        volume_mode = 'Block' if interface == constants.CEPHBLOCKPOOL else None
+        if interface == constants.CEPHBLOCKPOOL:
+            volume_mode = 'Block'
+            storage_type = 'block'
+            block_pv = True
+        else:
+            volume_mode = None
+            storage_type = 'fs'
+            block_pv = False
 
         # Create a RWX PVC
         pvc_obj = pvc_factory(
@@ -117,7 +124,7 @@ class TestPvcAssignPodNode(ManageTest):
             pod_obj = helpers.create_pod(
                 interface_type=interface, pvc_name=pvc_obj.name,
                 namespace=pvc_obj.namespace, node_name=node,
-                pod_dict_path=constants.NGINX_POD_YAML
+                pod_dict_path=constants.NGINX_POD_YAML, raw_block_pv=block_pv
             )
             pod_list.append(pod_obj)
             teardown_factory(pod_obj)
@@ -136,8 +143,6 @@ class TestPvcAssignPodNode(ManageTest):
                 f"Pod {pod_obj.name} is running on a different node "
                 f"than the selected node"
             )
-
-        storage_type = 'block' if volume_mode == 'Block' else 'fs'
 
         # Run IOs on all pods. FIO Filename is kept same as pod name
         with ThreadPoolExecutor() as p:
