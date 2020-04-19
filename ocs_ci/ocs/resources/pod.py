@@ -1259,3 +1259,79 @@ def wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj):
                 helpers.wait_for_resource_state(
                     dpod, constants.STATUS_RUNNING, timeout=1200
                 )
+
+
+def get_rbdplugin_pods(rbdplugin_label=constants.CSI_RBDPLUGIN_LABEL, namespace=None):
+    """
+    Fetches info about rbdplugin pods in the cluster
+
+    Args:
+        rbdplugin_label (str): label associated with rbdplugin pods
+            (default: constants.CSI_RBDPLUGIN_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list : of rbdplugin pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    rbdplugins = get_pods_having_label(rbdplugin_label, namespace)
+    rbdplugin_pods = [Pod(**rbdplugin) for rbdplugin in rbdplugins]
+    return rbdplugin_pods
+
+
+def get_cephfsplugin_pods(cephfsplugin_label=constants.CSI_CEPHFSPLUGIN_LABEL, namespace=None):
+    """
+    Fetches info about cephfsplugin pods in the cluster
+
+    Args:
+        cephfsplugin_label (str): label associated with cephfsplugin pods
+            (default: constants.CSI_CEPHFSPLUGIN_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list : of cephfsplugin pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    cephfsplugins = get_pods_having_label(cephfsplugin_label, namespace)
+    cephfsplugin_pods = [Pod(**cephfsplugin) for cephfsplugin in cephfsplugins]
+    return cephfsplugin_pods
+
+
+def get_draincanary_pods(draincanary_label=constants.DRAIN_CANARY_APP_LABEL, namespace=None):
+    """
+    Fetches info about draincanary pods in the cluster
+
+    Args:
+        draincanary_label (str): label associated with draincanary pods
+            (default: constants.DRAIN_CANARY_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list : of draincanary pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    draincanarys = get_pods_having_label(draincanary_label, namespace)
+    draincanarys_pods = [Pod(**draincanary) for draincanary in draincanarys]
+    return draincanarys_pods
+
+
+def get_crashcollector_pods(crashcollector_label=constants.CRASHCOLLECTOR_APP_LABEL, namespace=None):
+    """
+    Fetches info about crashcollector pods in the cluster
+
+    Args:
+        crashcollector_label (str): label associated with crashcollector pods
+            (default: constants.CRASHCOLLECTOR_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list : of crashcollector pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    crashcollectors = get_pods_having_label(crashcollector_label, namespace)
+    crashcollectors_pods = [Pod(**crashcollector) for crashcollector in crashcollectors]
+    return crashcollectors_pods
