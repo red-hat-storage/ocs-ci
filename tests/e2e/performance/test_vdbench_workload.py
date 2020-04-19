@@ -194,8 +194,9 @@ class TestVDBenchWorkload(E2ETest):
         log.info('Calculating Storage size....')
         ceph_cluster = CephCluster()
         total_capacity = ceph_cluster.get_ceph_capacity()
-        assert (total_capacity > constants.VDBENCH_MIN_CAPACITY), \
+        assert total_capacity > constants.VDBENCH_MIN_CAPACITY, (
             "Storage capacity is too low for performance testing"
+        )
         log.info(f'The Total usable capacity is {total_capacity}')
 
         if load:
