@@ -77,18 +77,32 @@ class TestPvcAssignPodNode(ManageTest):
 
     @acceptance
     @tier1
-    @pytest.mark.polarion_id("OCS-1258")
-    def test_rwx_pvc_assign_pod_node(self, pvc_factory, teardown_factory):
+    @pytest.mark.parametrize(
+        argnames=["interface"],
+        argvalues=[
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                marks=pytest.mark.polarion_id("OCS-1257")
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM],
+                marks=pytest.mark.polarion_id("OCS-1258")
+            )
+        ]
+    )
+    def test_rwx_pvc_assign_pod_node(
+        self, interface, pvc_factory, teardown_factory
+    ):
         """
         Test assign nodeName to a pod using RWX pvc
         """
-        interface = constants.CEPHFILESYSTEM
         worker_nodes_list = helpers.get_worker_nodes()
+        volume_mode = 'Block' if interface == constants.CEPHBLOCKPOOL else None
 
         # Create a RWX PVC
         pvc_obj = pvc_factory(
             interface=interface, access_mode=constants.ACCESS_MODE_RWX,
-            status=constants.STATUS_BOUND
+            status=constants.STATUS_BOUND, volume_mode=volume_mode
         )
 
         # Create two pods on selected nodes
@@ -122,12 +136,14 @@ class TestPvcAssignPodNode(ManageTest):
                 f"than the selected node"
             )
 
+        storage_type = 'block' if volume_mode == 'Block' else 'fs'
+
         # Run IOs on all pods. FIO Filename is kept same as pod name
         with ThreadPoolExecutor() as p:
             for pod_obj in pod_list:
                 logger.info(f"Running IO on pod {pod_obj.name}")
                 p.submit(
-                    pod_obj.run_io, storage_type='fs', size='512M',
+                    pod_obj.run_io, storage_type=storage_type, size='512M',
                     runtime=30, fio_filename=pod_obj.name
                 )
 
