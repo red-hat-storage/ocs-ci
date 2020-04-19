@@ -212,8 +212,8 @@ class TestVDBenchWorkload(E2ETest):
             servers = round(tested_capacity / capacity_per_pod)
 
             """
-                To spread the application pods evenly on all workers or application nodes and at least 2 app pods
-                per node.
+            To spread the application pods evenly on all workers or application nodes and at least 2 app pods
+            per node.
             """
             nodes = len(node.get_typed_nodes(node_type=constants.WORKER_MACHINE))
             if not with_ocs:
