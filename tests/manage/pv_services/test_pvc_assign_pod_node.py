@@ -17,6 +17,7 @@ class TestPvcAssignPodNode(ManageTest):
     OCS-717 - RBD: Assign nodeName to a POD using RWO PVC
     OCS-744 - CephFS: Assign nodeName to a POD using RWO PVC
     OCS-1258 - CephFS: Assign nodeName to a POD using RWX PVC
+    OCS-1257 - RBD: Assign nodeName to a POD using RWX PVC
     """
 
     @acceptance
