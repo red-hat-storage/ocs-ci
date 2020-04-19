@@ -131,6 +131,7 @@ OPENSHIFT_IMAGE_REGISTRY_NAMESPACE = "openshift-image-registry"
 OPENSHIFT_IMAGE_REGISTRY_DEPLOYMENT = "image-registry"
 OPENSHIFT_IMAGE_SELECTOR = "docker-registry=default"
 OPENSHIFT_INGRESS_NAMESPACE = "openshift-ingress"
+OPENSHIFT_MONITORING_NAMESPACE = "openshift-monitoring"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
 MOUNT_POINT = '/var/lib/www/html'

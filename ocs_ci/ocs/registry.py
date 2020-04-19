@@ -332,3 +332,30 @@ def check_image_exists_in_registry(image_url):
         return_value = True
         logger.info("Image exists in Registry")
     return return_value
+
+
+def remove_ocp_registry_from_ocs(platform):
+    """
+    Function removes OCS registry from OCP cluster
+
+    Args:
+        platform (str): the platform the cluster deployed on
+
+    """
+    image_registry_obj = ocp.OCP(
+        kind=constants.CONFIG, namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+    )
+    param_cmd = ''
+    if platform.lower() == constants.AWS_PLATFORM:
+        param_cmd = '[{"op": "remove", "path": "/spec/storage"}]'
+
+    elif platform.lower() == constants.VSPHERE_PLATFORM:
+        param_cmd = '[{"op": "replace", "path": "/spec/storage", "value": {"emptyDir": "{}"}}]'
+
+    else:
+        logger.info("platform registry not supported")
+        return
+
+    image_registry_obj.patch(
+        resource_name=constants.IMAGE_REGISTRY_RESOURCE_NAME, params=param_cmd, format_type='json'
+    )
