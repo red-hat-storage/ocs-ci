@@ -168,3 +168,35 @@ class NoBucketPolicyResponse(Exception):
 
 class PendingCSRException(Exception):
     pass
+
+
+class OsdCountException(Exception):
+    pass
+
+
+class MgrCountException(Exception):
+    pass
+
+
+class RgwCountException(Exception):
+    pass
+
+
+class RbdpluginCountException(Exception):
+    pass
+
+
+class CephfspluginCountException(Exception):
+    pass
+
+
+class RbdpluginProvisionerCountException(Exception):
+    pass
+
+
+class CephfspluginProvisionerCountException(Exception):
+    pass
+
+
+class DraincanaryCountException(Exception):
+    pass

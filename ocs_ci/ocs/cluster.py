@@ -24,6 +24,7 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants, exceptions
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
+from tests import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -94,21 +95,48 @@ class CephCluster(object):
         self.osd_selector = constant.OSD_APP_LABEL
         self.noobaa_selector = constant.NOOBAA_APP_LABEL
         self.noobaa_core_selector = constant.NOOBAA_CORE_POD_LABEL
+        self.rgw_selector = constants.RGW_APP_LABEL
+        self.rbdplugin_selector = constants.CSI_RBDPLUGIN_LABEL
+        self.cephfsplusgin_selector = constants.CSI_CEPHFSPLUGIN_LABEL
+        self.rbdplugin_provisioner_selector = constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+        self.cephfsplugin_provisioner_selector = constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL
+        self.drain_canary_selector = constants.DRAIN_CANARY_APP_LABEL
         self.mons = []
         self._ceph_pods = []
         self.mdss = []
         self.mgrs = []
         self.osds = []
         self.noobaas = []
+        self.rgws = []
+        self.rbdplugins = []
+        self.cephfsplugins = []
+        self.rbdplugin_provisioners = []
+        self.cephfsplugin_provisioners = []
+        self.drain_canarys = []
         self.toolbox = None
         self.mds_count = 0
         self.mon_count = 0
         self.mgr_count = 0
         self.osd_count = 0
         self.noobaa_count = 0
+        self.rgw_count = 0
+        self.rbdplugin_count = 0
+        self.rbdplugin_provisioner_count = 0
+        self.cephfsplugin_count = 0
+        self.cephfsplugin_provisioner_count = 0
+        self.drain_canary_count = 0
         self.scan_cluster()
         logging.info(f"Number of mons = {self.mon_count}")
         logging.info(f"Number of mds = {self.mds_count}")
+        logging.info(f"Number of osd = {self.osd_count}")
+        logging.info(f"Number of mgr = {self.mgr_count}")
+        logging.info(f"Number of csi-rbdplugin = {self.rbdplugin_count}")
+        logging.info(f"Number of csi-cephfsplugin = {self.cephfsplugin_count}")
+        logging.info(f"Number of csi-rbdplugin-provisioner = {self.rbdplugin_provisioner_count}")
+        logging.info(f"Number of csi-cephfsplugin-provisioner = {self.cephfsplugin_provisioner_count}")
+        logging.info(f"Number of drain-canary = {self.drain_canary_count}")
+        if self.rgw_count:
+            logging.info(f"Number of rgw = {self.rgw_count}")
 
         self.used_space = 0
 
@@ -140,6 +168,19 @@ class CephCluster(object):
         self.osds = pod.get_osd_pods(self.osd_selector, self.namespace)
         self.noobaas = pod.get_noobaa_pods(self.noobaa_selector, self.namespace)
         self.toolbox = pod.get_ceph_tools_pod()
+        self.rbdplugins = pod.get_rbdplugin_pods(self.rbdplugin_selector, self.namespace)
+        self.cephfsplugins = pod.get_cephfsplugin_pods(self.cephfsplusgin_selector, self.namespace)
+        self.rbdplugin_provisioners = pod.get_rbdfsplugin_provisioner_pods(
+            self.rbdplugin_provisioner_selector, self.namespace
+        )
+        self.cephfsplugin_provisioners = pod.get_cephfsplugin_provisioner_pods(
+            self.cephfsplugin_provisioner_selector, self.namespace
+        )
+        self.drain_canarys = pod.get_draincanary_pods(self.drain_canary_selector, self.namespace)
+
+        if config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
+            self.rgws = pod.get_rgw_pod(self.rgw_selector, self.namespace)
+
 
         # set port attrib on mon pods
         self.mons = list(map(self.set_port, self.mons))
@@ -159,7 +200,14 @@ class CephCluster(object):
         self.mds_count = len(self.mdss)
         self.mgr_count = len(self.mgrs)
         self.osd_count = len(self.osds)
+        if config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
+            self.rgw_count = 1
         self.noobaa_count = len(self.noobaas)
+        self.cephfsplugin_count = len(self.cephfsplugins)
+        self.rbdplugin_count = len(self.rbdplugins)
+        self.cephfsplugin_provisioner_count = len(self.cephfsplugin_provisioners)
+        self.rbdplugin_provisioner_count = len(self.rbdplugin_provisioners)
+        self.drain_canary_count = len(self.drain_canarys)
 
     @staticmethod
     def set_port(pod):
@@ -221,6 +269,15 @@ class CephCluster(object):
         # is not ok ?
         expected_mon_count = self.mon_count
         expected_mds_count = self.mds_count
+        expected_osd_count = self.osd_count
+        expected_mgr_count = self.mgr_count
+        expected_rbdplugin_count = self.rbdplugin_count
+        expected_cephfsplugin_count = self.cephfsplugin_count
+        expected_rbdplugin_provisioner_count = self.rbdplugin_provisioner_count
+        expected_cepfsplugin_provisioner_count = self.cephfsplugin_provisioner_count
+        expected_drain_canary_count = self.drain_canary_count
+        if self.rgw_count:
+            expected_rgw_count = self.rgw_count
 
         self.scan_cluster()
         try:
@@ -239,7 +296,56 @@ class CephCluster(object):
             raise exceptions.CephHealthException("Cluster health is NOT OK")
 
         self.noobaa_health_check()
-        # TODO: OSD and MGR health check
+
+        try:
+            self.osd_health_check(expected_osd_count)
+        except exceptions.OsdCountException as e:
+            logger.error(e)
+            raise exceptions.CephHealthException("Cluster health is NOT OK")
+
+        try:
+            self.mgr_health_check(expected_mgr_count)
+        except exceptions.MgrCountException as e:
+            logger.error(e)
+            raise exceptions.CephHealthException("Cluster health is NOT OK")
+
+        if config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
+            try:
+                self.rgw_health_check(expected_rgw_count)
+            except exceptions.MgrCountException as e:
+                logger.error(e)
+                raise exceptions.CephHealthException("Cluster health is NOT OK")
+
+        try:
+            self.rbdplugin_health_check(expected_rbdplugin_count)
+        except exceptions.RbdpluginCountException as e:
+            logger.error(e)
+            raise exceptions.CephHealthException("Cluster health is NOT OK")
+
+        try:
+            self.cephfsplugin_health_check(expected_cephfsplugin_count)
+        except exceptions.CephfspluginCountException as e:
+            logger.error(e)
+            raise exceptions.CephHealthException("Cluster health is NOT OK")
+
+        try:
+            self.rbdplugin_provisioner_health_check(expected_rbdplugin_provisioner_count)
+        except exceptions.RbdpluginProvisionerCountException as e:
+            logger.error(e)
+            raise exceptions.CephHealthException("Cluster health is NOT OK")
+
+        try:
+            self.cephfsplugin_provisioner_health_check(expected_cepfsplugin_provisioner_count)
+        except exceptions.CephfspluginProvisionerCountException as e:
+            logger.error(e)
+            raise exceptions.CephHealthException("Cluster health is NOT OK")
+
+        try:
+            self.drain_canary_health_check(expected_drain_canary_count)
+        except exceptions.DraincanaryCountException as e:
+            logger.error(e)
+            raise exceptions.CephHealthException("Cluster health is NOT OK")
+
         logger.info("Cluster HEALTH_OK")
         # This scan is for reconcilation on *.count
         # because during first scan in this function some of the
@@ -327,6 +433,7 @@ class CephCluster(object):
             MDACountException: if pod count doesn't match
         """
         timeout = 10 * len(self.pods)
+        logger.info(f"Expected MDS = {count}")
         try:
             assert self.POD.wait_for_resource(
                 condition='Running', selector=self.mds_selector,
@@ -631,6 +738,230 @@ class CephCluster(object):
                 logging.info("Rebalance is completed")
                 time_taken = time.time() - start_time
                 return (time_taken / 60)
+
+    def osd_health_check(self, count):
+        """
+        Osd health check based on pod count
+
+        Args:
+            count (int): Expected number of Osd pods
+
+        Raises:
+            OsdCountException: if osd pod count doesn't match
+        """
+        timeout = 10 * len(self.pods)
+        logger.info(f"Expected OSDs = {count}")
+        try:
+            assert self.POD.wait_for_resource(
+                condition='Running', selector=self.osd_selector,
+                resource_count=count, timeout=timeout, sleep=3,
+            )
+
+            actual_osds = len(pod.get_osd_pods())
+
+            assert count == actual_osds, f"Expected {count},  Got {actual_osds}"
+        except exceptions.TimeoutExpiredError as e:
+            logger.error(e)
+            raise exceptions.OsdCountException(
+                f"Failed to achieve desired Osd count"
+                f" {count}"
+            )
+
+    def mgr_health_check(self, count):
+        """
+        Mgr health check based on pod count
+
+        Args:
+            count (int): Expected number of Mgr pods
+
+        Raises:
+            MgrCountException: if mgr pod count doesn't match
+        """
+        timeout = 10 * len(self.pods)
+        logger.info(f"Expected Mgr = {count}")
+        try:
+            assert self.POD.wait_for_resource(
+                condition='Running', selector=self.mgr_selector,
+                resource_count=count, timeout=timeout, sleep=3,
+            )
+
+            actual_mgr = len(pod.get_mgr_pods())
+
+            assert count == actual_mgr, f"Expected {count},  Got {actual_mgr}"
+        except exceptions.TimeoutExpiredError as e:
+            logger.error(e)
+            raise exceptions.MgrCountException(
+                f"Failed to achieve desired Mgr count"
+                f" {count}"
+            )
+
+    def rgw_health_check(self, count):
+        """
+        Rgw health check based on pod count
+
+        Args:
+            count (int): Expected number of Rgw pods
+
+        Raises:
+            RgwCountException: if rgw pod count doesn't match
+        """
+        timeout = 10 * len(self.pods)
+        logger.info(f"Expected Rgw = {count}")
+        try:
+            assert self.POD.wait_for_resource(
+                condition='Running', selector=self.rgw_selector,
+                resource_count=count, timeout=timeout, sleep=3,
+            )
+
+            actual_rgw = 1
+
+            assert count == actual_rgw, f"Expected {count},  Got {actual_rgw}"
+        except exceptions.TimeoutExpiredError as e:
+            logger.error(e)
+            raise exceptions.RgwCountException(
+                f"Failed to achieve desired Rgw count"
+                f" {count}"
+            )
+
+    def rbdplugin_health_check(self, count):
+        """
+        csi-rbdplugin health check based on pod count
+
+        Args:
+            count (int): Expected number of csi-rbdplugin pods
+
+        Raises:
+            RbdpluginCountException: if csi-rbdplugin pod count doesn't match
+        """
+        timeout = 10 * len(self.pods)
+        logger.info(f"Expected rbdplugin = {count}")
+        try:
+            assert self.POD.wait_for_resource(
+                condition='Running', selector=self.rbdplugin_selector,
+                resource_count=count, timeout=timeout, sleep=3,
+            )
+
+            actual_rbdplugin = len(helpers.get_worker_nodes())
+
+            assert count == actual_rbdplugin, f"Expected {count},  Got {actual_rbdplugin}"
+        except exceptions.TimeoutExpiredError as e:
+            logger.error(e)
+            raise exceptions.RbdpluginCountException(
+                f"Failed to achieve desired rbdplugin count"
+                f" {count}"
+            )
+
+    def cephfsplugin_health_check(self, count):
+        """
+        csi-cephfsplugin health check based on pod count
+
+        Args:
+            count (int): Expected number of csi-cephfsplugin pods
+
+        Raises:
+            CephfspluginCountException: if csi-cephfsplugin pod count doesn't match
+        """
+        timeout = 10 * len(self.pods)
+        logger.info(f"Expected cephfsplugin = {count}")
+        try:
+            assert self.POD.wait_for_resource(
+                condition='Running', selector=self.cephfsplusgin_selector,
+                resource_count=count, timeout=timeout, sleep=3,
+            )
+
+            actual_cephfsplugin = len(helpers.get_worker_nodes())
+
+            assert count == actual_cephfsplugin, f"Expected {count},  Got {actual_cephfsplugin}"
+        except exceptions.TimeoutExpiredError as e:
+            logger.error(e)
+            raise exceptions.CephfspluginCountException(
+                f"Failed to achieve desired cephfsplugin count"
+                f" {count}"
+            )
+
+    def rbdplugin_provisioner_health_check(self, count):
+        """
+        csi-rbdplugin-provisioner health check based on pod count
+
+        Args:
+            count (int): Expected number of csi-rbdplugin-provisioner pods
+
+        Raises:
+            RbdpluginProvisionerCountException: if csi-rbdplugin-provisioner pod count doesn't match
+        """
+        timeout = 10 * len(self.pods)
+        logger.info(f"Expected rbdplugin-provisioner = {count}")
+        try:
+            assert self.POD.wait_for_resource(
+                condition='Running', selector=self.rbdplugin_provisioner_selector,
+                resource_count=count, timeout=timeout, sleep=3,
+            )
+
+            actual_rbdplugin_provisioner = len(pod.get_rbdfsplugin_provisioner_pods())
+
+            assert count == actual_rbdplugin_provisioner, f"Expected {count},  Got {actual_rbdplugin_provisioner}"
+        except exceptions.TimeoutExpiredError as e:
+            logger.error(e)
+            raise exceptions.RbdpluginProvisionerCountException(
+                f"Failed to achieve desired rbdplugin-provisioner count"
+                f" {count}"
+            )
+
+    def cephfsplugin_provisioner_health_check(self, count):
+        """
+        csi-cephfsplugin-provisioner health check based on pod count
+
+        Args:
+            count (int): Expected number of csi-cephfsplugin-provisioner pods
+
+        Raises:
+            CephfspluginProvisionerCountException: if csi-cephfsplugin-provisioner pod count doesn't match
+        """
+        timeout = 10 * len(self.pods)
+        logger.info(f"Expected cephfsplugin-provisioner = {count}")
+        try:
+            assert self.POD.wait_for_resource(
+                condition='Running', selector=self.cephfsplugin_provisioner_selector,
+                resource_count=count, timeout=timeout, sleep=3,
+            )
+
+            actual_cephfsplugin_provisioner = len(pod.get_cephfsplugin_provisioner_pods())
+
+            assert count == actual_cephfsplugin_provisioner, f"Expected {count}, Got {actual_cephfsplugin_provisioner}"
+        except exceptions.TimeoutExpiredError as e:
+            logger.error(e)
+            raise exceptions.CephfspluginProvisionerCountException(
+                f"Failed to achieve desired cephfsplugin-provisioner count"
+                f" {count}"
+            )
+
+    def drain_canary_health_check(self, count):
+        """
+        drain_canary health check based on pod count
+
+        Args:
+            count (int): Expected number of drain_canary pods
+
+        Raises:
+            DraincanaryCountException: if drain_canary pod count doesn't match
+        """
+        timeout = 10 * len(self.pods)
+        logger.info(f"Expected drain_canary = {count}")
+        try:
+            assert self.POD.wait_for_resource(
+                condition='Running', selector=self.drain_canary_selector,
+                resource_count=count, timeout=timeout, sleep=3,
+            )
+
+            actual_drain_canary = len(pod.get_draincanary_pods())
+
+            assert count == actual_drain_canary, f"Expected {count}, Got {actual_drain_canary}"
+        except exceptions.TimeoutExpiredError as e:
+            logger.error(e)
+            raise exceptions.DraincanaryCountException(
+                f"Failed to achieve desired drain_canary count"
+                f" {count}"
+            )
 
 
 class CephHealthMonitor(threading.Thread):
