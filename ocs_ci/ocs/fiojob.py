@@ -157,7 +157,6 @@ def wait_for_job_completion(namespace, timeout, error_msg):
     assert pod_dict['kind'] == "Pod"
     pod_name = pod_dict['metadata']['name']
     logger.info(f"Identified pod name of the finished Job: {pod_name}")
-    pod_name = pod_dict['metadata']['name']
 
     return pod_name
 
