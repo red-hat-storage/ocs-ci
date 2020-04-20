@@ -752,6 +752,7 @@ class AWS(object):
             bucket_name (str): Name of a valid s3 bucket
             object_key (str): the key for the s3 object
             file_path (str): path for the file to be uploaded
+
         """
         self.s3_client.Bucket(bucket_name).upload_file(object_key, file_path)
 
