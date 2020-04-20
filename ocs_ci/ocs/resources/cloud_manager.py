@@ -21,6 +21,7 @@ logger = logging.getLogger(name=__file__)
 class CloudManager(ABC):
     """
     Class containing all client types
+
     """
     aws_client, google_client, azure_client, s3comp_client = (None,) * 4
 
@@ -36,6 +37,7 @@ class CloudManager(ABC):
 class CloudClient(ABC):
     """
     Base abstract class for Cloud based API calls
+
     """
     client = None
 
@@ -46,6 +48,7 @@ class CloudClient(ABC):
         """
         Super method that first logs the Underlying Storage creation and then calls
         the appropriate implementation
+
         """
         logger.info(f"Creating Underlying Storage {name} in {region}")
         self.internal_create_uls(name, region)
@@ -54,6 +57,7 @@ class CloudClient(ABC):
         """
         Super method that first logs the Underlying Storage deletion and then calls
         the appropriate implementation
+
         """
         logger.info(f"Deleting ULS: {name}")
         self.internal_delete_uls(name)
@@ -76,6 +80,7 @@ class CloudClient(ABC):
 class S3Client(CloudClient):
     """
     Implementation of a S3 Client using the S3 API
+
     """
 
     def __init__(self, key_id=None, access_key=None, endpoint="https://s3.amazonaws.com",
@@ -116,6 +121,7 @@ class S3Client(CloudClient):
            region (str): The region to create the Underlying Storage, if none will create at
            `us-east-1` IMPORTANT!!! note that `us-east-1` will cause an error if used since it is
            the default region for aws
+
         """
         if region is None:
             self.client.create_bucket(Bucket=name)
@@ -132,6 +138,7 @@ class S3Client(CloudClient):
         Deletes the Underlying Storage using the S3 API
         Args:
            name (str): The Underlying Storage name to be deleted
+
         """
         # Todo: rename client to resource (or find an alternative)
         self.client.meta.client.delete_bucket_policy(
@@ -156,6 +163,7 @@ class S3Client(CloudClient):
             name (str): the Underlying Storage name
         Returns:
             bool: True if deleted successfully
+
         """
         if self.verify_uls_exists(name):
             try:
@@ -179,6 +187,7 @@ class S3Client(CloudClient):
 
        Returns:
              bool: True if Underlying Storage exists, False otherwise
+
         """
         try:
             # Todo: rename client to resource (or find an alternative)
@@ -202,6 +211,7 @@ class S3Client(CloudClient):
 class GoogleClient(CloudClient):
     """
     Implementation of a Google Client using the Google API
+
     """
 
     def __init__(self, creds=None, *args, **kwargs):
@@ -219,6 +229,7 @@ class GoogleClient(CloudClient):
         Args:
            name (str): The Underlying Storage name to be created
            region (str): The region to create the Underlying Storage
+
         """
         if region is None:
             self.client.create_bucket(name)
@@ -230,6 +241,7 @@ class GoogleClient(CloudClient):
         Deletes the Underlying Storage using the Google API
         Args:
            name (str): The Underlying Storage name to be deleted
+
         """
         for _ in range(10):
             try:
@@ -251,6 +263,7 @@ class GoogleClient(CloudClient):
 class AzureClient(CloudClient):
     """
     Implementation of a Azure Client using the Azure API
+
     """
 
     def __init__(self, *args, **kwargs):
@@ -263,6 +276,7 @@ class AzureClient(CloudClient):
         Args:
            name (str): The Underlying Storage name to be created
            region (str): The region to create the Underlying Storage,
+
         """
         pass
 
@@ -271,6 +285,7 @@ class AzureClient(CloudClient):
         Deletes the Underlying Storage using the Azure API
         Args:
            name (str): The Underlying Storage name to be deleted
+
         """
         pass
 

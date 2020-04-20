@@ -1466,6 +1466,7 @@ def cld_mgr(request):
     Returns a cloud manager instance that'll be used throughout the session
     Returns:
         CloudManager: A CloudManager resource
+
     """
 
     # Todo: Find a more elegant method
@@ -1756,6 +1757,7 @@ def cloud_uls_factory(request, cld_mgr):
      Calling this fixture creates a new underlying storage(s).
      Args:
         cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
+
     """
     all_created_uls = {
         'aws': set(),
@@ -1782,6 +1784,7 @@ def cloud_uls_factory(request, cld_mgr):
                 'aws': [(3,us-west-1),(2,eu-west-2)]
         Returns:
             dict: A dictionary of cloud names as keys and uls names sets as value.
+
         """
         current_call_created_uls = {
             'aws': set(),
@@ -1840,6 +1843,7 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
         Args:
             cloud_uls_factory: Factory for underlying storage creation
             cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
+
     """
     created_backingstores = []
 
@@ -1876,6 +1880,7 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
                 'pv': [(3,32,ocs-storagecluster-ceph-rbd),(2,100,ocs-storagecluster-ceph-rbd)]
         Returns:
             list: A list of backingstore objects.
+
         """
         if method.lower() not in cmdMap:
             raise RuntimeError(

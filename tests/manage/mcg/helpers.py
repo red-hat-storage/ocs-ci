@@ -171,6 +171,7 @@ def oc_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
         backingstore_name (str): backingstore name
         uls_name (str): underlying storage name
         region (str): which region to create backingstore (should be the same as uls)
+
     """
     bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
     bs_data['metadata']['name'] = backingstore_name
@@ -189,6 +190,7 @@ def cli_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
         backingstore_name (str): backingstore name
         uls_name (str): underlying storage name
         region (str): which region to create backingstore (should be the same as uls)
+
     """
     run_mcg_cmd(f'backingstore create aws-s3 {backingstore_name} '
                 f'--access-key {cld_mgr.aws_client.get_aws_key()} '
@@ -229,6 +231,7 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
         vol_num (int): number of pv volumes
         size (int): each volume size in GB
         storage_class (str): which storage class to use
+
     """
     bs_data = templating.load_yaml(constants.PV_BACKINGSTORE_YAML)
     bs_data['metadata']['name'] = backingstore_name
@@ -248,6 +251,7 @@ def cli_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
         vol_num (int): number of pv volumes
         size (int): each volume size in GB
         storage_class (str): which storage class to use
+
     """
     run_mcg_cmd(f'backingstore create pv-pool {backingstore_name} --num-volumes '
                 f'{vol_num} --pv-size-gb {size} --storage-class {storage_class}'
@@ -261,6 +265,7 @@ def wait_for_pv_backingstore(backingstore_name, namespace=None):
     Args:
         backingstore_name (str): backingstore name
         namespace (str): backing store's namespace
+
     """
 
     namespace = namespace or config.ENV_DATA['cluster_namespace']
@@ -283,6 +288,7 @@ def check_pv_backingstore_status(backingstore_name, namespace=None):
         namespace (str): backing store's namespace
     Returns:
         bool: True if backing store is in OPTIMAL state
+
     """
     kubeconfig = os.getenv('KUBECONFIG')
     namespace = namespace or config.ENV_DATA['cluster_namespace']
