@@ -775,3 +775,8 @@ OCS_PROVISIONERS = [
     'openshift-storage.cephfs.csi.ceph.com',
     'openshift-storage.noobaa.io/obc'
 ]
+
+# Bucket Policy action lists
+bucket_website_action_list = ['PutBucketWebsite', 'GetBucketWebsite', 'PutObject']
+bucket_version_action_list = ['PutBucketVersioning', 'GetBucketVersioning']
+object_version_action_list = ['PutObject', 'GetObjectVersion', 'DeleteObjectVersion']

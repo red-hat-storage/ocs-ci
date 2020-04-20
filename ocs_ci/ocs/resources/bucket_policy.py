@@ -106,7 +106,7 @@ class NoobaaAccount(object):
 
     def __init__(
         self, mcg, name, email, buckets, admin_access=False, s3_access=True,
-        backingstore_name=constants.DEFAULT_NOOBAA_BACKINGSTORE, full_bucket_access=True
+        full_bucket_access=True, backingstore_name=constants.DEFAULT_NOOBAA_BACKINGSTORE
     ):
         """
         Initializer function

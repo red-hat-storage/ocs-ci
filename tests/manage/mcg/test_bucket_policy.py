@@ -7,9 +7,11 @@ import uuid
 
 from ocs_ci.framework.pytest_customization.marks import filter_insecure_request_warning
 from ocs_ci.ocs.exceptions import NoBucketPolicyResponse, InvalidStatusCode, UnexpectedBehaviour
-from ocs_ci.framework.testlib import ManageTest, tier1, tier3, skipif_ocs_version
+from ocs_ci.framework.testlib import ManageTest, tier1, tier2, tier3, skipif_ocs_version
 from ocs_ci.ocs.resources.bucket_policy import OBC, NoobaaAccount, HttpResponseParser, gen_bucket_policy
 from tests.manage.mcg import helpers
+from ocs_ci.ocs.defaults import website_config, index, error
+from ocs_ci.ocs.constants import bucket_website_action_list, bucket_version_action_list, object_version_action_list
 
 logger = logging.getLogger(__name__)
 
@@ -318,26 +320,19 @@ class TestS3BucketPolicy(ManageTest):
         assert helpers.s3_get_object(user, s3_bucket.name, object_key), f"Failed: Get Object by user {user.email_id}"
 
     @pytest.mark.polarion_id("OCS-2140")
-    @tier1
+    @tier2
     def test_bucket_website_and_policies(self, mcg_obj, bucket_factory):
         """
         Tests bucket website bucket policy actions
         """
-        website_config = {
-            'ErrorDocument': {'Key': 'error.html'},
-            'IndexDocument': {'Suffix': 'index.html'},
-        }
-        index = "<html><body><h1>My Static Website on S3</h1></body></html>"
-        error = "<html><body><h1>Oh. Something bad happened!</h1></body></html>"
-
         # Creating a OBC (account)
         obc = bucket_factory(amount=1, interface='OC')
         obc_obj = OBC(mcg_obj, obc=obc[0].name)
 
-        # Admin sets policy with with Put/Get bucket website actions
+        # Admin sets policy with Put/Get bucket website actions
         bucket_policy_generated = gen_bucket_policy(
             user_list=obc_obj.obc_account,
-            actions_list=['PutBucketWebsite', 'GetBucketWebsite', 'PutObject'],
+            actions_list=bucket_website_action_list,
             resources_list=[obc_obj.bucket_name, f'{obc_obj.bucket_name}/{"*"}'],
             effect="Allow"
         )
@@ -404,7 +399,7 @@ class TestS3BucketPolicy(ManageTest):
         ), "Failed: DeleteBucketWebsite"
 
     @pytest.mark.polarion_id("OCS-2161")
-    @tier1
+    @tier2
     def test_bucket_versioning_and_policies(self, mcg_obj, bucket_factory):
         """
         Tests bucket and object versioning on Noobaa buckets and also its related actions
@@ -417,10 +412,10 @@ class TestS3BucketPolicy(ManageTest):
         obc = bucket_factory(amount=1, interface='OC')
         obc_obj = OBC(mcg_obj, obc=obc[0].name)
 
-        # Admin sets a policy on OBC bucket to allow Versioning related actions
+        # Admin sets a policy on OBC bucket to allow versioning related actions
         bucket_policy_generated = gen_bucket_policy(
             user_list=obc_obj.obc_account,
-            actions_list=['PutBucketVersioning', 'GetBucketVersioning'],
+            actions_list=bucket_version_action_list,
             resources_list=[obc_obj.bucket_name, f'{obc_obj.bucket_name}/{"*"}']
         )
         bucket_policy = json.dumps(bucket_policy_generated)
@@ -447,7 +442,7 @@ class TestS3BucketPolicy(ManageTest):
         # Admin modifies the policy to all obc-account to write/read/delete versioned objects
         bucket_policy_generated = gen_bucket_policy(
             user_list=obc_obj.obc_account,
-            actions_list=['PutObject', 'GetObjectVersion', 'DeleteObjectVersion'],
+            actions_list=object_version_action_list,
             resources_list=[obc_obj.bucket_name, f'{obc_obj.bucket_name}/{"*"}']
         )
         bucket_policy = json.dumps(bucket_policy_generated)
@@ -511,7 +506,7 @@ class TestS3BucketPolicy(ManageTest):
                 raise UnexpectedBehaviour(f"Response received invalid error code {response.error['Code']}")
 
     @pytest.mark.polarion_id("OCS-2159")
-    @tier1
+    @tier2
     def test_bucket_policy_effect_deny(self, mcg_obj, bucket_factory):
         """
         Tests explicit "Deny" effect on bucket policy actions
@@ -586,7 +581,7 @@ class TestS3BucketPolicy(ManageTest):
                 raise UnexpectedBehaviour(f"Response received invalid error code {response.error['Code']}")
 
     @pytest.mark.polarion_id("OCS-2149")
-    @tier1
+    @tier2
     def test_bucket_policy_multi_statement(self, mcg_obj, bucket_factory):
         """
         Tests multiple statements in a bucket policy
