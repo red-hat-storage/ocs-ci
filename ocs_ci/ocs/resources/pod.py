@@ -1316,22 +1316,3 @@ def get_draincanary_pods(draincanary_label=constants.DRAIN_CANARY_APP_LABEL, nam
     draincanarys = get_pods_having_label(draincanary_label, namespace)
     draincanarys_pods = [Pod(**draincanary) for draincanary in draincanarys]
     return draincanarys_pods
-
-
-def get_crashcollector_pods(crashcollector_label=constants.CRASHCOLLECTOR_APP_LABEL, namespace=None):
-    """
-    Fetches info about crashcollector pods in the cluster
-
-    Args:
-        crashcollector_label (str): label associated with crashcollector pods
-            (default: constants.CRASHCOLLECTOR_APP_LABEL)
-        namespace (str): Namespace in which ceph cluster lives
-            (default: defaults.ROOK_CLUSTER_NAMESPACE)
-
-    Returns:
-        list : of crashcollector pod objects
-    """
-    namespace = namespace or config.ENV_DATA['cluster_namespace']
-    crashcollectors = get_pods_having_label(crashcollector_label, namespace)
-    crashcollectors_pods = [Pod(**crashcollector) for crashcollector in crashcollectors]
-    return crashcollectors_pods
