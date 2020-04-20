@@ -1460,7 +1460,7 @@ def ec2_instances(request, aws_obj):
     return ec2_instances
 
 
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope='session')
 def cld_mgr(request):
     """
     Returns a cloud manager instance that'll be used throughout the session
