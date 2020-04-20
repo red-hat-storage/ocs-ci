@@ -148,7 +148,7 @@ class PVC(OCS):
         )
 
         if verify:
-            for pvc_data in TimeoutSampler(20, 2, self.get):
+            for pvc_data in TimeoutSampler(240, 2, self.get):
                 capacity = pvc_data.get('status').get('capacity').get('storage')
                 if capacity == f'{new_size}Gi':
                     break
