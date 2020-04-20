@@ -14,7 +14,7 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest
+from ocs_ci.framework.testlib import E2ETest, workloads
 from tests import helpers
 from ocs_ci.ocs import machine, node
 
@@ -137,8 +137,8 @@ class TestVDBenchWorkload(E2ETest):
     """
 
     @pytest.mark.parametrize('template', [
-        pytest.param("VDBench-Basic.yaml", marks=pytest.mark.workloads()),
-        pytest.param("VDBench-Basic-FS.yaml", marks=pytest.mark.workloads())]
+        pytest.param("VDBench-Basic.yaml", marks=workloads),
+        pytest.param("VDBench-Basic-FS.yaml", marks=workloads)]
     )
     @pytest.mark.parametrize('load', [15, 35, 70])
     @pytest.mark.parametrize(
@@ -146,7 +146,7 @@ class TestVDBenchWorkload(E2ETest):
                   'samples', 'width', 'depth', 'files', 'file_size',
                   'runtime', 'pause'],
         argvalues=[pytest.param(*[True, 0, 0, [], "", 1, 0, 0, 0, 0, 600, 5],
-                                marks=pytest.mark.workloads())],
+                                marks=workloads)],
     )
     def test_vdbench_workload(
         self, template, with_ocs, load, label_nodes, ripsaw, servers, threads,
