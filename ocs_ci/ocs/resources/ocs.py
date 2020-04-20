@@ -41,7 +41,7 @@ class OCS(object):
                     )
         """
         self.data = kwargs
-        self._api_version = self.data.get('api_version')
+        self._api_version = self.data.get('apiVersion')
         self._kind = self.data.get('kind')
         self._namespace = None
         if 'metadata' in self.data:
