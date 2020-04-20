@@ -4,6 +4,7 @@ import time
 import boto3
 import random
 import traceback
+import re
 
 from botocore.exceptions import ClientError
 
@@ -843,6 +844,51 @@ class AWS(object):
             stack_name, param_name
         )
         return worker_instance_profile_name
+
+    def get_worker_stacks(self):
+        """
+        Get the cloudformation stacks only for workers of this cluster
+
+        Returns:
+            list : of worker stacks
+
+        """
+        worker_pattern = r"{}-no[0-9]*".format(config.ENV_DATA['cluster_name'])
+        return self.get_matching_stacks(worker_pattern)
+
+    def get_matching_stacks(self, pattern):
+        """
+        Get only the stacks which matches the pattern
+
+        Args:
+            pattern (str): A raw string which is re compliant
+
+        Returns:
+            list : of strings which are matching stack name
+
+        """
+        all_stacks = self.get_all_stacks()
+        matching_stacks = []
+        for stack in all_stacks:
+            matching = re.match(pattern, stack)
+            if matching:
+                matching_stacks.append(matching.group())
+        return matching_stacks
+
+    def get_all_stacks(self):
+        """
+        Get all the cloudformation stacks
+
+        Returns:
+            list : of all cloudformation stacks
+
+        """
+        all_stacks = []
+        stack_description = self.cf_client.describe_stacks()
+        for stack in stack_description['Stacks']:
+            all_stacks.append(stack['StackName'])
+
+        return all_stacks
 
 
 def get_instances_ids_and_names(instances):

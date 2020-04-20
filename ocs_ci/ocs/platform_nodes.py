@@ -129,10 +129,10 @@ class NodesBase(object):
             f'{self.platform.upper()}{self.deployment_type.upper()}Node'
         ]
 
-        rhel_cnt = len(get_typed_worker_nodes('rhel'))
-        rhcos_cnt = len(get_typed_worker_nodes('rhcos'))
+        rhel_count = len(get_typed_worker_nodes('rhel'))
+        rhcos_count = len(get_typed_worker_nodes('rhcos'))
         for i in range(num_nodes):
-            node_id = rhel_cnt + rhcos_cnt + i
+            node_id = rhel_count + rhcos_count + i
             node_list.append(node_cls(node_conf, node_type))
             node_list[i]._prepare_node(node_id)
 
@@ -573,6 +573,8 @@ class AWSNodes(NodesBase):
     def attach_nodes_to_upi_cluster(self, node_list):
         """
         Attach node to upi cluster
+        Note: For RHCOS nodes, create function itself would have
+        attached the nodes to cluster so nothing to do here
 
         Args:
             node_list (list): of AWSUPINode objects
@@ -580,10 +582,6 @@ class AWSNodes(NodesBase):
         """
         if node_list[0].node_type == 'RHEL':
             self.attach_rhel_nodes_to_upi_cluster(node_list)
-        elif node_list[0].node_type == 'RHCOS':
-            # Nothing to do, as create stack
-            # itself would have attached the node
-            pass
 
     def attach_rhel_nodes_to_upi_cluster(self, node_list):
         """
@@ -1184,7 +1182,6 @@ class AWSUPINode(AWSNodes):
         self.worker_iam_role = worker_instance.iam_instance_profile
         self.worker_tag = self.get_kube_tag(worker_instance.tags)
         self.worker_image_id = worker_instance.image.id  # AMI id
-        # TODO: Get the following values
         self.worker_instance_profile = self.aws.get_worker_instance_profile_name(
             stack_name
         )

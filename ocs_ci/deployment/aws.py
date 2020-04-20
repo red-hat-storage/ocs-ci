@@ -21,7 +21,6 @@ from ocs_ci.utility.aws import (
 )
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.node import get_typed_worker_nodes
 from ocs_ci.utility.utils import (
     clone_repo, create_rhelpod, get_cluster_name, get_infra_id, run_cmd,
     TimeoutSampler, get_ocp_version
@@ -825,20 +824,11 @@ class AWSUPI(AWSBase):
         # Delete master, bootstrap, security group, and worker stacks
         suffixes = ['ma', 'bs', 'sg']
 
-        # Considering only 'rhcos' workers because if there were rhel workers
-        # it would have been already removed above.
-        # Warning!: There is a catch if we have mixed worker clusters with
-        # rhel and rhcos workers, stack numbering may not be in sequential order
-        # and may mess up the deletion of worker stack because of the way we generate
-        # stack name. Let's say initially we had 3 rhcos workers then tests will add
-        # 2 rhel workers followed by 2 rhcos workers, then after deleting
-        # rhel workers there will be a hole in sequence numbers of worker stack
-        # names
-        num_workers = len(get_typed_worker_nodes('rhcos'))
-        for i in range(num_workers - 1, -1, -1):
-            suffixes.insert(0, f'no{i}')
-
-        stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
+        stack_names = self.aws.get_worker_stacks()
+        stack_names.sort()
+        stack_names.reverse()
+        map(stack_names.append, [f'{cluster_name}-{s}' for s in suffixes])
+        logger.info(f"Deleteing stacks: {stack_names}")
         self.aws.delete_cloudformation_stacks(stack_names)
 
         # Call openshift-installer destroy cluster
