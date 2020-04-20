@@ -116,6 +116,7 @@ class S3Client(CloudClient):
     def internal_create_uls(self, name, region=None):
         """
         Creates the Underlying Storage using the S3 API
+
         Args:
            name (str): The Underlying Storage name to be created
            region (str): The region to create the Underlying Storage, if none will create at
@@ -136,6 +137,7 @@ class S3Client(CloudClient):
     def internal_delete_uls(self, name):
         """
         Deletes the Underlying Storage using the S3 API
+
         Args:
            name (str): The Underlying Storage name to be deleted
 
@@ -145,7 +147,7 @@ class S3Client(CloudClient):
             Bucket=name
         )
         sample = TimeoutSampler(
-            timeout=30, sleep=3, func=self.wait_for_delete_uls,
+            timeout=30, sleep=3, func=self.check_uls_deletion,
             name=name
         )
         if not sample.wait_for_func_status(result=True):
@@ -156,11 +158,13 @@ class S3Client(CloudClient):
         else:
             logger.info(f'Underlying Storage {name} deleted successfully')
 
-    def wait_for_delete_uls(self, name):
+    def check_uls_deletion(self, name):
         """
         Try to delete Underlying Storage by name
+
         Args:
             name (str): the Underlying Storage name
+
         Returns:
             bool: True if deleted successfully
 
@@ -182,6 +186,7 @@ class S3Client(CloudClient):
     def verify_uls_exists(self, uls_name):
         """
        Verifies whether a Underlying Storage with the given uls_name exists
+
        Args:
            uls_name (str): The Underlying Storage name to be verified
 
@@ -226,6 +231,7 @@ class GoogleClient(CloudClient):
     def internal_create_uls(self, name, region=None):
         """
         Creates the Underlying Storage using the Google API
+
         Args:
            name (str): The Underlying Storage name to be created
            region (str): The region to create the Underlying Storage
@@ -239,6 +245,7 @@ class GoogleClient(CloudClient):
     def internal_delete_uls(self, name):
         """
         Deletes the Underlying Storage using the Google API
+
         Args:
            name (str): The Underlying Storage name to be deleted
 
@@ -273,6 +280,7 @@ class AzureClient(CloudClient):
     def internal_create_uls(self, name, region=None):
         """
         Creates the Underlying Storage using the Azure API
+
         Args:
            name (str): The Underlying Storage name to be created
            region (str): The region to create the Underlying Storage,
@@ -283,6 +291,7 @@ class AzureClient(CloudClient):
     def internal_delete_uls(self, name):
         """
         Deletes the Underlying Storage using the Azure API
+
         Args:
            name (str): The Underlying Storage name to be deleted
 

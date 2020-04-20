@@ -166,6 +166,7 @@ def upload_parts(mcg_obj, awscli_pod, bucketname, object_key, body_path, upload_
 def oc_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
     """
     Create a new backingstore with aws underlying storage using oc create command
+
     Args:
         cld_mgr (CloudManager): holds secret for backingstore creation
         backingstore_name (str): backingstore name
@@ -185,6 +186,7 @@ def oc_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
 def cli_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
     """
     Create a new backingstore with aws underlying storage using noobaa cli command
+
     Args:
         cld_mgr (CloudManager): holds secret for backingstore creation
         backingstore_name (str): backingstore name
@@ -226,6 +228,7 @@ def cli_create_s3comp_backingstore(cld_mgr, backingstore_name, uls_name, region)
 def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
     """
     Create a new backingstore with pv underlying storage using oc create command
+
     Args:
         backingstore_name (str): backingstore name
         vol_num (int): number of pv volumes
@@ -246,6 +249,7 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
 def cli_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
     """
     Create a new backingstore with pv underlying storage using noobaa cli command
+
     Args:
         backingstore_name (str): backingstore name
         vol_num (int): number of pv volumes
@@ -262,6 +266,7 @@ def cli_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
 def wait_for_pv_backingstore(backingstore_name, namespace=None):
     """
     wait for existing pv backing store to reach OPTIMAL state
+
     Args:
         backingstore_name (str): backingstore name
         namespace (str): backing store's namespace
@@ -283,9 +288,11 @@ def wait_for_pv_backingstore(backingstore_name, namespace=None):
 def check_pv_backingstore_status(backingstore_name, namespace=None):
     """
     check if existing pv backing store is in OPTIMAL state
+
     Args:
         backingstore_name (str): backingstore name
         namespace (str): backing store's namespace
+
     Returns:
         bool: True if backing store is in OPTIMAL state
 

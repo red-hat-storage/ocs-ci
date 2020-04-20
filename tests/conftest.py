@@ -1464,6 +1464,7 @@ def ec2_instances(request, aws_obj):
 def cld_mgr(request):
     """
     Returns a cloud manager instance that'll be used throughout the session
+
     Returns:
         CloudManager: A CloudManager resource
 
@@ -1755,6 +1756,7 @@ def cloud_uls_factory(request, cld_mgr):
     """
      Create a Underlying Storage factory.
      Calling this fixture creates a new underlying storage(s).
+
      Args:
         cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
 
@@ -1776,12 +1778,14 @@ def cloud_uls_factory(request, cld_mgr):
     def _create_uls(uls_dict):
         """
         Creates and deletes all underlying storage that were created as part of the test
+
         Args:
             uls_dict (dict): Dictionary containing storage provider as key and a list of tuples
             as value.
             each tuple contain amount as first parameter and region as second parameter.
             Example:
                 'aws': [(3,us-west-1),(2,eu-west-2)]
+
         Returns:
             dict: A dictionary of cloud names as keys and uls names sets as value.
 
@@ -1840,6 +1844,7 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
     """
         Create a Backing Store factory.
         Calling this fixture creates a new Backing Store(s).
+
         Args:
             cloud_uls_factory: Factory for underlying storage creation
             cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
@@ -1867,6 +1872,7 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
     def _create_backingstore(method, uls_dict):
         """
         Creates and deletes all underlying storage that were created as part of the test
+
         Args:
             method (str): String for selecting method of backing store creation (CLI/OC)
             uls_dict (dict): Dictionary containing storage provider as key and a list of tuples
@@ -1878,6 +1884,7 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
             Example:
                 'aws': [(3,us-west-1),(2,eu-west-2)]
                 'pv': [(3,32,ocs-storagecluster-ceph-rbd),(2,100,ocs-storagecluster-ceph-rbd)]
+
         Returns:
             list: A list of backingstore objects.
 
