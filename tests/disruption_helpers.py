@@ -61,12 +61,23 @@ class Disruptions:
         if self.resource == 'operator':
             self.resource_obj = pod.get_operator_pods()
             self.selector = constants.OPERATOR_LABEL
-
+        if self.resource == 'postgres':
+            self.resource_obj = pod.get_operator_pods(
+                operator_label=constants.POSTGRES_APP_LABEL,namespace='my-ripsaw')
+            self.selector = constants.POSTGRES_APP_LABEL
         self.resource_count = resource_count or len(self.resource_obj)
 
     def delete_resource(self, resource_id=0):
         self.resource_obj[resource_id].delete(force=True)
         assert POD.wait_for_resource(
+            condition='Running', selector=self.selector,
+            resource_count=self.resource_count, timeout=300
+        )
+
+    def delete_app_resource(self, resource_id=0):
+        self.resource_obj[resource_id].delete(force=True)
+        Pod=ocp.OCP(kind=constants.POD, namespace=self.resource_obj[resource_id].namespace)
+        assert Pod.wait_for_resource(
             condition='Running', selector=self.selector,
             resource_count=self.resource_count, timeout=300
         )
