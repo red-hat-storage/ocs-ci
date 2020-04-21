@@ -827,7 +827,7 @@ class AWSUPI(AWSBase):
         stack_names = self.aws.get_worker_stacks()
         stack_names.sort()
         stack_names.reverse()
-        map(stack_names.append, [f'{cluster_name}-{s}' for s in suffixes])
+        stack_names.extend([f'{cluster_name}-{s}' for s in suffixes])
         logger.info(f"Deleteing stacks: {stack_names}")
         self.aws.delete_cloudformation_stacks(stack_names)
 

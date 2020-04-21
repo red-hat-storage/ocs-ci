@@ -12,7 +12,7 @@ from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import aws, vsphere, templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs import constants, ocp, exceptions
-from ocs_ci.ocs.node import get_node_objs, get_typed_worker_nodes
+from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod, ocs
 from ocs_ci.utility.utils import (
@@ -129,14 +129,56 @@ class NodesBase(object):
             f'{self.platform.upper()}{self.deployment_type.upper()}Node'
         ]
 
-        rhel_count = len(get_typed_worker_nodes('rhel'))
-        rhcos_count = len(get_typed_worker_nodes('rhcos'))
-        for i in range(num_nodes):
-            node_id = rhel_count + rhcos_count + i
+        workers_stacks = self.aws.get_worker_stacks()
+        existing_indexes = self.get_existing_indexes(workers_stacks)
+        slots_available = self.get_available_slots(existing_indexes, num_nodes)
+        logger.info(f"Available indexes: {slots_available}")
+        for slot in slots_available:
+            node_id = slot
             node_list.append(node_cls(node_conf, node_type))
-            node_list[i]._prepare_node(node_id)
+            node_list[-1]._prepare_node(node_id)
 
         return node_list
+
+    def get_available_slots(self, existing_indexes, required_slots):
+        """
+        Get indexes which are free
+
+        Args:
+            existing_indexes (list): of integers
+            required_slots (int): required number of integers
+
+        Returns:
+            list : of integers (available slots)
+
+        """
+        slots_available = []
+        count = 0
+        index = 0
+
+        while count < required_slots:
+            if index not in existing_indexes:
+                slots_available.append(index)
+                count = count + 1
+            index = index + 1
+        return slots_available
+
+    def get_existing_indexes(self, index_list):
+        """
+        Extract index suffixes from index_list
+
+        Args:
+            index_list (list): of stack names in the form of
+                'clustername-no$i'
+
+        Returns:
+            list : sorted list of Integers
+
+        """
+        temp = []
+        for index in index_list:
+            temp.append(int(index.split('-')[1][2:]))
+        return temp.sort()
 
     def attach_nodes_to_cluster(self, node_list):
         raise NotImplementedError(
@@ -840,7 +882,7 @@ class AWSUPINode(AWSNodes):
         along with the user provided config
 
         Returns:
-            conf (dict): A dictionary of merged user and default values
+            dict: A dictionary of merged user and default values
 
         """
         conf = self.read_default_config(constants.RHCOS_WORKER_CONF)
@@ -858,7 +900,7 @@ class AWSUPINode(AWSNodes):
             conf (dict): configuration for node
 
         Returns:
-           awsinstance object
+            boto3.Instance: instance of ec2 instance resource
 
         """
         worker_template_path = self.get_rhcos_worker_template()
@@ -871,40 +913,18 @@ class AWSUPINode(AWSNodes):
         s3_url = self.aws.get_s3_bucket_object_url(
             self.bucket_name, self.template_obj_key
         )
-        self.create_stack(conf, s3_url)
+        params_list = self.build_stack_params(
+            conf['node_id'], conf
+        )
+        self.stack_name, self.stack_id = self.aws.create_stack(
+            conf, s3_url, conf['node_id'], params_list
+        )
         instance_id = self.aws.get_stack_instance_id(
             self.stack_name, constants.AWS_WORKER_LOGICAL_RESOURCE_ID
         )
 
         delete_file(worker_template_path)
         return self.aws.get_ec2_instance(instance_id)
-
-    def create_stack(self, conf, s3_url):
-        """
-        Create a new cloudformation stack for worker creation
-
-        Args:
-            conf (dict): of worker configuration
-            s3_url (str): An aws url for accessing s3 object
-        """
-        index = conf['node_id']
-        stack_name = f"{self.cluster_name}-no{index}"
-
-        try:
-            response = self.cf.create_stack(
-                StackName=stack_name,
-                TemplateURL=s3_url,
-                Parameters=self.build_stack_params(index, conf),
-                Capabilities='CAPABILITY_NAMED_IAM'
-            )
-        except Exception:
-            logger.error("Cloudformation Stack creation failed")
-            raise
-        self.cf.get_waiter('stack_create_complete').wait(StackName=stack_name)
-        logger.info(f"Stack {stack_name} created successfuly")
-        self.stack_name = stack_name
-        self.stack_id = response['StackId']
-        logger.info(f"Stackid = {self.stack_id}")
 
     def build_stack_params(self, index, conf):
         """

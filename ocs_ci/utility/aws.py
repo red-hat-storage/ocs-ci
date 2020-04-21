@@ -854,7 +854,7 @@ class AWS(object):
             list : of worker stacks
 
         """
-        worker_pattern = r"{}-no[0-9]*".format(config.ENV_DATA['cluster_name'])
+        worker_pattern = r"{}-no[0-9]+".format(config.ENV_DATA['cluster_name'])
         return self.get_matching_stacks(worker_pattern)
 
     def get_matching_stacks(self, pattern):
@@ -890,6 +890,34 @@ class AWS(object):
             all_stacks.append(stack['StackName'])
 
         return all_stacks
+
+    def create_stack(self, conf, s3_url, index, params_list):
+        """
+        Create a new cloudformation stack for worker creation
+
+        Args:
+            conf (dict): of worker configuration
+            s3_url (str): An aws url for accessing s3 object
+            index (int): Integer index for stack name
+            params_list (list): of parameters (k,v) for create_stack
+
+        Returns:
+            tuple : of (stack_name, stack_id)
+
+        """
+        stack_name = f"{self.cluster_name}-no{index}"
+
+        response = self.cf_client.create_stack(
+            StackName=stack_name,
+            TemplateURL=s3_url,
+            Parameters=params_list,
+            Capabilities='CAPABILITY_NAMED_IAM'
+        )
+        self.cf_client.get_waiter('stack_create_complete').wait(StackName=stack_name)
+        logger.info(f"Stack {stack_name} created successfuly")
+        stack_id = response['StackId']
+        logger.info(f"Stackid = {stack_id}")
+        return stack_name, stack_id
 
 
 def get_instances_ids_and_names(instances):
