@@ -421,7 +421,7 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         CommandFailed: In case the command execution fails
 
     Returns:
-        (str) Decoded stdout of command
+        (CompletedProcess) A CompletedProcess object of the command that was executed
 
     """
     masked_cmd = mask_secrets(cmd, secrets)
