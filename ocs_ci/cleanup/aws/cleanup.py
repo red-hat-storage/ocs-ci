@@ -184,10 +184,22 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
         ec2_instances = [aws.get_ec2_instance(instance_dict['id']) for instance_dict in instance_dicts]
         if not ec2_instances:
             continue
-        cluster_io_tag = [
-            tag['Key'] for tag in ec2_instances[0].tags if 'kubernetes.io/cluster' in tag['Key']
-        ]
-        cluster_name = cluster_io_tag[0].strip('kubernetes.io/cluster/')
+        cluster_io_tag = None
+        for instance in ec2_instances:
+            cluster_io_tag = [
+                tag['Key'] for tag in instance.tags
+                if 'kubernetes.io/cluster' in tag['Key']
+            ]
+            if cluster_io_tag:
+                break
+        if not cluster_io_tag:
+            logger.warning(
+                "Unable to find valid cluster IO tag from ec2 instance tags "
+                "for VPC %s. This is probably not an OCS cluster VPC!",
+                vpc_name
+            )
+            continue
+        cluster_name = cluster_io_tag[0].replace('kubernetes.io/cluster/', '')
         if determine_cluster_deletion(ec2_instances, cluster_name):
             cf_clusters_to_delete.append(cluster_name)
 

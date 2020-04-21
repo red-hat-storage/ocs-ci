@@ -1,4 +1,3 @@
-from concurrent.futures import ThreadPoolExecutor
 import logging
 
 import pytest
@@ -6,6 +5,9 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers, pre_upgrade, post_upgrade
 )
+from ocs_ci.ocs import constants
+from ocs_ci.ocs import ocp
+from tests import helpers
 
 log = logging.getLogger(__name__)
 
@@ -16,7 +18,13 @@ def test_start_pre_upgrade_pod_io(pre_upgrade_pods_running_io):
     """
     Confirm that there are pods created before upgrade.
     """
-    assert pre_upgrade_pods_running_io
+    for pod in pre_upgrade_pods_running_io:
+        log.info("Waiting for all fio pods to come up")
+        helpers.wait_for_resource_state(
+            pod,
+            constants.STATUS_RUNNING,
+            timeout=600
+        )
 
 
 @post_upgrade
@@ -26,7 +34,7 @@ def test_pod_io(
     post_upgrade_filesystem_pods,
     pre_upgrade_block_pods,
     post_upgrade_block_pods,
-    upgrade_fio_file
+    fio_project
 ):
     """
     Test IO on multiple pods at the same time and finish IO on pods that were
@@ -48,48 +56,19 @@ def test_pod_io(
         f"Pods using block device created after upgrade: "
         f"{post_upgrade_block_pods}"
     )
-
-    log.warning('Stopping fio for pre upgrade pods')
-    upgrade_fio_file.write_text('stop')
-
-    # Run IOs on filesystem pods
-    log.info('Starting fio on post upgrade fs pods')
-    pods = pre_upgrade_filesystem_pods + post_upgrade_filesystem_pods
-    with ThreadPoolExecutor() as executor:
-        for pod in pods:
-            log.info(f"Running fio on {pod.name}")
-            executor.submit(
-                pod.run_io(
-                    storage_type='fs',
-                    size='1GB',
-                    runtime=20,
-                )
-            )
+    pods = (
+        pre_upgrade_block_pods
+        + post_upgrade_block_pods
+        + pre_upgrade_filesystem_pods
+        + post_upgrade_filesystem_pods
+    )
+    job_obj = ocp.OCP(kind=constants.JOB, namespace=fio_project.namespace)
     for pod in pods:
-        log.info(f"Waiting for results from {pod.name}")
-        fio_result = pod.get_fio_results()
-        reads = fio_result.get('jobs')[0].get('read').get('iops')
-        writes = fio_result.get('jobs')[0].get('write').get('iops')
-        assert reads, f"There are no reads from pod {pod.name}"
-        assert writes, f"There are no writes from pod {pod.name}"
-
-    # Run IOs on block device pods
-    log.info('Starting fio on post upgrade block pods')
-    pods = pre_upgrade_block_pods + post_upgrade_block_pods
-    with ThreadPoolExecutor() as executor:
-        for pod in pods:
-            log.info(f"Running fio on {pod.name}")
-            executor.submit(
-                pod.run_io(
-                    storage_type='block',
-                    size='1024MB',
-                    runtime=20,
-                )
-            )
-    for pod in pods:
-        log.info(f"Waiting for results from {pod.name}")
-        fio_result = pod.get_fio_results()
-        reads = fio_result.get('jobs')[0].get('read').get('iops')
-        writes = fio_result.get('jobs')[0].get('write').get('iops')
-        assert reads, f"There are no reads from pod {pod.name}"
-        assert writes, f"There are no writes from pod {pod.name}"
+        log.info(f"Checking that fio is still running")
+        helpers.wait_for_resource_state(
+            pod,
+            constants.STATUS_RUNNING,
+            timeout=600
+        )
+        job_name = pod.get_labels().get('job-name')
+        job_obj.delete(resource_name=job_name)

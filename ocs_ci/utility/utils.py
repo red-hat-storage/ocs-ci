@@ -1,23 +1,29 @@
-import hcl
 import json
 import logging
 import os
 import platform
 import random
+import re
 import shlex
+import smtplib
 import string
 import subprocess
 import time
 import traceback
 from copy import deepcopy
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from shutil import which
 
-
+import hcl
 import requests
 import yaml
-import re
-import smtplib
+from bs4 import BeautifulSoup
+from paramiko import SSHClient, AutoAddPolicy
+from semantic_version import Version
 
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
     CommandFailed,
@@ -27,15 +33,7 @@ from ocs_ci.ocs.exceptions import (
     UnavailableBuildException,
     UnsupportedOSType,
 )
-from ocs_ci.framework import config
-from ocs_ci.ocs import constants, defaults
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from ocs_ci.utility.retry import retry
-from bs4 import BeautifulSoup
-from paramiko import SSHClient, AutoAddPolicy
-from semantic_version import Version
-
 
 log = logging.getLogger(__name__)
 
@@ -384,6 +382,7 @@ def mask_secrets(plaintext, secrets):
 
 def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     """
+    *The deprecated form of exec_cmd.*
     Run an arbitrary command locally
 
     Args:
@@ -400,13 +399,41 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
 
     Returns:
         (str) Decoded stdout of command
+    """
+    completed_process = exec_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
+    return mask_secrets(completed_process.stdout.decode(), secrets)
+
+
+def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
+    """
+    Run an arbitrary command locally
+
+    Args:
+        cmd (str): command to run
+        secrets (list): A list of secrets to be masked with asterisks
+            This kwarg is popped in order to not interfere with
+            subprocess.run(``**kwargs``)
+        timeout (int): Timeout for the command, defaults to 600 seconds.
+        ignore_error (bool): True if ignore non zero return code and do not
+            raise the exception.
+
+    Raises:
+        CommandFailed: In case the command execution fails
+
+    Returns:
+        (CompletedProcess) A CompletedProcess object of the command that was executed
+        CompletedProcess attributes:
+        args: The list or str args passed to run().
+        returncode (str): The exit code of the process, negative for signals.
+        stdout     (str): The standard output (None if not captured).
+        stderr     (str): The standard error (None if not captured).
 
     """
     masked_cmd = mask_secrets(cmd, secrets)
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str):
         cmd = shlex.split(cmd)
-    r = subprocess.run(
+    completed_process = subprocess.run(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -414,23 +441,24 @@ def run_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
         timeout=timeout,
         **kwargs
     )
-    masked_stdout = mask_secrets(r.stdout.decode(), secrets)
-    if len(r.stdout) > 0:
+    masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
+    if len(completed_process.stdout) > 0:
         log.debug(f"Command stdout: {masked_stdout}")
     else:
         log.debug("Command stdout is empty")
-    masked_stderr = mask_secrets(r.stderr.decode(), secrets)
-    if len(r.stderr) > 0:
+
+    masked_stderr = mask_secrets(completed_process.stderr.decode(), secrets)
+    if len(completed_process.stderr) > 0:
         log.warning(f"Command stderr: {masked_stderr}")
     else:
         log.debug("Command stderr is empty")
-    log.debug(f"Command return code: {r.returncode}")
-    if r.returncode and not ignore_error:
+    log.debug(f"Command return code: {completed_process.returncode}")
+    if completed_process.returncode and not ignore_error:
         raise CommandFailed(
             f"Error during execution of command: {masked_cmd}."
             f"\nError is {masked_stderr}"
         )
-    return masked_stdout
+    return completed_process
 
 
 def download_file(url, filename):

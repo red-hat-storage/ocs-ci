@@ -91,10 +91,8 @@ def test_run_cmd_simple_negative(caplog):
     assert caplog.records[1].levelname == 'DEBUG'
     assert caplog.records[1].message == 'Command stdout is empty'
     assert caplog.records[2].levelname == 'WARNING'
-    assert caplog.records[2].message == (
-        "Command stderr: "
-        "ls: cannot access '/tmp/this/file/isindeednotthereatall': "
-        "No such file or directory\n")
+    assert caplog.records[2].message.startswith("Command stderr: ls:")
+    assert "No such file or directory" in caplog.records[2].message
     assert caplog.records[3].levelname == 'DEBUG'
     assert caplog.records[3].message == 'Command return code: 2'
 
@@ -131,9 +129,7 @@ def test_run_cmd_simple_negative_ignoreerror(caplog):
     assert caplog.records[1].levelname == 'DEBUG'
     assert caplog.records[1].message == 'Command stdout is empty'
     assert caplog.records[2].levelname == 'WARNING'
-    assert caplog.records[2].message == (
-        "Command stderr: "
-        "ls: cannot access '/tmp/this/file/isindeednotthereatall': "
-        "No such file or directory\n")
+    assert caplog.records[2].message.startswith("Command stderr: ls:")
+    assert "No such file or directory" in caplog.records[2].message
     assert caplog.records[3].levelname == 'DEBUG'
     assert caplog.records[3].message == 'Command return code: 2'

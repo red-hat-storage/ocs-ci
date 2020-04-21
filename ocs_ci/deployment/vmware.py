@@ -59,6 +59,12 @@ class VSPHEREBASE(Deployment):
             constants.EXTERNAL_DIR,
             'openshift-misc'
         )
+        os.environ['TF_LOG'] = config.ENV_DATA.get('TF_LOG_LEVEL', "TRACE")
+        os.environ['TF_LOG_PATH'] = os.path.join(
+            config.ENV_DATA.get('cluster_path'),
+            config.ENV_DATA.get('TF_LOG_FILE')
+        )
+
         self.wait_time = 90
 
     def attach_disk(self, size=100):

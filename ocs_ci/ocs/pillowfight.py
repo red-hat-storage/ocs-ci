@@ -219,3 +219,8 @@ class PillowFight(object):
             except CommandFailed:
                 log.info(f"{pf_fullpath} object is already deleted")
         rmtree(self.logs)
+        nsinfo = self.pod_obj.exec_oc_cmd(command="get namespace")
+        if self.COUCHBASE_OPERATOR in nsinfo:
+            self.pod_obj.exec_oc_cmd(
+                command=f"delete namespace {self.COUCHBASE_OPERATOR}"
+            )

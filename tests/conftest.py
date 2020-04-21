@@ -3,7 +3,9 @@ from itertools import chain
 import os
 from random import randrange
 import tempfile
+import textwrap
 from time import sleep
+import yaml
 
 import pytest
 from botocore.exceptions import ClientError
@@ -79,8 +81,7 @@ def pytest_collection_modifyitems(session, config, items):
         skip_marker = item.get_closest_marker("skipif_ocs_version")
         if skip_marker:
             skip_condition = skip_marker.args
-            log.info(skip_condition)
-            # skip_confition will be a tuple
+            # skip_condition will be a tuple
             # and condition will be first element in the tuple
             if skipif_ocs_version(skip_condition[0]):
                 log.info(
@@ -355,9 +356,8 @@ def storageclass_factory_fixture(
             sc_obj = helpers.create_resource(**custom_data)
         else:
             secret = secret or secret_factory(interface=interface)
-            ceph_pool = ceph_pool_factory(interface)
             if interface == constants.CEPHBLOCKPOOL:
-                interface_name = ceph_pool.name
+                interface_name = constants.DEFAULT_BLOCKPOOL
             elif interface == constants.CEPHFILESYSTEM:
                 interface_name = helpers.get_cephfs_data_pool_name()
 
@@ -369,7 +369,6 @@ def storageclass_factory_fixture(
                 reclaim_policy=reclaim_policy
             )
             assert sc_obj, f"Failed to create {interface} storage class"
-            sc_obj.ceph_pool = ceph_pool
             sc_obj.secret = secret
 
         instances.append(sc_obj)
@@ -913,8 +912,11 @@ def tier_marks_name():
 def health_checker(request, tier_marks_name):
     def finalizer():
         try:
-            ceph_health_check_base()
-            log.info("Ceph health check passed at teardown")
+            teardown = config.RUN['cli_params']['teardown']
+            skip_ocs_deployment = config.ENV_DATA['skip_ocs_deployment']
+            if not (teardown or skip_ocs_deployment):
+                ceph_health_check_base()
+                log.info("Ceph health check passed at teardown")
         except CephHealthException:
             log.info("Ceph health check failed at teardown")
             # Retrying to increase the chance the cluster health will be OK
@@ -1951,3 +1953,115 @@ def install_logging(request):
     )
     log.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
     ocp_logging_obj.create_instance()
+
+
+@pytest.fixture
+def fio_pvc_dict():
+    return fio_pvc_dict_fixture()
+
+
+@pytest.fixture(scope='session')
+def fio_pvc_dict_session():
+    return fio_pvc_dict_fixture()
+
+
+def fio_pvc_dict_fixture():
+    """
+    PVC template for fio workloads.
+    Note that all 'None' values needs to be defined before usage.
+    """
+    # TODO(fbalak): load dictionary fixtures from one place
+    template = textwrap.dedent("""
+        kind: PersistentVolumeClaim
+        apiVersion: v1
+        metadata:
+          name: fio-target
+        spec:
+          storageClassName: None
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: None
+        """)
+    pvc_dict = yaml.safe_load(template)
+    return pvc_dict
+
+
+@pytest.fixture
+def fio_configmap_dict():
+    return fio_configmap_dict_fixture()
+
+
+@pytest.fixture(scope='session')
+def fio_configmap_dict_session():
+    return fio_configmap_dict_fixture()
+
+
+def fio_configmap_dict_fixture():
+    """
+    ConfigMap template for fio workloads.
+    Note that you need to add actual configuration to workload.fio file.
+    """
+    # TODO(fbalak): load dictionary fixtures from one place
+    template = textwrap.dedent("""
+        kind: ConfigMap
+        apiVersion: v1
+        metadata:
+          name: fio-config
+        data:
+          workload.fio: |
+            # here comes workload configuration
+        """)
+    cm_dict = yaml.safe_load(template)
+    return cm_dict
+
+
+@pytest.fixture
+def fio_job_dict():
+    return fio_job_dict_fixture()
+
+
+@pytest.fixture(scope='session')
+def fio_job_dict_session():
+    return fio_job_dict_fixture()
+
+
+def fio_job_dict_fixture():
+    """
+    Job template for fio workloads.
+    """
+    # TODO(fbalak): load dictionary fixtures from one place
+    template = textwrap.dedent("""
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: fio
+        spec:
+          backoffLimit: 1
+          template:
+            metadata:
+              name: fio
+            spec:
+              containers:
+                - name: fio
+                  image: quay.io/johnstrunk/fs-performance:latest
+                  command:
+                    - "/usr/bin/fio"
+                    - "--output-format=json"
+                    - "/etc/fio/workload.fio"
+                  volumeMounts:
+                    - name: fio-target
+                      mountPath: /mnt/target
+                    - name: fio-config-volume
+                      mountPath: /etc/fio
+              restartPolicy: Never
+              volumes:
+                - name: fio-target
+                  persistentVolumeClaim:
+                    claimName: fio-target
+                - name: fio-config-volume
+                  configMap:
+                    name: fio-config
+        """)
+    job_dict = yaml.safe_load(template)
+    return job_dict
