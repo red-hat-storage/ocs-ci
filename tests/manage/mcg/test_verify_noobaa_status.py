@@ -15,9 +15,8 @@ def test_verify_noobaa_status(mcg_obj_session):
     Verify noobaa status output is clean without any errors
     """
     # Get noobaa status
-    status_process = mcg_obj_session.exec_mcg_cmd('status')
+    status = mcg_obj_session.exec_mcg_cmd('status').stderr
 
-    status = status_process.stderr.decode()
     # Verify noobaa status
     for content, count in defaults.NOOBAA_STATUS_CONTENT_COUNT.items():
         assert count == status.count(f'Exists: {content} '), (

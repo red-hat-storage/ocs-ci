@@ -702,8 +702,11 @@ class MCG(object):
             kubeconfig = f"--kubeconfig {kubeconfig} "
 
         namespace = f'-n {namespace}' if namespace else f'-n {self.namespace}'
-        return exec_cmd(
+        result = exec_cmd(
             f'oc {kubeconfig} rsh {self.operator_pod.name} '
             f'{constants.NOOBAA_OPERATOR_POD_CLI_PATH} {cmd} {namespace}',
             **kwargs
         )
+        result.stdout = result.stdout.decode()
+        result.stderr = result.stderr.decode()
+        return result
