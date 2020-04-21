@@ -25,7 +25,7 @@ from ocs_ci.utility.templating import dump_data_to_json, Templating
 from ocs_ci.utility.utils import (
     clone_repo, convert_yaml2tfvars, create_directory_path, read_file_as_str,
     remove_keys_from_tf_variable_file, replace_content_in_file, run_cmd,
-    upload_file, wait_for_co
+    upload_file, wait_for_co, get_ocp_version
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from .deployment import Deployment
@@ -329,7 +329,8 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # git clone repo from openshift installer
             clone_repo(
-                constants.VSPHERE_INSTALLER_REPO, self.upi_repo_path
+                constants.VSPHERE_INSTALLER_REPO, self.upi_repo_path,
+                f'release-{get_ocp_version()}'
             )
 
             # upload bootstrap ignition to public access server
@@ -614,7 +615,8 @@ class VSPHEREUPI(VSPHEREBASE):
             constants.TERRAFORM_VARS
         )
         clone_repo(
-            constants.VSPHERE_INSTALLER_REPO, upi_repo_path
+            constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
+            f'release-{get_ocp_version()}'
         )
         if (
             os.path.exists(f"{constants.VSPHERE_MAIN}.backup")
