@@ -29,6 +29,15 @@ class TestAddCapacity(ManageTest):
             selector='app=rook-ceph-osd',
             resource_count=result * 3
         )
+
+        # Verify status of rook-ceph-osd-prepare pods. Verifies bug 1769061
+        pod.wait_for_resource(
+            timeout=300,
+            condition=constants.STATUS_COMPLETED,
+            selector=constants.OSD_PREPARE_APP_LABEL,
+            resource_count=result * 3
+        )
+
         ceph_health_check(
             namespace=config.ENV_DATA['cluster_namespace'], tries=80
         )
