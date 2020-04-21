@@ -423,10 +423,10 @@ def exec_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
     Returns:
         (CompletedProcess) A CompletedProcess object of the command that was executed
         CompletedProcess attributes:
-            args: The list or str args passed to run().
-            returncode (str): The exit code of the process, negative for signals.
-            stdout     (str): The standard output (None if not captured).
-            stderr     (str): The standard error (None if not captured).
+        args: The list or str args passed to run().
+        returncode (str): The exit code of the process, negative for signals.
+        stdout     (str): The standard output (None if not captured).
+        stderr     (str): The standard error (None if not captured).
 
     """
     masked_cmd = mask_secrets(cmd, secrets)
