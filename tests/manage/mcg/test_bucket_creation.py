@@ -10,7 +10,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
-from tests.manage.mcg.helpers import wait_for_mcg_resource_status
 
 logger = logging.getLogger(__name__)
 
