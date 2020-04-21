@@ -3,10 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import boto3
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_rgw_pod
-from ocs_ci.utility.utils import TimeoutSampler
 from tests.helpers import logger, craft_s3_command, craft_s3_api_command
 
 
