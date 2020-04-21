@@ -179,6 +179,7 @@ def test_buckets_before_upgrade(upgrade_buckets, mcg_obj_session):
 @aws_platform_required
 @bugzilla('1820974')
 @post_upgrade
+@pytest.mark.polarion_id("OCS-2181")
 def test_buckets_after_upgrade(upgrade_buckets, mcg_obj_session):
     """
     Test that all buckets in cluster are in OPTIMAL state after upgrade.
