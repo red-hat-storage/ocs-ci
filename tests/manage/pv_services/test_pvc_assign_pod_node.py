@@ -102,10 +102,12 @@ class TestPvcAssignPodNode(ManageTest):
             volume_mode = 'Block'
             storage_type = 'block'
             block_pv = True
+            pod_yaml = constants.CSI_RBD_RAW_BLOCK_POD_YAML
         else:
-            volume_mode = None
+            volume_mode = ''
             storage_type = 'fs'
             block_pv = False
+            pod_yaml = ''
 
         # Create a RWX PVC
         pvc_obj = pvc_factory(
@@ -124,7 +126,7 @@ class TestPvcAssignPodNode(ManageTest):
             pod_obj = helpers.create_pod(
                 interface_type=interface, pvc_name=pvc_obj.name,
                 namespace=pvc_obj.namespace, node_name=node,
-                pod_dict_path=constants.NGINX_POD_YAML, raw_block_pv=block_pv
+                pod_dict_path=pod_yaml, raw_block_pv=block_pv,
             )
             pod_list.append(pod_obj)
             teardown_factory(pod_obj)
