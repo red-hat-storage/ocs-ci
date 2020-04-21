@@ -788,6 +788,50 @@ class OCP(object):
             )
             return False
 
+    def get_logs(
+        self,
+        name,
+        container_name=None,
+        all_containers=False,
+        secrets=None,
+        timeout=None,
+        ignore_error=False,
+    ):
+        """
+        Execute ``oc logs`` command to fetch logs for a given k8s resource.
+
+        Since the log is stored as a string in memory, this will be
+        problematic when the log is large.
+
+        Args:
+            name (str): name of the resource to fetch logs from
+            container_name (str): name of the container (optional)
+            all_containers (bool): fetch logs from all containers of the
+                resource
+            secrets (list): A list of secrets to be masked with asterisks
+            timeout (int): timeout for the oc_cmd
+            ignore_error (bool): True if ignore non zero return code and do not
+                raise the exception.
+
+        Returns:
+            str: container logs
+
+        """
+        log.info("fetching logs from %s/%s", self.kind, name)
+        oc_cmd = f"logs {self.kind}/{name}"
+        if container_name is not None:
+            oc_cmd += f" --container='{container_name}'"
+        if all_containers:
+            oc_cmd += " --all-containers=true"
+        output = self.exec_oc_cmd(
+            oc_cmd,
+            out_yaml_format=False,
+            secrets=secrets,
+            timeout=timeout,
+            ignore_error=ignore_error
+        )
+        return output
+
 
 def switch_to_project(project_name):
     """
