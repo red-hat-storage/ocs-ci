@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import os
 import shlex
 from time import sleep
 
@@ -16,7 +17,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 from tests.helpers import create_unique_resource_name, create_resource
 
 logger = logging.getLogger(name=__file__)
@@ -683,7 +684,7 @@ class MCG(object):
             )
             assert False
 
-    def exec_mcg_cmd(self, cmd, namespace=None):
+    def exec_mcg_cmd(self, cmd, namespace=None, **kwargs):
         """
         Executes an MCG CLI command through the noobaa-operator pod's CLI binary
 
@@ -696,8 +697,13 @@ class MCG(object):
 
         """
 
+        kubeconfig = os.getenv('KUBECONFIG')
+        if kubeconfig:
+            kubeconfig = f"--kubeconfig {kubeconfig} "
+
         namespace = f'-n {namespace}' if namespace else f'-n {self.namespace}'
-        return self.operator_pod.exec_cmd_on_pod(
+        return exec_cmd(
+            f'oc {kubeconfig} rsh {self.operator_pod.name} '
             f'{constants.NOOBAA_OPERATOR_POD_CLI_PATH} {cmd} {namespace}',
-            out_yaml_format=False
+            **kwargs
         )
