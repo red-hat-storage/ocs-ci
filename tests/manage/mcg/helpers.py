@@ -355,23 +355,3 @@ def s3_delete_object(s3_obj, bucketname, object_key):
 
     """
     return s3_obj.s3_client.delete_object(Bucket=bucketname, Key=object_key)
-
-
-def wait_for_mcg_resource_status(resource_name, resource_type, column, status, interval, timeout):
-    ocp_obj = OCP(namespace='openshift-storage', kind=resource_type)
-
-    def _get_status():
-        return ocp_obj.get_resource(resource_name=resource_name, column=column)
-
-    try:
-        for status_check in TimeoutSampler(
-            timeout, interval, _get_status
-        ):
-            if status_check == status:
-                logger.info(f'{resource_name} reached status {status}.')
-                return True
-            else:
-                logger.info(f'Waiting for {resource_name} to reach status {status}')
-    except TimeoutExpiredError:
-        logger.error(f'{resource_name} did not reach status {status} within {timeout} seconds.')
-        assert False
