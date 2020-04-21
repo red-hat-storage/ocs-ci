@@ -198,6 +198,18 @@ class AWSIPI(AWSBase):
         def __init__(self):
             super(AWSIPI.OCPDeployment, self).__init__()
 
+        def deploy_prereq(self):
+            """
+            Overriding deploy_prereq from parent. Perform all necessary
+            prerequisites for AWSIPI here.
+            """
+            super(AWSIPI.OCPDeployment, self).deploy_prereq()
+            if config.DEPLOYMENT['preserve_bootstrap_node']:
+                logger.info("Setting ENV VAR to preserve bootstrap node")
+                os.environ['OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP'] = 'True'
+                assert os.getenv(
+                    'OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP') == 'True'
+
         def deploy(self, log_cli_level='DEBUG'):
             """
             Deployment specific to OCP cluster on this platform
@@ -318,8 +330,12 @@ class AWSUPI(AWSBase):
                 'AVAILABILITY_ZONE_COUNT': str(config.ENV_DATA.get(
                     'availability_zone_count', ''
                 )),
-                'BASE_DOMAIN': config.ENV_DATA['base_domain']
+                'BASE_DOMAIN': config.ENV_DATA['base_domain'],
+                'remove_bootstrap': 'yes'
             }
+            if config.DEPLOYMENT['preserve_bootstrap_node']:
+                logger.info("Setting ENV VAR to preserve bootstrap node")
+                upi_env_vars['remove_bootstrap'] = 'No'
 
             for key, value in upi_env_vars.items():
                 if value:

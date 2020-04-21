@@ -441,7 +441,8 @@ class OCP(object):
 
     def wait_for_resource(
         self, condition, resource_name='', column='STATUS', selector=None,
-        resource_count=0, timeout=60, sleep=3
+        resource_count=0, timeout=60, sleep=3,
+        dont_allow_other_resources=False,
     ):
         """
         Wait for a resource to reach to a desired condition
@@ -457,6 +458,12 @@ class OCP(object):
             resource_count (int): How many resources expected to be
             timeout (int): Time in seconds to wait
             sleep (int): Sampling time in seconds
+            dont_allow_other_resources (bool): If True it will not allow other
+                resources in different state. For example you are waiting for 2
+                resources and there are currently 3 (2 in running state,
+                1 in ContainerCreating) the function will continue to next
+                iteration to wait for only 2 resources in running state and no
+                other exists.
 
         Returns:
             bool: True in case all resources reached desired condition,
@@ -496,8 +503,10 @@ class OCP(object):
                 # More than 1 resources returned
                 elif sample.get('kind') == 'List':
                     in_condition = []
+                    in_condition_len = 0
                     actual_status = []
                     sample = sample['items']
+                    sample_len = len(sample)
                     for item in sample:
                         try:
                             item_name = item.get('metadata').get('name')
@@ -505,13 +514,28 @@ class OCP(object):
                             actual_status.append(status)
                             if status == condition:
                                 in_condition.append(item)
+                                in_condition_len = len(in_condition)
                         except CommandFailed as ex:
                             log.info(
                                 f"Failed to get status of resource: {item_name} at column {column}, "
                                 f"Error: {ex}"
                             )
                         if resource_count:
-                            if len(in_condition) == resource_count:
+                            if in_condition_len == resource_count:
+                                log.info(
+                                    f"{in_condition_len} resources already "
+                                    f"reached condition!"
+                                )
+                                if (
+                                    dont_allow_other_resources
+                                    and sample_len != in_condition_len
+                                ):
+                                    log.info(
+                                        f"There are {sample_len} resources in "
+                                        f"total. Continue to waiting as "
+                                        f"you don't allow other resources!"
+                                    )
+                                    continue
                                 return True
                         elif len(sample) == len(in_condition):
                             return True

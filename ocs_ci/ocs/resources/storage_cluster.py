@@ -232,14 +232,15 @@ def ocs_install_verification(
     }
     assert required_storage_classes.issubset(storage_class_names)
 
-    # Verify OSD's are distributed
+    # Verify OSDs are distributed
     if not skip_osd_distribution_check:
-        log.info("Verifying OSD's are distributed evenly across worker nodes")
+        log.info("Verifying OSDs are distributed evenly across worker nodes")
         ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
         osds = ocp_pod_obj.get(selector=constants.OSD_APP_LABEL)['items']
+        deviceset_count = get_deviceset_count()
         node_names = [osd['spec']['nodeName'] for osd in osds]
         for node in node_names:
-            assert not node_names.count(node) > 1, (
+            assert not node_names.count(node) > deviceset_count, (
                 "OSD's are not distributed evenly across worker nodes"
             )
 
@@ -342,32 +343,34 @@ def ocs_install_verification(
 
 def add_capacity(osd_size_capacity_requested):
     """
-   Add storage capacity to the cluster
-   Args:
-       osd_size_capacity_requested(int): Requested osd size capacity
+    Add storage capacity to the cluster
 
-   Returns:
-       new storage device set count (int) : Returns True if all OSDs are in Running state
+    Args:
+        osd_size_capacity_requested(int): Requested osd size capacity
 
-   Note:
-   "StoragedeviceSets->count" represents the set of 3 OSDs.
-   That is, if there are 3 OSDs in the system then count will be 1.
-   If there are 6 OSDs then count is 2 and so on.
-   By changing this value,we can add extra devices to the cluster.
-   For example, if we want to expand the cluster by 3 more osds in a cluster that already has 3 osds,
-   we can set count as 2. So, with each increase of count by 1,
-   we get 3 OSDs extra added to the cluster.
-   This is how we are going to 'add capacity' via automation.
-   As we know that OCS has 3 way replica. That is, same data is placed in 3 OSDs.
-   Because of this, the total usable capacity for apps from 3 OSDs
-   will be the size of one OSD (all osds are of same size).
-   If we want to add more capacity to the cluster then we need to add 3 OSDs of same size
-   as that of the original OSD. add_capacity needs to accept the 'capacity_to_add' as an argument.
-   From this we need to arrive at storagedeviceSets -> count and then
-   "Patch" this count to get the required capacity to add.
-   To do so, we use following formula:
-   storageDeviceSets->count = (capacity reqested / osd capacity ) + existing count storageDeviceSets
-   """
+    Returns:
+        new storage device set count (int) : Returns True if all OSDs are in Running state
+
+    Note:
+    "StoragedeviceSets->count" represents the set of 3 OSDs.
+    That is, if there are 3 OSDs in the system then count will be 1.
+    If there are 6 OSDs then count is 2 and so on.
+    By changing this value,we can add extra devices to the cluster.
+    For example, if we want to expand the cluster by 3 more osds in a cluster that already has 3 osds,
+    we can set count as 2. So, with each increase of count by 1,
+    we get 3 OSDs extra added to the cluster.
+    This is how we are going to 'add capacity' via automation.
+    As we know that OCS has 3 way replica. That is, same data is placed in 3 OSDs.
+    Because of this, the total usable capacity for apps from 3 OSDs
+    will be the size of one OSD (all osds are of same size).
+    If we want to add more capacity to the cluster then we need to add 3 OSDs of same size
+    as that of the original OSD. add_capacity needs to accept the 'capacity_to_add' as an argument.
+    From this we need to arrive at storagedeviceSets -> count and then
+    "Patch" this count to get the required capacity to add.
+    To do so, we use following formula:
+    storageDeviceSets->count = (capacity reqested / osd capacity ) + existing count storageDeviceSets
+
+    """
 
     sc = get_storage_cluster()
     old_storage_devices_sets_count = get_deviceset_count()
@@ -387,25 +390,27 @@ def add_capacity(osd_size_capacity_requested):
 
 def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     """
-  Get storage cluster name
+    Get storage cluster name
 
-  Args:
-      namespace (str): Namespace of the resource
+    Args:
+        namespace (str): Namespace of the resource
 
-  Returns:
-      storage cluster (obj) : Storage cluster object handler
-   """
+    Returns:
+        storage cluster (obj) : Storage cluster object handler
+
+    """
     sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
     return sc_obj
 
 
 def get_osd_size():
     """
-   Get osd size from Storage cluster
+    Get osd size from Storage cluster
 
-   Returns:
-       int: osd size
-   """
+    Returns:
+        int: osd size
+
+    """
     sc = get_storage_cluster()
     return int(
         sc.get().get('items')[0].get('spec').get('storageDeviceSets')[0].get(
@@ -416,11 +421,12 @@ def get_osd_size():
 
 def get_deviceset_count():
     """
-   Get storageDeviceSets count  from storagecluster
+    Get storageDeviceSets count  from storagecluster
 
-   Returns:
-       int: storageDeviceSets count
-   """
+    Returns:
+        int: storageDeviceSets count
+
+    """
     sc = get_storage_cluster()
     return int(sc.get().get('items')[0].get('spec').get(
         'storageDeviceSets')[0].get('count')

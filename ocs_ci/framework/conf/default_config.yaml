@@ -64,6 +64,7 @@ DEPLOYMENT:
   ui_deployment: False
   # Following options are defaults for deployment from live content
   live_deployment: False
+  preserve_bootstrap_node: False
 
 # Section for reporting configuration
 REPORTING:
@@ -109,6 +110,9 @@ ENV_DATA:
   # workload fixture will fail on a timeout)
   # the default value used here is based on observations on aws clusters
   fio_storageutilization_min_mbps: 30.0
+  # terraform environment variables
+  TF_LOG_LEVEL: TRACE
+  TF_LOG_FILE: "terraform.log"
 
 # This section is related to upgrade
 UPGRADE:

@@ -35,7 +35,12 @@ class PVC(OCS):
             int: PVC size
         """
         #  [:-2] -> to remove the 'Gi' from the size (e.g. '5Gi --> '5')
-        return int(self.data.get('status').get('capacity').get('storage')[:-2])
+        unformatted_size = self.data.get('status').get('capacity').get('storage')
+        units = unformatted_size[-2:]
+        if units == 'Ti':
+            return int(unformatted_size[:-2]) * 1024
+        elif units == 'Gi':
+            return int(unformatted_size[:-2])
 
     @property
     def status(self):

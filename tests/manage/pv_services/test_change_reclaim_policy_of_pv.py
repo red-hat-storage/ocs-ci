@@ -6,7 +6,8 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.utility.utils import TimeoutSampler
 from tests.helpers import (
-    wait_for_resource_state, verify_volume_deleted_in_backend
+    wait_for_resource_state, verify_volume_deleted_in_backend,
+    default_ceph_block_pool
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
@@ -77,9 +78,12 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
                 pod_factory(
                     interface=interface,
                     pvc=pvc_obj,
-                    status=constants.STATUS_RUNNING
+                    status=None
                 )
             )
+        for pod in self.pod_objs:
+            wait_for_resource_state(pod, constants.STATUS_RUNNING)
+            pod.reload()
 
     def run_and_verify_io(self, pods_list, do_setup=True):
         """
@@ -221,9 +225,12 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
                 pod_factory(
                     interface=interface,
                     pvc=pvc_obj,
-                    status=constants.STATUS_RUNNING
+                    status=None
                 )
             )
+        for pod in new_pod_objs:
+            wait_for_resource_state(pod, constants.STATUS_RUNNING)
+            pod.reload()
 
         # Run IO on new pods
         self.run_and_verify_io(new_pod_objs)
@@ -288,7 +295,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
         )
 
         # Verify PV using ceph toolbox. Wait for Image/Subvolume to be deleted.
-        pool_name = self.sc_obj.ceph_pool.name if interface == constants.CEPHBLOCKPOOL else None
+        pool_name = default_ceph_block_pool() if interface == constants.CEPHBLOCKPOOL else None
         for pvc_name, uuid in pvc_uuid_map.items():
             try:
                 for ret in TimeoutSampler(
