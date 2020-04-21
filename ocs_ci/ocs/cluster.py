@@ -741,16 +741,17 @@ class CephCluster(object):
 
     def osd_health_check(self, count):
         """
-        Osd health check based on pod count
+        OSD health check based on pod count
 
         Args:
             count (int): Expected number of Osd pods
 
         Raises:
             OsdCountException: if osd pod count doesn't match
+
         """
         timeout = 10 * len(self.pods)
-        logger.info(f"Expected OSDs = {count}")
+        logger.info(f"Expected OSDs count= {count}")
         try:
             assert self.POD.wait_for_resource(
                 condition='Running', selector=self.osd_selector,
@@ -769,16 +770,17 @@ class CephCluster(object):
 
     def mgr_health_check(self, count):
         """
-        Mgr health check based on pod count
+        MGR health check based on pod count
 
         Args:
             count (int): Expected number of Mgr pods
 
         Raises:
             MgrCountException: if mgr pod count doesn't match
+
         """
         timeout = 10 * len(self.pods)
-        logger.info(f"Expected Mgr = {count}")
+        logger.info(f"Expected Mgr count= {count}")
         try:
             assert self.POD.wait_for_resource(
                 condition='Running', selector=self.mgr_selector,
@@ -804,9 +806,10 @@ class CephCluster(object):
 
         Raises:
             RgwCountException: if rgw pod count doesn't match
+
         """
         timeout = 10 * len(self.pods)
-        logger.info(f"Expected Rgw = {count}")
+        logger.info(f"Expected Rgw count= {count}")
         try:
             assert self.POD.wait_for_resource(
                 condition='Running', selector=self.rgw_selector,
@@ -832,9 +835,10 @@ class CephCluster(object):
 
         Raises:
             RbdpluginCountException: if csi-rbdplugin pod count doesn't match
+
         """
         timeout = 10 * len(self.pods)
-        logger.info(f"Expected rbdplugin = {count}")
+        logger.info(f"Expected rbdplugin count= {count}")
         try:
             assert self.POD.wait_for_resource(
                 condition='Running', selector=self.rbdplugin_selector,
@@ -860,9 +864,10 @@ class CephCluster(object):
 
         Raises:
             CephfspluginCountException: if csi-cephfsplugin pod count doesn't match
+
         """
         timeout = 10 * len(self.pods)
-        logger.info(f"Expected cephfsplugin = {count}")
+        logger.info(f"Expected cephfsplugin count= {count}")
         try:
             assert self.POD.wait_for_resource(
                 condition='Running', selector=self.cephfsplusgin_selector,
@@ -888,9 +893,10 @@ class CephCluster(object):
 
         Raises:
             RbdpluginProvisionerCountException: if csi-rbdplugin-provisioner pod count doesn't match
+
         """
         timeout = 10 * len(self.pods)
-        logger.info(f"Expected rbdplugin-provisioner = {count}")
+        logger.info(f"Expected rbdplugin-provisioner count= {count}")
         try:
             assert self.POD.wait_for_resource(
                 condition='Running', selector=self.rbdplugin_provisioner_selector,
@@ -916,9 +922,10 @@ class CephCluster(object):
 
         Raises:
             CephfspluginProvisionerCountException: if csi-cephfsplugin-provisioner pod count doesn't match
+
         """
         timeout = 10 * len(self.pods)
-        logger.info(f"Expected cephfsplugin-provisioner = {count}")
+        logger.info(f"Expected cephfsplugin-provisioner count= {count}")
         try:
             assert self.POD.wait_for_resource(
                 condition='Running', selector=self.cephfsplugin_provisioner_selector,
@@ -944,9 +951,10 @@ class CephCluster(object):
 
         Raises:
             DraincanaryCountException: if drain_canary pod count doesn't match
+
         """
         timeout = 10 * len(self.pods)
-        logger.info(f"Expected drain_canary = {count}")
+        logger.info(f"Expected drain_canary count= {count}")
         try:
             assert self.POD.wait_for_resource(
                 condition='Running', selector=self.drain_canary_selector,
