@@ -181,7 +181,6 @@ class CephCluster(object):
         if config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
             self.rgws = pod.get_rgw_pod(self.rgw_selector, self.namespace)
 
-
         # set port attrib on mon pods
         self.mons = list(map(self.set_port, self.mons))
         self.cluster.reload()
