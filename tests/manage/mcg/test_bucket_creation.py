@@ -84,7 +84,7 @@ class TestBucketCreation:
             ),
         ]
     )
-    def test_bucket_creation(self, verify_rgw_restart_count, mcg_obj, bucket_factory, amount, interface):
+    def test_bucket_creation(self, bucket_factory, amount, interface):
         """
         Test bucket creation using the S3 SDK, OC command or MCG CLI
         """
@@ -92,8 +92,8 @@ class TestBucketCreation:
             bucket.name for bucket in bucket_factory(amount, interface)
         )
 
-        for bucketname in bucket_set:
-            assert wait_for_mcg_resource_status(bucketname, 'obc', 'PHASE', 'Bound', 3, 30)
+        for bucket in bucket_set:
+            assert bucket.verify_health()
 
     @pytest.mark.parametrize(
         argnames="amount,interface",
