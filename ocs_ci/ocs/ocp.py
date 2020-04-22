@@ -555,6 +555,13 @@ class OCP(object):
                 f"Wait for {self._kind} resource {resource_name} at column {column}"
                 f" to reach desired condition {condition} failed,"
                 f" last actual status was {actual_status}"))
+            # run `oc describe` on the resources we were waiting for to provide
+            # evidence so that we can understand what was wrong
+            output = self.describe(resource_name, selector=selector)
+            log.warning(
+                "Description of the resource(s) we were waiting for:\n%s",
+                output
+            )
             raise(ex)
 
         return False
