@@ -482,10 +482,11 @@ class CephCluster(object):
             str: Output of the ceph status command.
 
         """
+        cmd = "ceph status"
         if format:
-            return self.toolbox.exec_cmd_on_pod(
-                f"ceph status -f {format}"
-            )
+            cmd += f" -f {format}"
+        return self.toolbox.exec_cmd_on_pod(cmd)
+
         return self.toolbox.exec_cmd_on_pod(
             "ceph status", out_yaml_format=False,
         )
