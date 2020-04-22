@@ -21,12 +21,8 @@ def approve_pending_csr():
         cmd = f"{cmd} {item.get('metadata').get('name')}"
         csr_conf.ocp.exec_oc_cmd(cmd)
 
-    try:
-        check_no_pending_csr(csr_conf)
-        logger.info("All CSRs approved")
-    except exceptions.PendingCSRException:
-        logger.error("Failed to approve all CSRs")
-        raise
+    check_no_pending_csr(csr_conf)
+    logger.info("All CSRs approved")
 
 
 @retry(exceptions.PendingCSRException, tries=2, delay=300, backoff=1)
