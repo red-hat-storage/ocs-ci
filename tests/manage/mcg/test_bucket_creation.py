@@ -5,7 +5,7 @@ import botocore
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1, tier3, noobaa_cli_required, filter_insecure_request_warning,
+    tier1, tier3, filter_insecure_request_warning,
     acceptance, performance
 )
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -62,23 +62,20 @@ class TestBucketCreation:
             ),
             pytest.param(
                 *[3, 'CLI'],
-                marks=[
-                    tier1, acceptance, noobaa_cli_required,
-                    pytest.mark.polarion_id("OCS-1298")
-                ]
+                marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1298")]
             ),
             pytest.param(
                 *[100, 'CLI'],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
-                    performance, noobaa_cli_required, pytest.mark.polarion_id("OCS-1825")
+                    performance, pytest.mark.polarion_id("OCS-1825")
                 ]
             ),
             pytest.param(
                 *[1000, 'CLI'],
                 marks=[
                     pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
-                    performance, noobaa_cli_required, pytest.mark.polarion_id("OCS-1828")
+                    performance, pytest.mark.polarion_id("OCS-1828")
                 ]
             ),
         ]
@@ -103,8 +100,7 @@ class TestBucketCreation:
             ),
             pytest.param(
                 *[3, 'CLI'],
-                marks=[tier3, noobaa_cli_required,
-                       pytest.mark.polarion_id("OCS-1863")]
+                marks=[tier3, pytest.mark.polarion_id("OCS-1863")]
             ),
             pytest.param(
                 *[3, 'OC'],

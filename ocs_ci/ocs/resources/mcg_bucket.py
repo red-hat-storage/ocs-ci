@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_mcg_cmd
 from tests.helpers import create_unique_resource_name, create_resource
 
 logger = logging.getLogger(name=__file__)
@@ -136,13 +135,13 @@ class CLIBucket(MCGBucket):
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        run_mcg_cmd(f'obc create --exact {self.name}')
+        self.mcg.exec_mcg_cmd(f'obc create --exact {self.name}')
 
     def internal_delete(self):
         """
         Deletes the bucket using the NooBaa CLI
         """
-        run_mcg_cmd(f'obc delete {self.name}')
+        self.mcg.exec_mcg_cmd(f'obc delete {self.name}')
 
     @property
     def status(self):

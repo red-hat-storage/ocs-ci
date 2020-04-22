@@ -3,9 +3,11 @@ In this pytest plugin we will keep all our pytest marks used in our tests and
 all related hooks/plugins to markers.
 """
 import os
+
 import pytest
 from funcy import compose
 
+from ocs_ci.framework import config
 from ocs_ci.ocs.constants import (
     ORDER_BEFORE_OCS_UPGRADE,
     ORDER_BEFORE_OCP_UPGRADE,
@@ -16,8 +18,6 @@ from ocs_ci.ocs.constants import (
     ORDER_AFTER_OCS_UPGRADE,
     ORDER_AFTER_UPGRADE,
 )
-from ocs_ci.framework import config
-from ocs_ci.utility.utils import check_if_executable_in_path
 
 # tier marks
 
@@ -88,11 +88,6 @@ google_api_required = pytest.mark.skipif(
     not os.path.exists(os.path.expanduser(
         config.RUN['google_api_secret'])
     ), reason="Google API credentials don't exist"
-)
-
-noobaa_cli_required = pytest.mark.skipif(
-    not check_if_executable_in_path('noobaa'),
-    reason='MCG CLI was not found'
 )
 
 aws_platform_required = pytest.mark.skipif(

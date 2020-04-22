@@ -35,7 +35,7 @@ from ocs_ci.utility.utils import (
 from ocs_ci.deployment import factory as dep_factory
 from tests import helpers
 from tests.manage.mcg.helpers import get_rgw_restart_count
-from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
+from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes, registry
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.ocs.resources.ocs import OCS
@@ -1464,10 +1464,15 @@ def mcg_obj_fixture(request):
 
     mcg_obj = MCG()
 
-    if config.ENV_DATA['platform'].lower() == 'aws':
-        def finalizer():
+    def finalizer():
+        registry.remove_role_from_user(
+            'cluster-admin', constants.NOOBAA_SERVICE_ACCOUNT,
+            cluster_role=True
+        )
+        if config.ENV_DATA['platform'].lower() == 'aws':
             mcg_obj.cred_req_obj.delete()
-        request.addfinalizer(finalizer)
+
+    request.addfinalizer(finalizer)
 
     return mcg_obj
 
