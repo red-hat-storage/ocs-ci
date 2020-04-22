@@ -177,7 +177,7 @@ def oc_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
     bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
     bs_data['metadata']['name'] = backingstore_name
     bs_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
-    bs_data['spec']['awsS3']['secret']['name'] = cld_mgr.aws_client.get_oc_secret()
+    bs_data['spec']['awsS3']['secret']['name'] = cld_mgr.aws_client.secret.name
     bs_data['spec']['awsS3']['targetBucket'] = uls_name
     bs_data['spec']['awsS3']['region'] = region
     create_resource(**bs_data)
@@ -195,8 +195,8 @@ def cli_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
 
     """
     run_mcg_cmd(f'backingstore create aws-s3 {backingstore_name} '
-                f'--access-key {cld_mgr.aws_client.get_aws_key()} '
-                f'--secret-key {cld_mgr.aws_client.get_aws_secret()} '
+                f'--access-key {cld_mgr.aws_client.access_key} '
+                f'--secret-key {cld_mgr.aws_client.secret_key} '
                 f'--target-bucket {uls_name} --region {region}'
                 )
 
@@ -298,13 +298,13 @@ def check_pv_backingstore_status(backingstore_name, namespace=None):
 
     """
     kubeconfig = os.getenv('KUBECONFIG')
+    kubeconfig = f'--kubeconfig {kubeconfig}' if kubeconfig else ''
     namespace = namespace or config.ENV_DATA['cluster_namespace']
-    cmd = 'oc get backingstore'
-    cmd += f' -n {namespace}'
-    if kubeconfig:
-        cmd += f" --kubeconfig {kubeconfig} "
-    cmd += f'{backingstore_name}'
-    cmd += ' -o=jsonpath=`{.status.mode.modeCode}`'
+
+    cmd = (
+        f'oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} '
+        '-o=jsonpath=`{.status.mode.modeCode}`'
+    )
     res = run_cmd(cmd=cmd)
     return True if 'OPTIMAL' in res else False
 

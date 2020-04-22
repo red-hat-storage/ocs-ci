@@ -1472,7 +1472,13 @@ def cld_mgr(request):
 
     # Todo: Find a more elegant method
     def finalizer():
-        run_cmd('oc -n openshift-storage delete secret backing-store-secret-client-secret')
+        oc = ocp.OCP(
+            namespace='openshift-storage'
+        )
+        oc.exec_oc_cmd(
+            command='delete secret backing-store-secret-client-secret',
+            out_yaml_format=False
+        )
 
     request.addfinalizer(finalizer)
 
@@ -1783,8 +1789,9 @@ def cloud_uls_factory(request, cld_mgr):
             uls_dict (dict): Dictionary containing storage provider as key and a list of tuples
             as value.
             each tuple contain amount as first parameter and region as second parameter.
-            Example:
-                'aws': [(3,us-west-1),(2,eu-west-2)]
+            Cloud backing stores form - 'CloudName': [(amount, region), (amount, region)]
+            i.e. - 'aws': [(3, us-west-1),(2, eu-west-2)]
+
 
         Returns:
             dict: A dictionary of cloud names as keys and uls names sets as value.
@@ -1803,6 +1810,7 @@ def cloud_uls_factory(request, cld_mgr):
                     f'Invalid interface type received: {cloud}. '
                     f'available types: {", ".join(ulsMap.keys())}'
                 )
+            log.info(f'Creating uls for cloud {cloud.lower()}')
             for tup in params:
                 amount, region = tup
                 for i in range(amount):
@@ -1827,12 +1835,11 @@ def cloud_uls_factory(request, cld_mgr):
                         log.info(
                             f"Verifying whether uls: {uls} exists after deletion"
                         )
-                        # sleep(5)  # wait for aws command to pass
                         assert not client.verify_uls_exists(uls), (
                             f'Unable to delete Underlying Storage {uls}'
                         )
                     else:
-                        log.info(f'Underlying Storage {uls} not found.')
+                        log.warning(f'Underlying Storage {uls} not found.')
 
     request.addfinalizer(uls_cleanup)
 
@@ -1871,22 +1878,19 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
 
     def _create_backingstore(method, uls_dict):
         """
-        Creates and deletes all underlying storage that were created as part of the test
+        Tracks creation and cleanup of all the backing stores that were created in the scope
 
         Args:
             method (str): String for selecting method of backing store creation (CLI/OC)
             uls_dict (dict): Dictionary containing storage provider as key and a list of tuples
             as value.
-            for cloud backingstore: each tuple contain amount as first parameter
-            and region as second parameter.
-            for pv: each tuple contain number of volumes as first parameter
-            and size as second parameter.
-            Example:
-                'aws': [(3,us-west-1),(2,eu-west-2)]
-                'pv': [(3,32,ocs-storagecluster-ceph-rbd),(2,100,ocs-storagecluster-ceph-rbd)]
+            Cloud backing stores form - 'CloudName': [(amount, region), (amount, region)]
+            i.e. - 'aws': [(3, us-west-1),(2, eu-west-2)]
+            PV form - 'pv': [(amount, size_in_gb, storageclass), ...]
+            i.e. - 'pv': [(3, 32, ocs-storagecluster-ceph-rbd),(2, 100, ocs-storagecluster-ceph-rbd)]
 
         Returns:
-            list: A list of backingstore objects.
+            list: A list of backingstore names.
 
         """
         if method.lower() not in cmdMap:
@@ -1915,6 +1919,7 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
                     )
                 else:
                     region = uls_tup[1]
+                    # Todo: Verify that the given cloud has an initialized client
                     uls_dict = cloud_uls_factory({cloud: [uls_tup]})
                     for uls_name in uls_dict[cloud.lower()]:
                         backingstore_name = create_unique_resource_name(
@@ -1926,14 +1931,20 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
                         cmdMap[method.lower()][cloud.lower()](
                             cld_mgr, backingstore_name, uls_name, region
                         )
+                        # Todo: Raise an exception in case the BS wasn't created
 
         return created_backingstores
 
     def backingstore_cleanup():
         for backingstore_name in created_backingstores:
             log.info(f'Cleaning up backingstore {backingstore_name}')
-            current_namespace = config.ENV_DATA['cluster_namespace']
-            run_cmd(f'oc -n {current_namespace} delete backingstore {backingstore_name}')
+            oc = ocp.OCP(
+                namespace=config.ENV_DATA['cluster_namespace']
+            )
+            oc.exec_oc_cmd(
+                command=f'delete backingstore {backingstore_name}',
+                out_yaml_format=False
+            )
             log.info(
                 f"Verifying whether backingstore {backingstore_name} exists after deletion"
             )

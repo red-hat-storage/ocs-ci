@@ -98,8 +98,8 @@ class S3Client(CloudClient):
             self.client = boto3.resource('s3', endpoint_url=endpoint)
             # create a secret for the underlying storage to use
             session = boto3.Session()
-            credentials = session.get_credentials()
-            credentials = credentials.get_frozen_credentials()
+            # Retrieving the credentials of the existing session
+            credentials = session.get_credentials().get_frozen_credentials()
             self.access_key = credentials.access_key
             self.secret_key = credentials.secret_key
         bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
@@ -143,11 +143,8 @@ class S3Client(CloudClient):
 
         """
         # Todo: rename client to resource (or find an alternative)
-        self.client.meta.client.delete_bucket_policy(
-            Bucket=name
-        )
         sample = TimeoutSampler(
-            timeout=30, sleep=3, func=self.check_uls_deletion,
+            timeout=30, sleep=3, func=self.exec_uls_deletion,
             name=name
         )
         if not sample.wait_for_func_status(result=True):
@@ -158,9 +155,9 @@ class S3Client(CloudClient):
         else:
             logger.info(f'Underlying Storage {name} deleted successfully')
 
-    def check_uls_deletion(self, name):
+    def exec_uls_deletion(self, name):
         """
-        Try to delete Underlying Storage by name
+        Try to delete Underlying Storage by name if exists
 
         Args:
             name (str): the Underlying Storage name
@@ -171,6 +168,9 @@ class S3Client(CloudClient):
         """
         if self.verify_uls_exists(name):
             try:
+                self.client.meta.client.delete_bucket_policy(
+                    Bucket=name
+                )
                 self.client.Bucket(name).objects.all().delete()
                 self.client.Bucket(name).delete()
                 return True
@@ -178,6 +178,7 @@ class S3Client(CloudClient):
                 logger.info(f'Deletion of Underlying Storage {name} failed. Retrying...')
                 return False
         else:
+            logger.warning(f'Underlying Storage {name} does not exist, and cannot be deleted!')
             return True
 
     def get_all_uls_names(self):
@@ -202,15 +203,6 @@ class S3Client(CloudClient):
         except ClientError:
             logger.info(f"{uls_name} does not exist")
             return False
-
-    def get_oc_secret(self):
-        return self.secret.name
-
-    def get_aws_key(self):
-        return self.access_key
-
-    def get_aws_secret(self):
-        return self.secret_key
 
 
 class GoogleClient(CloudClient):
@@ -250,6 +242,7 @@ class GoogleClient(CloudClient):
            name (str): The Underlying Storage name to be deleted
 
         """
+        # Todo: Replace with a TimeoutSampler
         for _ in range(10):
             try:
                 bucket = self.client.get_bucket(name)
