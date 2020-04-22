@@ -20,7 +20,7 @@ def approve_pending_csr():
     csr_conf = get_csr_resource()
     for item in csr_conf.data.get('items'):
         cmd = f"{cmd} {item.get('metadata').get('name')}"
-        csr_conf.ocp.exec_oc_cmd(cmd)
+        csr_conf.exec_oc_cmd(cmd)
 
     check_no_pending_csr(csr_conf)
     logger.info("All CSRs approved")
