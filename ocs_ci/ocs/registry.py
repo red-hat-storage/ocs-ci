@@ -43,9 +43,10 @@ def change_registry_backend_to_ocs():
     )()
 
     # Validate pvc mount in the registry pod
-    retry((CommandFailed, UnexpectedBehaviour), tries=3, delay=15)(
-        validate_pvc_mount_on_registry_pod
-    )()
+    retry(
+        (CommandFailed, UnexpectedBehaviour, AssertionError),
+        tries=3, delay=15
+    )(validate_pvc_mount_on_registry_pod)()
 
 
 def get_registry_pod_obj():
@@ -121,7 +122,9 @@ def validate_pvc_mount_on_registry_pod():
     """
     pod_objs = get_registry_pod_obj()
     for pod_obj in pod_objs:
-        mount_point = pod_obj.exec_cmd_on_pod(command="mount")
+        mount_point = pod_obj.exec_cmd_on_pod(
+            command="mount", out_yaml_format=False,
+        )
         assert "/registry" in mount_point, (
             f"pvc is not mounted on pod {pod_obj.name}"
         )

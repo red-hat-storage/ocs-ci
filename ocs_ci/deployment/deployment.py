@@ -588,7 +588,7 @@ class Deployment(object):
             validate_pvc_created_and_bound_on_monitoring_pods()
 
             # Validate the pvc are mounted on pods
-            retry(CommandFailed, tries=3, delay=15)(
+            retry((CommandFailed, AssertionError), tries=3, delay=15)(
                 validate_pvc_are_mounted_on_monitoring_pods
             )(pods_list)
         elif config.ENV_DATA.get('monitoring_enabled') and config.ENV_DATA.get("telemeter_server_url"):
