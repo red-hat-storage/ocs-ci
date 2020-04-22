@@ -15,6 +15,7 @@ def approve_pending_csr():
         exceptions.PendingCSRException
 
     """
+    logger.info("Approving CSRs")
     cmd = "adm certificate approve"
     csr_conf = get_csr_resource()
     for item in csr_conf.data.get('items'):
@@ -34,7 +35,7 @@ def check_no_pending_csr():
         exceptions.PendingCSRException
 
     """
-    # Load the latest state of csr
+    logger.info("Checking for Pending CSRs")
     csr_conf = get_csr_resource()
     pending = False
     for item in csr_conf.data.get('items'):
@@ -51,10 +52,11 @@ def check_no_pending_csr():
 
 def get_csr_resource():
     """
-    Retrieve the latest CSR resource data
+    Retrieve the latest CSR data
 
     Returns:
-        ocp.OCP: CSR resource data
+        ocp.OCP: CSR data
 
     """
+    logger.info("Retrieving CSR data")
     return ocp.OCP(kind='csr', namespace=constants.DEFAULT_NAMESPACE).get()
