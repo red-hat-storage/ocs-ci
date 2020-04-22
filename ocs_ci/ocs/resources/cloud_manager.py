@@ -2,11 +2,12 @@ import base64
 import logging
 import os
 from abc import ABC, abstractmethod
+from time import sleep
+
 import boto3
 from botocore.exceptions import ClientError
-from time import sleep
-from google.cloud import storage
 from google.auth.exceptions import DefaultCredentialsError
+from google.cloud import storage
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants

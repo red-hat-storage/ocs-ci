@@ -1,17 +1,17 @@
+import logging
+import os
 from concurrent.futures import ThreadPoolExecutor
 
 import boto3
 
-from ocs_ci.ocs import constants
-import os
-from ocs_ci.utility import templating
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.resources.pod import get_rgw_pod
+from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_mcg_cmd, TimeoutSampler, run_cmd
 from tests.helpers import create_resource
-from ocs_ci.ocs.resources.pod import get_rgw_pod
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from tests.helpers import logger, craft_s3_command, craft_s3_api_command
-import logging
 
 log = logging.getLogger(__name__)
 

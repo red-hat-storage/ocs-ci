@@ -1,52 +1,52 @@
 import logging
-from itertools import chain
 import os
-from random import randrange
+import random
 import tempfile
 import textwrap
-from time import sleep
-import yaml
-
-import pytest
-from botocore.exceptions import ClientError
 import threading
 from datetime import datetime
-import random
+from itertools import chain
 from math import floor
+from random import randrange
+from time import sleep
 
-from ocs_ci.ocs.resources.cloud_manager import CloudManager
-from ocs_ci.utility.utils import (
-    TimeoutSampler, get_rook_repo, get_ocp_version, run_cmd, ceph_health_check
-)
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
-from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-from ocs_ci.utility import aws
+import pytest
+import yaml
+from botocore.exceptions import ClientError
+
+from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     deployment, ignore_leftovers, tier_marks
 )
-from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
-from ocs_ci.utility.environment_check import (
-    get_status_before_execution, get_status_after_execution
-)
-from ocs_ci.utility.utils import (
-    get_openshift_client, ocsci_log_path, get_testrun_name,
-    ceph_health_check_base, skipif_ocs_version
-)
-from ocs_ci.deployment import factory as dep_factory
-from tests import helpers
-from tests.helpers import create_unique_resource_name
-from tests.manage.mcg.helpers import get_rgw_restart_count
 from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import get_rgw_pod
 from ocs_ci.ocs.resources.pvc import PVC
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
+from ocs_ci.utility import aws
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
-from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility import templating
+from ocs_ci.utility.environment_check import (
+    get_status_before_execution, get_status_after_execution
+)
+from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
+from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
+from ocs_ci.utility.utils import (
+    TimeoutSampler, get_rook_repo, get_ocp_version, ceph_health_check
+)
+from ocs_ci.utility.utils import (
+    get_openshift_client, ocsci_log_path, get_testrun_name,
+    ceph_health_check_base, skipif_ocs_version
+)
+from tests import helpers
+from tests.helpers import create_unique_resource_name
+from tests.manage.mcg.helpers import get_rgw_restart_count
 from tests.manage.mcg.helpers import (
     oc_create_aws_backingstore, oc_create_google_backingstore, oc_create_azure_backingstore,
     oc_create_s3comp_backingstore, oc_create_pv_backingstore, cli_create_aws_backingstore,
