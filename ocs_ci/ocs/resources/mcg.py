@@ -188,7 +188,7 @@ class MCG(object):
             set: A set of all bucket names
 
         """
-        obc_lst = self.exec_mcg_cmd('obc list').split('\n')[1:-1]
+        obc_lst = self.exec_mcg_cmd('obc list').stdout.split('\n')[1:-1]
         # TODO assert the bucket passed the Pending state
         return {row.split()[1] for row in obc_lst}
 
