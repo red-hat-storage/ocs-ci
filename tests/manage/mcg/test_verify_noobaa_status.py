@@ -20,7 +20,7 @@ def test_verify_noobaa_status(mcg_obj_session):
     # Verify noobaa status
     for content, count in defaults.NOOBAA_STATUS_CONTENT_COUNT.items():
         assert count == status.count(f'Exists: {content} '), (
-            f"Could not find expected match for {content} in noobaa status output."
+            f"Could not find expected match for {content} in NooBaa status output."
         )
     assert 'System Phase is \\"Ready\\"' in status, (
         f"System Phase is not 'Ready'."
