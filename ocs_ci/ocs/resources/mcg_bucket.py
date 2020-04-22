@@ -152,7 +152,7 @@ class CLIBucket(MCGBucket):
             str: OBC status
 
         """
-        return run_mcg_cmd(f'obc status {self.name}')
+        return self.mcg.exec_mcg_cmd(f'obc status {self.name}')
 
     def verify_health(self):
         """
