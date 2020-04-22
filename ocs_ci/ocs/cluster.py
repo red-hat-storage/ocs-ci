@@ -609,9 +609,10 @@ class CephCluster(object):
         logger.info(ceph_health)
         logger.info(pg_states)
         for states in pg_states:
-            return (states['state_name'] == 'active+clean'
-                    and states['count'] == total_pg_count
-                    )
+            return (
+                states['state_name'] == 'active+clean'
+                and states['count'] == total_pg_count
+            )
 
     def time_taken_to_complete_rebalance(self, timeout=600):
         """
