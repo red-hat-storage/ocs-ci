@@ -703,7 +703,7 @@ class MCG(object):
 
         namespace = f'-n {namespace}' if namespace else f'-n {self.namespace}'
         result = exec_cmd(
-            f'oc {kubeconfig} rsh {self.operator_pod.name} '
+            f'oc {kubeconfig} {namespace} rsh {self.operator_pod.name} '
             f'{constants.NOOBAA_OPERATOR_POD_CLI_PATH} {cmd} {namespace}',
             **kwargs
         )
