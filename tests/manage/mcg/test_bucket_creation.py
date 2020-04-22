@@ -84,11 +84,8 @@ class TestBucketCreation:
         """
         Test bucket creation using the S3 SDK, OC command or MCG CLI
         """
-        bucket_set = set(
-            bucket.name for bucket in bucket_factory(amount, interface)
-        )
 
-        for bucket in bucket_set:
+        for bucket in bucket_factory(amount, interface):
             assert bucket.verify_health()
 
     @pytest.mark.parametrize(

@@ -183,6 +183,7 @@ class CLIBucket(MCGBucket):
 
         """
         return (
-            constants.HEALTHY_OB_CLI_MODE in self.status
-            and constants.HEALTHY_OBC_CLI_PHASE in self.status
+            all(
+                healthy_mark in self.status.stdout.replace(' ', '') for healthy_mark
+                in [constants.HEALTHY_OB_CLI_MODE, constants.HEALTHY_OBC_CLI_PHASE])
         )

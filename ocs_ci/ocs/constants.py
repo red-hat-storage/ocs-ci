@@ -76,8 +76,8 @@ BS_AUTH_FAILED = 'AUTH_FAILED'
 BS_OPTIMAL = 'OPTIMAL'
 HEALTHY_OB = 'OPTIMAL'
 HEALTHY_OBC = STATUS_BOUND
-HEALTHY_OBC_CLI_PHASE = 'Phase                  : Bound'
-HEALTHY_OB_CLI_MODE = 'Mode                   : OPTIMAL'
+HEALTHY_OBC_CLI_PHASE = 'Phase:Bound'
+HEALTHY_OB_CLI_MODE = 'Mode:OPTIMAL'
 
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
