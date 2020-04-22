@@ -143,8 +143,21 @@ def wait_for_job_completion(namespace, timeout, error_msg):
     except TimeoutExpiredError as ex:
         # report some high level error as well
         logger.error(error_msg)
-        # TODO: log both describe and the output from the fio pods, as DEBUG
         ex.message = error_msg
+        # fetch log(s) of any fio pod(s) in the job namespace
+        pod_data = ocp_pod.get()
+        for pod_dict in pod_data.get('items', []):
+            pod_name = pod_dict['metadata']['name']
+            output = ocp_pod.get_logs(pod_name)
+            if len(output) == 0:
+                logger.error(
+                    "Container log from pod '%s' is empty.", pod_name)
+            else:
+                logger.error(
+                    "Container log from pod '%s' follows:\n%s",
+                    pod_name,
+                    output)
+        # reraise the exception
         raise(ex)
 
     # indentify pod of the completed job
@@ -157,7 +170,6 @@ def wait_for_job_completion(namespace, timeout, error_msg):
     assert pod_dict['kind'] == "Pod"
     pod_name = pod_dict['metadata']['name']
     logger.info(f"Identified pod name of the finished Job: {pod_name}")
-    pod_name = pod_dict['metadata']['name']
 
     return pod_name
 
@@ -188,8 +200,7 @@ def write_data_via_fio(fio_job_file, write_timeout, pvc_size, target_percentage)
         fio_job_file.project.namespace, write_timeout, error_msg)
 
     ocp_pod = ocp.OCP(kind="Pod", namespace=fio_job_file.project.namespace)
-    fio_output = ocp_pod.exec_oc_cmd(
-        f"logs {pod_name}", out_yaml_format=False)
+    fio_output = ocp_pod.get_logs(pod_name)
 
     # parse fio output
     fio_report = fio_to_dict(fio_output)

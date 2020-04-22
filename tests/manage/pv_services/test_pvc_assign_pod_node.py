@@ -17,6 +17,7 @@ class TestPvcAssignPodNode(ManageTest):
     OCS-717 - RBD: Assign nodeName to a POD using RWO PVC
     OCS-744 - CephFS: Assign nodeName to a POD using RWO PVC
     OCS-1258 - CephFS: Assign nodeName to a POD using RWX PVC
+    OCS-1257 - RBD: Assign nodeName to a POD using RWX PVC
     """
 
     @acceptance
@@ -77,18 +78,41 @@ class TestPvcAssignPodNode(ManageTest):
 
     @acceptance
     @tier1
-    @pytest.mark.polarion_id("OCS-1258")
-    def test_rwx_pvc_assign_pod_node(self, pvc_factory, teardown_factory):
+    @pytest.mark.parametrize(
+        argnames=["interface"],
+        argvalues=[
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                marks=pytest.mark.polarion_id("OCS-1257")
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM],
+                marks=pytest.mark.polarion_id("OCS-1258")
+            )
+        ]
+    )
+    def test_rwx_pvc_assign_pod_node(
+        self, interface, pvc_factory, teardown_factory
+    ):
         """
         Test assign nodeName to a pod using RWX pvc
         """
-        interface = constants.CEPHFILESYSTEM
         worker_nodes_list = helpers.get_worker_nodes()
+        if interface == constants.CEPHBLOCKPOOL:
+            volume_mode = 'Block'
+            storage_type = 'block'
+            block_pv = True
+            pod_yaml = constants.CSI_RBD_RAW_BLOCK_POD_YAML
+        else:
+            volume_mode = ''
+            storage_type = 'fs'
+            block_pv = False
+            pod_yaml = ''
 
         # Create a RWX PVC
         pvc_obj = pvc_factory(
             interface=interface, access_mode=constants.ACCESS_MODE_RWX,
-            status=constants.STATUS_BOUND
+            status=constants.STATUS_BOUND, volume_mode=volume_mode
         )
 
         # Create two pods on selected nodes
@@ -102,7 +126,7 @@ class TestPvcAssignPodNode(ManageTest):
             pod_obj = helpers.create_pod(
                 interface_type=interface, pvc_name=pvc_obj.name,
                 namespace=pvc_obj.namespace, node_name=node,
-                pod_dict_path=constants.NGINX_POD_YAML
+                pod_dict_path=pod_yaml, raw_block_pv=block_pv,
             )
             pod_list.append(pod_obj)
             teardown_factory(pod_obj)
@@ -127,7 +151,7 @@ class TestPvcAssignPodNode(ManageTest):
             for pod_obj in pod_list:
                 logger.info(f"Running IO on pod {pod_obj.name}")
                 p.submit(
-                    pod_obj.run_io, storage_type='fs', size='512M',
+                    pod_obj.run_io, storage_type=storage_type, size='512M',
                     runtime=30, fio_filename=pod_obj.name
                 )
 
