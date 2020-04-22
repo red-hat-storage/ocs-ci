@@ -42,7 +42,27 @@ class MCGBucket(ABC):
 
     @abstractmethod
     def internal_delete(self):
-        pass
+        """
+        Abstract internal deletion method
+
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def status(self):
+        """
+        Abstract status method
+
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def verify_health(self):
+        """
+        Abstract health verification method
+
+        """
+        raise NotImplementedError()
 
 
 class S3Bucket(MCGBucket):
