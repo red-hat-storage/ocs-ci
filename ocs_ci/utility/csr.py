@@ -1,7 +1,6 @@
 import logging
 
 from ocs_ci.ocs import constants, exceptions, ocp
-from ocs_ci.ocs.resources import ocs
 from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
@@ -59,9 +58,7 @@ def get_csr_resource():
     Retrieve the latest CSR resource data
 
     Returns:
-        ocs.OCS: CSR resource data
+        ocp.OCP: CSR resource data
+
     """
-    csr_conf = ocs.OCS(
-        **ocp.OCP(kind='csr', namespace=constants.DEFAULT_NAMESPACE).get()
-    )
-    return csr_conf.get()
+    return ocp.OCP(kind='csr', namespace=constants.DEFAULT_NAMESPACE).get()
