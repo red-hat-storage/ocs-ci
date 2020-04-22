@@ -529,9 +529,10 @@ class VSPHEREUPI(VSPHEREBASE):
                 )
                 os.chdir(self.previous_dir)
 
+            OCP.set_kubeconfig(self.kubeconfig)
+
             approve_pending_csr()
 
-            OCP.set_kubeconfig(self.kubeconfig)
             # wait for image registry to show-up
             co = "image-registry"
             wait_for_co(co)
