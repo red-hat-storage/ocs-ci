@@ -487,10 +487,6 @@ class CephCluster(object):
             cmd += f" -f {format}"
         return self.toolbox.exec_cmd_on_pod(cmd)
 
-        return self.toolbox.exec_cmd_on_pod(
-            "ceph status", out_yaml_format=False,
-        )
-
     def get_ceph_capacity(self):
         """
         The function gets the total mount of storage capacity of the ocs cluster.
