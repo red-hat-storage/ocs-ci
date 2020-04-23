@@ -83,7 +83,7 @@ def test_fill_bucket(
     )
 
     mcg_obj_session.check_if_mirroring_is_done(bucket.name)
-    assert bucket.phase == constants.STATUS_BOUND
+    assert bucket.status == constants.STATUS_BOUND
 
     # Retrieve all objects from MCG bucket to result dir in Pod
     sync_object_directory(
@@ -93,7 +93,7 @@ def test_fill_bucket(
         mcg_obj_session
     )
 
-    assert bucket.phase == constants.STATUS_BOUND
+    assert bucket.status == constants.STATUS_BOUND
 
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
@@ -102,7 +102,7 @@ def test_fill_bucket(
             result_object_path=f'{LOCAL_TEMP_PATH}/{obj}',
             awscli_pod=awscli_pod_session
         ), 'Checksum comparision between original and result object failed'
-    assert bucket.phase == constants.STATUS_BOUND
+    assert bucket.status == constants.STATUS_BOUND
 
 
 @aws_platform_required
@@ -133,7 +133,7 @@ def test_noobaa_postupgrade(
             awscli_pod=awscli_pod_session
         ), 'Checksum comparision between original and result object failed'
 
-    assert bucket.phase == constants.STATUS_BOUND
+    assert bucket.status == constants.STATUS_BOUND
 
     # Clean up the temp dir
     awscli_pod_session.exec_cmd_on_pod(
@@ -151,7 +151,7 @@ def test_noobaa_postupgrade(
         timeout=360
     )
 
-    assert bucket.phase == constants.STATUS_BOUND
+    assert bucket.status == constants.STATUS_BOUND
 
     # Verify integrity of A
     # Retrieve all objects from MCG bucket to result dir in Pod
@@ -161,4 +161,4 @@ def test_noobaa_postupgrade(
         LOCAL_TEMP_PATH,
         mcg_obj_session
     )
-    assert bucket.phase == constants.STATUS_BOUND
+    assert bucket.status == constants.STATUS_BOUND
