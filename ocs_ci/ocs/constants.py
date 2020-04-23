@@ -237,6 +237,10 @@ MCG_BACKINGSTORE_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "BackingStore.yaml"
 )
 
+PV_BACKINGSTORE_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "PVBackingStore.yaml"
+)
+
 MCG_BUCKETCLASS_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "BucketClass.yaml"
 )

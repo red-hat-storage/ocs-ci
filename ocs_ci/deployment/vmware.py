@@ -21,6 +21,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility.bootstrap import gather_bootstrap
+from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.utility.templating import dump_data_to_json, Templating
 from ocs_ci.utility.utils import (
     clone_repo, convert_yaml2tfvars, create_directory_path, read_file_as_str,
@@ -529,6 +530,9 @@ class VSPHEREUPI(VSPHEREBASE):
                 os.chdir(self.previous_dir)
 
             OCP.set_kubeconfig(self.kubeconfig)
+
+            approve_pending_csr()
+
             # wait for image registry to show-up
             co = "image-registry"
             wait_for_co(co)
@@ -544,7 +548,7 @@ class VSPHEREUPI(VSPHEREBASE):
                 f"--log-level {log_cli_level}",
                 timeout=1800
             )
-
+            approve_pending_csr()
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level='DEBUG'):
