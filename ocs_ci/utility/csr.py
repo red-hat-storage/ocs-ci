@@ -59,4 +59,4 @@ def get_csr_resource():
 
     """
     logger.info("Retrieving CSR data")
-    return ocp.OCP(kind='csr', namespace=constants.DEFAULT_NAMESPACE).get()
+    return ocp.OCP(kind='csr', namespace=constants.DEFAULT_NAMESPACE)
