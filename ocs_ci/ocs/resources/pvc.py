@@ -9,6 +9,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -129,15 +130,36 @@ class PVC(OCS):
 
     def resize_pvc(self, new_size, verify=False):
         """
-        Returns the PVC size pvc_name in namespace
+        Modify the capacity of PVC
+
+        Args:
+            new_size (int): New size of PVC in Gi
+            verify (bool): True to verify the change is reflected on PVC,
+                False otherwise
 
         Returns:
             bool: True if operation succeeded, False otherwise
         """
-        self.data['status']['capacity']['storage'] = f"{new_size}Gi"
-        self.apply(**self.data)
+        patch_param = f'{{"spec": {{"resources": {{"requests": {{"storage": "{new_size}Gi"}}}}}}}}'
+
+        # Modify size of PVC
+        assert self.ocp.patch(resource_name=self.name, params=patch_param), (
+            f"Patch command to modify size of PVC {self.name} has failed."
+        )
+
         if verify:
-            return self.size == new_size
+            for pvc_data in TimeoutSampler(240, 2, self.get):
+                capacity = pvc_data.get('status').get('capacity').get('storage')
+                if capacity == f'{new_size}Gi':
+                    break
+                log.info(
+                    f"Capacity of PVC {self.name} is not {new_size}Gi as "
+                    f"expected, but {capacity}. Retrying."
+                )
+            log.info(
+                f"Verified that the capacity of PVC {self.name} is changed to "
+                f"{new_size}Gi."
+            )
         return True
 
 

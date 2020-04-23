@@ -456,6 +456,12 @@ def create_storage_class(
     sc_data['parameters'][
         'csi.storage.k8s.io/provisioner-secret-namespace'
     ] = defaults.ROOK_CLUSTER_NAMESPACE
+    sc_data['parameters'][
+        'csi.storage.k8s.io/controller-expand-secret-name'
+    ] = secret_name
+    sc_data['parameters'][
+        'csi.storage.k8s.io/controller-expand-secret-namespace'
+    ] = defaults.ROOK_CLUSTER_NAMESPACE
 
     sc_data['parameters']['clusterID'] = defaults.ROOK_CLUSTER_NAMESPACE
     sc_data['reclaimPolicy'] = reclaim_policy
