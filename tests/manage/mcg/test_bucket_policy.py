@@ -55,7 +55,7 @@ class TestS3BucketPolicy(ManageTest):
         # Get bucket policy
         logger.info(f'Getting Bucket policy on bucket: {obc_obj.bucket_name}')
         get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
-        logger.info(f'Got bucket policy: %s' % get_policy['Policy'])
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # Modifying bucket policy to take new policy
         logger.info('Modifying bucket policy')
@@ -118,7 +118,7 @@ class TestS3BucketPolicy(ManageTest):
             if response.error['Code'] == 'NoSuchBucketPolicy':
                 logger.info('Bucket policy has been deleted successfully')
             else:
-                raise UnexpectedBehaviour(f"Response received invalid error code {response.error['Code']}")
+                raise UnexpectedBehaviour(f"{e.response} received invalid error code {response.error['Code']}")
 
     @pytest.mark.polarion_id("OCS-2146")
     @tier1
@@ -156,7 +156,7 @@ class TestS3BucketPolicy(ManageTest):
 
         # Verifying whether user can get the bucket policy after modification
         get_policy = helpers.get_bucket_policy(obc_obj, obc_obj.bucket_name)
-        logger.info('Got bucket policy:%s\n' % get_policy['Policy'])
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # Verifying whether user is not allowed Put the bucket policy after modification
         logger.info(f'Verifying whether user: {obc_obj.obc_account} is denied to put objects')
@@ -168,7 +168,7 @@ class TestS3BucketPolicy(ManageTest):
             if response.error['Code'] == 'AccessDenied':
                 logger.info(f'Put bucket policy has been denied access to the user: {obc_obj.obc_account}')
             else:
-                raise UnexpectedBehaviour(f"Response received invalid error code {response.error['Code']}")
+                raise UnexpectedBehaviour(f"{e.response} received invalid error code {response.error['Code']}")
 
         # Verifying whether user can Delete the bucket policy after modification
         logger.info(f'Deleting bucket policy on bucket: {obc_obj.bucket_name}')
@@ -203,7 +203,7 @@ class TestS3BucketPolicy(ManageTest):
         # Get Policy
         logger.info(f'Getting Bucket policy on bucket: {obc_obj.bucket_name}')
         get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
-        logger.info('Got bucket policy:%s' % get_policy['Policy'])
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # Verifying whether obc account can put object
         logger.info(f'Adding object on bucket: {obc_obj.bucket_name}')
@@ -219,7 +219,7 @@ class TestS3BucketPolicy(ManageTest):
             if response.error['Code'] == 'AccessDenied':
                 logger.info('Get Object action has been denied access')
             else:
-                raise UnexpectedBehaviour(f"Response received invalid error code {response.error['Code']}")
+                raise UnexpectedBehaviour(f"{e.response} received invalid error code {response.error['Code']}")
 
         # Verifying whether obc account allowed to create multipart
         logger.info(f'Creating multipart on bucket: {obc_obj.bucket_name} with key: {object_key}')
@@ -235,7 +235,7 @@ class TestS3BucketPolicy(ManageTest):
             if response.error['Code'] == 'AccessDenied':
                 logger.info('Delete action has been denied access')
             else:
-                raise UnexpectedBehaviour(f"Response received invalid error code {response.error['Code']}")
+                raise UnexpectedBehaviour(f"{e.response} received invalid error code {response.error['Code']}")
 
         # Creating noobaa account to access bucket belonging to obc account
         user_name = "noobaa-user" + str(uuid.uuid4().hex)
@@ -257,7 +257,7 @@ class TestS3BucketPolicy(ManageTest):
         # Get Policy
         logger.info(f'Getting bucket policy on bucket: {obc_obj.bucket_name}')
         get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
-        logger.info('Got bucket policy:%s' % get_policy['Policy'])
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # Verifying whether Get, Delete object is allowed
         logger.info(f'Getting object on bucket: {obc_obj.bucket_name} with user: {user.email_id}')
@@ -275,7 +275,7 @@ class TestS3BucketPolicy(ManageTest):
             if response.error['Code'] == 'AccessDenied':
                 logger.info('Put object action has been denied access')
             else:
-                raise UnexpectedBehaviour(f"Response received invalid error code {response.error['Code']}")
+                raise UnexpectedBehaviour(f"{e.response} received invalid error code {response.error['Code']}")
 
     @pytest.mark.polarion_id("OCS-2145")
     @tier1
@@ -309,7 +309,7 @@ class TestS3BucketPolicy(ManageTest):
         # Getting Policy
         logger.info(f'Getting bucket policy on bucket: {s3_bucket.name}')
         get_policy = helpers.get_bucket_policy(mcg_obj, s3_bucket.name)
-        logger.info('Got bucket policy:%s' % get_policy['Policy'])
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # Admin writes an object to bucket
         logger.info(f'Writing object on bucket: {s3_bucket.name} by admin')
@@ -344,7 +344,7 @@ class TestS3BucketPolicy(ManageTest):
         # Getting Policy
         logger.info(f'Getting bucket policy for bucket: {obc_obj.bucket_name}')
         get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
-        logger.info('Got bucket policy:%s' % get_policy['Policy'])
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         logger.info(f"Adding bucket website config to: {obc_obj.bucket_name}")
         assert helpers.s3_put_bucket_website(
@@ -374,7 +374,7 @@ class TestS3BucketPolicy(ManageTest):
             if response.error['Code'] == 'AccessDenied':
                 logger.info('GetObject action has been denied access')
             else:
-                raise UnexpectedBehaviour(f"Response received invalid error code {response.error['Code']}")
+                raise UnexpectedBehaviour(f"{e.response} received invalid error code {response.error['Code']}")
 
         # Admin modifies policy to allow DeleteBucketWebsite action
         bucket_policy_generated = gen_bucket_policy(
@@ -391,7 +391,7 @@ class TestS3BucketPolicy(ManageTest):
         # Getting Policy
         logger.info(f'Getting bucket policy for bucket: {obc_obj.bucket_name}')
         get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
-        logger.info('Got bucket policy:%s' % get_policy['Policy'])
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         logger.info(f"Deleting bucket website config from bucket: {obc_obj.bucket_name}")
         assert helpers.s3_delete_bucket_website(
@@ -427,7 +427,7 @@ class TestS3BucketPolicy(ManageTest):
         # Getting Policy
         logger.info(f'Getting bucket policy on bucket: {obc_obj.bucket_name}')
         get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
-        logger.info('Got bucket policy:%s' % get_policy['Policy'])
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         logger.info(f'Enabling bucket versioning on {obc_obj.bucket_name} using User: {obc_obj.obc_account}')
         assert helpers.s3_put_bucket_versioning(
@@ -453,7 +453,7 @@ class TestS3BucketPolicy(ManageTest):
         # Getting Policy
         logger.info(f'Getting bucket policy for bucket: {obc_obj.bucket_name}')
         get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
-        logger.info('Got bucket policy:%s' % get_policy['Policy'])
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         for key in range(5):
             logger.info(f"Writing {key} version of {object_key}")
@@ -486,7 +486,7 @@ class TestS3BucketPolicy(ManageTest):
         # Getting Policy
         logger.info(f'Getting bucket policy on bucket: {obc_obj.bucket_name}')
         get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
-        logger.info('Got bucket policy:%s' % get_policy['Policy'])
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         logger.info(f"Suspending bucket versioning on {obc_obj.bucket_name} using User: {obc_obj.obc_account}")
         assert helpers.s3_put_bucket_versioning(
@@ -503,7 +503,7 @@ class TestS3BucketPolicy(ManageTest):
             if response.error['Code'] == 'AccessDenied':
                 logger.info('Get Object action has been denied access')
             else:
-                raise UnexpectedBehaviour(f"Response received invalid error code {response.error['Code']}")
+                raise UnexpectedBehaviour(f"{e.response} received invalid error code {response.error['Code']}")
 
     @pytest.mark.polarion_id("OCS-2159")
     @tier2
@@ -537,7 +537,7 @@ class TestS3BucketPolicy(ManageTest):
         # Getting Policy
         logger.info(f'Getting bucket policy from bucket: {obc_obj.bucket_name}')
         get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
-        logger.info('Got bucket policy:%s' % get_policy['Policy'])
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # Verifying whether Get action is denied access
         logger.info(f'Verifying whether user: {obc_obj.obc_account} is denied to GetObject')
@@ -549,7 +549,7 @@ class TestS3BucketPolicy(ManageTest):
             if response.error['Code'] == 'AccessDenied':
                 logger.info('GetObject action has been denied access')
             else:
-                raise UnexpectedBehaviour(f"Response received invalid error code {response.error['Code']}")
+                raise UnexpectedBehaviour(f"{e.response} received invalid error code {response.error['Code']}")
 
         # Admin sets a new policy on same obc bucket with same account but with different action and resource
         bucket_policy_generated = gen_bucket_policy(
@@ -566,7 +566,7 @@ class TestS3BucketPolicy(ManageTest):
         # Getting Policy
         logger.info(f'Getting bucket policy from bucket: {obc_obj.bucket_name}')
         get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
-        logger.info('Got bucket policy:%s' % get_policy['Policy'])
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # Verifying whether delete action is denied
         logger.info(f'Verifying whether user: {obc_obj.obc_account} is denied to Get object')
@@ -578,7 +578,7 @@ class TestS3BucketPolicy(ManageTest):
             if response.error['Code'] == 'AccessDenied':
                 logger.info('Get Object action has been denied access')
             else:
-                raise UnexpectedBehaviour(f"Response received invalid error code {response.error['Code']}")
+                raise UnexpectedBehaviour(f"{e.response} received invalid error code {response.error['Code']}")
 
     @pytest.mark.polarion_id("OCS-2149")
     @tier2
@@ -638,7 +638,7 @@ class TestS3BucketPolicy(ManageTest):
         # Getting Policy
         logger.info(f'Getting multi statement bucket policy from bucket: {obc_obj.bucket_name}')
         get_policy = helpers.get_bucket_policy(mcg_obj, obc_obj.bucket_name)
-        logger.info('Got bucket policy:%s' % get_policy['Policy'])
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
 
         # NooBaa user writes an object to bucket
         logger.info(f'Writing object on bucket: {obc_obj.bucket_name} with User: {noobaa_user.email_id}')
@@ -659,7 +659,7 @@ class TestS3BucketPolicy(ManageTest):
                 if response.error['Code'] == 'AccessDenied':
                     logger.info(f"DeleteObject failed due to: {response.error['Message']}")
                 else:
-                    raise UnexpectedBehaviour(f"Response received invalid error code {response.error['Code']}")
+                    raise UnexpectedBehaviour(f"{e.response} received invalid error code {response.error['Code']}")
 
     @pytest.mark.parametrize(
         argnames="policy_name, policy_param",
@@ -723,4 +723,4 @@ class TestS3BucketPolicy(ManageTest):
             if response.error['Code'] == 'MalformedPolicy':
                 logger.info(f"PutBucketPolicy failed due to: {response.error['Message']}")
             else:
-                raise UnexpectedBehaviour(f"Response received invalid error code {response.error['Code']}")
+                raise UnexpectedBehaviour(f"{e.response} received invalid error code {response.error['Code']}")
