@@ -47,16 +47,6 @@ from ocs_ci.utility.utils import (
 from tests import helpers
 from tests.helpers import create_unique_resource_name
 from tests.manage.mcg.helpers import get_rgw_restart_count
-from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes, registry
-from ocs_ci.ocs.resources.mcg import MCG
-from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
-from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import get_rgw_pod
-from ocs_ci.ocs.resources.pvc import PVC
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
-from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
-from ocs_ci.utility import templating
 from tests.manage.mcg.helpers import (
     oc_create_aws_backingstore, oc_create_google_backingstore, oc_create_azure_backingstore,
     oc_create_s3comp_backingstore, oc_create_pv_backingstore, cli_create_aws_backingstore,
