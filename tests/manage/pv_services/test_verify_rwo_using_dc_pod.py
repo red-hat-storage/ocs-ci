@@ -98,6 +98,8 @@ class TestVerifyRwoUsingReplica2DcPod(ManageTest):
                 resource=self.pod_not_running, state=constants.STATUS_RUNNING,
                 timeout=10
             )
+            # ResourceWrongStatusException exception should be raised in
+            # wait_for_resource_state. If not, raise UnexpectedBehaviour.
             raise UnexpectedBehaviour(
                 f"Unexpected: Pod {self.pod_not_running.name} is in "
                 f"Running state"
