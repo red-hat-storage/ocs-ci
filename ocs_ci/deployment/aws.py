@@ -9,7 +9,7 @@ from subprocess import PIPE, Popen
 
 import boto3
 
-from ocs_ci.cleanup.aws import defaults
+from ocs_ci.cleanup.aws.defaults import CLUSTER_PREFIXES_SPECIAL_RULES
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions, ocp
@@ -253,7 +253,7 @@ class AWSIPI(AWSBase):
             cluster_name = config.ENV_DATA['cluster_name']
             cluster_name_parts = cluster_name.split("-")
             prefix = cluster_name_parts[0]
-            if prefix in defaults.CLUSTER_PREFIXES_SPECIAL_RULES.keys():
+            if prefix.lower() in CLUSTER_PREFIXES_SPECIAL_RULES.keys():
                 # if the prefix is a cleanup special rule, use the next part of
                 # the cluster name as the prefix
                 prefix = cluster_name_parts[1]
