@@ -22,7 +22,7 @@ def approve_pending_csr():
         cmd = f"{cmd} {item.get('metadata').get('name')}"
         csr_conf.exec_oc_cmd(cmd)
 
-    check_no_pending_csr(csr_conf)
+    check_no_pending_csr()
     logger.info("All CSRs approved")
 
 
