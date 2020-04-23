@@ -548,7 +548,7 @@ class VSPHEREUPI(VSPHEREBASE):
                 f"--log-level {log_cli_level}",
                 timeout=1800
             )
-
+            approve_pending_csr()
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level='DEBUG'):
