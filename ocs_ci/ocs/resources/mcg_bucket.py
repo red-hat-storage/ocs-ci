@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_mcg_cmd
 from tests.helpers import create_unique_resource_name, create_resource
 
 logger = logging.getLogger(name=__file__)
@@ -33,19 +32,6 @@ class MCGBucket(ABC):
         elif type(other) == MCGBucket:
             return self.name == other.name
 
-    @property
-    def phase(self):
-        """
-        Returns phase of bucket claim
-
-        Returns:
-            str: OBC phase
-
-        """
-        return OCP(kind='obc', namespace=self.mcg.namespace).get(
-            resource_name=self.name
-        )['status']['phase']
-
     def delete(self):
         """
         Super method that first logs the bucket deletion and then calls
@@ -56,7 +42,27 @@ class MCGBucket(ABC):
 
     @abstractmethod
     def internal_delete(self):
-        pass
+        """
+        Abstract internal deletion method
+
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def status(self):
+        """
+        Abstract status method
+
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def verify_health(self):
+        """
+        Abstract health verification method
+
+        """
+        raise NotImplementedError()
 
 
 class S3Bucket(MCGBucket):
@@ -73,6 +79,27 @@ class S3Bucket(MCGBucket):
         """
         self.mcg.s3_resource.Bucket(self.name).object_versions.delete()
         self.mcg.s3_resource.Bucket(self.name).delete()
+
+    @property
+    def status(self):
+        """
+        Returns the OBC mode as shown in the NB UI and retrieved via RPC
+
+        Returns:
+            str: The bucket's mode
+
+        """
+        return self.mcg.get_bucket_info(self.name).get('mode')
+
+    def verify_health(self):
+        """
+        Verifies that the bucket is healthy by checking its mode
+
+        Returns:
+            bool: True if the bucket is healthy, False otherwise
+
+        """
+        return self.status == constants.HEALTHY_OB
 
 
 class OCBucket(MCGBucket):
@@ -98,6 +125,29 @@ class OCBucket(MCGBucket):
         """
         OCP(kind='obc', namespace=self.mcg.namespace).delete(resource_name=self.name)
 
+    @property
+    def status(self):
+        """
+        Returns the OBC's phase
+
+        Returns:
+            str: OBC phase
+
+        """
+        return OCP(kind='obc', namespace=self.mcg.namespace).get(
+            resource_name=self.name
+        )['status']['phase']
+
+    def verify_health(self):
+        """
+        Verifies that the bucket is healthy by checking its phase
+
+        Returns:
+            bool: True if the bucket is healthy, False otherwise
+
+        """
+        return self.status == constants.HEALTHY_OBC
+
 
 class CLIBucket(MCGBucket):
     """
@@ -105,10 +155,35 @@ class CLIBucket(MCGBucket):
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        run_mcg_cmd(f'obc create --exact {self.name}')
+        self.mcg.exec_mcg_cmd(f'obc create --exact {self.name}')
 
     def internal_delete(self):
         """
         Deletes the bucket using the NooBaa CLI
         """
-        run_mcg_cmd(f'obc delete {self.name}')
+        self.mcg.exec_mcg_cmd(f'obc delete {self.name}')
+
+    @property
+    def status(self):
+        """
+        Returns the OBC status as printed by the NB CLI
+
+        Returns:
+            str: OBC status
+
+        """
+        return self.mcg.exec_mcg_cmd(f'obc status {self.name}')
+
+    def verify_health(self):
+        """
+        Verifies that the bucket is healthy using the CLI
+
+        Returns:
+            bool: True if the bucket is healthy, False otherwise
+
+        """
+        return (
+            all(
+                healthy_mark in self.status.stdout.replace(' ', '') for healthy_mark
+                in [constants.HEALTHY_OB_CLI_MODE, constants.HEALTHY_OBC_CLI_PHASE])
+        )

@@ -74,6 +74,10 @@ STATUS_COMPLETED = 'Completed'
 # NooBaa statuses
 BS_AUTH_FAILED = 'AUTH_FAILED'
 BS_OPTIMAL = 'OPTIMAL'
+HEALTHY_OB = 'OPTIMAL'
+HEALTHY_OBC = STATUS_BOUND
+HEALTHY_OBC_CLI_PHASE = 'Phase:Bound'
+HEALTHY_OB_CLI_MODE = 'Mode:OPTIMAL'
 
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
@@ -119,6 +123,8 @@ OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
 OPENSHIFT_LOGGING_NAMESPACE = "openshift-logging"
 OPENSHIFT_OPERATORS_REDHAT_NAMESPACE = "openshift-operators-redhat"
 OPENSHIFT_IMAGE_REGISTRY_NAMESPACE = "openshift-image-registry"
+OPENSHIFT_IMAGE_REGISTRY_DEPLOYMENT = "image-registry"
+OPENSHIFT_IMAGE_SELECTOR = "docker-registry=default"
 OPENSHIFT_INGRESS_NAMESPACE = "openshift-ingress"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
@@ -233,6 +239,10 @@ MCG_BACKINGSTORE_SECRET_YAML = os.path.join(
 
 MCG_BACKINGSTORE_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "BackingStore.yaml"
+)
+
+PV_BACKINGSTORE_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "PVBackingStore.yaml"
 )
 
 MCG_BUCKETCLASS_YAML = os.path.join(
@@ -745,3 +755,9 @@ LOCAL_VOLUME_YAML = os.path.join(
 
 # All worker default config files
 RHEL_WORKERS_CONF = os.path.join(CONF_DIR, 'ocsci/aws_upi_rhel_workers.yaml')
+
+# Users
+NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
+
+# Miscellaneous
+NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"

@@ -707,7 +707,8 @@ def get_pods_having_label(label, namespace):
         namespace (str): Namespace in which to be looked up
 
     Return:
-        dict: of pod info
+        list: of pods info
+
     """
     ocp_pod = OCP(kind=constants.POD, namespace=namespace)
     pods = ocp_pod.get(selector=label).get('items')

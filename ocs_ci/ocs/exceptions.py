@@ -166,5 +166,5 @@ class NoBucketPolicyResponse(Exception):
     pass
 
 
-class ClusterIOTagNotFound(Exception):
+class PendingCSRException(Exception):
     pass

@@ -23,6 +23,8 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
     prometheus = PrometheusAPI()
     # time (in seconds) for monitoring to notice the change
     expected_delay = 60
+    # query resolution step used in this test case (number of seconds)
+    query_step = 15
 
     affected_mons = measure_stop_ceph_mon['result']
     # we asked to stop just a single mon ... make this assumption explicit
@@ -38,30 +40,45 @@ def test_monitoring_shows_mon_down(measure_stop_ceph_mon):
         query='ceph_health_status',
         start=measure_stop_ceph_mon['start'],
         end=measure_stop_ceph_mon['stop'],
-        step=15)
+        step=query_step)
     health_validation = check_query_range_result(
         result=health_result,
         good_values=[1],
         bad_values=[0],
         exp_metric_num=1,
+        exp_good_time=measure_stop_ceph_mon['min_downtime'],
         exp_delay=expected_delay)
     health_msg = "health status should be affected by missing mon"
-    assert health_validation, health_msg
 
     logger.info("let's check that mon quorum status value was affected")
     mon_result = prometheus.query_range(
         query='ceph_mon_quorum_status{ceph_daemon="%s"}' % ceph_daemon,
         start=measure_stop_ceph_mon['start'],
         end=measure_stop_ceph_mon['stop'],
-        step=15)
+        step=query_step,
+        validate=False)
     mon_validation = check_query_range_result(
         result=mon_result,
         good_values=[0],
         bad_values=[1],
         exp_metric_num=1,
+        exp_good_time=measure_stop_ceph_mon['min_downtime'],
         exp_delay=expected_delay)
-    mon_msg = "ceph_osd_up value should be affected by missing osd"
+    mon_msg = "ceph_mon_quorum_status value should be affected by missing mon"
+
+    # checking validation results when both queries are performed makes sure
+    # that there is evidence for both mon and health queries in the test case
+    # logs in case of an assert failure
+    assert health_validation, health_msg
     assert mon_validation, mon_msg
+
+    # since we don't do strict result validation in the previous query, we
+    # are going to check the min. expected size of the reply explicitly, taking
+    # into account the min. expected downtime of the affected ceph mon
+    assert len(mon_result) == 1, "there should be one metric for one mon"
+    min_mon_samples = measure_stop_ceph_mon['min_downtime'] / query_step
+    mon_sample_size = len(mon_result[0]["values"])
+    assert mon_sample_size >= min_mon_samples
 
 
 @tier3
@@ -93,7 +110,6 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd):
         exp_metric_num=1,
         exp_delay=expected_delay)
     health_msg = "health status should be affected by missing osd"
-    assert health_validation, health_msg
 
     logger.info("let's check that osd up value was affected")
     osd_up_result = prometheus.query_range(
@@ -108,7 +124,6 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd):
         exp_metric_num=1,
         exp_delay=expected_delay)
     osd_up_msg = "ceph_osd_up value should be affected by missing osd"
-    assert osd_up_validation, osd_up_msg
 
     logger.info("let's check that osd in value was not affected")
     # osd in value is not affected because we just stopped the osd, we
@@ -124,4 +139,10 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd):
         bad_values=[0],
         exp_metric_num=1)
     osd_in_msg = "ceph_osd_in value should not be affected by missing osd"
+
+    # checking validation results when all queries are performed makes sure
+    # that there is evidence for all queries in the test case logs in case of
+    # an assert failure
+    assert health_validation, health_msg
+    assert osd_up_validation, osd_up_msg
     assert osd_in_validation, osd_in_msg

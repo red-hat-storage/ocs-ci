@@ -85,7 +85,9 @@ def validate_pvc_are_mounted_on_monitoring_pods(pod_list):
         pod_obj = get_pod_obj(
             name=pod.name, namespace=defaults.OCS_MONITORING_NAMESPACE
         )
-        mount_point = pod_obj.exec_cmd_on_pod(command="df -kh")
+        mount_point = pod_obj.exec_cmd_on_pod(
+            command="df -kh", out_yaml_format=False,
+        )
         assert "/dev/rbd" in mount_point, f"pvc is not mounted on pod {pod.name}"
     logger.info("Verified all pvc are mounted on monitoring pods")
 

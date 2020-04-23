@@ -123,6 +123,9 @@ def measure_stop_ceph_mon(measurement_dir):
     logger.info(f"Monitors to stop: {mons_to_stop}")
     logger.info(f"Monitors left to run: {mons[:split_index]}")
 
+    # run_time of operation
+    run_time = 60 * 14
+
     def stop_mon():
         """
         Downscale Ceph Monitor deployments for 14 minutes. First 15 minutes
@@ -137,8 +140,6 @@ def measure_stop_ceph_mon(measurement_dir):
         Returns:
             str: Names of downscaled deployments
         """
-        # run_time of operation
-        run_time = 60 * 14
         nonlocal oc
         nonlocal mons_to_stop
         for mon in mons_to_stop:
@@ -150,6 +151,9 @@ def measure_stop_ceph_mon(measurement_dir):
 
     test_file = os.path.join(measurement_dir, 'measure_stop_ceph_mon.json')
     measured_op = measure_operation(stop_mon, test_file)
+
+    # expected minimal downtime of a mon inflicted by this fixture
+    measured_op['min_downtime'] = run_time - (60 * 2)
 
     # get new list of monitors to make sure that new monitors were deployed
     mon_deployments = oc.get(selector=constants.MON_APP_LABEL)['items']
@@ -353,8 +357,48 @@ def workload_fio_storageutilization(
         f"using {storage_class_name} storage class "
         f"backed by {ceph_pool_name} ceph pool"))
 
+    # log ceph mon_osd_*_ratio values for QE team to understand behaviour of
+    # ceph cluster during high utilization levels (for expected values, consult
+    # BZ 1775432 and check that there is no more recent BZ or JIRA in this
+    # area)
+    ceph_full_ratios = [
+        'mon_osd_full_ratio',
+        'mon_osd_backfillfull_ratio',
+        'mon_osd_nearfull_ratio',
+    ]
+    ct_pod = pod.get_ceph_tools_pod()
+    for ceph_ratio in ceph_full_ratios:
+        logger.info("checking value of %s", ceph_ratio)
+        value = ct_pod.exec_ceph_cmd(f'ceph config get mon.* {ceph_ratio}')
+        logger.info(f"{ceph_ratio} is {value}")
+
     pvc_size = \
         fiojob.get_storageutilization_size(target_percentage, ceph_pool_name)
+
+    # To handle use case of test_workload_rbd_cephfs_minimal which writes data
+    # to reach a small fraction of the total capacity only (eg. 5%), the test
+    # is going increase the target 2x and try again.
+    if pvc_size <= 0 and target_percentage <= 0.10:
+        new_target_percentage = 2 * target_percentage
+        logger.info(
+            "increasing storage utilization target percentage from %.2f to %.2f",
+            target_percentage,
+            new_target_percentage)
+        target_percentage = new_target_percentage
+        pvc_size = fiojob.get_storageutilization_size(
+            target_percentage,
+            ceph_pool_name)
+    # If this is still not enough, the test will be skipped, because the idea
+    # of tests reaching a small total utilization is to do just that.
+    # Moreover this will also skip this test case for any other utilization
+    # level, which is easier to read in the test report than the actual
+    # failure with negative pvc size.
+    if pvc_size <= 0:
+        skip_msg = (
+            "current total storage utilization is too high, "
+            f"the target utilization {target_percentage*100}% is already met")
+        logger.warning(skip_msg)
+        pytest.skip(skip_msg)
 
     fio_conf = textwrap.dedent("""
         [simple-write]

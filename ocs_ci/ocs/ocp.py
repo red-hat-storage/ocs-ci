@@ -441,7 +441,8 @@ class OCP(object):
 
     def wait_for_resource(
         self, condition, resource_name='', column='STATUS', selector=None,
-        resource_count=0, timeout=60, sleep=3
+        resource_count=0, timeout=60, sleep=3,
+        dont_allow_other_resources=False,
     ):
         """
         Wait for a resource to reach to a desired condition
@@ -457,6 +458,12 @@ class OCP(object):
             resource_count (int): How many resources expected to be
             timeout (int): Time in seconds to wait
             sleep (int): Sampling time in seconds
+            dont_allow_other_resources (bool): If True it will not allow other
+                resources in different state. For example you are waiting for 2
+                resources and there are currently 3 (2 in running state,
+                1 in ContainerCreating) the function will continue to next
+                iteration to wait for only 2 resources in running state and no
+                other exists.
 
         Returns:
             bool: True in case all resources reached desired condition,
@@ -496,8 +503,10 @@ class OCP(object):
                 # More than 1 resources returned
                 elif sample.get('kind') == 'List':
                     in_condition = []
+                    in_condition_len = 0
                     actual_status = []
                     sample = sample['items']
+                    sample_len = len(sample)
                     for item in sample:
                         try:
                             item_name = item.get('metadata').get('name')
@@ -505,13 +514,28 @@ class OCP(object):
                             actual_status.append(status)
                             if status == condition:
                                 in_condition.append(item)
+                                in_condition_len = len(in_condition)
                         except CommandFailed as ex:
                             log.info(
                                 f"Failed to get status of resource: {item_name} at column {column}, "
                                 f"Error: {ex}"
                             )
                         if resource_count:
-                            if len(in_condition) == resource_count:
+                            if in_condition_len == resource_count:
+                                log.info(
+                                    f"{in_condition_len} resources already "
+                                    f"reached condition!"
+                                )
+                                if (
+                                    dont_allow_other_resources
+                                    and sample_len != in_condition_len
+                                ):
+                                    log.info(
+                                        f"There are {sample_len} resources in "
+                                        f"total. Continue to waiting as "
+                                        f"you don't allow other resources!"
+                                    )
+                                    continue
                                 return True
                         elif len(sample) == len(in_condition):
                             return True
@@ -531,6 +555,13 @@ class OCP(object):
                 f"Wait for {self._kind} resource {resource_name} at column {column}"
                 f" to reach desired condition {condition} failed,"
                 f" last actual status was {actual_status}"))
+            # run `oc describe` on the resources we were waiting for to provide
+            # evidence so that we can understand what was wrong
+            output = self.describe(resource_name, selector=selector)
+            log.warning(
+                "Description of the resource(s) we were waiting for:\n%s",
+                output
+            )
             raise(ex)
 
         return False
@@ -763,6 +794,50 @@ class OCP(object):
                 f"Resource: {resource_name}, selector: {selector} not found."
             )
             return False
+
+    def get_logs(
+        self,
+        name,
+        container_name=None,
+        all_containers=False,
+        secrets=None,
+        timeout=None,
+        ignore_error=False,
+    ):
+        """
+        Execute ``oc logs`` command to fetch logs for a given k8s resource.
+
+        Since the log is stored as a string in memory, this will be
+        problematic when the log is large.
+
+        Args:
+            name (str): name of the resource to fetch logs from
+            container_name (str): name of the container (optional)
+            all_containers (bool): fetch logs from all containers of the
+                resource
+            secrets (list): A list of secrets to be masked with asterisks
+            timeout (int): timeout for the oc_cmd
+            ignore_error (bool): True if ignore non zero return code and do not
+                raise the exception.
+
+        Returns:
+            str: container logs
+
+        """
+        log.info("fetching logs from %s/%s", self.kind, name)
+        oc_cmd = f"logs {self.kind}/{name}"
+        if container_name is not None:
+            oc_cmd += f" --container='{container_name}'"
+        if all_containers:
+            oc_cmd += " --all-containers=true"
+        output = self.exec_oc_cmd(
+            oc_cmd,
+            out_yaml_format=False,
+            secrets=secrets,
+            timeout=timeout,
+            ignore_error=ignore_error
+        )
+        return output
 
 
 def switch_to_project(project_name):

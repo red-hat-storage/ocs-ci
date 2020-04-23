@@ -21,11 +21,12 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility.bootstrap import gather_bootstrap
+from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.utility.templating import dump_data_to_json, Templating
 from ocs_ci.utility.utils import (
     clone_repo, convert_yaml2tfvars, create_directory_path, read_file_as_str,
     remove_keys_from_tf_variable_file, replace_content_in_file, run_cmd,
-    upload_file, wait_for_co
+    upload_file, wait_for_co, get_ocp_version
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
 from .deployment import Deployment
@@ -329,7 +330,8 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # git clone repo from openshift installer
             clone_repo(
-                constants.VSPHERE_INSTALLER_REPO, self.upi_repo_path
+                constants.VSPHERE_INSTALLER_REPO, self.upi_repo_path,
+                f'release-{get_ocp_version()}'
             )
 
             # upload bootstrap ignition to public access server
@@ -528,6 +530,9 @@ class VSPHEREUPI(VSPHEREBASE):
                 os.chdir(self.previous_dir)
 
             OCP.set_kubeconfig(self.kubeconfig)
+
+            approve_pending_csr()
+
             # wait for image registry to show-up
             co = "image-registry"
             wait_for_co(co)
@@ -543,7 +548,7 @@ class VSPHEREUPI(VSPHEREBASE):
                 f"--log-level {log_cli_level}",
                 timeout=1800
             )
-
+            approve_pending_csr()
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level='DEBUG'):
@@ -614,7 +619,8 @@ class VSPHEREUPI(VSPHEREBASE):
             constants.TERRAFORM_VARS
         )
         clone_repo(
-            constants.VSPHERE_INSTALLER_REPO, upi_repo_path
+            constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
+            f'release-{get_ocp_version()}'
         )
         if (
             os.path.exists(f"{constants.VSPHERE_MAIN}.backup")
