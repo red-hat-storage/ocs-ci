@@ -759,7 +759,7 @@ class CephCluster(object):
 
             actual_osds = len(pod.get_osd_pods())
 
-            assert count == actual_osds, f"Expected {count},  Got {actual_osds}"
+            assert count == actual_osds, f"Expected OSD {count},  Got {actual_osds}"
         except exceptions.TimeoutExpiredError as e:
             logger.error(e)
             raise exceptions.OsdCountException(
@@ -788,7 +788,7 @@ class CephCluster(object):
 
             actual_mgr = len(pod.get_mgr_pods())
 
-            assert count == actual_mgr, f"Expected {count},  Got {actual_mgr}"
+            assert count == actual_mgr, f"Expected MGR {count},  Got {actual_mgr}"
         except exceptions.TimeoutExpiredError as e:
             logger.error(e)
             raise exceptions.MgrCountException(
@@ -817,7 +817,7 @@ class CephCluster(object):
 
             actual_rgw = 1
 
-            assert count == actual_rgw, f"Expected {count},  Got {actual_rgw}"
+            assert count == actual_rgw, f"Expected RGW {count},  Got {actual_rgw}"
         except exceptions.TimeoutExpiredError as e:
             logger.error(e)
             raise exceptions.RgwCountException(
