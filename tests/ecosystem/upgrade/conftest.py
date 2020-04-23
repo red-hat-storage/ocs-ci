@@ -1,3 +1,4 @@
+import configparser
 import copy
 import logging
 import textwrap
@@ -8,6 +9,7 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.resources.pod import Pod
+from ocs_ci.ocs.utility.workloads.fio import config_to_string
 from tests import helpers
 
 log = logging.getLogger(__name__)
@@ -158,6 +160,18 @@ def fio_project(project_factory_session):
 
 
 @pytest.fixture(scope='session')
+def workload_bucket(bucket_factory_session):
+    """
+    MCG bucket where fio workload is supposed to be run.
+
+    Returns:
+        obj: Bucket object
+
+    """
+    return bucket_factory_session()
+
+
+@pytest.fixture(scope='session')
 def fio_conf_fs():
     """
     Basic fio configuration for upgrade utilization for fs based pvcs
@@ -199,6 +213,24 @@ def fio_conf_block():
         runtime=24h
         numjobs=10
         """)
+
+
+@pytest.fixture(scope='session')
+def fio_conf_mcg(workload_bucket):
+    """
+    Basic fio configuration for upgrade utilization for AWS S3 bucket.
+
+    """
+    config = configparser.ConfigParser()
+    config.read_file(open(constants.FIO_S3))
+    config['global']['name'] = workload_bucket.name
+    config['global']['http_s3_key'] = mcg_obj.access_key
+    config['global']['http_s3_keyid'] = mcg_obj.access_key_id
+    config['global']['http_host'] = mcg_obj.s3_endpoint
+    config['global']['http_s3_region'] = mcg_obj.region
+    config['create']['time_based'] = 1
+    config['create']['runtime'] = '24h'
+    return config_to_string(config)
 
 
 @pytest.fixture(scope='session')
@@ -566,3 +598,22 @@ def upgrade_buckets(
         )
 
     return buckets
+
+
+@pytest.fixture(scope='session')
+def mcg_workload_jobs(
+    fio_job_dict_session,
+    fio_configmap_dict_session,
+    fio_conf_mcg,
+    fio_project,
+    tmp_path
+):
+    """
+    Creates kubernetes jobs that should utilize MCG during upgrade.
+
+    Returns:
+        list: List of job objects
+
+    """
+    job_name = 'mcg_workload'
+    pass

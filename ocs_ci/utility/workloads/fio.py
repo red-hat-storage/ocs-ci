@@ -11,6 +11,7 @@ This module implements few functions::
 Note: The above mentioned functions will be invoked from Workload.setup()
 and Workload.run() methods along with user provided parameters.
 """
+import configparser
 import logging
 from time import sleep
 
@@ -87,3 +88,22 @@ def run(**kwargs):
     log.info(f"Running cmd: {fio_cmd}")
 
     return io_pod.exec_cmd_on_pod(fio_cmd, out_yaml_format=False)
+
+
+def config_to_string(config):
+    """
+    Convert ConfigParser object to string in INI format.
+
+    Args:
+        config (obj): ConfigParser object
+
+    Returns:
+        str: Config in one string
+
+    """
+    string = ""
+    sections = config.default_section + config.sections()
+    for section in sections:
+        string += f"[{section}]\n"
+        string += "\n".join([f"{item[0]}={item[1]}" for item in config.items(section)])
+    return string
