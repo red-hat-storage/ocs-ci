@@ -9,7 +9,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.pod import get_rgw_pod
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_mcg_cmd, TimeoutSampler, run_cmd
+from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from tests.helpers import create_resource
 from tests.helpers import logger, craft_s3_command, craft_s3_api_command
 
@@ -38,8 +38,8 @@ def retrieve_test_objects_to_pod(podobj, target_dir):
             logger.info(f'Downloading {obj.key} from AWS test bucket')
             p.submit(podobj.exec_cmd_on_pod,
                      command=f'sh -c "'
-                     f'wget -P {target_dir} '
-                     f'https://{constants.TEST_FILES_BUCKET}.s3.amazonaws.com/{obj.key}"'
+                             f'wget -P {target_dir} '
+                             f'https://{constants.TEST_FILES_BUCKET}.s3.amazonaws.com/{obj.key}"'
                      )
             downloaded_objects.append(obj.key)
         return downloaded_objects
@@ -183,7 +183,7 @@ def oc_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
     create_resource(**bs_data)
 
 
-def cli_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
+def cli_create_aws_backingstore(mcg_obj_session, cld_mgr, backingstore_name, uls_name, region):
     """
     Create a new backingstore with aws underlying storage using noobaa cli command
 
@@ -194,11 +194,11 @@ def cli_create_aws_backingstore(cld_mgr, backingstore_name, uls_name, region):
         region (str): which region to create backingstore (should be the same as uls)
 
     """
-    run_mcg_cmd(f'backingstore create aws-s3 {backingstore_name} '
-                f'--access-key {cld_mgr.aws_client.access_key} '
-                f'--secret-key {cld_mgr.aws_client.secret_key} '
-                f'--target-bucket {uls_name} --region {region}'
-                )
+    mcg_obj_session.exec_mcg_cmd(f'backingstore create aws-s3 {backingstore_name} '
+                                 f'--access-key {cld_mgr.aws_client.access_key} '
+                                 f'--secret-key {cld_mgr.aws_client.secret_key} '
+                                 f'--target-bucket {uls_name} --region {region}'
+                                 )
 
 
 def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
@@ -246,7 +246,7 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA['cluster_namespace'])
 
 
-def cli_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
+def cli_create_pv_backingstore(mcg_obj_session, backingstore_name, vol_num, size, storage_class):
     """
     Create a new backingstore with pv underlying storage using noobaa cli command
 
@@ -257,9 +257,9 @@ def cli_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
         storage_class (str): which storage class to use
 
     """
-    run_mcg_cmd(f'backingstore create pv-pool {backingstore_name} --num-volumes '
-                f'{vol_num} --pv-size-gb {size} --storage-class {storage_class}'
-                )
+    mcg_obj_session.exec_mcg_cmd(f'backingstore create pv-pool {backingstore_name} --num-volumes '
+                                 f'{vol_num} --pv-size-gb {size} --storage-class {storage_class}'
+                                 )
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA['cluster_namespace'])
 
 

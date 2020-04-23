@@ -19,7 +19,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     deployment, ignore_leftovers, tier_marks
 )
-from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
+from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes, registry
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
