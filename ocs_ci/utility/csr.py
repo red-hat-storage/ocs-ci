@@ -16,10 +16,10 @@ def approve_pending_csr():
 
     """
     logger.info("Approving CSRs")
-    cmd = "adm certificate approve"
+    base_cmd = "adm certificate approve"
     csr_conf = get_csr_resource()
     for item in csr_conf.data.get('items'):
-        cmd = f"{cmd} {item.get('metadata').get('name')}"
+        cmd = f"{base_cmd} {item.get('metadata').get('name')}"
         csr_conf.exec_oc_cmd(cmd)
 
     check_no_pending_csr()
