@@ -1094,7 +1094,6 @@ def verify_cluster_operator_status(cluster_operator):
     operator_data = ocp.get(
         resource_name=f'{cluster_operator} -o json', out_yaml_format=False
     )
-    # operator_data = json.loads(oc_json)
     conditions = operator_data['status']['conditions']
     for condition in conditions:
         if condition['type'] == 'Degraded' and condition['status'] == 'True':
@@ -1106,3 +1105,36 @@ def verify_cluster_operator_status(cluster_operator):
     log.info(f'{cluster_operator} status is valid')
 
     return True
+
+
+def validate_cluster_version_status():
+    ocp = OCP(kind="clusterversion")
+    operator_data = ocp.get('-o json', out_yaml_format=False)
+    conditions = operator_data['items'][0]['status']['condition']
+    for condition in conditions:
+        if condition['type'] == 'Progressing' and condition['status'] == 'True':
+            log.info('cluster version status is Progressing')
+            return False
+        if condition['type'] == 'Failing' and condition['status'] == 'True':
+            log.info('cluster version status is Failing')
+            return False
+        if condition['type'] == 'Available' and condition['status'] != 'True':
+            log.info('cluster status is not available')
+            return False
+
+    log.info('Cluster version validation - OK!')
+    return True
+
+
+def get_ocp_upgrade_channel():
+    """
+    Gets OCP upgrade channel
+
+    Returns:
+        str: ocp upgrade channel name
+
+    """
+    ocp = OCP(kind="clusterversion")
+    operator_version = ocp.get('-o json', out_yaml_format=False)
+
+    return operator_version['items'][0]['spec']['channel']
