@@ -44,6 +44,7 @@ setup(
         'funcy',
         'semantic-version',
         'jsonschema>=3.2.0',
+        'google-cloud-storage',
     ],
     entry_points={
         'console_scripts': [
