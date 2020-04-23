@@ -9,6 +9,7 @@ from subprocess import PIPE, Popen
 
 import boto3
 
+from ocs_ci.cleanup.aws.defaults import CLUSTER_PREFIXES_SPECIAL_RULES
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions, ocp
@@ -167,12 +168,14 @@ class AWSBase(Deployment):
         Check cluster existence according to cluster name prefix
 
         Returns:
-            bool: True in case a cluster with the same name prefix already exists,
+            bool: True if a cluster with the same name prefix already exists,
                 False otherwise
 
         """
         instances = self.aws.get_instances_by_name_pattern(cluster_name_prefix)
-        instance_objs = [self.aws.get_ec2_instance(ins.get('id')) for ins in instances]
+        instance_objs = [
+            self.aws.get_ec2_instance(ins.get('id')) for ins in instances
+        ]
         non_terminated_instances = [
             ins for ins in instance_objs if ins.state
             .get('Code') != constants.INSTANCE_TERMINATED
@@ -248,7 +251,14 @@ class AWSIPI(AWSBase):
         """
         if not config.DEPLOYMENT.get('force_deploy_multiple_clusters'):
             cluster_name = config.ENV_DATA['cluster_name']
-            prefix = cluster_name.split("-")[0] + '*'
+            cluster_name_parts = cluster_name.split("-")
+            prefix = cluster_name_parts[0]
+            if prefix.lower() in CLUSTER_PREFIXES_SPECIAL_RULES.keys():
+                # if the prefix is a cleanup special rule, use the next part of
+                # the cluster name as the prefix
+                prefix = cluster_name_parts[1]
+            prefix += "*"
+
             if self.check_cluster_existence(prefix):
                 raise exceptions.SameNamePrefixClusterAlreadyExistsException(
                     f"Cluster with name prefix {prefix} already exists. "
