@@ -549,7 +549,7 @@ def upgrade_buckets(
 
     # add some data to the first pod
     awscli_pod_session.exec_cmd_on_pod(
-        'dd if=/dev/zero of=/tmp/testfile bs=1M count=500'
+        'dd if=/dev/urandom of=/tmp/testfile bs=1M count=500'
     )
     for i in range(1, 7):
         awscli_pod_session.exec_cmd_on_pod(
