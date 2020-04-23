@@ -442,6 +442,31 @@ def project_factory_fixture(request):
         Delete the project
         """
         for instance in instances:
+            try:
+                ocp_event = ocp.OCP(kind="Event", namespace=instance.namespace)
+                events = ocp_event.get()
+                event_count = len(events['items'])
+                warn_event_count = 0
+                for event in events['items']:
+                    if event['type'] == "Warning":
+                        warn_event_count += 1
+                log.info(
+                    (
+                        "There was %d events in %s ns before it's removal"
+                        " (our of which %d was of type Warning)."
+                        " For a full dump of this event list, see DEBUG logs."
+                    ),
+                    event_count,
+                    instance.namespace,
+                    warn_event_count
+                )
+            except Exception as ex:
+                # we don't want any problem to distrupt the teardown itself
+                log.warning(
+                    "failed to get events for %s namespace: %s",
+                    instance.namespace,
+                    ex
+                )
             ocp.switch_to_default_rook_cluster_project()
             instance.delete(resource_name=instance.namespace)
             instance.wait_for_delete(instance.namespace, timeout=300)
