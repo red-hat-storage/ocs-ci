@@ -33,24 +33,21 @@ from ocs_ci.utility.workloadfixture import measure_operation
 logger = logging.getLogger(__name__)
 
 
-def get_storageutilization_size(target_percentage, ceph_pool_name):
+def get_ceph_storage_stats(ceph_pool_name):
     """
-    For the purpose of the workload storage utilization fixtures, get expected
-    pvc_size based on STORED and MAX AVAIL values (as reported by `ceph df`)
-    for given ceph pool and target utilization percentage.
-
-    This is only approximate, and it won't work eg. if each pool has different
-    configuration of replication.
+    Get ceph storage utilization values from ``ceph df``: total STORED value
+    and MAX AVAIL of given ceph pool, which are important for understanding
+    how much space is already consumed and how much is still available.
 
     Args:
-        target_percentage (float): target total utilization, eg. 0.5 for 50%
         ceph_pool_name (str): name of ceph pool where you want to write data
 
     Returns:
-        int: pvc_size for storage utilization job (in GiB, rounded)
+        tuple:
+            int: sum of all ceph pool STORED values (Bytes)
+            int: value of MAX AVAIL value of given ceph pool (Bytes)
 
     """
-    # get STORED and MAX AVAIL of given ceph pool ...
     ct_pod = pod.get_ceph_tools_pod()
     ceph_df_dict = ct_pod.exec_ceph_cmd(ceph_cmd="ceph df")
     ceph_pool = None
@@ -70,9 +67,30 @@ def get_storageutilization_size(target_percentage, ceph_pool_name):
     #  - pool is missing (likely a product bug)
     # either way, the fixture can't continue ...
     assert ceph_pool is not None, f"Pool: {ceph_pool_name} doesn't exist!"
+    return ceph_total_stored, ceph_pool['stats']['max_avail']
+
+
+def get_storageutilization_size(target_percentage, ceph_pool_name):
+    """
+    For the purpose of the workload storage utilization fixtures, get expected
+    pvc_size based on STORED and MAX AVAIL values (as reported by `ceph df`)
+    for given ceph pool and target utilization percentage.
+
+    This is only approximate, and it won't work eg. if each pool has different
+    configuration of replication.
+
+    Args:
+        target_percentage (float): target total utilization, eg. 0.5 for 50%
+        ceph_pool_name (str): name of ceph pool where you want to write data
+
+    Returns:
+        int: pvc_size for storage utilization job (in GiB, rounded)
+
+    """
+    ceph_total_stored, max_avail = get_ceph_storage_stats(ceph_pool_name)
     # ... to compute PVC size (values in bytes)
-    total = ceph_pool["stats"]["max_avail"] + ceph_total_stored
-    max_avail_gi = ceph_pool['stats']['max_avail'] / 2**30
+    total = max_avail + ceph_total_stored  # Bytes
+    max_avail_gi = max_avail / 2**30  # GiB
     logger.info(f"MAX AVAIL of {ceph_pool_name} is {max_avail_gi} Gi")
     target = total * target_percentage
     to_utilize = target - ceph_total_stored
@@ -264,21 +282,69 @@ def delete_fio_data(fio_job_file, delete_check_func):
 
 def workload_fio_storageutilization(
     fixture_name,
-    target_percentage,
     project,
     fio_pvc_dict,
     fio_job_dict,
     fio_configmap_dict,
     measurement_dir,
     tmp_path,
+    target_percentage=None,
+    target_size=None,
     with_checksum=False,
 ):
     """
     This function implements core functionality of fio storage utilization
-    workload fixture. This is necessary because we can't parametrize single
+    workload fixtures. This is necessary because we can't parametrize single
     general fixture over multiple parameters (it would mess with test case id
     and polarion test case tracking).
+
+    It works as a workload fixture, as understood by
+    :py:mod:`ocs_ci.utility.workloadfixture` module.
+
+    When ``target_percentage`` is specified, the goal of the fixture is to fill
+    whatever is left so that total cluster utilization reaches the target
+    percentage. This means that in this mode, number of data written depends
+    on both total capacity and current utilization. If the current storage
+    utilization already exceeds the target, the test is skipped.
+
+    On the other hand with ``target_size``, you can specify the size of data
+    written by fio directly.
+
+    Args:
+        fixture_name (str): name of the fixture using this function (for
+            logging and k8s object labeling purposes)
+        project (): project in which the Job is deployed
+        fio_pvc_dict (dict): PVC k8s struct for fio target volume
+        fio_job_dict (dict): Job k8s struct for fio job
+        fio_configmap_dict (dict): configmap k8s struct with fio config file
+        measurement_dir (str): reference to a fixture which represents a
+            directory where measurement results are stored, see also
+            :py:func:`ocs_ci.utility.workloadfixture.measure_operation()`
+        tmp_path (pathlib.PosixPath): reference to pytest ``tmp_path`` fixture
+        target_percentage (float): target utilization as percentage wrt all
+            usable OCS space, eg. 0.50 means a request to reach 50% of total
+            OCS storage utilization (wrt usable space)
+        target_size (int): target size of the PVC for fio to use, eg. 10 means
+            a request for fio to write 10GiB of data
+        with_checksum (bool): if true, sha1 checksum of the data written by
+            fio is stored on the volume, and reclaim policy of the volume is
+            changed to ``Retain`` so that the volume is not removed during test
+            teardown for later verification runs
+
+    Returns:
+        dict: measurement results with timestamps and other medatada from
+            :py:func:`ocs_ci.utility.workloadfixture.measure_operation()`
+
     """
+    val_err_msg = "Specify either target_size or target_percentage"
+    if target_size is None and target_percentage is None:
+        raise ValueError(
+            val_err_msg
+            + ", it's not clear how much storage space should be used."
+        )
+    if target_size is not None and target_percentage is not None:
+        raise ValueError(val_err_msg + ", not both.")
+
     # TODO: move out storage class names
     if fixture_name.endswith("rbd"):
         storage_class_name = "ocs-storagecluster-ceph-rbd"
@@ -311,12 +377,18 @@ def workload_fio_storageutilization(
         value = ct_pod.exec_ceph_cmd(f'ceph config get mon.* {ceph_ratio}')
         logger.info(f"{ceph_ratio} is {value}")
 
-    pvc_size = get_storageutilization_size(target_percentage, ceph_pool_name)
+    if target_size is not None:
+        pvc_size = target_size
+    else:
+        pvc_size = get_storageutilization_size(
+            target_percentage,
+            ceph_pool_name
+        )
 
     # To handle use case of test_workload_rbd_cephfs_minimal which writes data
     # to reach a small fraction of the total capacity only (eg. 5%), the test
     # is going increase the target 2x and try again.
-    if pvc_size <= 0 and target_percentage <= 0.10:
+    if pvc_size <= 0 and target_percentage is not None and target_percentage <= 0.10:
         new_target_percentage = 2 * target_percentage
         logger.info(
             "increasing storage utilization target percentage from %.2f to %.2f",
@@ -331,7 +403,7 @@ def workload_fio_storageutilization(
     # Moreover this will also skip this test case for any other utilization
     # level, which is easier to read in the test report than the actual
     # failure with negative pvc size.
-    if pvc_size <= 0:
+    if pvc_size <= 0 and target_percentage is not None:
         skip_msg = (
             "current total storage utilization is too high, "
             f"the target utilization {target_percentage*100}% is already met")
@@ -411,29 +483,25 @@ def workload_fio_storageutilization(
     if not measured_op['first_run']:
         return measured_op
 
-    def check_pvc_size():
+    # measure MAX AVAIL value just before reclamaion of data written by fio
+    _, max_avail_before_delete = get_ceph_storage_stats(ceph_pool_name)
+
+    def is_storage_reclaimed():
         """
         Check whether data created by the Job were actually deleted.
         """
-        # By asking again for pvc_size necessary to reach the target
-        # cluster utilization, we can see how much data were already
-        # deleted. Negative or small value of current pvc_size means that
-        # the data were not yet deleted.
-        pvc_size_tmp = get_storageutilization_size(
-            target_percentage, ceph_pool_name)
-        # If no other components were utilizing OCS storage, the space
-        # would be considered reclaimed when current pvc_size reaches
-        # it's original value again. But since this is not the case (eg.
-        # constantly growing monitoring or log data are stored there),
-        # we are ok with just 90% of the original value.
-        result = pvc_size_tmp >= pvc_size * 0.90
+        _, max_avail = get_ceph_storage_stats(ceph_pool_name)
+        reclaimed_size = round((max_avail - max_avail_before_delete) / 2**30)
+        logger.info(
+            "%d Gi of %d Gi (PVC size) seems already reclaimed",
+            reclaimed_size,
+            pvc_size
+        )
+        result = reclaimed_size >= pvc_size * 0.9
         if result:
-            logger.info("storage space was reclaimed")
+            logger.info("Storage for the PVC was at least 90% reclaimed.")
         else:
-            logger.info(
-                "storage space was not yet fully reclaimed, "
-                f"current pvc size {pvc_size_tmp} value "
-                f"should be close to {pvc_size}")
+            logger.info("Storage for the PVC was not yet reclaimed enough.")
         return result
 
     if with_checksum:
@@ -470,6 +538,6 @@ def workload_fio_storageutilization(
         # Without checksum, we just need to make sure that data were deleted
         # and wait for this to happen to avoid conflicts with tests executed
         # right after this one.
-        delete_fio_data(fio_job_file, check_pvc_size)
+        delete_fio_data(fio_job_file, is_storage_reclaimed)
 
     return measured_op
