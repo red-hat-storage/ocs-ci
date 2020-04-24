@@ -53,9 +53,10 @@ def get_storageutilization_size(target_percentage, ceph_pool_name):
         if pool["name"] == ceph_pool_name:
             ceph_pool = pool
     if ceph_pool is None:
-        logger.error((
+        logger.error(
             f"pool {ceph_pool_name} was not found "
-            f"in output of `ceph df`: {ceph_df_dict}"))
+            f"in output of `ceph df`: {ceph_df_dict}"
+        )
     # If the following assert fail, the problem is either:
     #  - name of the pool has changed (when this happens before GA, it's
     #    likely ocs-ci bug, after the release it's a product bug),
@@ -72,7 +73,8 @@ def get_storageutilization_size(target_percentage, ceph_pool_name):
     logger.info(
         f"to reach {target/2**30} Gi of total cluster utilization, "
         f"which is {target_percentage*100}% of the total capacity, "
-        f"utilization job should request and fill {pvc_size} Gi volume")
+        f"utilization job should request and fill {pvc_size} Gi volume"
+    )
     return pvc_size
 
 
@@ -115,9 +117,10 @@ def get_timeout(fio_min_mbps, pvc_size):
     # ... we compute max. time we are going to wait for fio to write all data
     min_time_to_write_gb = 1 / (fio_min_mbps / 2**10)
     write_timeout = pvc_size * min_time_to_write_gb  # seconds
-    logger.info((
+    logger.info(
         f"fixture will wait {write_timeout} seconds for the Job "
-        f"to write {pvc_size} Gi data on OCS backed volume"))
+        f"to write {pvc_size} Gi data on OCS backed volume"
+    )
     return write_timeout
 
 
@@ -139,7 +142,8 @@ def wait_for_job_completion(namespace, timeout, error_msg):
             resource_count=1,
             condition=constants.STATUS_COMPLETED,
             timeout=timeout,
-            sleep=30)
+            sleep=30
+        )
     except TimeoutExpiredError as ex:
         # report some high level error as well
         logger.error(error_msg)
@@ -156,7 +160,8 @@ def wait_for_job_completion(namespace, timeout, error_msg):
                 logger.error(
                     "Container log from pod '%s' follows:\n%s",
                     pod_name,
-                    output)
+                    output
+                )
         # reraise the exception
         raise(ex)
 
@@ -244,6 +249,7 @@ def delete_fio_data(fio_job_file, delete_check_func):
         error_msg = (
             "it seems that the storage space was not reclaimed "
             f"within {check_timeout} seconds, "
-            "this is most likely a product bug or misconfiguration")
+            "this is most likely a product bug or misconfiguration"
+        )
         logger.error(error_msg)
         raise Exception(error_msg)
