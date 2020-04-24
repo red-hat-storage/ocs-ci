@@ -161,7 +161,7 @@ def test_noobaa_postupgrade(
         LOCAL_TEMP_PATH,
         mcg_obj_session
     )
-    assert bucket.phase == constants.STATUS_BOUND
+    assert bucket.status == constants.STATUS_BOUND
 
 
 @aws_platform_required
@@ -185,3 +185,24 @@ def test_buckets_after_upgrade(upgrade_buckets, mcg_obj_session):
     """
     for bucket in mcg_obj_session.read_system().get('buckets'):
         assert bucket.get('mode') == BS_OPTIMAL
+    assert bucket.status == constants.STATUS_BOUND
+
+
+@pre_upgrade
+@ignore_leftovers
+def test_start_upgrade_mcg_io(mcg_workload_jobs):
+    """
+    Confirm that there are MCG workload jobs running before upgrade.
+    """
+    # TODO(fbalak): check that all jobs are running
+    assert mcg_workload_jobs
+
+
+@post_upgrade
+@ignore_leftovers
+def test_upgrade_mcg_io(mcg_workload_jobs):
+    """
+    Confirm that there are MCG workload jobs running after upgrade.
+    """
+    # TODO(fbalak): check that all jobs are running
+    assert mcg_workload_jobs
