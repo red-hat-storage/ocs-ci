@@ -11,10 +11,11 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import aws, vsphere, templating
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
-from ocs_ci.ocs.resources import pod, ocs
+from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
     get_ocp_version, get_az_count, TimeoutSampler,
@@ -874,7 +875,7 @@ class AWSUPINode(AWSNodes):
             except Exception:
                 logger.error("Failed to create RHCOS node")
                 raise
-            self.approve_pending_csr()
+            approve_pending_csr()
 
     def _prepare_rhcos_node_conf(self):
         """
@@ -983,57 +984,6 @@ class AWSUPINode(AWSNodes):
         )
         cert = self.get_cert_content(worker_ignition_path)
         self.update_template_with_cert(worker_template_path, cert)
-
-    @retry(exceptions.PendingCSRException, tries=4, delay=10, backoff=1)
-    def approve_pending_csr(self):
-        """
-        After node addition csr could be in pending state,we have to
-        approve it
-
-        Raises:
-            exceptions.PendingCSRException
-
-        """
-        cmd = "adm certificate approve"
-        self.get_csr_resource()
-        for item in self.csr_conf.data.get('items'):
-            cmd = f"{cmd} {item.get('metadata').get('name')}"
-            self.csr_conf.ocp.exec_oc_cmd(cmd)
-
-        try:
-            self.check_no_pending_csr()
-            logger.info("All the csrs approved")
-        except exceptions.PendingCSRException:
-            logger.error("Failed to approve all the CSR")
-            raise
-
-    @retry(exceptions.PendingCSRException, tries=2, delay=300, backoff=1)
-    def check_no_pending_csr(self):
-        """
-        Check whether we have any pending csrs
-
-        Raises:
-            exceptions.PendingCSRException
-
-        """
-        # Load the latest state of csr
-        self.csr_conf.get()
-        pending = False
-        for item in self.csr_conf.data.get('items'):
-            if item.get('status') == {}:
-                logger.warning(f"{item.get('metadata').get('name')} is not Approved")
-                pending = True
-        if pending:
-            raise exceptions.PendingCSRException("Some of the csrs are in 'Pending' state")
-
-    def get_csr_resource(self):
-        """
-        Get the csr data into OCS object
-        """
-        self.csr_conf = ocs.OCS(
-            **ocp.OCP(kind='csr', namespace=constants.DEFAULT_NAMESPACE).get()
-        )
-        self.csr_conf.get()
 
     def update_template_with_cert(self, worker_template_path, cert):
         """

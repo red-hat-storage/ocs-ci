@@ -70,10 +70,6 @@ class UnavailableResourceException(Exception):
     pass
 
 
-class PendingCSRException(Exception):
-    pass
-
-
 class TagNotFoundException(Exception):
     pass
 
