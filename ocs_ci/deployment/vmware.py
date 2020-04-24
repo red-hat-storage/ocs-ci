@@ -248,8 +248,11 @@ class VSPHEREBASE(Deployment):
         Delete the extra disks from all the worker nodes
         """
         vms = self.get_compute_vms(self.datacenter, self.cluster)
-        for vm in vms:
-            self.vsphere.remove_disks(vm)
+        if vms:
+            for vm in vms:
+                self.vsphere.remove_disks(vm)
+        else:
+            logger.debug("NO Resource Pool or VMs exists")
 
     def get_compute_vms(self, dc, cluster):
         """
@@ -263,12 +266,17 @@ class VSPHEREBASE(Deployment):
             list: VM instance
 
         """
-        vms = self.vsphere.get_all_vms_in_pool(
-            config.ENV_DATA.get("cluster_name"),
-            dc,
-            cluster
-        )
-        return [vm for vm in vms if "compute" in vm.name or "rhel" in vm.name]
+        if self.vsphere.is_resource_pool_exist(
+            config.ENV_DATA['cluster_name'],
+            self.datacenter,
+            self.cluster
+        ):
+            vms = self.vsphere.get_all_vms_in_pool(
+                config.ENV_DATA.get("cluster_name"),
+                dc,
+                cluster
+            )
+            return [vm for vm in vms if "compute" in vm.name or "rhel" in vm.name]
 
     def post_destroy_checks(self):
         """
