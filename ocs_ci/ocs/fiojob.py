@@ -13,14 +13,21 @@ fixtures (see :py:mod:`ocs_ci.utility.workloadfixture`).
 
 
 import logging
+import os
+import textwrap
 import time
 
+import pytest
 import yaml
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import UnexpectedVolumeType
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.workloadfixture import measure_operation
 
 
 logger = logging.getLogger(__name__)
@@ -253,3 +260,216 @@ def delete_fio_data(fio_job_file, delete_check_func):
         )
         logger.error(error_msg)
         raise Exception(error_msg)
+
+
+def workload_fio_storageutilization(
+    fixture_name,
+    target_percentage,
+    project,
+    fio_pvc_dict,
+    fio_job_dict,
+    fio_configmap_dict,
+    measurement_dir,
+    tmp_path,
+    with_checksum=False,
+):
+    """
+    This function implements core functionality of fio storage utilization
+    workload fixture. This is necessary because we can't parametrize single
+    general fixture over multiple parameters (it would mess with test case id
+    and polarion test case tracking).
+    """
+    # TODO: move out storage class names
+    if fixture_name.endswith("rbd"):
+        storage_class_name = "ocs-storagecluster-ceph-rbd"
+        ceph_pool_name = "ocs-storagecluster-cephblockpool"
+    elif fixture_name.endswith("cephfs"):
+        storage_class_name = "ocs-storagecluster-cephfs"
+        ceph_pool_name = "ocs-storagecluster-cephfilesystem-data0"
+    else:
+        raise UnexpectedVolumeType(
+            "unexpected volume type, ocs-ci code is wrong")
+
+    # make sure we communicate what is going to happen
+    logger.info((
+        f"starting {fixture_name} fixture, "
+        f"using {storage_class_name} storage class "
+        f"backed by {ceph_pool_name} ceph pool"))
+
+    # log ceph mon_osd_*_ratio values for QE team to understand behaviour of
+    # ceph cluster during high utilization levels (for expected values, consult
+    # BZ 1775432 and check that there is no more recent BZ or JIRA in this
+    # area)
+    ceph_full_ratios = [
+        'mon_osd_full_ratio',
+        'mon_osd_backfillfull_ratio',
+        'mon_osd_nearfull_ratio',
+    ]
+    ct_pod = pod.get_ceph_tools_pod()
+    for ceph_ratio in ceph_full_ratios:
+        logger.info("checking value of %s", ceph_ratio)
+        value = ct_pod.exec_ceph_cmd(f'ceph config get mon.* {ceph_ratio}')
+        logger.info(f"{ceph_ratio} is {value}")
+
+    pvc_size = get_storageutilization_size(target_percentage, ceph_pool_name)
+
+    # To handle use case of test_workload_rbd_cephfs_minimal which writes data
+    # to reach a small fraction of the total capacity only (eg. 5%), the test
+    # is going increase the target 2x and try again.
+    if pvc_size <= 0 and target_percentage <= 0.10:
+        new_target_percentage = 2 * target_percentage
+        logger.info(
+            "increasing storage utilization target percentage from %.2f to %.2f",
+            target_percentage,
+            new_target_percentage)
+        target_percentage = new_target_percentage
+        pvc_size = get_storageutilization_size(
+            target_percentage,
+            ceph_pool_name)
+    # If this is still not enough, the test will be skipped, because the idea
+    # of tests reaching a small total utilization is to do just that.
+    # Moreover this will also skip this test case for any other utilization
+    # level, which is easier to read in the test report than the actual
+    # failure with negative pvc size.
+    if pvc_size <= 0:
+        skip_msg = (
+            "current total storage utilization is too high, "
+            f"the target utilization {target_percentage*100}% is already met")
+        logger.warning(skip_msg)
+        pytest.skip(skip_msg)
+
+    fio_conf = textwrap.dedent("""
+        [simple-write]
+        readwrite=write
+        buffered=1
+        blocksize=4k
+        ioengine=libaio
+        directory=/mnt/target
+        """)
+
+    # When we ask for checksum to be generated for all files written in the
+    # /mnt/target directory, we need to keep some space free so that the
+    # checksum file would fit there. We overestimate this free space so that
+    # it works both with CephFS and RBD volumes, as with RBD volumes actuall
+    # usable capacity is smaller because of filesystem overhead (pvc size
+    # defines size of a block device, on which local ext4 filesystem is
+    # formatted).
+    if with_checksum:
+        # assume 4% fs overhead, and double to it make it safe
+        fs_overhead = 0.08
+        # size of file created by fio in MiB
+        fio_size = int((pvc_size * (1 - fs_overhead)) * 2**10)
+        fio_conf += f"size={fio_size}M\n"
+    # Otherwise, we are tryting to write as much data as possible and fill the
+    # persistent volume entirely.
+    # For cephfs we can't use fill_fs because of BZ 1763808 (the process
+    # will get *Disk quota exceeded* error instead of *No space left on
+    # device* error).
+    # On the other hand, we can't use size={pvc_size} for rbd, as we can't
+    # write pvc_size bytes to a filesystem on a block device of {pvc_size}
+    # size (obviously, some space is used by filesystem metadata).
+    elif fixture_name.endswith("rbd"):
+        fio_conf += "fill_fs=1\n"
+    else:
+        fio_conf += f"size={pvc_size}G\n"
+
+    # When we ask for checksum to be generated for all files written in the
+    # /mnt/target directory, we change the command of the container to run
+    # both fio and sha1 checksum tool in the target directory. To do that,
+    # we use '/bin/sh -c' hack.
+    if with_checksum:
+        container = fio_job_dict['spec']['template']['spec']['containers'][0]
+        fio_command = " ".join(container['command'])
+        sha_command = (
+            "sha1sum /mnt/target/simple-write.*"
+            " > /mnt/target/fio.sha1sum"
+            " 2> /mnt/target/fio.stderr")
+        shell_command = fio_command + " && " + sha_command
+        container['command'] = ["/bin/bash", "-c", shell_command]
+
+    # put the dicts together into yaml file of the Job
+    fio_configmap_dict["data"]["workload.fio"] = fio_conf
+    fio_pvc_dict["spec"]["storageClassName"] = storage_class_name
+    fio_pvc_dict["spec"]["resources"]["requests"]["storage"] = f"{pvc_size}Gi"
+    fio_objs = [fio_pvc_dict, fio_configmap_dict, fio_job_dict]
+    fio_job_file = ObjectConfFile(fixture_name, fio_objs, project, tmp_path)
+
+    fio_min_mbps = config.ENV_DATA['fio_storageutilization_min_mbps']
+    write_timeout = get_timeout(fio_min_mbps, pvc_size)
+
+    test_file = os.path.join(measurement_dir, f"{fixture_name}.json")
+
+    measured_op = measure_operation(
+        lambda: write_data_via_fio(
+            fio_job_file, write_timeout, pvc_size, target_percentage),
+        test_file,
+        measure_after=True,
+        minimal_time=480)
+
+    # we don't need to delete anything if this fixture has been already
+    # executed
+    if not measured_op['first_run']:
+        return measured_op
+
+    def check_pvc_size():
+        """
+        Check whether data created by the Job were actually deleted.
+        """
+        # By asking again for pvc_size necessary to reach the target
+        # cluster utilization, we can see how much data were already
+        # deleted. Negative or small value of current pvc_size means that
+        # the data were not yet deleted.
+        pvc_size_tmp = get_storageutilization_size(
+            target_percentage, ceph_pool_name)
+        # If no other components were utilizing OCS storage, the space
+        # would be considered reclaimed when current pvc_size reaches
+        # it's original value again. But since this is not the case (eg.
+        # constantly growing monitoring or log data are stored there),
+        # we are ok with just 90% of the original value.
+        result = pvc_size_tmp >= pvc_size * 0.90
+        if result:
+            logger.info("storage space was reclaimed")
+        else:
+            logger.info(
+                "storage space was not yet fully reclaimed, "
+                f"current pvc size {pvc_size_tmp} value "
+                f"should be close to {pvc_size}")
+        return result
+
+    if with_checksum:
+        # Let's get the name of the PV via the PVC.
+        ocp_pvc = ocp.OCP(kind=constants.PVC, namespace=project.namespace)
+        pvc_data = ocp_pvc.get()
+        # Explicit list of assumptions, if these assumptions are not met, the
+        # code won't work and it either means that something went terrible
+        # wrong or that the code needs to be changed.
+        assert pvc_data['kind'] == "List"
+        assert len(pvc_data['items']) == 1
+        pvc_dict = pvc_data['items'][0]
+        assert pvc_dict['kind'] == constants.PVC
+        pv_name = pvc_dict['spec']['volumeName']
+        logger.info("Identified PV of the finished fio Job: %s", pv_name)
+        # We change reclaim policy of the volume, so that we can reuse it
+        # later, while everyting but the volume will be deleted during project
+        # teardown. Note that while a standard way of doing this would be via
+        # custom storage class with redefined reclaim policy, we need to do
+        # this on this single volume only here, so editing volume directly is
+        # more straightforward.
+        logger.info("Changing persistentVolumeReclaimPolicy of %s", pv_name)
+        ocp_pv = ocp.OCP(kind=constants.PV)
+        patch_success = ocp_pv.patch(
+            resource_name=pv_name,
+            params='{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}')
+        if patch_success:
+            logger.info('Reclaim policy of %s was changed.', pv_name)
+        else:
+            logger.error('Reclaim policy of %s failed to be changed.', pv_name)
+        label = f'fixture={fixture_name}'
+        ocp_pv.add_label(pv_name, label)
+    else:
+        # Without checksum, we just need to make sure that data were deleted
+        # and wait for this to happen to avoid conflicts with tests executed
+        # right after this one.
+        delete_fio_data(fio_job_file, check_pvc_size)
+
+    return measured_op
