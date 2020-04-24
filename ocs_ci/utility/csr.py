@@ -2,6 +2,7 @@ import logging
 
 from ocs_ci.ocs import constants, exceptions, ocp
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import run_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -15,12 +16,14 @@ def approve_pending_csr():
         exceptions.PendingCSRException
 
     """
-    logger.info("Approving CSRs")
-    base_cmd = "adm certificate approve"
-    csr_conf = get_csr_resource()
-    for item in csr_conf.data.get('items'):
-        cmd = f"{base_cmd} {item.get('metadata').get('name')}"
-        csr_conf.exec_oc_cmd(cmd)
+    base_cmd = "oc adm certificate approve"
+    pending_csrs = get_pending_csr()
+    if pending_csrs:
+        logger.info(f"Pending CSRs: {pending_csrs}")
+        csrs = ' '.join([str(csr) for csr in pending_csrs])
+        cmd = f"{base_cmd} {csrs}"
+        logger.info("Approving pending CSRs")
+        run_cmd(cmd)
 
     check_no_pending_csr()
     logger.info("All CSRs approved")
@@ -60,3 +63,18 @@ def get_csr_resource():
     """
     logger.info("Retrieving CSR data")
     return ocp.OCP(kind='csr', namespace=constants.DEFAULT_NAMESPACE)
+
+
+def get_pending_csr():
+    """
+    Gets the pending CSRs
+
+    Returns:
+        list: list of pending CSRs
+
+    """
+    csr_conf = get_csr_resource()
+    return [
+        item['metadata']['name'] for item in csr_conf.data.get('items')
+        if not item.get('status')
+    ]
