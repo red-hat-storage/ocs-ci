@@ -1108,9 +1108,19 @@ def verify_cluster_operator_status(cluster_operator):
 
 
 def validate_cluster_version_status():
+    """
+    Verify OCP upgrade is completed, by checking 'oc get clusterversion'
+    status
+
+    Returns:
+        bool: False in case that one of condition flags is invalid:
+        Progressing (should be False), Failing(should be False)
+        or Available (should be True)
+
+    """
     ocp = OCP(kind="clusterversion")
     operator_data = ocp.get('-o json', out_yaml_format=False)
-    conditions = operator_data['items'][0]['status']['conditions']
+    conditions = operator_data['items'][0].get('status').get('conditions')
     for condition in conditions:
         if condition['type'] == 'Progressing' and condition['status'] == 'True':
             log.info('cluster version status is Progressing')
@@ -1131,14 +1141,14 @@ def get_ocp_upgrade_channel():
     Gets OCP upgrade channel
 
     Returns:
-        str: ocp upgrade channel name
+        str: OCP upgrade channel name
 
     """
     ocp = OCP(kind="clusterversion")
     log.info("Gathering Subscription Channel information")
     operator_version = ocp.get('-o json', out_yaml_format=False)
     log.debug(f"cluster version: {operator_version}")
-    channel = operator_version['items'][0]['spec']['channel']
+    channel = operator_version['items'][0].get('spec').get('channel')
     log.info(f"Subscription Channel: {channel}")
 
     return channel
@@ -1150,11 +1160,11 @@ def verify_ocp_upgrade_channel(channel_variable):
     as current one, and patch it if is not.
 
     Args:
-        channel_variable: new  ocp upgrade subscription channel
+        channel_variable (str): New OCP upgrade subscription channel
 
     Returns:
-        bool: True if upgrade channel is same as current ocp
-        subscription channel
+        bool: True if upgrade subscription channel is same as current
+        OCP subscription channel
 
     """
     if get_ocp_upgrade_channel() == channel_variable:
