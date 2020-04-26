@@ -933,7 +933,6 @@ def health_checker(request, tier_marks_name):
             # Retrying to increase the chance the cluster health will be OK
             # for next test
             ceph_health_check()
-            raise
 
     node = request.node
     request.addfinalizer(finalizer)
