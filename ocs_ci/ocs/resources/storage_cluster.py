@@ -203,19 +203,6 @@ def ocs_install_verification(
             timeout=timeout
         )
 
-    # Verify ceph health
-    log.info("Verifying ceph health")
-    health_check_tries = 20
-    health_check_delay = 30
-    if post_upgrade_verification:
-        # In case of upgrade with FIO we have to wait longer time to see
-        # health OK. See discussion in BZ:
-        # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
-        health_check_tries = 60
-    assert utils.ceph_health_check(
-        namespace, health_check_tries, health_check_delay
-    )
-
     # Verify StorageClasses (1 ceph-fs, 1 ceph-rbd)
     log.info("Verifying storage classes")
     storage_class = OCP(
@@ -339,6 +326,19 @@ def ocs_install_verification(
                 item for item in crush_rule['steps'] if item.get('type') == 'zone'
             ], f"{crush_rule['rule_name']} is not with type as zone"
         log.info("Verified - pool crush rule is with type: zone")
+
+    # Verify ceph health
+    log.info("Verifying ceph health")
+    health_check_tries = 20
+    health_check_delay = 30
+    if post_upgrade_verification:
+        # In case of upgrade with FIO we have to wait longer time to see
+        # health OK. See discussion in BZ:
+        # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
+        health_check_tries = 60
+    assert utils.ceph_health_check(
+        namespace, health_check_tries, health_check_delay
+    )
 
 
 def add_capacity(osd_size_capacity_requested):
