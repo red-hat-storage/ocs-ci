@@ -1164,8 +1164,10 @@ def patch_ocp_upgrade_channel(channel_variable):
 
     """
     if get_ocp_upgrade_channel() != channel_variable:
-        cmd = f'patch clusterversions/version -p \'' \
-              f'{{"spec":{{"channel":"{channel_variable}"}}}}\' --type=merge'
+        cmd = (
+            f'patch clusterversions/version -p \'{{"spec":'
+            f'{{"channel":"{channel_variable}"}}}}\' --type=merge'
+        )
         ocp = OCP()
         log.info(f"Patching channel into {channel_variable}")
         ocp.exec_oc_cmd(cmd)
