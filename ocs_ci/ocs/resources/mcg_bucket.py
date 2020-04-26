@@ -2,8 +2,10 @@ import logging
 from abc import ABC, abstractmethod
 
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
+from ocs_ci.utility.utils import TimeoutSampler
 from tests.helpers import create_unique_resource_name, create_resource
 
 logger = logging.getLogger(name=__file__)
@@ -12,12 +14,14 @@ logger = logging.getLogger(name=__file__)
 class MCGBucket(ABC):
     """
     Base abstract class for MCG buckets
+
     """
     mcg, name = (None,) * 2
 
     def __init__(self, mcg, name, *args, **kwargs):
         """
         Constructor of an MCG bucket
+
         """
         self.mcg = mcg
         self.name = name
@@ -36,9 +40,39 @@ class MCGBucket(ABC):
         """
         Super method that first logs the bucket deletion and then calls
         the appropriate implementation
+
         """
         logger.info(f"Deleting bucket: {self.name}")
         self.internal_delete()
+
+    @property
+    def status(self):
+        """
+        A method that first logs the bucket's status and then calls
+        the appropriate implementation
+
+        """
+        status = self.internal_status
+        logger.info(f"{self.name} status is {status}")
+        return status
+
+    def verify_health(self, timeout=30, interval=5):
+        """
+        Abstract health verification method
+
+        """
+        try:
+            for health_check in TimeoutSampler(timeout, interval, self.internal_verify_health):
+                if health_check:
+                    logger.info(f'{self.name} is healthy')
+                    return True
+                else:
+                    logger.info(f'{self.name} is unhealthy. Rechecking.')
+        except TimeoutExpiredError:
+            logger.error(
+                'The bucket did not reach a healthy state within the time limit.'
+            )
+            assert False
 
     @abstractmethod
     def internal_delete(self):
@@ -49,7 +83,7 @@ class MCGBucket(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def status(self):
+    def internal_status(self):
         """
         Abstract status method
 
@@ -57,7 +91,7 @@ class MCGBucket(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def verify_health(self):
+    def internal_verify_health(self):
         """
         Abstract health verification method
 
@@ -81,7 +115,7 @@ class S3Bucket(MCGBucket):
         self.mcg.s3_resource.Bucket(self.name).delete()
 
     @property
-    def status(self):
+    def internal_status(self):
         """
         Returns the OBC mode as shown in the NB UI and retrieved via RPC
 
@@ -91,7 +125,7 @@ class S3Bucket(MCGBucket):
         """
         return self.mcg.get_bucket_info(self.name).get('mode')
 
-    def verify_health(self):
+    def internal_verify_health(self):
         """
         Verifies that the bucket is healthy by checking its mode
 
@@ -126,7 +160,7 @@ class OCBucket(MCGBucket):
         OCP(kind='obc', namespace=self.mcg.namespace).delete(resource_name=self.name)
 
     @property
-    def status(self):
+    def internal_status(self):
         """
         Returns the OBC's phase
 
@@ -138,7 +172,7 @@ class OCBucket(MCGBucket):
             resource_name=self.name
         )['status']['phase']
 
-    def verify_health(self):
+    def internal_verify_health(self):
         """
         Verifies that the bucket is healthy by checking its phase
 
@@ -164,7 +198,7 @@ class CLIBucket(MCGBucket):
         self.mcg.exec_mcg_cmd(f'obc delete {self.name}')
 
     @property
-    def status(self):
+    def internal_status(self):
         """
         Returns the OBC status as printed by the NB CLI
 
@@ -174,7 +208,7 @@ class CLIBucket(MCGBucket):
         """
         return self.mcg.exec_mcg_cmd(f'obc status {self.name}')
 
-    def verify_health(self):
+    def internal_verify_health(self):
         """
         Verifies that the bucket is healthy using the CLI
 
