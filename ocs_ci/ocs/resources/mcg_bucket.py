@@ -61,6 +61,7 @@ class MCGBucket(ABC):
         Abstract health verification method
 
         """
+        logger.info(f'Waiting for {self.name} to be healthy')
         try:
             for health_check in TimeoutSampler(timeout, interval, self.internal_verify_health):
                 if health_check:
