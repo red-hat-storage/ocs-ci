@@ -1110,7 +1110,7 @@ def verify_cluster_operator_status(cluster_operator):
 def validate_cluster_version_status():
     ocp = OCP(kind="clusterversion")
     operator_data = ocp.get('-o json', out_yaml_format=False)
-    conditions = operator_data['items'][0]['status']['condition']
+    conditions = operator_data['items'][0]['status']['conditions']
     for condition in conditions:
         if condition['type'] == 'Progressing' and condition['status'] == 'True':
             log.info('cluster version status is Progressing')
@@ -1135,9 +1135,13 @@ def get_ocp_upgrade_channel():
 
     """
     ocp = OCP(kind="clusterversion")
+    log.info("Gathering Subscription Channel information")
     operator_version = ocp.get('-o json', out_yaml_format=False)
+    log.debug(f"cluster version: {operator_version}")
+    channel = operator_version['items'][0]['spec']['channel']
+    log.info(f"Subscription Channel: {channel}")
 
-    return operator_version['items'][0]['spec']['channel']
+    return channel
 
 
 def verify_ocp_upgrade_channel(channel_variable):
@@ -1160,5 +1164,6 @@ def verify_ocp_upgrade_channel(channel_variable):
         cmd = f'oc patch clusterversions/version -p \'' \
               f'{{"spec":{{"channel":"{channel_variable}"}}}}\' --type=merge'
         ocp = OCP()
+        log.info(f"Patching channel into {channel_variable}")
         ocp.exec_oc_cmd(cmd)
         return False
