@@ -9,7 +9,7 @@ sslclientcert=/etc/pki/ca-trust/source/anchors/ops-mirror.pem
 
 [rhel-server]
 name=RHserver
-baseurl=https://mirror.openshift.com/enterprise/reposync/4.4/rhel-server-rpms/
+baseurl=https://mirror.openshift.com/enterprise/reposync/ci-deps/rhel-server-rpms/
 enabled=1
 gpgcheck=0
 sslverify=0
@@ -18,7 +18,7 @@ sslclientcert=/etc/pki/ca-trust/source/anchors/ops-mirror.pem
 
 [rhel-extras]
 name=RHextra
-baseurl=https://mirror.openshift.com/enterprise/reposync/4.4/rhel-server-extras-rpms/
+baseurl=https://mirror.openshift.com/enterprise/reposync/ci-deps/rhel-server-extras-rpms/
 enabled=1
 gpgcheck=0
 sslverify=0
