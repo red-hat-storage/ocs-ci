@@ -86,7 +86,7 @@ class TestScaleOSDsRebootNodes(E2ETest):
         cluster = CephCluster()
 
         # Get rebalance status
-        rebalance_status = cluster.get_rebalance_status()
+        rebalance_status = cluster.get_rebalance_status_base()
         logger.info(rebalance_status)
         if rebalance_status:
             time_taken = cluster.time_taken_to_complete_rebalance()

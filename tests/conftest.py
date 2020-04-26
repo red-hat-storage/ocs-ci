@@ -975,7 +975,7 @@ def rebalance_checker(request, tier_marks_name):
                 log.info("Ceph rebalance check failed at teardown")
                 # Retrying to increase the chance the cluster health will be OK
                 # for next test
-                ceph_cluster.get_rebalance_status()
+                ceph_cluster.wait_for_rebalance_to_complete()
             finally:
                 raise RebalanceException(
                     f"Ceph cluster health is not OK."
