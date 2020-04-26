@@ -1138,3 +1138,27 @@ def get_ocp_upgrade_channel():
     operator_version = ocp.get('-o json', out_yaml_format=False)
 
     return operator_version['items'][0]['spec']['channel']
+
+
+def verify_ocp_upgrade_channel(channel_variable):
+    """
+    When upgrade OCP version, verify that subscription channel is same
+    as current one, and patch it if is not.
+
+    Args:
+        channel_variable: new  ocp upgrade subscription channel
+
+    Returns:
+        bool: True if upgrade channel is same as current ocp
+        subscription channel
+
+    """
+    if get_ocp_upgrade_channel() == channel_variable:
+        log.info(f"Channel is {channel_variable}, no patch required")
+        return True
+    else:
+        cmd = f'oc patch clusterversions/version -p \'' \
+              f'{{"spec":{{"channel":"{channel_variable}"}}}}\' --type=merge'
+        ocp = OCP()
+        ocp.exec_oc_cmd(cmd)
+        return False
