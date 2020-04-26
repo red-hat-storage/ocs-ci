@@ -20,7 +20,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     deployment, ignore_leftovers, tier_marks
 )
 from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes, registry
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
+from ocs_ci.ocs.exceptions import (
+    TimeoutExpiredError, CephHealthException, RebalanceException
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.mcg import MCG
@@ -948,6 +950,39 @@ def health_checker(request, tier_marks_name):
             except CephHealthException:
                 # skip because ceph is not in good health
                 pytest.skip("Ceph health check failed at setup")
+
+
+@pytest.fixture(scope='function', autouse=True)
+def rebalance_checker(request, tier_marks_name):
+    """
+    This fixutre ensures the Ceph health status is OK wrt to the PG state.
+    The expected state is active+clean
+    """
+    # import here to ensure no cyclic import
+    from ocs_ci.ocs.cluster import CephCluster
+
+    def finalizer():
+        ceph_cluster = CephCluster()
+        status = True
+        teardown = config.RUN['cli_params']['teardown']
+        skip_ocs_deployment = config.ENV_DATA['skip_ocs_deployment']
+        if not (teardown or skip_ocs_deployment):
+            status = ceph_cluster.get_rebalance_status_base()
+        if status:
+            log.info("Ceph rebalance check passed at teardown")
+        if not status:
+            try:
+                log.info("Ceph rebalance check failed at teardown")
+                # Retrying to increase the chance the cluster health will be OK
+                # for next test
+                ceph_cluster.get_rebalance_status()
+            finally:
+                raise RebalanceException(
+                    f"Ceph cluster health is not OK."
+                    f"Not all PGs state are active+clean"
+                )
+
+    request.addfinalizer(finalizer)
 
 
 @pytest.fixture(scope="session", autouse=True)

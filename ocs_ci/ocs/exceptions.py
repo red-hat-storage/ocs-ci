@@ -14,6 +14,10 @@ class UnexpectedBehaviour(Exception):
     pass
 
 
+class RebalanceException(Exception):
+    pass
+
+
 class ClassCreationException(Exception):
     pass
 

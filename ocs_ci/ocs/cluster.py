@@ -15,7 +15,7 @@ import yaml
 import time
 
 import ocs_ci.ocs.resources.pod as pod
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour, RebalanceException
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
 from ocs_ci.utility.retry import retry
@@ -590,7 +590,7 @@ class CephCluster(object):
         logging.info(f"The throughput percentage of the cluster is {throughput_percentage}%")
         return throughput_percentage
 
-    def get_rebalance_status(self):
+    def get_rebalance_status_base(self):
         """
         This function gets the rebalance status
 
@@ -611,6 +611,23 @@ class CephCluster(object):
                 and states['count'] == total_pg_count
             )
 
+    @retry(UnexpectedBehaviour, tries=20, delay=10, backoff=1)
+    def get_rebalance_status(self):
+        """
+        Calls get_rebalance_status_base with retries
+
+        Raises:
+            RebalanceException: Exception in case the call for
+                get_rebalance_status_base returns False which means the PGs
+                state are not all active+clean
+
+        """
+        if not self.get_rebalance_status_base():
+            raise RebalanceException(
+                f"Ceph cluster health is not OK."
+                f"Not all PGs state are active+clean"
+            )
+
     def time_taken_to_complete_rebalance(self, timeout=600):
         """
         This function calculates the time taken to complete
@@ -625,7 +642,7 @@ class CephCluster(object):
         """
         start_time = time.time()
         for rebalance in TimeoutSampler(
-            timeout=timeout, sleep=10, func=self.get_rebalance_status
+            timeout=timeout, sleep=10, func=self.get_rebalance_status_base
         ):
             if rebalance:
                 logging.info("Rebalance is completed")
