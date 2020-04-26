@@ -94,7 +94,10 @@ class TestDiskFailures(ManageTest):
         nodes.restart_nodes([worker])
 
         # Cluster health check
-        self.sanity_helpers.health_check()
+        # W/A: For the investigation of BZ 1825675, timeout is increased to see if cluster
+        # becomes healthy eventually
+        # TODO: Remove 'tries=100'
+        self.sanity_helpers.health_check(tries=100)
 
     @aws_platform_required
     @pytest.mark.polarion_id("OCS-1086")
