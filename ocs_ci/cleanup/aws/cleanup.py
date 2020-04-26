@@ -171,7 +171,7 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
             vpc_name = [
                 tag['Value'] for tag in vpc_tags if tag['Key'] == 'Name'
             ][0]
-            cluster_name = vpc_name.strip('-vpc')
+            cluster_name = vpc_name.replace('-vpc', '')
             vpc_instances = vpc_obj.instances.all()
             if not vpc_instances:
                 clusters_to_delete.append(cluster_name)
@@ -186,7 +186,7 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
     # Get all cloudformation based clusters to delete
     cf_clusters_to_delete = list()
     for vpc_name in cloudformation_vpc_names:
-        instance_dicts = aws.get_instances_by_name_pattern(f"{vpc_name.strip('-vpc')}*")
+        instance_dicts = aws.get_instances_by_name_pattern(f"{vpc_name.replace('-vpc', '')}*")
         ec2_instances = [aws.get_ec2_instance(instance_dict['id']) for instance_dict in instance_dicts]
         if not ec2_instances:
             continue
