@@ -51,6 +51,16 @@ class TestUpgradeOCP(ManageTest):
             image_path = config.UPGRADE['ocp_upgrade_path']
             self.cluster_operators = ocp.get_all_cluster_operators()
             logger.info(f" oc version: {ocp.get_current_oc_version()}")
+            # Verify Upgrade subscription channel:
+            for sampler in TimeoutSampler(
+                timeout=250,
+                sleep=120,
+                func=ocp.verify_ocp_upgrade_channel,
+                channel_variable=ocp_channel
+            ):
+                if sampler:
+                    logger.info(f"OCP Channel:{ocp_channel}")
+                    break
 
             # Upgrade OCP
             logger.info(f"full upgrade path: {image_path}:{target_image}")
@@ -90,3 +100,13 @@ class TestUpgradeOCP(ManageTest):
                     )
                     if sampler:
                         break
+            # Post upgrade validation: check cluster version status
+            logger.info("Checking clusterversion status")
+            for sampler in TimeoutSampler(
+                timeout=900,
+                sleep=60,
+                func=ocp.validate_cluster_version_status
+            ):
+                if sampler:
+                    logger.info("Upgrade Completed Successfully!")
+                    break
