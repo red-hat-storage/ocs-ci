@@ -611,7 +611,7 @@ class CephCluster(object):
                 and states['count'] == total_pg_count
             )
 
-    @retry(UnexpectedBehaviour, tries=20, delay=10, backoff=1)
+    @retry(RebalanceException, tries=20, delay=10, backoff=1)
     def wait_for_rebalance_to_complete(self):
         """
         Calls get_rebalance_status_base with retries
