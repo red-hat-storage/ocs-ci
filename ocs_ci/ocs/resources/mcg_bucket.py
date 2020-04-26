@@ -52,13 +52,20 @@ class MCGBucket(ABC):
         the appropriate implementation
 
         """
-        status = self.internal_status
-        logger.info(f"{self.name} status is {status}")
-        return status
+        status_var = self.internal_status
+        logger.info(f"{self.name} status is {status_var}")
+        return status_var
 
     def verify_health(self, timeout=30, interval=5):
         """
         Abstract health verification method
+
+        Args:
+            timeout (int): Timeout for the check, in seconds
+            interval (int): Interval to wait between checks, in seconds
+
+        Returns:
+            (bool): True if the bucket is healthy, False otherwise
 
         """
         logger.info(f'Waiting for {self.name} to be healthy')
@@ -71,7 +78,7 @@ class MCGBucket(ABC):
                     logger.info(f'{self.name} is unhealthy. Rechecking.')
         except TimeoutExpiredError:
             logger.error(
-                'The bucket did not reach a healthy state within the time limit.'
+                f'{self.name} did not reach a healthy state within {timeout} seconds.'
             )
             assert False
 
