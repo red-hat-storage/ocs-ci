@@ -1154,26 +1154,44 @@ def get_ocp_upgrade_channel():
     return channel
 
 
+def patch_ocp_upgrade_channel(channel_variable):
+    """
+    Using 'oc patch clusterversion' if new OCP upgrade channel is
+    different than current one
+
+    Args:
+        channel_variable (str): New OCP upgrade subscription channel
+
+    """
+    if get_ocp_upgrade_channel() != channel_variable:
+        cmd = f'patch clusterversions/version -p \'' \
+              f'{{"spec":{{"channel":"{channel_variable}"}}}}\' --type=merge'
+        ocp = OCP()
+        log.info(f"Patching channel into {channel_variable}")
+        ocp.exec_oc_cmd(cmd)
+
+    else:
+        log.info("No patch needed")
+
+
 def verify_ocp_upgrade_channel(channel_variable):
     """
     When upgrade OCP version, verify that subscription channel is same
-    as current one, and patch it if is not.
+    as current one
 
     Args:
         channel_variable (str): New OCP upgrade subscription channel
 
     Returns:
-        bool: True if upgrade subscription channel is same as current
-        OCP subscription channel
 
     """
-    if get_ocp_upgrade_channel() == channel_variable:
+    current_channel = get_ocp_upgrade_channel()
+    if current_channel == channel_variable:
         log.info(f"Channel is {channel_variable}, no patch required")
+
         return True
     else:
-        cmd = f'oc patch clusterversions/version -p \'' \
-              f'{{"spec":{{"channel":"{channel_variable}"}}}}\' --type=merge'
-        ocp = OCP()
-        log.info(f"Patching channel into {channel_variable}")
-        ocp.exec_oc_cmd(cmd)
+        log.info(f"Current subscription channel is  {current_channel}")
+        log.info(f"Required subscription channel is {channel_variable}")
+
         return False

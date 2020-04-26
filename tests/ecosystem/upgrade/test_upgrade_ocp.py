@@ -52,9 +52,10 @@ class TestUpgradeOCP(ManageTest):
             self.cluster_operators = ocp.get_all_cluster_operators()
             logger.info(f" oc version: {ocp.get_current_oc_version()}")
             # Verify Upgrade subscription channel:
+            ocp.patch_ocp_upgrade_channel(ocp_channel)
             for sampler in TimeoutSampler(
                 timeout=250,
-                sleep=120,
+                sleep=15,
                 func=ocp.verify_ocp_upgrade_channel,
                 channel_variable=ocp_channel
             ):
