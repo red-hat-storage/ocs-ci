@@ -58,7 +58,9 @@ class MCGBucket(ABC):
 
     def verify_health(self, timeout=30, interval=5):
         """
-        Abstract health verification method
+        Health verification function that tries to verify
+        the a bucket's health by using its appropriate internal_verify_health
+        function until a given time limit is reached
 
         Args:
             timeout (int): Timeout for the check, in seconds
