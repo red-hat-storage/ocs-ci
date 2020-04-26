@@ -299,6 +299,9 @@ def workload_fio_storageutilization(
     target_percentage=None,
     target_size=None,
     with_checksum=False,
+    delete_fio_data_after_test=True,
+    request=None,
+    minimal_time=480,
 ):
     """
     This function implements core functionality of fio storage utilization
@@ -486,7 +489,7 @@ def workload_fio_storageutilization(
             fio_job_file, write_timeout, pvc_size, target_percentage),
         test_file,
         measure_after=True,
-        minimal_time=480)
+        minimal_time=minimal_time)
 
     # we don't need to delete anything if this fixture has been already
     # executed
@@ -548,6 +551,10 @@ def workload_fio_storageutilization(
         # Without checksum, we just need to make sure that data were deleted
         # and wait for this to happen to avoid conflicts with tests executed
         # right after this one.
-        delete_fio_data(fio_job_file, is_storage_reclaimed)
+        if delete_fio_data_after_test:
+            delete_fio_data(fio_job_file, is_storage_reclaimed)
+        # Wait until the end of the tests, and then delete the data.
+        else:
+            request.addfinalizer(lambda: delete_fio_data(fio_job_file, is_storage_reclaimed))
 
     return measured_op
