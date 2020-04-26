@@ -104,7 +104,7 @@ class TestUpgradeOCP(ManageTest):
             logger.info("Checking clusterversion status")
             for sampler in TimeoutSampler(
                 timeout=900,
-                sleep=60,
+                sleep=15,
                 func=ocp.validate_cluster_version_status
             ):
                 if sampler:
