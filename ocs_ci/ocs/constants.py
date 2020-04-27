@@ -114,6 +114,7 @@ CLUSTER_SERVICE_VERSION = 'csv'
 
 # Other
 SECRET = "Secret"
+TEST = "test"
 NAMESPACE = 'Namespace'
 IGNORE_SC_GP2 = "gp2"
 IGNORE_SC_FLEX = "rook-ceph-block"
@@ -766,3 +767,8 @@ NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
 
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
+
+# Storage classes provisioners
+OCS_PROVISIONERS = ['openshift-storage.rbd.csi.ceph.com',
+                    'openshift-storage.cephfs.csi.ceph.com',
+                    'openshift-storage.noobaa.io/obc']

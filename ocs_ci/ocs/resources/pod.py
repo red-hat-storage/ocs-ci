@@ -1032,11 +1032,14 @@ def get_pvc_name(pod_obj):
         pod_obj (str): The pod object
 
     Returns:
-        pvc_name (str): The pvc_name on a given pod_obj
+        (str): The pvc name of a given pod_obj,
+                None if there is no pvc attached
+
     """
-    return pod_obj.get().get(
-        'spec'
-    ).get('volumes')[0].get('persistentVolumeClaim').get('claimName')
+    pvc = pod_obj.get().get('spec').get('volumes')[0].get('persistentVolumeClaim')
+    if pvc:
+        return pvc.get('claimName')
+    return pvc
 
 
 def get_used_space_on_mount_point(pod_obj):

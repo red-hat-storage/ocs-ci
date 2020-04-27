@@ -162,6 +162,26 @@ class PVC(OCS):
             )
         return True
 
+    def get_attached_pods(self):
+        """
+        Get the pods attached to the PVC represented by this object instance
+
+        Returns:
+            list: A list of pod objects attached to the PVC
+
+        Note:
+             # Importing from pod inside, because of unsolvable import loop
+             from ocs_ci.ocs.resources.pod import get_all_pods, get_pvc_name
+
+        """
+        from ocs_ci.ocs.resources.pod import get_all_pods, get_pvc_name
+        attached_pods = []
+        all_pods = get_all_pods()
+        for pod_obj in all_pods:
+            if get_pvc_name(pod_obj) == self.name:
+                attached_pods.append(pod_obj)
+        return attached_pods
+
 
 def delete_pvcs(pvc_objs, concurrent=False):
     """
@@ -190,18 +210,21 @@ def get_all_pvcs(namespace=None, selector=None):
     Gets all pvc in given namespace
 
     Args:
-        namespace (str): Name of namespace
+        namespace (str): Name of namespace  ('all-namespaces' to get all namespaces)
         selector (str): The label selector to look for
 
     Returns:
          dict: Dict of all pvc in namespaces
     """
+    all_ns = False
+    if namespace == 'all-namespaces':
+        all_ns = True
     if not namespace:
         namespace = config.ENV_DATA['cluster_namespace']
     ocp_pvc_obj = OCP(
         kind=constants.PVC, namespace=namespace
     )
-    out = ocp_pvc_obj.get(selector=selector)
+    out = ocp_pvc_obj.get(selector=selector, all_namespaces=all_ns)
     return out
 
 
