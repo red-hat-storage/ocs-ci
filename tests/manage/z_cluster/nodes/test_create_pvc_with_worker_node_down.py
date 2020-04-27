@@ -21,11 +21,23 @@ class TestCreatePvcWithWorkerNodeDown(ManageTest):
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
         """
-        Make sure all nodes are up again
+        Restart nodes that are in status NotReady, for situations in
+        which the test failed before restarting the node,
+        which leaves nodes in NotReady
 
         """
+
         def finalizer():
-            nodes.restart_nodes_teardown()
+            not_ready_nodes = [
+                n for n in node.get_node_objs() if n
+                .ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
+            ]
+            log.warning(
+                f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
+            )
+            if not_ready_nodes:
+                nodes.restart_nodes(not_ready_nodes)
+                node.wait_for_nodes_status()
 
         request.addfinalizer(finalizer)
 
@@ -37,7 +49,7 @@ class TestCreatePvcWithWorkerNodeDown(ManageTest):
         self.sanity_helpers = Sanity()
 
     @pytest.mark.polarion_id("OCS-1628")
-    def test_create_delete_pvc_parallel(self, project_factory, storageclass_factory, dc_pod_factory, nodes):
+    def test_create_delete_pvc_parallel(self, project_factory, pvc_factory, pod_factory, nodes):
         """
         PV provisioning with one worker down
 
@@ -46,16 +58,19 @@ class TestCreatePvcWithWorkerNodeDown(ManageTest):
         # Get worker nodes
         worker_node_list = get_worker_nodes()
         log.info(f"Current available worker nodes are {worker_node_list}")
-
         mgr_pod_obj = pod.get_mgr_pods()
-        log.info(mgr_pod_obj[0].name)
-        mgr_node_name = pod.get_pod_node(mgr_pod_obj[0]).name
-        worker_node_list.remove(mgr_node_name)
+        worker_node_with_mgr_pod = pod.get_pod_node(mgr_pod_obj)
         selected_worker_node = random.choice(worker_node_list)
         log.info(f"Stopping Node {selected_worker_node}")
         selected_worker_node_obj = node.get_node_objs(selected_worker_node)
         log.info(selected_worker_node_obj[0].name)
         nodes.stop_nodes(selected_worker_node_obj)
+        if selected_worker_node == worker_node_with_mgr_pod:
+            log.info("Selected Worker node has mgr pod running")
+            log.info("Deleting mgr pod to start mgr on other node")
+            pod.delete_pods([mgr_pod_obj])
+            pod.validate_pods_are_respinned_and_running_state([mgr_pod_obj])
+        log.log("Checking if toolbox pod is accessable after stopping node")
         toolbox_pod_obj = pod.get_ceph_tools_pod()
         toolbox_node_name = pod.get_pod_node(toolbox_pod_obj).name
         if selected_worker_node == toolbox_node_name:
@@ -63,34 +78,24 @@ class TestCreatePvcWithWorkerNodeDown(ManageTest):
         project_obj = project_factory()
         rbd_sc_obj = helpers.default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
         cephfs_sc_obj = helpers.default_storage_class(interface_type=constants.CEPHFILESYSTEM)
-        all_pvc_obj, dc_pod_obj = list()
+        all_pvc_obj = list()
         log.info("Creating pvc in parallel")
         rbd_pvcs_obj = helpers.create_multiple_pvc_parallel(
-            sc_obj=rbd_sc_obj, namespace=project_obj.namespace, number_of_pvc=25, size="10Gi",
+            sc_obj=rbd_sc_obj, namespace=project_obj.namespace, number_of_pvc=25, size="4Gi",
             access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
         )
         cephfs_pvcs_obj = helpers.create_multiple_pvc_parallel(
-            sc_obj=cephfs_sc_obj, namespace=project_obj.namespace, number_of_pvc=25, size="10Gi",
+            sc_obj=cephfs_sc_obj, namespace=project_obj.namespace, number_of_pvc=25, size="4Gi",
             access_modes=[constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
         )
-        log.info("Creating dc pod backed with rbd pvc and running io")
+        log.info("Creating resources to make sure everything works fine")
 
-        for dc_pod_count in range(2):
-            rbd_dc_pod = dc_pod_factory(interface=constants.CEPHBLOCKPOOL, size=5)
-            rbd_dc_pod.run_io(storage_type='fs', size='2G')
-            dc_pod_obj.append(rbd_dc_pod)
-        log.info("Creating dc pod backed with cephfs pvc and running io")
-        for dc_pod_count in range(2):
-            cephfs_dc_pod = dc_pod_factory(interface=constants.CEPHFILESYSTEM, size=5)
-            cephfs_dc_pod.run_io(storage_type='fs', size='2G')
-            dc_pod_obj.append(cephfs_dc_pod)
+        self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
         all_pvc_obj.extend(rbd_pvcs_obj + cephfs_pvcs_obj)
         log.info("Deleting pvc in parallel")
         assert helpers.delete_objs_parallel(all_pvc_obj)
 
-        for dc_pod_obj in dc_pod_obj:
-            pod.get_fio_rw_iops(dc_pod_obj)
         log.info(f"Starting Node {selected_worker_node}")
 
         nodes.start_nodes(selected_worker_node_obj)
