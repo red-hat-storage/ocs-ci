@@ -109,9 +109,10 @@ class TestPVCCreationDeletionScale(E2ETest):
         # TODO: Update below code with google API, to record value in spreadsheet
         # TODO: For now observing Google API limit to write more than 100 writes
         log_path = f"{ocsci_log_path()}/{self.sc_obj}-{access_mode}"
-        csv_obj = csv.writer(open(f"{log_path}-creation-time.csv", "w"))
-        for k, v in pvc_create_time.items():
-            csv_obj.writerow([k, v])
+        with open(f"{log_path}-creation-time.csv", "w") as fd:
+            csv_obj = csv.writer(fd)
+            for k, v in pvc_create_time.items():
+                csv_obj.writerow([k, v])
         logging.info(
             f"Create data present in {log_path}-creation-time.csv file"
         )
@@ -129,9 +130,10 @@ class TestPVCCreationDeletionScale(E2ETest):
         # Update result to csv file.
         # TODO: Update below code with google API, to record value in spreadsheet
         # TODO: For now observing Google API limit to write more than 100 writes
-        csv_obj = csv.writer(open(f"{log_path}-deletion-time.csv", "w"))
-        for k, v in pvc_deletion_time.items():
-            csv_obj.writerow([k, v])
+        with open(f"{log_path}-deletion-time.csv", "w") as fd:
+            csv_obj = csv.writer(fd)
+            for k, v in pvc_deletion_time.items():
+                csv_obj.writerow([k, v])
         logging.info(
             f"Delete data present in {log_path}-deletion-time.csv file"
         )
@@ -224,9 +226,10 @@ class TestPVCCreationDeletionScale(E2ETest):
         # TODO: Update below code with google API, to record value in spreadsheet
         # TODO: For now observing Google API limit to write more than 100 writes
         log_path = f"{ocsci_log_path()}/All-type-PVC"
-        csv_obj = csv.writer(open(f"{log_path}-creation-time.csv", "w"))
-        for k, v in fs_pvc_create_time.items():
-            csv_obj.writerow([k, v])
+        with open(f"{log_path}-creation-time.csv", "w") as fd:
+            csv_obj = csv.writer(fd)
+            for k, v in fs_pvc_create_time.items():
+                csv_obj.writerow([k, v])
         logging.info(
             f"Create data present in {log_path}-creation-time.csv file"
         )
@@ -248,9 +251,10 @@ class TestPVCCreationDeletionScale(E2ETest):
 
         # TODO: Update below code with google API, to record value in spreadsheet
         # TODO: For now observing Google API limit to write more than 100 writes
-        csv_obj = csv.writer(open(f"{log_path}-deletion-time.csv", "w"))
-        for k, v in fs_pvc_deletion_time.items():
-            csv_obj.writerow([k, v])
+        with open(f"{log_path}-deletion-time.csv", "w") as fd:
+            csv_obj = csv.writer(fd)
+            for k, v in fs_pvc_deletion_time.items():
+                csv_obj.writerow([k, v])
         logging.info(
             f"Delete data present in {log_path}-deletion-time.csv file"
         )
