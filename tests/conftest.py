@@ -452,8 +452,8 @@ def project_factory_fixture(request):
                         warn_event_count += 1
                 log.info(
                     (
-                        "There was %d events in %s ns before it's removal"
-                        " (our of which %d was of type Warning)."
+                        "There were %d events in %s namespace before it's"
+                        " removal (out of which %d were of type Warning)."
                         " For a full dump of this event list, see DEBUG logs."
                     ),
                     event_count,
@@ -461,7 +461,7 @@ def project_factory_fixture(request):
                     warn_event_count
                 )
             except Exception as ex:
-                # we don't want any problem to distrupt the teardown itself
+                # we don't want any problem to disrupt the teardown itself
                 log.warning(
                     "failed to get events for %s namespace: %s",
                     instance.namespace,
