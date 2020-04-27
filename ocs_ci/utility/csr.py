@@ -2,29 +2,42 @@ import logging
 
 from ocs_ci.ocs import constants, exceptions, ocp
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
 
-@retry(exceptions.PendingCSRException, tries=4, delay=10, backoff=1)
-def approve_pending_csr():
+@retry(
+    (exceptions.PendingCSRException, exceptions.TimeoutExpiredError),
+    tries=4,
+    delay=10,
+    backoff=1
+)
+def approve_pending_csr(expected=None):
     """
     After node addition CSR could be in pending state, we have to approve it.
 
+    Args:
+        expected (int): Expected number of CSRs. By default, it will approve
+            all the pending CSRs if exists.
+
     Raises:
         exceptions.PendingCSRException
+        exceptions.TimeoutExpiredError
 
     """
-    base_cmd = "oc adm certificate approve"
-    pending_csrs = get_pending_csr()
-    if pending_csrs:
-        logger.info(f"Pending CSRs: {pending_csrs}")
-        csrs = ' '.join([str(csr) for csr in pending_csrs])
-        cmd = f"{base_cmd} {csrs}"
-        logger.info("Approving pending CSRs")
-        run_cmd(cmd)
-
+    for pending_csrs in TimeoutSampler(300, 10, get_pending_csr):
+        if not expected:
+            if pending_csrs:
+                approve_csrs(pending_csrs)
+            break
+        if len(pending_csrs) >= expected:
+            logger.info(f"Pending CSRs: {pending_csrs}")
+            approve_csrs(pending_csrs)
+            break
+        logger.info(
+            f"Expected: {expected} but found pending csr: {len(pending_csrs)}"
+        )
     check_no_pending_csr()
     logger.info("All CSRs approved")
 
@@ -78,3 +91,18 @@ def get_pending_csr():
         item['metadata']['name'] for item in csr_conf.data.get('items')
         if not item.get('status')
     ]
+
+
+def approve_csrs(pending_csrs):
+    """
+    Approves the CSRs
+
+    Args:
+        csrs (list): List of CSRs
+
+    """
+    base_cmd = "oc adm certificate approve"
+    csrs = ' '.join([str(csr) for csr in pending_csrs])
+    cmd = f"{base_cmd} {csrs}"
+    logger.info(f"Approving pending CSRs")
+    run_cmd(cmd)
