@@ -460,12 +460,11 @@ def project_factory_fixture(request):
                     instance.namespace,
                     warn_event_count
                 )
-            except Exception as ex:
+            except Exception:
                 # we don't want any problem to disrupt the teardown itself
-                log.warning(
-                    "failed to get events for %s namespace: %s",
-                    instance.namespace,
-                    ex
+                log.exception(
+                    "Failed to get events for project %s",
+                    instance.namespace
                 )
             ocp.switch_to_default_rook_cluster_project()
             instance.delete(resource_name=instance.namespace)
