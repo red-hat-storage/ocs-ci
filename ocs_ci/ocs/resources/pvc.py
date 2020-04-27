@@ -216,9 +216,7 @@ def get_all_pvcs(namespace=None, selector=None):
     Returns:
          dict: Dict of all pvc in namespaces
     """
-    all_ns = False
-    if namespace == 'all-namespaces':
-        all_ns = True
+    all_ns = True if namespace == 'all-namespaces' else False
     if not namespace:
         namespace = config.ENV_DATA['cluster_namespace']
     ocp_pvc_obj = OCP(

@@ -769,6 +769,8 @@ NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
 
 # Storage classes provisioners
-OCS_PROVISIONERS = ['openshift-storage.rbd.csi.ceph.com',
-                    'openshift-storage.cephfs.csi.ceph.com',
-                    'openshift-storage.noobaa.io/obc']
+OCS_PROVISIONERS = [
+    'openshift-storage.rbd.csi.ceph.com',
+    'openshift-storage.cephfs.csi.ceph.com',
+    'openshift-storage.noobaa.io/obc'
+]
