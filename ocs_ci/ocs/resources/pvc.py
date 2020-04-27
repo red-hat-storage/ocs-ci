@@ -5,6 +5,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import UnavailableResourceException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.framework import config
@@ -169,16 +170,17 @@ class PVC(OCS):
         Returns:
             list: A list of pod objects attached to the PVC
 
-        Note:
-             # Importing from pod inside, because of unsolvable import loop
-             from ocs_ci.ocs.resources.pod import get_all_pods, get_pvc_name
-
         """
+        # Importing from pod inside, because of unsolvable import loop
         from ocs_ci.ocs.resources.pod import get_all_pods, get_pvc_name
         attached_pods = []
         all_pods = get_all_pods()
         for pod_obj in all_pods:
-            if get_pvc_name(pod_obj) == self.name:
+            try:
+                pvc = get_pvc_name(pod_obj)
+            except UnavailableResourceException:
+                continue
+            if pvc == self.name:
                 attached_pods.append(pod_obj)
         return attached_pods
 
