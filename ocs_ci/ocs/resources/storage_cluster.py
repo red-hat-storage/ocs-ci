@@ -5,7 +5,7 @@ from ocs_ci.ocs.ocp import OCP, get_images
 from jsonschema import validate
 from ocs_ci.framework import config
 import logging
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants, defaults, ocp
 
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.packagemanifest import get_selector_for_ocs_operator, PackageManifest
@@ -431,3 +431,26 @@ def get_deviceset_count():
     return int(sc.get().get('items')[0].get('spec').get(
         'storageDeviceSets')[0].get('count')
     )
+
+
+def get_all_storageclass():
+    """
+    Function for getting all storageclass excluding 'gp2' and 'flex'
+
+    Returns:
+         list: list of storageclass
+
+    """
+    sc_obj = ocp.OCP(
+        kind=constants.STORAGECLASS,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    result = sc_obj.get()
+    sample = result['items']
+
+    storageclass = [
+        item for item in sample if (
+            item.get('metadata').get('name') not in (constants.IGNORE_SC_GP2, constants.IGNORE_SC_FLEX)
+        )
+    ]
+    return storageclass

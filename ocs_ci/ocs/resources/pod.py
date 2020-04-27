@@ -18,7 +18,7 @@ from tests import helpers
 from ocs_ci.ocs import workload
 from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import CommandFailed, NonUpgradedImagesFoundError
+from ocs_ci.ocs.exceptions import CommandFailed, NonUpgradedImagesFoundError, UnavailableResourceException
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
@@ -1032,11 +1032,16 @@ def get_pvc_name(pod_obj):
         pod_obj (str): The pod object
 
     Returns:
-        pvc_name (str): The pvc_name on a given pod_obj
+        str: The pvc name of a given pod_obj,
+
+    Raises:
+        UnavailableResourceException: If no pvc attached
+
     """
-    return pod_obj.get().get(
-        'spec'
-    ).get('volumes')[0].get('persistentVolumeClaim').get('claimName')
+    pvc = pod_obj.get().get('spec').get('volumes')[0].get('persistentVolumeClaim')
+    if not pvc:
+        raise UnavailableResourceException
+    return pvc.get('claimName')
 
 
 def get_used_space_on_mount_point(pod_obj):

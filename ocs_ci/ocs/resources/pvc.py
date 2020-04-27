@@ -5,6 +5,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import UnavailableResourceException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.framework import config
@@ -162,6 +163,27 @@ class PVC(OCS):
             )
         return True
 
+    def get_attached_pods(self):
+        """
+        Get the pods attached to the PVC represented by this object instance
+
+        Returns:
+            list: A list of pod objects attached to the PVC
+
+        """
+        # Importing from pod inside, because of unsolvable import loop
+        from ocs_ci.ocs.resources.pod import get_all_pods, get_pvc_name
+        attached_pods = []
+        all_pods = get_all_pods()
+        for pod_obj in all_pods:
+            try:
+                pvc = get_pvc_name(pod_obj)
+            except UnavailableResourceException:
+                continue
+            if pvc == self.name:
+                attached_pods.append(pod_obj)
+        return attached_pods
+
 
 def delete_pvcs(pvc_objs, concurrent=False):
     """
@@ -190,18 +212,19 @@ def get_all_pvcs(namespace=None, selector=None):
     Gets all pvc in given namespace
 
     Args:
-        namespace (str): Name of namespace
+        namespace (str): Name of namespace  ('all-namespaces' to get all namespaces)
         selector (str): The label selector to look for
 
     Returns:
          dict: Dict of all pvc in namespaces
     """
+    all_ns = True if namespace == 'all-namespaces' else False
     if not namespace:
         namespace = config.ENV_DATA['cluster_namespace']
     ocp_pvc_obj = OCP(
         kind=constants.PVC, namespace=namespace
     )
-    out = ocp_pvc_obj.get(selector=selector)
+    out = ocp_pvc_obj.get(selector=selector, all_namespaces=all_ns)
     return out
 
 
