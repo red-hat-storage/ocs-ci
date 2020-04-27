@@ -183,5 +183,5 @@ class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
 
         # Added sleep for test case run time and for capturing memory leak after scale
         time.sleep(test_run_time)
-        assert utils.ceph_health_check(delay=180), "Failed, Ceph health NOT_OK after ceph pod respin"
+        utils.ceph_health_check(delay=180)
         helpers.memory_leak_analysis(median_dict)
