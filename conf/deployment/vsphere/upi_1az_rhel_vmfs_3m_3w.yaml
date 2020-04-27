@@ -20,8 +20,7 @@ ENV_DATA:
   # This is used just for RHCOS nodes which will get removed after adding
   # RHEL nodes, so no need to have big number here.
   compute_memory: '16384'
-  # Once we will have DC which can handle 64GB we should use those and update here
-  rhel_memory: '32768'
+  rhel_memory: '65536'
   fio_storageutilization_min_mbps: 10.0
 REPORTING:
   polarion:
