@@ -131,7 +131,9 @@ class NodesBase(object):
         ]
 
         workers_stacks = self.aws.get_worker_stacks()
+        logger.info(f"Existing worker stacks: {workers_stacks}")
         existing_indexes = self.get_existing_indexes(workers_stacks)
+        logger.info(f"Existing indexes: {existing_indexes}")
         slots_available = self.get_available_slots(existing_indexes, num_nodes)
         logger.info(f"Available indexes: {slots_available}")
         for slot in slots_available:
@@ -179,7 +181,8 @@ class NodesBase(object):
         temp = []
         for index in index_list:
             temp.append(int(index.split('-')[1][2:]))
-        return temp.sort()
+        temp.sort()
+        return temp
 
     def attach_nodes_to_cluster(self, node_list):
         raise NotImplementedError(
@@ -904,6 +907,7 @@ class AWSUPINode(AWSNodes):
             boto3.Instance: instance of ec2 instance resource
 
         """
+        self.gather_worker_data()
         worker_template_path = self.get_rhcos_worker_template()
         self.bucket_name = constants.AWS_S3_UPI_BUCKET
         self.template_obj_key = 'workertemplate'
@@ -917,8 +921,9 @@ class AWSUPINode(AWSNodes):
         params_list = self.build_stack_params(
             conf['node_id'], conf
         )
+        capabilities = ['CAPABILITY_NAMED_IAM']
         self.stack_name, self.stack_id = self.aws.create_stack(
-            conf, s3_url, conf['node_id'], params_list
+            s3_url, conf['node_id'], params_list, capabilities
         )
         instance_id = self.aws.get_stack_instance_id(
             self.stack_name, constants.AWS_WORKER_LOGICAL_RESOURCE_ID
@@ -943,7 +948,7 @@ class AWSUPINode(AWSNodes):
         pk = 'ParameterKey'
         pv = 'ParameterValue'
 
-        param_list.append({pk: 'Index', pv: index})
+        param_list.append({pk: 'Index', pv: str(index)})
         param_list.append({pk: 'InfrastructureName', pv: self.infra_id})
         param_list.append({pk: 'RhcosAmi', pv: self.worker_image_id})
         param_list.append(
@@ -954,7 +959,8 @@ class AWSUPINode(AWSNodes):
         param_list.append({pk: 'Subnet', pv: self.worker_subnet})
         param_list.append(
             {
-                pk: 'WorkerSecurityGroupId', pv: self.worker_security_group
+                pk: 'WorkerSecurityGroupId',
+                pv: self.worker_security_group[0].get('GroupId')
             }
         )
         param_list.append(
@@ -995,16 +1001,20 @@ class AWSUPINode(AWSNodes):
 
         """
         search_str = "ABC...xYz=="
-        with open(worker_template_path, "r+") as fp:
+        temp = "/tmp/worker_temp.yaml"
+        with open(worker_template_path, "r") as fp:
             orig_content = fp.read()
+            logger.info("=====ORIGINAL=====")
+            logger.info(orig_content)
             final_content = re.sub(
                 r'{}'.format(search_str),
                 r'{}'.format(cert),
                 orig_content
             )
-            fp.truncate()
+        with open(temp, 'w') as wfp:
             logger.info(final_content)
-            fp.write(final_content)
+            wfp.write(final_content)
+        os.rename(temp, worker_template_path)
 
     def get_cert_content(self, worker_ignition_path):
         """

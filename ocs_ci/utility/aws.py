@@ -754,7 +754,10 @@ class AWS(object):
             file_path (str): path for the file to be uploaded
 
         """
-        self.s3_client.Bucket(bucket_name).upload_file(object_key, file_path)
+        self.s3_client.meta.client.upload_file(
+            file_path, bucket_name, object_key,
+            ExtraArgs={'ACL': 'public-read'}
+        )
 
     def get_s3_bucket_object_url(self, bucket_name, object_key):
         """
@@ -769,7 +772,7 @@ class AWS(object):
 
         """
         s3_url = os.path.join(
-            f'https://{bucket_name}.s3.{self._region_name}.amazonws.com',
+            f'https://s3.{self._region_name}.amazonaws.com/{bucket_name}',
             f'{object_key}'
         )
         return s3_url
@@ -787,7 +790,7 @@ class AWS(object):
             instance_id (str): Id of the instance
 
         """
-        resource = self.cf_client(
+        resource = self.cf_client.describe_stack_resource(
             StackName=stack_name, LogicalResourceId=logical_id
         )
         return resource.get('StackResourceDetail').get('PhysicalResourceId')
@@ -804,7 +807,7 @@ class AWS(object):
             str: Parameter value
 
         """
-        stack_description = self.cf_client(
+        stack_description = self.cf_client.describe_stacks(
             StackName=stack_name
         )
         params = stack_description.get('Stacks')[0].get('Parameters')
@@ -891,27 +894,28 @@ class AWS(object):
 
         return all_stacks
 
-    def create_stack(self, conf, s3_url, index, params_list):
+    def create_stack(self, s3_url, index, params_list, capabilities):
         """
         Create a new cloudformation stack for worker creation
 
         Args:
-            conf (dict): of worker configuration
             s3_url (str): An aws url for accessing s3 object
             index (int): Integer index for stack name
             params_list (list): of parameters (k,v) for create_stack
+            capabilities (list): of valid AWS capabilities like
+                CAPABILITY_NAMED_IAM etc
 
         Returns:
             tuple : of (stack_name, stack_id)
 
         """
-        stack_name = f"{self.cluster_name}-no{index}"
+        stack_name = f"{config.ENV_DATA['cluster_name']}-no{index}"
 
         response = self.cf_client.create_stack(
             StackName=stack_name,
             TemplateURL=s3_url,
             Parameters=params_list,
-            Capabilities='CAPABILITY_NAMED_IAM'
+            Capabilities=capabilities
         )
         self.cf_client.get_waiter('stack_create_complete').wait(StackName=stack_name)
         logger.info(f"Stack {stack_name} created successfuly")
