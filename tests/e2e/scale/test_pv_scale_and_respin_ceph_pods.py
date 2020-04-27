@@ -151,9 +151,9 @@ class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
         self.rbd_sc_obj = storageclass_factory(interface=constants.CEPHBLOCKPOOL)
         self.cephfs_sc_obj = storageclass_factory(interface=constants.CEPHFILESYSTEM)
 
-    # TODO: Skipping memory leak fixture call in test function because of bz 1750328
     def test_pv_scale_out_create_pvcs_and_respin_ceph_pods(
-        self, namespace, storageclass, setup_fixture, resource_to_delete
+        self, namespace, storageclass, setup_fixture, resource_to_delete,
+        memory_leak_function
     ):
         pvc_count_each_itr = 10
         scale_pod_count = 120
