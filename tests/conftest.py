@@ -1348,7 +1348,7 @@ def memory_leak_function(request):
             )
         if thread:
             thread.join()
-        log_path = f"{ocsci_log_path()}"
+        log_path = ocsci_log_path()
         for worker in helpers.get_worker_nodes():
             if os.path.exists(f"/tmp/{worker}-top-output.txt"):
                 copyfile(
