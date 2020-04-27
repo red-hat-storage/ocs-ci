@@ -514,3 +514,55 @@ def pre_upgrade_pods_running_io(
     pre_upgrade_block_pods,
 ):
     return pre_upgrade_filesystem_pods + pre_upgrade_block_pods
+
+
+@pytest.fixture(scope='session')
+def upgrade_buckets(
+    bucket_factory_session,
+    awscli_pod_session,
+    mcg_obj_session
+):
+    """
+    Additional NooBaa buckets that are created for upgrade testing. First
+    bucket is populated with data and quota to 1 PB is set.
+
+    Returns:
+        list: list of buckets that should survive OCS and OCP upgrade.
+            First one has bucket quota set to 1 PB and is populated
+            with 3.5 GB.
+
+    """
+    buckets = bucket_factory_session(amount=3)
+
+    # add quota to the first bucket
+    mcg_obj_session.send_rpc_query(
+        'bucket_api',
+        'update_bucket',
+        {
+            'name': buckets[0].name,
+            'quota': {
+                'unit': 'PETABYTE',
+                'size': 1
+            }
+        }
+    )
+
+    # add some data to the first pod
+    awscli_pod_session.exec_cmd_on_pod(
+        'dd if=/dev/urandom of=/tmp/testfile bs=1M count=500'
+    )
+    for i in range(1, 7):
+        awscli_pod_session.exec_cmd_on_pod(
+            helpers.craft_s3_command(
+                mcg_obj_session,
+                f"cp /tmp/testfile s3://{buckets[0].name}/testfile{i}"
+            ),
+            out_yaml_format=False,
+            secrets=[
+                mcg_obj_session.access_key_id,
+                mcg_obj_session.access_key,
+                mcg_obj_session.s3_endpoint
+            ]
+        )
+
+    return buckets
