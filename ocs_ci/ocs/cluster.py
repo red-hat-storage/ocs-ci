@@ -598,7 +598,7 @@ class CephCluster(object):
             bool: True if rebalance is completed, False otherwise
 
         """
-
+        rebalance_state = True
         ceph_status = self.get_ceph_status(format='json-pretty')
         ceph_health = ceph_status['health']['status']
         total_pg_count = ceph_status['pgmap']['num_pgs']
@@ -606,10 +606,13 @@ class CephCluster(object):
         logger.info(ceph_health)
         logger.info(pg_states)
         for states in pg_states:
-            return (
-                states['state_name'] == 'active+clean'
-                and states['count'] == total_pg_count
-            )
+            if not (
+                states['state_name'] == 'active+clean' and (
+                    states['count'] == total_pg_count
+                )
+            ):
+                rebalance_state = False
+        return rebalance_state
 
     @retry(RebalanceException, tries=20, delay=10, backoff=1)
     def wait_for_rebalance_to_complete(self):
