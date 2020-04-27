@@ -12,6 +12,7 @@ import time
 from tests import helpers, disruption_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
+from ocs_ci.utility import utils
 from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
 
 log = logging.getLogger(__name__)
@@ -109,16 +110,16 @@ class BasePvcCreateRespinCephPods(E2ETest):
     argnames="resource_to_delete",
     argvalues=[
         pytest.param(
-            *['mgr'], marks=[pytest.mark.polarion_id("OCS-766"), pytest.mark.bugzilla("1768031")]
+            *['mgr'], marks=[pytest.mark.polarion_id("OCS-766")]
         ),
         pytest.param(
-            *['mon'], marks=[pytest.mark.polarion_id("OCS-764"), pytest.mark.bugzilla("1768031")]
+            *['mon'], marks=[pytest.mark.polarion_id("OCS-764")]
         ),
         pytest.param(
-            *['osd'], marks=[pytest.mark.polarion_id("OCS-765"), pytest.mark.bugzilla("1768031")]
+            *['osd'], marks=[pytest.mark.polarion_id("OCS-765")]
         ),
         pytest.param(
-            *['mds'], marks=[pytest.mark.polarion_id("OCS-613"), pytest.mark.bugzilla("1768031")]
+            *['mds'], marks=[pytest.mark.polarion_id("OCS-613")]
         )
     ]
 )
@@ -161,9 +162,8 @@ class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
         self.all_pvc_obj, self.all_pod_obj = ([] for i in range(2))
 
         # Identify median memory value for each worker node
-        # TODO: Skipping memory leak test because of bz 1750328
-        # median_dict = helpers.get_memory_leak_median_value()
-        # log.info(f"Median dict values for memory leak {median_dict}")
+        median_dict = helpers.get_memory_leak_median_value()
+        log.info(f"Median dict values for memory leak {median_dict}")
 
         # First Iteration call to create PVC and POD
         self.create_pvc_pod(self.rbd_sc_obj, self.cephfs_sc_obj, pvc_count_each_itr, size)
@@ -183,5 +183,5 @@ class TestPVSTOcsCreatePVCsAndRespinCephPods(BasePvcCreateRespinCephPods):
 
         # Added sleep for test case run time and for capturing memory leak after scale
         time.sleep(test_run_time)
-        # TODO: Skipping memory leak analysis because of bz 1750328
-        # helpers.memory_leak_analysis(median_dict)
+        assert utils.ceph_health_check(delay=180), "Failed, Ceph health NOT_OK after ceph pod respin"
+        helpers.memory_leak_analysis(median_dict)
