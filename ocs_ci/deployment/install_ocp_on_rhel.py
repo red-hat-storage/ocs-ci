@@ -7,6 +7,7 @@ import os
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import upload
+from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.utils import (
     create_rhelpod, get_ocp_repo
@@ -68,6 +69,9 @@ class OCPINSTALLRHEL(object):
         )
 
         self.ocp_repo = get_ocp_repo()
+
+        # Approve the pending CSRs
+        approve_pending_csr()
 
         # Upload helper files to pod for OCP installation on RHEL
         self.upload_helpers(self.ocp_repo)
