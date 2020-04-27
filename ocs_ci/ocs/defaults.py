@@ -30,7 +30,7 @@ TEMP_YAML = os.path.join(constants.TEMPLATE_DIR, "temp.yaml")
 PROMETHEUS_ROUTE = 'prometheus-k8s'
 
 # Default device size in Gigs
-DEVICE_SIZE = 340
+DEVICE_SIZE = 512
 
 OCS_OPERATOR_NAME = "ocs-operator"
 LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"

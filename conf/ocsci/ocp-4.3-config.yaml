@@ -1,8 +1,0 @@
----
-# Use this config for installation of OCP 4.3 cluster
-RUN:
-  client_version: '4.3.0-0.nightly'
-DEPLOYMENT:
-  installer_version: "4.3.0-0.nightly"
-ENV_DATA:
-  vm_template: 'rhcos-4.3.0-x86_64-vmware'
