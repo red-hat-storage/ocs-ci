@@ -9,6 +9,7 @@ from itertools import chain
 from math import floor
 from random import randrange
 from time import sleep
+from shutil import copyfile
 
 import pytest
 import yaml
@@ -1347,8 +1348,13 @@ def memory_leak_function(request):
             )
         if thread:
             thread.join()
+        log_path = f"{ocsci_log_path()}"
         for worker in helpers.get_worker_nodes():
             if os.path.exists(f"/tmp/{worker}-top-output.txt"):
+                copyfile(
+                    f"/tmp/{worker}-top-output.txt",
+                    f"{log_path}/{worker}-top-output.txt"
+                )
                 os.remove(f"/tmp/{worker}-top-output.txt")
         log.info(f"Memory leak capture has stopped")
 
