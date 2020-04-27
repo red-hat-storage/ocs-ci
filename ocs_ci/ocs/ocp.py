@@ -24,6 +24,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
 from ocs_ci.ocs import defaults, constants
+from ocs_ci.framework import config
 
 
 log = logging.getLogger(__name__)
@@ -1099,7 +1100,7 @@ def verify_cluster_operator_status(cluster_operator):
         if condition['type'] == 'Degraded' and condition['status'] == 'True':
             log.info(f'{cluster_operator} status is Degraded')
             return False
-        if condition['type'] == 'Progressing' and condition['status'] == 'True':
+        elif condition['type'] == 'Progressing' and condition['status'] == 'True':
             log.info(f'{cluster_operator} status is Progressing')
             return False
     log.info(f'{cluster_operator} status is valid')
@@ -1114,21 +1115,21 @@ def validate_cluster_version_status():
 
     Returns:
         bool: False in case that one of condition flags is invalid:
-        Progressing (should be False), Failing(should be False)
-        or Available (should be True)
+            Progressing (should be False), Failing(should be False)
+            or Available (should be True)
 
     """
     ocp = OCP(kind="clusterversion")
     operator_data = ocp.get('-o json', out_yaml_format=False)
-    conditions = operator_data['items'][0].get('status').get('conditions')
+    conditions = operator_data['items'][0].get('status').get('conditions', [])
     for condition in conditions:
         if condition['type'] == 'Progressing' and condition['status'] == 'True':
             log.info('cluster version status is Progressing')
             return False
-        if condition['type'] == 'Failing' and condition['status'] == 'True':
+        elif condition['type'] == 'Failing' and condition['status'] == 'True':
             log.info('cluster version status is Failing')
             return False
-        if condition['type'] == 'Available' and condition['status'] != 'True':
+        elif condition['type'] == 'Available' and condition['status'] != 'True':
             log.info('cluster status is not available')
             return False
 
@@ -1154,7 +1155,9 @@ def get_ocp_upgrade_channel():
     return channel
 
 
-def patch_ocp_upgrade_channel(channel_variable):
+def patch_ocp_upgrade_channel(
+    channel_variable=config.UPGRADE['ocp_channel']
+):
     """
     Using 'oc patch clusterversion' if new OCP upgrade channel is
     different than current one
@@ -1176,7 +1179,9 @@ def patch_ocp_upgrade_channel(channel_variable):
         log.info("No patch needed")
 
 
-def verify_ocp_upgrade_channel(channel_variable):
+def verify_ocp_upgrade_channel(
+    channel_variable=config.UPGRADE['ocp_channel']
+):
     """
     When upgrade OCP version, verify that subscription channel is same
     as current one
