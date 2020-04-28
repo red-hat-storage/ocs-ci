@@ -91,6 +91,12 @@ class Disruptions:
         ret, pid, err = pid_proc.async_communicate()
         pid = pid.strip()
 
+        # Consider scenario where more than one self.resource pod is running
+        # on one node. eg: More than one osd on same node.
+        pids = pid.split()
+        self.pids = [pid.strip() for pid in pids]
+        pid = pids[0]
+
         # ret will be 0 and err will be None if command is success
         assert not any([ret, err, not pid.isdigit()]), (
             f"Failed to fetch pid of ceph-{self.resource} "
@@ -137,8 +143,17 @@ class Disruptions:
                 for pid_proc in TimeoutSampler(
                     60, 2, run_async, command=pid_cmd
                 ):
-                    ret, new_pid, err = pid_proc.async_communicate()
-                    new_pid = new_pid.strip()
+                    ret, pid, err = pid_proc.async_communicate()
+
+                    # Consider scenario where more than one self.resource pod
+                    # is running on one node. eg:More than one osd on same node
+                    pids = pid.strip().split()
+                    pids = [pid.strip() for pid in pids]
+                    if len(pids) != len(self.pids):
+                        continue
+                    new_pid = [pid for pid in pids if pid not in self.pids]
+                    assert len(new_pid) == 1, 'Found more than one new pid.'
+                    new_pid = new_pid[0]
                     if new_pid and (new_pid != self.daemon_pid):
                         log.info(
                             f"New pid of ceph-{self.resource} is {new_pid}"
