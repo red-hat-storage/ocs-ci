@@ -154,7 +154,7 @@ class Disruptions:
                     new_pid = [pid for pid in pids if pid not in self.pids]
                     assert len(new_pid) == 1, 'Found more than one new pid.'
                     new_pid = new_pid[0]
-                    if new_pid and (new_pid != self.daemon_pid):
+                    if new_pid.isdigit() and (new_pid != self.daemon_pid):
                         log.info(
                             f"New pid of ceph-{self.resource} is {new_pid}"
                         )
