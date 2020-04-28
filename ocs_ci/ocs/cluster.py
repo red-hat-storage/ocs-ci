@@ -815,9 +815,9 @@ class CephCluster(object):
                 resource_count=count, timeout=timeout, sleep=3,
             )
 
-            actual_rgw = 1
+            expected_rgw = 1
 
-            assert count == actual_rgw, f"Expected RGW {count},  Got {actual_rgw}"
+            assert count == expected_rgw, f"Expected RGW {count},  Got {expected_rgw}"
         except exceptions.TimeoutExpiredError as e:
             logger.error(e)
             raise exceptions.RgwCountException(
