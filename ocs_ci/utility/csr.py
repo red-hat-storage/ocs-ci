@@ -154,7 +154,7 @@ def wait_for_all_nodes_csr(timeout=900, sleep=10):
     pending = False
     all_nodes = get_all_nodes()
     for csr_nodes in TimeoutSampler(
-            timeout=timeout, sleep=sleep, func=get_nodes_csr()
+            timeout=timeout, sleep=sleep, func=get_nodes_csr
     ):
         pending_nodes = []
         logger.debug(f"CSR data: {csr_nodes}")
