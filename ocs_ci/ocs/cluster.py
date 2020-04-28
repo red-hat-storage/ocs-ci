@@ -311,7 +311,7 @@ class CephCluster(object):
         if config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
             try:
                 self.rgw_health_check(expected_rgw_count)
-            except exceptions.MgrCountException as e:
+            except exceptions.RgwCountException as e:
                 logger.error(e)
                 raise exceptions.CephHealthException("Cluster health is NOT OK")
 
@@ -815,9 +815,9 @@ class CephCluster(object):
                 resource_count=count, timeout=timeout, sleep=3,
             )
 
-            expected_rgw = 1
+            actual_rgw = len(pod.get_rgw_pod(return_list=True))
 
-            assert count == expected_rgw, f"Expected RGW {count},  Got {expected_rgw}"
+            assert count == actual_rgw, f"Expected RGW {count},  Got {actual_rgw}"
         except exceptions.TimeoutExpiredError as e:
             logger.error(e)
             raise exceptions.RgwCountException(
