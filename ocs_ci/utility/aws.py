@@ -891,7 +891,6 @@ class AWS(object):
         stack_description = self.cf_client.describe_stacks()
         for stack in stack_description['Stacks']:
             all_stacks.append(stack['StackName'])
-
         return all_stacks
 
     def create_stack(self, s3_url, index, params_list, capabilities):
@@ -910,7 +909,6 @@ class AWS(object):
 
         """
         stack_name = f"{config.ENV_DATA['cluster_name']}-no{index}"
-
         response = self.cf_client.create_stack(
             StackName=stack_name,
             TemplateURL=s3_url,

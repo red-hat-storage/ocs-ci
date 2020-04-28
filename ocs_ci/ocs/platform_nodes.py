@@ -1,11 +1,11 @@
 import logging
 import os
 import random
+import json
+import re
 
 import boto3
 import yaml
-import json
-import re
 
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
@@ -113,76 +113,9 @@ class NodesBase(object):
         self.attach_nodes_to_cluster(node_list)
 
     def create_nodes(self, node_conf, node_type, num_nodes):
-        """
-        create aws instances of nodes
-
-        Args:
-            node_conf (dict): of node configuration
-            node_type (str): type of node to be created RHCOS/RHEL
-            num_nodes (int): Number of node instances to be created
-
-        Returns:
-           list: of AWSUPINode/AWSIPINode objects
-
-        """
-        node_list = []
-        node_cls = self.nodes_map[
-            f'{self.platform.upper()}{self.deployment_type.upper()}Node'
-        ]
-
-        workers_stacks = self.aws.get_worker_stacks()
-        logger.info(f"Existing worker stacks: {workers_stacks}")
-        existing_indexes = self.get_existing_indexes(workers_stacks)
-        logger.info(f"Existing indexes: {existing_indexes}")
-        slots_available = self.get_available_slots(existing_indexes, num_nodes)
-        logger.info(f"Available indexes: {slots_available}")
-        for slot in slots_available:
-            node_id = slot
-            node_list.append(node_cls(node_conf, node_type))
-            node_list[-1]._prepare_node(node_id)
-
-        return node_list
-
-    def get_available_slots(self, existing_indexes, required_slots):
-        """
-        Get indexes which are free
-
-        Args:
-            existing_indexes (list): of integers
-            required_slots (int): required number of integers
-
-        Returns:
-            list : of integers (available slots)
-
-        """
-        slots_available = []
-        count = 0
-        index = 0
-
-        while count < required_slots:
-            if index not in existing_indexes:
-                slots_available.append(index)
-                count = count + 1
-            index = index + 1
-        return slots_available
-
-    def get_existing_indexes(self, index_list):
-        """
-        Extract index suffixes from index_list
-
-        Args:
-            index_list (list): of stack names in the form of
-                'clustername-no$i'
-
-        Returns:
-            list : sorted list of Integers
-
-        """
-        temp = []
-        for index in index_list:
-            temp.append(int(index.split('-')[1][2:]))
-        temp.sort()
-        return temp
+        raise NotImplementedError(
+            "Create nodes functionality not implemented"
+        )
 
     def attach_nodes_to_cluster(self, node_list):
         raise NotImplementedError(
@@ -605,6 +538,78 @@ class AWSNodes(NodesBase):
         if stopped_instances:
             self.aws.start_ec2_instances(instances=stopped_instances, wait=True)
 
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        """
+        create aws instances of nodes
+
+        Args:
+            node_conf (dict): of node configuration
+            node_type (str): type of node to be created RHCOS/RHEL
+            num_nodes (int): Number of node instances to be created
+
+        Returns:
+           list: of AWSUPINode objects
+
+        """
+        node_list = []
+        node_cls = self.nodes_map[
+            f'{self.platform.upper()}{self.deployment_type.upper()}Node'
+        ]
+
+        workers_stacks = self.aws.get_worker_stacks()
+        logger.info(f"Existing worker stacks: {workers_stacks}")
+        existing_indexes = self.get_existing_indexes(workers_stacks)
+        logger.info(f"Existing indexes: {existing_indexes}")
+        slots_available = self.get_available_slots(existing_indexes, num_nodes)
+        logger.info(f"Available indexes: {slots_available}")
+        for slot in slots_available:
+            node_id = slot
+            node_list.append(node_cls(node_conf, node_type))
+            node_list[-1]._prepare_node(node_id)
+
+        return node_list
+
+    def get_available_slots(self, existing_indexes, required_slots):
+        """
+        Get indexes which are free
+
+        Args:
+            existing_indexes (list): of integers
+            required_slots (int): required number of integers
+
+        Returns:
+            list : of integers (available slots)
+
+        """
+        slots_available = []
+        count = 0
+        index = 0
+
+        while count < required_slots:
+            if index not in existing_indexes:
+                slots_available.append(index)
+                count = count + 1
+            index = index + 1
+        return slots_available
+
+    def get_existing_indexes(self, index_list):
+        """
+        Extract index suffixes from index_list
+
+        Args:
+            index_list (list): of stack names in the form of
+                'clustername-no$i'
+
+        Returns:
+            list : sorted list of Integers
+
+        """
+        temp = []
+        for index in index_list:
+            temp.append(int(index.split('-')[1][2:]))
+        temp.sort()
+        return temp
+
     def attach_nodes_to_cluster(self, node_list):
         """
         Attach nodes in the list to the cluster
@@ -910,7 +915,7 @@ class AWSUPINode(AWSNodes):
         self.gather_worker_data()
         worker_template_path = self.get_rhcos_worker_template()
         self.bucket_name = constants.AWS_S3_UPI_BUCKET
-        self.template_obj_key = 'workertemplate'
+        self.template_obj_key = f'{self.cluster_name}-workertemplate'
         self.add_cert_to_template(worker_template_path)
         self.aws.upload_file_to_s3_bucket(
             self.bucket_name, self.template_obj_key, worker_template_path
