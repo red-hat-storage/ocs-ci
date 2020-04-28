@@ -1215,10 +1215,9 @@ def get_testrun_name():
     baremetal_config = None
     if config.ENV_DATA.get('mon_type'):
         baremetal_config = (
-            f"MON {config.ENV_DATA.get('mon_type').upper()} " 
+            f"MON {config.ENV_DATA.get('mon_type').upper()} "
             f"OSD {config.ENV_DATA.get('osd_type').upper()} "
         )
-
 
     if config.REPORTING.get('display_name'):
         testrun_name = config.REPORTING.get('display_name')
