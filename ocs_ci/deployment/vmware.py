@@ -21,7 +21,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility.bootstrap import gather_bootstrap
-from ocs_ci.utility.csr import approve_pending_csr
+from ocs_ci.utility.csr import approve_pending_csr, wait_for_all_nodes_csr
 from ocs_ci.utility.templating import dump_data_to_json, Templating
 from ocs_ci.utility.utils import (
     clone_repo, convert_yaml2tfvars, create_directory_path, read_file_as_str,
@@ -29,6 +29,7 @@ from ocs_ci.utility.utils import (
     upload_file, wait_for_co, get_ocp_version
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
+from semantic_version import Version
 from .deployment import Deployment
 
 logger = logging.getLogger(__name__)
@@ -556,6 +557,14 @@ class VSPHEREUPI(VSPHEREBASE):
                 f"--log-level {log_cli_level}",
                 timeout=1800
             )
+
+            # wait for all nodes to generate CSR
+            # From OCP version 4.4 and above, we have to approve CSR manually
+            # for all the nodes
+            ocp_version = get_ocp_version()
+            if Version.coerce(ocp_version) >= Version.coerce('4.4'):
+                wait_for_all_nodes_csr()
+
             approve_pending_csr()
             self.test_cluster()
 
