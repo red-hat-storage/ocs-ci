@@ -109,7 +109,7 @@ def create_pod(
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
     raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1,
-    pod_name=None, node_selector=None
+    pod_name=None, node_selector=None, deploy_pod_status=constants.STATUS_COMPLETED
 ):
     """
     Create a pod
@@ -129,6 +129,8 @@ def create_pod(
         pod_name (str): Name of the pod to create
         node_selector (dict): dict of key-value pair to be used for nodeSelector field
             eg: {'nodetype': 'app-pod'}
+        deploy_pod_status (str): Expected status of deploy pod. Applicable
+            only if dc_deployment is True
 
     Returns:
         Pod: A Pod instance
@@ -202,7 +204,7 @@ def create_pod(
         ocs_obj = create_resource(**pod_data)
         logger.info(ocs_obj.name)
         assert (ocp.OCP(kind='pod', namespace=namespace)).wait_for_resource(
-            condition=constants.STATUS_COMPLETED,
+            condition=deploy_pod_status,
             resource_name=pod_name + '-1-deploy',
             resource_count=0, timeout=180, sleep=3
         )
