@@ -42,6 +42,20 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         """
         Identify the nodes and start DeploymentConfig based app pods using
         PVC with ReadWriteOnce (RWO) access mode on selected nodes
+
+        Args:
+            scenario (str): Scenario of app pods running on OCS or dedicated nodes
+                (eg., 'colocated', 'dedicated')
+            num_of_nodes (int): number of nodes required for running test
+            num_of_fail_nodes (int): number of nodes to make unresponsive during test
+            disrupt_provisioner (bool): True to disrupt the leader provisioner
+                pods if not running on selected nodes, else False
+            project_factory: A fixture to create new project
+            multi_pvc_factory: A fixture create a set of new PVCs
+            dc_pod_factory: A fixture to create deploymentconfig pods
+
+        Returns:
+            tuple: containing the params used in test cases
         """
         ocs_nodes, non_ocs_nodes = self.identify_and_add_nodes(
             scenario, num_of_nodes
