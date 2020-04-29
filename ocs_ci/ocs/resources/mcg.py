@@ -375,7 +375,7 @@ class MCG(object):
         sleep(5)
 
         secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
-        cred_req_secret_dict = secret_ocp_obj.get(creds_request.name)
+        cred_req_secret_dict = secret_ocp_obj.get(resource_name=creds_request.name, retry=5)
 
         aws_access_key_id = base64.b64decode(
             cred_req_secret_dict.get('data').get('aws_access_key_id')
