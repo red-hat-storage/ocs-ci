@@ -1204,3 +1204,27 @@ def verify_ocp_upgrade_channel(
         log.info(f"Required subscription channel is {channel_variable}")
 
         return False
+
+
+def wait_for_cluster_connectivity(timeout=600):
+    """
+    Wait for the cluster to be reachable
+
+    Args:
+        timeout (int): The number in seconds to wait for connectivity to
+            the cluster
+
+    Returns:
+        bool: True if the cluster is reachable, False otherwise
+
+    """
+    service = OCP()
+    try:
+        for sample in TimeoutSampler(timeout, 3, service.get()):
+            if sample.get('items'):
+                log.info("The cluster is reachable")
+                return True
+
+    except TimeoutExpiredError:
+        log.error(f"The cluster is unreachable")
+        return False
