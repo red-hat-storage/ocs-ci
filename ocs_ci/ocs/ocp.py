@@ -1219,11 +1219,7 @@ def wait_for_cluster_connectivity(tries=200, delay=3):
 
     """
     service = OCP()
-
-    def _check_out():
-        isinstance(service.get(), dict)
-
     log.info("Waiting for cluster connectivity")
     return retry(
         CommandFailed, tries=tries, delay=delay, backoff=1
-    )(_check_out)
+    )(service.get)
