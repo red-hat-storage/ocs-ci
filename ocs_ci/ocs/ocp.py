@@ -1206,25 +1206,24 @@ def verify_ocp_upgrade_channel(
         return False
 
 
-def wait_for_cluster_connectivity(timeout=600):
+def wait_for_cluster_connectivity(tries=200, delay=3):
     """
     Wait for the cluster to be reachable
 
     Args:
-        timeout (int): The number in seconds to wait for connectivity to
-            the cluster
+        tries (int): The number of retries
+        delay (int): The delay in seconds between retries
 
     Returns:
-        bool: True if the cluster is reachable, False otherwise
+        bool: True if cluster is reachable, False otherwise
 
     """
     service = OCP()
-    try:
-        for sample in TimeoutSampler(timeout, 3, service.get()):
-            if sample.get('items'):
-                log.info("The cluster is reachable")
-                return True
 
-    except TimeoutExpiredError:
-        log.error(f"The cluster is unreachable")
-        return False
+    def _check_out():
+        isinstance(service.get(), dict)
+
+    log.info("Waiting for cluster connectivity")
+    return retry(
+        CommandFailed, tries=tries, delay=delay, backoff=1
+    )(_check_out)

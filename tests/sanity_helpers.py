@@ -29,7 +29,7 @@ class Sanity:
         """
         Perform Ceph and cluster health checks
         """
-        assert wait_for_cluster_connectivity(), "The cluster is unreachable"
+        wait_for_cluster_connectivity()
         logger.info("Checking cluster and Ceph health")
         node.wait_for_nodes_status()
 
