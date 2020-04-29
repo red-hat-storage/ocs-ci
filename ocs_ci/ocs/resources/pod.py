@@ -18,7 +18,7 @@ from tests import helpers
 from ocs_ci.ocs import workload
 from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import CommandFailed, NonUpgradedImagesFoundError
+from ocs_ci.ocs.exceptions import CommandFailed, NonUpgradedImagesFoundError, UnavailableResourceException
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
@@ -707,10 +707,27 @@ def get_pods_having_label(label, namespace):
         namespace (str): Namespace in which to be looked up
 
     Return:
-        dict: of pod info
+        list: of pods info
+
     """
     ocp_pod = OCP(kind=constants.POD, namespace=namespace)
     pods = ocp_pod.get(selector=label).get('items')
+    return pods
+
+
+def get_deployments_having_label(label, namespace):
+    """
+    Fetches deployment resources with given label in given namespace
+
+    Args:
+        label (str): label which deployments might have
+        namespace (str): Namespace in which to be looked up
+
+    Return:
+        list: deployment OCP instances
+    """
+    ocp_deployment = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+    pods = ocp_deployment.get(selector=label).get('items')
     return pods
 
 
@@ -788,6 +805,46 @@ def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
     osds = get_pods_having_label(osd_label, namespace)
     osd_pods = [Pod(**osd) for osd in osds]
     return osd_pods
+
+
+def get_osd_prepare_pods(
+    osd_prepare_label=constants.OSD_PREPARE_APP_LABEL, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+):
+    """
+    Fetches info about osd prepare pods in the cluster
+
+    Args:
+        osd_prepare_label (str): label associated with osd prepare pods
+            (default: constants.OSD_PREPARE_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list: OSD prepare pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    osds = get_pods_having_label(osd_prepare_label, namespace)
+    osd_pods = [Pod(**osd) for osd in osds]
+    return osd_pods
+
+
+def get_osd_deployments(osd_label=constants.OSD_APP_LABEL, namespace=None):
+    """
+    Fetches info about osd deployments in the cluster
+
+    Args:
+        osd_label (str): label associated with osd deployments
+            (default: defaults.OSD_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: defaults.ROOK_CLUSTER_NAMESPACE)
+
+    Returns:
+        list: OSD deployment OCS instances
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    osds = get_deployments_having_label(osd_label, namespace)
+    osd_deployments = [OCS(**osd) for osd in osds]
+    return osd_deployments
 
 
 def get_pod_count(label, namespace=None):
@@ -975,11 +1032,16 @@ def get_pvc_name(pod_obj):
         pod_obj (str): The pod object
 
     Returns:
-        pvc_name (str): The pvc_name on a given pod_obj
+        str: The pvc name of a given pod_obj,
+
+    Raises:
+        UnavailableResourceException: If no pvc attached
+
     """
-    return pod_obj.get().get(
-        'spec'
-    ).get('volumes')[0].get('persistentVolumeClaim').get('claimName')
+    pvc = pod_obj.get().get('spec').get('volumes')[0].get('persistentVolumeClaim')
+    if not pvc:
+        raise UnavailableResourceException
+    return pvc.get('claimName')
 
 
 def get_used_space_on_mount_point(pod_obj):

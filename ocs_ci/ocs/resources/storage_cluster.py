@@ -5,13 +5,11 @@ from ocs_ci.ocs.ocp import OCP, get_images
 from jsonschema import validate
 from ocs_ci.framework import config
 import logging
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants, defaults, ocp
 
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.packagemanifest import get_selector_for_ocs_operator, PackageManifest
 from ocs_ci.utility import utils
-from tests.helpers import check_local_volume
-from ocs_ci.deployment.deployment import get_typed_nodes, get_device_paths
 
 log = logging.getLogger(__name__)
 
@@ -205,19 +203,6 @@ def ocs_install_verification(
             timeout=timeout
         )
 
-    # Verify ceph health
-    log.info("Verifying ceph health")
-    health_check_tries = 20
-    health_check_delay = 30
-    if post_upgrade_verification:
-        # In case of upgrade with FIO we have to wait longer time to see
-        # health OK. See discussion in BZ:
-        # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
-        health_check_tries = 60
-    assert utils.ceph_health_check(
-        namespace, health_check_tries, health_check_delay
-    )
-
     # Verify StorageClasses (1 ceph-fs, 1 ceph-rbd)
     log.info("Verifying storage classes")
     storage_class = OCP(
@@ -342,6 +327,19 @@ def ocs_install_verification(
             ], f"{crush_rule['rule_name']} is not with type as zone"
         log.info("Verified - pool crush rule is with type: zone")
 
+    # Verify ceph health
+    log.info("Verifying ceph health")
+    health_check_tries = 20
+    health_check_delay = 30
+    if post_upgrade_verification:
+        # In case of upgrade with FIO we have to wait longer time to see
+        # health OK. See discussion in BZ:
+        # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
+        health_check_tries = 60
+    assert utils.ceph_health_check(
+        namespace, health_check_tries, health_check_delay
+    )
+
 
 def add_capacity(osd_size_capacity_requested):
     """
@@ -373,15 +371,6 @@ def add_capacity(osd_size_capacity_requested):
     storageDeviceSets->count = (capacity reqested / osd capacity ) + existing count storageDeviceSets
 
     """
-    lvpresent = check_local_volume()
-    if lvpresent:
-        workers = get_typed_nodes(node_type='worker')
-        worker_names = [worker.name for worker in workers]
-        device_paths = get_device_paths(worker_names)
-        lv_data = get_localvolume_cr()
-        lv_data['spec']['storageClassDevices'][0][
-            'devicePaths'
-        ] = device_paths
 
     sc = get_storage_cluster()
     old_storage_devices_sets_count = get_deviceset_count()
@@ -444,14 +433,24 @@ def get_deviceset_count():
     )
 
 
-def get_localvolume_cr():
+def get_all_storageclass():
     """
-    Get localvolumeCR object from local-storage
+    Function for getting all storageclass excluding 'gp2' and 'flex'
 
     Returns:
-        dict: Dictionary represents a returned yaml file
+         list: list of storageclass
 
     """
-    A = OCP(kind=constants.LOCAL_VOLUME, namespace=constants.LOCAL_STORAGE_NAMESPACE)
-    lvcr = A.get('local-block')
-    return lvcr
+    sc_obj = ocp.OCP(
+        kind=constants.STORAGECLASS,
+        namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+    result = sc_obj.get()
+    sample = result['items']
+
+    storageclass = [
+        item for item in sample if (
+            item.get('metadata').get('name') not in (constants.IGNORE_SC_GP2, constants.IGNORE_SC_FLEX)
+        )
+    ]
+    return storageclass

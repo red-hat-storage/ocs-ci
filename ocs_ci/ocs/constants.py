@@ -74,11 +74,16 @@ STATUS_COMPLETED = 'Completed'
 # NooBaa statuses
 BS_AUTH_FAILED = 'AUTH_FAILED'
 BS_OPTIMAL = 'OPTIMAL'
+HEALTHY_OB = 'OPTIMAL'
+HEALTHY_OBC = STATUS_BOUND
+HEALTHY_OBC_CLI_PHASE = 'Phase:Bound'
+HEALTHY_OB_CLI_MODE = 'Mode:OPTIMAL'
 
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
 DEPLOYMENT = "Deployment"
+JOB = "Job"
 STORAGECLASS = "StorageClass"
 PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
@@ -92,7 +97,7 @@ STORAGECLUSTER = 'storagecluster'
 CLUSTER_OPERATOR = 'ClusterOperator'
 MONITORING = 'monitoring'
 CLUSTER_SERVICE_VERSION = 'csv'
-LOCAL_VOLUME = "localvolume"
+JOB = 'job'
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -109,6 +114,7 @@ CLUSTER_SERVICE_VERSION = 'csv'
 
 # Other
 SECRET = "Secret"
+TEST = "test"
 NAMESPACE = 'Namespace'
 IGNORE_SC_GP2 = "gp2"
 IGNORE_SC_FLEX = "rook-ceph-block"
@@ -118,6 +124,8 @@ OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
 OPENSHIFT_LOGGING_NAMESPACE = "openshift-logging"
 OPENSHIFT_OPERATORS_REDHAT_NAMESPACE = "openshift-operators-redhat"
 OPENSHIFT_IMAGE_REGISTRY_NAMESPACE = "openshift-image-registry"
+OPENSHIFT_IMAGE_REGISTRY_DEPLOYMENT = "image-registry"
+OPENSHIFT_IMAGE_SELECTOR = "docker-registry=default"
 OPENSHIFT_INGRESS_NAMESPACE = "openshift-ingress"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
@@ -142,7 +150,6 @@ DEFAULT_ROUTE_CRT = "router-certs-default"
 DEFAULT_NAMESPACE = "default"
 IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
 IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
-LOCAL_STORAGE_NAMESPACE = "local-storage"
 
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f'{DEFAULT_CLUSTERNAME}-cephfs'
@@ -168,6 +175,7 @@ MDS_APP_LABEL = "app=rook-ceph-mds"
 TOOL_APP_LABEL = "app=rook-ceph-tools"
 MGR_APP_LABEL = "app=rook-ceph-mgr"
 OSD_APP_LABEL = "app=rook-ceph-osd"
+OSD_PREPARE_APP_LABEL = "app=rook-ceph-osd-prepare"
 RGW_APP_LABEL = "app=rook-ceph-rgw"
 OPERATOR_LABEL = "app=rook-ceph-operator"
 CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = "app=csi-cephfsplugin-provisioner"
@@ -181,6 +189,8 @@ NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
 NOOBAA_OPERATOR_POD_LABEL = "noobaa-operator=deployment"
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
+OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
+CEPH_ROOK_IO_PVC_LABEL = 'ceph.rook.io/pvc'
 
 
 # YAML paths
@@ -230,6 +240,10 @@ MCG_BACKINGSTORE_SECRET_YAML = os.path.join(
 
 MCG_BACKINGSTORE_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "BackingStore.yaml"
+)
+
+PV_BACKINGSTORE_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "PVBackingStore.yaml"
 )
 
 MCG_BUCKETCLASS_YAML = os.path.join(
@@ -504,6 +518,11 @@ OPENSHIFT_UPGRADE_INFO_API = (
 APP_NODE_LABEL = 'app-node'
 VDBENCH_NODE_LABEL = 'vdbench'
 VDBENCH_RESULTS_FILE = '/tmp/Results.tar.gz'
+VDBENCH_WIDTH = 4  # the width of the directory tree  that will be created
+VDBENCH_DEPTH = 4  # the depth of the directory tree  that will be created
+VDBENCH_FILE_SIZE = 1  # the file size in MB that will be created
+VDBENCH_CAP_PER_POD = 80000  # the Maximum capacity (in MB) per pod in the test
+VDBENCH_MIN_CAPACITY = 300  # minimum storage capacity (in GB) for the test to run
 
 # Platforms
 AWS_PLATFORM = 'aws'
@@ -742,3 +761,16 @@ LOCAL_VOLUME_YAML = os.path.join(
 
 # All worker default config files
 RHEL_WORKERS_CONF = os.path.join(CONF_DIR, 'ocsci/aws_upi_rhel_workers.yaml')
+
+# Users
+NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
+
+# Miscellaneous
+NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
+
+# Storage classes provisioners
+OCS_PROVISIONERS = [
+    'openshift-storage.rbd.csi.ceph.com',
+    'openshift-storage.cephfs.csi.ceph.com',
+    'openshift-storage.noobaa.io/obc'
+]

@@ -1,21 +1,24 @@
 import base64
 import json
 import logging
+import os
 import shlex
 from time import sleep
 
 import boto3
 import requests
+import urllib3
 from botocore.client import ClientError
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, registry
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_mcg_cmd, TimeoutSampler
-from tests.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
+from ocs_ci.utility import templating
+from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
+from tests.helpers import create_unique_resource_name, create_resource
 
 logger = logging.getLogger(name=__file__)
 
@@ -35,6 +38,11 @@ class MCG(object):
         """
         Constructor for the MCG class
         """
+
+        # Todo: find a better solution for not being able to verify requests with a self-signed cert
+        logger.warning('Suppressing InsecureRequestWarnings')
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
         self.namespace = config.ENV_DATA['cluster_namespace']
         ocp_obj = OCP(kind='noobaa', namespace=self.namespace)
         results = ocp_obj.get()
@@ -90,6 +98,14 @@ class MCG(object):
             aws_secret_access_key=self.access_key
         )
 
+        # Give NooBaa's ServiceAccount permissions in order to execute CLI commands
+        registry.add_role_to_user(
+            'cluster-admin', constants.NOOBAA_SERVICE_ACCOUNT,
+            cluster_role=True
+        )
+
+        self.operator_pod = Pod(**get_pods_having_label(constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace)[0])
+
         if config.ENV_DATA['platform'].lower() == 'aws':
             (
                 self.cred_req_obj,
@@ -126,6 +142,35 @@ class MCG(object):
         """
         return {bucket.name for bucket in self.s3_resource.buckets.all()}
 
+    def read_system(self):
+        """
+        Returns:
+            dict: A dictionary with information about MCG resources
+
+        """
+        return self.send_rpc_query(
+            'system_api',
+            'read_system',
+            params={}
+        ).json()['reply']
+
+    def get_bucket_info(self, bucket_name):
+        """
+        Args:
+            bucket_name (str): Name of searched bucket
+
+        Returns:
+            dict: Information about the bucket
+
+        """
+        logger.info(f'Requesting information about bucket {bucket_name}')
+        for bucket in self.read_system().get('buckets'):
+            if bucket['name'] == bucket_name:
+                logger.debug(bucket)
+                return bucket
+        logger.warning(f'Bucket {bucket_name} was not found')
+        return None
+
     def oc_get_all_bucket_names(self):
         """
         Returns:
@@ -143,7 +188,7 @@ class MCG(object):
             set: A set of all bucket names
 
         """
-        obc_lst = run_mcg_cmd('obc list').split('\n')[1:-1]
+        obc_lst = self.exec_mcg_cmd('obc list').stdout.split('\n')[1:-1]
         # TODO assert the bucket passed the Pending state
         return {row.split()[1] for row in obc_lst}
 
@@ -607,9 +652,7 @@ class MCG(object):
         """
 
         def _check_state():
-            sysinfo = self.send_rpc_query(
-                'system_api', 'read_system', params={}
-            ).json()['reply']
+            sysinfo = self.read_system()
             for pool in sysinfo.get('pools'):
                 if pool.get('name') == backingstore_name:
                     current_state = pool.get('mode')
@@ -640,3 +683,30 @@ class MCG(object):
                 f'{desired_state} within the time limit.'
             )
             assert False
+
+    def exec_mcg_cmd(self, cmd, namespace=None, **kwargs):
+        """
+        Executes an MCG CLI command through the noobaa-operator pod's CLI binary
+
+        Args:
+            cmd (str): The command to run
+            namespace (str): The namespace to run the command in
+
+        Returns:
+            str: stdout of the command
+
+        """
+
+        kubeconfig = os.getenv('KUBECONFIG')
+        if kubeconfig:
+            kubeconfig = f"--kubeconfig {kubeconfig} "
+
+        namespace = f'-n {namespace}' if namespace else f'-n {self.namespace}'
+        result = exec_cmd(
+            f'oc {kubeconfig} {namespace} rsh {self.operator_pod.name} '
+            f'{constants.NOOBAA_OPERATOR_POD_CLI_PATH} {cmd} {namespace}',
+            **kwargs
+        )
+        result.stdout = result.stdout.decode()
+        result.stderr = result.stderr.decode()
+        return result

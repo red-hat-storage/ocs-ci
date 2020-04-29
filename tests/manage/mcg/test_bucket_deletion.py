@@ -1,17 +1,15 @@
 import logging
-
 import timeit
+
 import botocore
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1, tier3, noobaa_cli_required, acceptance,
-    performance, filter_insecure_request_warning
+    tier1, tier3, acceptance, performance, filter_insecure_request_warning
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
-from ocs_ci.utility.utils import run_mcg_cmd
 from tests.helpers import create_unique_resource_name
 from tests.manage.mcg import helpers
 
@@ -33,8 +31,7 @@ class TestBucketDeletion:
             ),
             pytest.param(
                 *[3, 'CLI'],
-                marks=[tier1, acceptance, noobaa_cli_required,
-                       pytest.mark.polarion_id("OCS-1940")]
+                marks=[tier1, acceptance, pytest.mark.polarion_id("OCS-1940")]
             ),
             pytest.param(
                 *[3, 'OC'],
@@ -90,8 +87,7 @@ class TestBucketDeletion:
             ),
             pytest.param(
                 *['CLI'],
-                marks=[tier1, noobaa_cli_required,
-                       pytest.mark.polarion_id("OCS-1917")]
+                marks=[tier1, pytest.mark.polarion_id("OCS-1917")]
             ),
             pytest.param(
                 *['OC'],
@@ -149,8 +145,7 @@ class TestBucketDeletion:
             ),
             pytest.param(
                 *['CLI'],
-                marks=[tier3, noobaa_cli_required,
-                       pytest.mark.polarion_id("OCS-1941")]
+                marks=[tier3, pytest.mark.polarion_id("OCS-1941")]
             ),
             pytest.param(
                 *['OC'],
@@ -185,7 +180,7 @@ class TestBucketDeletion:
                 )
         elif interface == "CLI":
             try:
-                cli_del = run_mcg_cmd(f'obc delete {name}')
+                cli_del = mcg_obj.exec_mcg_cmd(f'obc delete {name}')
                 assert cli_del, "Unexpected cli delete non-exist OBC succeed"
             except CommandFailed as err:
                 assert "Could not delete OBC" in str(err), (
@@ -197,7 +192,6 @@ class TestBucketDeletion:
 
     @pytest.mark.bugzilla("1753109")
     @pytest.mark.polarion_id("OCS-1924")
-    @tier3
     def test_s3_bucket_delete_1t_objects(self, mcg_obj, awscli_pod):
         """
         Test with deletion of bucket has 1T objects stored in.

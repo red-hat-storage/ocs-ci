@@ -578,7 +578,9 @@ class Deployment(object):
             time.sleep(waiting_time)
 
             # Validate the pods are respinned and in running state
-            validate_pods_are_respinned_and_running_state(
+            retry(CommandFailed, tries=3, delay=15)(
+                validate_pods_are_respinned_and_running_state
+            )(
                 pods_list
             )
 
@@ -586,7 +588,9 @@ class Deployment(object):
             validate_pvc_created_and_bound_on_monitoring_pods()
 
             # Validate the pvc are mounted on pods
-            validate_pvc_are_mounted_on_monitoring_pods(pods_list)
+            retry((CommandFailed, AssertionError), tries=3, delay=15)(
+                validate_pvc_are_mounted_on_monitoring_pods
+            )(pods_list)
         elif config.ENV_DATA.get('monitoring_enabled') and config.ENV_DATA.get("telemeter_server_url"):
             # Create configmap cluster-monitoring-config to reconfigure
             # telemeter server url when 'persistent-monitoring' is False
@@ -820,8 +824,6 @@ def get_device_paths(worker_names):
     platform = config.ENV_DATA.get('platform').lower()
     if platform == 'aws':
         pattern = 'nvme-Amazon_EC2_NVMe_Instance_Storage'
-    elif platform == 'none'
-        pattern = 'scsi-'
     # TODO: add patterns for vsphere and bare metal
     else:
         raise UnsupportedPlatformError(

@@ -109,7 +109,7 @@ def create_pod(
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
     raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1,
-    pod_name=None, node_selector=None
+    pod_name=None, node_selector=None, deploy_pod_status=constants.STATUS_COMPLETED
 ):
     """
     Create a pod
@@ -129,6 +129,8 @@ def create_pod(
         pod_name (str): Name of the pod to create
         node_selector (dict): dict of key-value pair to be used for nodeSelector field
             eg: {'nodetype': 'app-pod'}
+        deploy_pod_status (str): Expected status of deploy pod. Applicable
+            only if dc_deployment is True
 
     Returns:
         Pod: A Pod instance
@@ -202,7 +204,7 @@ def create_pod(
         ocs_obj = create_resource(**pod_data)
         logger.info(ocs_obj.name)
         assert (ocp.OCP(kind='pod', namespace=namespace)).wait_for_resource(
-            condition=constants.STATUS_COMPLETED,
+            condition=deploy_pod_status,
             resource_name=pod_name + '-1-deploy',
             resource_count=0, timeout=180, sleep=3
         )
@@ -455,6 +457,12 @@ def create_storage_class(
     ] = secret_name
     sc_data['parameters'][
         'csi.storage.k8s.io/provisioner-secret-namespace'
+    ] = defaults.ROOK_CLUSTER_NAMESPACE
+    sc_data['parameters'][
+        'csi.storage.k8s.io/controller-expand-secret-name'
+    ] = secret_name
+    sc_data['parameters'][
+        'csi.storage.k8s.io/controller-expand-secret-namespace'
     ] = defaults.ROOK_CLUSTER_NAMESPACE
 
     sc_data['parameters']['clusterID'] = defaults.ROOK_CLUSTER_NAMESPACE
@@ -1086,13 +1094,14 @@ def measure_pvc_creation_time(interface, pvc_name):
     return total.total_seconds()
 
 
-def measure_pvc_creation_time_bulk(interface, pvc_name_list):
+def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
     """
     Measure PVC creation time of bulk PVC based on logs.
 
     Args:
         interface (str): The interface backed the PVC
         pvc_name_list (list): List of PVC Names for measuring creation time
+        wait_time (int): Seconds to wait before collecting CSI log
 
     Returns:
         pvc_dict (dict): Dictionary of pvc_name with creation time.
@@ -1100,6 +1109,8 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list):
     """
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
+    # due to some delay in CSI log generation added wait
+    time.sleep(wait_time)
     # get the logs from the csi-provisioner containers
     logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
     logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
@@ -1126,13 +1137,14 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list):
     return pvc_dict
 
 
-def measure_pv_deletion_time_bulk(interface, pv_name_list):
+def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
     """
     Measure PV deletion time of bulk PV, based on logs.
 
     Args:
         interface (str): The interface backed the PV
         pv_name_list (list): List of PV Names for measuring deletion time
+        wait_time (int): Seconds to wait before collecting CSI log
 
     Returns:
         pv_dict (dict): Dictionary of pv_name with deletion time.
@@ -1140,6 +1152,8 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list):
     """
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
+    # due to some delay in CSI log generation added wait
+    time.sleep(wait_time)
     # get the logs from the csi-provisioner containers
     logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
     logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
@@ -2101,20 +2115,3 @@ def modify_osd_replica_count(resource_name, replica_count):
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     resource_name = '-'.join(resource_name.split('-')[0:4])
     return ocp_obj.patch(resource_name=resource_name, params=params)
-
-
-def check_local_volume():
-    """
-    Function to check if Local-volume is present or not
-    {To be used for BM Cluster}
-
-    Returns:
-        bool: True if LV present, False if LV not present
-
-    """
-    command = "get localvolume -n local-storage "
-    status = OCP.exec_oc_cmd(command, out_yaml_format=False)
-    if "No resources found" in status:
-        return False
-    else:
-        return True

@@ -30,7 +30,7 @@ TEMP_YAML = os.path.join(constants.TEMPLATE_DIR, "temp.yaml")
 PROMETHEUS_ROUTE = 'prometheus-k8s'
 
 # Default device size in Gigs
-DEVICE_SIZE = 340
+DEVICE_SIZE = 512
 
 OCS_OPERATOR_NAME = "ocs-operator"
 LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
@@ -40,6 +40,6 @@ LIVE_CONTENT_SOURCE = "redhat-operators"
 NOOBAA_STATUS_CONTENT_COUNT = {
     'CustomResourceDefinition': 5, 'Namespace': 1, 'ServiceAccount': 1,
     'Role': 1, 'RoleBinding': 1, 'ClusterRole': 1, 'ClusterRoleBinding': 1,
-    'Deployment': 1, 'NooBaa': 1, 'StatefulSet': 1, 'Service': 2, 'Secret': 3,
+    'Deployment': 2, 'NooBaa': 1, 'StatefulSet': 2, 'Service': 3, 'Secret': 4,
     'StorageClass': 1, 'BucketClass': 1, 'PersistentVolumeClaim': 1
 }

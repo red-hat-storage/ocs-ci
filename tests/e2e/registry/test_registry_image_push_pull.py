@@ -30,7 +30,10 @@ class TestRegistryImagePullPush(E2ETest):
         role_type = ['registry-viewer', 'registry-editor',
                      'system:registry', 'admin', 'system:image-builder']
         for role in role_type:
-            registry.add_role_to_user(role_type=role, user=config.RUN['username'])
+            registry.add_role_to_user(
+                role_type=role, user=config.RUN['username'],
+                namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+            )
 
         # Provide write access to registry
         ocp_obj = ocp.OCP()
@@ -60,4 +63,7 @@ class TestRegistryImagePullPush(E2ETest):
 
         # Remove user roles from User
         for role in role_type:
-            registry.remove_role_from_user(role_type=role, user=config.RUN['username'])
+            registry.remove_role_from_user(
+                role_type=role, user=config.RUN['username'],
+                namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+            )

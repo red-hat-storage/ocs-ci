@@ -12,10 +12,11 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest
+from ocs_ci.framework.testlib import E2ETest, performance
 from tests import helpers
-from ocs_ci.ocs import machine
+from ocs_ci.ocs import machine, node
 
 log = logging.getLogger(__name__)
 
@@ -135,31 +136,20 @@ class TestVDBenchWorkload(E2ETest):
     The total number of files is calculating by : files * (width ** depth)
     """
 
+    @pytest.mark.parametrize('template', [
+        pytest.param("VDBench-Basic.yaml", marks=performance),
+        pytest.param("VDBench-Basic-FS.yaml", marks=performance)]
+    )
+    @pytest.mark.parametrize('load', [15, 35, 70])
     @pytest.mark.parametrize(
-        argnames=['template', 'with_ocs', 'servers', 'threads', 'blocksize',
-                  'fileio', 'samples', 'width', 'depth', 'files', 'file_size',
+        argnames=['with_ocs', 'servers', 'threads', 'blocksize', 'fileio',
+                  'samples', 'width', 'depth', 'files', 'file_size',
                   'runtime', 'pause'],
-        argvalues=[
-            pytest.param(*["VDBench-BCurve.yaml", True,
-                           9, 4, ["4k"], "random",
-                           1, 4, 3, 256, 5, 600, 5]),
-            pytest.param(*["VDBench-BCurve.yaml", True,
-                           9, 4, ["64k"], "random",
-                           1, 4, 3, 256, 5, 600, 5]),
-            pytest.param(*["VDBench-BCurve-FS.yaml", True,
-                           9, 4, ["4k"], "random",
-                           1, 4, 3, 256, 5, 600, 5]),
-            pytest.param(*["VDBench-BCurve-FS.yaml", True,
-                           9, 4, ["64k"], "random",
-                           1, 4, 3, 256, 5, 600, 5]),
-            pytest.param(*["VDBench-Basic.yaml", True,
-                           9, 4, ["4k", "64k"], "random",
-                           1, 4, 3, 256, 5, 600, 1],
-                         marks=pytest.mark.workloads()),
-        ],
+        argvalues=[pytest.param(*[True, 0, 0, [], "", 1, 0, 0, 0, 0, 600, 5],
+                                marks=performance)],
     )
     def test_vdbench_workload(
-        self, template, with_ocs, label_nodes, ripsaw, servers, threads,
+        self, template, with_ocs, load, label_nodes, ripsaw, servers, threads,
         blocksize, fileio, samples, width, depth, files, file_size, runtime,
         pause
     ):
@@ -170,6 +160,7 @@ class TestVDBenchWorkload(E2ETest):
             template (str) : Name of yaml file that will used as a template
             with_ocs (bool) : This parameter will indicate if the test will
                               run on the same nodes as the OCS
+            load (int) : load to run on the storage in percentage of the capacity.
             label_nodes (fixture) : This fixture is labeling the worker(s)
                                     that will used for App. pod(s)
             ripsaw (fixture) : Fixture to deploy the ripsaw benchmarking operator
@@ -185,6 +176,7 @@ class TestVDBenchWorkload(E2ETest):
             runtime (int) : Time (in Sec.) for each test iteration
             pause (int) : Time (in Min.) to pause between each test iteration.
         """
+        log.info(f'going to use {template} as template')
         log.info("Apply Operator CRD")
 
         crd = 'resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml'
@@ -198,6 +190,45 @@ class TestVDBenchWorkload(E2ETest):
         sf_data = templating.load_yaml(template)
 
         target_results = template + 'Results'
+
+        log.info('Calculating Storage size....')
+        ceph_cluster = CephCluster()
+        total_capacity = ceph_cluster.get_ceph_capacity()
+        assert total_capacity > constants.VDBENCH_MIN_CAPACITY, (
+            "Storage capacity is too low for performance testing"
+        )
+        log.info(f'The Total usable capacity is {total_capacity}')
+
+        if load:
+            width = constants.VDBENCH_WIDTH
+            depth = constants.VDBENCH_DEPTH
+            file_size = constants.VDBENCH_FILE_SIZE
+            capacity_per_pod = constants.VDBENCH_CAP_PER_POD
+            total_dirs = width ** depth
+            log.info(f'The total dirs in the tree {total_dirs}')
+            log.info(f'Going to run with {load} % of the capacity load.')
+            tested_capacity = round(total_capacity * 1024 * load / 100)
+            log.info(f'Tested capacity is {tested_capacity} MB')
+            servers = round(tested_capacity / capacity_per_pod)
+
+            """
+            To spread the application pods evenly on all workers or application nodes and at least 2 app pods
+            per node.
+            """
+            nodes = len(node.get_typed_nodes(node_type=constants.WORKER_MACHINE))
+            if not with_ocs:
+                nodes = len(machine.get_labeled_nodes(f'node-role.kubernetes.io/app={constants.APP_NODE_LABEL}'))
+            log.info(f'Going to use {nodes} nodes for the test !')
+            servers = round(servers / nodes) * nodes
+            if servers < (nodes * 2):
+                servers = nodes * 2
+
+            files = round(tested_capacity / servers / total_dirs)
+            total_files = round(files * servers * total_dirs)
+            log.info(f'number of pods is {servers}')
+            log.info(f'Going to create {total_files} files !')
+            log.info(f'number of files in dir is {files}')
+
         """
             Setting up the parameters for this test
         """
@@ -245,7 +276,7 @@ class TestVDBenchWorkload(E2ETest):
             since the file_size is in Kb and the vol_size need to be in Gb,
             more calculation is needed.
         """
-        vol_size = int((files * (width ** depth)) * file_size * 1.3)
+        vol_size = int((files * total_dirs) * file_size * 1.3)
         log.info('number of files to create : {}'.format(
             int(files * (width ** depth)))
         )
@@ -255,7 +286,7 @@ class TestVDBenchWorkload(E2ETest):
             vol_size = 100
         sf_data['spec']['workload']['args']['storagesize'] = f'{vol_size}Gi'
 
-        log.info(sf_data)
+        log.debug(f'output of configuration file is {sf_data}')
 
         timeout = 86400  # 3600 (1H) * 24 (1D)  = one days
 

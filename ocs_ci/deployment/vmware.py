@@ -21,13 +21,15 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility.bootstrap import gather_bootstrap
+from ocs_ci.utility.csr import approve_pending_csr, wait_for_all_nodes_csr
 from ocs_ci.utility.templating import dump_data_to_json, Templating
 from ocs_ci.utility.utils import (
     clone_repo, convert_yaml2tfvars, create_directory_path, read_file_as_str,
     remove_keys_from_tf_variable_file, replace_content_in_file, run_cmd,
-    upload_file, wait_for_co
+    upload_file, wait_for_co, get_ocp_version
 )
 from ocs_ci.utility.vsphere import VSPHERE as VSPHEREUtil
+from semantic_version import Version
 from .deployment import Deployment
 
 logger = logging.getLogger(__name__)
@@ -59,6 +61,12 @@ class VSPHEREBASE(Deployment):
             constants.EXTERNAL_DIR,
             'openshift-misc'
         )
+        os.environ['TF_LOG'] = config.ENV_DATA.get('TF_LOG_LEVEL', "TRACE")
+        os.environ['TF_LOG_PATH'] = os.path.join(
+            config.ENV_DATA.get('cluster_path'),
+            config.ENV_DATA.get('TF_LOG_FILE')
+        )
+
         self.wait_time = 90
 
     def attach_disk(self, size=100):
@@ -241,8 +249,11 @@ class VSPHEREBASE(Deployment):
         Delete the extra disks from all the worker nodes
         """
         vms = self.get_compute_vms(self.datacenter, self.cluster)
-        for vm in vms:
-            self.vsphere.remove_disks(vm)
+        if vms:
+            for vm in vms:
+                self.vsphere.remove_disks(vm)
+        else:
+            logger.debug("NO Resource Pool or VMs exists")
 
     def get_compute_vms(self, dc, cluster):
         """
@@ -256,12 +267,17 @@ class VSPHEREBASE(Deployment):
             list: VM instance
 
         """
-        vms = self.vsphere.get_all_vms_in_pool(
-            config.ENV_DATA.get("cluster_name"),
-            dc,
-            cluster
-        )
-        return [vm for vm in vms if "compute" in vm.name or "rhel" in vm.name]
+        if self.vsphere.is_resource_pool_exist(
+            config.ENV_DATA['cluster_name'],
+            self.datacenter,
+            self.cluster
+        ):
+            vms = self.vsphere.get_all_vms_in_pool(
+                config.ENV_DATA.get("cluster_name"),
+                dc,
+                cluster
+            )
+            return [vm for vm in vms if "compute" in vm.name or "rhel" in vm.name]
 
     def post_destroy_checks(self):
         """
@@ -323,7 +339,8 @@ class VSPHEREUPI(VSPHEREBASE):
 
             # git clone repo from openshift installer
             clone_repo(
-                constants.VSPHERE_INSTALLER_REPO, self.upi_repo_path
+                constants.VSPHERE_INSTALLER_REPO, self.upi_repo_path,
+                f'release-{get_ocp_version()}'
             )
 
             # upload bootstrap ignition to public access server
@@ -522,6 +539,9 @@ class VSPHEREUPI(VSPHEREBASE):
                 os.chdir(self.previous_dir)
 
             OCP.set_kubeconfig(self.kubeconfig)
+
+            approve_pending_csr()
+
             # wait for image registry to show-up
             co = "image-registry"
             wait_for_co(co)
@@ -538,6 +558,14 @@ class VSPHEREUPI(VSPHEREBASE):
                 timeout=1800
             )
 
+            # wait for all nodes to generate CSR
+            # From OCP version 4.4 and above, we have to approve CSR manually
+            # for all the nodes
+            ocp_version = get_ocp_version()
+            if Version.coerce(ocp_version) >= Version.coerce('4.4'):
+                wait_for_all_nodes_csr()
+
+            approve_pending_csr()
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level='DEBUG'):
@@ -608,7 +636,8 @@ class VSPHEREUPI(VSPHEREBASE):
             constants.TERRAFORM_VARS
         )
         clone_repo(
-            constants.VSPHERE_INSTALLER_REPO, upi_repo_path
+            constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
+            f'release-{get_ocp_version()}'
         )
         if (
             os.path.exists(f"{constants.VSPHERE_MAIN}.backup")

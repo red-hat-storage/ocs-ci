@@ -5,10 +5,12 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import UnavailableResourceException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +37,12 @@ class PVC(OCS):
             int: PVC size
         """
         #  [:-2] -> to remove the 'Gi' from the size (e.g. '5Gi --> '5')
-        return int(self.data.get('status').get('capacity').get('storage')[:-2])
+        unformatted_size = self.data.get('status').get('capacity').get('storage')
+        units = unformatted_size[-2:]
+        if units == 'Ti':
+            return int(unformatted_size[:-2]) * 1024
+        elif units == 'Gi':
+            return int(unformatted_size[:-2])
 
     @property
     def status(self):
@@ -124,16 +131,58 @@ class PVC(OCS):
 
     def resize_pvc(self, new_size, verify=False):
         """
-        Returns the PVC size pvc_name in namespace
+        Modify the capacity of PVC
+
+        Args:
+            new_size (int): New size of PVC in Gi
+            verify (bool): True to verify the change is reflected on PVC,
+                False otherwise
 
         Returns:
             bool: True if operation succeeded, False otherwise
         """
-        self.data['status']['capacity']['storage'] = f"{new_size}Gi"
-        self.apply(**self.data)
+        patch_param = f'{{"spec": {{"resources": {{"requests": {{"storage": "{new_size}Gi"}}}}}}}}'
+
+        # Modify size of PVC
+        assert self.ocp.patch(resource_name=self.name, params=patch_param), (
+            f"Patch command to modify size of PVC {self.name} has failed."
+        )
+
         if verify:
-            return self.size == new_size
+            for pvc_data in TimeoutSampler(240, 2, self.get):
+                capacity = pvc_data.get('status').get('capacity').get('storage')
+                if capacity == f'{new_size}Gi':
+                    break
+                log.info(
+                    f"Capacity of PVC {self.name} is not {new_size}Gi as "
+                    f"expected, but {capacity}. Retrying."
+                )
+            log.info(
+                f"Verified that the capacity of PVC {self.name} is changed to "
+                f"{new_size}Gi."
+            )
         return True
+
+    def get_attached_pods(self):
+        """
+        Get the pods attached to the PVC represented by this object instance
+
+        Returns:
+            list: A list of pod objects attached to the PVC
+
+        """
+        # Importing from pod inside, because of unsolvable import loop
+        from ocs_ci.ocs.resources.pod import get_all_pods, get_pvc_name
+        attached_pods = []
+        all_pods = get_all_pods()
+        for pod_obj in all_pods:
+            try:
+                pvc = get_pvc_name(pod_obj)
+            except UnavailableResourceException:
+                continue
+            if pvc == self.name:
+                attached_pods.append(pod_obj)
+        return attached_pods
 
 
 def delete_pvcs(pvc_objs, concurrent=False):
@@ -163,18 +212,19 @@ def get_all_pvcs(namespace=None, selector=None):
     Gets all pvc in given namespace
 
     Args:
-        namespace (str): Name of namespace
+        namespace (str): Name of namespace  ('all-namespaces' to get all namespaces)
         selector (str): The label selector to look for
 
     Returns:
          dict: Dict of all pvc in namespaces
     """
+    all_ns = True if namespace == 'all-namespaces' else False
     if not namespace:
         namespace = config.ENV_DATA['cluster_namespace']
     ocp_pvc_obj = OCP(
         kind=constants.PVC, namespace=namespace
     )
-    out = ocp_pvc_obj.get(selector=selector)
+    out = ocp_pvc_obj.get(selector=selector, all_namespaces=all_ns)
     return out
 
 

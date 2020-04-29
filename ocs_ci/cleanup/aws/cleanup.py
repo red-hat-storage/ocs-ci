@@ -160,34 +160,52 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
     vpc_objs = [aws.ec2_resource.Vpc(vpc_id) for vpc_id in vpc_ids]
     for vpc_obj in vpc_objs:
         vpc_tags = vpc_obj.tags
-        cloudformation_vpc_name = [
-            tag['Value'] for tag in vpc_tags if tag['Key'] == defaults.AWS_CLOUDFORMATION_TAG
-        ]
-        if cloudformation_vpc_name:
-            cloudformation_vpc_names.append(cloudformation_vpc_name[0])
-            continue
-        vpc_name = [tag['Value'] for tag in vpc_tags if tag['Key'] == 'Name'][0]
-        cluster_name = vpc_name.strip('-vpc')
-        vpc_instances = vpc_obj.instances.all()
-        if not vpc_instances:
-            clusters_to_delete.append(cluster_name)
-            continue
+        if vpc_tags:
+            cloudformation_vpc_name = [
+                tag['Value'] for tag in vpc_tags
+                if tag['Key'] == defaults.AWS_CLOUDFORMATION_TAG
+            ]
+            if cloudformation_vpc_name:
+                cloudformation_vpc_names.append(cloudformation_vpc_name[0])
+                continue
+            vpc_name = [
+                tag['Value'] for tag in vpc_tags if tag['Key'] == 'Name'
+            ][0]
+            cluster_name = vpc_name.replace('-vpc', '')
+            vpc_instances = vpc_obj.instances.all()
+            if not vpc_instances:
+                clusters_to_delete.append(cluster_name)
+                continue
 
-        # Append to clusters_to_delete if cluster should be deleted
-        if determine_cluster_deletion(vpc_instances, cluster_name):
-            clusters_to_delete.append(cluster_name)
+            # Append to clusters_to_delete if cluster should be deleted
+            if determine_cluster_deletion(vpc_instances, cluster_name):
+                clusters_to_delete.append(cluster_name)
+        else:
+            logger.info("No tags found for VPC")
 
     # Get all cloudformation based clusters to delete
     cf_clusters_to_delete = list()
     for vpc_name in cloudformation_vpc_names:
-        instance_dicts = aws.get_instances_by_name_pattern(f"{vpc_name.strip('-vpc')}*")
+        instance_dicts = aws.get_instances_by_name_pattern(f"{vpc_name.replace('-vpc', '')}*")
         ec2_instances = [aws.get_ec2_instance(instance_dict['id']) for instance_dict in instance_dicts]
         if not ec2_instances:
             continue
-        cluster_io_tag = [
-            tag['Key'] for tag in ec2_instances[0].tags if 'kubernetes.io/cluster' in tag['Key']
-        ]
-        cluster_name = cluster_io_tag[0].strip('kubernetes.io/cluster/')
+        cluster_io_tag = None
+        for instance in ec2_instances:
+            cluster_io_tag = [
+                tag['Key'] for tag in instance.tags
+                if 'kubernetes.io/cluster' in tag['Key']
+            ]
+            if cluster_io_tag:
+                break
+        if not cluster_io_tag:
+            logger.warning(
+                "Unable to find valid cluster IO tag from ec2 instance tags "
+                "for VPC %s. This is probably not an OCS cluster VPC!",
+                vpc_name
+            )
+            continue
+        cluster_name = cluster_io_tag[0].replace('kubernetes.io/cluster/', '')
         if determine_cluster_deletion(ec2_instances, cluster_name):
             cf_clusters_to_delete.append(cluster_name)
 

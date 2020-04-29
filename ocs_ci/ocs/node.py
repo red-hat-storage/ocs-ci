@@ -68,6 +68,19 @@ def get_typed_nodes(node_type='worker', num_of_nodes=None):
     return typed_nodes
 
 
+def get_all_nodes():
+    """
+    Gets the all nodes in cluster
+
+    Returns:
+        list: List of node name
+
+    """
+    ocp_node_obj = ocp.OCP(kind=constants.NODE)
+    node_items = ocp_node_obj.get().get('items')
+    return [node['metadata']['name'] for node in node_items]
+
+
 def wait_for_nodes_status(
     node_names=None, status=constants.NODE_READY, timeout=180
 ):
