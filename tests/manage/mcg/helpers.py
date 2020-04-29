@@ -312,6 +312,7 @@ def check_pv_backingstore_status(backingstore_name, namespace=None):
 def create_multipart_upload(s3_obj, bucketname, object_key):
     """
     Initiates Multipart Upload
+
     Args:
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket on which multipart upload to be initiated on
@@ -329,6 +330,7 @@ def create_multipart_upload(s3_obj, bucketname, object_key):
 def list_multipart_upload(s3_obj, bucketname):
     """
     Lists the multipart upload details on a bucket
+
     Args:
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
@@ -343,6 +345,7 @@ def list_multipart_upload(s3_obj, bucketname):
 def list_uploaded_parts(s3_obj, bucketname, object_key, upload_id):
     """
     Lists uploaded parts and their ETags
+
     Args:
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
@@ -359,6 +362,7 @@ def list_uploaded_parts(s3_obj, bucketname, object_key, upload_id):
 def complete_multipart_upload(s3_obj, bucketname, object_key, upload_id, parts):
     """
     Completes the Multipart Upload
+
     Args:
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
@@ -382,6 +386,7 @@ def complete_multipart_upload(s3_obj, bucketname, object_key, upload_id, parts):
 def abort_all_multipart_upload(s3_obj, bucketname, object_key):
     """
     Abort all Multipart Uploads for this Bucket
+
     Args:
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
@@ -406,6 +411,7 @@ def abort_all_multipart_upload(s3_obj, bucketname, object_key):
 def abort_multipart(s3_obj, bucketname, object_key, upload_id):
     """
     Aborts a Multipart Upload for this Bucket
+
     Args:
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
@@ -423,6 +429,7 @@ def abort_multipart(s3_obj, bucketname, object_key, upload_id):
 def put_bucket_policy(s3_obj, bucketname, policy):
     """
     Adds bucket policy to a bucket
+
     Args:
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
@@ -438,6 +445,7 @@ def put_bucket_policy(s3_obj, bucketname, policy):
 def get_bucket_policy(s3_obj, bucketname):
     """
     Gets bucket policy from a bucket
+
     Args:
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
@@ -452,6 +460,7 @@ def get_bucket_policy(s3_obj, bucketname):
 def delete_bucket_policy(s3_obj, bucketname):
     """
     Deletes bucket policy
+
     Args:
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
@@ -463,47 +472,140 @@ def delete_bucket_policy(s3_obj, bucketname):
     return s3_obj.s3_client.delete_bucket_policy(Bucket=bucketname)
 
 
-def s3_put_object(s3_obj, bucketname, object_key, data):
+def s3_put_object(s3_obj, bucketname, object_key, data, content_type=''):
     """
     Simple Boto3 client based Put object
+
     Args:
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
         object_key (str): Unique object Identifier
         data (str): string content to write to a new S3 object
+        content_type (str): Type of object data. eg: html, txt etc,
 
     Returns:
         dict : Put object response
 
     """
-    return s3_obj.s3_client.put_object(Bucket=bucketname, Key=object_key, Body=data)
+    return s3_obj.s3_client.put_object(Bucket=bucketname, Key=object_key, Body=data, ContentType=content_type)
 
 
-def s3_get_object(s3_obj, bucketname, object_key):
+def s3_get_object(s3_obj, bucketname, object_key, versionid=''):
     """
     Simple Boto3 client based Get object
+
     Args:
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
         object_key (str): Unique object Identifier
+        versionid (str): Unique version number of an object
 
     Returns:
         dict : Get object response
 
     """
-    return s3_obj.s3_client.get_object(Bucket=bucketname, Key=object_key)
+    return s3_obj.s3_client.get_object(Bucket=bucketname, Key=object_key, VersionId=versionid)
 
 
-def s3_delete_object(s3_obj, bucketname, object_key):
+def s3_delete_object(s3_obj, bucketname, object_key, versionid=''):
     """
     Simple Boto3 client based Delete object
+
     Args:
         s3_obj (obj): MCG or OBC object
         bucketname (str): Name of the bucket
         object_key (str): Unique object Identifier
+        versionid (str): Unique version number of an object
 
     Returns:
         dict : Delete object response
 
     """
-    return s3_obj.s3_client.delete_object(Bucket=bucketname, Key=object_key)
+    return s3_obj.s3_client.delete_object(Bucket=bucketname, Key=object_key, VersionId=versionid)
+
+
+def s3_put_bucket_website(s3_obj, bucketname, website_config):
+    """
+    Boto3 client based Put bucket website function
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        website_config (dict): Website configuration info
+
+    Returns:
+        dict : PutBucketWebsite response
+    """
+    return s3_obj.s3_client.put_bucket_website(Bucket=bucketname, WebsiteConfiguration=website_config)
+
+
+def s3_get_bucket_website(s3_obj, bucketname):
+    """
+    Boto3 client based Get bucket website function
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+
+    Returns:
+        dict : GetBucketWebsite response
+    """
+    return s3_obj.s3_client.get_bucket_website(Bucket=bucketname)
+
+
+def s3_delete_bucket_website(s3_obj, bucketname):
+    """
+    Boto3 client based Delete bucket website function
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+
+    Returns:
+        dict : DeleteBucketWebsite response
+    """
+    return s3_obj.s3_client.delete_bucket_website(Bucket=bucketname)
+
+
+def s3_put_bucket_versioning(s3_obj, bucketname, status='Enabled'):
+    """
+    Boto3 client based Put Bucket Versioning function
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        status (str): 'Enabled' or 'Suspended'. Default 'Enabled'
+
+    Returns:
+        dict : PutBucketVersioning response
+    """
+    return s3_obj.s3_client.put_bucket_versioning(Bucket=bucketname, VersioningConfiguration={'Status': status})
+
+
+def s3_get_bucket_versioning(s3_obj, bucketname):
+    """
+    Boto3 client based Get Bucket Versioning function
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+
+    Returns:
+        dict : GetBucketVersioning response
+    """
+    return s3_obj.s3_client.get_bucket_versioning(Bucket=bucketname)
+
+
+def s3_list_object_versions(s3_obj, bucketname, prefix=''):
+    """
+    Boto3 client based list object Versionfunction
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        prefix (str): Object key prefix
+
+    Returns:
+        dict : List object version response
+    """
+    return s3_obj.s3_client.list_object_versions(Bucket=bucketname, Prefix=prefix)

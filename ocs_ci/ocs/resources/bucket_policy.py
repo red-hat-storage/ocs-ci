@@ -104,7 +104,10 @@ class NoobaaAccount(object):
         email_id, token, access_key_id, access_key
     ) = (None,) * 7
 
-    def __init__(self, mcg, name, email, buckets, admin_access=False, s3_access=True, full_bucket_access=False):
+    def __init__(
+        self, mcg, name, email, buckets, admin_access=False, s3_access=True,
+        full_bucket_access=True, backingstore_name=constants.DEFAULT_NOOBAA_BACKINGSTORE
+    ):
         """
         Initializer function
 
@@ -115,6 +118,8 @@ class NoobaaAccount(object):
             buckets (list): list of bucket names to be given permission
             admin_access (bool): True for admin privilege, otherwise False. Default (False)
             s3_access (bool): True for S3 access, otherwise False. Default (True)
+            backingstore_name (str): Backingstore name on which buckets created
+                using this account to be placed by default. Default("noobaa-default-backing-store")
             full_bucket_access (bool): True for future bucket access, otherwise False. Default (False)
         """
         self.account_name = name
@@ -127,6 +132,7 @@ class NoobaaAccount(object):
                 "name": name,
                 "has_login": admin_access,
                 "s3_access": s3_access,
+                "default_pool": backingstore_name,
                 "allowed_buckets": {
                     "full_permission": full_bucket_access,
                     "permission_list": buckets
