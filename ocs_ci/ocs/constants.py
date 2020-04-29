@@ -150,6 +150,7 @@ DEFAULT_ROUTE_CRT = "router-certs-default"
 DEFAULT_NAMESPACE = "default"
 IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
 IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
+DEFAULT_NOOBAA_BACKINGSTORE = "noobaa-default-backing-store"
 
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f'{DEFAULT_CLUSTERNAME}-cephfs'
@@ -774,3 +775,8 @@ OCS_PROVISIONERS = [
     'openshift-storage.cephfs.csi.ceph.com',
     'openshift-storage.noobaa.io/obc'
 ]
+
+# Bucket Policy action lists
+bucket_website_action_list = ['PutBucketWebsite', 'GetBucketWebsite', 'PutObject']
+bucket_version_action_list = ['PutBucketVersioning', 'GetBucketVersioning']
+object_version_action_list = ['PutObject', 'GetObjectVersion', 'DeleteObjectVersion']

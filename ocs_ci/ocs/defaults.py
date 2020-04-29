@@ -43,3 +43,11 @@ NOOBAA_STATUS_CONTENT_COUNT = {
     'Deployment': 2, 'NooBaa': 1, 'StatefulSet': 2, 'Service': 3, 'Secret': 4,
     'StorageClass': 1, 'BucketClass': 1, 'PersistentVolumeClaim': 1
 }
+
+# Noobaa S3 bucket website configurations
+website_config = {
+    'ErrorDocument': {'Key': 'error.html'},
+    'IndexDocument': {'Suffix': 'index.html'},
+}
+index = "<html><body><h1>My Static Website on S3</h1></body></html>"
+error = "<html><body><h1>Oh. Something bad happened!</h1></body></html>"
