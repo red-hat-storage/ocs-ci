@@ -4,6 +4,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import TimeoutSampler, run_async, run_cmd
+from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
 log = logging.getLogger(__name__)
@@ -71,6 +72,7 @@ class Disruptions:
             resource_count=self.resource_count, timeout=300
         )
 
+    @retry(AssertionError, tries=5, delay=3, backoff=1)
     def select_daemon(self, node_name=None):
         """
         Select pid of self.resource daemon
@@ -133,7 +135,7 @@ class Disruptions:
             )
             try:
                 for pid_proc in TimeoutSampler(
-                    20, 1, run_async, command=pid_cmd
+                    60, 2, run_async, command=pid_cmd
                 ):
                     ret, new_pid, err = pid_proc.async_communicate()
                     new_pid = new_pid.strip()
