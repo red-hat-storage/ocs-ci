@@ -944,7 +944,7 @@ def tier_marks_name():
     return tier_marks_name
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope='function', autouse=True)
 def health_checker(request, tier_marks_name):
     def finalizer():
         try:
