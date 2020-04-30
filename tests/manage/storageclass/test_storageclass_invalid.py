@@ -79,7 +79,8 @@ def invalid_storageclass(request):
     yaml_path = os.path.join(
         request.param['template_dir'], "storageclass.yaml"
     )
-    yaml_data = yaml.safe_load(open(yaml_path, 'r'))
+    with open(yaml_path, 'r') as fd:
+        yaml_data = yaml.safe_load(fd)
     yaml_data.update(request.param['values'])
     storageclass = OCS(**yaml_data)
     sc_data = storageclass.create()
