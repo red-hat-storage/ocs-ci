@@ -1,7 +1,7 @@
 import logging
 import pytest
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest, workloads, google_api_required
+from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.ocs.pgsql import Postgresql
 
 log = logging.getLogger(__name__)
@@ -19,7 +19,6 @@ def pgsql(request):
 
 
 @workloads
-@google_api_required
 @pytest.mark.polarion_id("OCS-807")
 class TestPgSQLWorkload(E2ETest):
     """
@@ -42,9 +41,4 @@ class TestPgSQLWorkload(E2ETest):
         pgbench_pods = pgsql.get_pgbench_pods()
 
         # Validate pgbench run and parse logs
-        pg_out = pgsql.validate_pgbench_run(pgbench_pods)
-
-        # Collect data and export to Google doc spreadsheet
-        pgsql.collect_data_to_googlesheet(
-            pg_out, sheet_name="OCS PGSQL", sheet_index=1
-        )
+        pgsql.validate_pgbench_run(pgbench_pods)

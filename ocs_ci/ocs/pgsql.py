@@ -8,13 +8,12 @@ from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import utils, templating
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed
-from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from subprocess import CalledProcessError
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from tests.helpers import wait_for_resource_state
-from ocs_ci.ocs.constants import RIPSAW_NAMESPACE
+from ocs_ci.ocs.constants import RIPSAW_NAMESPACE, RIPSAW_CRD
 
 
 log = logging.getLogger(__name__)
@@ -30,7 +29,7 @@ class Postgresql(RipSaw):
 
         """
         super().__init__(**kwargs)
-        self._apply_crd(crd='resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml')
+        self._apply_crd(crd=RIPSAW_CRD)
 
     def _apply_crd(self, crd):
         """
@@ -81,7 +80,7 @@ class Postgresql(RipSaw):
             log.error('Failed during setup of PostgreSQL server')
             raise cf
         self.pgsql_is_setup = True
-        log.info("Successfully deploying postgres database")
+        log.info("Successfully deployed postgres database")
 
     def create_pgbench_benchmark(
         self, replicas, clients=None, threads=None,
@@ -136,7 +135,7 @@ class Postgresql(RipSaw):
                     break
             except IndexError:
                 log.info(
-                    f'Expecting number of pgbench pods are {replicas} '
+                    f'Expected number of pgbench pods are {replicas} '
                     f'but only found {len(pgbench_pods)}'
                 )
 
@@ -200,10 +199,10 @@ class Postgresql(RipSaw):
         status = pod_obj.get().get(
             'status'
         ).get('containerStatuses')[0].get('state')
-        if list(status.keys())[0] == 'running':
-            return 'running'
-        elif list(status.keys())[0] == 'terminated':
-            return status['terminated']['reason']
+
+        return 'running' if list(status.keys())[0] == 'running' else status[
+            'terminated'
+        ]['reason']
 
     def wait_for_pgbench_status(self, status, timeout=None):
         """
@@ -214,7 +213,6 @@ class Postgresql(RipSaw):
             timeout (int): Time in seconds to wait
 
         """
-
         timeout = timeout if timeout else 43200
         # Wait for pg_bench pods to initialized and running
         log.info(f"Waiting for pgbench pods to be reach {status} state")
@@ -235,58 +233,31 @@ class Postgresql(RipSaw):
             pg_output (list): pgbench outputs in list
 
         """
-        pg_output = []
+        all_pgbench_pods_output = []
         for pgbench_pod in pgbench_pods:
             log.info(f"pgbench_client_pod===={pgbench_pod.name}====")
             output = run_cmd(f'oc logs {pgbench_pod.name}')
             pg_output = utils.parse_pgsql_logs(output)
-            # list_pg_output.append(pg_output)
             log.info(
                 "*******PGBench output log*********\n"
                 f"{pg_output}"
             )
-
-        # for data in list_pg_output:
-        for data in pg_output:
-            latency_avg = data['latency_avg']
-            if not latency_avg:
-                raise UnexpectedBehaviour(
-                    "PGBench failed to run, "
-                    "no data found on latency_avg"
-                )
-        log.info("PGBench completed successfully")
-        return pg_output
-
-    def collect_data_to_googlesheet(self, pg_output, sheet_name, sheet_index):
-        """
-        Collect pgbench output to google spread sheet
-
-        Args:
-            pg_output (list):  pgbench outputs in list
-            sheet_name (str): Name of the sheet
-            sheet_index (int): Index of sheet
-
-        """
-        # Collect data and export to Google doc spreadsheet
-        g_sheet = GoogleSpreadSheetAPI(sheet_name, sheet_index)
-        for lat in pg_output:
-            lat_avg = lat['latency_avg']
-            lat_stddev = lat['lat_stddev']
-            tps_incl = lat['tps_incl']
-            tps_excl = lat['tps_excl']
-            g_sheet.insert_row(
-                [int(lat_avg),
-                 int(lat_stddev),
-                 int(tps_incl),
-                 int(tps_excl)], 2
-            )
+            # for data in all_pgbench_pods_output:
+            for data in pg_output:
+                run_id = list(data.keys())
+                latency_avg = data[run_id[0]]['latency_avg']
+                if not latency_avg:
+                    raise UnexpectedBehaviour(
+                        "PGBench failed to run, "
+                        "no data found on latency_avg"
+                    )
+            log.info(f"PGBench on {pgbench_pod.name} completed successfully")
+            all_pgbench_pods_output.append(pg_output)
+        return all_pgbench_pods_output
 
     def cleanup(self):
         """
         Clean pgench pods
-
-        Args:
-            benchmark_pod_obj (list): benchmark pod objects in a list
 
         """
         log.info("Deleting configuration created for ripsaw")

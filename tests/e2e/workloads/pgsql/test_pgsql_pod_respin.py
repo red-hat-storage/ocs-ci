@@ -4,7 +4,7 @@ import pytest
 from ocs_ci.ocs import constants
 from tests import disruption_helpers
 from ocs_ci.framework.testlib import (
-    E2ETest, google_api_required, workloads, ignore_leftovers
+    E2ETest, workloads, ignore_leftovers
 )
 from ocs_ci.ocs.pgsql import Postgresql
 
@@ -24,7 +24,6 @@ def pgsql(request):
 
 @ignore_leftovers
 @workloads
-@google_api_required
 class TestPgSQLCephPodRespin(E2ETest):
     """
     Test running PGSQL and with Ceph pods respin
@@ -54,7 +53,7 @@ class TestPgSQLCephPodRespin(E2ETest):
         ]
     )
     @pytest.mark.usefixtures(pgsql_setup.__name__)
-    def test_run_pgsql(self, transactions, pod_name):
+    def test_run_pgsql(self, pgsql, transactions, pod_name):
         """
         Test pgsql workload
         """
@@ -65,12 +64,10 @@ class TestPgSQLCephPodRespin(E2ETest):
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)
 
         # Respin Ceph pod
-        resource_osd = [f'{pod_name}']
         log.info(f"Respin Ceph pod {pod_name}")
         disruption = disruption_helpers.Disruptions()
-        for resource in resource_osd:
-            disruption.set_resource(resource=resource)
-            disruption.delete_resource()
+        disruption.set_resource(resource=f'{pod_name}')
+        disruption.delete_resource()
 
         # Wait for pg_bench pod to complete
         pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
@@ -79,9 +76,4 @@ class TestPgSQLCephPodRespin(E2ETest):
         pgbench_pods = pgsql.get_pgbench_pods()
 
         # Validate pgbench run and parse logs
-        pg_out = pgsql.validate_pgbench_run(pgbench_pods)
-
-        # Collect data and export to Google doc spreadsheet
-        pgsql.collect_data_to_googlesheet(
-            pg_out, sheet_name="OCS PGSQL", sheet_index=2
-        )
+        pgsql.validate_pgbench_run(pgbench_pods)
