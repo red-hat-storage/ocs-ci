@@ -48,8 +48,7 @@ def label_nodes(request, with_ocs):
 
     def teardown():
 
-        if not ceph_health_check():
-            raise
+        ceph_health_check()
 
         if with_ocs:
             return
