@@ -70,6 +70,7 @@ STATUS_TERMINATING = 'Terminating'
 STATUS_BOUND = 'Bound'
 STATUS_RELEASED = 'Released'
 STATUS_COMPLETED = 'Completed'
+STATUS_ERROR = 'Error'
 
 # NooBaa statuses
 BS_AUTH_FAILED = 'AUTH_FAILED'
