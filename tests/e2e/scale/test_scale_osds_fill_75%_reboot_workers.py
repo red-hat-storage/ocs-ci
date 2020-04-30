@@ -15,7 +15,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants, platform_nodes
 from ocs_ci.ocs.resources.pod import wait_for_dc_app_pods_to_reach_running_state
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers, tier4a
+from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
 from ocs_ci.utility.utils import ceph_health_check
 
 
@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 
 @scale
-@tier4a
 @ignore_leftovers
 @pytest.mark.parametrize(
     argnames=["interface"],
