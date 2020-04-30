@@ -152,23 +152,30 @@ def wait_for_job_completion(namespace, timeout, error_msg):
             timeout=timeout,
             sleep=30
         )
-    except TimeoutExpiredError as ex:
-        # report some high level error as well
-        logger.error(error_msg)
-        ex.message = error_msg
+    except Exception as ex:
+        # report some high level error as well in case of a timeout error
+        if type(ex) == TimeoutExpiredError:
+            logger.error(error_msg)
+            ex.message = error_msg
         # fetch log(s) of any fio pod(s) in the job namespace
         pod_data = ocp_pod.get()
         for pod_dict in pod_data.get('items', []):
-            pod_name = pod_dict['metadata']['name']
-            output = ocp_pod.get_logs(pod_name)
-            if len(output) == 0:
-                logger.error(
-                    "Container log from pod '%s' is empty.", pod_name)
-            else:
-                logger.error(
-                    "Container log from pod '%s' follows:\n%s",
-                    pod_name,
-                    output
+            try:
+                pod_name = pod_dict['metadata']['name']
+                output = ocp_pod.get_logs(pod_name)
+                if len(output) == 0:
+                    logger.error(
+                        "Container log from pod '%s' is empty.", pod_name)
+                else:
+                    logger.error(
+                        "Container log from pod '%s' follows:\n%s",
+                        pod_name,
+                        output
+                    )
+            except Exception:
+                logger.exception(
+                    "Container log from pod '%s' failed to be fetched.",
+                    pod_name
                 )
         # reraise the exception
         raise(ex)
