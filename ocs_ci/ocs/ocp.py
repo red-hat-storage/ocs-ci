@@ -1217,6 +1217,9 @@ def wait_for_cluster_connectivity(tries=200, delay=3):
     Returns:
         bool: True if cluster is reachable, False otherwise
 
+    Raises:
+        CommandFailed: In case the cluster is unreachable
+
     """
     service = OCP()
     log.info("Waiting for cluster connectivity")
