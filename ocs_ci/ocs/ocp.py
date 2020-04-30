@@ -1204,3 +1204,25 @@ def verify_ocp_upgrade_channel(
         log.info(f"Required subscription channel is {channel_variable}")
 
         return False
+
+
+def wait_for_cluster_connectivity(tries=200, delay=3):
+    """
+    Wait for the cluster to be reachable
+
+    Args:
+        tries (int): The number of retries
+        delay (int): The delay in seconds between retries
+
+    Returns:
+        bool: True if cluster is reachable, False otherwise
+
+    Raises:
+        CommandFailed: In case the cluster is unreachable
+
+    """
+    service = OCP()
+    log.info("Waiting for cluster connectivity")
+    return retry(
+        CommandFailed, tries=tries, delay=delay, backoff=1
+    )(service.get)
