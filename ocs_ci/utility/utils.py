@@ -1124,17 +1124,17 @@ def parse_pgsql_logs(data):
     Returns:
         list_data (list): data digestable by scripts with below format
             e.g.:
-                [{1: {'num_clients': '2', 'num_threads': '7',
-                 'latency_avg': '7', 'lat_stddev': '0', 'tps_incl': '234',
-                  'tps_excl': '243'},
-                  {2: {'num_clients': '2', 'num_threads': '7',
-                 'latency_avg': '7', 'lat_stddev': '0', 'tps_incl': '234',
-                  'tps_excl': '243'},
-                   {3: {'num_clients': '2', 'num_threads': '7',
-                 'latency_avg': '7', 'lat_stddev': '0', 'tps_incl': '234',
-                  'tps_excl': '243'}
-                  ]
+
+                [
+                {1: {'num_clients': '2','num_threads': '7','latency_avg': '7',
+                'lat_stddev': '0', 'tps_incl': '234', 'tps_excl': '243'},
+                {2: {'num_clients': '2','num_threads': '7','latency_avg': '7',
+                'lat_stddev': '0', 'tps_incl': '234', 'tps_excl': '243'},
+                {3: {'num_clients': '2','num_threads': '7','latency_avg': '7',
+                'lat_stddev': '0', 'tps_incl': '234', 'tps_excl': '243'},
+                ]
                 where keys{1,2,3} are run-IDs
+
     """
     match = data.split("PGBench Results")
     list_data = []
