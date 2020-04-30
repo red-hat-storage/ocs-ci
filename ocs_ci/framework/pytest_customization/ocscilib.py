@@ -382,3 +382,12 @@ def pytest_runtest_makereport(item, call):
             call.start,
             call.stop
         )
+
+    # Get the performance metrics when tests fails for scale or performance tag
+    from tests.helpers import collect_performance_stats
+    if (
+        (rep.when == "setup" or rep.when == "call")
+        and rep.failed
+        and (item.get_closest_marker('scale') or item.get_closest_marker('performance'))
+    ):
+        collect_performance_stats()
