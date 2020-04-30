@@ -67,11 +67,11 @@ class AMQ(object):
                 cwd=self.dir,
                 check=True
             )
-            self.amq_dir = "ocs-workloads/amq/v1/install/cluster-operator"
-            self.amq_dir_examples = "ocs-workloads/amq/v1/examples/templates/cluster-operator"
-            self.amq_kafka_pers_yaml = "ocs-workloads/amq/v1/kafka-persistent.yaml"
-            self.amq_kafka_connect_yaml = "ocs-workloads/amq/v1/kafka-connect.yaml"
-            self.amq_kafka_bridge_yaml = "ocs-workloads/amq/v1/kafka-bridge.yaml"
+            self.amq_dir = "ocs-workloads/amq/v2/install/cluster-operator"
+            self.amq_dir_examples = "ocs-workloads/amq/v2/examples/templates/cluster-operator"
+            self.amq_kafka_pers_yaml = "ocs-workloads/amq/v2/kafka-persistent.yaml"
+            self.amq_kafka_connect_yaml = "ocs-workloads/amq/v2/kafka-connect.yaml"
+            self.amq_kafka_bridge_yaml = "ocs-workloads/amq/v2/kafka-bridge.yaml"
 
         except (CommandFailed, CalledProcessError)as cf:
             log.error('Error during cloning of amq repository')
