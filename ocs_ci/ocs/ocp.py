@@ -1191,7 +1191,7 @@ def verify_ocp_upgrade_channel(
 
     Returns:
         bool: True when OCP subscription channel is correct,
-        and no patch needed
+            and no patch needed
 
     """
     current_channel = get_ocp_upgrade_channel()
