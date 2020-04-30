@@ -930,8 +930,7 @@ def get_pod_logs(pod_name, container=None, namespace=defaults.ROOK_CLUSTER_NAMES
     pod_name (str): Name of the pod
     container (str): Name of the container
     namespace (str): Namespace of the pod
-    previous (bool): True, if pod previous log required.
-                     False otherwise.
+    previous (bool): True, if pod previous log required. False otherwise.
 
     Returns:
         str: Output from 'oc get logs <pod_name> command
