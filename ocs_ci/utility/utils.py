@@ -1228,7 +1228,7 @@ def get_testrun_name():
             f"{config.ENV_DATA.get('deployment_type', '').upper()} "
         )
         if baremetal_config:
-            testrun_name = f"{baremetal_config} {testrun_name}"
+            testrun_name = f"LSO {baremetal_config} {testrun_name}"
 
         testrun_name = (
             f"{testrun_name}"
