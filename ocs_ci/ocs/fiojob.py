@@ -313,7 +313,8 @@ def workload_fio_storageutilization(
     Args:
         fixture_name (str): name of the fixture using this function (for
             logging and k8s object labeling purposes)
-        project (): project in which the Job is deployed
+        project (ocs_ci.ocs.ocp.OCP): OCP object of project in which the Job is
+            deployed, as created by ``project_factory`` or ``project`` fixture
         fio_pvc_dict (dict): PVC k8s struct for fio target volume
         fio_job_dict (dict): Job k8s struct for fio job
         fio_configmap_dict (dict): configmap k8s struct with fio config file
