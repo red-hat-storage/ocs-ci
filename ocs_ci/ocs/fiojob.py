@@ -148,6 +148,7 @@ def wait_for_job_completion(namespace, timeout, error_msg):
         ocp_pod.wait_for_resource(
             resource_count=1,
             condition=constants.STATUS_COMPLETED,
+            error_condition=constants.STATUS_ERROR,
             timeout=timeout,
             sleep=30
         )
