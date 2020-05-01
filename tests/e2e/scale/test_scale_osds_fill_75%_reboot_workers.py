@@ -27,8 +27,12 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[
-        pytest.param(constants.CEPHBLOCKPOOL),
-        pytest.param(constants.CEPHFILESYSTEM)
+        pytest.param(
+            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-XXXX")
+        ),
+        pytest.param(
+            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-XXXX")
+        )
     ]
 )
 class TestScaleOSDsRebootNodes(E2ETest):
@@ -60,7 +64,9 @@ class TestScaleOSDsRebootNodes(E2ETest):
                 for pvc_obj in pvc_objs:
                     dc_pod_objs.append(dc_pod_factory(pvc=pvc_obj))
 
-                wait_for_dc_app_pods_to_reach_running_state(dc_pod_objs)
+                wait_for_dc_app_pods_to_reach_running_state(
+                    dc_pod_objs, timeout=1200
+                )
 
                 for pod_obj in dc_pod_objs:
                     pod_obj.run_io(

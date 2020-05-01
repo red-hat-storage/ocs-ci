@@ -359,7 +359,9 @@ class TestNodesMaintenance(ManageTest):
 
         # DC app pods on the drained node will get automatically created on other
         # running node in same AZ. Waiting for all dc app pod to reach running state
-        pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj)
+        pod.wait_for_dc_app_pods_to_reach_running_state(
+            dc_pod_obj, timeout=1200
+        )
         log.info("All the dc pods reached running state")
 
         # Remove unscheduled nodes

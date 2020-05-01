@@ -1243,12 +1243,14 @@ def get_noobaa_pods(noobaa_label=constants.NOOBAA_APP_LABEL, namespace=None):
     return noobaa_pods
 
 
-def wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj):
+def wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj, timeout=120):
     """
     Wait for DC app pods to reach running state
 
     Args:
         dc_pod_obj (list): list of dc app pod objects
+        timeout (int): Timeout in seconds to wait for pods to be in Running
+            state.
 
     """
     for pod_obj in dc_pod_obj:
@@ -1257,5 +1259,5 @@ def wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj):
         for dpod in dpod_list:
             if '-1-deploy' not in dpod.name:
                 helpers.wait_for_resource_state(
-                    dpod, constants.STATUS_RUNNING, timeout=1200
+                    dpod, constants.STATUS_RUNNING, timeout=timeout
                 )

@@ -421,7 +421,7 @@ def wait_for_new_node_to_be_ready(machine_set):
     replica_count = get_replica_count(machine_set)
     try:
         for timer in TimeoutSampler(
-                300, 100, get_ready_replica_count, machine_set=machine_set
+                300, 15, get_ready_replica_count, machine_set=machine_set
         ):
             if replica_count == timer:
                 log.info("New spun node reached Ready state")
