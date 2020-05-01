@@ -102,7 +102,7 @@ def cleanup(cluster_name, cluster_id, upi=False):
         destroy_cluster(installer=oc_bin, cluster_path=cleanup_path)
 
 
-def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare):
+def get_clusters(time_to_delete, region_name, prefixes_hours_to_spare):
     """
     Get all cluster names that their EC2 instances running time is greater
     than the specified time to delete
@@ -117,7 +117,8 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
 
     Returns:
         tuple: List of the cluster names (e.g ebenahar-cluster-gqtd4) to be provided to the
-            ci-cleanup script and a list of VPCs that are part of cloudformations
+            ci-cleanup script, a list of VPCs that are part of cloudformation,
+            and a list of remaining clusters
 
     """
     def determine_cluster_deletion(ec2_instances, cluster_name):
@@ -154,6 +155,7 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
 
     aws = AWS(region_name=region_name)
     clusters_to_delete = list()
+    remaining_clusters = list()
     cloudformation_vpc_names = list()
     vpcs = aws.ec2_client.describe_vpcs()['Vpcs']
     vpc_ids = [vpc['VpcId'] for vpc in vpcs]
@@ -180,6 +182,8 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
             # Append to clusters_to_delete if cluster should be deleted
             if determine_cluster_deletion(vpc_instances, cluster_name):
                 clusters_to_delete.append(cluster_name)
+            else:
+                remaining_clusters.append(cluster_name)
         else:
             logger.info("No tags found for VPC")
 
@@ -208,8 +212,10 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
         cluster_name = cluster_io_tag[0].replace('kubernetes.io/cluster/', '')
         if determine_cluster_deletion(ec2_instances, cluster_name):
             cf_clusters_to_delete.append(cluster_name)
+        else:
+            remaining_clusters.append(cluster_name)
 
-    return clusters_to_delete, cf_clusters_to_delete
+    return clusters_to_delete, cf_clusters_to_delete, remaining_clusters
 
 
 def cluster_cleanup():
@@ -309,8 +315,8 @@ def aws_cleanup():
 
     time_to_delete = args.hours * 60 * 60
     region = defaults.AWS_REGION if not args.region else args.region
-    clusters_to_delete, cf_clusters_to_delete = (
-        get_clusters_to_delete(
+    clusters_to_delete, cf_clusters_to_delete, remaining_clusters = (
+        get_clusters(
             time_to_delete=time_to_delete, region_name=region,
             prefixes_hours_to_spare=prefixes_hours_to_spare,
         )
@@ -338,6 +344,7 @@ def aws_cleanup():
         procs.append(proc)
     for p in procs:
         p.join()
+    logger.info("Remaining clusters: %s", remaining_clusters)
 
 
 def prefix_hour_mapping(string):
