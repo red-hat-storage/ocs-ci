@@ -1,4 +1,4 @@
 ---
 #This config file holds the disk size in GB for production environments.
 ENV_DATA:
-  device_size: '512'
+  device_size: '180'
