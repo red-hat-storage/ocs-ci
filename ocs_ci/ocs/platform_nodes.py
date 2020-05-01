@@ -45,7 +45,6 @@ class NodesBase(object):
 
     """
     def __init__(self):
-        self.cluster_nodes = get_node_objs()
         self.cluster_path = config.ENV_DATA['cluster_path']
         self.platform = config.ENV_DATA['platform']
         self.deployment_type = config.ENV_DATA['deployment_type']
@@ -288,6 +287,7 @@ class VMWareNodes(NodesBase):
         Make sure all VMs are up by the end of the test
 
         """
+        self.cluster_nodes = get_node_objs()
         vms = self.get_vms(self.cluster_nodes)
         assert vms, (
             f"Failed to get VM objects for nodes {[n.name for n in self.cluster_nodes]}"
@@ -379,16 +379,17 @@ class AWSNodes(NodesBase):
         )
         self.aws.stop_ec2_instances(instances=instances, wait=wait)
 
-    def start_nodes(self, nodes, wait=True):
+    def start_nodes(self, instances, nodes, wait=True):
         """
         Start EC2 instances
 
         Args:
             nodes (list): The OCS objects of the nodes
+            instances (dict): instance-id and name dict
             wait (bool): True for waiting the instances to start, False otherwise
 
         """
-        instances = self.get_ec2_instances(nodes)
+        instances = instances or self.get_ec2_instances(nodes)
         assert instances, (
             f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
         )
