@@ -567,7 +567,63 @@ class AWSNodes(NodesBase):
             node_list.append(node_cls(node_conf, node_type))
             node_list[-1]._prepare_node(node_id)
 
+        # Make sure that csr is approved for all the nodes
+        # not making use of csr.py functions as aws rhcos has long
+        # delays for csr to appear
+        self.approve_all_nodes_csr(node_list)
+
         return node_list
+
+    @retry(
+        (exceptions.PendingCSRException, exceptions.TimeoutExpiredError),
+        tries=4,
+        delay=10,
+        backoff=1
+    )
+    def approve_all_nodes_csr(self, node_list):
+        """
+        Make sure that all the newly added nodes are in approved csr state
+
+        Args:
+            node_list (list): of AWSUPINode/AWSIPINode objects
+
+        """
+        node_names = [
+            node.aws_instance_obj.private_dns_name for node in node_list
+        ]
+
+        sample = TimeoutSampler(
+            timeout=600, sleep=3, func=self.all_nodes_found,
+            node_names=node_names
+        )
+        if not sample.wait_for_func_status(result=True):
+            raise exceptions.PendingCSRException(
+                "All nodes csr not approved"
+            )
+
+    def all_nodes_found(self, node_names):
+        """
+        Relying on oc get nodes -o wide to confirm that
+        node is added to cluster
+
+        Args:
+            node_names (list): of node names as string
+
+        """
+        approve_pending_csr()
+        get_nodes_cmd = "get nodes -o wide"
+        oc_obj = ocp.OCP()
+        nodes_wide_out = oc_obj.exec_oc_cmd(
+            get_nodes_cmd, out_yaml_format=False
+        )
+        for line in nodes_wide_out.splitlines():
+            for node in node_names:
+                if node in line:
+                    node_names.remove(node)
+                    break
+        if node_names:
+            logger.warning("Some of the nodes have not appeared in nodes list")
+        return not node_names
 
     def get_available_slots(self, existing_indexes, required_slots):
         """
@@ -935,6 +991,7 @@ class AWSUPINode(AWSNodes):
         )
 
         delete_file(worker_template_path)
+        self.aws.delete_s3_object(self.bucket_name, self.template_obj_key)
         return self.aws.get_ec2_instance(instance_id)
 
     def build_stack_params(self, index, conf):
@@ -1035,13 +1092,9 @@ class AWSUPINode(AWSNodes):
         assert os.path.exists(worker_ignition_path)
         with open(worker_ignition_path, "r") as fp:
             content = json.loads(fp.read())
-            cert_content = (
-                content.get
-                ('ignition').get
-                ('security').get
-                ('tls').get
-                ('certificateAuthorities')[0].get
-                ('source')
+            tls_data = content.get('ignition').get('security').get('tls')
+            cert_content = tls_data.get('certificateAuthorities')[0].get(
+                'source'
             )
             formatted_cert = cert_content.split(',')[1]
         return formatted_cert

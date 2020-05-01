@@ -759,6 +759,19 @@ class AWS(object):
             ExtraArgs={'ACL': 'public-read'}
         )
 
+    def delete_s3_object(self, bucket_name, object_key):
+        """
+        Delete an object from s3 bucket
+
+        Args:
+            bucket_name (str): name of a valid s3 bucket
+            object_key (str): the key for s3 object
+
+        """
+        self.s3_client.meta.client.delete_object(
+            Bucket=bucket_name, Key=object_key
+        )
+
     def get_s3_bucket_object_url(self, bucket_name, object_key):
         """
         Get s3 bucket object url
