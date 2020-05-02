@@ -933,7 +933,8 @@ def email_reports():
     msg['To'] = ", ".join(recipients)
 
     html = config.RUN['cli_params']['--html']
-    html_data = open(os.path.expanduser(html)).read()
+    with open(os.path.expanduser(html)) as fd:
+        html_data = fd.read()
     soup = BeautifulSoup(html_data, "html.parser")
 
     parse_html_for_email(soup)
@@ -1231,6 +1232,12 @@ def get_testrun_name():
     ocs_version_string = f"OCS{ocs_version}" if ocs_version else ''
     worker_os = 'RHEL' if config.ENV_DATA.get('rhel_workers') else 'RHCOS'
     build_user = None
+    baremetal_config = None
+    if config.ENV_DATA.get('mon_type'):
+        baremetal_config = (
+            f"MON {config.ENV_DATA.get('mon_type').upper()} "
+            f"OSD {config.ENV_DATA.get('osd_type').upper()}"
+        )
 
     if config.REPORTING.get('display_name'):
         testrun_name = config.REPORTING.get('display_name')
@@ -1239,6 +1246,12 @@ def get_testrun_name():
         testrun_name = (
             f"{config.ENV_DATA.get('platform', '').upper()} "
             f"{config.ENV_DATA.get('deployment_type', '').upper()} "
+        )
+        if baremetal_config:
+            testrun_name = f"LSO {baremetal_config} {testrun_name}"
+
+        testrun_name = (
+            f"{testrun_name}"
             f"{get_az_count()}AZ "
             f"{worker_os} "
             f"{config.ENV_DATA.get('master_replicas')}M "

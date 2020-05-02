@@ -154,6 +154,7 @@ DEFAULT_NOOBAA_BACKINGSTORE = "noobaa-default-backing-store"
 RIPSAW_NAMESPACE = "my-ripsaw"
 RIPSAW_CRD = "resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml"
 
+
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f'{DEFAULT_CLUSTERNAME}-cephfs'
 DEFAULT_STORAGECLASS_RBD = f'{DEFAULT_CLUSTERNAME}-ceph-rbd'
@@ -777,3 +778,8 @@ OCS_PROVISIONERS = [
     'openshift-storage.cephfs.csi.ceph.com',
     'openshift-storage.noobaa.io/obc'
 ]
+
+# Bucket Policy action lists
+bucket_website_action_list = ['PutBucketWebsite', 'GetBucketWebsite', 'PutObject']
+bucket_version_action_list = ['PutBucketVersioning', 'GetBucketVersioning']
+object_version_action_list = ['PutObject', 'GetObjectVersion', 'DeleteObjectVersion']

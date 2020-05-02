@@ -10,6 +10,7 @@ from subprocess import TimeoutExpired, run, PIPE
 import tempfile
 import time
 import yaml
+import json
 import threading
 
 from ocs_ci.ocs.ocp import OCP
@@ -109,7 +110,7 @@ def create_pod(
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
     raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1,
-    pod_name=None, node_selector=None
+    pod_name=None, node_selector=None, deploy_pod_status=constants.STATUS_COMPLETED
 ):
     """
     Create a pod
@@ -129,6 +130,8 @@ def create_pod(
         pod_name (str): Name of the pod to create
         node_selector (dict): dict of key-value pair to be used for nodeSelector field
             eg: {'nodetype': 'app-pod'}
+        deploy_pod_status (str): Expected status of deploy pod. Applicable
+            only if dc_deployment is True
 
     Returns:
         Pod: A Pod instance
@@ -202,7 +205,7 @@ def create_pod(
         ocs_obj = create_resource(**pod_data)
         logger.info(ocs_obj.name)
         assert (ocp.OCP(kind='pod', namespace=namespace)).wait_for_resource(
-            condition=constants.STATUS_COMPLETED,
+            condition=deploy_pod_status,
             resource_name=pod_name + '-1-deploy',
             resource_count=0, timeout=180, sleep=3
         )
@@ -2113,3 +2116,56 @@ def modify_osd_replica_count(resource_name, replica_count):
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     resource_name = '-'.join(resource_name.split('-')[0:4])
     return ocp_obj.patch(resource_name=resource_name, params=params)
+
+
+def collect_performance_stats():
+    """
+    Collect performance stats and saves them in file in json format.
+
+    Performance stats include:
+        IOPs and throughput percentage of cluster
+        CPU, memory consumption of each nodes
+
+    """
+    from ocs_ci.ocs.cluster import CephCluster
+
+    log_dir_path = os.path.join(
+        os.path.expanduser(config.RUN['log_dir']),
+        f"failed_testcase_ocs_logs_{config.RUN['run_id']}",
+        "performance_stats"
+    )
+    if not os.path.exists(log_dir_path):
+        logger.info(f'Creating directory {log_dir_path}')
+        os.makedirs(log_dir_path)
+
+    ceph_obj = CephCluster()
+    performance_stats = {}
+
+    # Get iops and throughput percentage of cluster
+    iops_percentage = ceph_obj.get_iops_percentage()
+    throughput_percentage = ceph_obj.get_throughput_percentage()
+
+    # ToDo: Get iops and throughput percentage of each nodes
+
+    # Get the cpu and memory of each nodes from adm top
+    master_node_utilization_from_adm_top = \
+        node.get_node_resource_utilization_from_adm_top(node_type='master')
+    worker_node_utilization_from_adm_top = \
+        node.get_node_resource_utilization_from_adm_top(node_type='worker')
+
+    # Get the cpu and memory from describe of nodes
+    master_node_utilization_from_oc_describe = \
+        node.get_node_resource_utilization_from_oc_describe(node_type='master')
+    worker_node_utilization_from_oc_describe = \
+        node.get_node_resource_utilization_from_oc_describe(node_type='worker')
+
+    performance_stats['iops_percentage'] = iops_percentage
+    performance_stats['throughput_percentage'] = throughput_percentage
+    performance_stats['master_node_utilization'] = master_node_utilization_from_adm_top
+    performance_stats['worker_node_utilization'] = worker_node_utilization_from_adm_top
+    performance_stats['master_node_utilization_from_oc_describe'] = master_node_utilization_from_oc_describe
+    performance_stats['worker_node_utilization_from_oc_describe'] = worker_node_utilization_from_oc_describe
+
+    file_name = os.path.join(log_dir_path, 'performance')
+    with open(file_name, 'w') as outfile:
+        json.dump(performance_stats, outfile)

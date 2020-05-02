@@ -24,6 +24,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
 from ocs_ci.ocs import defaults, constants
+from ocs_ci.framework import config
 
 
 log = logging.getLogger(__name__)
@@ -1094,15 +1095,134 @@ def verify_cluster_operator_status(cluster_operator):
     operator_data = ocp.get(
         resource_name=f'{cluster_operator} -o json', out_yaml_format=False
     )
-    # operator_data = json.loads(oc_json)
     conditions = operator_data['status']['conditions']
     for condition in conditions:
         if condition['type'] == 'Degraded' and condition['status'] == 'True':
             log.info(f'{cluster_operator} status is Degraded')
             return False
-        if condition['type'] == 'Progressing' and condition['status'] == 'True':
+        elif condition['type'] == 'Progressing' and condition['status'] == 'True':
             log.info(f'{cluster_operator} status is Progressing')
             return False
     log.info(f'{cluster_operator} status is valid')
 
     return True
+
+
+def validate_cluster_version_status():
+    """
+    Verify OCP upgrade is completed, by checking 'oc get clusterversion'
+    status
+
+    Returns:
+        bool: False in case that one of condition flags is invalid:
+            Progressing (should be False), Failing(should be False)
+            or Available (should be True)
+
+    """
+    ocp = OCP(kind="clusterversion")
+    operator_data = ocp.get('-o json', out_yaml_format=False)
+    conditions = operator_data['items'][0].get('status').get('conditions', [])
+    for condition in conditions:
+        if condition['type'] == 'Progressing' and condition['status'] == 'True':
+            log.info('cluster version status is Progressing')
+            return False
+        elif condition['type'] == 'Failing' and condition['status'] == 'True':
+            log.info('cluster version status is Failing')
+            return False
+        elif condition['type'] == 'Available' and condition['status'] != 'True':
+            log.info('cluster status is not available')
+            return False
+
+    log.info('Cluster version validation - OK!')
+    return True
+
+
+def get_ocp_upgrade_channel():
+    """
+    Gets OCP upgrade channel
+
+    Returns:
+        str: OCP upgrade channel name
+
+    """
+    ocp = OCP(kind="clusterversion")
+    log.info("Gathering Subscription Channel information")
+    operator_version = ocp.get('-o json', out_yaml_format=False)
+    log.debug(f"cluster version: {operator_version}")
+    channel = operator_version['items'][0].get('spec').get('channel')
+    log.info(f"Subscription Channel: {channel}")
+
+    return channel
+
+
+def patch_ocp_upgrade_channel(
+    channel_variable=config.UPGRADE['ocp_channel']
+):
+    """
+    Using 'oc patch clusterversion' if new OCP upgrade channel is
+    different than current one
+
+    Args:
+        channel_variable (str): New OCP upgrade subscription channel
+
+    """
+    if get_ocp_upgrade_channel() != channel_variable:
+        cmd = (
+            f'patch clusterversions/version -p \'{{"spec":'
+            f'{{"channel":"{channel_variable}"}}}}\' --type=merge'
+        )
+        ocp = OCP()
+        log.info(f"Patching channel into {channel_variable}")
+        ocp.exec_oc_cmd(cmd)
+
+    else:
+        log.info("No patch needed")
+
+
+def verify_ocp_upgrade_channel(
+    channel_variable=config.UPGRADE['ocp_channel']
+):
+    """
+    When upgrade OCP version, verify that subscription channel is same
+    as current one
+
+    Args:
+        channel_variable (str): New OCP upgrade subscription channel
+
+    Returns:
+        bool: True when OCP subscription channel is correct,
+            and no patch needed
+
+    """
+    current_channel = get_ocp_upgrade_channel()
+    if current_channel == channel_variable:
+        log.info(f"Channel is {channel_variable}, no patch required")
+
+        return True
+    else:
+        log.info(f"Current subscription channel is  {current_channel}")
+        log.info(f"Required subscription channel is {channel_variable}")
+
+        return False
+
+
+def wait_for_cluster_connectivity(tries=200, delay=3):
+    """
+    Wait for the cluster to be reachable
+
+    Args:
+        tries (int): The number of retries
+        delay (int): The delay in seconds between retries
+
+    Returns:
+        bool: True if cluster is reachable, False otherwise
+
+    Raises:
+        CommandFailed: In case the cluster is unreachable
+
+    """
+    service = OCP()
+    log.info("Waiting for cluster connectivity")
+    return retry(
+        CommandFailed, tries=tries, delay=delay, backoff=1
+    )(service.get)

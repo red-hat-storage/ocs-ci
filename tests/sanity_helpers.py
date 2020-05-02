@@ -1,6 +1,7 @@
 import logging
 
 from ocs_ci.framework import config
+from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.utility.utils import ceph_health_check
@@ -28,6 +29,7 @@ class Sanity:
         """
         Perform Ceph and cluster health checks
         """
+        wait_for_cluster_connectivity()
         logger.info("Checking cluster and Ceph health")
         node.wait_for_nodes_status()
 

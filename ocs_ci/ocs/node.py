@@ -68,6 +68,19 @@ def get_typed_nodes(node_type='worker', num_of_nodes=None):
     return typed_nodes
 
 
+def get_all_nodes():
+    """
+    Gets the all nodes in cluster
+
+    Returns:
+        list: List of node name
+
+    """
+    ocp_node_obj = ocp.OCP(kind=constants.NODE)
+    node_items = ocp_node_obj.get().get('items')
+    return [node['metadata']['name'] for node in node_items]
+
+
 def wait_for_nodes_status(
     node_names=None, status=constants.NODE_READY, timeout=180
 ):
@@ -318,6 +331,12 @@ def get_node_resource_utilization_from_adm_top(nodename=None, node_type='worker'
     node_names = [nodename] if nodename else [
         node.name for node in get_typed_nodes(node_type=node_type)
     ]
+
+    # Validate node is in Ready state
+    wait_for_nodes_status(
+        node_names, status=constants.NODE_READY, timeout=30
+    )
+
     obj = ocp.OCP()
     resource_utilization_all_nodes = obj.exec_oc_cmd(
         command='adm top nodes', out_yaml_format=False
