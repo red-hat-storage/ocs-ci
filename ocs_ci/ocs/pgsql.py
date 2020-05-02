@@ -84,7 +84,8 @@ class Postgresql(RipSaw):
 
     def create_pgbench_benchmark(
         self, replicas, clients=None, threads=None,
-        transactions=None, scaling_factor=None
+        transactions=None, scaling_factor=None,
+        timeout=None
     ):
         """
         Create pgbench benchmark pods
@@ -95,6 +96,7 @@ class Postgresql(RipSaw):
             threads (int): Number of threads
             transactions (int): Number of transactions
             scaling_factor (int): scaling factor
+            timeout (int): Time in seconds to wait
 
         """
         for i in range(replicas):
@@ -122,8 +124,9 @@ class Postgresql(RipSaw):
 
         # Confirm that expected pgbench pods are spinned
         log.info("Checking if Getting pgbench pods name")
+        timeout = timeout if timeout else 300
         for pgbench_pods in TimeoutSampler(
-            3600, replicas, get_pod_name_by_pattern,
+            timeout, replicas, get_pod_name_by_pattern,
             'pgbench-1-dbs-client', RIPSAW_NAMESPACE
         ):
             try:
@@ -213,7 +216,7 @@ class Postgresql(RipSaw):
             timeout (int): Time in seconds to wait
 
         """
-        timeout = timeout if timeout else 43200
+        timeout = timeout if timeout else 1200
         # Wait for pg_bench pods to initialized and running
         log.info(f"Waiting for pgbench pods to be reach {status} state")
         pgbench_pod_objs = self.get_pgbench_pods()

@@ -58,7 +58,9 @@ class TestPgSQLCephPodRespin(E2ETest):
         Test pgsql workload
         """
         # Create pgbench benchmark
-        pgsql.create_pgbench_benchmark(replicas=3, transactions=transactions)
+        pgsql.create_pgbench_benchmark(
+            replicas=3, transactions=transactions, clients=3
+        )
 
         # Wait for pgbench pod to reach running state
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)

@@ -32,7 +32,7 @@ class TestPgSQLWorkload(E2ETest):
         pgsql.setup_postgresql(replicas=3)
 
         # Create pgbench benchmark
-        pgsql.create_pgbench_benchmark(replicas=3)
+        pgsql.create_pgbench_benchmark(replicas=3, clients=3)
 
         # Wait for pg_bench pod to initialized and complete
         pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
