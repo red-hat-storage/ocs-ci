@@ -570,7 +570,8 @@ class AWSNodes(NodesBase):
         # Make sure that csr is approved for all the nodes
         # not making use of csr.py functions as aws rhcos has long
         # delays for csr to appear
-        self.approve_all_nodes_csr(node_list)
+        if node_type.upper() == 'RHCOS':
+            self.approve_all_nodes_csr(node_list)
 
         return node_list
 
