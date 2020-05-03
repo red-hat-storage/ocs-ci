@@ -1286,11 +1286,13 @@ def wait_for_dc_app_pods_to_reach_running_state(
 def get_draincanary_pods(draincanary_label=constants.DRAIN_CANARY_APP_LABEL, namespace=None):
     """
     Fetches info about draincanary pods in the cluster
+
     Args:
         draincanary_label (str): label associated with draincanary pods
             (default: constants.DRAIN_CANARY_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
             (default: None)
+
     Returns:
         list : of draincanary pod objects
     """
