@@ -4,7 +4,8 @@ import random
 
 from ocs_ci.ocs import node, constants
 from ocs_ci.framework.testlib import (
-    tier4, tier4b, ignore_leftovers, ManageTest, aws_platform_required, vsphere_platform_required
+    tier4, tier4b, ignore_leftovers, ManageTest, aws_platform_required,
+    vsphere_platform_required, bugzilla
 )
 from tests.sanity_helpers import Sanity
 from tests.helpers import wait_for_ct_pod_recovery
@@ -141,6 +142,7 @@ class TestDiskFailures(ManageTest):
         self.sanity_helpers.health_check()
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
 
+    @bugzilla('1830702')
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2172")
     def test_recovery_from_volume_deletion(self, nodes, pvc_factory, pod_factory):
