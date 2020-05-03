@@ -13,7 +13,6 @@ log = logging.getLogger(__name__)
 @deployment
 @polarion_id(get_deployment_polarion_id())
 def test_deployment(pvc_factory, pod_factory):
-    sanity_helpers = Sanity()
     deploy = config.RUN['cli_params'].get('deploy')
     teardown = config.RUN['cli_params'].get('teardown')
     if not teardown or deploy:
@@ -24,6 +23,8 @@ def test_deployment(pvc_factory, pod_factory):
             # Check basic cluster functionality by creating resources
             # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
             # run IO and delete the resources
+            sanity_helpers = Sanity()
+            sanity_helpers.health_check()
             sanity_helpers.create_resources(pvc_factory, pod_factory)
             sanity_helpers.delete_resources()
 
