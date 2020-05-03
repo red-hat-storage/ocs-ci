@@ -641,7 +641,9 @@ def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=False):
         # Hence, catching this exception
         except CommandFailed as ex:
             if expect_to_fail:
-                if re.search("code 137", str(ex)):
+                if re.search("code 137", str(ex)) or (
+                    re.search("code 143", str(ex))
+                ):
                     logger.info("I/O command got terminated as expected")
                     return
             raise ex
@@ -1244,7 +1246,9 @@ def get_noobaa_pods(noobaa_label=constants.NOOBAA_APP_LABEL, namespace=None):
     return noobaa_pods
 
 
-def wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj, timeout=120):
+def wait_for_dc_app_pods_to_reach_running_state(
+    dc_pod_obj, timeout=120, exclude_state=None
+):
     """
     Wait for DC app pods to reach running state
 
@@ -1252,13 +1256,14 @@ def wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj, timeout=120):
         dc_pod_obj (list): list of dc app pod objects
         timeout (int): Timeout in seconds to wait for pods to be in Running
             state.
+        exclude_state (str): A resource state to ignore
 
     """
     for pod_obj in dc_pod_obj:
         name = pod_obj.get_labels().get('name')
         dpod_list = get_all_pods(selector_label=f"name={name}", wait=True)
         for dpod in dpod_list:
-            if '-1-deploy' not in dpod.name:
+            if '-1-deploy' not in dpod.name and dpod.status != exclude_state:
                 helpers.wait_for_resource_state(
                     dpod, constants.STATUS_RUNNING, timeout=timeout
                 )

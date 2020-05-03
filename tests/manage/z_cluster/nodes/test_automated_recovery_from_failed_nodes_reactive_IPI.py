@@ -1,8 +1,9 @@
 import logging
 import pytest
 from ocs_ci.framework.testlib import (
-    tier4, tier4b, ManageTest, aws_platform_required,
-    ipi_deployment_required, ignore_leftovers)
+    tier4, tier4a, tier4b, ManageTest, aws_platform_required,
+    ipi_deployment_required, ignore_leftovers
+)
 from ocs_ci.ocs import machine, constants, defaults, ocp
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import get_all_pods, get_osd_pods, get_pod_node
@@ -10,11 +11,12 @@ from ocs_ci.utility.utils import ceph_health_check
 from tests.sanity_helpers import Sanity
 from tests.helpers import (
     get_worker_nodes, label_worker_node, remove_label_from_worker_node,
-    wait_for_resource_state)
+    wait_for_resource_state
+)
 from ocs_ci.ocs.node import (
     get_osd_running_nodes, get_app_pod_running_nodes,
     get_both_osd_and_app_pod_running_node, get_node_objs,
-    add_new_node_and_label_it, get_typed_nodes
+    add_new_node_and_label_it
 )
 from tests import helpers
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
@@ -42,6 +44,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             remove_label_from_worker_node(worker_nodes, label_key="dc")
             for thread in self.threads:
                 thread.join()
+            ceph_health_check()
 
         request.addfinalizer(finalizer)
 
@@ -155,7 +158,9 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         try:
             # DC app pods on the failed node will get automatically created on other
             # running node. Waiting for all dc app pod to reach running state
-            pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj)
+            pod.wait_for_dc_app_pods_to_reach_running_state(
+                dc_pod_obj, timeout=720
+            )
             log.info("All the dc pods reached running state")
 
             # Check all OCS pods status, they should be in running state
@@ -164,26 +169,25 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             )
             for pod_obj in all_pod_obj:
                 if '-1-deploy' and 'ocs-deviceset' not in pod_obj.name:
-                    try:
-                        helpers.wait_for_resource_state(
-                            resource=pod_obj, state=constants.STATUS_RUNNING,
-                            timeout=60
-                        )
-                    except ResourceWrongStatusException:
-                        # 'rook-ceph-crashcollector' on the failed node stucks at
-                        # pending state. BZ 1810014 tracks it.
-                        # Ignoring 'rook-ceph-crashcollector' pod health check as
-                        # WA and deleting its deployment so that the pod
-                        # disappears. Will revert this WA once the BZ is fixed
-                        if 'rook-ceph-crashcollector' in pod_obj.name:
-                            ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-                            pod_name = pod_obj.name
-                            deployment_name = '-'.join(pod_name.split("-")[:-2])
-                            command = f"delete deployment {deployment_name}"
-                            ocp_obj.exec_oc_cmd(command=command)
-                            log.info(f"Deleted deployment for pod {pod_obj.name}")
-                        else:
-                            raise
+                    # 'rook-ceph-crashcollector' on the failed node stucks at
+                    # pending state. BZ 1810014 tracks it.
+                    # Ignoring 'rook-ceph-crashcollector' pod health check as
+                    # WA and deleting its deployment so that the pod
+                    # disappears. Will revert this WA once the BZ is fixed
+                    if 'rook-ceph-crashcollector' in pod_obj.name:
+                        ocp_obj = ocp.OCP(
+                            namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+                        pod_name = pod_obj.name
+                        deployment_name = '-'.join(pod_name.split("-")[:-2])
+                        command = f"delete deployment {deployment_name}"
+                        ocp_obj.exec_oc_cmd(command=command)
+                        log.info(f"Deleted deployment for pod {pod_obj.name}")
+                        continue
+
+                    helpers.wait_for_resource_state(
+                        resource=pod_obj, state=constants.STATUS_RUNNING,
+                        timeout=240
+                    )
         except ResourceWrongStatusException:
             if failure == "shutdown":
                 nodes.terminate_nodes(failure_node_obj, wait=True)
@@ -205,7 +209,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 
 @ignore_leftovers
 @tier4
-@tier4b
+@tier4a
 @aws_platform_required
 @ipi_deployment_required
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
@@ -251,11 +255,11 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
         argvalues=[
             pytest.param(
                 True,
-                marks=pytest.mark.polarion_id("OCS-XXXX"),
+                marks=pytest.mark.polarion_id("OCS-2191"),
             ),
             pytest.param(
                 False,
-                marks=pytest.mark.polarion_id("OCS-XXXX")
+                marks=pytest.mark.polarion_id("OCS-2190")
             ),
         ]
     )
@@ -276,7 +280,6 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
              A - pods should start on the new node
              B - pods should start on the stopped node after starting it
         """
-        ocp_pod = ocp.OCP(kind=constants.POD)
         temp_osd = get_osd_pods()[0]
         osd_real_name = "-".join(temp_osd.name.split("-")[:-1])
         self.osd_worker_node = [get_pod_node(temp_osd)]
@@ -295,20 +298,18 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
         all_pod_obj = get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
         new_osd = None
         for pod_obj in all_pod_obj:
-            if osd_real_name == "-".join(pod_obj.name.split("-")[:-1]):
-                if (
-                    ocp_pod.get_resource(pod_obj.name, 'STATUS') !=
-                    constants.STATUS_TERMINATING
-                ):
-                    new_osd = pod_obj
-                    break
+            if osd_real_name == "-".join(pod_obj.name.split("-")[:-1]) and (
+                temp_osd.name != pod_obj.name
+            ):
+                new_osd = pod_obj
+                break
 
         nodes.start_nodes(self.osd_worker_node, wait=True)
         log.info(
             f"Successfully powered on node: {self.osd_worker_node[0].name}"
         )
         wait_for_resource_state(
-            new_osd, constants.STATUS_RUNNING, timeout=120
+            new_osd, constants.STATUS_RUNNING, timeout=180
         )
         if additional_node:
             new_osd_node = get_pod_node(new_osd)
