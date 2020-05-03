@@ -31,6 +31,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     """
     Knip-678 Automated recovery from failed nodes - Reactive
     """
+    threads = []
 
     @pytest.fixture(autouse=True)
     def teardown(self, request):
@@ -39,6 +40,8 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             worker_nodes = get_worker_nodes()
             # Removing created label on all worker nodes
             remove_label_from_worker_node(worker_nodes, label_key="dc")
+            for thread in self.threads:
+                thread.join()
 
         request.addfinalizer(finalizer)
 
@@ -102,8 +105,9 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         dc_pod_obj = []
         for i in range(2):
             dc_pod = dc_pod_factory(
-                interface=interface, node_selector={'dc': 'fedora'})
-            pod.run_io_in_bg(dc_pod, fedora_dc=True)
+                interface=interface, node_selector={'dc': 'fedora'}
+            )
+            self.threads.append(pod.run_io_in_bg(dc_pod, fedora_dc=True))
             dc_pod_obj.append(dc_pod)
 
         # Get app pods running nodes
@@ -165,7 +169,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                             resource=pod_obj, state=constants.STATUS_RUNNING,
                             timeout=60
                         )
-                    except ResourceWrongStatusException as ex:
+                    except ResourceWrongStatusException:
                         # 'rook-ceph-crashcollector' on the failed node stucks at
                         # pending state. BZ 1810014 tracks it.
                         # Ignoring 'rook-ceph-crashcollector' pod health check as
@@ -301,7 +305,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
         nodes.start_nodes(self.osd_worker_node, wait=True)
         log.info(
-            f"Successfully powered off node: {self.osd_worker_node[0].name}"
+            f"Successfully powered on node: {self.osd_worker_node[0].name}"
         )
         wait_for_resource_state(
             new_osd, constants.STATUS_RUNNING, timeout=120

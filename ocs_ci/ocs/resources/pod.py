@@ -633,8 +633,9 @@ def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=False):
             else:
                 FILE = TEST_FILE
             pod_obj.exec_cmd_on_pod(
-                f"bash -c \"let i=0; while true; do echo {TEXT_CONTENT} "
-                f">> {FILE}$i; let i++; sleep 0.01; done\""
+                command=f"bash -c \"let i=0; while true; do echo "
+                f"{TEXT_CONTENT} >> {FILE}$i; let i++; sleep 0.01; done\"",
+                timeout=2400
             )
         # Once the pod gets deleted, the I/O execution will get terminated.
         # Hence, catching this exception
