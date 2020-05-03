@@ -840,6 +840,50 @@ class OCP(object):
         )
         return output
 
+    def get_build(self):
+        """
+        Return the OCP Build Version
+
+        Args:
+            None
+
+        Returns:
+             str: The build version of the OCP
+        """
+        ns = config.ENV_DATA['cluster_namespace']
+        out = run_cmd(f'oc get clusterversion -n {ns} -o yaml')
+        ocp_build = yaml.full_load(out)
+        return ocp_build['items'][0]['status']['desired']['version']
+
+    def get_channel(self):
+        """
+        Return the OCP Channel
+
+        Args:
+            None
+
+        Returns:
+             str: The channel of the OCP
+        """
+        ns = config.ENV_DATA['cluster_namespace']
+        out = run_cmd(f'oc get clusterversion -n {ns} -o yaml')
+        ocp_build = yaml.full_load(out)
+        return ocp_build['items'][0]['spec']['channel']
+
+    def get_provider(self):
+        """
+        Return the OCP Provider (Platform)
+
+        Args:
+            None
+
+        Returns:
+             str: The Provider that the OCP is running on
+        """
+        out = run_cmd('oc get nodes -o yaml')
+        provider = yaml.full_load(out)['items'][0]['spec']['providerID'].split(':')[0]
+        return provider
+
 
 def switch_to_project(project_name):
     """

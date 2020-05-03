@@ -8,12 +8,14 @@ metadata:
   name: smallfile-benchmark
   namespace: my-ripsaw
 spec:
-  test_user: homer_simpson
-  clustername: aws-dec26-2019
+  test_user: avi-liani
+  clustername: dc27-4.4-on-4.3
   elasticsearch:
-    es: es_server
-    es_port: 9090
-    es_index: smallfile
+    server: 10.0.144.152
+    port: 9200
+  es_index: ripsaw_smallfile
+  metadata_collection: true
+  index_data: true
   workload:
     name: smallfile
     args:
