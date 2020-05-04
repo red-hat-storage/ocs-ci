@@ -21,7 +21,9 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility.bootstrap import gather_bootstrap
-from ocs_ci.utility.csr import approve_pending_csr, wait_for_all_nodes_csr
+from ocs_ci.utility.csr import (
+    approve_pending_csr, wait_for_all_nodes_csr_and_approve
+)
 from ocs_ci.utility.templating import dump_data_to_json, Templating
 from ocs_ci.utility.utils import (
     clone_repo, convert_yaml2tfvars, create_directory_path, read_file_as_str,
@@ -563,10 +565,7 @@ class VSPHEREUPI(VSPHEREBASE):
             # for all the nodes
             ocp_version = get_ocp_version()
             if Version.coerce(ocp_version) >= Version.coerce('4.4'):
-                # before waiting for CSRs to generate, approve
-                # the existing ones if any
-                approve_pending_csr()
-                wait_for_all_nodes_csr()
+                wait_for_all_nodes_csr_and_approve()
 
             approve_pending_csr()
             self.test_cluster()

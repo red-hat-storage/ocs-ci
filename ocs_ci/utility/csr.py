@@ -136,7 +136,11 @@ def get_nodes_csr():
     return csr_nodes
 
 
-def wait_for_all_nodes_csr(timeout=900, sleep=10, expected_node_num=None):
+def wait_for_all_nodes_csr_and_approve(
+        timeout=900,
+        sleep=10,
+        expected_node_num=None
+):
     """
     Wait for CSR to generate for nodes
 
@@ -172,3 +176,8 @@ def wait_for_all_nodes_csr(timeout=900, sleep=10, expected_node_num=None):
             f" {expected_node_num} but found {len(csr_nodes.keys())} CSRs."
             f"retrying again"
         )
+        # approve the pending CSRs here since newly added nodes will not
+        # generate CSR till existing CSRs are approved
+        pending_csrs = get_pending_csr()
+        if pending_csrs:
+            approve_csrs(pending_csrs)
