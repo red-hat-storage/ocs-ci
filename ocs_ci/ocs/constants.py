@@ -297,6 +297,18 @@ PGSQL_BENCHMARK_YAML = os.path.join(
     TEMPLATE_PGSQL_DIR, "PGSQL_Benchmark.yaml"
 )
 
+POSTGRESSQL_PERSISTENT_YAML = os.path.join(
+    TEMPLATE_PGSQL_DIR, "postgresql-persistent-ocs.yaml"
+)
+
+PGBENCH_YAML = os.path.join(
+    TEMPLATE_PGSQL_DIR, "pgbench.yaml"
+)
+
+PGBENCH_WORKLOAD_YAML = os.path.join(
+    TEMPLATE_PGSQL_DIR, "pgbench_workload.yaml"
+)
+
 SMALLFILE_BENCHMARK_YAML = os.path.join(
     TEMPLATE_SMALLFILE_DIR, "SmallFile.yaml"
 )

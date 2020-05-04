@@ -1,0 +1,14 @@
+name: pgbench_workload
+cluster_ip:
+username:
+scale: 10
+clients: 1
+threads: 1
+script_type: simple
+run_type: time
+run_type_value: 60
+vacuum: yes
+quite: no
+password:
+pg_db: sampledb
+progress: 5
