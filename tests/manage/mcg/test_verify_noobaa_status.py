@@ -16,19 +16,6 @@ def test_verify_noobaa_status(mcg_obj_session):
     """
     # Get noobaa status
     status = mcg_obj_session.exec_mcg_cmd('status').stderr
-
-    # Verify noobaa status
-    for content, count in defaults.NOOBAA_STATUS_CONTENT_COUNT.items():
-        assert count == status.count(f'Exists: {content} '), (
-            f"Could not find expected match for {content} in NooBaa status output."
-        )
-    assert 'System Phase is \\"Ready\\"' in status, (
-        f"System Phase is not 'Ready'."
-    )
-    assert 'Exists:  \\"noobaa-admin\\"' in status, (
-        f"'noobaa-admin' does not exists."
-    )
-
     for line in status.split('\n'):
         if 'Not Found' in line:
             assert 'Optional' in line, f"Error in noobaa status output- {line}"
