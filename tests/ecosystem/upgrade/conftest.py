@@ -216,7 +216,7 @@ def fio_conf_block():
 
 
 @pytest.fixture(scope='session')
-def fio_conf_mcg(workload_bucket):
+def fio_conf_mcg(workload_bucket, mcg_obj_session):
     """
     Basic fio configuration for upgrade utilization for AWS S3 bucket.
 
@@ -224,10 +224,10 @@ def fio_conf_mcg(workload_bucket):
     config = configparser.ConfigParser()
     config.read_file(open(constants.FIO_S3))
     config['global']['name'] = workload_bucket.name
-    config['global']['http_s3_key'] = mcg_obj.access_key
-    config['global']['http_s3_keyid'] = mcg_obj.access_key_id
-    config['global']['http_host'] = mcg_obj.s3_endpoint
-    config['global']['http_s3_region'] = mcg_obj.region
+    config['global']['http_s3_key'] = mcg_obj_session.access_key
+    config['global']['http_s3_keyid'] = mcg_obj_session.access_key_id
+    config['global']['http_host'] = mcg_obj_session.s3_endpoint
+    config['global']['http_s3_region'] = mcg_obj_session.region
     config['create']['time_based'] = 1
     config['create']['runtime'] = '24h'
     return config_to_string(config)

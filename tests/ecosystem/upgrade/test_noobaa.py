@@ -164,6 +164,25 @@ def test_noobaa_postupgrade(
     assert bucket.status == constants.STATUS_BOUND
 
 
+@pre_upgrade
+def test_start_upgrade_mcg_io(mcg_workload_jobs):
+    """
+    Confirm that there are MCG workload jobs running before upgrade.
+    """
+    # TODO(fbalak): check that all jobs are running
+    assert mcg_workload_jobs
+
+
+@post_upgrade
+def test_upgrade_mcg_io(mcg_workload_jobs):
+    """
+    Confirm that there are MCG workload jobs running after upgrade.
+    """
+    # TODO(fbalak): check that all jobs are running
+    assert mcg_workload_jobs
+>>>>>>> fix pep8
+
+
 @aws_platform_required
 @bugzilla('1820974')
 @pre_upgrade
