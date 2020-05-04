@@ -841,7 +841,6 @@ class OCP(object):
         return output
 
 
-
     def get_provider(self):
         """
         Return the OCP Provider (Platform)
