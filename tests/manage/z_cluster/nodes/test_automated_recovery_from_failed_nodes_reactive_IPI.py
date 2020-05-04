@@ -1,17 +1,23 @@
 import logging
 import pytest
 from ocs_ci.framework.testlib import (
-    tier4, tier4b, ManageTest, aws_platform_required,
-    ipi_deployment_required, ignore_leftovers)
+    tier4, tier4a, tier4b, ManageTest, aws_platform_required,
+    ipi_deployment_required, ignore_leftovers
+)
 from ocs_ci.ocs import machine, constants, defaults, ocp
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pod import get_all_pods, get_osd_pods, get_pod_node
+from ocs_ci.utility.utils import ceph_health_check
 from tests.sanity_helpers import Sanity
 from tests.helpers import (
-    get_worker_nodes, label_worker_node, remove_label_from_worker_node)
+    get_worker_nodes, label_worker_node, remove_label_from_worker_node,
+    wait_for_resource_state
+)
 from ocs_ci.ocs.node import (
     get_osd_running_nodes, get_app_pod_running_nodes,
     get_both_osd_and_app_pod_running_node, get_node_objs,
-    add_new_node_and_label_it)
+    add_new_node_and_label_it
+)
 from tests import helpers
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
@@ -27,6 +33,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     """
     Knip-678 Automated recovery from failed nodes - Reactive
     """
+    threads = []
 
     @pytest.fixture(autouse=True)
     def teardown(self, request):
@@ -35,6 +42,9 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             worker_nodes = get_worker_nodes()
             # Removing created label on all worker nodes
             remove_label_from_worker_node(worker_nodes, label_key="dc")
+            for thread in self.threads:
+                thread.join()
+            ceph_health_check()
 
         request.addfinalizer(finalizer)
 
@@ -51,7 +61,10 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         argvalues=[
             pytest.param(
                 *['rbd', 'shutdown'],
-                marks=pytest.mark.polarion_id("OCS-2102")
+                marks=[
+                    pytest.mark.polarion_id("OCS-2102"),
+                    pytest.mark.bugzilla("1830015")
+                ]
             ),
             pytest.param(
                 *['rbd', 'terminate'],
@@ -59,7 +72,10 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             ),
             pytest.param(
                 *['cephfs', 'shutdown'],
-                marks=pytest.mark.polarion_id("OCS-2104")
+                marks=[
+                    pytest.mark.polarion_id("OCS-2104"),
+                    pytest.mark.bugzilla("1830015")
+                ]
             ),
             pytest.param(
                 *['cephfs', 'terminate'],
@@ -79,7 +95,9 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         osd_running_nodes = get_osd_running_nodes()
         log.info(f"OSDs are running on nodes {osd_running_nodes}")
         # Label osd nodes with fedora app
-        label_worker_node(osd_running_nodes, label_key='dc', label_value='fedora')
+        label_worker_node(
+            osd_running_nodes, label_key='dc', label_value='fedora'
+        )
 
         # Create DC app pods
         log.info("Creating DC based app pods")
@@ -90,8 +108,9 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         dc_pod_obj = []
         for i in range(2):
             dc_pod = dc_pod_factory(
-                interface=interface, node_selector={'dc': 'fedora'})
-            pod.run_io_in_bg(dc_pod, fedora_dc=True)
+                interface=interface, node_selector={'dc': 'fedora'}
+            )
+            self.threads.append(pod.run_io_in_bg(dc_pod, fedora_dc=True))
             dc_pod_obj.append(dc_pod)
 
         # Get app pods running nodes
@@ -126,47 +145,57 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         if failure == "shutdown":
             nodes.stop_nodes(failure_node_obj, wait=True)
             log.info(
-                f"Successfully powered off node: {failure_node_obj[0].name}"
-            )
-            nodes.terminate_nodes(failure_node_obj, wait=True)
-            log.info(
-                f"Successfully terminated node : {failure_node_obj[0].name} instance"
+                f"Successfully powered off node: "
+                f"{failure_node_obj[0].name}"
             )
         elif failure == "terminate":
             nodes.terminate_nodes(failure_node_obj, wait=True)
             log.info(
-                f"Successfully terminated node : {failure_node_obj[0].name} instance"
+                f"Successfully terminated node : "
+                f"{failure_node_obj[0].name} instance"
             )
 
-        # DC app pods on the failed node will get automatically created on other
-        # running node. Waiting for all dc app pod to reach running state
-        pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj)
-        log.info("All the dc pods reached running state")
+        try:
+            # DC app pods on the failed node will get automatically created on other
+            # running node. Waiting for all dc app pod to reach running state
+            pod.wait_for_dc_app_pods_to_reach_running_state(
+                dc_pod_obj, timeout=720
+            )
+            log.info("All the dc pods reached running state")
 
-        # Check all OCS pods status, they should be in running state
-        all_pod_obj = pod.get_all_pods(
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE
-        )
-        for pod_obj in all_pod_obj:
-            if '-1-deploy' and 'ocs-deviceset' not in pod_obj.name:
-                try:
-                    helpers.wait_for_resource_state(
-                        resource=pod_obj, state=constants.STATUS_RUNNING,
-                        timeout=60
-                    )
-                except ResourceWrongStatusException:
+            # Check all OCS pods status, they should be in running state
+            all_pod_obj = pod.get_all_pods(
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            )
+            for pod_obj in all_pod_obj:
+                if '-1-deploy' and 'ocs-deviceset' not in pod_obj.name:
                     # 'rook-ceph-crashcollector' on the failed node stucks at
                     # pending state. BZ 1810014 tracks it.
                     # Ignoring 'rook-ceph-crashcollector' pod health check as
                     # WA and deleting its deployment so that the pod
                     # disappears. Will revert this WA once the BZ is fixed
                     if 'rook-ceph-crashcollector' in pod_obj.name:
-                        ocp_obj = ocp.OCP(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+                        ocp_obj = ocp.OCP(
+                            namespace=defaults.ROOK_CLUSTER_NAMESPACE)
                         pod_name = pod_obj.name
                         deployment_name = '-'.join(pod_name.split("-")[:-2])
                         command = f"delete deployment {deployment_name}"
                         ocp_obj.exec_oc_cmd(command=command)
                         log.info(f"Deleted deployment for pod {pod_obj.name}")
+                        continue
+
+                    helpers.wait_for_resource_state(
+                        resource=pod_obj, state=constants.STATUS_RUNNING,
+                        timeout=240
+                    )
+        except ResourceWrongStatusException:
+            if failure == "shutdown":
+                nodes.terminate_nodes(failure_node_obj, wait=True)
+                log.info(
+                    f"Successfully terminated node : "
+                    f"{failure_node_obj[0].name} instance"
+                )
+            raise
 
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
@@ -176,3 +205,114 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
+
+
+@ignore_leftovers
+@tier4
+@tier4a
+@aws_platform_required
+@ipi_deployment_required
+class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
+
+    osd_worker_node = None
+    extra_node = False
+
+    @pytest.fixture(autouse=True)
+    def teardown(self, request, nodes):
+
+        def finalizer():
+            if self.extra_node:
+                nodes.terminate_nodes(self.osd_worker_node, wait=True)
+                log.info(
+                    f"Successfully terminated node : "
+                    f"{self.osd_worker_node[0].name} instance"
+                )
+            else:
+                nodes.start_nodes(self.osd_worker_node, wait=True)
+            log.info(
+                f"Successfully started node : "
+                f"{self.osd_worker_node[0].name} instance"
+            )
+            ceph_health_check()
+
+        request.addfinalizer(finalizer)
+
+    def add_new_storage_node(self, node_name):
+        machine_name = machine.get_machine_from_node_name(node_name)
+        log.info(f"{node_name} associated machine is {machine_name}")
+
+        # Get the machineset name using machine name
+        machineset_name = machine.get_machineset_from_machine_name(
+            machine_name
+        )
+        log.info(f"{node_name} associated machineset is {machineset_name}")
+
+        # Add a new node and label it
+        add_new_node_and_label_it(machineset_name)
+
+    @pytest.mark.parametrize(
+        argnames=["additional_node"],
+        argvalues=[
+            pytest.param(
+                True,
+                marks=pytest.mark.polarion_id("OCS-2191"),
+            ),
+            pytest.param(
+                False,
+                marks=pytest.mark.polarion_id("OCS-2190")
+            ),
+        ]
+    )
+    def test_automated_recovery_from_stopped_node_and_start(
+        self, nodes, additional_node
+    ):
+        """
+        Knip-678 Automated recovery from failed nodes
+        Reactive case - IPI
+
+        0) A - add new node, B - don't add new node
+        1) Stop node
+        2) Validate result:
+             A - pods should respin on the new node
+             B - pods should remain in Pending state on the stopped node
+        3) Start node
+        4) Validate result:
+             A - pods should start on the new node
+             B - pods should start on the stopped node after starting it
+        """
+        temp_osd = get_osd_pods()[0]
+        osd_real_name = "-".join(temp_osd.name.split("-")[:-1])
+        self.osd_worker_node = [get_pod_node(temp_osd)]
+        if additional_node:
+            self.add_new_storage_node(self.osd_worker_node[0].name)
+            self.extra_node = True
+        nodes.stop_nodes(self.osd_worker_node, wait=True)
+        log.info(
+            f"Successfully powered off node: {self.osd_worker_node[0].name}"
+        )
+
+        wait_for_resource_state(
+            temp_osd, constants.STATUS_TERMINATING, timeout=240
+        )
+        # Validate that the OSD in terminate state has a new OSD in Pending
+        all_pod_obj = get_all_pods(namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+        new_osd = None
+        for pod_obj in all_pod_obj:
+            if osd_real_name == "-".join(pod_obj.name.split("-")[:-1]) and (
+                temp_osd.name != pod_obj.name
+            ):
+                new_osd = pod_obj
+                break
+
+        nodes.start_nodes(self.osd_worker_node, wait=True)
+        log.info(
+            f"Successfully powered on node: {self.osd_worker_node[0].name}"
+        )
+        wait_for_resource_state(
+            new_osd, constants.STATUS_RUNNING, timeout=180
+        )
+        if additional_node:
+            new_osd_node = get_pod_node(new_osd)
+            assert new_osd_node.name != self.osd_worker_node[0].name, (
+                "New OSD is expected to run on the new additional node"
+            )
