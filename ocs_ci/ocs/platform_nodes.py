@@ -13,7 +13,7 @@ from ocs_ci.utility import aws, vsphere, templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.ocs import constants, ocp, exceptions
-from ocs_ci.ocs.node import get_node_objs
+from ocs_ci.ocs.node import get_node_objs, get_typed_worker_nodes
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import (
@@ -556,16 +556,23 @@ class AWSNodes(NodesBase):
             f'{self.platform.upper()}{self.deployment_type.upper()}Node'
         ]
 
-        workers_stacks = self.aws.get_worker_stacks()
-        logger.info(f"Existing worker stacks: {workers_stacks}")
-        existing_indexes = self.get_existing_indexes(workers_stacks)
-        logger.info(f"Existing indexes: {existing_indexes}")
-        slots_available = self.get_available_slots(existing_indexes, num_nodes)
-        logger.info(f"Available indexes: {slots_available}")
-        for slot in slots_available:
-            node_id = slot
-            node_list.append(node_cls(node_conf, node_type))
-            node_list[-1]._prepare_node(node_id)
+        if node_type.upper() == 'RHCOS':
+            workers_stacks = self.aws.get_worker_stacks()
+            logger.info(f"Existing worker stacks: {workers_stacks}")
+            existing_indexes = self.get_existing_indexes(workers_stacks)
+            logger.info(f"Existing indexes: {existing_indexes}")
+            slots_available = self.get_available_slots(existing_indexes, num_nodes)
+            logger.info(f"Available indexes: {slots_available}")
+            for slot in slots_available:
+                node_id = slot
+                node_list.append(node_cls(node_conf, node_type))
+                node_list[-1]._prepare_node(node_id)
+        elif node_type.upper() == 'RHEL':
+            rhel_workers = len(get_typed_worker_nodes('rhel'))
+            for i in range(num_nodes):
+                node_id = i + rhel_workers
+                node_list.append(node_cls(node_conf, node_type))
+                node_list[-1]._prepare_node(node_id)
 
         # Make sure that csr is approved for all the nodes
         # not making use of csr.py functions as aws rhcos has long
