@@ -8,11 +8,9 @@ import tempfile
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ocp import switch_to_default_rook_cluster_project
-from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs import constants
 from subprocess import run, CalledProcessError
 from ocs_ci.utility.utils import run_cmd
-from ocs_ci.utility import templating
+from ocs_ci.ocs.constants import RIPSAW_NAMESPACE
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +41,7 @@ class RipSaw(object):
         self.args = kwargs
         self.repo = self.args.get('repo', 'https://github.com/cloud-bulldozer/ripsaw')
         self.branch = self.args.get('branch', 'master')
-        self.namespace = self.args.get('namespace', 'my-ripsaw')
+        self.namespace = self.args.get('namespace', RIPSAW_NAMESPACE)
         self.pgsql_is_setup = False
         self.ocp = OCP()
         self.ns_obj = OCP(kind='namespace')
@@ -89,36 +87,6 @@ class RipSaw(object):
         run(f'oc apply -f deploy', shell=True, check=True, cwd=self.dir)
         run(f'oc apply -f {crd}', shell=True, check=True, cwd=self.dir)
         run(f'oc apply -f {self.operator}', shell=True, check=True, cwd=self.dir)
-
-    def setup_postgresql(self):
-        """
-        Deploy postgres sql server
-        """
-        try:
-            pgsql_service = templating.load_yaml(
-                constants.PGSQL_SERVICE_YAML
-            )
-            pgsql_cmap = templating.load_yaml(
-                constants.PGSQL_CONFIGMAP_YAML
-            )
-            pgsql_sset = templating.load_yaml(
-                constants.PGSQL_STATEFULSET_YAML
-            )
-            self.pgsql_service = OCS(**pgsql_service)
-            self.pgsql_service.create()
-            self.pgsql_cmap = OCS(**pgsql_cmap)
-            self.pgsql_cmap.create()
-            self.pgsql_sset = OCS(**pgsql_sset)
-            self.pgsql_sset.create()
-            self.pod_obj.wait_for_resource(
-                condition='Running',
-                selector='app=postgres',
-                timeout=120
-            )
-        except (CommandFailed, CalledProcessError) as cf:
-            log.error('Failed during setup of PostgreSQL server')
-            raise cf
-        self.pgsql_is_setup = True
 
     def cleanup(self):
         run(f'oc delete -f {self.crd}', shell=True, cwd=self.dir)
