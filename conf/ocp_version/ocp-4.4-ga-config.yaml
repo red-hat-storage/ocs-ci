@@ -9,4 +9,4 @@ DEPLOYMENT:
   installer_version: "4.4-ga"
   ocp_channel: "stable"
 ENV_DATA:
-  vm_template: 'rhcos-4.2.0-x86_64-vmware'
+  vm_template: 'rhcos-4.4.0-x86_64-vmware'
