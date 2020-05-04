@@ -481,8 +481,9 @@ class OCP(object):
         if condition == error_condition:
             # when this fails, this method is used in a wrong way
             raise ValueError(
-                "Condition we are waiting for must be different from error"
-                " condition which describes unexpected error state."
+                f"Condition '{condition}' we are waiting for must be different"
+                f" from error condition '{error_condition}'"
+                " which describes unexpected error state."
             )
         log.info((
             f"Waiting for a resource(s) of kind {self._kind}"
