@@ -632,30 +632,6 @@ class CephCluster(object):
                 time_taken = time.time() - start_time
                 return (time_taken / 60)
 
-    def get_clustername(self):
-        """
-        Return the name (DNS short name) of the cluster
-
-        Returns:
-             str: the short DNS name of the cluster
-        """
-        ocp_cluster = ocp.OCP(
-            namespace='openshift-console',
-            kind='', resource_name='route')
-        return ocp_cluster.get()['items'][0]['spec']['host'].split('.')[2]
-
-    def get_version(self):
-        """
-        Return the OCS Version
-
-        Returns:
-             str: The version of the OCS
-        """
-        ocp_cluster = ocp.OCP(
-            namespace=config.ENV_DATA['cluster_namespace'],
-            kind='', resource_name='csv')
-        return ocp_cluster.get()['items'][0]['spec']['version']
-
 
 class CephHealthMonitor(threading.Thread):
     """

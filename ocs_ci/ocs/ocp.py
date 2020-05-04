@@ -840,30 +840,7 @@ class OCP(object):
         )
         return output
 
-    def get_build(self):
-        """
-        Return the OCP Build Version
 
-        Args:
-            None
-
-        Returns:
-             str: The build version of the OCP
-        """
-        ver = self.get('clusterversion')
-        return ver['items'][0]['status']['desired']['version']
-
-    def get_channel(self):
-        """
-        Return the OCP Channel
-
-        Args:
-            None
-
-        Returns:
-             str: The channel of the OCP
-        """
-        return self.get('clusterversion')['items'][0]['spec']['channel']
 
     def get_provider(self):
         """
@@ -876,6 +853,62 @@ class OCP(object):
              str: The Provider that the OCP is running on
         """
         return self.get('nodes')['items'][0]['spec']['providerID'].split(':')[0]
+
+
+def get_ocp_clustername():
+    """
+    Return the name (DNS short name) of the cluster
+
+    Returns:
+         str: the short DNS name of the cluster
+    """
+
+    ocp_cluster = OCP(
+        namespace='openshift-console', kind='',
+        resource_name='route')
+    return ocp_cluster.get()['items'][0]['spec']['host'].split('.')[2]
+
+
+def get_ocp_version():
+    """
+    Return the OCS Version
+
+    Returns:
+         str: The version of the OCS
+    """
+
+    ocp_cluster = OCP(
+        namespace=config.ENV_DATA['cluster_namespace'],
+        kind='', resource_name='csv')
+    return ocp_cluster.get()['items'][0]['spec']['version']
+
+
+def get_ocp_build():
+    """
+    Return the OCP Build Version
+
+    Returns:
+         str: The build version of the OCP
+    """
+
+    ocp_cluster = OCP(
+        namespace=config.ENV_DATA['cluster_namespace'],
+        kind='', resource_name='clusterversion')
+    return ocp_cluster.get()['items'][0]['status']['desired']['version']
+
+
+def get_ocp_channel():
+    """
+    Return the OCP Channel
+
+    Returns:
+         str: The channel of the OCP
+    """
+
+    ocp_cluster = OCP(
+        namespace=config.ENV_DATA['cluster_namespace'],
+        kind='', resource_name='clusterversion')
+    return ocp_cluster.get()['items'][0]['spec']['channel']
 
 
 def switch_to_project(project_name):
