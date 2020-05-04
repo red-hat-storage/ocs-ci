@@ -151,6 +151,9 @@ DEFAULT_NAMESPACE = "default"
 IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
 IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
 DEFAULT_NOOBAA_BACKINGSTORE = "noobaa-default-backing-store"
+RIPSAW_NAMESPACE = "my-ripsaw"
+RIPSAW_CRD = "resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml"
+
 
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f'{DEFAULT_CLUSTERNAME}-cephfs'
