@@ -170,6 +170,7 @@ def wait_for_all_nodes_csr_and_approve(
         logger.debug(f"CSR data: {csr_nodes}")
         if len(csr_nodes.keys()) == expected_node_num:
             logger.info(f"CSR generated for all {expected_node_num} nodes")
+            approve_pending_csr()
             return
         logger.warning(
             f"Some nodes are not generated CSRs. Expected"

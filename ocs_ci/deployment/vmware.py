@@ -567,7 +567,6 @@ class VSPHEREUPI(VSPHEREBASE):
             if Version.coerce(ocp_version) >= Version.coerce('4.4'):
                 wait_for_all_nodes_csr_and_approve()
 
-            approve_pending_csr()
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level='DEBUG'):
