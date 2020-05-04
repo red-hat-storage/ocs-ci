@@ -1,7 +1,7 @@
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions, ocp
-from ocs_ci.ocs.node import get_all_nodes
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 
@@ -136,13 +136,18 @@ def get_nodes_csr():
     return csr_nodes
 
 
-def wait_for_all_nodes_csr(timeout=900, sleep=10):
+def wait_for_all_nodes_csr_and_approve(
+        timeout=900,
+        sleep=10,
+        expected_node_num=None
+):
     """
     Wait for CSR to generate for nodes
 
     Args:
         timeout (int): Time in seconds to wait
         sleep (int): Sampling time in seconds
+        expected_node_num (int): Number of nodes to verify CSR is generated
 
     Returns:
          bool: True if all nodes are generated CSR
@@ -151,21 +156,29 @@ def wait_for_all_nodes_csr(timeout=900, sleep=10):
         TimeoutExpiredError: in case CSR not found
 
     """
-    pending = False
-    all_nodes = get_all_nodes()
+    if not expected_node_num:
+        # expected number of nodes is total of master, worker nodes and
+        # bootstrapper node
+        expected_node_num = (
+            config.ENV_DATA['master_replicas']
+            + config.ENV_DATA['worker_replicas']
+            + 1
+        )
     for csr_nodes in TimeoutSampler(
-            timeout=timeout, sleep=sleep, func=get_nodes_csr
+        timeout=timeout, sleep=sleep, func=get_nodes_csr
     ):
-        pending_nodes = []
         logger.debug(f"CSR data: {csr_nodes}")
-        for node in all_nodes:
-            if node not in csr_nodes.keys():
-                logger.info(f"{node} CSR is not generated")
-                pending = True
-                pending_nodes.append(node)
-        if not pending:
-            logger.info("CSR generated for all nodes in cluster")
+        if len(csr_nodes.keys()) == expected_node_num:
+            logger.info(f"CSR generated for all {expected_node_num} nodes")
+            approve_pending_csr()
             return
         logger.warning(
-            f"Nodes {pending_nodes} are not generated CSR. retrying again"
+            f"Some nodes are not generated CSRs. Expected"
+            f" {expected_node_num} but found {len(csr_nodes.keys())} CSRs."
+            f"retrying again"
         )
+        # approve the pending CSRs here since newly added nodes will not
+        # generate CSR till existing CSRs are approved
+        pending_csrs = get_pending_csr()
+        if pending_csrs:
+            approve_csrs(pending_csrs)
