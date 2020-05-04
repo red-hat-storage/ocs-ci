@@ -42,7 +42,7 @@ class TestSmallFileWorkload(E2ETest):
     workloads
     """
 
-    def analize_results(self, results, logs):
+    def analyze_results(self, results, logs):
 
         def add_value(res, key, value):
             if key not in res.keys():
@@ -99,10 +99,6 @@ class TestSmallFileWorkload(E2ETest):
             pytest.param(
                 *[16, 50000, 4, 3, constants.CEPHFILESYSTEM],
                 marks=pytest.mark.polarion_id("OCS-2023"),
-            ),
-            pytest.param(
-                *[16, 200000, 4, 3, constants.CEPHFILESYSTEM],
-                marks=pytest.mark.polarion_id("OCS-2024"),
             ),
         ]
     )
@@ -202,7 +198,7 @@ class TestSmallFileWorkload(E2ETest):
                 out_yaml_format=False
             )
             if "RUN STATUS DONE" in logs:
-                results = self.analize_results(results, logs)
+                results = self.analyze_results(results, logs)
                 results['end_time'] = time.strftime('%Y-%m-%dT%H:%M:%SGMT', time.gmtime())
                 log.debug(f'The test results are : {results}')
                 log.info("SmallFile Benchmark Completed Successfully")
