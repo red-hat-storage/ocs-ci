@@ -5,7 +5,8 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     pre_upgrade, post_upgrade,
-    aws_platform_required, filter_insecure_request_warning
+    aws_platform_required, filter_insecure_request_warning,
+    bugzilla
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_OPTIMAL
@@ -83,7 +84,7 @@ def test_fill_bucket(
     )
 
     mcg_obj_session.check_if_mirroring_is_done(bucket.name)
-    assert bucket.phase == constants.STATUS_BOUND
+    assert bucket.status == constants.STATUS_BOUND
 
     # Retrieve all objects from MCG bucket to result dir in Pod
     sync_object_directory(
@@ -93,7 +94,7 @@ def test_fill_bucket(
         mcg_obj_session
     )
 
-    assert bucket.phase == constants.STATUS_BOUND
+    assert bucket.status == constants.STATUS_BOUND
 
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
@@ -102,7 +103,7 @@ def test_fill_bucket(
             result_object_path=f'{LOCAL_TEMP_PATH}/{obj}',
             awscli_pod=awscli_pod_session
         ), 'Checksum comparision between original and result object failed'
-    assert bucket.phase == constants.STATUS_BOUND
+    assert bucket.status == constants.STATUS_BOUND
 
 
 @aws_platform_required
@@ -133,7 +134,7 @@ def test_noobaa_postupgrade(
             awscli_pod=awscli_pod_session
         ), 'Checksum comparision between original and result object failed'
 
-    assert bucket.phase == constants.STATUS_BOUND
+    assert bucket.status == constants.STATUS_BOUND
 
     # Clean up the temp dir
     awscli_pod_session.exec_cmd_on_pod(
@@ -151,7 +152,7 @@ def test_noobaa_postupgrade(
         timeout=360
     )
 
-    assert bucket.phase == constants.STATUS_BOUND
+    assert bucket.status == constants.STATUS_BOUND
 
     # Verify integrity of A
     # Retrieve all objects from MCG bucket to result dir in Pod
@@ -162,3 +163,26 @@ def test_noobaa_postupgrade(
         mcg_obj_session
     )
     assert bucket.phase == constants.STATUS_BOUND
+
+
+@aws_platform_required
+@bugzilla('1820974')
+@pre_upgrade
+def test_buckets_before_upgrade(upgrade_buckets, mcg_obj_session):
+    """
+    Test that all buckets in cluster are in OPTIMAL state before upgrade.
+    """
+    for bucket in mcg_obj_session.read_system().get('buckets'):
+        assert bucket.get('mode') == BS_OPTIMAL
+
+
+@aws_platform_required
+@bugzilla('1820974')
+@post_upgrade
+@pytest.mark.polarion_id("OCS-2181")
+def test_buckets_after_upgrade(upgrade_buckets, mcg_obj_session):
+    """
+    Test that all buckets in cluster are in OPTIMAL state after upgrade.
+    """
+    for bucket in mcg_obj_session.read_system().get('buckets'):
+        assert bucket.get('mode') == BS_OPTIMAL

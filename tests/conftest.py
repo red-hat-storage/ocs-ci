@@ -1,46 +1,59 @@
 import logging
-from itertools import chain
 import os
-from random import randrange
+import random
 import tempfile
-from time import sleep
-
-import pytest
-from botocore.exceptions import ClientError
+import textwrap
 import threading
 from datetime import datetime
-import random
+from itertools import chain
 from math import floor
+from random import randrange
+from time import sleep
+from shutil import copyfile
 
-from ocs_ci.utility.utils import TimeoutSampler, get_rook_repo
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
-from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-from ocs_ci.utility import aws
+import pytest
+import yaml
+from botocore.exceptions import ClientError
+
+from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    deployment, ignore_leftovers
+    deployment, ignore_leftovers, tier_marks
 )
-from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
-from ocs_ci.utility.environment_check import (
-    get_status_before_execution, get_status_after_execution
-)
-from ocs_ci.utility.utils import (
-    get_openshift_client, ocsci_log_path, get_testrun_name,
-    ceph_health_check_base, skipif_ocs_version, skipif_lso_deployment
-)
-from ocs_ci.deployment import factory as dep_factory
-from tests import helpers
-from tests.manage.mcg.helpers import get_rgw_restart_count
-from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
+from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes, registry
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import get_rgw_pod
 from ocs_ci.ocs.resources.pvc import PVC
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
+from ocs_ci.utility import aws
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
-from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility import templating
+from ocs_ci.utility.environment_check import (
+    get_status_before_execution, get_status_after_execution
+)
+from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
+from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
+from ocs_ci.utility.utils import (
+    TimeoutSampler, get_rook_repo, get_ocp_version, ceph_health_check
+)
+from ocs_ci.utility.utils import (
+    get_openshift_client, ocsci_log_path, get_testrun_name,
+    ceph_health_check_base, skipif_ocs_version, skipif_lso_deployment
+)
+from tests import helpers
+from tests.helpers import create_unique_resource_name
+from tests.manage.mcg.helpers import get_rgw_restart_count
+from tests.manage.mcg.helpers import (
+    oc_create_aws_backingstore, oc_create_google_backingstore, oc_create_azure_backingstore,
+    oc_create_s3comp_backingstore, oc_create_pv_backingstore, cli_create_aws_backingstore,
+    cli_create_google_backingstore, cli_create_azure_backingstore, cli_create_s3comp_backingstore,
+    cli_create_pv_backingstore
+)
 
 log = logging.getLogger(__name__)
 
@@ -115,7 +128,7 @@ def supported_configuration():
     Last documentation check: 2020-02-21
     """
     min_cpu = 16
-    min_memory = 64 * 10**9
+    min_memory = 64 * 10 ** 9
 
     node_obj = ocp.OCP(kind=constants.NODE)
     log.info('Checking if system meets minimal requirements')
@@ -129,13 +142,13 @@ def supported_configuration():
         real_cpu = int(node_info['status']['capacity']['cpu'])
         real_memory = node_info['status']['capacity']['memory']
         if real_memory.endswith('Ki'):
-            real_memory = int(real_memory[0:-2]) * 2**10
+            real_memory = int(real_memory[0:-2]) * 2 ** 10
         elif real_memory.endswith('Mi'):
-            real_memory = int(real_memory[0:-2]) * 2**20
+            real_memory = int(real_memory[0:-2]) * 2 ** 20
         elif real_memory.endswith('Gi'):
-            real_memory = int(real_memory[0:-2]) * 2**30
+            real_memory = int(real_memory[0:-2]) * 2 ** 30
         elif real_memory.endswith('Ti'):
-            real_memory = int(real_memory[0:-2]) * 2**40
+            real_memory = int(real_memory[0:-2]) * 2 ** 40
         else:
             real_memory = int(real_memory)
 
@@ -367,9 +380,8 @@ def storageclass_factory_fixture(
             sc_obj = helpers.create_resource(**custom_data)
         else:
             secret = secret or secret_factory(interface=interface)
-            ceph_pool = ceph_pool_factory(interface)
             if interface == constants.CEPHBLOCKPOOL:
-                interface_name = ceph_pool.name
+                interface_name = constants.DEFAULT_BLOCKPOOL
             elif interface == constants.CEPHFILESYSTEM:
                 interface_name = helpers.get_cephfs_data_pool_name()
 
@@ -381,7 +393,6 @@ def storageclass_factory_fixture(
                 reclaim_policy=reclaim_policy
             )
             assert sc_obj, f"Failed to create {interface} storage class"
-            sc_obj.ceph_pool = ceph_pool
             sc_obj.secret = secret
 
         instances.append(sc_obj)
@@ -447,6 +458,30 @@ def project_factory_fixture(request):
         Delete the project
         """
         for instance in instances:
+            try:
+                ocp_event = ocp.OCP(kind="Event", namespace=instance.namespace)
+                events = ocp_event.get()
+                event_count = len(events['items'])
+                warn_event_count = 0
+                for event in events['items']:
+                    if event['type'] == "Warning":
+                        warn_event_count += 1
+                log.info(
+                    (
+                        "There were %d events in %s namespace before it's"
+                        " removal (out of which %d were of type Warning)."
+                        " For a full dump of this event list, see DEBUG logs."
+                    ),
+                    event_count,
+                    instance.namespace,
+                    warn_event_count
+                )
+            except Exception:
+                # we don't want any problem to disrupt the teardown itself
+                log.exception(
+                    "Failed to get events for project %s",
+                    instance.namespace
+                )
             ocp.switch_to_default_rook_cluster_project()
             instance.delete(resource_name=instance.namespace)
             instance.wait_for_delete(instance.namespace, timeout=300)
@@ -748,6 +783,7 @@ def teardown_factory_fixture(request):
                 )
                 if reclaim_policy == constants.RECLAIM_POLICY_DELETE:
                     helpers.validate_pv_delete(instance.backed_pv)
+
     request.addfinalizer(finalizer)
     return factory
 
@@ -777,8 +813,10 @@ def service_account_factory(request):
         if active_service_account_obj and not service_account:
             return active_service_account_obj
         elif service_account:
-            sa_obj = helpers.get_serviceaccount_obj(sa_name=service_account, namespace=project.namespace)
-            if not helpers.validate_scc_policy(sa_name=service_account, namespace=project.namespace):
+            sa_obj = helpers.get_serviceaccount_obj(sa_name=service_account,
+                                                    namespace=project.namespace)
+            if not helpers.validate_scc_policy(sa_name=service_account,
+                                               namespace=project.namespace):
                 helpers.add_scc_policy(sa_name=service_account, namespace=project.namespace)
             sa_obj.project = project
             active_service_account_obj = sa_obj
@@ -903,22 +941,53 @@ def polarion_testsuite_properties(record_testsuite_property, pytestconfig):
     )
 
 
+@pytest.fixture(scope='session')
+def tier_marks_name():
+    """
+    Gets the tier mark names
+
+    Returns:
+        list: list of tier mark names
+
+    """
+    tier_marks_name = []
+    for each_tier in tier_marks:
+        try:
+            tier_marks_name.append(each_tier.name)
+        except AttributeError:
+            tier_marks_name.append(each_tier().args[0].name)
+    return tier_marks_name
+
+
 @pytest.fixture(scope='function', autouse=True)
-def health_checker(request):
+def health_checker(request, tier_marks_name):
+    def finalizer():
+        try:
+            teardown = config.RUN['cli_params']['teardown']
+            skip_ocs_deployment = config.ENV_DATA['skip_ocs_deployment']
+            if not (teardown or skip_ocs_deployment):
+                ceph_health_check_base()
+                log.info("Ceph health check passed at teardown")
+        except CephHealthException:
+            log.info("Ceph health check failed at teardown")
+            # Retrying to increase the chance the cluster health will be OK
+            # for next test
+            ceph_health_check()
+            raise
+
     node = request.node
-    # Limit the health check for tier4a, tier4b, tier4c
-    tier4_marks = ['tier4', 'tier4a', 'tier4b', 'tier4c']
+    request.addfinalizer(finalizer)
     for mark in node.iter_markers():
-        if mark.name in tier4_marks:
+        if mark.name in tier_marks_name:
             log.info("Checking for Ceph Health OK ")
             try:
                 status = ceph_health_check_base()
                 if status:
-                    log.info("Health check passed")
+                    log.info("Ceph health check passed at setup")
                     return
             except CephHealthException:
                 # skip because ceph is not in good health
-                pytest.skip("Ceph Health check failed")
+                pytest.skip("Ceph health check failed at setup")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -939,6 +1008,7 @@ def cluster(request, log_cli_level):
     if teardown:
         def cluster_teardown_finalizer():
             deployer.destroy_cluster(log_cli_level)
+
         request.addfinalizer(cluster_teardown_finalizer)
         log.info("Will teardown cluster because --teardown was provided")
 
@@ -1155,6 +1225,7 @@ def multi_pvc_factory_fixture(
     3. Create PVCs based on the specified distribution number of access modes.
        The order of PVC creation is independent of access mode.
     """
+
     def factory(
         interface=constants.CEPHBLOCKPOOL,
         project=None,
@@ -1165,7 +1236,8 @@ def multi_pvc_factory_fixture(
         access_mode_dist_ratio=None,
         status=constants.STATUS_BOUND,
         num_of_pvc=1,
-        wait_each=False
+        wait_each=False,
+        timeout=60
     ):
         """
         Args:
@@ -1210,6 +1282,7 @@ def multi_pvc_factory_fixture(
             num_of_pvc(int): Number of PVCs to be created
             wait_each(bool): True to wait for each PVC to be in status 'status'
                 before creating next PVC, False otherwise
+            timeout(int): Time in seconds to wait
 
         Returns:
             list: objects of PVC class.
@@ -1266,7 +1339,7 @@ def multi_pvc_factory_fixture(
             pvc_obj.project = project
         if status and not wait_each:
             for pvc_obj in pvc_list:
-                helpers.wait_for_resource_state(pvc_obj, status)
+                helpers.wait_for_resource_state(pvc_obj, status, timeout=timeout)
         return pvc_list
 
     return factory
@@ -1297,6 +1370,7 @@ def memory_leak_function(request):
             helpers.memory_leak_analysis(median_dict)
             ....
     """
+
     def finalizer():
         """
         Finalizer to stop memory leak data capture thread and cleanup the files
@@ -1313,8 +1387,13 @@ def memory_leak_function(request):
             )
         if thread:
             thread.join()
+        log_path = ocsci_log_path()
         for worker in helpers.get_worker_nodes():
             if os.path.exists(f"/tmp/{worker}-top-output.txt"):
+                copyfile(
+                    f"/tmp/{worker}-top-output.txt",
+                    f"{log_path}/{worker}-top-output.txt"
+                )
                 os.remove(f"/tmp/{worker}-top-output.txt")
         log.info(f"Memory leak capture has stopped")
 
@@ -1358,6 +1437,7 @@ def memory_leak_function(request):
                                 f.write(str(datetime.now()))
                                 f.write(' ')
                                 f.write(line)
+
     log.info(f"Start memory leak data capture in the test background")
     thread = threading.Thread(target=run_memory_leak_in_bg)
     thread.start()
@@ -1425,6 +1505,31 @@ def ec2_instances(request, aws_obj):
     return ec2_instances
 
 
+@pytest.fixture(scope='session')
+def cld_mgr(request):
+    """
+    Returns a cloud manager instance that'll be used throughout the session
+
+    Returns:
+        CloudManager: A CloudManager resource
+
+    """
+
+    # Todo: Find a more elegant method
+    def finalizer():
+        oc = ocp.OCP(
+            namespace='openshift-storage'
+        )
+        oc.exec_oc_cmd(
+            command='delete secret backing-store-secret-client-secret',
+            out_yaml_format=False
+        )
+
+    request.addfinalizer(finalizer)
+
+    return CloudManager()
+
+
 @pytest.fixture()
 def mcg_obj(request):
     return mcg_obj_fixture(request)
@@ -1445,10 +1550,15 @@ def mcg_obj_fixture(request):
 
     mcg_obj = MCG()
 
-    if config.ENV_DATA['platform'].lower() == 'aws':
-        def finalizer():
+    def finalizer():
+        registry.remove_role_from_user(
+            'cluster-admin', constants.NOOBAA_SERVICE_ACCOUNT,
+            cluster_role=True
+        )
+        if config.ENV_DATA['platform'].lower() == 'aws':
             mcg_obj.cred_req_obj.delete()
-        request.addfinalizer(finalizer)
+
+    request.addfinalizer(finalizer)
 
     return mcg_obj
 
@@ -1476,6 +1586,7 @@ def created_pods_fixture(request):
         for pod in created_pods_objects:
             log.info(f'Deleting pod {pod.name}')
             pod.delete()
+
     request.addfinalizer(pod_cleanup)
     return created_pods_objects
 
@@ -1695,6 +1806,204 @@ def bucket_factory_fixture(request, mcg_obj):
     return _create_buckets
 
 
+@pytest.fixture(scope='class')
+def cloud_uls_factory(request, cld_mgr):
+    """
+     Create a Underlying Storage factory.
+     Calling this fixture creates a new underlying storage(s).
+
+     Args:
+        cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
+
+    """
+    all_created_uls = {
+        'aws': set(),
+        'google': set(),
+        'azure': set(),
+        's3comp': set()
+    }
+
+    ulsMap = {
+        'aws': cld_mgr.aws_client,
+        'google': cld_mgr.google_client,
+        'azure': cld_mgr.azure_client,
+        's3comp': cld_mgr.s3comp_client
+    }
+
+    def _create_uls(uls_dict):
+        """
+        Creates and deletes all underlying storage that were created as part of the test
+
+        Args:
+            uls_dict (dict): Dictionary containing storage provider as key and a list of tuples
+            as value.
+            each tuple contain amount as first parameter and region as second parameter.
+            Cloud backing stores form - 'CloudName': [(amount, region), (amount, region)]
+            i.e. - 'aws': [(3, us-west-1),(2, eu-west-2)]
+
+
+        Returns:
+            dict: A dictionary of cloud names as keys and uls names sets as value.
+
+        """
+        current_call_created_uls = {
+            'aws': set(),
+            'google': set(),
+            'azure': set(),
+            's3comp': set()
+        }
+
+        for cloud, params in uls_dict.items():
+            if cloud.lower() not in ulsMap:
+                raise RuntimeError(
+                    f'Invalid interface type received: {cloud}. '
+                    f'available types: {", ".join(ulsMap.keys())}'
+                )
+            log.info(f'Creating uls for cloud {cloud.lower()}')
+            for tup in params:
+                amount, region = tup
+                for i in range(amount):
+                    uls_name = create_unique_resource_name(
+                        resource_description='uls', resource_type=cloud.lower()
+                    )
+                    ulsMap[cloud.lower()].create_uls(uls_name, region)
+                    all_created_uls[cloud].add(uls_name)
+                    current_call_created_uls[cloud.lower()].add(uls_name)
+
+            return current_call_created_uls
+
+    def uls_cleanup():
+        for cloud, uls_set in all_created_uls.items():
+            client = ulsMap[cloud]
+            if client is not None:
+                all_existing_uls = client.get_all_uls_names()
+                for uls in uls_set:
+                    if uls in all_existing_uls:
+                        log.info(f'Cleaning up uls {uls}')
+                        client.delete_uls(uls)
+                        log.info(
+                            f"Verifying whether uls: {uls} exists after deletion"
+                        )
+                        assert not client.verify_uls_exists(uls), (
+                            f'Unable to delete Underlying Storage {uls}'
+                        )
+                    else:
+                        log.warning(f'Underlying Storage {uls} not found.')
+
+    request.addfinalizer(uls_cleanup)
+
+    return _create_uls
+
+
+@pytest.fixture(scope='class')
+def backingstore_factory(request, cld_mgr, cloud_uls_factory):
+    """
+        Create a Backing Store factory.
+        Calling this fixture creates a new Backing Store(s).
+
+        Args:
+            cloud_uls_factory: Factory for underlying storage creation
+            cld_mgr (CloudManager): Cloud Manager object containing all connections to clouds
+
+    """
+    created_backingstores = []
+
+    cmdMap = {
+        'oc': {
+            'aws': oc_create_aws_backingstore,
+            'google': oc_create_google_backingstore,
+            'azure': oc_create_azure_backingstore,
+            's3comp': oc_create_s3comp_backingstore,
+            'pv': oc_create_pv_backingstore
+        },
+        'cli': {
+            'aws': cli_create_aws_backingstore,
+            'google': cli_create_google_backingstore,
+            'azure': cli_create_azure_backingstore,
+            's3comp': cli_create_s3comp_backingstore,
+            'pv': cli_create_pv_backingstore
+        }
+    }
+
+    def _create_backingstore(method, uls_dict):
+        """
+        Tracks creation and cleanup of all the backing stores that were created in the scope
+
+        Args:
+            method (str): String for selecting method of backing store creation (CLI/OC)
+            uls_dict (dict): Dictionary containing storage provider as key and a list of tuples
+            as value.
+            Cloud backing stores form - 'CloudName': [(amount, region), (amount, region)]
+            i.e. - 'aws': [(3, us-west-1),(2, eu-west-2)]
+            PV form - 'pv': [(amount, size_in_gb, storageclass), ...]
+            i.e. - 'pv': [(3, 32, ocs-storagecluster-ceph-rbd),(2, 100, ocs-storagecluster-ceph-rbd)]
+
+        Returns:
+            list: A list of backingstore names.
+
+        """
+        if method.lower() not in cmdMap:
+            raise RuntimeError(
+                f'Invalid method type received: {method}. '
+                f'available types: {", ".join(cmdMap.keys())}'
+            )
+        for cloud, uls_lst in uls_dict.items():
+            for uls_tup in uls_lst:
+                # Todo: Replace multiple .append calls, create names in advance, according to amountoc
+                if cloud.lower() not in cmdMap[method.lower()]:
+                    raise RuntimeError(
+                        f'Invalid cloud type received: {cloud}. '
+                        f'available types: {", ".join(cmdMap[method.lower()].keys())}'
+                    )
+                if cloud == 'pv':
+                    vol_num, size, storage_class = uls_tup
+                    backingstore_name = create_unique_resource_name(
+                        resource_description='backingstore', resource_type=cloud.lower()
+                    )
+                    # removing characters from name (pod name length bellow 64 characters issue)
+                    backingstore_name = backingstore_name[:-16]
+                    created_backingstores.append(backingstore_name)
+                    cmdMap[method.lower()][cloud.lower()](
+                        backingstore_name, vol_num, size, storage_class
+                    )
+                else:
+                    region = uls_tup[1]
+                    # Todo: Verify that the given cloud has an initialized client
+                    uls_dict = cloud_uls_factory({cloud: [uls_tup]})
+                    for uls_name in uls_dict[cloud.lower()]:
+                        backingstore_name = create_unique_resource_name(
+                            resource_description='backingstore', resource_type=cloud.lower()
+                        )
+                        # removing characters from name (pod name length bellow 64 characters issue)
+                        backingstore_name = backingstore_name[:-16]
+                        created_backingstores.append(backingstore_name)
+                        cmdMap[method.lower()][cloud.lower()](
+                            cld_mgr, backingstore_name, uls_name, region
+                        )
+                        # Todo: Raise an exception in case the BS wasn't created
+
+        return created_backingstores
+
+    def backingstore_cleanup():
+        for backingstore_name in created_backingstores:
+            log.info(f'Cleaning up backingstore {backingstore_name}')
+            oc = ocp.OCP(
+                namespace=config.ENV_DATA['cluster_namespace']
+            )
+            oc.exec_oc_cmd(
+                command=f'delete backingstore {backingstore_name}',
+                out_yaml_format=False
+            )
+            log.info(
+                f"Verifying whether backingstore {backingstore_name} exists after deletion"
+            )
+            # Todo: implement deletion assertion
+
+    request.addfinalizer(backingstore_cleanup)
+
+    return _create_backingstore
+
+
 @pytest.fixture()
 def multiregion_resources(request, mcg_obj):
     return multiregion_resources_fixture(request, mcg_obj)
@@ -1885,6 +2194,10 @@ def install_logging(request):
 
     request.addfinalizer(finalizer)
 
+    # Checks OCP version
+
+    ocp_version = get_ocp_version()
+
     # Creates namespace opensift-operators-redhat
     ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
 
@@ -1900,9 +2213,8 @@ def install_logging(request):
     )
 
     # Creates subscription for elastic-search operator
-    logging_version = config.ENV_DATA['logging_version']
     subscription_yaml = templating.load_yaml(constants.EO_SUB_YAML)
-    subscription_yaml['spec']['channel'] = logging_version
+    subscription_yaml['spec']['channel'] = ocp_version
     helpers.create_resource(**subscription_yaml)
     assert ocp_logging_obj.get_elasticsearch_subscription()
 
@@ -1916,7 +2228,7 @@ def install_logging(request):
 
     # Creates subscription for cluster-logging
     cl_subscription = templating.load_yaml(constants.CL_SUB_YAML)
-    cl_subscription['spec']['channel'] = logging_version
+    cl_subscription['spec']['channel'] = ocp_version
     helpers.create_resource(**cl_subscription)
     assert ocp_logging_obj.get_clusterlogging_subscription()
 
@@ -1926,3 +2238,115 @@ def install_logging(request):
     )
     log.info(f"The cluster-logging-operator {cluster_logging_operator.get()}")
     ocp_logging_obj.create_instance()
+
+
+@pytest.fixture
+def fio_pvc_dict():
+    return fio_pvc_dict_fixture()
+
+
+@pytest.fixture(scope='session')
+def fio_pvc_dict_session():
+    return fio_pvc_dict_fixture()
+
+
+def fio_pvc_dict_fixture():
+    """
+    PVC template for fio workloads.
+    Note that all 'None' values needs to be defined before usage.
+    """
+    # TODO(fbalak): load dictionary fixtures from one place
+    template = textwrap.dedent("""
+        kind: PersistentVolumeClaim
+        apiVersion: v1
+        metadata:
+          name: fio-target
+        spec:
+          storageClassName: None
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: None
+        """)
+    pvc_dict = yaml.safe_load(template)
+    return pvc_dict
+
+
+@pytest.fixture
+def fio_configmap_dict():
+    return fio_configmap_dict_fixture()
+
+
+@pytest.fixture(scope='session')
+def fio_configmap_dict_session():
+    return fio_configmap_dict_fixture()
+
+
+def fio_configmap_dict_fixture():
+    """
+    ConfigMap template for fio workloads.
+    Note that you need to add actual configuration to workload.fio file.
+    """
+    # TODO(fbalak): load dictionary fixtures from one place
+    template = textwrap.dedent("""
+        kind: ConfigMap
+        apiVersion: v1
+        metadata:
+          name: fio-config
+        data:
+          workload.fio: |
+            # here comes workload configuration
+        """)
+    cm_dict = yaml.safe_load(template)
+    return cm_dict
+
+
+@pytest.fixture
+def fio_job_dict():
+    return fio_job_dict_fixture()
+
+
+@pytest.fixture(scope='session')
+def fio_job_dict_session():
+    return fio_job_dict_fixture()
+
+
+def fio_job_dict_fixture():
+    """
+    Job template for fio workloads.
+    """
+    # TODO(fbalak): load dictionary fixtures from one place
+    template = textwrap.dedent("""
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: fio
+        spec:
+          backoffLimit: 1
+          template:
+            metadata:
+              name: fio
+            spec:
+              containers:
+                - name: fio
+                  image: quay.io/johnstrunk/fs-performance:latest
+                  command:
+                    - "/usr/bin/fio"
+                    - "--output-format=json"
+                    - "/etc/fio/workload.fio"
+                  volumeMounts:
+                    - name: fio-target
+                      mountPath: /mnt/target
+                    - name: fio-config-volume
+                      mountPath: /etc/fio
+              restartPolicy: Never
+              volumes:
+                - name: fio-target
+                  persistentVolumeClaim:
+                    claimName: fio-target
+                - name: fio-config-volume
+                  configMap:
+                    name: fio-config
+        """)
+    job_dict = yaml.safe_load(template)
+    return job_dict

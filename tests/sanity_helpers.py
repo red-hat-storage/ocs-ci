@@ -1,6 +1,7 @@
 import logging
 
 from ocs_ci.framework import config
+from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.utility.utils import ceph_health_check
@@ -24,16 +25,15 @@ class Sanity:
         self.pod_objs = list()
         self.ceph_cluster = CephCluster()
 
-    def health_check(self, cluster_check=True):
+    def health_check(self, cluster_check=True, tries=20):
         """
         Perform Ceph and cluster health checks
         """
+        wait_for_cluster_connectivity()
         logger.info("Checking cluster and Ceph health")
         node.wait_for_nodes_status()
 
-        assert ceph_health_check(
-            namespace=config.ENV_DATA['cluster_namespace']
-        )
+        ceph_health_check(namespace=config.ENV_DATA['cluster_namespace'], tries=tries)
         if cluster_check:
             self.ceph_cluster.cluster_health_check(timeout=60)
 

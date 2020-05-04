@@ -1,6 +1,6 @@
 import logging
 import pytest
-from ocs_ci.framework.testlib import tier1, E2ETest, ignore_leftovers
+from ocs_ci.framework.testlib import workloads, E2ETest, ignore_leftovers
 from ocs_ci.ocs import ocp, registry, constants
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
@@ -13,7 +13,7 @@ class TestRegistryImagePullPush(E2ETest):
     Test to check Image push and pull worked with registry backed by OCS
     """
 
-    @tier1
+    @workloads
     @ignore_leftovers
     @pytest.mark.polarion_id("OCS-1080")
     @pytest.mark.skip("Skip this test due to https://github.com/red-hat-storage/ocs-ci/issues/1547")
@@ -30,7 +30,10 @@ class TestRegistryImagePullPush(E2ETest):
         role_type = ['registry-viewer', 'registry-editor',
                      'system:registry', 'admin', 'system:image-builder']
         for role in role_type:
-            registry.add_role_to_user(role_type=role, user=config.RUN['username'])
+            registry.add_role_to_user(
+                role_type=role, user=config.RUN['username'],
+                namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+            )
 
         # Provide write access to registry
         ocp_obj = ocp.OCP()
@@ -60,4 +63,7 @@ class TestRegistryImagePullPush(E2ETest):
 
         # Remove user roles from User
         for role in role_type:
-            registry.remove_role_from_user(role_type=role, user=config.RUN['username'])
+            registry.remove_role_from_user(
+                role_type=role, user=config.RUN['username'],
+                namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+            )

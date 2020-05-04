@@ -122,8 +122,8 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
         bool: True in case of success, False otherwise
     """
     machine_type = get_machine_type(machine_name)
-    machines = get_machines(machine_type=machine_type)
     delete_machine(machine_name)
+    machines = get_machines(machine_type=machine_type)
     for machine in machines:
         if re.match(machine.name[:-6], machine_name):
             log.info(f"New spinned machine name is {machine.name}")
@@ -428,7 +428,7 @@ def wait_for_new_node_to_be_ready(machine_set):
                 break
     except TimeoutExpiredError:
         log.error(
-            "New spun node failed to reach ready state OR"
+            "New spun node failed to reach ready state OR "
             "Replica count didn't match ready replica count"
         )
 
@@ -445,3 +445,20 @@ def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
 
     sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
     return sc_obj.get().get('items')[0].get('metadata').get('name')
+
+
+def add_annotation_to_machine(annotation, machine_name):
+    """
+    Add annotation to the machine
+    Args:
+        annotation (str): Annotation to be set on the machine
+        eg: annotation = "machine.openshift.io/exclude-node-draining=''"
+        machine_name (str): machine name
+    """
+    ocp_obj = OCP(
+        kind='machine',
+        namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
+    )
+    command = f"annotate machine {machine_name} {annotation}"
+    log.info(f"Adding annotation: {command} to machine {machine_name} ")
+    ocp_obj.exec_oc_cmd(command)

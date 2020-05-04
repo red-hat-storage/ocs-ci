@@ -10,6 +10,7 @@ from subprocess import TimeoutExpired, run, PIPE
 import tempfile
 import time
 import yaml
+import json
 import threading
 
 from ocs_ci.ocs.ocp import OCP
@@ -109,7 +110,7 @@ def create_pod(
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
     raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1,
-    pod_name=None, node_selector=None
+    pod_name=None, node_selector=None, deploy_pod_status=constants.STATUS_COMPLETED
 ):
     """
     Create a pod
@@ -129,6 +130,8 @@ def create_pod(
         pod_name (str): Name of the pod to create
         node_selector (dict): dict of key-value pair to be used for nodeSelector field
             eg: {'nodetype': 'app-pod'}
+        deploy_pod_status (str): Expected status of deploy pod. Applicable
+            only if dc_deployment is True
 
     Returns:
         Pod: A Pod instance
@@ -202,7 +205,7 @@ def create_pod(
         ocs_obj = create_resource(**pod_data)
         logger.info(ocs_obj.name)
         assert (ocp.OCP(kind='pod', namespace=namespace)).wait_for_resource(
-            condition=constants.STATUS_COMPLETED,
+            condition=deploy_pod_status,
             resource_name=pod_name + '-1-deploy',
             resource_count=0, timeout=180, sleep=3
         )
@@ -455,6 +458,12 @@ def create_storage_class(
     ] = secret_name
     sc_data['parameters'][
         'csi.storage.k8s.io/provisioner-secret-namespace'
+    ] = defaults.ROOK_CLUSTER_NAMESPACE
+    sc_data['parameters'][
+        'csi.storage.k8s.io/controller-expand-secret-name'
+    ] = secret_name
+    sc_data['parameters'][
+        'csi.storage.k8s.io/controller-expand-secret-namespace'
     ] = defaults.ROOK_CLUSTER_NAMESPACE
 
     sc_data['parameters']['clusterID'] = defaults.ROOK_CLUSTER_NAMESPACE
@@ -1086,13 +1095,14 @@ def measure_pvc_creation_time(interface, pvc_name):
     return total.total_seconds()
 
 
-def measure_pvc_creation_time_bulk(interface, pvc_name_list):
+def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
     """
     Measure PVC creation time of bulk PVC based on logs.
 
     Args:
         interface (str): The interface backed the PVC
         pvc_name_list (list): List of PVC Names for measuring creation time
+        wait_time (int): Seconds to wait before collecting CSI log
 
     Returns:
         pvc_dict (dict): Dictionary of pvc_name with creation time.
@@ -1100,6 +1110,8 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list):
     """
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
+    # due to some delay in CSI log generation added wait
+    time.sleep(wait_time)
     # get the logs from the csi-provisioner containers
     logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
     logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
@@ -1126,13 +1138,14 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list):
     return pvc_dict
 
 
-def measure_pv_deletion_time_bulk(interface, pv_name_list):
+def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
     """
     Measure PV deletion time of bulk PV, based on logs.
 
     Args:
         interface (str): The interface backed the PV
         pv_name_list (list): List of PV Names for measuring deletion time
+        wait_time (int): Seconds to wait before collecting CSI log
 
     Returns:
         pv_dict (dict): Dictionary of pv_name with deletion time.
@@ -1140,6 +1153,8 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list):
     """
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
+    # due to some delay in CSI log generation added wait
+    time.sleep(wait_time)
     # get the logs from the csi-provisioner containers
     logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
     logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
@@ -2101,3 +2116,120 @@ def modify_osd_replica_count(resource_name, replica_count):
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     resource_name = '-'.join(resource_name.split('-')[0:4])
     return ocp_obj.patch(resource_name=resource_name, params=params)
+
+
+def collect_performance_stats():
+    """
+    Collect performance stats and saves them in file in json format.
+
+    Performance stats include:
+        IOPs and throughput percentage of cluster
+        CPU, memory consumption of each nodes
+
+    """
+    from ocs_ci.ocs.cluster import CephCluster
+
+    log_dir_path = os.path.join(
+        os.path.expanduser(config.RUN['log_dir']),
+        f"failed_testcase_ocs_logs_{config.RUN['run_id']}",
+        "performance_stats"
+    )
+    if not os.path.exists(log_dir_path):
+        logger.info(f'Creating directory {log_dir_path}')
+        os.makedirs(log_dir_path)
+
+    ceph_obj = CephCluster()
+    performance_stats = {}
+
+    # Get iops and throughput percentage of cluster
+    iops_percentage = ceph_obj.get_iops_percentage()
+    throughput_percentage = ceph_obj.get_throughput_percentage()
+
+    # ToDo: Get iops and throughput percentage of each nodes
+
+    # Get the cpu and memory of each nodes from adm top
+    master_node_utilization_from_adm_top = \
+        node.get_node_resource_utilization_from_adm_top(node_type='master')
+    worker_node_utilization_from_adm_top = \
+        node.get_node_resource_utilization_from_adm_top(node_type='worker')
+
+    # Get the cpu and memory from describe of nodes
+    master_node_utilization_from_oc_describe = \
+        node.get_node_resource_utilization_from_oc_describe(node_type='master')
+    worker_node_utilization_from_oc_describe = \
+        node.get_node_resource_utilization_from_oc_describe(node_type='worker')
+
+    performance_stats['iops_percentage'] = iops_percentage
+    performance_stats['throughput_percentage'] = throughput_percentage
+    performance_stats['master_node_utilization'] = master_node_utilization_from_adm_top
+    performance_stats['worker_node_utilization'] = worker_node_utilization_from_adm_top
+    performance_stats['master_node_utilization_from_oc_describe'] = master_node_utilization_from_oc_describe
+    performance_stats['worker_node_utilization_from_oc_describe'] = worker_node_utilization_from_oc_describe
+
+    file_name = os.path.join(log_dir_path, 'performance')
+    with open(file_name, 'w') as outfile:
+        json.dump(performance_stats, outfile)
+
+
+def validate_pod_oomkilled(
+    pod_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE, container=None
+):
+    """
+    Validate pod oomkilled message are found on log
+
+    Args:
+        pod_name (str): Name of the pod
+        namespace (str): Namespace of the pod
+        container (str): Name of the container
+
+    Returns:
+        bool : True if oomkill messages are not found on log.
+               False Otherwise.
+
+    Raises:
+        Assertion if failed to fetch logs
+
+    """
+    rc = True
+    try:
+        pod_log = pod.get_pod_logs(
+            pod_name=pod_name, namespace=namespace,
+            container=container, previous=True
+        )
+        result = pod_log.find("signal: killed")
+        if result != -1:
+            rc = False
+    except CommandFailed as ecf:
+        assert f'previous terminated container "{container}" in pod "{pod_name}" not found' in str(ecf), (
+            "Failed to fetch logs"
+        )
+
+    return rc
+
+
+def validate_pods_are_running_and_not_restarted(
+    pod_name, pod_restart_count, namespace
+):
+    """
+    Validate given pod is in running state and not restarted or re-spinned
+
+    Args:
+        pod_name (str): Name of the pod
+        pod_restart_count (int): Restart count of pod
+        namespace (str): Namespace of the pod
+
+    Returns:
+        bool : True if pod is in running state and restart
+               count matches the previous one
+
+    """
+    ocp_obj = ocp.OCP(kind=constants.POD, namespace=namespace)
+    pod_obj = ocp_obj.get(resource_name=pod_name)
+    restart_count = pod_obj.get('status').get('containerStatuses')[0].get('restartCount')
+    pod_state = pod_obj.get('status').get('phase')
+    if pod_state == 'Running' and restart_count == pod_restart_count:
+        logger.info("Pod is running state and restart count matches with previous one")
+        return True
+    logger.error(f"Pod is in {pod_state} state and restart count of pod {restart_count}")
+    logger.info(f"{pod_obj}")
+    return False

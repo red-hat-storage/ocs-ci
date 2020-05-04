@@ -8,6 +8,7 @@ import shlex
 import tempfile
 import time
 import yaml
+import json
 
 from ocs_ci.ocs.constants import RSYNC_POD_YAML, STATUS_RUNNING
 from ocs_ci.ocs.exceptions import (
@@ -23,6 +24,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
 from ocs_ci.ocs import defaults, constants
+from ocs_ci.framework import config
 
 
 log = logging.getLogger(__name__)
@@ -375,6 +377,29 @@ class OCP(object):
             return True
         return False
 
+    def delete_project(self, project_name):
+        """
+        Delete a project.  A project created by the new_project function does
+        not have a corresponding yaml file so normal resource deletion calls
+        do not work
+
+        Args:
+            project_name (str): Name of the project to be deleted
+
+        Returns:
+            bool: True in case project deletion succeeded.
+
+        Raises:
+            CommandFailed: When the project deletion does not succeed.
+
+        """
+        command = f"oc delete project {project_name}"
+        if f' "{project_name}" deleted' in run_cmd(f"{command}"):
+            return True
+        raise CommandFailed(
+            f"{project_name} was not deleted"
+        )
+
     def login(self, user, password):
         """
         Logs user in
@@ -417,7 +442,8 @@ class OCP(object):
 
     def wait_for_resource(
         self, condition, resource_name='', column='STATUS', selector=None,
-        resource_count=0, timeout=60, sleep=3
+        resource_count=0, timeout=60, sleep=3,
+        dont_allow_other_resources=False,
     ):
         """
         Wait for a resource to reach to a desired condition
@@ -433,6 +459,12 @@ class OCP(object):
             resource_count (int): How many resources expected to be
             timeout (int): Time in seconds to wait
             sleep (int): Sampling time in seconds
+            dont_allow_other_resources (bool): If True it will not allow other
+                resources in different state. For example you are waiting for 2
+                resources and there are currently 3 (2 in running state,
+                1 in ContainerCreating) the function will continue to next
+                iteration to wait for only 2 resources in running state and no
+                other exists.
 
         Returns:
             bool: True in case all resources reached desired condition,
@@ -472,8 +504,10 @@ class OCP(object):
                 # More than 1 resources returned
                 elif sample.get('kind') == 'List':
                     in_condition = []
+                    in_condition_len = 0
                     actual_status = []
                     sample = sample['items']
+                    sample_len = len(sample)
                     for item in sample:
                         try:
                             item_name = item.get('metadata').get('name')
@@ -481,13 +515,28 @@ class OCP(object):
                             actual_status.append(status)
                             if status == condition:
                                 in_condition.append(item)
+                                in_condition_len = len(in_condition)
                         except CommandFailed as ex:
                             log.info(
                                 f"Failed to get status of resource: {item_name} at column {column}, "
                                 f"Error: {ex}"
                             )
                         if resource_count:
-                            if len(in_condition) == resource_count:
+                            if in_condition_len == resource_count:
+                                log.info(
+                                    f"{in_condition_len} resources already "
+                                    f"reached condition!"
+                                )
+                                if (
+                                    dont_allow_other_resources
+                                    and sample_len != in_condition_len
+                                ):
+                                    log.info(
+                                        f"There are {sample_len} resources in "
+                                        f"total. Continue to waiting as "
+                                        f"you don't allow other resources!"
+                                    )
+                                    continue
                                 return True
                         elif len(sample) == len(in_condition):
                             return True
@@ -507,6 +556,13 @@ class OCP(object):
                 f"Wait for {self._kind} resource {resource_name} at column {column}"
                 f" to reach desired condition {condition} failed,"
                 f" last actual status was {actual_status}"))
+            # run `oc describe` on the resources we were waiting for to provide
+            # evidence so that we can understand what was wrong
+            output = self.describe(resource_name, selector=selector)
+            log.warning(
+                "Description of the resource(s) we were waiting for:\n%s",
+                output
+            )
             raise(ex)
 
         return False
@@ -740,6 +796,50 @@ class OCP(object):
             )
             return False
 
+    def get_logs(
+        self,
+        name,
+        container_name=None,
+        all_containers=False,
+        secrets=None,
+        timeout=None,
+        ignore_error=False,
+    ):
+        """
+        Execute ``oc logs`` command to fetch logs for a given k8s resource.
+
+        Since the log is stored as a string in memory, this will be
+        problematic when the log is large.
+
+        Args:
+            name (str): name of the resource to fetch logs from
+            container_name (str): name of the container (optional)
+            all_containers (bool): fetch logs from all containers of the
+                resource
+            secrets (list): A list of secrets to be masked with asterisks
+            timeout (int): timeout for the oc_cmd
+            ignore_error (bool): True if ignore non zero return code and do not
+                raise the exception.
+
+        Returns:
+            str: container logs
+
+        """
+        log.info("fetching logs from %s/%s", self.kind, name)
+        oc_cmd = f"logs {self.kind}/{name}"
+        if container_name is not None:
+            oc_cmd += f" --container='{container_name}'"
+        if all_containers:
+            oc_cmd += " --all-containers=true"
+        output = self.exec_oc_cmd(
+            oc_cmd,
+            out_yaml_format=False,
+            secrets=secrets,
+            timeout=timeout,
+            ignore_error=ignore_error
+        )
+        return output
+
 
 def switch_to_project(project_name):
     """
@@ -874,3 +974,255 @@ def verify_images_upgraded(old_images, object_data):
         f"All the images: {current_images} were successfully upgraded in: "
         f"{name}!"
     )
+
+
+def confirm_cluster_operator_version(target_version, cluster_operator):
+    """
+    Check if cluster operator upgrade process is completed:
+
+    Args:
+        cluster_operator: (str): ClusterOperator name
+        target_version (str): expected OCP client
+
+    Returns:
+        bool: True if success, False if failed
+
+    """
+    log.info(f"target_version: {target_version}")
+    cur_version = get_cluster_operator_version(cluster_operator)
+    log.info(f"current {cluster_operator} operator version is: {cur_version}")
+    if cur_version == target_version or target_version.startswith(cur_version):
+        log.info(f"{cluster_operator} cluster operator upgrade to build"
+                 f" {target_version} completed")
+        return True
+
+    log.debug(f"{cluster_operator} upgrade not yet completed")
+    return False
+
+
+def upgrade_ocp(image_path, image):
+    """
+    upgrade OCP version
+
+    Args:
+        image (str): image to be installed
+        image_path (str): path to image
+
+    """
+    ocp = OCP()
+    ocp.exec_oc_cmd(
+        f"adm upgrade --to-image={image_path}:{image} "
+        f"--allow-explicit-upgrade --force "
+    )
+    log.info(f"Upgrading OCP to version: {image} ")
+
+
+def get_current_oc_version():
+    """
+    Gets Current OCP client version
+
+    Returns:
+        str: current COP client version
+
+    """
+    ocp = OCP()
+    oc_json = ocp.exec_oc_cmd('version -o json', out_yaml_format=False)
+    log.debug(f"oc_json=: {oc_json}")
+    oc_dict = json.loads(oc_json)
+    log.debug(f"oc_dict=: {oc_dict}")
+
+    return oc_dict.get("openshiftVersion")
+
+
+def get_cluster_operator_version(cluster_operator_name):
+    """
+    Get image version of selected cluster operator
+
+    Args:
+        cluster_operator_name (str): ClusterOperator name
+
+    Returns:
+        str: cluster operator version: ClusterOperator image version
+
+    """
+    ocp = OCP(kind='ClusterOperator')
+    operator_info = ocp.get(cluster_operator_name)
+    log.debug(f"operator info: {operator_info}")
+    operator_status = operator_info.get('status')
+    version = operator_status.get('versions')[0]['version']
+    version = version.rstrip('_openshift')
+
+    return version
+
+
+def get_all_cluster_operators():
+    """
+    Get all ClusterOperators names in OCP
+
+    Returns:
+        list: cluster-operator names
+
+    """
+    ocp = OCP(kind='ClusterOperator')
+    operator_info = ocp.get("-o name", out_yaml_format=False, all_namespaces=True)
+    operators_full_names = str(operator_info).split()
+    operator_names = list()
+    for name in operators_full_names:
+        log.debug(f"original operator name: {name}")
+        new_name = name.lstrip('clusteroperator.config.openshift.io').lstrip('/')
+        log.info(f"fixed operator name: {new_name}")
+        operator_names.append(new_name)
+
+    log.info(f"ClusterOperators full list: {operator_names}")
+
+    return operator_names
+
+
+def verify_cluster_operator_status(cluster_operator):
+    """
+    Checks if cluster operator status is degraded or progressing,
+    as sign that upgrade not yet completed
+
+    Args:
+        cluster_operator (str): OCP cluster operator name
+
+    Returns:
+        bool: True if cluster operator status is valid, False if cluster operator status
+        is "degraded" or "progressing"
+
+    """
+    ocp = OCP(kind='clusteroperators')
+    operator_data = ocp.get(
+        resource_name=f'{cluster_operator} -o json', out_yaml_format=False
+    )
+    conditions = operator_data['status']['conditions']
+    for condition in conditions:
+        if condition['type'] == 'Degraded' and condition['status'] == 'True':
+            log.info(f'{cluster_operator} status is Degraded')
+            return False
+        elif condition['type'] == 'Progressing' and condition['status'] == 'True':
+            log.info(f'{cluster_operator} status is Progressing')
+            return False
+    log.info(f'{cluster_operator} status is valid')
+
+    return True
+
+
+def validate_cluster_version_status():
+    """
+    Verify OCP upgrade is completed, by checking 'oc get clusterversion'
+    status
+
+    Returns:
+        bool: False in case that one of condition flags is invalid:
+            Progressing (should be False), Failing(should be False)
+            or Available (should be True)
+
+    """
+    ocp = OCP(kind="clusterversion")
+    operator_data = ocp.get('-o json', out_yaml_format=False)
+    conditions = operator_data['items'][0].get('status').get('conditions', [])
+    for condition in conditions:
+        if condition['type'] == 'Progressing' and condition['status'] == 'True':
+            log.info('cluster version status is Progressing')
+            return False
+        elif condition['type'] == 'Failing' and condition['status'] == 'True':
+            log.info('cluster version status is Failing')
+            return False
+        elif condition['type'] == 'Available' and condition['status'] != 'True':
+            log.info('cluster status is not available')
+            return False
+
+    log.info('Cluster version validation - OK!')
+    return True
+
+
+def get_ocp_upgrade_channel():
+    """
+    Gets OCP upgrade channel
+
+    Returns:
+        str: OCP upgrade channel name
+
+    """
+    ocp = OCP(kind="clusterversion")
+    log.info("Gathering Subscription Channel information")
+    operator_version = ocp.get('-o json', out_yaml_format=False)
+    log.debug(f"cluster version: {operator_version}")
+    channel = operator_version['items'][0].get('spec').get('channel')
+    log.info(f"Subscription Channel: {channel}")
+
+    return channel
+
+
+def patch_ocp_upgrade_channel(
+    channel_variable=config.UPGRADE['ocp_channel']
+):
+    """
+    Using 'oc patch clusterversion' if new OCP upgrade channel is
+    different than current one
+
+    Args:
+        channel_variable (str): New OCP upgrade subscription channel
+
+    """
+    if get_ocp_upgrade_channel() != channel_variable:
+        cmd = (
+            f'patch clusterversions/version -p \'{{"spec":'
+            f'{{"channel":"{channel_variable}"}}}}\' --type=merge'
+        )
+        ocp = OCP()
+        log.info(f"Patching channel into {channel_variable}")
+        ocp.exec_oc_cmd(cmd)
+
+    else:
+        log.info("No patch needed")
+
+
+def verify_ocp_upgrade_channel(
+    channel_variable=config.UPGRADE['ocp_channel']
+):
+    """
+    When upgrade OCP version, verify that subscription channel is same
+    as current one
+
+    Args:
+        channel_variable (str): New OCP upgrade subscription channel
+
+    Returns:
+        bool: True when OCP subscription channel is correct,
+            and no patch needed
+
+    """
+    current_channel = get_ocp_upgrade_channel()
+    if current_channel == channel_variable:
+        log.info(f"Channel is {channel_variable}, no patch required")
+
+        return True
+    else:
+        log.info(f"Current subscription channel is  {current_channel}")
+        log.info(f"Required subscription channel is {channel_variable}")
+
+        return False
+
+
+def wait_for_cluster_connectivity(tries=200, delay=3):
+    """
+    Wait for the cluster to be reachable
+
+    Args:
+        tries (int): The number of retries
+        delay (int): The delay in seconds between retries
+
+    Returns:
+        bool: True if cluster is reachable, False otherwise
+
+    Raises:
+        CommandFailed: In case the cluster is unreachable
+
+    """
+    service = OCP()
+    log.info("Waiting for cluster connectivity")
+    return retry(
+        CommandFailed, tries=tries, delay=delay, backoff=1
+    )(service.get)

@@ -70,7 +70,8 @@ class TestMultiRegion:
         Test multi-region bucket creation using the S3 SDK
         """
 
-        bucket_name, backingstore1, backingstore2 = multiregion_mirror_setup
+        bucket, backingstore1, backingstore2 = multiregion_mirror_setup
+        bucket_name = bucket.name
 
         # Download test objects from the public bucket
         downloaded_objs = retrieve_test_objects_to_pod(awscli_pod, '/aws/original/')

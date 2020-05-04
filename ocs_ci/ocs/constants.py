@@ -32,6 +32,9 @@ TEMPLATE_SMALLFILE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "smallfile")
 TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
 TEMPLATE_VDBENCH_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "vdbench")
 TEMPLATE_PGSQL_SERVER_DIR = os.path.join(TEMPLATE_PGSQL_DIR, "server")
+TEMPLATE_COUCHBASE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase")
+TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
+TEMPLATE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_SERVER_DIR, "pillowfight")
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(
     TEMPLATE_DIR, "openshift-infra/"
@@ -71,11 +74,16 @@ STATUS_COMPLETED = 'Completed'
 # NooBaa statuses
 BS_AUTH_FAILED = 'AUTH_FAILED'
 BS_OPTIMAL = 'OPTIMAL'
+HEALTHY_OB = 'OPTIMAL'
+HEALTHY_OBC = STATUS_BOUND
+HEALTHY_OBC_CLI_PHASE = 'Phase:Bound'
+HEALTHY_OB_CLI_MODE = 'Mode:OPTIMAL'
 
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
 DEPLOYMENT = "Deployment"
+JOB = "Job"
 STORAGECLASS = "StorageClass"
 PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
@@ -89,6 +97,7 @@ STORAGECLUSTER = 'storagecluster'
 CLUSTER_OPERATOR = 'ClusterOperator'
 MONITORING = 'monitoring'
 CLUSTER_SERVICE_VERSION = 'csv'
+JOB = 'job'
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -105,6 +114,7 @@ CLUSTER_SERVICE_VERSION = 'csv'
 
 # Other
 SECRET = "Secret"
+TEST = "test"
 NAMESPACE = 'Namespace'
 IGNORE_SC_GP2 = "gp2"
 IGNORE_SC_FLEX = "rook-ceph-block"
@@ -114,6 +124,8 @@ OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
 OPENSHIFT_LOGGING_NAMESPACE = "openshift-logging"
 OPENSHIFT_OPERATORS_REDHAT_NAMESPACE = "openshift-operators-redhat"
 OPENSHIFT_IMAGE_REGISTRY_NAMESPACE = "openshift-image-registry"
+OPENSHIFT_IMAGE_REGISTRY_DEPLOYMENT = "image-registry"
+OPENSHIFT_IMAGE_SELECTOR = "docker-registry=default"
 OPENSHIFT_INGRESS_NAMESPACE = "openshift-ingress"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
@@ -138,6 +150,7 @@ DEFAULT_ROUTE_CRT = "router-certs-default"
 DEFAULT_NAMESPACE = "default"
 IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
 IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
+DEFAULT_NOOBAA_BACKINGSTORE = "noobaa-default-backing-store"
 
 # Default StorageClass
 DEFAULT_STORAGECLASS_CEPHFS = f'{DEFAULT_CLUSTERNAME}-cephfs'
@@ -163,6 +176,7 @@ MDS_APP_LABEL = "app=rook-ceph-mds"
 TOOL_APP_LABEL = "app=rook-ceph-tools"
 MGR_APP_LABEL = "app=rook-ceph-mgr"
 OSD_APP_LABEL = "app=rook-ceph-osd"
+OSD_PREPARE_APP_LABEL = "app=rook-ceph-osd-prepare"
 RGW_APP_LABEL = "app=rook-ceph-rgw"
 OPERATOR_LABEL = "app=rook-ceph-operator"
 CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = "app=csi-cephfsplugin-provisioner"
@@ -176,6 +190,8 @@ NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
 NOOBAA_OPERATOR_POD_LABEL = "noobaa-operator=deployment"
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
+OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
+CEPH_ROOK_IO_PVC_LABEL = 'ceph.rook.io/pvc'
 
 
 # YAML paths
@@ -225,6 +241,10 @@ MCG_BACKINGSTORE_SECRET_YAML = os.path.join(
 
 MCG_BACKINGSTORE_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "BackingStore.yaml"
+)
+
+PV_BACKINGSTORE_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "PVBackingStore.yaml"
 )
 
 MCG_BUCKETCLASS_YAML = os.path.join(
@@ -283,6 +303,58 @@ SMALLFILE_BENCHMARK_YAML = os.path.join(
 
 VDBENCH_BENCHMARK_YAML = os.path.join(
     TEMPLATE_VDBENCH_DIR, "VDBench.yaml"
+)
+
+COUCHBASE_ADMISSION_SERVICE_ACCOUNT_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionServiceAccount.yaml"
+)
+
+COUCHBASE_ADMISSION_CLUSTER_ROLE_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionClusterRole.yaml"
+)
+
+COUCHBASE_ADMISSION_CLUSTER_ROLE_BINDING_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionClusterRoleBinding.yaml"
+)
+
+COUCHBASE_ADMISSION_SECRET_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionSecret.yaml"
+)
+
+COUCHBASE_ADMISSION_DEPLOYMENT_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionDeployment.yaml"
+)
+
+COUCHBASE_ADMISSION_SERVICE_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "admissionService.yaml"
+)
+
+COUCHBASE_MUTATING_WEBHOOK_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "MutatingWebhookConfiguration.yaml"
+)
+
+COUCHBASE_VALIDATING_WEBHOOK_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "ValidatingWebhookConfiguration.yaml"
+)
+
+COUCHBASE_CRD_YAML = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbaseCrd.yaml"
+)
+
+COUCHBASE_OPERATOR_ROLE = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "operator-role.yaml"
+)
+
+COUCHBASE_OPERATOR_DEPLOY = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "operator-deployment.yaml"
+)
+
+COUCHBASE_WORKER_SECRET = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-secret.yaml"
+)
+
+COUCHBASE_WORKER_EXAMPLE = os.path.join(
+    TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-example.yaml"
 )
 
 NGINX_POD_YAML = os.path.join(
@@ -447,6 +519,11 @@ OPENSHIFT_UPGRADE_INFO_API = (
 APP_NODE_LABEL = 'app-node'
 VDBENCH_NODE_LABEL = 'vdbench'
 VDBENCH_RESULTS_FILE = '/tmp/Results.tar.gz'
+VDBENCH_WIDTH = 4  # the width of the directory tree  that will be created
+VDBENCH_DEPTH = 4  # the depth of the directory tree  that will be created
+VDBENCH_FILE_SIZE = 1  # the file size in MB that will be created
+VDBENCH_CAP_PER_POD = 80000  # the Maximum capacity (in MB) per pod in the test
+VDBENCH_MIN_CAPACITY = 300  # minimum storage capacity (in GB) for the test to run
 
 # Platforms
 AWS_PLATFORM = 'aws'
@@ -501,8 +578,13 @@ PEM_PATH = "/etc/pki/ca-trust/source/anchors/"
 # Upgrade related constants, keeping some space between, so we can add
 # additional order.
 ORDER_BEFORE_UPGRADE = 10
-ORDER_UPGRADE = 20
-ORDER_AFTER_UPGRADE = 30
+ORDER_BEFORE_OCP_UPGRADE = 20
+ORDER_OCP_UPGRADE = 30
+ORDER_AFTER_OCP_UPGRADE = 40
+ORDER_BEFORE_OCS_UPGRADE = 50
+ORDER_OCS_UPGRADE = 60
+ORDER_AFTER_OCS_UPGRADE = 70
+ORDER_AFTER_UPGRADE = 80
 
 # Deployment constants
 OCS_CSV_PREFIX = 'ocs-operator'
@@ -644,3 +726,57 @@ OSD_TREE_ZONE = {
 
 # gather bootstrap
 GATHER_BOOTSTRAP_PATTERN = 'openshift-install gather bootstrap --help'
+
+# must-gather commands output files
+MUST_GATHER_COMMANDS = [
+    'ceph_versions', 'ceph_status', 'ceph_report', 'ceph_pg_dump',
+    'ceph_osd_tree', 'ceph_osd_stat', 'ceph_osd_dump', 'ceph_osd_df_tree',
+    'ceph_osd_crush_show-tunables', 'ceph_osd_crush_dump', 'ceph_mon_stat',
+    'ceph_mon_dump', 'ceph_mgr_dump', 'ceph_mds_stat', 'ceph_health_detail',
+    'ceph_fs_ls', 'ceph_fs_dump', 'ceph_df', 'ceph_auth_list',
+    'ceph-volume_lvm_list'
+]
+
+MUST_GATHER_COMMANDS_JSON = [
+    'ceph_versions_--format_json-pretty', 'ceph_status_--format_json-pretty',
+    'ceph_report_--format_json-pretty', 'ceph_pg_dump_--format_json-pretty',
+    'ceph_osd_tree_--format_json-pretty', 'ceph_osd_stat_--format_json-pretty',
+    'ceph_osd_dump_--format_json-pretty',
+    'ceph_osd_df_tree_--format_json-pretty',
+    'ceph_osd_crush_show-tunables_--format_json-pretty',
+    'ceph_osd_crush_dump_--format_json-pretty',
+    'ceph_mon_stat_--format_json-pretty', 'ceph_mon_dump_--format_json-pretty',
+    'ceph_mgr_dump_--format_json-pretty', 'ceph_mds_stat_--format_json-pretty',
+    'ceph_health_detail_--format_json-pretty',
+    'ceph_fs_ls_--format_json-pretty', 'ceph_fs_dump_--format_json-pretty',
+    'ceph_df_--format_json-pretty', 'ceph_auth_list_--format_json-pretty'
+]
+
+# local storage
+LOCAL_STORAGE_OPERATOR = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "local-storage-operator.yaml"
+)
+LOCAL_VOLUME_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "local-volume.yaml"
+)
+
+# All worker default config files
+RHEL_WORKERS_CONF = os.path.join(CONF_DIR, 'ocsci/aws_upi_rhel_workers.yaml')
+
+# Users
+NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
+
+# Miscellaneous
+NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
+
+# Storage classes provisioners
+OCS_PROVISIONERS = [
+    'openshift-storage.rbd.csi.ceph.com',
+    'openshift-storage.cephfs.csi.ceph.com',
+    'openshift-storage.noobaa.io/obc'
+]
+
+# Bucket Policy action lists
+bucket_website_action_list = ['PutBucketWebsite', 'GetBucketWebsite', 'PutObject']
+bucket_version_action_list = ['PutBucketVersioning', 'GetBucketVersioning']
+object_version_action_list = ['PutObject', 'GetObjectVersion', 'DeleteObjectVersion']

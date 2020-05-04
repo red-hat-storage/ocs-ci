@@ -6,11 +6,15 @@ import threading
 import os
 import re
 
+from botocore.exceptions import ClientError
+
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import CLEANUP_YAML, TEMPLATE_CLEANUP_DIR
-from ocs_ci.utility.utils import get_openshift_installer, run_cmd
+from ocs_ci.utility.utils import get_openshift_installer, destroy_cluster
 from ocs_ci.utility import templating
-from ocs_ci.utility.aws import AWS
+from ocs_ci.utility.aws import (
+    AWS, terminate_rhel_workers, destroy_volumes, get_rhel_worker_instances
+)
 from ocs_ci.cleanup.aws import defaults
 
 
@@ -21,13 +25,14 @@ logging.basicConfig(format=FORMAT, level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-def cleanup(cluster_name, cluster_id):
+def cleanup(cluster_name, cluster_id, upi=False):
     """
     Cleanup existing cluster in AWS
 
     Args:
         cluster_name (str): Name of the cluster
         cluster_id (str): Cluster id to cleanup
+        upi (bool): True for UPI cluster, False otherwise
 
     """
     data = {'cluster_name': cluster_name, 'cluster_id': cluster_id}
@@ -39,8 +44,62 @@ def cleanup(cluster_name, cluster_id):
         temp.write(cleanup_template)
     bin_dir = os.path.expanduser(config.RUN['bin_dir'])
     oc_bin = os.path.join(bin_dir, "openshift-install")
-    logger.info(f"cleaning up {cluster_id}")
-    run_cmd(f"{oc_bin} destroy cluster --dir {cleanup_path} --log-level=debug")
+
+    if upi:
+        aws = AWS()
+        rhel_workers = get_rhel_worker_instances(cleanup_path)
+        logger.info(f"{cluster_name}'s RHEL workers: {rhel_workers}")
+        if rhel_workers:
+            terminate_rhel_workers(rhel_workers)
+        # Destroy extra volumes
+        destroy_volumes(cluster_name)
+
+        stack_names = list()
+        # Get master, bootstrap and security group stacks
+        for stack_type in ['ma', 'bs', 'sg']:
+            try:
+                stack_names.append(
+                    aws.get_cloudformation_stacks(
+                        pattern=f"{cluster_name}-{stack_type}"
+                    )[0]['StackName']
+                )
+            except ClientError:
+                continue
+
+        # Get the worker stacks
+        worker_index = 0
+        worker_stack_exists = True
+        while worker_stack_exists:
+            try:
+                stack_names.append(
+                    aws.get_cloudformation_stacks(
+                        pattern=f"{cluster_name}-no{worker_index}"
+                    )[0]['StackName']
+                )
+                worker_index += 1
+            except ClientError:
+                worker_stack_exists = False
+
+        logger.info(f"Deleting stacks: {stack_names}")
+        aws.delete_cloudformation_stacks(stack_names)
+
+        # Destroy the cluster
+        logger.info(f"cleaning up {cluster_id}")
+        destroy_cluster(installer=oc_bin, cluster_path=cleanup_path)
+
+        for stack_type in ['inf', 'vpc']:
+            try:
+                stack_names.append(
+                    aws.get_cloudformation_stacks(
+                        pattern=f"{cluster_name}-{stack_type}"
+                    )[0]['StackName']
+                )
+            except ClientError:
+                continue
+        aws.delete_cloudformation_stacks(stack_names)
+    else:
+        logger.info(f"cleaning up {cluster_id}")
+        destroy_cluster(installer=oc_bin, cluster_path=cleanup_path)
 
 
 def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare):
@@ -61,26 +120,8 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
             ci-cleanup script and a list of VPCs that are part of cloudformations
 
     """
-    aws = AWS(region_name=region_name)
-    clusters_to_delete = list()
-    cloudformation_vpcs = list()
-    vpcs = aws.ec2_client.describe_vpcs()['Vpcs']
-    vpc_ids = [vpc['VpcId'] for vpc in vpcs]
-    vpc_objs = [aws.ec2_resource.Vpc(vpc_id) for vpc_id in vpc_ids]
-    for vpc_obj in vpc_objs:
-        vpc_tags = vpc_obj.tags
-        vpc_cloudformation = [
-            tag['Value'] for tag in vpc_tags if tag['Key'] == defaults.AWS_CLOUDFORMATION_TAG
-        ]
-        if vpc_cloudformation:
-            cloudformation_vpcs.append(vpc_cloudformation)
-            continue
-        vpc_name = [tag['Value'] for tag in vpc_tags if tag['Key'] == 'Name'][0]
-        cluster_name = vpc_name[:-4]
-        vpc_instances = vpc_obj.instances.all()
-        if not vpc_instances:
-            clusters_to_delete.append(cluster_name)
-        for instance in vpc_instances:
+    def determine_cluster_deletion(ec2_instances, cluster_name):
+        for instance in ec2_instances:
             allowed_running_time = time_to_delete
             do_not_delete = False
             if instance.state["Name"] == "running":
@@ -97,14 +138,78 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
                         "%s marked as 'do not delete' and will not be "
                         "destroyed", cluster_name
                     )
+                    return False
                 else:
                     launch_time = instance.launch_time
                     current_time = datetime.datetime.now(launch_time.tzinfo)
                     running_time = current_time - launch_time
+                    logger.info(
+                        f"Instance {[tag['Value'] for tag in instance.tags if tag['Key'] == 'Name'][0]} "
+                        f"(id: {instance.id}) running time is {running_time} hours while the allowed"
+                        f" running time for it is {allowed_running_time/3600} hours"
+                    )
                     if running_time.seconds > allowed_running_time:
-                        clusters_to_delete.append(cluster_name)
+                        return True
+        return False
+
+    aws = AWS(region_name=region_name)
+    clusters_to_delete = list()
+    cloudformation_vpc_names = list()
+    vpcs = aws.ec2_client.describe_vpcs()['Vpcs']
+    vpc_ids = [vpc['VpcId'] for vpc in vpcs]
+    vpc_objs = [aws.ec2_resource.Vpc(vpc_id) for vpc_id in vpc_ids]
+    for vpc_obj in vpc_objs:
+        vpc_tags = vpc_obj.tags
+        if vpc_tags:
+            cloudformation_vpc_name = [
+                tag['Value'] for tag in vpc_tags
+                if tag['Key'] == defaults.AWS_CLOUDFORMATION_TAG
+            ]
+            if cloudformation_vpc_name:
+                cloudformation_vpc_names.append(cloudformation_vpc_name[0])
+                continue
+            vpc_name = [
+                tag['Value'] for tag in vpc_tags if tag['Key'] == 'Name'
+            ][0]
+            cluster_name = vpc_name.replace('-vpc', '')
+            vpc_instances = vpc_obj.instances.all()
+            if not vpc_instances:
+                clusters_to_delete.append(cluster_name)
+                continue
+
+            # Append to clusters_to_delete if cluster should be deleted
+            if determine_cluster_deletion(vpc_instances, cluster_name):
+                clusters_to_delete.append(cluster_name)
+        else:
+            logger.info("No tags found for VPC")
+
+    # Get all cloudformation based clusters to delete
+    cf_clusters_to_delete = list()
+    for vpc_name in cloudformation_vpc_names:
+        instance_dicts = aws.get_instances_by_name_pattern(f"{vpc_name.replace('-vpc', '')}*")
+        ec2_instances = [aws.get_ec2_instance(instance_dict['id']) for instance_dict in instance_dicts]
+        if not ec2_instances:
+            continue
+        cluster_io_tag = None
+        for instance in ec2_instances:
+            cluster_io_tag = [
+                tag['Key'] for tag in instance.tags
+                if 'kubernetes.io/cluster' in tag['Key']
+            ]
+            if cluster_io_tag:
                 break
-    return clusters_to_delete, cloudformation_vpcs
+        if not cluster_io_tag:
+            logger.warning(
+                "Unable to find valid cluster IO tag from ec2 instance tags "
+                "for VPC %s. This is probably not an OCS cluster VPC!",
+                vpc_name
+            )
+            continue
+        cluster_name = cluster_io_tag[0].replace('kubernetes.io/cluster/', '')
+        if determine_cluster_deletion(ec2_instances, cluster_name):
+            cf_clusters_to_delete.append(cluster_name)
+
+    return clusters_to_delete, cf_clusters_to_delete
 
 
 def cluster_cleanup():
@@ -116,13 +221,19 @@ def cluster_cleanup():
         required=True,
         help="Cluster name tag"
     )
+    parser.add_argument(
+        '--upi',
+        action='store_true',
+        required=False,
+        help="For UPI cluster deletion"
+    )
     logging.basicConfig(level=logging.DEBUG)
     args = parser.parse_args()
     procs = []
     for id in args.cluster:
         cluster_name = id[0].rsplit('-', 1)[0]
         logger.info(f"cleaning up {id[0]}")
-        proc = threading.Thread(target=cleanup, args=(cluster_name, id[0]))
+        proc = threading.Thread(target=cleanup, args=(cluster_name, id[0], args.upi))
         proc.start()
         procs.append(proc)
     for p in procs:
@@ -198,9 +309,11 @@ def aws_cleanup():
 
     time_to_delete = args.hours * 60 * 60
     region = defaults.AWS_REGION if not args.region else args.region
-    clusters_to_delete, cloudformation_vpcs = get_clusters_to_delete(
-        time_to_delete=time_to_delete, region_name=region,
-        prefixes_hours_to_spare=prefixes_hours_to_spare,
+    clusters_to_delete, cf_clusters_to_delete = (
+        get_clusters_to_delete(
+            time_to_delete=time_to_delete, region_name=region,
+            prefixes_hours_to_spare=prefixes_hours_to_spare,
+        )
     )
 
     if not clusters_to_delete:
@@ -217,11 +330,14 @@ def aws_cleanup():
         procs.append(proc)
     for p in procs:
         p.join()
-    if cloudformation_vpcs:
-        logger.warning(
-            "The following cloudformation VPCs were found: %s",
-            cloudformation_vpcs
-        )
+    for cluster in cf_clusters_to_delete:
+        cluster_name = cluster.rsplit('-', 1)[0]
+        logger.info(f"Deleting UPI cluster {cluster_name}")
+        proc = threading.Thread(target=cleanup, args=(cluster_name, cluster, True))
+        proc.start()
+        procs.append(proc)
+    for p in procs:
+        p.join()
 
 
 def prefix_hour_mapping(string):

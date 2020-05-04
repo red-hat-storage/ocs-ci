@@ -12,7 +12,7 @@ import random
 import re
 import threading
 import yaml
-from time import sleep
+import time
 
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
@@ -471,17 +471,43 @@ class CephCluster(object):
             ceph_health_cmd, out_yaml_format=False,
         )
 
-    def get_ceph_status(self):
+    def get_ceph_status(self, format=None):
         """
         Exec `ceph status` cmd on tools pod and return its output.
+
+        Args:
+            format (str) : Format of the output (e.g. json-pretty, json, plain)
 
         Returns:
             str: Output of the ceph status command.
 
         """
-        return self.toolbox.exec_cmd_on_pod(
-            "ceph status", out_yaml_format=False,
+        cmd = "ceph status"
+        if format:
+            cmd += f" -f {format}"
+        return self.toolbox.exec_cmd_on_pod(cmd)
+
+    def get_ceph_capacity(self):
+        """
+        The function gets the total mount of storage capacity of the ocs cluster.
+        the calculation is <Num of OSD> * <OSD size> / <replica number>
+        it will not take into account the current used capacity.
+
+        Returns:
+            int : Total storage capacity in GiB (GiB is for development environment)
+
+        """
+        storage_cluster_obj = storage_cluster.StorageCluster(
+            resource_name=config.ENV_DATA['storage_cluster_name'],
+            namespace=config.ENV_DATA['cluster_namespace'],
         )
+        replica = int(storage_cluster_obj.data['spec']['storageDeviceSets'][0]['replica'])
+
+        ceph_pod = pod.get_ceph_tools_pod()
+        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+        usable_capacity = int(ceph_status['stats']['total_bytes']) / replica / constant.GB
+
+        return usable_capacity
 
     def get_ceph_cluster_iops(self):
         """
@@ -564,6 +590,48 @@ class CephCluster(object):
         logging.info(f"The throughput percentage of the cluster is {throughput_percentage}%")
         return throughput_percentage
 
+    def get_rebalance_status(self):
+        """
+        This function gets the rebalance status
+
+        Returns:
+            bool: True if rebalance is completed, False otherwise
+
+        """
+
+        ceph_status = self.get_ceph_status(format='json-pretty')
+        ceph_health = ceph_status['health']['status']
+        total_pg_count = ceph_status['pgmap']['num_pgs']
+        pg_states = ceph_status['pgmap']['pgs_by_state']
+        logger.info(ceph_health)
+        logger.info(pg_states)
+        for states in pg_states:
+            return (
+                states['state_name'] == 'active+clean'
+                and states['count'] == total_pg_count
+            )
+
+    def time_taken_to_complete_rebalance(self, timeout=600):
+        """
+        This function calculates the time taken to complete
+        rebalance
+
+        Args:
+            timeout (int): Time to wait for the completion of rebalance
+
+        Returns:
+            int : Time taken in minutes for the completion of rebalance
+
+        """
+        start_time = time.time()
+        for rebalance in TimeoutSampler(
+            timeout=timeout, sleep=10, func=self.get_rebalance_status
+        ):
+            if rebalance:
+                logging.info("Rebalance is completed")
+                time_taken = time.time() - start_time
+                return (time_taken / 60)
+
 
 class CephHealthMonitor(threading.Thread):
     """
@@ -594,7 +662,7 @@ class CephHealthMonitor(threading.Thread):
         while self.health_monitor_enabled and (
             not self.health_error_status
         ):
-            sleep(self.sleep)
+            time.sleep(self.sleep)
             self.latest_health_status = self.ceph_cluster.get_ceph_health(
                 detail=True
             )
@@ -666,9 +734,10 @@ def validate_cluster_on_pvc():
 
     mon_pods = get_pod_name_by_pattern('rook-ceph-mon', ns)
     osd_pods = get_pod_name_by_pattern('rook-ceph-osd', ns, filter='prepare')
-    assert len(mon_pods) + len(osd_pods) == len(pvc_names), (
-        "Not enough PVC's available for all Ceph Pods"
-    )
+    if not config.DEPLOYMENT.get('local_storage'):
+        assert len(mon_pods) + len(osd_pods) == len(pvc_names), (
+            "Not enough PVC's available for all Ceph Pods"
+        )
     for ceph_pod in mon_pods + osd_pods:
         out = run_cmd(f'oc -n {ns} get pods {ceph_pod} -o yaml')
         out_yaml = yaml.safe_load(out)

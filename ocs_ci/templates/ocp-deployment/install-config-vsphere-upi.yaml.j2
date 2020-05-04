@@ -4,6 +4,9 @@ metadata:
   name: '{{ cluster_name }}'
 networking:
   machineCIDR: '{{ machine_cidr }}'
+{% if fips %}
+fips: {{ fips }}
+{% endif %}
 platform:
   vsphere:
     datacenter: {{ vsphere_datacenter }}

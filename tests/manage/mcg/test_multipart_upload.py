@@ -54,23 +54,23 @@ class TestS3MultipartUpload(ManageTest):
 
         # Abort all Multipart Uploads for this Bucket (optional, for starting over)
         logger.info(f'Aborting any Multipart Upload on bucket:{bucket}')
-        mcg_obj.abort_multipart_upload(bucket, key)
+        helpers.abort_all_multipart_upload(mcg_obj, bucket, key)
 
         # Create & list Multipart Upload on the Bucket
         logger.info(f'Initiating Multipart Upload on Bucket: {bucket} with Key {key}')
-        upload_id = mcg_obj.create_multipart_upload(bucket, key)
-        logger.info(f'Listing the Multipart Upload : {mcg_obj.list_multipart_upload(bucket)}')
+        upload_id = helpers.create_multipart_upload(mcg_obj, bucket, key)
+        logger.info(f'Listing the Multipart Upload : {helpers.list_multipart_upload(mcg_obj, bucket)}')
 
         # Uploading individual parts to the Bucket
         logger.info(f'Uploading individual parts to the bucket {bucket}')
         uploaded_parts = helpers.upload_parts(mcg_obj, awscli_pod, bucket, key, res_dir, upload_id, parts)
 
         # Listing the Uploaded parts
-        logger.info(f'Listing the individual parts : {mcg_obj.list_uploaded_parts(bucket, key, upload_id)}')
+        logger.info(f'Listing the individual parts : {helpers.list_uploaded_parts(mcg_obj, bucket, key, upload_id)}')
 
         # Completing the Multipart Upload
         logger.info(f'Completing the Multipart Upload on bucket: {bucket}')
-        logger.info(mcg_obj.complete_multipart_upload(bucket, key, upload_id, uploaded_parts))
+        logger.info(helpers.complete_multipart_upload(mcg_obj, bucket, key, upload_id, uploaded_parts))
 
         # Checksum Validation: Downloading the object after completing Multipart Upload and verifying its integrity
         logger.info(f'Downloading the completed multipart object from MCG bucket to awscli pod')

@@ -1,21 +1,24 @@
 import base64
 import json
 import logging
+import os
 import shlex
 from time import sleep
 
 import boto3
 import requests
+import urllib3
 from botocore.client import ClientError
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, registry
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_mcg_cmd, TimeoutSampler
-from tests.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
+from ocs_ci.utility import templating
+from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
+from tests.helpers import create_unique_resource_name, create_resource
 
 logger = logging.getLogger(name=__file__)
 
@@ -35,6 +38,11 @@ class MCG(object):
         """
         Constructor for the MCG class
         """
+
+        # Todo: find a better solution for not being able to verify requests with a self-signed cert
+        logger.warning('Suppressing InsecureRequestWarnings')
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
         self.namespace = config.ENV_DATA['cluster_namespace']
         ocp_obj = OCP(kind='noobaa', namespace=self.namespace)
         results = ocp_obj.get()
@@ -90,6 +98,14 @@ class MCG(object):
             aws_secret_access_key=self.access_key
         )
 
+        # Give NooBaa's ServiceAccount permissions in order to execute CLI commands
+        registry.add_role_to_user(
+            'cluster-admin', constants.NOOBAA_SERVICE_ACCOUNT,
+            cluster_role=True
+        )
+
+        self.operator_pod = Pod(**get_pods_having_label(constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace)[0])
+
         if config.ENV_DATA['platform'].lower() == 'aws':
             (
                 self.cred_req_obj,
@@ -126,6 +142,35 @@ class MCG(object):
         """
         return {bucket.name for bucket in self.s3_resource.buckets.all()}
 
+    def read_system(self):
+        """
+        Returns:
+            dict: A dictionary with information about MCG resources
+
+        """
+        return self.send_rpc_query(
+            'system_api',
+            'read_system',
+            params={}
+        ).json()['reply']
+
+    def get_bucket_info(self, bucket_name):
+        """
+        Args:
+            bucket_name (str): Name of searched bucket
+
+        Returns:
+            dict: Information about the bucket
+
+        """
+        logger.info(f'Requesting information about bucket {bucket_name}')
+        for bucket in self.read_system().get('buckets'):
+            if bucket['name'] == bucket_name:
+                logger.debug(bucket)
+                return bucket
+        logger.warning(f'Bucket {bucket_name} was not found')
+        return None
+
     def oc_get_all_bucket_names(self):
         """
         Returns:
@@ -143,7 +188,7 @@ class MCG(object):
             set: A set of all bucket names
 
         """
-        obc_lst = run_mcg_cmd('obc list').split('\n')[1:-1]
+        obc_lst = self.exec_mcg_cmd('obc list').stdout.split('\n')[1:-1]
         # TODO assert the bucket passed the Pending state
         return {row.split()[1] for row in obc_lst}
 
@@ -288,23 +333,22 @@ class MCG(object):
             bucket_data_reduced = resp.json().get('reply').get('data').get('size_reduced')
 
             logger.info(
-                'Overall bytes stored: ' + str(bucket_data) + '. Amount reduced: ' + str(bucket_data_reduced)
+                'Overall bytes stored: ' + str(bucket_data) + '. Reduced size: ' + str(bucket_data_reduced)
             )
 
             return bucket_data, bucket_data_reduced
 
         try:
             for total_size, total_reduced in TimeoutSampler(140, 5, _retrieve_reduction_data):
-                if total_size - total_reduced > 80000000:
+                if total_size - total_reduced > 100 * 1024 * 1024:
                     logger.info(
                         'Data reduced:' + str(total_size - total_reduced)
                     )
                     return True
                 else:
                     logger.info(
-                        f'Data reduction is not yet sufficient - '
-                        f'Total size: {total_size}, Reduced: {total_reduced}.'
-                        f'Retrying in 5 seconds...'
+                        'Data reduction is not yet sufficient. '
+                        'Retrying in 5 seconds...'
                     )
         except TimeoutExpiredError:
             logger.error(
@@ -331,7 +375,7 @@ class MCG(object):
         sleep(5)
 
         secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
-        cred_req_secret_dict = secret_ocp_obj.get(creds_request.name)
+        cred_req_secret_dict = secret_ocp_obj.get(resource_name=creds_request.name, retry=5)
 
         aws_access_key_id = base64.b64decode(
             cred_req_secret_dict.get('data').get('aws_access_key_id')
@@ -608,9 +652,7 @@ class MCG(object):
         """
 
         def _check_state():
-            sysinfo = self.send_rpc_query(
-                'system_api', 'read_system', params={}
-            ).json()['reply']
+            sysinfo = self.read_system()
             for pool in sysinfo.get('pools'):
                 if pool.get('name') == backingstore_name:
                     current_state = pool.get('mode')
@@ -642,86 +684,29 @@ class MCG(object):
             )
             assert False
 
-    def create_multipart_upload(self, bucketname, object_key):
+    def exec_mcg_cmd(self, cmd, namespace=None, **kwargs):
         """
-        Initiates Multipart Upload
+        Executes an MCG CLI command through the noobaa-operator pod's CLI binary
+
         Args:
-            bucketname (str): Name of the bucket on which multipart upload to be initiated on
-            object_key (str): Unique object Identifier
+            cmd (str): The command to run
+            namespace (str): The namespace to run the command in
 
         Returns:
-            str : Multipart Upload-ID
+            str: stdout of the command
 
         """
-        mpu = self.s3_client.create_multipart_upload(Bucket=bucketname, Key=object_key)
-        upload_id = mpu["UploadId"]
-        return upload_id
 
-    def list_multipart_upload(self, bucketname):
-        """
-        Lists the multipart upload details on a bucket
-        Args:
-            bucketname (str): Name of the bucket
+        kubeconfig = os.getenv('KUBECONFIG')
+        if kubeconfig:
+            kubeconfig = f"--kubeconfig {kubeconfig} "
 
-        Returns:
-            dict : Dictionary containing the multipart upload details
-
-        """
-        return self.s3_client.list_multipart_uploads(Bucket=bucketname)
-
-    def list_uploaded_parts(self, bucketname, object_key, upload_id):
-        """
-        Lists uploaded parts and their ETags
-        Args:
-            bucketname (str): Name of the bucket
-            object_key (str): Unique object Identifier
-            upload_id (str): Multipart Upload-ID
-
-        Returns:
-            dict : Dictionary containing the multipart upload details
-
-        """
-        return self.s3_client.list_parts(Bucket=bucketname, Key=object_key, UploadId=upload_id)
-
-    def complete_multipart_upload(self, bucketname, object_key, upload_id, parts):
-        """
-        Completes the Multipart Upload
-        Args:
-            bucketname (str): Name of the bucket
-            object_key (str): Unique object Identifier
-            upload_id (str): Multipart Upload-ID
-            parts (list): List containing the uploaded parts which includes ETag and part number
-
-        Returns:
-            dict : Dictionary containing the completed multipart upload details
-
-        """
-        result = self.s3_client.complete_multipart_upload(
-            Bucket=bucketname,
-            Key=object_key,
-            UploadId=upload_id,
-            MultipartUpload={"Parts": parts}
+        namespace = f'-n {namespace}' if namespace else f'-n {self.namespace}'
+        result = exec_cmd(
+            f'oc {kubeconfig} {namespace} rsh {self.operator_pod.name} '
+            f'{constants.NOOBAA_OPERATOR_POD_CLI_PATH} {cmd} {namespace}',
+            **kwargs
         )
+        result.stdout = result.stdout.decode()
+        result.stderr = result.stderr.decode()
         return result
-
-    def abort_multipart_upload(self, bucketname, object_key):
-        """
-        Abort all Multipart Uploads for this Bucket
-        Args:
-            bucketname (str): Name of the bucket
-            object_key (str): Unique object Identifier
-
-        Returns:
-            list : List of aborted upload ids
-
-        """
-        multipart_list = self.s3_client.list_multipart_uploads(Bucket=bucketname)
-        logger.info(f"Aborting{len(multipart_list)} uploads")
-        if "Uploads" in multipart_list:
-            return [
-                self.s3_client.abort_multipart_upload(
-                    Bucket=bucketname, Key=object_key, UploadId=upload["UploadId"]
-                ) for upload in multipart_list["Uploads"]
-            ]
-        else:
-            return None

@@ -35,6 +35,9 @@ networking:
   networkType: OpenShiftSDN
   serviceNetwork:
     - 172.30.0.0/16
+{% if fips %}
+fips: {{ fips }}
+{% endif %}
 platform:
   aws:
     region: {{ region | default('us-east-2') }}

@@ -1,13 +1,13 @@
 import logging
-import time
 import base64
 import os
 
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources import pod
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
 from tests import helpers
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.framework import config
 
 
@@ -37,20 +37,16 @@ def change_registry_backend_to_ocs():
         resource_name=constants.IMAGE_REGISTRY_RESOURCE_NAME, params=param_cmd, format_type='json'
     ), f"Registry pod storage backend to OCS is not success"
 
-    if(config.ENV_DATA['platform'] not in constants.CLOUD_PLATFORMS):
-        run_cmd(
-            f'oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p '
-            f'\'{{"spec":{{"managementState": "Managed"}}}}\''
-        )
-        logger.info(
-            "Waiting 30 seconds after change managementState of image-registry."
-        )
-        time.sleep(30)
     # Validate registry pod status
-    validate_registry_pod_status()
+    retry((CommandFailed, UnexpectedBehaviour), tries=3, delay=15)(
+        validate_registry_pod_status
+    )()
 
     # Validate pvc mount in the registry pod
-    validate_pvc_mount_on_registry_pod()
+    retry(
+        (CommandFailed, UnexpectedBehaviour, AssertionError),
+        tries=3, delay=15
+    )(validate_pvc_mount_on_registry_pod)()
 
 
 def get_registry_pod_obj():
@@ -67,22 +63,31 @@ def get_registry_pod_obj():
     # Sometimes when there is a update in config crd, there will be 2 registry pods
     # i.e. old pod will be terminated and new pod will be up based on new crd
     # so below loop waits till old pod terminates
-    wait_time = 30
-    for iteration in range(10):
-        pod_data = pod.get_pods_having_label(
-            label='docker-registry=default', namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
+
+    registry_deployment = ocp.OCP(
+        kind="deployment",
+        namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
+        resource_name=constants.OPENSHIFT_IMAGE_REGISTRY_DEPLOYMENT,
+    )
+    replicas = registry_deployment.data['spec'].get('replicas', 1)
+    registry_pods = ocp.OCP(
+        kind='pod', namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
+        selector=constants.OPENSHIFT_IMAGE_SELECTOR,
+    )
+    registry_pods.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        timeout=400, resource_count=replicas, dont_allow_other_resources=True,
+    )
+    pod_objs = [pod.Pod(**data) for data in registry_pods.data['items']]
+    pod_objs_len = len(pod_objs)
+    if pod_objs_len == 0:
+        raise UnexpectedBehaviour("No image-registry pod is present!")
+    elif pod_objs_len != replicas:
+        raise UnexpectedBehaviour(
+            f"Expected {replicas} image-registry pod(s), but {pod_objs_len} "
+            f"found!"
         )
-        pod_obj = [pod.Pod(**data) for data in pod_data]
-        if len(pod_obj) == 1:
-            break
-        elif len(pod_obj) == 0:
-            raise UnexpectedBehaviour("Image-registry pod not present")
-        elif iteration > 5:
-            raise UnexpectedBehaviour("Waited for 3 mins Image-registry pod is not in Running state")
-        else:
-            logger.info(f"Waiting for 30 sec's for registry pod to be up iteration {iteration}")
-            time.sleep(wait_time)
-    return pod_obj
+    return pod_objs
 
 
 def get_oc_podman_login_cmd():
@@ -115,30 +120,26 @@ def validate_pvc_mount_on_registry_pod():
         AssertionError: When PVC mount not present in the registry pod
 
     """
-    pod_obj = get_registry_pod_obj()
-    mount_point = pod_obj[0].exec_cmd_on_pod(command="mount")
-    assert "/registry" in mount_point, f"pvc is not mounted on pod {pod_obj.name}"
-    logger.info("Verified pvc is mounted on image-registry pod")
+    pod_objs = get_registry_pod_obj()
+    for pod_obj in pod_objs:
+        mount_point = pod_obj.exec_cmd_on_pod(
+            command="mount", out_yaml_format=False,
+        )
+        assert "/registry" in mount_point, (
+            f"pvc is not mounted on pod {pod_obj.name}"
+        )
+        logger.info(f"Verified pvc is mounted on {pod_obj.name} pod")
 
 
 def validate_registry_pod_status():
     """
     Function to validate registry pod status
     """
-    pod_obj = get_registry_pod_obj()
-    helpers.wait_for_resource_state(pod_obj[0], state=constants.STATUS_RUNNING)
-
-
-def get_registry_pvc():
-    """
-    Function to get registry pvc
-
-    Returns:
-        pvc_name (str): Returns name of the OCS pvc backed for registry
-
-    """
-    pod_obj = get_registry_pod_obj()
-    return pod.get_pvc_name(pod_obj)
+    pod_objs = get_registry_pod_obj()
+    for pod_obj in pod_objs:
+        helpers.wait_for_resource_state(
+            pod_obj, state=constants.STATUS_RUNNING
+        )
 
 
 def get_default_route_name():
@@ -155,42 +156,50 @@ def get_default_route_name():
     return route_dict.get('items')[0].get('spec').get('host')
 
 
-def add_role_to_user(role_type, user):
+def add_role_to_user(role_type, user, cluster_role=False, namespace=None):
     """
-    Function to add role to user
+    Function to add a cluster/regular role to user
 
     Args:
         role_type (str): Type of the role to be added
         user (str): User to be added for the role
+        cluster_role (bool): Whether to add a cluster-role or a regular role
+        namespace (str): Namespace to be used
 
     Raises:
         AssertionError: When failure in adding new role to user
 
     """
     ocp_obj = ocp.OCP()
+    cluster = 'cluster-' if cluster_role else ''
+    namespace = f'-n {namespace}' if namespace else ''
     role_cmd = (
-        f"policy add-role-to-user {role_type} {user} "
-        f"-n {constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE}"
+        f"adm policy add-{cluster}role-to-user {role_type} {user} {namespace}"
     )
     assert ocp_obj.exec_oc_cmd(command=role_cmd), 'Adding role failed'
     logger.info(f"Role_type {role_type} added to the user {user}")
 
 
-def remove_role_from_user(role_type, user):
+def remove_role_from_user(role_type, user, cluster_role=False, namespace=None):
     """
-    Function to remove role to user
+    Function to remove a cluster/regular role from a user
 
     Args:
         role_type (str): Type of the role to be removed
         user (str): User of the role
+        cluster_role (bool): Whether to remove a cluster-role or a regular role
+        namespace (str): Namespace to be used
 
     Raises:
         AssertionError: When failure in removing role from user
 
     """
     ocp_obj = ocp.OCP()
-    role_cmd = f"policy remove-role-from-user {role_type} {user} " \
-               f"-n {constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE}"
+    cluster = 'cluster-' if cluster_role else ''
+    namespace = f'-n {namespace}' if namespace else ''
+    role_cmd = (
+        f"adm policy remove-{cluster}role-from-user {role_type} {user} {namespace}"
+    )
     assert ocp_obj.exec_oc_cmd(command=role_cmd), 'Removing role failed'
     logger.info(f"Role_type {role_type} removed from user {user}")
 

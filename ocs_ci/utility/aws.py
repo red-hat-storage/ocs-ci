@@ -2,9 +2,14 @@ import logging
 import time
 import boto3
 import random
+import traceback
 
+from botocore.exceptions import ClientError
+
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import get_infra_id
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, exceptions
 
 logger = logging.getLogger(name=__file__)
 
@@ -13,6 +18,10 @@ SLEEP = 3
 
 
 class AWSTimeoutException(Exception):
+    pass
+
+
+class StackStatusError(Exception):
     pass
 
 
@@ -665,6 +674,57 @@ class AWS(object):
                 self.append_security_group(sg, instance)
                 self.remove_security_group(security_group_id_to_remove, instance)
 
+    @property
+    def cf_client(self):
+        """
+        Property for cloudformation client
+
+        Returns:
+            boto3.client: instance of cloudformation
+
+        """
+        return boto3.client('cloudformation', region_name=self._region_name)
+
+    def get_cloudformation_stacks(self, pattern):
+        """
+        Get cloudformation stacks
+
+        Args:
+            pattern (str): The pattern of the stack name
+
+        """
+        result = self.cf_client.describe_stacks(StackName=pattern)
+        return result['Stacks']
+
+    def delete_cloudformation_stacks(self, stack_names):
+        """
+        Delete cloudformation stacks
+
+        Args:
+            stack_names (list): List of cloudformation stacks
+
+        """
+        @retry(StackStatusError, tries=20, delay=30, backoff=1)
+        def verify_stack_deleted(stack_name):
+            try:
+                stacks = self.get_cloudformation_stacks(stack_name)
+                for stack in stacks:
+                    status = stack['StackStatus']
+                    raise StackStatusError(
+                        f'{stack_name} not deleted yet, current status: {status}.'
+                    )
+            except ClientError as e:
+                assert f"Stack with id {stack_name} does not exist" in str(e)
+                logger.info(
+                    "Received expected ClientError, stack successfully deleted"
+                )
+
+        for stack_name in stack_names:
+            logger.info("Destroying stack: %s", stack_name)
+            self.cf_client.delete_stack(StackName=stack_name)
+        for stack_name in stack_names:
+            verify_stack_deleted(stack_name)
+
 
 def get_instances_ids_and_names(instances):
     """
@@ -720,3 +780,108 @@ def get_vpc_id_by_node_obj(aws_obj, instances):
     vpc_id = aws_obj.get_vpc_id_by_instance_id(instance_id)
 
     return vpc_id
+
+
+def get_rhel_worker_instances(cluster_path):
+    """
+    Get list of rhel worker instance IDs
+
+    Args:
+        cluster_path (str): The cluster path
+
+    Returns:
+        list: list of instance IDs of rhel workers
+
+    """
+    aws = AWS()
+    rhel_workers = []
+    worker_pattern = get_infra_id(cluster_path) + "*rhel-worker*"
+    worker_filter = [{
+        'Name': 'tag:Name', 'Values': [worker_pattern]
+    }]
+
+    response = aws.ec2_client.describe_instances(Filters=worker_filter)
+    if not response['Reservations']:
+        return
+    for worker in response['Reservations']:
+        rhel_workers.append(worker['Instances'][0]['InstanceId'])
+    return rhel_workers
+
+
+def terminate_rhel_workers(worker_list):
+    """
+    Terminate the RHEL worker EC2 instances
+
+    Args:
+        worker_list (list): Instance IDs of rhel workers
+
+    Raises:
+        exceptions.FailedToDeleteInstance: if failed to terminate
+
+    """
+    aws = AWS()
+    if not worker_list:
+        logger.info(
+            "No workers in list, skipping termination of RHEL workers"
+        )
+        return
+
+    logging.info(f"Terminating RHEL workers {worker_list}")
+    # Do a dry run of instance termination
+    try:
+        aws.ec2_client.terminate_instances(InstanceIds=worker_list, DryRun=True)
+    except aws.ec2_client.exceptions.ClientError as err:
+        if "DryRunOperation" in str(err):
+            logging.info("Instances can be deleted")
+        else:
+            logging.error("Some of the Instances can't be deleted")
+            raise exceptions.FailedToDeleteInstance()
+    # Actual termination call here
+    aws.ec2_client.terminate_instances(InstanceIds=worker_list, DryRun=False)
+    try:
+        waiter = aws.ec2_client.get_waiter('instance_terminated')
+        waiter.wait(InstanceIds=worker_list)
+        logging.info("Instances are terminated")
+    except aws.ec2_client.exceptions.WaiterError as ex:
+        logging.error(f"Failed to terminate instances {ex}")
+        raise exceptions.FailedToDeleteInstance()
+
+
+def destroy_volumes(cluster_name):
+    """
+    Destroy cluster volumes
+
+    Args:
+        cluster_name (str): The name of the cluster
+
+    """
+    aws = AWS()
+    try:
+        volume_pattern = f"{cluster_name}*"
+        logger.debug(f"Finding volumes with pattern: {volume_pattern}")
+        volumes = aws.get_volumes_by_name_pattern(volume_pattern)
+        logger.debug(f"Found volumes: \n {volumes}")
+        for volume in volumes:
+            # skip root devices for deletion
+            # EBS root device volumes are automatically deleted when
+            # the instance terminates
+            if not check_root_volume(volume):
+                aws.detach_and_delete_volume(
+                    aws.ec2_resource.Volume(volume['id'])
+                )
+    except Exception:
+        logger.error(traceback.format_exc())
+
+
+def check_root_volume(volume):
+    """
+    Checks whether given EBS volume is root device or not
+
+    Args:
+         volume (dict): EBS volume dictionary
+
+    Returns:
+        bool: True if EBS volume is root device, False otherwise
+
+    """
+    return True if volume['attachments'][0]['DeleteOnTermination'] else False
