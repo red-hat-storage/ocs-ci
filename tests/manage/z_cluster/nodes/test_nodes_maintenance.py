@@ -16,7 +16,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.framework.testlib import (
     tier1, tier2, tier3, tier4, tier4b,
-    ManageTest, aws_platform_required, ignore_leftovers, bugzilla
+    ManageTest, aws_platform_required, ignore_leftovers
 )
 
 from tests.sanity_helpers import Sanity
@@ -33,7 +33,6 @@ log = logging.getLogger(__name__)
 @pytest.fixture(autouse=True)
 def teardown(request):
     """
-
     Tear down function
 
     """
@@ -60,7 +59,6 @@ def teardown(request):
     request.addfinalizer(finalizer)
 
 
-@bugzilla('1818613')
 @ignore_leftovers
 class TestNodesMaintenance(ManageTest):
     """
@@ -135,7 +133,7 @@ class TestNodesMaintenance(ManageTest):
         argnames=["node_type"],
         argvalues=[
             pytest.param(*['worker'], marks=pytest.mark.polarion_id("OCS-1292")),
-            pytest.param(*['master'], marks=[pytest.mark.polarion_id("OCS-1293"), bugzilla('1754287')])
+            pytest.param(*['master'], marks=pytest.mark.polarion_id("OCS-1293"))
         ]
     )
     def test_node_maintenance_restart_activate(
