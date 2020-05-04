@@ -563,6 +563,9 @@ class VSPHEREUPI(VSPHEREBASE):
             # for all the nodes
             ocp_version = get_ocp_version()
             if Version.coerce(ocp_version) >= Version.coerce('4.4'):
+                # before waiting for CSRs to generate, approve
+                # the existing ones if any
+                approve_pending_csr()
                 wait_for_all_nodes_csr()
 
             approve_pending_csr()
