@@ -946,19 +946,22 @@ def tier_marks_name():
 
 @pytest.fixture(scope='function', autouse=True)
 def health_checker(request, tier_marks_name):
+    skipped = False
+
     def finalizer():
-        try:
-            teardown = config.RUN['cli_params']['teardown']
-            skip_ocs_deployment = config.ENV_DATA['skip_ocs_deployment']
-            if not (teardown or skip_ocs_deployment):
-                ceph_health_check_base()
-                log.info("Ceph health check passed at teardown")
-        except CephHealthException:
-            log.info("Ceph health check failed at teardown")
-            # Retrying to increase the chance the cluster health will be OK
-            # for next test
-            ceph_health_check()
-            raise
+        if not skipped:
+            try:
+                teardown = config.RUN['cli_params']['teardown']
+                skip_ocs_deployment = config.ENV_DATA['skip_ocs_deployment']
+                if not (teardown or skip_ocs_deployment):
+                    ceph_health_check_base()
+                    log.info("Ceph health check passed at teardown")
+            except CephHealthException:
+                log.info("Ceph health check failed at teardown")
+                # Retrying to increase the chance the cluster health will be OK
+                # for next test
+                ceph_health_check()
+                raise
 
     node = request.node
     request.addfinalizer(finalizer)
@@ -971,6 +974,7 @@ def health_checker(request, tier_marks_name):
                     log.info("Ceph health check passed at setup")
                     return
             except CephHealthException:
+                skipped = True
                 # skip because ceph is not in good health
                 pytest.skip("Ceph health check failed at setup")
 
