@@ -1,45 +1,18 @@
 import logging
 import pytest
 
-from ocs_ci.ocs import ocp, constants, defaults
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.framework.testlib import E2ETest, scale
 from tests.helpers import (
     default_storage_class,
-    validate_pod_oomkilled
+    validate_pod_oomkilled,
+    validate_pods_are_running_and_not_restarted
 )
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.resources.storage_cluster import get_osd_size
 
 log = logging.getLogger(__name__)
-
-
-def validate_pods_are_running_and_not_restarted(
-    pod_name, pod_restart_count, namespace
-):
-    """
-    Validate given pod is in running state and not restarted or re-spinned
-
-    Args:
-        pod_name (str): Name of the pod
-        pod_restart_count (int): Restart count of pod
-        namespace (str): Namespace of the pod
-
-    Returns:
-        bool : True if pod is in running state and restart
-               count matches the previous one
-
-    """
-    ocp_obj = ocp.OCP(kind=constants.POD, namespace=namespace)
-    pod_obj = ocp_obj.get(resource_name=pod_name)
-    restart_count = pod_obj.get('status').get('containerStatuses')[0].get('restartCount')
-    pod_state = pod_obj.get('status').get('phase')
-    if pod_state == 'Running' and restart_count == pod_restart_count:
-        log.info("Pod is running state and restart count matches with previous one")
-        return True
-    log.error(f"Pod is in {pod_state} state and restart count of pod {restart_count}")
-    log.info(f"{pod_obj}")
-    return False
 
 
 @scale
