@@ -636,29 +636,25 @@ class CephCluster(object):
         """
         Return the name (DNS short name) of the cluster
 
-        Args:
-            None
-
         Returns:
              str: the short DNS name of the cluster
         """
-        out = run_cmd('oc get route -n openshift-console -o yaml')
-        return yaml.full_load(out)['items'][0]['spec']['host'].split('.')[2]
+        ocp_cluster = ocp.OCP(
+            namespace='openshift-console',
+            kind='', resource_name='route')
+        return ocp_cluster.get()['items'][0]['spec']['host'].split('.')[2]
 
     def get_version(self):
         """
         Return the OCS Version
 
-        Args:
-            None
-
         Returns:
              str: The version of the OCS
         """
-        ns = config.ENV_DATA['cluster_namespace']
-        out = run_cmd(f'oc get csv -n {ns} -o yaml')
-        ocs_version = yaml.full_load(out)
-        return ocs_version['items'][0]['spec']['version']
+        ocp_cluster = ocp.OCP(
+            namespace=config.ENV_DATA['cluster_namespace'],
+            kind='', resource_name='csv')
+        return ocp_cluster.get()['items'][0]['spec']['version']
 
 
 class CephHealthMonitor(threading.Thread):
