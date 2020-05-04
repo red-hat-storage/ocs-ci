@@ -861,6 +861,7 @@ def get_ocp_clustername():
 
     Returns:
          str: the short DNS name of the cluster
+
     """
 
     ocp_cluster = OCP(
@@ -875,6 +876,7 @@ def get_ocp_version():
 
     Returns:
          str: The version of the OCS
+
     """
 
     ocp_cluster = OCP(
@@ -889,6 +891,7 @@ def get_ocp_build():
 
     Returns:
          str: The build version of the OCP
+
     """
 
     ocp_cluster = OCP(
@@ -903,6 +906,7 @@ def get_ocp_channel():
 
     Returns:
          str: The channel of the OCP
+
     """
 
     ocp_cluster = OCP(
