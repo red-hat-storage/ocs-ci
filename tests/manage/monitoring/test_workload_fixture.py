@@ -151,6 +151,18 @@ def test_workload_rbd_cephfs(
     logger.info(workload_storageutilization_50p_cephfs)
 
 
+@pytest.mark.libtest
+def test_workload_rbd_cephfs_10g(
+    workload_storageutilization_10g_rbd,
+    workload_storageutilization_10g_cephfs
+):
+    """
+    Test of a workload utilization with constant 10 GiB target.
+    """
+    logger.info(workload_storageutilization_10g_rbd)
+    logger.info(workload_storageutilization_10g_cephfs)
+
+
 @tier1
 @pytest.mark.polarion_id("OCS-2125")
 def test_workload_rbd_cephfs_minimal(
