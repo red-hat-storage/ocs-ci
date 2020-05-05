@@ -297,17 +297,7 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
         # Verify PV using ceph toolbox. Wait for Image/Subvolume to be deleted.
         pool_name = default_ceph_block_pool() if interface == constants.CEPHBLOCKPOOL else None
         for pvc_name, uuid in pvc_uuid_map.items():
-            try:
-                for ret in TimeoutSampler(
-                    180, 2, verify_volume_deleted_in_backend,
-                    interface=interface, image_uuid=uuid, pool_name=pool_name
-                ):
-                    if ret:
-                        break
-            except TimeoutExpiredError as err:
-                err.message = (
-                    f"{err.message}- Volume associated with PVC {pvc_name} "
-                    f"still exists in backend"
-                )
-                raise
+            assert verify_volume_deleted_in_backend(
+                interface=interface, image_uuid=uuid, pool_name=pool_name
+            ), f"Volume associated with PVC {pvc_name} still exists in backend"
         log.info("Verified: Image/Subvolume removed from backend.")
