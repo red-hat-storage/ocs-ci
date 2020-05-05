@@ -20,7 +20,9 @@ from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.ocs.node import get_node_objs, get_typed_worker_nodes
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
-from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve
+from ocs_ci.utility.csr import (
+    get_nodes_csr, wait_for_all_nodes_csr_and_approve,
+)
 from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
     get_ocp_version, TimeoutSampler, download_file,
@@ -62,7 +64,7 @@ class NodesBase(object):
         self.nodes_map = {
             'AWSUPINode': AWSUPINode, 'VSPHEREUPINode': VSPHEREUPINode
         }
-        self.wait_time = 300
+        self.wait_time = 120
 
     def get_data_volumes(self):
         raise NotImplementedError(
@@ -1421,13 +1423,22 @@ class VSPHEREUPINode(VMWareNodes):
             self._update_terraform()
             self._update_machine_conf()
 
+            # Gets the existing CSR data
+            existing_csr_data = get_nodes_csr()
+            pre_count_csr = len(existing_csr_data)
+            logger.debug(f"Existing CSR count before adding nodes: {pre_count_csr}")
+
             os.chdir(self.terraform_data_dir)
             self.terraform.initialize()
             self.terraform.apply(self.terraform_var)
             os.chdir(self.previous_dir)
-
             time.sleep(self.wait_time)
-            nodes_approve_csr_num = self.compute_count + 1
+
+            if constants.CSR_BOOTSTRAPPER_NODE in existing_csr_data:
+                nodes_approve_csr_num = pre_count_csr + self.compute_count
+            else:
+                nodes_approve_csr_num = pre_count_csr + self.compute_count + 1
+
             wait_for_all_nodes_csr_and_approve(
                 expected_node_num=nodes_approve_csr_num
             )
