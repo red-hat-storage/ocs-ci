@@ -60,8 +60,8 @@ def get_typed_nodes(node_type='worker', num_of_nodes=None):
 
     """
     typed_nodes = [
-        node for node in get_node_objs() if node
-        .ocp.get_resource(resource_name=node.name, column='ROLES') == node_type
+        node for node in get_node_objs() if node_type in node
+        .ocp.get_resource(resource_name=node.name, column='ROLES')
     ]
     if num_of_nodes:
         typed_nodes = typed_nodes[:num_of_nodes]
