@@ -21,23 +21,12 @@ class TestCreatePvcWithWorkerNodeDown(ManageTest):
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
         """
-        Restart nodes that are in status NotReady, for situations in
-        which the test failed before restarting the node,
-        which leaves nodes in NotReady
+         Make sure all nodes are up again
 
         """
 
         def finalizer():
-            not_ready_nodes = [
-                n for n in node.get_node_objs() if n
-                .ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
-            ]
-            log.warning(
-                f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
-            )
-            if not_ready_nodes:
-                nodes.restart_nodes(not_ready_nodes)
-                node.wait_for_nodes_status()
+            nodes.restart_nodes_teardown()
 
         request.addfinalizer(finalizer)
 
