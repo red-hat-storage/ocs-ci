@@ -93,6 +93,9 @@ class OCS(object):
             resource_name=self.name, out_yaml_format=out_yaml_format
         )
 
+    def status(self):
+        return self.ocp.get_resource(self.name, 'STATUS')
+
     def describe(self):
         return self.ocp.describe(resource_name=self.name)
 

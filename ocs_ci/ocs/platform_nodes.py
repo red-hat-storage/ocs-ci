@@ -28,7 +28,7 @@ class PlatformNodesFactory:
 
     """
     def __init__(self):
-        self.cls_map = {'AWS': AWSNodes, 'vsphere': VMWareNodes, 'aws': AWSNodes}
+        self.cls_map = {'AWS': AWSNodes, 'vsphere': VMWareNodes, 'aws': AWSNodes, 'baremetal': NodesBase}
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA['platform']

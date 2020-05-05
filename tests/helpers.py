@@ -10,6 +10,7 @@ from subprocess import TimeoutExpired, run, PIPE
 import tempfile
 import time
 import yaml
+import json
 import threading
 
 from ocs_ci.ocs.ocp import OCP
@@ -2115,3 +2116,120 @@ def modify_osd_replica_count(resource_name, replica_count):
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     resource_name = '-'.join(resource_name.split('-')[0:4])
     return ocp_obj.patch(resource_name=resource_name, params=params)
+
+
+def collect_performance_stats():
+    """
+    Collect performance stats and saves them in file in json format.
+
+    Performance stats include:
+        IOPs and throughput percentage of cluster
+        CPU, memory consumption of each nodes
+
+    """
+    from ocs_ci.ocs.cluster import CephCluster
+
+    log_dir_path = os.path.join(
+        os.path.expanduser(config.RUN['log_dir']),
+        f"failed_testcase_ocs_logs_{config.RUN['run_id']}",
+        "performance_stats"
+    )
+    if not os.path.exists(log_dir_path):
+        logger.info(f'Creating directory {log_dir_path}')
+        os.makedirs(log_dir_path)
+
+    ceph_obj = CephCluster()
+    performance_stats = {}
+
+    # Get iops and throughput percentage of cluster
+    iops_percentage = ceph_obj.get_iops_percentage()
+    throughput_percentage = ceph_obj.get_throughput_percentage()
+
+    # ToDo: Get iops and throughput percentage of each nodes
+
+    # Get the cpu and memory of each nodes from adm top
+    master_node_utilization_from_adm_top = \
+        node.get_node_resource_utilization_from_adm_top(node_type='master')
+    worker_node_utilization_from_adm_top = \
+        node.get_node_resource_utilization_from_adm_top(node_type='worker')
+
+    # Get the cpu and memory from describe of nodes
+    master_node_utilization_from_oc_describe = \
+        node.get_node_resource_utilization_from_oc_describe(node_type='master')
+    worker_node_utilization_from_oc_describe = \
+        node.get_node_resource_utilization_from_oc_describe(node_type='worker')
+
+    performance_stats['iops_percentage'] = iops_percentage
+    performance_stats['throughput_percentage'] = throughput_percentage
+    performance_stats['master_node_utilization'] = master_node_utilization_from_adm_top
+    performance_stats['worker_node_utilization'] = worker_node_utilization_from_adm_top
+    performance_stats['master_node_utilization_from_oc_describe'] = master_node_utilization_from_oc_describe
+    performance_stats['worker_node_utilization_from_oc_describe'] = worker_node_utilization_from_oc_describe
+
+    file_name = os.path.join(log_dir_path, 'performance')
+    with open(file_name, 'w') as outfile:
+        json.dump(performance_stats, outfile)
+
+
+def validate_pod_oomkilled(
+    pod_name, namespace=defaults.ROOK_CLUSTER_NAMESPACE, container=None
+):
+    """
+    Validate pod oomkilled message are found on log
+
+    Args:
+        pod_name (str): Name of the pod
+        namespace (str): Namespace of the pod
+        container (str): Name of the container
+
+    Returns:
+        bool : True if oomkill messages are not found on log.
+               False Otherwise.
+
+    Raises:
+        Assertion if failed to fetch logs
+
+    """
+    rc = True
+    try:
+        pod_log = pod.get_pod_logs(
+            pod_name=pod_name, namespace=namespace,
+            container=container, previous=True
+        )
+        result = pod_log.find("signal: killed")
+        if result != -1:
+            rc = False
+    except CommandFailed as ecf:
+        assert f'previous terminated container "{container}" in pod "{pod_name}" not found' in str(ecf), (
+            "Failed to fetch logs"
+        )
+
+    return rc
+
+
+def validate_pods_are_running_and_not_restarted(
+    pod_name, pod_restart_count, namespace
+):
+    """
+    Validate given pod is in running state and not restarted or re-spinned
+
+    Args:
+        pod_name (str): Name of the pod
+        pod_restart_count (int): Restart count of pod
+        namespace (str): Namespace of the pod
+
+    Returns:
+        bool : True if pod is in running state and restart
+               count matches the previous one
+
+    """
+    ocp_obj = ocp.OCP(kind=constants.POD, namespace=namespace)
+    pod_obj = ocp_obj.get(resource_name=pod_name)
+    restart_count = pod_obj.get('status').get('containerStatuses')[0].get('restartCount')
+    pod_state = pod_obj.get('status').get('phase')
+    if pod_state == 'Running' and restart_count == pod_restart_count:
+        logger.info("Pod is running state and restart count matches with previous one")
+        return True
+    logger.error(f"Pod is in {pod_state} state and restart count of pod {restart_count}")
+    logger.info(f"{pod_obj}")
+    return False

@@ -60,8 +60,8 @@ def get_typed_nodes(node_type='worker', num_of_nodes=None):
 
     """
     typed_nodes = [
-        node for node in get_node_objs() if node
-        .ocp.get_resource(resource_name=node.name, column='ROLES') == node_type
+        node for node in get_node_objs() if node_type in node
+        .ocp.get_resource(resource_name=node.name, column='ROLES')
     ]
     if num_of_nodes:
         typed_nodes = typed_nodes[:num_of_nodes]
@@ -331,6 +331,12 @@ def get_node_resource_utilization_from_adm_top(nodename=None, node_type='worker'
     node_names = [nodename] if nodename else [
         node.name for node in get_typed_nodes(node_type=node_type)
     ]
+
+    # Validate node is in Ready state
+    wait_for_nodes_status(
+        node_names, status=constants.NODE_READY, timeout=30
+    )
+
     obj = ocp.OCP()
     resource_utilization_all_nodes = obj.exec_oc_cmd(
         command='adm top nodes', out_yaml_format=False

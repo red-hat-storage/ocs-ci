@@ -371,7 +371,8 @@ class Pod(OCS):
 # Helper functions for Pods
 
 def get_all_pods(
-        namespace=None, selector=None, selector_label='app', wait=False
+        namespace=None, selector=None, selector_label='app',
+        exclude_selector=False, wait=False
 ):
     """
     Get all pods in a namespace.
@@ -382,6 +383,7 @@ def get_all_pods(
         selector (list) : List of the resource selector to search with.
             Example: ['alertmanager','prometheus']
         selector_label (str): Label of selector (default: app).
+        exclude_selector (bool): If list of the resource selector not to search with
 
     Returns:
         list: List of Pod objects
@@ -397,10 +399,16 @@ def get_all_pods(
         time.sleep(wait_time)
     pods = ocp_pod_obj.get()['items']
     if selector:
-        pods_new = [
-            pod for pod in pods if
-            pod['metadata'].get('labels', {}).get(selector_label) in selector
-        ]
+        if exclude_selector:
+            pods_new = [
+                pod for pod in pods if
+                pod['metadata']['labels'].get(selector_label) not in selector
+            ]
+        else:
+            pods_new = [
+                pod for pod in pods if
+                pod['metadata']['labels'].get(selector_label) in selector
+            ]
         pods = pods_new
     pod_objs = [Pod(**pod) for pod in pods]
     return pod_objs
@@ -633,14 +641,17 @@ def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=False):
             else:
                 FILE = TEST_FILE
             pod_obj.exec_cmd_on_pod(
-                f"bash -c \"let i=0; while true; do echo {TEXT_CONTENT} "
-                f">> {FILE}$i; let i++; sleep 0.01; done\""
+                command=f"bash -c \"let i=0; while true; do echo "
+                f"{TEXT_CONTENT} >> {FILE}$i; let i++; sleep 0.01; done\"",
+                timeout=2400
             )
         # Once the pod gets deleted, the I/O execution will get terminated.
         # Hence, catching this exception
         except CommandFailed as ex:
             if expect_to_fail:
-                if re.search("code 137", str(ex)):
+                if re.search("code 137", str(ex)) or (
+                    re.search("code 143", str(ex))
+                ):
                     logger.info("I/O command got terminated as expected")
                     return
             raise ex
@@ -915,22 +926,26 @@ def get_pod_obj(name, namespace=None):
     return pod_obj
 
 
-def get_pod_logs(pod_name, container=None):
+def get_pod_logs(pod_name, container=None, namespace=defaults.ROOK_CLUSTER_NAMESPACE, previous=False):
     """
     Get logs from a given pod
 
     pod_name (str): Name of the pod
     container (str): Name of the container
+    namespace (str): Namespace of the pod
+    previous (bool): True, if pod previous log required. False otherwise.
 
     Returns:
         str: Output from 'oc get logs <pod_name> command
     """
     pod = OCP(
-        kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        kind=constants.POD, namespace=namespace
     )
     cmd = f"logs {pod_name}"
     if container:
         cmd += f" -c {container}"
+    if previous:
+        cmd += " --previous"
     return pod.exec_oc_cmd(cmd, out_yaml_format=False)
 
 
@@ -1243,19 +1258,24 @@ def get_noobaa_pods(noobaa_label=constants.NOOBAA_APP_LABEL, namespace=None):
     return noobaa_pods
 
 
-def wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj):
+def wait_for_dc_app_pods_to_reach_running_state(
+    dc_pod_obj, timeout=120, exclude_state=None
+):
     """
     Wait for DC app pods to reach running state
 
     Args:
         dc_pod_obj (list): list of dc app pod objects
+        timeout (int): Timeout in seconds to wait for pods to be in Running
+            state.
+        exclude_state (str): A resource state to ignore
 
     """
     for pod_obj in dc_pod_obj:
         name = pod_obj.get_labels().get('name')
         dpod_list = get_all_pods(selector_label=f"name={name}", wait=True)
         for dpod in dpod_list:
-            if '-1-deploy' not in dpod.name:
+            if '-1-deploy' not in dpod.name and dpod.status != exclude_state:
                 helpers.wait_for_resource_state(
-                    dpod, constants.STATUS_RUNNING, timeout=1200
+                    dpod, constants.STATUS_RUNNING, timeout=timeout
                 )

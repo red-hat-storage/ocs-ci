@@ -155,6 +155,8 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                         command = f"delete deployment {deployment_name}"
                         ocp_obj.exec_oc_cmd(command=command)
                         log.info(f"Deleted deployment for pod {pod_obj.name}")
+                    else:
+                        raise
 
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
