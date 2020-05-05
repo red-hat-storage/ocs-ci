@@ -98,6 +98,7 @@ CLUSTER_OPERATOR = 'ClusterOperator'
 MONITORING = 'monitoring'
 CLUSTER_SERVICE_VERSION = 'csv'
 JOB = 'job'
+LOCAL_VOLUME = 'localvolume'
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -153,6 +154,8 @@ IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
 DEFAULT_NOOBAA_BACKINGSTORE = "noobaa-default-backing-store"
 RIPSAW_NAMESPACE = "my-ripsaw"
 RIPSAW_CRD = "resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml"
+OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
+LOCAL_STORAGE_NAMESPACE = 'local-storage'
 
 
 # Default StorageClass
