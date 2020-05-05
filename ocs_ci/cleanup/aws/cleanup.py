@@ -252,7 +252,7 @@ def aws_cleanup():
         help="""
             Maximum running time of the cluster (in hours).
             Clusters older than this will be deleted.
-            The minimum is 10 hours
+            The maximum is 40 hours
             """
     )
     parser.add_argument(
