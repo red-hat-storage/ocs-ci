@@ -1354,7 +1354,8 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
         pool_name (str): Name of the rbd-pool if interface is CephBlockPool
 
     Returns:
-        bool: True if volume is present. False if volume is not present.
+        bool: True if volume is present and False if volume is not present
+
     """
     ct_pod = pod.get_ceph_tools_pod()
     if interface == constants.CEPHBLOCKPOOL:
