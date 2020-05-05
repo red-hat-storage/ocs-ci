@@ -443,7 +443,7 @@ class OCP(object):
     def wait_for_resource(
         self, condition, resource_name='', column='STATUS', selector=None,
         resource_count=0, timeout=60, sleep=3,
-        dont_allow_other_resources=False,
+        dont_allow_other_resources=False, error_condition=None,
     ):
         """
         Wait for a resource to reach to a desired condition
@@ -465,12 +465,26 @@ class OCP(object):
                 1 in ContainerCreating) the function will continue to next
                 iteration to wait for only 2 resources in running state and no
                 other exists.
+            error_condition (str): State of the resource that is sampled
+                from 'oc get <kind> <resource_name>' command, which makes this
+                method to fail immediately without waiting for a timeout. This
+                is optional and makes sense only when there is a well defined
+                unrecoverable state of the resource(s) which is not expected to
+                be part of a workflow under test, and at the same time, the
+                timeout itself is large.
 
         Returns:
             bool: True in case all resources reached desired condition,
                 False otherwise
 
         """
+        if condition == error_condition:
+            # when this fails, this method is used in a wrong way
+            raise ValueError(
+                f"Condition '{condition}' we are waiting for must be different"
+                f" from error condition '{error_condition}'"
+                " which describes unexpected error state."
+            )
         log.info((
             f"Waiting for a resource(s) of kind {self._kind}"
             f" identified by name '{resource_name}'"
@@ -501,6 +515,11 @@ class OCP(object):
                         f"status of {resource_name} at column {column} was {status},"
                         f" but we were waiting for {condition}"))
                     actual_status = status
+                    if error_condition is not None and status == error_condition:
+                        raise ResourceInUnexpectedState(
+                            f"Status of '{resource_name}' at column {column}"
+                            f" is {status}."
+                        )
                 # More than 1 resources returned
                 elif sample.get('kind') == 'List':
                     in_condition = []
@@ -516,6 +535,11 @@ class OCP(object):
                             if status == condition:
                                 in_condition.append(item)
                                 in_condition_len = len(in_condition)
+                            if error_condition is not None and status == error_condition:
+                                raise ResourceInUnexpectedState(
+                                    f"Status of '{item_name}' "
+                                    f" at column {column} is {status}."
+                                )
                         except CommandFailed as ex:
                             log.info(
                                 f"Failed to get status of resource: {item_name} at column {column}, "
@@ -564,6 +588,25 @@ class OCP(object):
                 output
             )
             raise(ex)
+        except ResourceInUnexpectedState:
+            log.error(
+                (
+                    "Waiting for %s resource %s at column %s"
+                    " to reach desired condition %s was aborted"
+                    " because at least one is in unexpected %s state."
+                ),
+                self._kind,
+                resource_name,
+                column,
+                condition,
+                error_condition
+            )
+            output = self.describe(resource_name, selector=selector)
+            log.warning(
+                "Description of the resource(s) we were waiting for:\n%s",
+                output
+            )
+            raise
 
         return False
 
