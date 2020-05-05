@@ -418,6 +418,7 @@ def workload_fio_storageutilization(
         blocksize=4k
         ioengine=libaio
         directory=/mnt/target
+        nrfiles=8
         """)
 
     # When we ask for checksum to be generated for all files written in the
