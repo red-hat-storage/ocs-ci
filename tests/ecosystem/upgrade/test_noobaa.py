@@ -165,7 +165,7 @@ def test_noobaa_postupgrade(
 
 
 @pre_upgrade
-def test_start_upgrade_mcg_io(mcg_workload_jobs):
+def test_start_upgrade_mcg_io(mcg_workload_job):
     """
     Confirm that there are MCG workload jobs running before upgrade.
     """
@@ -174,7 +174,7 @@ def test_start_upgrade_mcg_io(mcg_workload_jobs):
 
 
 @post_upgrade
-def test_upgrade_mcg_io(mcg_workload_jobs):
+def test_upgrade_mcg_io(mcg_workload_job):
     """
     Confirm that there are MCG workload jobs running after upgrade.
     """
