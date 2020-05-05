@@ -1,11 +1,16 @@
+import json
 import logging
 import os
-import json
 import re
+import shutil
+import time
+
 
 import boto3
 import yaml
 
+from ocs_ci.deployment.terraform import Terraform
+from ocs_ci.deployment.vmware import change_vm_root_disk_size
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import aws, vsphere, templating
@@ -15,10 +20,11 @@ from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.ocs.node import get_node_objs, get_typed_worker_nodes
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
+from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve
 from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
-    get_ocp_version, TimeoutSampler,
-    download_file, delete_file, AZInfo
+    get_ocp_version, TimeoutSampler, download_file,
+    delete_file, AZInfo, replace_content_in_file, clone_repo,
 )
 
 
@@ -31,7 +37,12 @@ class PlatformNodesFactory:
 
     """
     def __init__(self):
-        self.cls_map = {'AWS': AWSNodes, 'vsphere': VMWareNodes, 'aws': AWSNodes, 'baremetal': NodesBase}
+        self.cls_map = {
+            'AWS': AWSNodes,
+            'vsphere': VMWareNodes,
+            'aws': AWSNodes,
+            'baremetal': NodesBase
+        }
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA['platform']
@@ -48,7 +59,10 @@ class NodesBase(object):
         self.cluster_path = config.ENV_DATA['cluster_path']
         self.platform = config.ENV_DATA['platform']
         self.deployment_type = config.ENV_DATA['deployment_type']
-        self.nodes_map = {'AWSUPINode': AWSUPINode}
+        self.nodes_map = {
+            'AWSUPINode': AWSUPINode, 'VSPHEREUPINode': VSPHEREUPINode
+        }
+        self.wait_time = 300
 
     def get_data_volumes(self):
         raise NotImplementedError(
@@ -299,6 +313,24 @@ class VMWareNodes(NodesBase):
         if stopped_vms:
             logger.info(f"The following VMs are powered off: {stopped_vms}")
             self.vsphere.start_vms(stopped_vms)
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        """
+        Create nodes and attach them to cluster
+        Use this function if you want to do both creation/attachment in
+        a single call
+
+        Args:
+            node_conf (dict): of node configuration
+            node_type (str): type of node to be created RHCOS/RHEL
+            num_nodes (int): Number of node instances to be created
+
+        """
+        node_cls = self.nodes_map[
+            f'{self.platform.upper()}{self.deployment_type.upper()}Node'
+        ]
+        node_cls_obj = node_cls(node_conf, node_type, num_nodes)
+        node_cls_obj.add_node()
 
 
 class AWSNodes(NodesBase):
@@ -1274,3 +1306,128 @@ class AWSUPINode(AWSNodes):
 
         """
         return resource['StackResourceSummaries'][0]['PhysicalResourceId']
+
+
+class VSPHEREUPINode(VMWareNodes):
+    """
+    Node object representing VMWARE UPI nodes
+    """
+    def __init__(self, node_conf, node_type, compute_count):
+        """
+        Initialize necessary variables
+
+        Args:
+            node_conf (dict): of node configuration
+            node_type (str): type of node to be created RHCOS/RHEL
+            compute_count (int): number of nodes to add to existing cluster
+
+        """
+        super(VSPHEREUPINode, self).__init__()
+        self.node_conf = node_conf
+        self.node_type = node_type
+        self.compute_count = compute_count
+        self.current_compute_count = config.ENV_DATA.get('worker_replicas', 3)
+        self.target_compute_count = (self.current_compute_count
+                                     + self.compute_count)
+        self.previous_dir = os.getcwd()
+        self.terraform_data_dir = os.path.join(
+            self.cluster_path,
+            constants.TERRAFORM_DATA_DIR
+        )
+        self.terraform_work_dir = constants.VSPHERE_DIR
+        self.terraform = Terraform(self.terraform_work_dir)
+        self.upi_repo_path = os.path.join(
+            constants.EXTERNAL_DIR, 'installer',
+        )
+
+    def _update_terraform(self):
+        """
+        Update terraform variables
+        """
+        logger.debug("Updating terraform variables")
+        self.terraform_var = os.path.join(
+            self.cluster_path,
+            constants.TERRAFORM_DATA_DIR,
+            "terraform.tfvars"
+        )
+        compute_str = 'compute_count ='
+        to_change = f"{compute_str} \"{self.current_compute_count}\""
+        updated_compute_str = f"{compute_str} \"{self.target_compute_count}\""
+        logging.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
+
+        # backup the terraform variable file
+        original_file = f"{self.terraform_var}_{int(time.time())}"
+        shutil.copyfile(self.terraform_var, original_file)
+        logging.info(f"original terraform file: {original_file}")
+
+        replace_content_in_file(
+            self.terraform_var,
+            to_change,
+            updated_compute_str
+        )
+
+    def _update_machine_conf(self):
+        """
+        Update the machine config for vsphere
+        """
+        to_change = "clone {"
+        add_file_block = f"{constants.LIFECYCLE}\n  {to_change}"
+        logging.debug(
+            f"Adding {constants.LIFECYCLE} to"
+            f" {constants.INSTALLER_MACHINE_CONF}"
+        )
+        replace_content_in_file(
+            constants.INSTALLER_MACHINE_CONF,
+            to_change,
+            add_file_block
+        )
+
+        # change root disk size
+        change_vm_root_disk_size(constants.INSTALLER_MACHINE_CONF)
+
+        # update gateway and DNS
+        if config.ENV_DATA.get('gateway'):
+            replace_content_in_file(
+                constants.INSTALLER_IGNITION,
+                '${cidrhost(var.machine_cidr,1)}',
+                f"{config.ENV_DATA.get('gateway')}"
+            )
+
+        if config.ENV_DATA.get('dns'):
+            replace_content_in_file(
+                constants.INSTALLER_IGNITION,
+                constants.INSTALLER_DEFAULT_DNS,
+                f"{config.ENV_DATA.get('dns')}"
+            )
+
+        # update the zone in route
+        if config.ENV_DATA.get('region'):
+            def_zone = 'provider "aws" { region = "%s" } \n' % config.ENV_DATA.get('region')
+            replace_content_in_file(constants.INSTALLER_ROUTE53, "xyz", def_zone)
+
+    def add_node(self):
+        """
+        Add nodes to the current cluster
+        """
+        if self.node_type == "RHCOS":
+            logger.info(f"Adding Nodes of type {self.node_type}")
+            logger.info(
+                f"Existing worker nodes: {self.current_compute_count}, "
+                f"New nodes to add: {self.compute_count}"
+            )
+            clone_repo(
+                constants.VSPHERE_INSTALLER_REPO, self.upi_repo_path, f'release-{get_ocp_version()}'
+            )
+            self._update_terraform()
+            self._update_machine_conf()
+
+            os.chdir(self.terraform_data_dir)
+            self.terraform.initialize()
+            self.terraform.apply(self.terraform_var)
+            os.chdir(self.previous_dir)
+
+            time.sleep(self.wait_time)
+            nodes_approve_csr_num = self.compute_count + 1
+            wait_for_all_nodes_csr_and_approve(
+                expected_node_num=nodes_approve_csr_num
+            )
