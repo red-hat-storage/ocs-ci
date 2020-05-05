@@ -841,17 +841,16 @@ class OCP(object):
         return output
 
 
-    def get_provider(self):
-        """
-        Return the OCP Provider (Platform)
+def get_ocp_provider():
+    """
+    Return the OCP Provider (Platform)
 
-        Args:
-            None
+    Returns:
+         str: The Provider that the OCP is running on
+    """
 
-        Returns:
-             str: The Provider that the OCP is running on
-        """
-        return self.get('nodes')['items'][0]['spec']['providerID'].split(':')[0]
+    ocp_cluster = OCP(kind='', resource_name='nodes')
+    return ocp_cluster.get('nodes')['items'][0]['spec']['providerID'].split(':')[0]
 
 
 def get_ocp_clustername():
@@ -869,7 +868,7 @@ def get_ocp_clustername():
     return ocp_cluster.get()['items'][0]['spec']['host'].split('.')[2]
 
 
-def get_ocp_version():
+def get_ocs_version():
     """
     Return the OCS Version
 
