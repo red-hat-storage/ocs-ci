@@ -286,7 +286,7 @@ class CephCluster(object):
             self.mon_health_check(expected_mon_count)
         except exceptions.MonCountException as e:
             logger.error(e)
-            raise exceptions.CephHealthException("Cluster health is NOT OK")
+            raise exceptions.CephHealthException(f"Cluster health is NOT OK - {e}")
 
         try:
             if not expected_mds_count:
@@ -295,7 +295,7 @@ class CephCluster(object):
                 self.mds_health_check(expected_mds_count)
         except exceptions.MDSCountException as e:
             logger.error(e)
-            raise exceptions.CephHealthException("Cluster health is NOT OK")
+            raise exceptions.CephHealthException(f"Cluster health is NOT OK - {e}")
 
         self.noobaa_health_check()
 
@@ -303,13 +303,13 @@ class CephCluster(object):
             self.osd_health_check(expected_osd_count)
         except exceptions.OsdCountException as e:
             logger.error(e)
-            raise exceptions.CephHealthException("Cluster health is NOT OK")
+            raise exceptions.CephHealthException(f"Cluster health is NOT OK - {e}")
 
         try:
             self.mgr_health_check(expected_mgr_count)
         except exceptions.MgrCountException as e:
             logger.error(e)
-            raise exceptions.CephHealthException("Cluster health is NOT OK")
+            raise exceptions.CephHealthException(f"Cluster health is NOT OK - {e}")
 
         if (
             config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM
@@ -320,37 +320,37 @@ class CephCluster(object):
                 self.rgw_health_check(expected_rgw_count)
             except exceptions.RgwCountException as e:
                 logger.error(e)
-                raise exceptions.CephHealthException("Cluster health is NOT OK")
+                raise exceptions.CephHealthException(f"Cluster health is NOT OK - {e}")
 
         try:
             self.rbdplugin_health_check(expected_rbdplugin_count)
         except exceptions.RbdpluginCountException as e:
             logger.error(e)
-            raise exceptions.CephHealthException("Cluster health is NOT OK")
+            raise exceptions.CephHealthException(f"Cluster health is NOT OK - {e}")
 
         try:
             self.cephfsplugin_health_check(expected_cephfsplugin_count)
         except exceptions.CephfspluginCountException as e:
             logger.error(e)
-            raise exceptions.CephHealthException("Cluster health is NOT OK")
+            raise exceptions.CephHealthException(f"Cluster health is NOT OK - {e}")
 
         try:
             self.rbdplugin_provisioner_health_check(expected_rbdplugin_provisioner_count)
         except exceptions.RbdpluginProvisionerCountException as e:
             logger.error(e)
-            raise exceptions.CephHealthException("Cluster health is NOT OK")
+            raise exceptions.CephHealthException(f"Cluster health is NOT OK - {e}")
 
         try:
             self.cephfsplugin_provisioner_health_check(expected_cepfsplugin_provisioner_count)
         except exceptions.CephfspluginProvisionerCountException as e:
             logger.error(e)
-            raise exceptions.CephHealthException("Cluster health is NOT OK")
+            raise exceptions.CephHealthException(f"Cluster health is NOT OK - {e}")
 
         try:
             self.drain_canary_health_check(expected_drain_canary_count)
         except exceptions.DraincanaryCountException as e:
             logger.error(e)
-            raise exceptions.CephHealthException("Cluster health is NOT OK")
+            raise exceptions.CephHealthException(f"Cluster health is NOT OK - {e}")
         logger.info("Cluster HEALTH_OK")
         # This scan is for reconcilation on *.count
         # because during first scan in this function some of the
