@@ -327,7 +327,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             wait_for_nodes_status()
 
         # Check the node are Ready state and check cluster is health ok
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=40)
 
         # Check all the prometheus pods are up
         for pod_obj in pod_obj_list:
@@ -400,7 +400,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         )
 
         # Check the node are Ready state and check cluster is health ok
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=40)
 
         # Check for ceph health check metrics is updated with new mgr pod
         wait_to_update_mgrpod_info_prometheus_pod()
@@ -446,7 +446,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             )
 
         # Check the node are Ready state and check cluster is health ok
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=40)
 
         # Check for the created pvc metrics after shutdown and recovery of prometheus nodes
         for pod_obj in pods:
