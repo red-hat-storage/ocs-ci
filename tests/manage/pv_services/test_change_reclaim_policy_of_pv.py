@@ -9,7 +9,6 @@ from tests.helpers import (
     wait_for_resource_state, verify_volume_deleted_in_backend,
     default_ceph_block_pool
 )
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
 log = logging.getLogger(__name__)
 
