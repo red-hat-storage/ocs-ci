@@ -16,7 +16,7 @@ http_s3_key=${S3_KEY}
 http_s3_keyid=${S3_ID}
 http_host=s3.eu-central-1.amazonaws.com
 http_s3_region=eu-central-1
-group_reporting
+group_reporting=1
 
 # With verify, this both writes and reads the object
 [create]
@@ -27,7 +27,7 @@ io_size=4k
 verify=sha256
 
 [trim]
-stonewall
+stonewall=1
 rw=trim
 bs=4k
 size=64k
