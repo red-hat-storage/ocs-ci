@@ -595,6 +595,9 @@ class AWSNodes(NodesBase):
         Args:
             node_list (list): of AWSUPINode/AWSIPINode objects
 
+        Raises:
+             PendingCSRException
+
         """
         node_names = [
             node.aws_instance_obj.private_dns_name for node in node_list
@@ -616,6 +619,10 @@ class AWSNodes(NodesBase):
 
         Args:
             node_names (list): of node names as string
+
+        Returns:
+            'True' if all the node names appeared in 'get nodes'
+            else 'False'
 
         """
         approve_pending_csr()
