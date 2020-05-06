@@ -16,7 +16,7 @@ from ocs_ci.deployment.vmware import (
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
-from ocs_ci.utility import aws, vsphere, templating
+from ocs_ci.utility import aws, vsphere, templating, baremetal
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.ocs import constants, ocp, exceptions
@@ -48,7 +48,7 @@ class PlatformNodesFactory:
             'AWS': AWSNodes,
             'vsphere': VMWareNodes,
             'aws': AWSNodes,
-            'baremetal': NodesBase
+            'baremetal': BaremetalNodes
         }
 
     def get_nodes_platform(self):
@@ -1426,3 +1426,123 @@ class VSPHEREUPINode(VMWareNodes):
             wait_for_all_nodes_csr_and_approve(
                 expected_node_num=nodes_approve_csr_num
             )
+
+
+class BaremetalNodes(NodesBase):
+    """
+    Baremetal Nodes class
+    """
+    def __init__(self):
+        super(BaremetalNodes, self).__init__()
+        self.baremetal = baremetal.BAREMETAL()
+
+    def stop_nodes(self, nodes, force=True):
+        """
+        Stop Baremetal Machine
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True
+
+        """
+        self.baremetal.stop_baremetal_machines(nodes, force=force)
+
+    def start_nodes(self, nodes, wait=True):
+        """
+        Start Baremetal Machine
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): Wait for node status
+
+        """
+        self.baremetal.start_baremetal_machines(nodes, wait=wait)
+
+    def restart_nodes(self, nodes, force=True):
+        """
+        Restart Baremetal Machine
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force VM stop, False otherwise
+
+        """
+        self.baremetal.restart_baremetal_machines(nodes, force=force)
+
+    def restart_nodes_teardown(self):
+        """
+        Make sure all VMs are up by the end of the test
+
+        """
+        bms = self.baremetal.get_nodes_ipmi_ctx(self.cluster_nodes)
+        for i in bms:
+            device_id = i.get_device_id()
+        stopped_bms = [
+            bm for bm in bms if self.baremetal.get_power_status(bm) == constants.VM_POWERED_OFF
+        ]
+
+        if stopped_bms:
+            logger.info(f"The following BMs are powered off: {stopped_bms}")
+            self.baremetal.start_baremetal_machines_with_ipmi_ctx(stopped_bms)
+        for bm in bms:
+            bm.session.close()
+
+    def get_data_volumes(self):
+        raise NotImplementedError(
+            "Get data volume functionality is not implemented"
+        )
+
+    def get_node_by_attached_volume(self, volume):
+        raise NotImplementedError(
+            "Get node by attached volume functionality is not implemented"
+        )
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        raise NotImplementedError(
+            "Detach volume functionality is not implemented"
+        )
+
+    def attach_volume(self, volume, node):
+        raise NotImplementedError(
+            "Attach volume functionality is not implemented"
+        )
+
+    def wait_for_volume_attach(self, volume):
+        raise NotImplementedError(
+            "Wait for volume attach functionality is not implemented"
+        )
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def attach_nodes_to_cluster(self, node_list):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def read_default_config(self, default_config_path):
+        """
+        Commonly used function to read default config
+
+        Args:
+            default_config_path (str): Path to default config file
+
+        Returns:
+            dict: of default config loaded
+
+        """
+        assert os.path.exists(default_config_path), (
+            f'Config file doesnt exists'
+        )
+
+        with open(default_config_path) as f:
+            default_config_dict = yaml.safe_load(f)
+
+        return default_config_dict
