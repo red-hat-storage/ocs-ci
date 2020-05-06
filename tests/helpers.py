@@ -186,7 +186,11 @@ def create_pod(
             ]
             if pod_dict_path == constants.FEDORA_DC_YAML:
                 del pod_data['spec']['template']['spec']['containers'][0]['volumeMounts']
+                security_context = {'capabilities': {'add': ["SYS_ADMIN"]}}
+                pod_data['spec']['template']['spec']['containers'][0]['securityContext'] = security_context
+
             pod_data['spec']['template']['spec']['containers'][0]['volumeDevices'] = temp_dict
+
         elif pod_dict_path == constants.NGINX_POD_YAML:
             temp_dict = [
                 {'devicePath': raw_block_device, 'name': pod_data.get('spec').get(
@@ -259,7 +263,7 @@ def create_pod(
         assert (ocp.OCP(kind='pod', namespace=namespace)).wait_for_resource(
             condition=deploy_pod_status,
             resource_name=pod_name + '-1-deploy',
-            resource_count=0, timeout=180, sleep=3
+            resource_count=0, timeout=360, sleep=3
         )
         dpod_list = pod.get_all_pods(namespace=namespace)
         for dpod in dpod_list:
