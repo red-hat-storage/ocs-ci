@@ -170,7 +170,7 @@ def test_start_upgrade_mcg_io(mcg_workload_job):
     Confirm that there are MCG workload jobs running before upgrade.
     """
     # TODO(fbalak): check that all jobs are running
-    assert mcg_workload_jobs
+    assert mcg_workload_job
 
 
 @post_upgrade
@@ -179,8 +179,7 @@ def test_upgrade_mcg_io(mcg_workload_job):
     Confirm that there are MCG workload jobs running after upgrade.
     """
     # TODO(fbalak): check that all jobs are running
-    assert mcg_workload_jobs
->>>>>>> fix pep8
+    assert mcg_workload_job
 
 
 @aws_platform_required
