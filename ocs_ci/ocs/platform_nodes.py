@@ -30,8 +30,13 @@ from ocs_ci.utility.csr import (
 )
 from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
+<<<<<<< HEAD
     get_ocp_version, TimeoutSampler, download_file,
     delete_file, AZInfo, replace_content_in_file,
+=======
+    get_ocp_version, TimeoutSampler,
+    download_file, delete_file, AZInfo,
+>>>>>>> 8ce1012d... Rebase
 )
 
 
@@ -1475,8 +1480,6 @@ class BaremetalNodes(NodesBase):
 
         """
         bms = self.baremetal.get_nodes_ipmi_ctx(self.cluster_nodes)
-        for i in bms:
-            device_id = i.get_device_id()
         stopped_bms = [
             bm for bm in bms if self.baremetal.get_power_status(bm) == constants.VM_POWERED_OFF
         ]
