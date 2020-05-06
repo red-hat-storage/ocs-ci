@@ -5,6 +5,7 @@ import time
 import tempfile
 import textwrap
 import threading
+from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from itertools import chain
 from math import floor
@@ -908,6 +909,9 @@ def dc_pod_factory(
         node_name=None,
         node_selector=None,
         replica_count=1,
+        raw_block_pv=False,
+        sa_obj=None,
+        wait=True
     ):
         """
         Args:
@@ -924,24 +928,27 @@ def dc_pod_factory(
             node_selector (dict): dict of key-value pair to be used for nodeSelector field
                 eg: {'nodetype': 'app-pod'}
             replica_count (int): Replica count for deployment config
+            raw_block_pv (str): True if pod with raw block pvc
+            sa_obj (object) : If specific service account is needed
+
         """
         if custom_data:
             dc_pod_obj = helpers.create_resource(**custom_data)
         else:
-
             pvc = pvc or pvc_factory(interface=interface, size=size)
-            sa_obj = service_account_factory(project=pvc.project, service_account=service_account)
+            sa_obj = sa_obj or service_account_factory(project=pvc.project, service_account=service_account)
             dc_pod_obj = helpers.create_pod(
                 interface_type=interface, pvc_name=pvc.name, do_reload=False,
                 namespace=pvc.namespace, sa_name=sa_obj.name, dc_deployment=True,
-                replica_count=replica_count, node_name=node_name,
-                node_selector=node_selector
+                replica_count=replica_count, node_name=node_name, node_selector=node_selector,
+                raw_block_pv=raw_block_pv, pod_dict_path=constants.FEDORA_DC_YAML
             )
         instances.append(dc_pod_obj)
         log.info(dc_pod_obj.name)
-        helpers.wait_for_resource_state(
-            dc_pod_obj, constants.STATUS_RUNNING, timeout=180
-        )
+        if wait:
+            helpers.wait_for_resource_state(
+                dc_pod_obj, constants.STATUS_RUNNING, timeout=180
+            )
         dc_pod_obj.pvc = pvc
         return dc_pod_obj
 
@@ -2516,3 +2523,73 @@ def measurement_dir(tmp_path):
         )
         os.mkdir(measurement_dir)
     return measurement_dir
+
+
+@pytest.fixture()
+def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
+    """
+    Prepare multiple dc pods for the test
+    Returns:
+        list: Pod instances
+    """
+
+    def factory(num_of_pvcs=1, pvc_size=100, project=None, access_mode="RWO", pool_type="rbd", timeout=60):
+
+        dict_modes = {"RWO": "ReadWriteOnce", "RWX": "ReadWriteMany", "RWX-BLK": "ReadWriteMany-Block"}
+        dict_types = {"rbd": "CephBlockPool", "cephfs": "CephFileSystem"}
+
+        if access_mode in "RWX-BLK" and pool_type in "rbd":
+            modes = dict_modes["RWX-BLK"]
+            create_rbd_block_rwx_pod = True
+        else:
+            modes = dict_modes[access_mode]
+            create_rbd_block_rwx_pod = False
+
+        pvc_objs = multi_pvc_factory(
+            interface=dict_types[pool_type],
+            access_modes=[modes],
+            size=pvc_size,
+            num_of_pvc=num_of_pvcs,
+            project=project,
+            timeout=timeout
+        )
+        dc_pods = []
+        dc_pods_res = []
+        sa_obj = service_account_factory(project=project)
+        with ThreadPoolExecutor() as p:
+            for pvc in pvc_objs:
+                if create_rbd_block_rwx_pod:
+                    dc_pods_res.append(
+                        p.submit(
+                            dc_pod_factory, interface=constants.CEPHBLOCKPOOL,
+                            pvc=pvc, raw_block_pv=True, sa_obj=sa_obj
+                        ))
+                else:
+                    dc_pods_res.append(
+                        p.submit(
+                            dc_pod_factory, interface=dict_types[pool_type],
+                            pvc=pvc, sa_obj=sa_obj
+                        ))
+
+        for dc in dc_pods_res:
+            pod_obj = dc.result()
+            if create_rbd_block_rwx_pod:
+                logging.info(f"#### setting attribute pod_type since"
+                             f" create_rbd_block_rwx_pod = {create_rbd_block_rwx_pod}"
+                             )
+                setattr(pod_obj, 'pod_type', 'rbd_block_rwx')
+            else:
+                setattr(pod_obj, 'pod_type', '')
+            dc_pods.append(pod_obj)
+
+        with ThreadPoolExecutor() as p:
+            for dc in dc_pods:
+                p.submit(
+                    helpers.wait_for_resource_state,
+                    resource=dc,
+                    state=constants.STATUS_RUNNING,
+                    timeout=120)
+
+        return dc_pods
+
+    return factory
