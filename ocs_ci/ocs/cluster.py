@@ -365,13 +365,13 @@ class CephCluster(object):
         """
         Set noout flag for maintainance
         """
-        self.toolbox.exec_cmd_on_pod(f"ceph osd set noout")
+        self.toolbox.exec_cmd_on_pod("ceph osd set noout")
 
     def unset_noout(self):
         """
         unset noout flag for peering
         """
-        self.toolbox.exec_cmd_on_pod(f"ceph osd unset noout")
+        self.toolbox.exec_cmd_on_pod("ceph osd unset noout")
 
     def get_user_key(self, user):
         """
