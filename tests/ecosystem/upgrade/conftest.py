@@ -224,13 +224,13 @@ def fio_conf_mcg(workload_bucket, mcg_obj_session):
     """
     config = configparser.ConfigParser()
     config.read_file(open(constants.FIO_S3))
-    config['global']['name'] = workload_bucket.name
-    config['global']['http_s3_key'] = mcg_obj_session.access_key
-    config['global']['http_s3_keyid'] = mcg_obj_session.access_key_id
-    config['global']['http_host'] = mcg_obj_session.s3_endpoint
-    config['global']['http_s3_region'] = mcg_obj_session.region
-    config['create']['time_based'] = 1
-    config['create']['runtime'] = '24h'
+    config.set('global', 'name', workload_bucket[0].name)
+    config.set('global', 'http_s3_key', mcg_obj_session.access_key)
+    config.set('global', 'http_s3_keyid', mcg_obj_session.access_key_id)
+    config.set('global', 'http_host', mcg_obj_session.s3_endpoint)
+    config.set('global', 'http_s3_region', mcg_obj_session.region)
+    config.set('create', 'time_based', '1')
+    config.set('create', 'runtime', '24h')
     return config_to_string(config)
 
 
@@ -580,7 +580,8 @@ def fio_configmap_dict_mcg(fio_configmap_dict_session, fio_job_dict_mcg):
     Fio configmap dictionary with configuration set for MCG workload.
     """
     configmap = copy.deepcopy(fio_configmap_dict_session)
-    configmap['metadata']['name'] = fio_job_dict_mcg['metadata']['name']
+    config_name = f"{fio_job_dict_mcg['metadata']['name']}-config"
+    configmap['metadata']['name'] = config_name
     return configmap
 
 
@@ -600,6 +601,7 @@ def mcg_workload_job(
         object: Job object
 
     """
+    fio_configmap_dict_mcg["data"]["workload.fio"] = fio_conf_mcg
     fio_objs = [fio_configmap_dict_mcg, fio_job_dict_mcg]
 
     job_name = fio_job_dict_mcg['metadata']['name']
@@ -616,7 +618,7 @@ def mcg_workload_job(
 
     # get job object
     ocp_job_obj = ocp.OCP(kind=constants.JOB, namespace=fio_project.namespace)
-    job = OCS(ocp_job_obj.get(resource_name=job_name))
+    job = OCS(**ocp_job_obj.get(resource_name=job_name))
 
     def teardown():
         """
