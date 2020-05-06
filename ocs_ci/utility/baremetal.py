@@ -72,7 +72,7 @@ class BAREMETAL(object):
                             )
                             for status in TimeoutSampler(600, 5, self.get_power_status, ipmi_ctx):
                                 logger.info(
-                                    f"Waiting for Baremetal Machine {[bm.name for bm in baremetal_machine]} to power off. "
+                                    f"Waiting for Baremetal Machine {[bm.name for bm in baremetal_machine]}to power off"
                                     f"Current Baremetal status: {status}"
                                 )
                                 if status == VM_POWERED_OFF:
@@ -141,7 +141,7 @@ class BAREMETAL(object):
                             )
                             for status in TimeoutSampler(600, 5, self.get_power_status, ipmi_ctx):
                                 logger.info(
-                                    f"Waiting for Baremetal Machine {[bm.name for bm in baremetal_machine]} to power on. "
+                                    f"Waiting for Baremetal Machine {[bm.name for bm in baremetal_machine]}to power on."
                                     f"Current Baremetal status: {status}"
                                 )
                                 if status == VM_POWERED_ON:
