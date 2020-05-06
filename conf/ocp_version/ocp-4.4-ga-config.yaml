@@ -8,6 +8,9 @@ DEPLOYMENT:
   ocp_url_template: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{version}/{file_name}-{os_type}-{version}.tar.gz"
   installer_version: "4.4-ga"
   ocp_channel: "fast"
+  # No promoted content to stable-4.4 channel yet
+  # Once the build promoted to stable, we can revert back
+  # http://post-office.corp.redhat.com/archives/aos-devel/2020-May/msg00071.html
 ENV_DATA:
   vm_template: 'rhcos-4.4.0-rc.1-x86_64-vmware.x86_64'
   # Once 4.4 GA we should move to new template without -rc suffix (see below)
