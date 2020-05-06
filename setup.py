@@ -45,9 +45,13 @@ setup(
         'semantic-version',
         'jsonschema>=3.2.0',
         'google-cloud-storage',
+<<<<<<< HEAD
         'elasticsearch',
         'numpy',
         'pyipmi',
+=======
+        'python-ipmi',
+>>>>>>> 4c477911... Fix Travis Failure
     ],
     entry_points={
         'console_scripts': [
