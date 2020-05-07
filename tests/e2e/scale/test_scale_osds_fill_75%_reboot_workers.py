@@ -12,7 +12,8 @@ from ocs_ci.ocs.cluster import count_cluster_osd, validate_osd_utilization
 from ocs_ci.framework import config
 from ocs_ci.ocs.node import get_typed_nodes, wait_for_nodes_status
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs import constants, platform_nodes
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.platform_nodes import initialize_nodes
 from ocs_ci.ocs.resources.pod import wait_for_dc_app_pods_to_reach_running_state
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.framework.testlib import scale, E2ETest, ignore_leftovers
@@ -100,8 +101,7 @@ class TestScaleOSDsRebootNodes(E2ETest):
         # Rolling reboot on worker nodes
         worker_nodes = get_typed_nodes(node_type='worker')
 
-        factory = platform_nodes.PlatformNodesFactory()
-        nodes = factory.get_nodes_platform()
+        nodes = initialize_nodes()
 
         for node in worker_nodes:
             nodes.restart_nodes(nodes=[node])

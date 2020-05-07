@@ -21,7 +21,8 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     deployment, ignore_leftovers, tier_marks
 )
-from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes, registry
+from ocs_ci.ocs import constants, ocp, defaults, node, registry
+from ocs_ci.ocs.platform_nodes import initialize_nodes
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
@@ -1609,9 +1610,7 @@ def nodes():
     detach/attach volume, etc.
 
     """
-    factory = platform_nodes.PlatformNodesFactory()
-    nodes = factory.get_nodes_platform()
-    return nodes
+    return initialize_nodes()
 
 
 @pytest.fixture()

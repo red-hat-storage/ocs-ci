@@ -25,6 +25,19 @@ from ocs_ci.utility.utils import (
 logger = logging.getLogger(__name__)
 
 
+def initialize_nodes():
+    """
+    Return an instance of the relevant platform nodes class
+    (e.g. AWSNodes, VMWareNodes) to be later used in the test
+    for nodes related operations, like nodes restart,
+    detach/attach volume, etc.
+
+    """
+    factory = PlatformNodesFactory()
+    nodes = factory.get_nodes_platform()
+    return nodes
+
+
 class PlatformNodesFactory:
     """
     A factory class to get specific nodes platform object
