@@ -1,7 +1,6 @@
 import pytest
 import logging
 import time
-from tests.manage.monitoring.conftest import *
 
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.pytest_customization.marks import polarion_id
@@ -16,79 +15,18 @@ from ocs_ci.ocs.node import get_typed_nodes, wait_for_nodes_status
 from tests.manage.z_cluster.cluster_expansion import temp_helper_file
 
 
-def get_total_space():
-    logging.info("In 'get_total_space':")
-    ct_pod = pod_helpers.get_ceph_tools_pod()
-    output = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd df')
-    total_space = int(output.get('summary').get('total_kb'))
-    logging.info(f"total space is: {total_space}")
-    return total_space
-
-
-def check_osd_pods_after_expansion(osd_pods_before):
-    osd_pods_after = pod_helpers.get_osd_pods()
-    number_of_osds_added = len(osd_pods_after) - len(osd_pods_before)
-    logging.info(f"number of osd's added = {number_of_osds_added}, "
-                 f"before = {len(osd_pods_before)}, after = {len(osd_pods_after)}")
-    if number_of_osds_added != 3:
-        return False
-
-    return True
-
-
-def check_total_space_after_expansion(total_space_b4_expansion):
-    # The newly added capacity takes into effect at the storage level
-    ct_pod = pod_helpers.get_ceph_tools_pod()
-    output = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd df')
-    total_space_after_expansion = int(output.get('summary').get('total_kb'))
-    osd_size = int(output.get('nodes')[0].get('kb'))
-    expanded_space = osd_size * 3  # 3 OSDS are added of size = 'osd_size'
-    logging.info(f"expanded_space == {expanded_space} ")
-    logging.info(f"space output == {output} ")
-    logging.info(f"osd size == {osd_size} ")
-    logging.info(f"total_space_after_expansion == {total_space_after_expansion} ")
-    expected_total_space_after_expansion = total_space_b4_expansion + expanded_space
-    logging.info(f"expected_total_space_after_expansion == {expected_total_space_after_expansion} ")
-    if not total_space_after_expansion == expected_total_space_after_expansion:
-        return False
-
-    return True
-
-
-def check_osd_tree():
-    # 'ceph osd tree' should show the new osds under right nodes/hosts
-    #   Verification is different for 3 AZ and 1 AZ configs
-    osd_pods = pod_helpers.get_osd_pods()
-    ct_pod = pod_helpers.get_ceph_tools_pod()
-    tree_output = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree')
-    logging.info(f"### OSD tree output = {tree_output}")
-    if config.ENV_DATA['platform'] == 'vsphere':
-        return temp_helper_file.check_osd_tree_1az_vmware(tree_output, len(osd_pods))
-
-    aws_number_of_zones = 3
-    if config.ENV_DATA['platform'] == 'AWS':
-        # parse the osd tree. if it contains a node 'rack' then it's a AWS_1AZ cluster. Else, 3 AWS_3AZ cluster
-        for i in range(len(tree_output['nodes'])):
-            if tree_output['nodes'][i]['name'] in "rack":
-                aws_number_of_zones = 1
-        if aws_number_of_zones == 1:
-            return temp_helper_file.check_osd_tree_1az_aws(tree_output, len(osd_pods))
-        else:
-            return temp_helper_file.check_osd_tree_3az_aws(tree_output, len(osd_pods))
-
-
 @pytest.mark.parametrize(
     argnames=["node_type", "num_of_nodes"],
     argvalues=[
         pytest.param(
             *['worker', 1],
-            marks=pytest.mark.polarion_id("OCS-1311")
+            marks=pytest.mark.polarion_id("OCS-1313")
         ),
      ]
 )
 @pytest.mark.parametrize(
     "workload_storageutilization_rbd",
-    [(0.02, False, 120)],
+    [(0.25, False, 120)],
     indirect=["workload_storageutilization_rbd"]
 )
 # @pytest.mark.parametrize(
@@ -104,7 +42,7 @@ class TestAddCapacityNodeRestart(ManageTest):
     Test add capacity when one of the nodes got restart
     in the middle of the process. Don't forget to include the flag '--cluster-name' when running the test
     """
-    num_of_pvcs = 4
+    num_of_pvcs = 3
     pvc_size = 100
 
     def test_add_capacity_node_restart(
@@ -133,8 +71,8 @@ class TestAddCapacityNodeRestart(ManageTest):
             "Condition 4 to start test failed: We have maximum of osd's in the cluster"
         logging.info("All start conditions are met!")
 
-        total_space_b4_expansion = get_total_space()
-        logging.info('total space  before expansion = {}'.format(str(total_space_b4_expansion)))
+        total_space_before_expansion = temp_helper_file.get_total_space()
+        logging.info('total space  before expansion = {}'.format(str(total_space_before_expansion)))
 
         logging.info("Perform some IO operations...")
 
@@ -151,9 +89,9 @@ class TestAddCapacityNodeRestart(ManageTest):
         with ThreadPoolExecutor(max_workers=self.num_of_pvcs-1) as executor:
             for pod_obj in pod_objs:
                 pod_io_task = executor.submit(
-                    pod_obj.run_io, storage_type='fs', size=4, jobs=10, io_direction='wo', rate='250m')
+                    pod_obj.run_io, storage_type='fs', size=2, jobs=10, io_direction='wo', rate='200m')
 
-        seconds_to_wait_for_io_operations = 120
+        seconds_to_wait_for_io_operations = 90
         logging.info(f"Going to sleep for {seconds_to_wait_for_io_operations} seconds")
         time.sleep(seconds_to_wait_for_io_operations)
         used_capacity_after_io_operations = temp_helper_file.get_percent_used_capacity()
@@ -187,13 +125,13 @@ class TestAddCapacityNodeRestart(ManageTest):
             resource_count=result * 3
         )
 
-        assert check_osd_pods_after_expansion(osd_pods_before), \
+        assert temp_helper_file.check_osd_pods_after_expansion(osd_pods_before), (
             "number of osd pods is not as expected"
-        # Don't failed the test for now, just add a warning
-        if not check_total_space_after_expansion(total_space_b4_expansion):
-            logging.warning("Expected capacity mismatch")
-        if not check_osd_tree():
-            logging.warning("Incorrect ceph osd tree format")
+        )
+        assert temp_helper_file.check_total_space_after_expansion(total_space_before_expansion), (
+            "Expected capacity mismatch"
+        )
+        assert temp_helper_file.check_osd_tree(), "Incorrect ceph osd tree format"
 
         logging.info("Finished verifying add capacity osd storage with node restart")
         logging.info("Waiting for ceph health check to finished...")

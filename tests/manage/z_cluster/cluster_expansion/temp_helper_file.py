@@ -1,5 +1,6 @@
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod as pod_helpers
@@ -162,4 +163,86 @@ def check_osd_tree_1az_aws(osd_tree, number_of_osds):
     all_hosts_flatten = [item for sublist in all_hosts for item in sublist]
 
     return check_osds_in_hosts_osd_tree(all_hosts_flatten, osd_tree)
+
+
+def get_total_space():
+    """
+    Returns:
+        int: the total space in kb in the cluster
+    """
+
+    ct_pod = pod_helpers.get_ceph_tools_pod()
+    output = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd df')
+    total_space = int(output.get('summary').get('total_kb'))
+    logging.info(f"total space is: {total_space}")
+    return total_space
+
+
+def check_osd_pods_after_expansion(osd_pods_before):
+    """
+    Check we have the right number of osd pods after the expansion completed.
+    Args:
+          osd_pods_before(int): the osd pods before expansion.
+    Returns:
+          bool: True if we have the right number of osd pods after the expansion completed.
+                False otherwise.
+    """
+
+    osd_pods_after = pod_helpers.get_osd_pods()
+    number_of_osds_added = len(osd_pods_after) - len(osd_pods_before)
+    logging.info(f"number of osd's added = {number_of_osds_added}, "
+                 f"before = {len(osd_pods_before)}, after = {len(osd_pods_after)}")
+    if number_of_osds_added != 3:
+        return False
+
+    return True
+
+
+def check_total_space_after_expansion(total_space_before_expansion):
+    """
+    Check that we have the right amount of total space after the expansion completed.
+    Args:
+        total_space_before_expansion(int): The total space before the expansion.
+    Returns:
+        bool: True if we have the right amount of total space after the expansion completed.
+              False otherwise.
+    """
+    # The newly added capacity takes into effect at the storage level
+    ct_pod = pod_helpers.get_ceph_tools_pod()
+    output = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd df')
+    total_space_after_expansion = int(output.get('summary').get('total_kb'))
+    osd_size = int(output.get('nodes')[0].get('kb'))
+    expanded_space = osd_size * 3  # 3 OSDS are added of size = 'osd_size'
+    logging.info(f"expanded_space == {expanded_space} ")
+    logging.info(f"space output == {output} ")
+    logging.info(f"osd size == {osd_size} ")
+    logging.info(f"total_space_after_expansion == {total_space_after_expansion} ")
+    expected_total_space_after_expansion = total_space_before_expansion + expanded_space
+    logging.info(f"expected_total_space_after_expansion == {expected_total_space_after_expansion} ")
+    if not total_space_after_expansion == expected_total_space_after_expansion:
+        return False
+
+    return True
+
+
+def check_osd_tree():
+    # 'ceph osd tree' should show the new osds under right nodes/hosts
+    #   Verification is different for 3 AZ and 1 AZ configs
+    osd_pods = pod_helpers.get_osd_pods()
+    ct_pod = pod_helpers.get_ceph_tools_pod()
+    tree_output = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree')
+    logging.info(f"### OSD tree output = {tree_output}")
+    if config.ENV_DATA['platform'] == 'vsphere':
+        return check_osd_tree_1az_vmware(tree_output, len(osd_pods))
+
+    aws_number_of_zones = 3
+    if config.ENV_DATA['platform'] == 'AWS':
+        # parse the osd tree. if it contains a node 'rack' then it's a AWS_1AZ cluster. Else, 3 AWS_3AZ cluster
+        for i in range(len(tree_output['nodes'])):
+            if tree_output['nodes'][i]['name'] in "rack":
+                aws_number_of_zones = 1
+        if aws_number_of_zones == 1:
+            return check_osd_tree_1az_aws(tree_output, len(osd_pods))
+        else:
+            return check_osd_tree_3az_aws(tree_output, len(osd_pods))
 
