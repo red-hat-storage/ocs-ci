@@ -1447,7 +1447,7 @@ class BaremetalNodes(NodesBase):
 
         Args:
             nodes (list): The OCS objects of the nodes
-            force (bool): True
+            force (bool): True for force nodes stop, False otherwise
 
         """
         self.baremetal.stop_baremetal_machines(nodes, force=force)
@@ -1469,14 +1469,14 @@ class BaremetalNodes(NodesBase):
 
         Args:
             nodes (list): The OCS objects of the nodes
-            force (bool): True for force VM stop, False otherwise
+            force (bool): True for force BM stop, False otherwise
 
         """
         self.baremetal.restart_baremetal_machines(nodes, force=force)
 
     def restart_nodes_teardown(self):
         """
-        Make sure all VMs are up by the end of the test
+        Make sure all BMs are up by the end of the test
 
         """
         bms = self.baremetal.get_nodes_ipmi_ctx(self.cluster_nodes)
