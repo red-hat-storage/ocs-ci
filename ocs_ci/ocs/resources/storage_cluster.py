@@ -10,6 +10,7 @@ from jsonschema import validate
 from ocs_ci.framework import config
 import logging
 from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs.resources import csv
 
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.packagemanifest import get_selector_for_ocs_operator, PackageManifest
@@ -556,10 +557,15 @@ def check_local_volume():
         bool: True if LV present, False if LV not present
 
     """
-    ocp_obj = OCP()
-    command = "get localvolume -n local-storage "
-    status = ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
-    return "No resources found" not in status
+
+    if csv.get_csvs_start_with_prefix(
+        csv_prefix=defaults.LOCAL_STORAGE_OPERATOR_NAME,
+        namespace=constants.LOCAL_STORAGE_NAMESPACE
+    ):
+        ocp_obj = OCP()
+        command = "get localvolume localblock -n local-storage "
+        status = ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
+        return "No resources found" not in status
 
 
 @retry(AssertionError, 12, 10, 1)
