@@ -4,7 +4,7 @@ import pyipmi
 import pyipmi.interfaces
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.constants import VM_POWERED_OFF, VM_POWERED_ON
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.ocp import OCP
@@ -27,13 +27,23 @@ class BAREMETAL(object):
         self.mgmt_details = config.ENV_DATA['mgmt_details']
 
     def get_ipmi_ctx(self, host, user, password):
+        """
+        Function to get ipmi handler
+        Args:
+            host (str): Host mgmt address
+            user (str): User Name for accessing mgmt console
+            password (str): Password for accessing mgmt console
+
+        Returns (object): ipmi handler
+
+        """
         interface = pyipmi.interfaces.create_interface('ipmitool',
-                                                       interface_type='lanplus')
+                                                       interface_type=defaults.IPMI_INTERFACE_TYPE)
         ipmi = pyipmi.create_connection(interface)
-        ipmi.session.set_session_type_rmcp(host, port=623)
+        ipmi.session.set_session_type_rmcp(host, port=defaults.IPMI_RMCP_PORT)
         ipmi.session.set_auth_type_user(user, password)
         ipmi.session.establish()
-        ipmi.target = pyipmi.Target(ipmb_address=0x20)
+        ipmi.target = pyipmi.Target(ipmb_address=defaults.IPMI_IPMB_ADDRESS)
         return ipmi
 
     def get_power_status(self, ipmi_ctx):
@@ -72,7 +82,8 @@ class BAREMETAL(object):
                             )
                             for status in TimeoutSampler(600, 5, self.get_power_status, ipmi_ctx):
                                 logger.info(
-                                    f"Waiting for Baremetal Machine {[bm.name for bm in baremetal_machine]}to power off"
+                                    f"Waiting for Baremetal Machine {[bm.name for bm in baremetal_machine]} \
+                                    to power off"
                                     f"Current Baremetal status: {status}"
                                 )
                                 if status == VM_POWERED_OFF:
@@ -86,8 +97,6 @@ class BAREMETAL(object):
         Args:
             ipmi_ctxs (list): List of BM ipmi_ctx
             wait (bool): Wait for BMs to start
-
-        Returns:
 
         """
         for ipmi_ctx in ipmi_ctxs:
