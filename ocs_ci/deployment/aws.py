@@ -824,11 +824,11 @@ class AWSUPI(AWSBase):
         # Delete master, bootstrap, security group, and worker stacks
         suffixes = ['ma', 'bs', 'sg']
 
-        num_workers = config.ENV_DATA['worker_replicas']
-        for i in range(num_workers - 1, -1, -1):
-            suffixes.insert(0, f'no{i}')
-
-        stack_names = [f'{cluster_name}-{suffix}' for suffix in suffixes]
+        stack_names = self.aws.get_worker_stacks()
+        stack_names.sort()
+        stack_names.reverse()
+        stack_names.extend([f'{cluster_name}-{s}' for s in suffixes])
+        logger.info(f"Deleteing stacks: {stack_names}")
         self.aws.delete_cloudformation_stacks(stack_names)
 
         # Call openshift-installer destroy cluster
