@@ -3,16 +3,14 @@ Module to perform IOs with several weights
 """
 import pytest
 import logging
-from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
-from ocs_ci.framework.testlib import (
-    ManageTest, performance, google_api_required,
-)
+
+from ocs_ci.utility.performance_dashboard import push_perf_dashboard
+from ocs_ci.framework.testlib import (ManageTest, performance,)
 
 
 logger = logging.getLogger(__name__)
 
 
-@google_api_required
 @performance
 class TestIOPerformance(ManageTest):
     """
@@ -54,9 +52,7 @@ class TestIOPerformance(ManageTest):
         ]
     )
     @pytest.mark.usefixtures(base_setup.__name__)
-    def test_run_io(
-        self, size, io_direction, jobs, runtime, depth, sheet_index
-    ):
+    def test_run_io(self, size, io_direction, jobs, runtime, depth):
         """
         Test IO
         """
@@ -73,7 +69,8 @@ class TestIOPerformance(ManageTest):
         logging.info("IOPs after FIO:")
         reads = fio_result.get('jobs')[0].get('read').get('iops')
         writes = fio_result.get('jobs')[0].get('write').get('iops')
+        w_bw = fio_result.get('jobs')[0].get('write').get('bw')
+        r_bw = fio_result.get('jobs')[0].get('read').get('bw')
         logging.info(f"Read: {reads}")
         logging.info(f"Write: {writes}")
-        g_sheet = GoogleSpreadSheetAPI("OCS FIO", sheet_index)
-        g_sheet.insert_row([self.interface, reads, writes], 2)
+        push_perf_dashboard(self.interface, reads, writes, r_bw, w_bw)
