@@ -33,20 +33,19 @@ class TestIOPerformance(ManageTest):
 
     @pytest.mark.parametrize(
         argnames=[
-            "size", "io_direction", "jobs",
-            "runtime", "depth", "sheet_index"
+            "size", "io_direction", "jobs", "runtime", "depth"
         ],
         argvalues=[
             pytest.param(
-                *['1GB', 'rw', 1, 60, 4, 1],
+                *['1GB', 'rw', 1, 60, 4],
                 marks=pytest.mark.polarion_id("OCS-676")
             ),
             pytest.param(
-                *['1GB', 'rw', 6, 60, 16, 2],
+                *['1GB', 'rw', 6, 60, 16],
                 marks=pytest.mark.polarion_id("OCS-677")
             ),
             pytest.param(
-                *['1GB', 'rw', 12, 60, 32, 3],
+                *['1GB', 'rw', 12, 60, 32],
                 marks=pytest.mark.polarion_id("OCS-678")
             ),
         ]

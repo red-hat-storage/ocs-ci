@@ -1,7 +1,15 @@
-# -*- coding: utf-8 -*-
-####################################################
-# Sample script to save result data using json #
-####################################################
+"""
+Script to save result data using json into the performance dashboard
+Database structure:
+commitid: The specific buid id. : v4.3.0-407 E.g. 407
+project: The project we are currently testing. E.g. 4.3
+branch: OCS full version. E.g. 4.3.0
+executable: Which OCS version we are testing. E.g. 4.3
+benchmark: The benchmark type (based on interface)
+environment: The platform we are testing. E.g, AWS
+result_value: The value of this benchmark.
+
+"""
 import requests
 import json
 from datetime import datetime
@@ -13,22 +21,26 @@ from ocs_ci.ocs import constants
 current_date = datetime.today()
 URL = 'http://10.0.78.167:8000/'
 
+data_template = {
+    "commitid": None,
+    "project": None,
+    "branch": None,
+    "executable": None,
+    "benchmark": None,
+    "environment": None,
+    "result_value": None
+}
 
-def push_perf_dashboard(
-    interface, read_iops, write_iops, bw_read, bw_write
-):
+
+def initialize_data():
     """
-
+    Initialize the data dictionary with cluster data
     """
     csv = ocp.OCP(kind='csv', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     worker_type = get_typed_nodes(num_of_nodes=1)[0].data['metadata'][
         'labels'
     ]['beta.kubernetes.io/instance-type']
-    interface = (
-        constants.RBD_INTERFACE if interface == constants.CEPHBLOCKPOOL else (
-            constants.CEPHFS_INTERFACE
-        )
-    )
+
     csv_vers = csv.get()['items'][1]['spec']['version'][:-3].split("-")
     min_version = csv_vers[0]
     build_id = csv_vers[1]
@@ -36,44 +48,51 @@ def push_perf_dashboard(
     platform = config.ENV_DATA['platform']
     if platform.lower() == 'aws':
         platform = platform.upper() + " " + worker_type
-    sample_data = [
-        {
-            "commitid": build_id,
-            "project": f"OCS{ocs_ver}",
-            "branch": min_version,
-            "executable": ocs_ver,
-            "benchmark": f"{interface}-iops-Read",
-            "environment": platform,
-            "result_value": read_iops
-        },
-        {
-            "commitid": build_id,
-            "project": f"OCS{ocs_ver}",
-            "branch": min_version,
-            "executable": ocs_ver,
-            "benchmark": f"{interface}-iops-Write",
-            "environment": platform,
-            "result_value": write_iops
-        },
-        {
-            "commitid": build_id,
-            "project": f"OCS{ocs_ver}",
-            "branch": min_version,
-            "executable": ocs_ver,
-            "benchmark": f"{interface}-BW-Write",
-            "environment": platform,
-            "result_value": bw_write
-        },
-        {
-            "commitid": build_id,
-            "project": f"OCS{ocs_ver}",
-            "branch": min_version,
-            "executable": ocs_ver,
-            "benchmark": f"{interface}-BW-Read",
-            "environment": platform,
-            "result_value": bw_read
-        }
-    ]
-    data = {'json': json.dumps(sample_data)}
-    r = requests.post(URL + 'result/add/json/', data=data)
-    assert r.status_code
+    data_template['commitid'] = build_id
+    data_template['project'] = f"OCS{ocs_ver}"
+    data_template['branch'] = min_version
+    data_template['executable'] = ocs_ver
+    data_template['environment'] = platform
+
+    return data_template
+
+
+def push_perf_dashboard(
+    interface, read_iops, write_iops, bw_read, bw_write
+):
+    """
+    Push JSON data to performance dashboard
+
+    Args:
+        interface (str): The interface used for getting the results
+        read_iops (str): Read IOPS
+        write_iops (str): Write IOPS
+        bw_read (str): Read bandwidth
+        bw_write (str): Write bandwidth
+    """
+    data = initialize_data()
+    interface = (
+        constants.RBD_INTERFACE if interface == constants.CEPHBLOCKPOOL else (
+            constants.CEPHFS_INTERFACE
+        )
+    )
+    sample_data = []
+
+    sample_data[0] = data
+    sample_data[0]['benchmark'] = f"{interface}-iops-Read"
+    sample_data[0]['result_value'] = read_iops
+
+    sample_data[1] = data
+    sample_data[1]['benchmark'] = f"{interface}-iops-Write"
+    sample_data[1]['result_value'] = write_iops
+
+    sample_data[2] = data
+    sample_data[2]['benchmark'] = f"{interface}-BW-Write"
+    sample_data[2]['result_value'] = bw_write
+
+    sample_data[3] = data
+    sample_data[3]['benchmark'] = f"{interface}-BW-Read"
+    sample_data[3]['result_value'] = bw_read
+
+    json_data = {'json': json.dumps(sample_data)}
+    requests.post(URL + 'result/add/json/', data=json_data)
