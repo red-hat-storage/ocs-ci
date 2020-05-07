@@ -2,7 +2,6 @@ import logging
 
 from ocs_ci.framework.pytest_customization.marks import tier2
 from ocs_ci.framework.testlib import polarion_id, bugzilla
-from ocs_ci.ocs import defaults
 
 log = logging.getLogger(__name__)
 

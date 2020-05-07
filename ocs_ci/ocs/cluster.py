@@ -189,7 +189,7 @@ class CephCluster(object):
         self.cluster.reload()
         return self.cluster.data['status']['ceph']['health'] == "HEALTH_OK"
 
-    def cluster_health_check(self, timeout=None):
+    def cluster_health_check(self, mcg_obj_session, timeout=None):
         """
         Check overall cluster health.
         Relying on health reported by CephCluster.get()
@@ -238,7 +238,10 @@ class CephCluster(object):
             logger.error(e)
             raise exceptions.CephHealthException("Cluster health is NOT OK")
 
-        self.noobaa_health_check()
+        # check noobaa health
+        if not mcg_obj_session.status:
+            raise exceptions.NoobaaHealthException("Cluster health is NOT OK")
+
         # TODO: OSD and MGR health check
         logger.info("Cluster HEALTH_OK")
         # This scan is for reconcilation on *.count
@@ -338,21 +341,6 @@ class CephCluster(object):
                 f"Failed to achieve desired MDS count"
                 f" {count}"
             )
-
-    def noobaa_health_check(self):
-        """
-        Noobaa health check based on pods status
-        """
-        timeout = 10 * len(self.pods)
-        assert self.POD.wait_for_resource(
-            condition='Running', selector=self.noobaa_selector,
-            timeout=timeout, sleep=3,
-        ), "Failed to achieve desired Noobaa Operator Status"
-
-        assert self.POD.wait_for_resource(
-            condition='Running', selector=self.noobaa_core_selector,
-            timeout=timeout, sleep=3,
-        ), "Failed to achieve desired Noobaa Core Status"
 
     def get_admin_key(self):
         """
