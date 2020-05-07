@@ -69,6 +69,7 @@ def push_perf_dashboard(
         write_iops (str): Write IOPS
         bw_read (str): Read bandwidth
         bw_write (str): Write bandwidth
+
     """
     data = initialize_data()
     interface = (
@@ -77,22 +78,21 @@ def push_perf_dashboard(
         )
     )
     sample_data = []
+    data['benchmark'] = f"{interface}-iops-Read"
+    data['result_value'] = read_iops
+    sample_data.append(data.copy())
 
-    sample_data[0] = data
-    sample_data[0]['benchmark'] = f"{interface}-iops-Read"
-    sample_data[0]['result_value'] = read_iops
+    data['benchmark'] = f"{interface}-iops-Write"
+    data['result_value'] = write_iops
+    sample_data.append(data.copy())
 
-    sample_data[1] = data
-    sample_data[1]['benchmark'] = f"{interface}-iops-Write"
-    sample_data[1]['result_value'] = write_iops
+    data['benchmark'] = f"{interface}-BW-Write"
+    data['result_value'] = bw_write
+    sample_data.append(data.copy())
 
-    sample_data[2] = data
-    sample_data[2]['benchmark'] = f"{interface}-BW-Write"
-    sample_data[2]['result_value'] = bw_write
-
-    sample_data[3] = data
-    sample_data[3]['benchmark'] = f"{interface}-BW-Read"
-    sample_data[3]['result_value'] = bw_read
+    data['benchmark'] = f"{interface}-BW-Read"
+    data['result_value'] = bw_read
+    sample_data.append(data.copy())
 
     json_data = {'json': json.dumps(sample_data)}
     requests.post(URL + 'result/add/json/', data=json_data)

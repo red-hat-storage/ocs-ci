@@ -72,4 +72,5 @@ class TestIOPerformance(ManageTest):
         r_bw = fio_result.get('jobs')[0].get('read').get('bw')
         logging.info(f"Read: {reads}")
         logging.info(f"Write: {writes}")
+
         push_perf_dashboard(self.interface, reads, writes, r_bw, w_bw)
