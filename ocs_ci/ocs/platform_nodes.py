@@ -596,7 +596,7 @@ class AWSNodes(NodesBase):
             node_list (list): of AWSUPINode/AWSIPINode objects
 
         Raises:
-             PendingCSRException
+             PendingCSRException: If any pending csrs exists
 
         """
         node_names = [
@@ -621,7 +621,7 @@ class AWSNodes(NodesBase):
             node_names (list): of node names as string
 
         Returns:
-            'True' if all the node names appeared in 'get nodes'
+            bool: 'True' if all the node names appeared in 'get nodes'
             else 'False'
 
         """
@@ -649,7 +649,7 @@ class AWSNodes(NodesBase):
             required_slots (int): required number of integers
 
         Returns:
-            list : of integers (available slots)
+            list: of integers (available slots)
 
         """
         slots_available = []
@@ -672,7 +672,7 @@ class AWSNodes(NodesBase):
                 'clustername-no$i'
 
         Returns:
-            list : sorted list of Integers
+            list: sorted list of Integers
 
         """
         temp = []
