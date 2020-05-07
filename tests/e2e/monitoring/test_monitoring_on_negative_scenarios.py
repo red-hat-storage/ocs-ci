@@ -19,6 +19,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
+from ocs_ci.utility import utils
 
 log = logging.getLogger(__name__)
 
@@ -100,7 +101,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             if scheduling_disabled_nodes:
                 schedule_nodes(scheduling_disabled_nodes)
 
-            # Validate all nodes are in READY state
+                # Validate all nodes are in READY state
             not_ready_nodes = [
                 n for n in get_node_objs() if n
                 .ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
@@ -352,13 +353,27 @@ class TestMonitoringBackedByOCS(E2ETest):
 
         # Get the master node list
         master_nodes = get_typed_nodes(node_type='master')
+        # Check if LSO is present
+        local_storage_operator = ocp.OCP(
+            kind=constants.POD, namespace='local-storage'
+        )
+        if local_storage_operator.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=constants.LOCAL_STORAGE_OPERATOR_LABEL,
+            timeout=600
+        ):
+            # Enter in the node and execute reboot
+            for node in master_nodes:
+                utils.run_cmd(f"oc debug node/{node}")
+                utils.run_cmd("reboot")
 
-        # Reboot one after one master nodes
-        for node in master_nodes:
-            nodes.restart_nodes([node])
+                wait_for_nodes_status_and_prometheus_health_check(pods)
+        else:
+            # Reboot one after one master nodes
+            for node in master_nodes:
+                nodes.restart_nodes([node])
 
-            wait_for_nodes_status_and_prometheus_health_check(pods)
-
+                wait_for_nodes_status_and_prometheus_health_check(pods)
         # Check the node are Ready state and check cluster is health ok
         self.sanity_helpers.health_check()
 
