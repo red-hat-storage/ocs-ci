@@ -36,6 +36,7 @@ TEMPLATE_COUCHBASE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase")
 TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
 TEMPLATE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_SERVER_DIR, "pillowfight")
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
+TEMPLATE_AMQ_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "amq")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(
     TEMPLATE_DIR, "openshift-infra/"
 )
@@ -140,6 +141,8 @@ CRITICAL_ERRORS = [
 ]
 must_gather_pod_label = "must-gather"
 
+# AMQ
+AMQ_NAMESPACE = "myproject"
 KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
 
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
@@ -366,6 +369,13 @@ COUCHBASE_WORKER_SECRET = os.path.join(
 
 COUCHBASE_WORKER_EXAMPLE = os.path.join(
     TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-example.yaml"
+)
+
+HELLO_WORLD_PRODUCER_YAML = os.path.join(
+    TEMPLATE_AMQ_DIR, "hello-world-producer.yaml"
+)
+HELLO_WORLD_CONSUMER_YAML = os.path.join(
+    TEMPLATE_AMQ_DIR, "hello-world-consumer.yaml"
 )
 
 NGINX_POD_YAML = os.path.join(
