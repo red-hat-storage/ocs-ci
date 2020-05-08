@@ -1325,8 +1325,8 @@ def change_default_storageclass(scname):
         # Change the existing default Storageclass annotation to false
         for sc in default_sc:
             patch = " '{\"metadata\": {\"annotations\":" \
-            "{\"storageclass.kubernetes.io/is-default-class\"" \
-            ":\"false\"}}}' "
+                    "{\"storageclass.kubernetes.io/is-default-class\"" \
+                    ":\"false\"}}}' "
             patch_cmd = f"patch storageclass {sc} -p" + patch
             ocp_obj.exec_oc_cmd(command=patch_cmd)
 

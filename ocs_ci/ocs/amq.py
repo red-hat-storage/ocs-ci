@@ -202,8 +202,9 @@ class AMQ(object):
             raise cf
         time.sleep(40)
 
-        if self.is_amq_pod_running(pod_pattern="my-cluster-zookeeper") and \
-            self.is_amq_pod_running(pod_pattern="my-cluster-kafka"):
+        if self.is_amq_pod_running(
+            pod_pattern="my-cluster-zookeeper"
+        ) and self.is_amq_pod_running(pod_pattern="my-cluster-kafka"):
             return self.kafka_persistent
         else:
             raise ResourceWrongStatusException("my-cluster-kafka and my-cluster-zookeeper "
