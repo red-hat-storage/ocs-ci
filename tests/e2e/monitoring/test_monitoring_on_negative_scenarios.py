@@ -101,7 +101,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             if scheduling_disabled_nodes:
                 schedule_nodes(scheduling_disabled_nodes)
 
-                # Validate all nodes are in READY state
+            # Validate all nodes are in READY state
             not_ready_nodes = [
                 n for n in get_node_objs() if n
                 .ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
@@ -371,7 +371,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         else:
             # Reboot one after one master nodes
             for node in master_nodes:
-                nodes.restart_nodes([node])
+                nodes.restart_nodes(nodes=[node])
 
                 wait_for_nodes_status_and_prometheus_health_check(pods)
         # Check the node are Ready state and check cluster is health ok
