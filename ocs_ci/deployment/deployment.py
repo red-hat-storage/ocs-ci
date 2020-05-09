@@ -341,6 +341,11 @@ class Deployment(object):
         ui_deployment = config.DEPLOYMENT.get('ui_deployment')
         live_deployment = config.DEPLOYMENT.get('live_deployment')
 
+        if config.ENV_DATA.get('disable_comunity_operator_source'):
+            disable_source(constants.COMMUNITY_OPERATORS)
+            create_lib_bucket_catalog(
+                config.ENV_DATA.get("lib_bucket_tag_before_ocs_deploy", "v1")
+            )
         if config.DEPLOYMENT.get('local_storage'):
             setup_local_storage()
 
@@ -624,6 +629,14 @@ class Deployment(object):
                 " and therefore, NooBaa auto scale will remain disabled"
             )
             change_noobaa_endpoints_count(min_nb_eps=1, max_nb_eps=1)
+        lib_bucket_tag = config.ENV_DATA.get("lib_bucket_tag_after_ocs_deploy")
+        if lib_bucket_tag:
+            patch_lib_bucket_image(lib_bucket_tag)
+        logger.info("Waiting 60 secods before gather CSV info")
+        time.sleep(60)
+        get_csv_cmd = f"oc get csv -n {config.ENV_DATA['cluster_namespace']}"
+        csvs_out = run_cmd(get_csv_cmd)
+        logger.info(f"Available CSVs: {csvs_out}")
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -928,3 +941,74 @@ def _get_disk_by_id(worker):
         f"-- chroot /host ls -la /dev/disk/by-id/"
     )
     return run_cmd(cmd)
+
+
+def disable_source(source_name):
+    """
+    Disable source in operator hub cluster
+
+    Args:
+        source_name (str): Source name.
+
+    """
+    cmd = (
+        f'oc patch OperatorHub cluster --type json -p '
+        f'\'[{{"op": "add", "path": "/spec/sources", '
+        f'"value": [{{"disabled": true, "name": "{source_name}"}}]}}]\''
+    )
+    logger.info(f"Disabling source: {source_name}")
+    run_cmd(cmd)
+
+
+def create_lib_bucket_catalog(tag="v1"):
+    """
+    Create catalog source for lib bucket provisioner
+
+    Args:
+        tag (str): Tag of the image.
+
+    """
+    catalog_source_data = templating.load_yaml(
+        constants.LIB_BUCKET_CATALOG_SOURCE_YAML
+    )
+    catalog_source_data['spec']['image'] = (
+        f"{constants.LIB_BUCKET_CATALOG_IMAGE}:{tag}"
+    )
+    catalog_source_manifest = tempfile.NamedTemporaryFile(
+        mode='w+', prefix='catalog_source_manifest', delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        catalog_source_data, catalog_source_manifest.name
+    )
+    logger.info("Creating WA lib bucket catalog")
+    run_cmd(f"oc create -f {catalog_source_manifest.name}", timeout=2400)
+    catalog_source = CatalogSource(
+        resource_name=constants.LIB_BUCKET_CATALOG_NAME,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+    # Wait for catalog source is ready
+    catalog_source.wait_for_state("READY")
+
+
+def patch_lib_bucket_image(tag="v2"):
+    """
+    Patch image
+
+    Args:
+        tag (str): Tag of the image.
+
+    """
+    cs_name = constants.LIB_BUCKET_CATALOG_NAME
+    namespace = constants.MARKETPLACE_NAMESPACE
+    image = constants.LIB_BUCKET_CATALOG_IMAGE
+    cmd = (
+        f'oc patch -n {namespace} CatalogSource {cs_name} --type '
+        f'merge -p \'{{"spec":{{"image": "{image}:{tag}"}}}}\''
+    )
+    run_cmd(cmd)
+    catalog_source = CatalogSource(
+        resource_name=constants.LIB_BUCKET_CATALOG_NAME,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+    # Wait for catalog source is ready
+    catalog_source.wait_for_state("READY")

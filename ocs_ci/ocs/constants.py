@@ -478,6 +478,16 @@ CATALOG_SOURCE_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "catalog-source.yaml"
 )
 
+LIB_BUCKET_CATALOG_SOURCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "catalog-lib-bucket.yaml"
+)
+
+LIB_BUCKET_CATALOG_NAME = "lib-bucket-catalog"
+
+LIB_BUCKET_CATALOG_IMAGE = "quay.io/noobaa/lib-bucket-catalog"
+
+COMMUNITY_OPERATORS = "community-operators"
+
 SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "subscription.yaml"
 )
