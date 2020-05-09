@@ -1,0 +1,4 @@
+---
+ENV_DATA:
+  disable_comunity_operator_source: true
+  lib_bucket_tag_after_ocs_deploy: "v2"
