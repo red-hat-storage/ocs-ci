@@ -55,6 +55,7 @@ def run_io_on_pool(pool_obj):
 
 @tier4
 @tier4c
+@pytest.mark.skip("Test case is disabled, as per requirement not to support this scenario")
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-355")
 class TestRemoveMonFromCluster(ManageTest):
