@@ -1045,9 +1045,9 @@ def run_io_in_background(request, pod_factory_session):
     """
     if config.RUN['cli_params'].get('io_in_bg') or config.RUN['io_in_bg']:
         log.info(
-            f"\n===================================================\n"
-            f"Tests will be running while IO is in the background\n"
-            f"==================================================="
+            "\n===================================================\n"
+            "Tests will be running while IO is in the background\n"
+            "==================================================="
         )
 
         g_sheet = None
