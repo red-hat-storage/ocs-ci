@@ -1516,12 +1516,9 @@ def get_next_version_available_for_upgrade(current_tag):
     raise TagNotFoundException("Couldn't find any tag!")
 
 
-def get_ocs_olm_operator_tags(limit=100):
+def load_auth_config():
     """
-    Query the OCS OLM Operator repo and retrieve a list of tags.
-
-    Args:
-        limit: the number of tags to limit the request to
+    Load the authentication config YAML from /data/auth.yaml
 
     Raises:
         FileNotFoundError: if the auth config is not found
@@ -1529,31 +1526,41 @@ def get_ocs_olm_operator_tags(limit=100):
         requests.RequestException: if the response return code is not ok
 
     Returns:
+        dict: A dictionary reprensenting the YAML file
+
+    """
+    log.info("Retrieving the authentication config dictionary")
+    auth_file = os.path.join(constants.TOP_DIR, 'data', 'auth.yaml')
+    try:
+        with open(auth_file) as f:
+            return yaml.safe_load(f)
+    except FileNotFoundError:
+        log.error(
+            f'Unable to find the authentication configuration at {auth_file}, '
+            f'please refer to the getting started guide ({constants.AUTH_CONFIG_DOCS})'
+        )
+        raise
+
+
+def get_ocs_olm_operator_tags(limit=100):
+    """
+    Query the OCS OLM Operator repo and retrieve a list of tags.
+
+    Args:
+        limit: the number of tags to limit the request to
+
+    Returns:
         list: OCS OLM Operator tags
 
     """
-    log.info("Retrieving OCS OLM Operator tags (limit %s)", limit)
-    auth_file = os.path.join(constants.TOP_DIR, 'data', 'auth.yaml')
-    doc_url = (
-        'https://ocs-ci.readthedocs.io/en/latest/docs/getting_started.html'
-        '#authentication-config'
-    )
+    log.info(f"Retrieving OCS OLM Operator tags (limit {limit})")
     try:
-        with open(auth_file) as f:
-            auth_config = yaml.safe_load(f)
-        quay_access_token = auth_config['quay']['access_token']
-    except FileNotFoundError:
-        log.error(
-            'Unable to find the authentication configuration at %s, '
-            'please refer to the getting started guide (%s)',
-            auth_file, doc_url
-        )
-        raise
+        quay_access_token = load_auth_config()['quay']['access_token']
     except KeyError:
         log.error(
             'Unable to retrieve the access token for quay, please refer to '
-            'the getting started guide (%s) to properly setup your '
-            'authentication configuration', doc_url
+            f'the getting started guide ({constants.AUTH_CONFIG_DOCS}) '
+            'to properly setup your authentication configuration'
         )
         raise
     headers = {'Authorization': f'Bearer {quay_access_token}'}
