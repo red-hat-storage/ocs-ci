@@ -42,7 +42,7 @@ class StorageCluster(OCP):
 
 
 def ocs_install_verification(
-    mcg_obj_session, timeout=600, skip_osd_distribution_check=False, ocs_registry_image=None,
+    timeout=600, skip_osd_distribution_check=False, ocs_registry_image=None,
     post_upgrade_verification=False,
 ):
     """
@@ -134,7 +134,12 @@ def ocs_install_verification(
         timeout=timeout
     )
     # noobaa
-    assert mcg_obj_session.status
+    assert pod.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector=constants.NOOBAA_APP_LABEL,
+        resource_count=2,
+        timeout=timeout
+    )
     # mons
     assert pod.wait_for_resource(
         condition=constants.STATUS_RUNNING,

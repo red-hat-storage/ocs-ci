@@ -18,6 +18,7 @@ import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
+from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -106,6 +107,7 @@ class CephCluster(object):
         self.mgr_count = 0
         self.osd_count = 0
         self.noobaa_count = 0
+        self.mcg_obj = MCG()
         self.scan_cluster()
         logging.info(f"Number of mons = {self.mon_count}")
         logging.info(f"Number of mds = {self.mds_count}")
@@ -189,7 +191,7 @@ class CephCluster(object):
         self.cluster.reload()
         return self.cluster.data['status']['ceph']['health'] == "HEALTH_OK"
 
-    def cluster_health_check(self, mcg_obj_session, timeout=None):
+    def cluster_health_check(self, timeout=None):
         """
         Check overall cluster health.
         Relying on health reported by CephCluster.get()
@@ -239,7 +241,7 @@ class CephCluster(object):
             raise exceptions.CephHealthException("Cluster health is NOT OK")
 
         # check noobaa health
-        if not mcg_obj_session.status:
+        if not self.mcg_obj.status:
             raise exceptions.NoobaaHealthException("Cluster health is NOT OK")
 
         # TODO: OSD and MGR health check
