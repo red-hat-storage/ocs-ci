@@ -5,8 +5,12 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility.utils import ceph_health_check
+import pytest
 
 
+@pytest.mark.skip(
+    reason="Temporarily disabling test as it prevents other tests from running"
+)
 @pre_upgrade
 @ignore_leftovers
 @tier1
