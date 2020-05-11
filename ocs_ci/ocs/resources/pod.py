@@ -250,7 +250,7 @@ class Pod(OCS):
 
     def run_io(
         self, storage_type, size, io_direction='rw', rw_ratio=75,
-        jobs=1, runtime=60, depth=4, rate='1m', rate_process='poisson', fio_filename=None
+        jobs=1, runtime=60, depth=4, rate='1m', rate_process='poisson', fio_filename=None, bs='4K'
     ):
         """
         Execute FIO on a pod
@@ -276,6 +276,7 @@ class Pod(OCS):
             rate (str): rate of IO default 1m, e.g. 16k
             rate_process (str): kind of rate process default poisson, e.g. poisson
             fio_filename(str): Name of fio file created on app pod's mount point
+            bs (str): Block size, e.g. 4K
         """
         if not self.wl_setup_done:
             self.workload_setup(storage_type=storage_type, jobs=jobs)
@@ -297,6 +298,7 @@ class Pod(OCS):
         self.io_params['iodepth'] = depth
         self.io_params['rate'] = rate
         self.io_params['rate_process'] = rate_process
+        self.io_params['bs'] = bs
         self.fio_thread = self.wl_obj.run(**self.io_params)
 
     def run_git_clone(self):
@@ -366,6 +368,22 @@ class Pod(OCS):
 
         cmd = f"ssh -i {authkey} -o \"StrictHostKeyChecking no\" {user}@{server} {cmd}"
         self.exec_cmd_on_pod(cmd, out_yaml_format=False)
+
+    def get_memory(self):
+        """
+        Get the pod memory size
+
+        Returns:
+            dict: The names of the pod's containers (str) as keys and their memory
+                size (str) as values
+
+        """
+        containers = self.pod_data.get('spec').get('containers')
+        container_names_and_memory = {
+            container.get('name'): container.get('resources')
+            .get('limits').get('memory') for container in containers
+        }
+        return container_names_and_memory
 
 
 # Helper functions for Pods

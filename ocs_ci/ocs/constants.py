@@ -823,3 +823,8 @@ AUTH_CONFIG_DOCS = (
     'https://ocs-ci.readthedocs.io/en/latest/docs/getting_started.html'
     '#authentication-config'
 )
+
+# Conversions
+TP_CONVERSION = {
+    ' B/s': 0.000000976562, ' KiB/s': 0.000976562, ' MiB/s': 1
+}

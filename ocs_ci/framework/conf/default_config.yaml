@@ -30,6 +30,8 @@ RUN:
   force_chrome_branch_base: "665006"
   force_chrome_branch_sha256sum: "a1ae2e0950828f991119825f62c24464ab3765aa219d150a94fb782a4c66a744"
   io_in_bg: False
+  io_load: null
+  bg_io_logs: False
 
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
@@ -130,4 +132,3 @@ UPGRADE:
 # or ping in ocs infra chat room.
 AUTH:
     test_quay_auth: test_secret
-  
