@@ -48,6 +48,8 @@ class BAREMETAL(object):
 
     def get_power_status(self, ipmi_ctx):
         """
+        Get BM Power status
+
         Args:
             ipmi_ctx (object) : Ipmi host handler
 
@@ -186,6 +188,13 @@ class BAREMETAL(object):
         self.start_baremetal_machines(baremetal_machine)
 
     def get_nodes_ipmi_ctx(self, baremetal_machine):
+        """
+        Get Node Ipmi handler
+
+        Args:
+            baremetal_machine: BM objects
+
+        """
         node_ipmi_ctx = list()
         for node in baremetal_machine:
             for details in self.mgmt_details:
