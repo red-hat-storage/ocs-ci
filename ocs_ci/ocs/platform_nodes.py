@@ -1,6 +1,5 @@
 import logging
 import os
-import random
 import json
 import re
 
@@ -564,12 +563,14 @@ class AWSNodes(NodesBase):
             slots_available = self.get_available_slots(existing_indexes, num_nodes)
             logger.info(f"Available indexes: {slots_available}")
             for slot in slots_available:
+                node_conf['zone'] = self.get_zone_number()
                 node_id = slot
                 node_list.append(node_cls(node_conf, node_type))
                 node_list[-1]._prepare_node(node_id)
         elif node_type.upper() == 'RHEL':
             rhel_workers = len(get_typed_worker_nodes('rhel'))
             for i in range(num_nodes):
+                node_conf['zone'] = self.get_zone_number()
                 node_id = i + rhel_workers
                 node_list.append(node_cls(node_conf, node_type))
                 node_list[-1]._prepare_node(node_id)
@@ -908,6 +909,26 @@ class AWSNodes(NodesBase):
             host, pem_dst_path, cmd, user=constants.EC2_USER
         )
 
+    def get_zone_number(self):
+        """
+        Get a zone number out of all available zones, we are looking for
+        sequential iteration over available zones. Note: This is not exact
+        zone info of aws, instead we are looking for an index to the
+        cloudformation stack whose zone info will be extracted later.
+
+        Returns:
+            int: Zone number, each call to this function returns next avaialable
+                zone number from available zones
+
+        """
+        num_zones = get_az_count()
+        try:
+            self.zone_count += 1
+        except AttributeError:
+            self.zone_count = 0
+
+        return self.zone_count % num_zones
+
 
 class AWSUPINode(AWSNodes):
     """
@@ -983,7 +1004,7 @@ class AWSUPINode(AWSNodes):
             boto3.Instance: instance of ec2 instance resource
 
         """
-        self.gather_worker_data()
+        self.gather_worker_data(f"no{conf.get('zone')}")
         worker_template_path = self.get_rhcos_worker_template()
         self.bucket_name = constants.AWS_S3_UPI_BUCKET
         self.template_obj_key = f'{self.cluster_name}-workertemplate'
@@ -1165,11 +1186,7 @@ class AWSUPINode(AWSNodes):
         """
         cluster_id = get_infra_id(self.cluster_path)
         node_id = node_conf['node_id']
-        if not node_conf.get('zone'):
-            num_zone = get_az_count()
-            zone = random.randint(0, num_zone)
-        else:
-            zone = node_conf.get('zone')
+        zone = node_conf.get('zone')
         logger.info("Creating RHEL worker node")
         self.gather_worker_data(f'no{zone}')
         response = self.client.run_instances(
