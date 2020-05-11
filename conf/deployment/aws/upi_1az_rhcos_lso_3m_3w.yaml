@@ -1,0 +1,12 @@
+---
+DEPLOYMENT:
+  local_storage: true
+ENV_DATA:
+  platform: 'aws'
+  deployment_type: 'upi'
+  region: 'us-east-2'
+  worker_replicas: 3
+  master_replicas: 3
+  availability_zone_count: 1
+  worker_instance_type: 'i3en.2xlarge'
+  device_size: 2300  # Value pulled from here: https://bugzilla.redhat.com/show_bug.cgi?id=1812557#c27

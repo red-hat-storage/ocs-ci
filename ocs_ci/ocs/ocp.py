@@ -1268,4 +1268,4 @@ def wait_for_cluster_connectivity(tries=200, delay=3):
     log.info("Waiting for cluster connectivity")
     return retry(
         CommandFailed, tries=tries, delay=delay, backoff=1
-    )(service.get)
+    )(service.get)()
