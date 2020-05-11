@@ -1426,6 +1426,10 @@ def verify_volume_deleted_in_backend(
             f"Volume corresponding to uuid {image_uuid} is not deleted "
             f"in backend"
         )
+        # Log 'ceph progress' and 'ceph rbd task list' for debugging purpose
+        ct_pod = pod.get_ceph_tools_pod()
+        ct_pod.exec_ceph_cmd('ceph progress')
+        ct_pod.exec_ceph_cmd('ceph rbd task list')
         return False
 
 
