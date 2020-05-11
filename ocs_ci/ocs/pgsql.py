@@ -145,6 +145,16 @@ class Postgresql(RipSaw):
                     f'but only found {len(pgbench_pods)}'
                 )
 
+    def get_postgresql_pods(self):
+        """
+        Get all postgresql pods
+        Returns:
+            List: postgresql pod objects list
+        """
+        return get_all_pods(
+            namespace=RIPSAW_NAMESPACE, selector=['postgres']
+        )
+
     def get_pgbench_pods(self):
         """
         Get all pgbench pods
@@ -210,7 +220,7 @@ class Postgresql(RipSaw):
             str: state of postgresql pod
 
         """
-        postgresql_pods = get_all_pods(namespace=RIPSAW_NAMESPACE, selector=['postgres'])
+        postgresql_pods = self.get_postgresql_pods()
 
         for pod in postgresql_pods:
             wait_for_resource_state(
@@ -270,7 +280,7 @@ class Postgresql(RipSaw):
 
     def get_nodes(self, pod_name, all_nodes=False):
         """
-        Choose Relevant
+         Get nodes that contain a specific pod
 
         Args:
             pod_name (str)
@@ -285,7 +295,7 @@ class Postgresql(RipSaw):
             pods_obj = self.pod_obj.get(selector=constants.OSD_APP_LABEL, all_namespaces=True)
         elif pod_name == 'postgres':
             pods_obj = self.pod_obj.get(selector=constants.PGSQL_APP_LABEL, all_namespaces=True)
-        # Create a list of nodes (witout dulicate nodes in the list)
+        # Create a list of nodes (witout duplicate nodes in the list)
         nodes_set = list(set([pod['spec']['nodeName'] for pod in pods_obj['items']]))
 
         if all_nodes:
@@ -298,7 +308,7 @@ class Postgresql(RipSaw):
 
     def respin_pod(self, pod_name=''):
         """
-        Choose Relevant pod and respin the pod
+        Respin a pod
 
         Args:
             pod_name (str)
@@ -306,10 +316,10 @@ class Postgresql(RipSaw):
         Returns:
             pod status
         """
+        log.info(f"Respin pod {pod_name}")
         if pod_name == 'postgers':
             self.respin_app_pod()
             return True
-        log.info(f"Respin Ceph pod {pod_name}")
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=f'{pod_name}')
         disruption.delete_resource()
@@ -317,7 +327,7 @@ class Postgresql(RipSaw):
 
     def respin_app_pod(self):
         """
-        respin the pgsql app pod
+        Respin the pgsql app pod
 
         Returns:
             pod status
