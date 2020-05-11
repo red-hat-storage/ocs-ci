@@ -47,6 +47,11 @@ class BAREMETAL(object):
         return ipmi
 
     def get_power_status(self, ipmi_ctx):
+        """
+        Args:
+            ipmi_ctx (object) : Ipmi host handler
+
+        """
         chassis_status = ipmi_ctx.get_chassis_status()
         return VM_POWERED_ON if chassis_status.power_on else VM_POWERED_OFF
 
