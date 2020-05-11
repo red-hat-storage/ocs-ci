@@ -2,7 +2,8 @@
 Postgresql workload class
 """
 import logging
-
+import random
+from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -14,7 +15,8 @@ from subprocess import CalledProcessError
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
 from tests.helpers import wait_for_resource_state
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE, RIPSAW_CRD
-
+from tests import disruption_helpers
+from ocs_ci.ocs.resources.pod import get_operator_pods
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +25,7 @@ class Postgresql(RipSaw):
     """
     Postgresql workload operation
     """
+
     def __init__(self, **kwargs):
         """
         Initializer function
@@ -142,18 +145,6 @@ class Postgresql(RipSaw):
                     f'but only found {len(pgbench_pods)}'
                 )
 
-    def get_postgresql_pods(self):
-        """
-        Get all postgresql pods
-
-        Returns:
-            List: postgresql pod objects list
-
-        """
-        return get_all_pods(
-            namespace=RIPSAW_NAMESPACE, selector=['postgres']
-        )
-
     def get_pgbench_pods(self):
         """
         Get all pgbench pods
@@ -207,6 +198,25 @@ class Postgresql(RipSaw):
             'terminated'
         ]['reason']
 
+    def get_postgresql_status(self, status=constants.STATUS_RUNNING):
+        """
+        Get all postgresql pods on cluster
+        Check that all postgresql pods in desired state
+
+        Args:
+           status (str): Desired state of postgresql pods
+
+        Returns:
+            str: state of postgresql pod
+
+        """
+        postgresql_pods = get_all_pods(namespace=RIPSAW_NAMESPACE, selector=['postgres'])
+
+        for pod in postgresql_pods:
+            wait_for_resource_state(
+                resource=pod, state=status, timeout=300
+            )
+
     def wait_for_pgbench_status(self, status, timeout=None):
         """
         Wait for pgbench benchmark pods status to reach running/completed
@@ -257,6 +267,68 @@ class Postgresql(RipSaw):
             log.info(f"PGBench on {pgbench_pod.name} completed successfully")
             all_pgbench_pods_output.append(pg_output)
         return all_pgbench_pods_output
+
+    def get_nodes(self, pod_name, all_nodes=False):
+        """
+        Choose Relevant
+
+        Args:
+            pod_name (str)
+            all_nodes (bool):
+                True-return all the nodes that contain postgres pod
+                False-return 1 node that contain postgres pod
+        Returns:
+            list: Cluster node OCP objects
+
+        """
+        if pod_name == 'osd':
+            pods_obj = self.pod_obj.get(selector=constants.OSD_APP_LABEL, all_namespaces=True)
+        elif pod_name == 'postgres':
+            pods_obj = self.pod_obj.get(selector=constants.PGSQL_APP_LABEL, all_namespaces=True)
+        # Create a list of nodes (witout dulicate nodes in the list)
+        nodes_set = list(set([pod['spec']['nodeName'] for pod in pods_obj['items']]))
+
+        if all_nodes:
+            node_list = get_node_objs(nodes_set)
+            return node_list
+
+        # Selects one Node (random)
+        node_obj = get_node_objs(nodes_set[random.randint(0, len(nodes_set) - 1)])
+        return node_obj
+
+    def respin_pod(self, pod_name=''):
+        """
+        Choose Relevant pod and respin the pod
+
+        Args:
+            pod_name (str)
+
+        Returns:
+            pod status
+        """
+        if pod_name == 'postgers':
+            self.respin_app_pod()
+            return True
+        log.info(f"Respin Ceph pod {pod_name}")
+        disruption = disruption_helpers.Disruptions()
+        disruption.set_resource(resource=f'{pod_name}')
+        disruption.delete_resource()
+        return True
+
+    def respin_app_pod(self):
+        """
+        respin the pgsql app pod
+
+        Returns:
+            pod status
+        """
+        app_pod_list = get_operator_pods(constants.PGSQL_APP_LABEL, constants.RIPSAW_NAMESPACE)
+        app_pod = app_pod_list[random.randint(0, len(app_pod_list) - 1)]
+        app_pod.delete(wait=True, force=False)
+        wait_for_resource_state(
+            resource=app_pod, state=constants.STATUS_RUNNING, timeout=300
+        )
+        return True
 
     def cleanup(self):
         """

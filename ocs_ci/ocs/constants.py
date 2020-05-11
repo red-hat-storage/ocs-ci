@@ -199,6 +199,7 @@ DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
 CEPH_ROOK_IO_PVC_LABEL = 'ceph.rook.io/pvc'
+PGSQL_APP_LABEL = "app=postgres"
 
 
 # YAML paths
