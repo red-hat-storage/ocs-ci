@@ -38,7 +38,6 @@ class AMQ(object):
                 branch: branch to use from the repo
         """
         self.args = kwargs
-        self.namespace = constants.AMQ_NAMESPACE
         self.repo = self.args.get('repo', constants.KAFKA_OPERATOR)
         self.branch = self.args.get('branch', 'master')
         self.ocp = OCP()
@@ -51,14 +50,7 @@ class AMQ(object):
         self.kafka_user_obj = OCP(kind="KafkaUser")
         self.amq_is_setup = False
         self.messaging = False
-        self._create_namespace()
         self._clone_amq()
-
-    def _create_namespace(self):
-        """
-        create namespace for amq
-        """
-        self.ocp.new_project(self.namespace)
 
     def _clone_amq(self):
         """
@@ -88,29 +80,54 @@ class AMQ(object):
             log.error('Error during cloning of amq repository')
             raise cf
 
-    def setup_amq_cluster_operator(self):
+    def create_namespace(self, namespace):
+        """
+        create namespace for amq
+
+        Args:
+            namespace (str): Namespace for amq pods
+        """
+        self.ocp.new_project(namespace)
+
+    def setup_amq_cluster_operator(self, namespace=constants.AMQ_NAMESPACE):
         """
         Function to setup amq-cluster_operator,
         the file is pulling from github
         it will make sure cluster-operator pod is running
+
+        Args:
+            namespace (str): Namespace for AMQ pods
+
         """
 
+        # Namespace for amq
+        try:
+            self.create_namespace(namespace)
+        except CommandFailed as ef:
+            if str(ef) not in f"project.project.openshift.io {namespace} already exists":
+                raise ef
+
         # Create strimzi-cluster-operator pod
-        run(f'oc apply -f {self.amq_dir} -n {self.namespace}', shell=True, check=True, cwd=self.dir)
+        run(f"for i in `(ls strimzi-kafka-operator/install/cluster-operator/)`;"
+            f"do sed 's/{namespace}/myproject/g' strimzi-kafka-operator/install/cluster-operator/$i;done",
+            shell=True, check=True, cwd=self.dir)
+        run(f'oc apply -f {self.amq_dir} -n {namespace}', shell=True, check=True, cwd=self.dir)
         time.sleep(10)
 
-        # Wait for strimzi-cluster-operator pod to be created
-        if self.is_amq_pod_running(pod_pattern="cluster-operator"):
+        #  Check strimzi-cluster-operator pod created
+        if self.is_amq_pod_running(pod_pattern="cluster-operator", expected_pods=1):
             log.info("strimzi-cluster-operator pod is in running state")
         else:
             raise ResourceWrongStatusException("strimzi-cluster-operator pod is not getting to running state")
 
-    def is_amq_pod_running(self, pod_pattern):
+    def is_amq_pod_running(self, pod_pattern, expected_pods, namespace=constants.AMQ_NAMESPACE):
         """
         The function checks if provided pod_pattern finds a pod and if the status is running or not
 
         Args:
             pod_pattern (str): the pattern for pod
+            expected_pods (int): Number of pods
+            namespace (str): Namespace for amq pods
 
         Returns:
             bool: status of pod: True if found pod is running
@@ -120,10 +137,10 @@ class AMQ(object):
         _rc = True
 
         for pod in TimeoutSampler(
-            300, 10, get_pod_name_by_pattern, pod_pattern, self.namespace
+            300, 10, get_pod_name_by_pattern, pod_pattern, namespace
         ):
             try:
-                if pod is not None:
+                if pod is not None and len(pod) == expected_pods:
                     amq_pod = pod
                     break
             except IndexError as ie:
@@ -174,18 +191,17 @@ class AMQ(object):
 
     def setup_amq_kafka_persistent(self, size=100, replicas=3):
         """
-        Function to setup amq-kafka-persistent, the file file is pulling from github
+        Function to setup amq-kafka-persistent, the file is pulling from github
         it will make kind: Kafka and will make sure the status is running
 
         Args:
-            size (int): Size of the storage
+            size (int): Size of the storage in Gi
             replicas (int): Number of kafka and zookeeper pods to be created
 
         return : kafka_persistent
 
         """
         # Change cephfs StorageClass to default
-
         assert self.change_cephfs_sc_to_default()
         try:
             kafka_persistent = templating.load_yaml(os.path.join(self.dir, self.amq_kafka_pers_yaml))
@@ -203,8 +219,8 @@ class AMQ(object):
         time.sleep(40)
 
         if self.is_amq_pod_running(
-            pod_pattern="my-cluster-zookeeper"
-        ) and self.is_amq_pod_running(pod_pattern="my-cluster-kafka"):
+            pod_pattern="my-cluster-zookeeper", expected_pods=replicas
+        ) and self.is_amq_pod_running(pod_pattern="my-cluster-kafka", expected_pods=replicas):
             return self.kafka_persistent
         else:
             raise ResourceWrongStatusException("my-cluster-kafka and my-cluster-zookeeper "
@@ -225,7 +241,7 @@ class AMQ(object):
             log.error('Failed during setup of AMQ KafkaConnect')
             raise cf
 
-        if self.is_amq_pod_running(pod_pattern="my-connect-cluster-connect"):
+        if self.is_amq_pod_running(pod_pattern="my-connect-cluster-connect", expected_pods=1):
             return self.kafka_connect
         else:
             raise ResourceWrongStatusException("my-connect-cluster-connect pod is not getting to running state")
@@ -245,7 +261,7 @@ class AMQ(object):
             log.error('Failed during setup of AMQ KafkaConnect')
             raise cf
         # Making sure the kafka_bridge is running
-        if self.is_amq_pod_running(pod_pattern="my-bridge-bridge"):
+        if self.is_amq_pod_running(pod_pattern="my-bridge-bridge", expected_pods=1):
             return self.kafka_bridge
         else:
             raise ResourceWrongStatusException("kafka_bridge_pod pod is not getting to running state")
@@ -327,7 +343,7 @@ class AMQ(object):
             raise cf
 
         # Making sure the producer pod is running
-        if self.is_amq_pod_running(pod_pattern="hello-world-producer"):
+        if self.is_amq_pod_running(pod_pattern="hello-world-producer", expected_pods=num_of_pods):
             return self.producer_pod
         else:
             raise ResourceWrongStatusException("producer pod is not getting to running state")
@@ -354,66 +370,64 @@ class AMQ(object):
             raise cf
 
         # Making sure the producer pod is running
-        if self.is_amq_pod_running(pod_pattern="hello-world-consumer"):
+        if self.is_amq_pod_running(pod_pattern="hello-world-consumer", expected_pods=num_of_pods):
             return self.consumer_pod
         else:
             raise ResourceWrongStatusException("consumer pod is not getting to running state")
 
-    def validate_messages_are_produced(self, value='10000', since_time=1800):
+    def validate_messages_are_produced(self, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
         """
         Validates if all messages are sent in producer pod
 
         Args:
+            namespace (str): Namespace of the pod
             value (str): Number of messages are sent
             since_time (int): Number of seconds to required to sent the msg
 
-        Returns:
-            bool: True if all messaged are sent in producer pod.
+        Raises exception on failures
 
         """
-        _rc = True
+
         producer_pod_objs = [get_pod_obj(
             pod
-        )for pod in get_pod_name_by_pattern('hello-world-produce', self.namespace)
+        )for pod in get_pod_name_by_pattern('hello-world-produce', namespace)
         ]
         for pod in producer_pod_objs:
-            cmd = f"oc logs -n {self.namespace} {pod.name} --since={since_time}s"
+            cmd = f"oc logs -n {namespace} {pod.name} --since={since_time}s"
             msg = run_cmd(cmd)
             if msg.find(f"{value} messages sent") is -1:
-                _rc = False
                 log.error(f"On producer {pod.name} all or few messages are not sent")
-        return _rc
+                raise Exception(f"On producer {pod.name} all or few messages are not sent")
 
-    def validate_messages_are_consumed(self, value='10000', since_time=1800):
+    def validate_messages_are_consumed(self, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
         """
         Validates if all messages are received in consumer pod
 
         Args:
+            namespace (str): Namespace of the pod
             value (str): Number of messages are recieved
             since_time (int): Number of seconds to required to receive the msg
 
-        Returns:
-            bool: True if all messaged are received in consumer pod.
+        Raises exception on failures
 
         """
-        _rc = True
-        producer_pod_objs = [get_pod_obj(
+        consumer_pod_objs = [get_pod_obj(
             pod
-        )for pod in get_pod_name_by_pattern('hello-world-consumer', self.namespace)
+        )for pod in get_pod_name_by_pattern('hello-world-consumer', namespace)
         ]
-        for pod in producer_pod_objs:
-            cmd = f"oc logs -n {self.namespace} {pod.name} --since={since_time}s"
+        for pod in consumer_pod_objs:
+            cmd = f"oc logs -n {namespace} {pod.name} --since={since_time}s"
             msg = run_cmd(cmd)
             if msg.find(f"Hello world - {int(value) - 1} ") is -1:
-                _rc = False
                 log.error(f"On consumer {pod.name} all or few messages are not sent")
-        return _rc
+                raise Exception(f"On consumer {pod.name} all or few messages are not sent")
 
-    def run_in_bg(self, value='10000', since_time=1800):
+    def run_in_bg(self, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
         """
         Validate messages are produced and consumed in bg
 
         Args:
+            namespace (str): Namespace of the pod
             value (str): Number of messages to be sent and received
             since_time (int): Number of seconds to required to sent and receive msg
 
@@ -422,12 +436,12 @@ class AMQ(object):
         log.info(f"Running open messages on pod in bg")
         threads = []
 
-        thread1 = Thread(target=self.validate_messages_are_produced, args=(value, since_time))
+        thread1 = Thread(target=self.validate_messages_are_produced, args=(namespace, value, since_time))
         thread1.start()
         time.sleep(10)
         threads.append(thread1)
 
-        thread2 = Thread(target=self.validate_messages_are_consumed, args=(value, since_time))
+        thread2 = Thread(target=self.validate_messages_are_consumed, args=(namespace, value, since_time))
         thread2.start()
         time.sleep(10)
         threads.append(thread2)
@@ -459,28 +473,31 @@ class AMQ(object):
         self.create_consumer_pod(num_of_consumer_pods, value)
         self.messaging = True
 
-    def setup_amq_cluster(self, size=100, replicas=3):
+    def setup_amq_cluster(self, namespace=constants.AMQ_NAMESPACE, size=100, replicas=3):
         """
         Creates amq cluster with persistent storage.
 
         Args:
-            sc_name (str): Name of the storage class
+            namespace (str): Namespace for amq cluster
             size (int): Size of the storage
             replicas (int): Number of kafka and zookeeper pods to be created
 
         """
-        self.setup_amq_cluster_operator()
+        self.setup_amq_cluster_operator(namespace)
         self.setup_amq_kafka_persistent(size, replicas)
         self.setup_amq_kafka_connect()
         self.setup_amq_kafka_bridge()
         self.amq_is_setup = True
         return self
 
-    def cleanup(self):
+    def cleanup(self, namespace=constants.AMQ_NAMESPACE):
         """
         Clean up function,
         will start to delete from amq cluster operator
         then amq-connector, persistent, bridge, at the end it will delete the created namespace
+
+        Args:
+            namespace (str): Created namespace for amq
         """
         if self.amq_is_setup:
             if self.messaging:
@@ -492,12 +509,12 @@ class AMQ(object):
             self.kafka_connect.delete()
             self.kafka_bridge.delete()
             run_cmd(f'oc delete -f {self.amq_dir}', shell=True, check=True, cwd=self.dir)
-        run_cmd(f'oc delete project {self.namespace}')
+        run_cmd(f'oc delete project {namespace}')
 
-        # Change the existing default Storageclass annotation to false
+        # Change the existing default Storageclass ocs-storagecluster-cephfs annotation to false
         if self.change_cephfs_sc_to_default():
             helpers.change_default_storageclass(scname=constants.DEFAULT_STORAGECLASS_CEPHFS)
 
         # Reset namespace to default
         switch_to_default_rook_cluster_project()
-        self.ns_obj.wait_for_delete(resource_name=self.namespace)
+        self.ns_obj.wait_for_delete(resource_name=namespace)
