@@ -47,7 +47,7 @@ class Sanity:
             run_io (bool): True for run IO, False otherwise
 
         """
-        logger.info(f"Creating resources and running IO as a sanity functional validation")
+        logger.info("Creating resources and running IO as a sanity functional validation")
 
         for interface in [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]:
             pvc_obj = pvc_factory(interface)
@@ -64,7 +64,7 @@ class Sanity:
         Sanity validation - Delete resources (FS and RBD)
 
         """
-        logger.info(f"Deleting resources as a sanity functional validation")
+        logger.info("Deleting resources as a sanity functional validation")
 
         for pod_obj in self.pod_objs:
             pod_obj.delete()

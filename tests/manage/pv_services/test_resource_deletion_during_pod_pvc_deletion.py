@@ -114,7 +114,7 @@ class DisruptionBase(ManageTest):
                 get_all_pods, initial_num_of_pods, self.namespace, 'decrease'
             )
             assert ret, "Wait timeout: Pods are not being deleted."
-            log.info(f"Pods deletion has started.")
+            log.info("Pods deletion has started.")
             disruption.delete_resource()
 
         pod_bulk_delete.result()
@@ -154,7 +154,7 @@ class DisruptionBase(ManageTest):
                 get_all_pvcs, initial_num_of_pvc, self.namespace, 'decrease'
             )
             assert ret, "Wait timeout: PVCs are not being deleted."
-            log.info(f"PVCs deletion has started.")
+            log.info("PVCs deletion has started.")
             disruption.delete_resource()
 
         pvcs_deleted = pvc_bulk_delete.result()

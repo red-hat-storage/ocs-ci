@@ -55,7 +55,7 @@ def create_pv(pv_data):
     )
     with open(TEMP_YAML_FILE, 'w') as yaml_file:
         yaml.dump(file_y, yaml_file, default_flow_style=False)
-        log.info(f"Creating new Persistent Volume")
+        log.info("Creating new Persistent Volume")
     assert OCP.create(yaml_file=TEMP_YAML_FILE)
     return OCP.wait_for_resource(
         resource_name=pv_data['pv_name'], condition='Available'

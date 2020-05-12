@@ -547,11 +547,11 @@ class Deployment(object):
         cfs_name = cfs_data['items'][0]['metadata']['name']
 
         if helpers.validate_cephfilesystem(cfs_name):
-            logger.info(f"MDS deployment is successful!")
+            logger.info("MDS deployment is successful!")
             defaults.CEPHFILESYSTEM_NAME = cfs_name
         else:
             logger.error(
-                f"MDS deployment Failed! Please check logs!"
+                "MDS deployment Failed! Please check logs!"
             )
 
         # Change monitoring backend to OCS
