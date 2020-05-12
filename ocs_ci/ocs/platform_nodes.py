@@ -1551,7 +1551,7 @@ class BaremetalNodes(NodesBase):
 
         """
         assert os.path.exists(default_config_path), (
-            f'Config file doesnt exists'
+            'Config file doesnt exists'
         )
 
         with open(default_config_path) as f:
