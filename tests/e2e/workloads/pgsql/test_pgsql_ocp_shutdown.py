@@ -79,7 +79,7 @@ class TestPgSQLNodeShut(E2ETest):
         nodes.start_nodes(node_list)
 
         # Check that postgresql pods in running state
-        pgsql.get_postgresql_status()
+        pgsql.get_postgresql_status(status=constants.STATUS_RUNNING)
 
         # Check that pgbench pods in running state
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)

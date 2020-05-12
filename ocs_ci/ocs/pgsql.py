@@ -12,11 +12,11 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from subprocess import CalledProcessError
-from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
+from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj, get_operator_pods
 from tests.helpers import wait_for_resource_state
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE, RIPSAW_CRD
 from tests import disruption_helpers
-from ocs_ci.ocs.resources.pod import get_operator_pods
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
 log = logging.getLogger(__name__)
 
@@ -220,12 +220,17 @@ class Postgresql(RipSaw):
             str: state of postgresql pod
 
         """
-        postgresql_pods = self.get_postgresql_pods()
-
-        for pod in postgresql_pods:
-            wait_for_resource_state(
-                resource=pod, state=status, timeout=300
-            )
+        try:
+            log.info(f"***********Check postgresql pods status***********")
+            postgresql_pods = self.get_postgresql_pods()
+            for pod in postgresql_pods:
+                wait_for_resource_state(
+                    resource=pod, state=status, timeout=300
+                )
+        except ResourceWrongStatusException:
+            log.error(f"{pod.name} not reached state {status}")
+            log.error(f"{pod.name} status is  {pod['data']['status']['phase']}")
+            raise TimeoutError(f"{pod.name} not reached state {status}")
 
     def wait_for_pgbench_status(self, status, timeout=None):
         """
@@ -280,13 +285,15 @@ class Postgresql(RipSaw):
 
     def get_nodes(self, pod_name, all_nodes=False):
         """
-         Get nodes that contain a specific pod
+        Get nodes that contain a specific pod
 
         Args:
-            pod_name (str)
+            pod_name (str): pod name
+
             all_nodes (bool):
                 True-return all the nodes that contain postgres pod
                 False-return 1 node that contain postgres pod
+
         Returns:
             list: Cluster node OCP objects
 
@@ -295,15 +302,19 @@ class Postgresql(RipSaw):
             pods_obj = self.pod_obj.get(selector=constants.OSD_APP_LABEL, all_namespaces=True)
         elif pod_name == 'postgres':
             pods_obj = self.pod_obj.get(selector=constants.PGSQL_APP_LABEL, all_namespaces=True)
-        # Create a list of nodes (witout duplicate nodes in the list)
-        nodes_set = list(set([pod['spec']['nodeName'] for pod in pods_obj['items']]))
+
+        log.info(f"Create a list of nodes (without duplicate nodes in the list)")
+        nodes_set = set()
+        for pod in pods_obj['items']:
+            log.info(f"pod {pod['metadata']['name']} located on node {pod['spec']['nodeName']}")
+            nodes_set.add(pod['spec']['nodeName'])
 
         if all_nodes:
-            node_list = get_node_objs(nodes_set)
+            node_list = get_node_objs(list(nodes_set))
             return node_list
-
         # Selects one Node (random)
-        node_obj = get_node_objs(nodes_set[random.randint(0, len(nodes_set) - 1)])
+        node_obj = get_node_objs(list(nodes_set)[random.randint(0, len(nodes_set) - 1)])
+        log.info(f"Selects one Node (random) - {node_obj[0].name}")
         return node_obj
 
     def respin_pod(self, pod_name=''):
@@ -314,7 +325,8 @@ class Postgresql(RipSaw):
             pod_name (str)
 
         Returns:
-            pod status
+            str: pod status
+
         """
         log.info(f"Respin pod {pod_name}")
         if pod_name == 'postgers':
@@ -323,7 +335,6 @@ class Postgresql(RipSaw):
         disruption = disruption_helpers.Disruptions()
         disruption.set_resource(resource=f'{pod_name}')
         disruption.delete_resource()
-        return True
 
     def respin_app_pod(self):
         """
@@ -331,14 +342,15 @@ class Postgresql(RipSaw):
 
         Returns:
             pod status
+
         """
         app_pod_list = get_operator_pods(constants.PGSQL_APP_LABEL, constants.RIPSAW_NAMESPACE)
         app_pod = app_pod_list[random.randint(0, len(app_pod_list) - 1)]
+        log.info(f"respin pod {app_pod['metadata']['name']}")
         app_pod.delete(wait=True, force=False)
         wait_for_resource_state(
             resource=app_pod, state=constants.STATUS_RUNNING, timeout=300
         )
-        return True
 
     def cleanup(self):
         """
