@@ -37,7 +37,7 @@ class TestCreateMultipleScWithDifferentPoolName(ManageTest):
         cbp_list = []
         sc_list = []
         for i in range(3):
-            log.info(f"Creating cephblockpool")
+            log.info("Creating cephblockpool")
             cbp_obj = helpers.create_ceph_block_pool()
             log.info(
                 f"{cbp_obj.name} created successfully"

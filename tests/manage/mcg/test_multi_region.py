@@ -76,7 +76,7 @@ class TestMultiRegion:
         # Download test objects from the public bucket
         downloaded_objs = retrieve_test_objects_to_pod(awscli_pod, '/aws/original/')
 
-        logger.info(f'Uploading all pod objects to MCG bucket')
+        logger.info('Uploading all pod objects to MCG bucket')
         local_testobjs_dir_path = '/aws/original'
         local_temp_path = '/aws/temp'
         mcg_bucket_path = f's3://{bucket_name}'

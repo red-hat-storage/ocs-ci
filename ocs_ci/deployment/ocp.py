@@ -87,29 +87,29 @@ class OCPDeployment:
         deploy = config.RUN['cli_params']['deploy']
         teardown = config.RUN['cli_params']['teardown']
         if teardown and not deploy:
-            msg = f"Attempting teardown of non-accessible cluster: "
+            msg = "Attempting teardown of non-accessible cluster: "
             msg += f"{self.cluster_path}"
             pytest.fail(msg)
         elif not deploy and not teardown:
             msg = "The given cluster can not be connected to: {}. ".format(
                 self.cluster_path)
             msg += (
-                f"Provide a valid --cluster-path or use --deploy to "
-                f"deploy a new cluster"
+                "Provide a valid --cluster-path or use --deploy to "
+                "deploy a new cluster"
             )
             pytest.fail(msg)
         elif not system.is_path_empty(self.cluster_path) and deploy:
             msg = "The given cluster path is not empty: {}. ".format(
                 self.cluster_path)
             msg += (
-                f"Provide an empty --cluster-path and --deploy to deploy "
-                f"a new cluster"
+                "Provide an empty --cluster-path and --deploy to deploy "
+                "a new cluster"
             )
             pytest.fail(msg)
         else:
             logger.info(
-                f"A testing cluster will be deployed and cluster information "
-                f"stored at: %s",
+                "A testing cluster will be deployed and cluster information "
+                "stored at: %s",
                 self.cluster_path
             )
         self.create_config()

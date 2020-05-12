@@ -35,7 +35,7 @@ def change_registry_backend_to_ocs():
     param_cmd = f'[{{"op": "add", "path": "/spec/storage", "value": {{"pvc": {{"claim": "{pv_obj.name}"}}}}}}]'
     assert ocp_obj.patch(
         resource_name=constants.IMAGE_REGISTRY_RESOURCE_NAME, params=param_cmd, format_type='json'
-    ), f"Registry pod storage backend to OCS is not success"
+    ), "Registry pod storage backend to OCS is not success"
 
     # Validate registry pod status
     retry((CommandFailed, UnexpectedBehaviour), tries=3, delay=15)(
@@ -219,8 +219,8 @@ def enable_route_and_create_ca_for_registry_access():
     assert ocp_obj.patch(
         resource_name=constants.IMAGE_REGISTRY_RESOURCE_NAME,
         params='{"spec": {"defaultRoute": true}}', format_type='merge'
-    ), f"Registry pod defaultRoute enable is not success"
-    logger.info(f"Enabled defaultRoute to true")
+    ), "Registry pod defaultRoute enable is not success"
+    logger.info("Enabled defaultRoute to true")
     ocp_obj = ocp.OCP()
     crt_cmd = f"get secret {constants.DEFAULT_ROUTE_CRT} " \
               f"-n {constants.OPENSHIFT_INGRESS_NAMESPACE} -o yaml"
@@ -233,11 +233,11 @@ def enable_route_and_create_ca_for_registry_access():
         temp.write(base64.b64decode(crt))
     master_list = helpers.get_master_nodes()
     ocp.rsync(
-        src=f"/tmp/secret/", dst='/etc/pki/ca-trust/source/anchors',
+        src="/tmp/secret/", dst='/etc/pki/ca-trust/source/anchors',
         node=master_list[0], dst_node=True
     )
     ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=['update-ca-trust enable'])
-    logger.info(f"Created base64 secret, copied to source location and enabled ca-trust")
+    logger.info("Created base64 secret, copied to source location and enabled ca-trust")
 
 
 def image_pull(image_url):
@@ -291,7 +291,7 @@ def image_list_all():
 
     """
     cmd_list = get_oc_podman_login_cmd()
-    cmd_list.append(f"podman image list --format json")
+    cmd_list.append("podman image list --format json")
     master_list = helpers.get_master_nodes()
     ocp_obj = ocp.OCP()
     return ocp_obj.exec_oc_debug_cmd(node=master_list[0], cmd_list=cmd_list)

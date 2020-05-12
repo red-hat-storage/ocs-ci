@@ -84,14 +84,14 @@ class RipSaw(object):
         """
         self.crd = crd
         self.dir += '/ripsaw'
-        run(f'oc apply -f deploy', shell=True, check=True, cwd=self.dir)
+        run('oc apply -f deploy', shell=True, check=True, cwd=self.dir)
         run(f'oc apply -f {crd}', shell=True, check=True, cwd=self.dir)
         run(f'oc apply -f {self.operator}', shell=True, check=True, cwd=self.dir)
 
     def cleanup(self):
         run(f'oc delete -f {self.crd}', shell=True, cwd=self.dir)
         run(f'oc delete -f {self.operator}', shell=True, cwd=self.dir)
-        run(f'oc delete -f deploy', shell=True, cwd=self.dir)
+        run('oc delete -f deploy', shell=True, cwd=self.dir)
         if self.pgsql_is_setup:
             self.pgsql_sset.delete()
             self.pgsql_cmap.delete()

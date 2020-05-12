@@ -299,7 +299,7 @@ class OCP(object):
                 "be provided"
             )
 
-        command = f"delete "
+        command = "delete "
         if resource_name:
             command += f"{self.kind} {resource_name}"
         else:
@@ -423,7 +423,7 @@ class OCP(object):
             str: output of login command
         """
         kubeconfig = os.getenv('KUBECONFIG')
-        command = f"oc login -u system:admin "
+        command = "oc login -u system:admin "
         if kubeconfig:
             command += f"--kubeconfig {kubeconfig}"
         status = run_cmd(command)

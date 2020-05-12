@@ -106,7 +106,7 @@ def approve_csrs(pending_csrs):
     base_cmd = "oc adm certificate approve"
     csrs = ' '.join([str(csr) for csr in pending_csrs])
     cmd = f"{base_cmd} {csrs}"
-    logger.info(f"Approving pending CSRs")
+    logger.info("Approving pending CSRs")
     run_cmd(cmd)
 
 

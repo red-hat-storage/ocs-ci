@@ -38,7 +38,7 @@ def mon_resource(request):
     yield
     self.cluster_obj.mon_change_count(mon_count)
     if mon_count != self.cluster_obj.mon_count:
-        log.error(f"Mon teardown failure")
+        log.error("Mon teardown failure")
         log.error(
             f"Expected: {mon_count}",
             f"but found {self.cluster_obj.mon_count}"
@@ -69,7 +69,7 @@ def mds_resource(request):
     self.cluster_obj.mds_change_count(mds_count)
     current_count = int(self.cluster_obj.mds_count / 2)
     if mds_count != current_count:
-        log.error(f"MDS teardown failure")
+        log.error("MDS teardown failure")
         log.error(f"Expected: {mds_count} but found {current_count}")
     if we_created_fs:
         self.cluster_obj.cephfs.delete()

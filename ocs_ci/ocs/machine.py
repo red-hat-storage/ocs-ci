@@ -241,7 +241,7 @@ def create_custom_machineset(
                     logging.info(f"Machineset {cls_id}-{role}-{aws_zone} created")
                     return f"{cls_id}-{role}-{aws_zone}"
                 else:
-                    raise ResourceNotFoundError(f"Machineset resource not found")
+                    raise ResourceNotFoundError("Machineset resource not found")
     else:
         raise UnsupportedPlatformError("Functionality not supported in UPI")
 

@@ -31,14 +31,14 @@ def wait_to_update_mgrpod_info_prometheus_pod():
     """
 
     log.info(
-        f"Verifying ceph health status metrics is updated after rebooting the node"
+        "Verifying ceph health status metrics is updated after rebooting the node"
     )
     ocp_obj = ocp.OCP(kind=constants.POD, namespace=defaults.ROOK_CLUSTER_NAMESPACE)
     mgr_pod = (
         ocp_obj.get(selector=constants.MGR_APP_LABEL).get('items')[0].get('metadata').get('name')
     )
     assert check_ceph_health_status_metrics_on_prometheus(mgr_pod=mgr_pod), (
-        f"Ceph health status metrics are not updated after the rebooting node where the mgr running"
+        "Ceph health status metrics are not updated after the rebooting node where the mgr running"
     )
     log.info("Ceph health status metrics is updated")
 
@@ -167,7 +167,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             pod_object.delete(force=True)
             pod_obj = ocp.OCP(kind=constants.POD, namespace=defaults.OCS_MONITORING_NAMESPACE)
             assert pod_obj.wait_for_resource(
-                condition='Running', selector=f'app=prometheus', timeout=60
+                condition='Running', selector='app=prometheus', timeout=60
             )
 
             # Check the same pvc is mounted on new pod

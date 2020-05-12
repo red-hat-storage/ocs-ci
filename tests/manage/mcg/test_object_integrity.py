@@ -48,7 +48,7 @@ class TestObjectIntegrity(ManageTest):
         )
 
         # Retrieve all objects from MCG bucket to result dir in Pod
-        logger.info(f'Downloading all objects from MCG bucket to awscli pod')
+        logger.info('Downloading all objects from MCG bucket to awscli pod')
         helpers.sync_object_directory(
             awscli_pod, full_object_path, result_dir, mcg_obj
         )
@@ -134,7 +134,7 @@ class TestObjectIntegrity(ManageTest):
             )
 
             # Retrieve all objects from MCG bucket to result dir in Pod
-            logger.info(f'Downloading objects from MCG bucket to awscli pod')
+            logger.info('Downloading objects from MCG bucket to awscli pod')
             helpers.sync_object_directory(
                 awscli_pod, full_object_path, result_dir, mcg_obj
             )
@@ -176,7 +176,7 @@ class TestObjectIntegrity(ManageTest):
         )
 
         # Retrieve all objects from MCG bucket to result dir in Pod
-        logger.info(f'Downloading objects from MCG bucket to awscli pod')
+        logger.info('Downloading objects from MCG bucket to awscli pod')
         helpers.sync_object_directory(
             awscli_pod, full_object_path, result_dir, mcg_obj
         )
