@@ -1522,8 +1522,6 @@ def load_auth_config():
 
     Raises:
         FileNotFoundError: if the auth config is not found
-        KeyError: if the auth config isn't setup properly
-        requests.RequestException: if the response return code is not ok
 
     Returns:
         dict: A dictionary reprensenting the YAML file
@@ -1548,6 +1546,10 @@ def get_ocs_olm_operator_tags(limit=100):
 
     Args:
         limit: the number of tags to limit the request to
+
+    Raises:
+        KeyError: if the auth config isn't setup properly
+        requests.RequestException: if the response return code is not ok
 
     Returns:
         list: OCS OLM Operator tags
