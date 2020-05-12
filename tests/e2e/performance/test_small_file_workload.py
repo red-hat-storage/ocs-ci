@@ -79,6 +79,7 @@ class SmallFileResultsAnalyse(object):
             'samples': crd['spec']['workload']['args']['samples'],
             'threads': crd['spec']['workload']['args']['threads'],
             'operations': crd['spec']['workload']['args']['operation'],
+            'uuid': uuid,
             'full-res': {}
         }
 
@@ -248,18 +249,23 @@ class SmallFileResultsAnalyse(object):
             log.info(f'Aggregating {op} - {self.results["full-res"][op]}')
             results = self.combine_results(self.results["full-res"][op], False)
 
-            log.info(f'Check {op} samples deviation')
+            log.info(f'Check IOPS {op} samples deviation')
+
             for key in self.managed_keys.keys():
                 if self.managed_keys[key]["name"] in results.keys():
                     results[key] = np.average(
                         results[self.managed_keys[key]["name"]]
                     )
-                    deviation = np.std(results[self.managed_keys[key]["name"]])
+                    if key == "IOPS":
+                        max = np.ma.max(results[self.managed_keys[key]["name"]])
+                        min = np.ma.min(results[self.managed_keys[key]["name"]])
+
+                        dev = (max - min) * 100 / min
+                        if dev > 5:
+                            log.error(
+                                f'Deviation for {op} IOPS is more the 5% ({dev})')
+                            test_pass = False
                     del results[self.managed_keys[key]["name"]]
-                    if deviation > 5:
-                        log.error(
-                            f'Deviation for {op} {key} is more the 5% {deviation}')
-                        test_pass = False
                 self.results["full-res"][op] = results
 
         return test_pass
