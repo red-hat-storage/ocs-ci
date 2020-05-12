@@ -144,7 +144,7 @@ class AMQ(object):
                     amq_pod = pod
                     break
             except IndexError as ie:
-                log.error(pod_pattern + " pod not ready yet")
+                log.error(" pod not ready yet")
                 raise ie
 
         # checking pod status
@@ -433,7 +433,7 @@ class AMQ(object):
 
         """
         # Todo: Check for each messages sent and received
-        log.info(f"Running open messages on pod in bg")
+        log.info("Running open messages on pod in bg")
         threads = []
 
         thread1 = Thread(target=self.validate_messages_are_produced, args=(namespace, value, since_time))
