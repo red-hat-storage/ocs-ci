@@ -5,8 +5,8 @@ import logging
 import pytest
 import time
 
-from ocs_ci.ocs.ocp import (OCP, get_ocp_clustername, get_ocs_version,
-                            get_ocp_build, get_ocp_channel, get_ocp_provider)
+from ocs_ci.ocs.ocp import (OCP, get_clustername, get_ocs_version,
+                            get_build, get_ocp_channel, get_provider)
 from ocs_ci.utility.utils import TimeoutSampler, get_ocp_version, run_cmd
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
@@ -333,6 +333,7 @@ class TestSmallFileWorkload(E2ETest):
                 *[4, 50000, 4, 3, constants.CEPHBLOCKPOOL],
                 marks=pytest.mark.polarion_id("OCS-1295"),
             ),
+
             pytest.param(
                 *[16, 50000, 4, 3, constants.CEPHBLOCKPOOL],
                 marks=pytest.mark.polarion_id("OCS-2020"),
@@ -349,6 +350,7 @@ class TestSmallFileWorkload(E2ETest):
                 *[16, 50000, 4, 3, constants.CEPHFILESYSTEM],
                 marks=pytest.mark.polarion_id("OCS-2023"),
             ),
+
         ]
     )
     @pytest.mark.polarion_id("OCS-1295")
@@ -380,7 +382,7 @@ class TestSmallFileWorkload(E2ETest):
         sf_data['spec']['workload']['args']['files'] = files
         sf_data['spec']['workload']['args']['threads'] = threads
         sf_data['spec']['workload']['args']['samples'] = samples
-        sf_data['spec']['clustername'] = get_ocp_clustername()
+        sf_data['spec']['clustername'] = get_clustername()
         sf_data['spec']['test_user'] = f'{user}<{email}>'
         """
         Calculating the size of the volume that need to be test, it should
@@ -433,10 +435,10 @@ class TestSmallFileWorkload(E2ETest):
         # Initialaize the results doc file.
         full_results.add_key('user', sf_data['spec']['test_user'])
         full_results.add_key('ocp_version', get_ocp_version())
-        full_results.add_key('ocp_build', get_ocp_build())
+        full_results.add_key('ocp_build', get_build())
         full_results.add_key('ocp_channel', get_ocp_channel())
         full_results.add_key('ocs_version', get_ocs_version())
-        full_results.add_key('vendor', get_ocp_provider())
+        full_results.add_key('vendor', get_provider())
         full_results.add_key('start_time',
                              time.strftime('%Y-%m-%dT%H:%M:%SGMT',
                                            time.gmtime()))

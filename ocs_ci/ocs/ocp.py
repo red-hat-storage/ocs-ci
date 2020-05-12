@@ -841,7 +841,7 @@ class OCP(object):
         return output
 
 
-def get_ocp_provider():
+def get_provider():
     """
     Return the OCP Provider (Platform)
 
@@ -853,7 +853,7 @@ def get_ocp_provider():
     return ocp_cluster.get('nodes')['items'][0]['spec']['providerID'].split(':')[0]
 
 
-def get_ocp_clustername():
+def get_clustername():
     """
     Return the name (DNS short name) of the cluster
 
@@ -883,7 +883,7 @@ def get_ocs_version():
     return ocp_cluster.get()['items'][0]['spec']['version']
 
 
-def get_ocp_build():
+def get_build():
     """
     Return the OCP Build Version
 
