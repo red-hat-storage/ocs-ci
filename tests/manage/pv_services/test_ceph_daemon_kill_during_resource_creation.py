@@ -214,7 +214,7 @@ class TestDaemonKillDuringResourceCreation(ManageTest):
                 pod.get_all_pods, initial_num_of_pods, namespace, 'increase'
             )
             assert ret, "Wait timeout: Pods are not being created."
-            log.info(f"Pods creation has started.")
+            log.info("Pods creation has started.")
             disruption.kill_daemon()
 
         pod_objs = bulk_pod_create.result()

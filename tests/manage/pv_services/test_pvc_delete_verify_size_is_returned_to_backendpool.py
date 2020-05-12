@@ -48,8 +48,8 @@ def verify_pv_not_exists(pvc_obj, cbp_name, rbd_image_id):
             f"Unexpected: PV {pvc_obj.backed_pv} still exists"
         )
     logger.info(
-        f"Expected: PV should not be found "
-        f"after deleting corresponding PVC"
+        "Expected: PV should not be found "
+        "after deleting corresponding PVC"
     )
 
 

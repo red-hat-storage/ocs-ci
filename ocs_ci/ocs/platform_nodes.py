@@ -134,7 +134,7 @@ class NodesBase(object):
 
         """
         assert os.path.exists(default_config_path), (
-            f'Config file doesnt exists'
+            'Config file doesnt exists'
         )
 
         with open(default_config_path) as f:
@@ -1126,7 +1126,7 @@ class AWSUPINode(AWSNodes):
         ocp_version = get_ocp_version('_')
         relative_template_path = os.path.join(
             f'aos-{ocp_version}',
-            f'hosts/upi_on_aws-cloudformation-templates'
+            'hosts/upi_on_aws-cloudformation-templates'
         )
 
         template_url = os.path.join(

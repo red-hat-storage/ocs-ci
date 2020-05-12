@@ -76,7 +76,7 @@ def uninstall_cluster_logging():
 
     if openshift_logging_namespace.get():
         assert openshift_logging_namespace.delete(resource_name=constants.OPENSHIFT_LOGGING_NAMESPACE)
-        logger.info(f"The namespace openshift-logging got deleted successfully")
+        logger.info("The namespace openshift-logging got deleted successfully")
     if openshift_operators_redhat_namespace.get():
         assert openshift_operators_redhat_namespace.delete(resource_name=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE)
-        logger.info(f"The project openshift-opertors-redhat got deleted successfully")
+        logger.info("The project openshift-opertors-redhat got deleted successfully")

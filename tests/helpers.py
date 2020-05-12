@@ -92,7 +92,7 @@ def wait_for_resource_state(resource, state, timeout=60):
         resource.name == constants.DEFAULT_STORAGECLASS_CEPHFS
         or resource.name == constants.DEFAULT_STORAGECLASS_RBD
     ):
-        logger.info(f"Attempt to default default Secret or StorageClass")
+        logger.info("Attempt to default default Secret or StorageClass")
         return
     try:
         resource.ocp.wait_for_resource(
@@ -1523,7 +1523,7 @@ def craft_s3_command(mcg_obj, cmd):
         string_wrapper = "\""
     else:
         base_command = (
-            f"aws s3 --no-verify-ssl --no-sign-request "
+            "aws s3 --no-verify-ssl --no-sign-request "
         )
         string_wrapper = ''
 
@@ -1554,7 +1554,7 @@ def craft_s3_api_command(mcg_obj, cmd):
         string_wrapper = "\""
     else:
         base_command = (
-            f"aws s3api --no-verify-ssl --no-sign-request "
+            "aws s3api --no-verify-ssl --no-sign-request "
         )
         string_wrapper = ''
 
