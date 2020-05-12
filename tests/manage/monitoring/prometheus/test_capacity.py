@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
             'rbd',
             marks=[
                 pytest.mark.polarion_id("OCS-899"),
+                pytest.mark.bugzilla('1809248'),
                 tier2,
                 gather_metrics_on_fail(
                     'ceph_cluster_total_used_bytes', 'cluster:memory_usage_bytes:sum'
@@ -29,6 +30,7 @@ log = logging.getLogger(__name__)
             'cephfs',
             marks=[
                 pytest.mark.polarion_id("OCS-1934"),
+                pytest.mark.bugzilla('1809248'),
                 tier2,
                 gather_metrics_on_fail(
                     'ceph_cluster_total_used_bytes', 'cluster:memory_usage_bytes:sum'

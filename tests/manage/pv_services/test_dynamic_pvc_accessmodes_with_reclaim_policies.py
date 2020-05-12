@@ -317,7 +317,7 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
         """
         RWX Dynamic PVC creation tests with Reclaim policy set to Delete/Retain
         """
-        logger.info(f"CephFS RWX test")
+        logger.info("CephFS RWX test")
         logger.info(
             f"Creating second pod on node: {self.worker_nodes_list[1]} "
             f"with pvc {self.pvc_obj.name}"
@@ -362,7 +362,7 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
             pod_obj=pod_obj2, file_name=file_name2
         )
 
-        logger.info(f"verify data from alternate pods")
+        logger.info("verify data from alternate pods")
 
         assert pod.verify_data_integrity(
             pod_obj=pod_obj2, file_name=file_name1,
@@ -376,7 +376,7 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
 
         # Verify that data is mutable from any pod
 
-        logger.info(f"Perform modification of files from alternate pod")
+        logger.info("Perform modification of files from alternate pod")
         # Access and rename file written by pod-2 from pod-1
         file_path2 = pod.get_file_path(pod_obj2, file_name2)
         logger.info(file_path2)
@@ -393,7 +393,7 @@ class TestRWXDynamicPvc(BaseDynamicPvc):
             out_yaml_format=False
         )
 
-        logger.info(f"Verify presence of renamed files from both pods")
+        logger.info("Verify presence of renamed files from both pods")
         file_names = [f"{file_path1}-renamed", f"{file_path2}-renamed"]
         for file in file_names:
             assert pod.check_file_existence(self.pod_obj1, file), (

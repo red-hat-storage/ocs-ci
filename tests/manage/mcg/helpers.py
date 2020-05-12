@@ -119,7 +119,7 @@ def write_individual_s3_objects(mcg_obj, awscli_pod, bucket_factory, downloaded_
 
     """
     bucketname = bucket_name or bucket_factory(1)[0].name
-    logger.info(f'Writing objects to bucket')
+    logger.info('Writing objects to bucket')
     for obj_name in downloaded_files:
         full_object_path = f"s3://{bucketname}/{obj_name}"
         copycommand = f"cp {target_dir}{obj_name} {full_object_path}"

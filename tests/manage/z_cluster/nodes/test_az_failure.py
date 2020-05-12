@@ -93,7 +93,7 @@ class TestAvailabilityZones(ManageTest):
 
         # Restore access for blocked instances
         aws_obj.restore_instances_access(self.security_group_id, self.original_sgs)
-        logger.info(f"Access restores")
+        logger.info("Access restores")
 
         # Check cluster's health, need to be healthy at that point
 

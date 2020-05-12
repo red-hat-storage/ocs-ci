@@ -342,7 +342,7 @@ def ocs_install_verification(
         # In case of upgrade with FIO we have to wait longer time to see
         # health OK. See discussion in BZ:
         # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
-        health_check_tries = 60
+        health_check_tries = 180
     assert utils.ceph_health_check(
         namespace, health_check_tries, health_check_delay
     )

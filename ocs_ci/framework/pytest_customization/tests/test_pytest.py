@@ -87,7 +87,7 @@ def test_config_parametrize(testdir, tmpdir):
         "-v",
         f"--ocsci-conf={conf_file}",
         f"--cluster-path={tmpdir}",
-        f"--cluster-name=fake-cluster",
+        "--cluster-name=fake-cluster",
     ]
     # this is a bit hack which allow us init all the config which we do in
     # runner run_ocsci.py. Without this we won't be able to access config

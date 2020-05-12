@@ -1039,12 +1039,16 @@ def log_cli_level(pytestconfig):
 
 
 @pytest.fixture(scope="session")
-def run_io_in_background(request):
+def run_io_in_background(request, pod_factory_session):
     """
     Run IO during the test execution
     """
-    if config.RUN['cli_params'].get('io_in_bg'):
-        log.info(f"Tests will be running while IO is in the background")
+    if config.RUN['cli_params'].get('io_in_bg') or config.RUN['io_in_bg']:
+        log.info(
+            "\n===================================================\n"
+            "Tests will be running while IO is in the background\n"
+            "==================================================="
+        )
 
         g_sheet = None
         if config.RUN['google_api_secret']:
@@ -1087,44 +1091,15 @@ def run_io_in_background(request):
             if thread:
                 thread.join()
 
-            log.info(f"Background IO has stopped")
+            log.info("Background IO has stopped")
             for result in results:
                 log.info(f"IOPs after FIO for pod {pod_obj.name}:")
                 log.info(f"Read: {result[0]}")
                 log.info(f"Write: {result[1]}")
 
-            if pod_obj:
-                pod_obj.delete()
-                pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
-            if pvc_obj:
-                pvc_obj.delete()
-                pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
-            if sc_obj:
-                sc_obj.delete()
-            if cbp_obj:
-                cbp_obj.delete()
-            if secret_obj:
-                secret_obj.delete()
-
         request.addfinalizer(finalizer)
 
-        secret_obj = helpers.create_secret(
-            interface_type=constants.CEPHBLOCKPOOL
-        )
-        cbp_obj = helpers.create_ceph_block_pool()
-        sc_obj = helpers.create_storage_class(
-            interface_type=constants.CEPHBLOCKPOOL,
-            interface_name=cbp_obj.name,
-            secret_name=secret_obj.name
-        )
-        pvc_obj = helpers.create_pvc(sc_name=sc_obj.name, size='2Gi')
-        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND)
-        pvc_obj.reload()
-        pod_obj = helpers.create_pod(
-            interface_type=constants.CEPHBLOCKPOOL, pvc_name=pvc_obj.name
-        )
-        helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING)
-        pod_obj.reload()
+        pod_obj = pod_factory_session(interface=constants.CEPHBLOCKPOOL)
 
         def run_io_in_bg():
             """
@@ -1150,7 +1125,7 @@ def run_io_in_background(request):
                 pod_obj.exec_cmd_on_pod(f'rm -rf {file_path}')
             set_test_status('terminated')
 
-        log.info(f"Start running IO in the test background")
+        log.info("Start running IO in the test background")
 
         thread = threading.Thread(target=run_io_in_bg)
         thread.start()
@@ -1384,7 +1359,7 @@ def memory_leak_function(request):
                     f"{log_path}/{worker}-top-output.txt"
                 )
                 os.remove(f"/tmp/{worker}-top-output.txt")
-        log.info(f"Memory leak capture has stopped")
+        log.info("Memory leak capture has stopped")
 
     request.addfinalizer(finalizer)
 
@@ -1427,7 +1402,7 @@ def memory_leak_function(request):
                                 f.write(' ')
                                 f.write(line)
 
-    log.info(f"Start memory leak data capture in the test background")
+    log.info("Start memory leak data capture in the test background")
     thread = threading.Thread(target=run_memory_leak_in_bg)
     thread.start()
 
@@ -2093,7 +2068,7 @@ def multiregion_mirror_setup_fixture(
             resource_description='testbs',
             resource_type='s3bucket'
         ),
-        'region': f'us-east-2'
+        'region': 'us-east-2'
     }
     # Create target buckets for them
     mcg_obj.create_new_backingstore_aws_bucket(backingstore1)

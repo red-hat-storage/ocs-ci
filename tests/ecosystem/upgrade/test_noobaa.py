@@ -67,7 +67,7 @@ def test_fill_bucket(
             )
             DOWNLOADED_OBJS.append(f'{obj.key}.{i}')
 
-    logger.info(f'Uploading all pod objects to MCG bucket')
+    logger.info('Uploading all pod objects to MCG bucket')
 
     sync_object_directory(
         awscli_pod_session,

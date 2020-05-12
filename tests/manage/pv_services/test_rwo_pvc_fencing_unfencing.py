@@ -185,7 +185,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                     node.wait_for_nodes_status(status=constants.NODE_READY)
 
             # Check ceph health
-            assert ceph_health_check(), f"Ceph cluster health is not OK"
+            assert ceph_health_check(), "Ceph cluster health is not OK"
             logger.info("Ceph cluster health is OK")
 
         request.addfinalizer(finalizer)
@@ -629,7 +629,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                 f"{count} expected pods with selector {selector} are not in Running state"
             )
 
-        assert ceph_health_check(), f"Ceph cluster health is not OK"
+        assert ceph_health_check(), "Ceph cluster health is not OK"
         logger.info("Ceph cluster health is OK")
 
         # Verify data integrity from new pods
@@ -736,7 +736,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             assert len(new_ceph_pods) > 0, 'Unexpected number of osd pods'
             self.verify_multi_attach_error(new_ceph_pods)
 
-        logger.info(f"Executing manual recovery steps")
+        logger.info("Executing manual recovery steps")
         # Power off the unresponsive node(s)
         logger.info(
             f"Powering off the unresponsive node(s): {app_pod_nodes}"
@@ -779,7 +779,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             if toolbox_status == constants.STATUS_TERMINATING:
                 ceph_cluster.toolbox.delete(force=True)
 
-            assert ceph_health_check(), f"Ceph cluster health is not OK"
+            assert ceph_health_check(), "Ceph cluster health is not OK"
             logger.info("Ceph cluster health is OK")
 
         # Verify data integrity from new pods
@@ -874,7 +874,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             assert len(new_ceph_pods) > 0, 'Unexpected number of osd pods'
             self.verify_multi_attach_error(new_ceph_pods)
 
-        logger.info(f"Executing manual recovery steps")
+        logger.info("Executing manual recovery steps")
         # Power off the unresponsive node
         logger.info(
             f"Powering off the unresponsive node: {app_pod_nodes}"
@@ -912,7 +912,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             if toolbox_status == constants.STATUS_TERMINATING:
                 ceph_cluster.toolbox.delete(force=True)
 
-            assert ceph_health_check(), f"Ceph cluster health is not OK"
+            assert ceph_health_check(), "Ceph cluster health is not OK"
             logger.info("Ceph cluster health is OK")
 
         # Verify data integrity from new pods
@@ -975,7 +975,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
         if ceph_cluster.mon_count == 3:
             # Check ceph health
-            assert ceph_health_check(), f"Ceph cluster health is not OK"
+            assert ceph_health_check(), "Ceph cluster health is not OK"
             logger.info("Ceph cluster health is OK")
 
         # Verify data integrity from new pods
