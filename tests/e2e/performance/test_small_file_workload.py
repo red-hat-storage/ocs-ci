@@ -473,7 +473,6 @@ class TestSmallFileWorkload(E2ETest):
                 break
 
             if timeout < (time.time() - start_time):
-                raise TimeoutError(
-                    f"Timed out waiting for benchmark to complete")
+                raise TimeoutError("Timed out waiting for benchmark to complete")
             time.sleep(30)
         assert (not get_logs_with_errors() and test_status), 'Test Failed'
