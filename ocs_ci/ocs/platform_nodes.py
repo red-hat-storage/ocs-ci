@@ -31,12 +31,21 @@ from ocs_ci.utility.csr import (
 from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
 <<<<<<< HEAD
+<<<<<<< HEAD
     get_ocp_version, TimeoutSampler, download_file,
     delete_file, AZInfo, replace_content_in_file,
 =======
     get_ocp_version, TimeoutSampler,
     download_file, delete_file, AZInfo,
 >>>>>>> 8ce1012d... Rebase
+=======
+    get_ocp_version, TimeoutSampler,
+    download_file, delete_file, AZInfo,
+=======
+    download_file, delete_file,
+    get_ocp_version, get_az_count, TimeoutSampler,
+>>>>>>> 178620d5... Fix Travis Failure
+>>>>>>> 71fc61ff... Fix Travis Failure
 )
 
 
