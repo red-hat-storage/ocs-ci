@@ -563,7 +563,7 @@ def check_local_volume():
         namespace=constants.LOCAL_STORAGE_NAMESPACE
     ):
         ocp_obj = OCP()
-        command = "get localvolume localblock -n local-storage "
+        command = "get localvolume local-block -n local-storage "
         status = ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
         return "No resources found" not in status
 
