@@ -10,7 +10,9 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_OPTIMAL
-from tests.manage.mcg.helpers import retrieve_anon_s3_resource, sync_object_directory
+from tests.manage.mcg.helpers import (
+    retrieve_anon_s3_resource, sync_object_directory
+)
 
 logger = logging.getLogger(__name__)
 

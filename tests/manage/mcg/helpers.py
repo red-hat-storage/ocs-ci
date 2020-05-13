@@ -29,7 +29,9 @@ def retrieve_anon_s3_resource():
         boto3.resource(): An anonymous S3 resource
     """
     anon_s3_resource = boto3.resource('s3')
-    anon_s3_resource.meta.client.meta.events.register('choose-signer.s3.*', disable_signing)
+    anon_s3_resource.meta.client.meta.events.register(
+        'choose-signer.s3.*', disable_signing
+    )
     return anon_s3_resource
 
 
