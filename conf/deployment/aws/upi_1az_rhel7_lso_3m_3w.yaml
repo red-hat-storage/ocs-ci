@@ -14,3 +14,6 @@ ENV_DATA:
   root_disk_size: 120
   root_disk: '/dev/sda1'
   availability_zone_count: 1
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-2198'
