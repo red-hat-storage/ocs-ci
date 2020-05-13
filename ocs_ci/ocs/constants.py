@@ -200,6 +200,10 @@ DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
 CEPH_ROOK_IO_PVC_LABEL = 'ceph.rook.io/pvc'
 
+# Auth Yaml
+BUCKETNAME = 'ocs-ci-data'
+AUTHYAML = 'auth.yaml'
+
 
 # YAML paths
 TOOL_POD_YAML = os.path.join(
