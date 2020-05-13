@@ -10,9 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_OPTIMAL
-from tests.manage.mcg.helpers import (
-    sync_object_directory
-)
+from tests.manage.mcg.helpers import retrieve_anon_s3_resource, sync_object_directory
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +43,7 @@ def test_fill_bucket(
     awscli_pod_session.exec_cmd_on_pod(
         command=f'mkdir {LOCAL_TESTOBJS_DIR_PATH}'
     )
-    test_objects = boto3.resource('s3').Bucket(
+    test_objects = retrieve_anon_s3_resource().Bucket(
         constants.TEST_FILES_BUCKET
     ).objects.all()
 
