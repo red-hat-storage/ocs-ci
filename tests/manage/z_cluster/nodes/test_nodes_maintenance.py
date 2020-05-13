@@ -224,7 +224,7 @@ class TestNodesMaintenance(ManageTest):
                 node_type=node_type, num_of_nodes=1
             )[0] for node_type in ['worker', 'master']
         ]
-        assert nodes, f"Failed to find a nodes for the test"
+        assert nodes, "Failed to find a nodes for the test"
 
         node_names = [typed_node.name for typed_node in nodes]
 

@@ -73,7 +73,7 @@ class TestS3MultipartUpload(ManageTest):
         logger.info(helpers.complete_multipart_upload(mcg_obj, bucket, key, upload_id, uploaded_parts))
 
         # Checksum Validation: Downloading the object after completing Multipart Upload and verifying its integrity
-        logger.info(f'Downloading the completed multipart object from MCG bucket to awscli pod')
+        logger.info('Downloading the completed multipart object from MCG bucket to awscli pod')
         helpers.sync_object_directory(
             awscli_pod, object_path, res_dir, mcg_obj
         )

@@ -92,7 +92,7 @@ def wait_for_resource_state(resource, state, timeout=60):
         resource.name == constants.DEFAULT_STORAGECLASS_CEPHFS
         or resource.name == constants.DEFAULT_STORAGECLASS_RBD
     ):
-        logger.info(f"Attempt to default default Secret or StorageClass")
+        logger.info("Attempt to default default Secret or StorageClass")
         return
     try:
         resource.ocp.wait_for_resource(
@@ -1523,7 +1523,7 @@ def craft_s3_command(mcg_obj, cmd):
         string_wrapper = "\""
     else:
         base_command = (
-            f"aws s3 --no-verify-ssl --no-sign-request "
+            "aws s3 --no-verify-ssl --no-sign-request "
         )
         string_wrapper = ''
 
@@ -1554,7 +1554,7 @@ def craft_s3_api_command(mcg_obj, cmd):
         string_wrapper = "\""
     else:
         base_command = (
-            f"aws s3api --no-verify-ssl --no-sign-request "
+            "aws s3api --no-verify-ssl --no-sign-request "
         )
         string_wrapper = ''
 
@@ -2118,9 +2118,11 @@ def modify_osd_replica_count(resource_name, replica_count):
     return ocp_obj.patch(resource_name=resource_name, params=params)
 
 
-def collect_performance_stats():
+def collect_performance_stats(dir_name):
     """
     Collect performance stats and saves them in file in json format.
+
+    dir_name (str): directory name to store stats.
 
     Performance stats include:
         IOPs and throughput percentage of cluster
@@ -2132,7 +2134,7 @@ def collect_performance_stats():
     log_dir_path = os.path.join(
         os.path.expanduser(config.RUN['log_dir']),
         f"failed_testcase_ocs_logs_{config.RUN['run_id']}",
-        "performance_stats"
+        f"{dir_name}_performance_stats"
     )
     if not os.path.exists(log_dir_path):
         logger.info(f'Creating directory {log_dir_path}')

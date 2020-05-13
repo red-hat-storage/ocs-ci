@@ -1091,7 +1091,7 @@ def run_io_in_background(request, pod_factory_session):
             if thread:
                 thread.join()
 
-            log.info(f"Background IO has stopped")
+            log.info("Background IO has stopped")
             for result in results:
                 log.info(f"IOPs after FIO for pod {pod_obj.name}:")
                 log.info(f"Read: {result[0]}")
@@ -1125,7 +1125,7 @@ def run_io_in_background(request, pod_factory_session):
                 pod_obj.exec_cmd_on_pod(f'rm -rf {file_path}')
             set_test_status('terminated')
 
-        log.info(f"Start running IO in the test background")
+        log.info("Start running IO in the test background")
 
         thread = threading.Thread(target=run_io_in_bg)
         thread.start()
@@ -1359,7 +1359,7 @@ def memory_leak_function(request):
                     f"{log_path}/{worker}-top-output.txt"
                 )
                 os.remove(f"/tmp/{worker}-top-output.txt")
-        log.info(f"Memory leak capture has stopped")
+        log.info("Memory leak capture has stopped")
 
     request.addfinalizer(finalizer)
 
@@ -1402,7 +1402,7 @@ def memory_leak_function(request):
                                 f.write(' ')
                                 f.write(line)
 
-    log.info(f"Start memory leak data capture in the test background")
+    log.info("Start memory leak data capture in the test background")
     thread = threading.Thread(target=run_memory_leak_in_bg)
     thread.start()
 
@@ -2068,7 +2068,7 @@ def multiregion_mirror_setup_fixture(
             resource_description='testbs',
             resource_type='s3bucket'
         ),
-        'region': f'us-east-2'
+        'region': 'us-east-2'
     }
     # Create target buckets for them
     mcg_obj.create_new_backingstore_aws_bucket(backingstore1)

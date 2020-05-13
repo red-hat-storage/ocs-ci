@@ -140,7 +140,7 @@ CRITICAL_ERRORS = [
 ]
 must_gather_pod_label = "must-gather"
 
-OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
+KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
 
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
@@ -803,3 +803,10 @@ OCS_PROVISIONERS = [
 bucket_website_action_list = ['PutBucketWebsite', 'GetBucketWebsite', 'PutObject']
 bucket_version_action_list = ['PutBucketVersioning', 'GetBucketVersioning']
 object_version_action_list = ['PutObject', 'GetObjectVersion', 'DeleteObjectVersion']
+
+
+# URLs
+AUTH_CONFIG_DOCS = (
+    'https://ocs-ci.readthedocs.io/en/latest/docs/getting_started.html'
+    '#authentication-config'
+)

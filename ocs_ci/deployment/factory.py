@@ -44,5 +44,5 @@ class DeploymentFactory(object):
             return self.cls_map[deployment_cls_key]()
         except KeyError:
             raise exceptions.DeploymentPlatformNotSupported(
-                f"Deployment platform specified is not supported"
+                "Deployment platform specified is not supported"
             )

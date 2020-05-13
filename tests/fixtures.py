@@ -50,7 +50,7 @@ def create_cephfs_secret(request):
     class_instance.cephfs_secret_obj = helpers.create_secret(
         interface_type=constants.CEPHFILESYSTEM
     )
-    assert class_instance.cephfs_secret_obj, f"Failed to create secret"
+    assert class_instance.cephfs_secret_obj, "Failed to create secret"
 
 
 @pytest.fixture()
@@ -128,7 +128,7 @@ def create_cephfs_storageclass(request):
         interface_name=helpers.get_cephfs_data_pool_name(),
         secret_name=class_instance.cephfs_secret_obj.name
     )
-    assert class_instance.sc_obj, f"Failed to create storage class"
+    assert class_instance.sc_obj, "Failed to create storage class"
 
 
 @pytest.fixture()

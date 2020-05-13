@@ -10,7 +10,6 @@ import time
 import yaml
 import json
 
-from ocs_ci.ocs.constants import RSYNC_POD_YAML, STATUS_RUNNING
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     NotSupportedFunctionError,
@@ -299,7 +298,7 @@ class OCP(object):
                 "be provided"
             )
 
-        command = f"delete "
+        command = "delete "
         if resource_name:
             command += f"{self.kind} {resource_name}"
         else:
@@ -423,7 +422,7 @@ class OCP(object):
             str: output of login command
         """
         kubeconfig = os.getenv('KUBECONFIG')
-        command = f"oc login -u system:admin "
+        command = "oc login -u system:admin "
         if kubeconfig:
             command += f"--kubeconfig {kubeconfig}"
         status = run_cmd(command)
@@ -932,7 +931,7 @@ def rsync(src, dst, node, dst_node=True, extra_params=""):
 
     """
     pod_name = f"rsync-{node.replace('.', '-')}"
-    pod_data = load_yaml(RSYNC_POD_YAML)
+    pod_data = load_yaml(constants.RSYNC_POD_YAML)
     pod_data['metadata']['name'] = pod_name
     pod_data['spec']['nodeName'] = node
     pod = OCP(kind='pod', namespace=constants.DEFAULT_NAMESPACE)
@@ -942,7 +941,7 @@ def rsync(src, dst, node, dst_node=True, extra_params=""):
         with tempfile.NamedTemporaryFile() as rsync_pod_yaml:
             dump_data_to_temp_yaml(pod_data, rsync_pod_yaml.name)
             pod.create(yaml_file=rsync_pod_yaml.name)
-        pod.wait_for_resource(condition=STATUS_RUNNING, timeout=120)
+        pod.wait_for_resource(condition=constants.STATUS_RUNNING, timeout=120)
         rsync_cmd = f"rsync {extra_params} {src} {dst}"
         out = pod.exec_oc_cmd(rsync_cmd)
         log.info(f"Rsync out: {out}")

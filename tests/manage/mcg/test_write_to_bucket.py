@@ -1,7 +1,6 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
-import boto3
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
@@ -12,6 +11,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants
 from tests.manage.mcg import helpers
+from tests.manage.mcg.helpers import retrieve_anon_s3_resource
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +132,7 @@ class TestBucketIO(ManageTest):
 
         # Download the file to pod
         awscli_pod.exec_cmd_on_pod(command=f'mkdir {data_dir}')
-        public_s3 = boto3.client('s3')
+        public_s3 = retrieve_anon_s3_resource()
         download_files = []
         # Use obj_key as prefix to download multiple files for large_small
         # case, it also works with single file

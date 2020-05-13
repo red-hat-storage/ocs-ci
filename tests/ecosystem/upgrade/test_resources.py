@@ -64,7 +64,7 @@ def test_pod_io(
     )
     job_obj = ocp.OCP(kind=constants.JOB, namespace=fio_project.namespace)
     for pod in pods:
-        log.info(f"Checking that fio is still running")
+        log.info("Checking that fio is still running")
         helpers.wait_for_resource_state(
             pod,
             constants.STATUS_RUNNING,

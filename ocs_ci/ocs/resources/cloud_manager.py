@@ -104,7 +104,7 @@ class S3Client(CloudClient):
             self.access_key = credentials.access_key
             self.secret_key = credentials.secret_key
         bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
-        bs_secret_data['metadata']['name'] += f'-client-secret'
+        bs_secret_data['metadata']['name'] += '-client-secret'
         bs_secret_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
         bs_secret_data['data']['AWS_ACCESS_KEY_ID'] = base64.urlsafe_b64encode(
             self.access_key.encode('UTF-8')
@@ -219,7 +219,7 @@ class GoogleClient(CloudClient):
         try:
             self.client = storage.Client()
         except DefaultCredentialsError:
-            logger.info(f'No credentials found failing test')
+            logger.info('No credentials found failing test')
 
     def internal_create_uls(self, name, region=None):
         """

@@ -34,7 +34,7 @@ def test_fixture_amq(request, storageclass_factory):
     )
 
     amq = AMQ()
-    amq.namespace = "my-project"
+    amq.namespace = "myproject"
 
     def teardown():
         amq.cleanup()

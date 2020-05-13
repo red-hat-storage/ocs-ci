@@ -27,7 +27,7 @@ def verify_mon_pod_up(pods):
         bool: True for wait for the resource, False otherwise
 
     """
-    log.info(f"Verifying all mons pods are up and Running")
+    log.info("Verifying all mons pods are up and Running")
     ret = pods.wait_for_resource(
         condition=constants.STATUS_RUNNING, selector='app=rook-ceph-mon',
         resource_count=3, timeout=700)
@@ -81,5 +81,5 @@ class TestRemoveMonFromCluster(ManageTest):
         assert delete_cephblockpools([self.pool_obj]), 'Failed to delete pool'
         ceph_cluster.cluster_health_check(timeout=0)
         ceph_cluster.remove_mon_from_cluster()
-        assert verify_mon_pod_up(pods), f"Mon pods are not up and running state"
+        assert verify_mon_pod_up(pods), "Mon pods are not up and running state"
         ceph_cluster.cluster_health_check(timeout=60)

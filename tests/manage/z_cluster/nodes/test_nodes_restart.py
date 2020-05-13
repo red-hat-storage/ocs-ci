@@ -265,7 +265,7 @@ class TestNodesRestart(ManageTest):
         assert rook_operator_pod.ocp.wait_for_resource(
             timeout=600, resource_name=rook_operator_pod_name,
             condition=constants.STATUS_TERMINATING
-        ), f"rook operator pod failed to reach status Terminating"
+        ), "rook operator pod failed to reach status Terminating"
         logger.info(
             f"Pod {rook_operator_pod_name} has reached status Terminating"
         )
@@ -278,9 +278,9 @@ class TestNodesRestart(ManageTest):
         assert rook_operator_pod.ocp.wait_for_resource(
             timeout=600, condition=constants.STATUS_RUNNING, selector=selector,
             resource_count=1
-        ), f"rook operator pod failed to reach status Running"
+        ), "rook operator pod failed to reach status Running"
         logger.info(
-            f"rook operator pod has reached status Running"
+            "rook operator pod has reached status Running"
         )
 
         assert wait_for_ct_pod_recovery(), "Ceph tools pod failed to come up on another node"

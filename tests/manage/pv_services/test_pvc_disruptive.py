@@ -278,7 +278,7 @@ class TestPVCDisruption(ManageTest):
             )
             assert ret, "Wait timeout: PVCs are not being created."
             logger.info(
-                f"PVCs creation has started."
+                "PVCs creation has started."
             )
             DISRUPTION_OPS.delete_resource()
 
@@ -304,7 +304,7 @@ class TestPVCDisruption(ManageTest):
             )
             assert ret, "Wait timeout: Pods are not being created."
             logger.info(
-                f"Pods creation has started."
+                "Pods creation has started."
             )
             DISRUPTION_OPS.delete_resource()
 
