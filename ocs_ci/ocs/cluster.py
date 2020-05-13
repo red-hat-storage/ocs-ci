@@ -485,7 +485,7 @@ class CephCluster(object):
         cmd = "ceph status"
         if format:
             cmd += f" -f {format}"
-        return self.toolbox.exec_cmd_on_pod(cmd)
+        return self.toolbox.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
     def get_ceph_capacity(self):
         """
