@@ -12,8 +12,28 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from tests.helpers import create_resource
 from tests.helpers import logger, craft_s3_command, craft_s3_api_command
+from botocore.handlers import disable_signing
 
 log = logging.getLogger(__name__)
+
+
+def retrieve_anon_s3_resource():
+    """
+    Returns an anonymous boto3 S3 resource by creating one and disabling signing
+
+    Disabling signing isn't documented anywhere, and this solution is based on
+    a comment by an AWS developer:
+    https://github.com/boto/boto3/issues/134#issuecomment-116766812
+
+    Returns:
+        boto3.resource(): An anonymous S3 resource
+
+    """
+    anon_s3_resource = boto3.resource('s3')
+    anon_s3_resource.meta.client.meta.events.register(
+        'choose-signer.s3.*', disable_signing
+    )
+    return anon_s3_resource
 
 
 def retrieve_test_objects_to_pod(podobj, target_dir):
@@ -32,7 +52,7 @@ def retrieve_test_objects_to_pod(podobj, target_dir):
     downloaded_objects = []
     # Retrieve a list of all objects on the test-objects bucket and downloads them to the pod
     podobj.exec_cmd_on_pod(command=f'mkdir {target_dir}')
-    public_s3 = boto3.resource('s3')
+    public_s3 = retrieve_anon_s3_resource()
     with ThreadPoolExecutor() as p:
         for obj in public_s3.Bucket(constants.TEST_FILES_BUCKET).objects.all():
             logger.info(f'Downloading {obj.key} from AWS test bucket')
