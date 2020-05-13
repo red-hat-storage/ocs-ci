@@ -34,9 +34,9 @@ class AMQ(object):
                 branch: branch to use from the repo
         """
         self.args = kwargs
-        self.repo = self.args.get('repo', constants.OCS_WORKLOADS)
+        self.repo = self.args.get('repo', constants.KAFKA_OPERATOR)
         self.branch = self.args.get('branch', 'master')
-        self.namespace = self.args.get('namespace', 'my-project')
+        self.namespace = self.args.get('namespace', 'myproject')
         self.amq_is_setup = False
         self.ocp = OCP()
         self.ns_obj = OCP(kind='namespace')
@@ -67,11 +67,10 @@ class AMQ(object):
                 cwd=self.dir,
                 check=True
             )
-            self.amq_dir = "ocs-workloads/amq/v2/install/cluster-operator"
-            self.amq_dir_examples = "ocs-workloads/amq/v2/examples/templates/cluster-operator"
-            self.amq_kafka_pers_yaml = "ocs-workloads/amq/v2/kafka-persistent.yaml"
-            self.amq_kafka_connect_yaml = "ocs-workloads/amq/v2/kafka-connect.yaml"
-            self.amq_kafka_bridge_yaml = "ocs-workloads/amq/v2/kafka-bridge.yaml"
+            self.amq_dir = "strimzi-kafka-operator/install/cluster-operator/"
+            self.amq_kafka_pers_yaml = "strimzi-kafka-operator/examples/kafka/kafka-persistent.yaml"
+            self.amq_kafka_connect_yaml = "strimzi-kafka-operator/examples/kafka-connect/kafka-connect.yaml"
+            self.amq_kafka_bridge_yaml = "strimzi-kafka-operator/examples/kafka-bridge/kafka-bridge.yaml"
 
         except (CommandFailed, CalledProcessError)as cf:
             log.error('Error during cloning of amq repository')
@@ -86,15 +85,8 @@ class AMQ(object):
 
         # self.amq_dir = constants.TEMPLATE_DEPLOYMENT_AMQ_CP
         run(f'oc apply -f {self.amq_dir} -n {self.namespace}', shell=True, check=True, cwd=self.dir)
-        time.sleep(5)
+        time.sleep(10)
         # Wait for strimzi-cluster-operator pod to be created
-        if self.is_amq_pod_running(pod_pattern="cluster-operator"):
-            log.info("strimzi-cluster-operator pod is in running state")
-        else:
-            raise ResourceWrongStatusException("strimzi-cluster-operator pod is not getting to running state")
-
-        run(f'oc apply -f {self.amq_dir_examples} -n {self.namespace}', shell=True, check=True, cwd=self.dir)
-        # checking pod status one more time
         if self.is_amq_pod_running(pod_pattern="cluster-operator"):
             log.info("strimzi-cluster-operator pod is in running state")
         else:
@@ -146,7 +138,7 @@ class AMQ(object):
         except(CommandFailed, CalledProcessError) as cf:
             log.error('Failed during setup of AMQ Kafka-persistent')
             raise cf
-        time.sleep(5)
+        time.sleep(20)
         if self.is_amq_pod_running(pod_pattern="zookeeper"):
             return self.kafka_persistent
         else:
@@ -215,7 +207,6 @@ class AMQ(object):
             self.kafka_connect.delete()
             self.kafka_bridge.delete()
             run_cmd(f'oc delete -f {self.amq_dir}', shell=True, check=True, cwd=self.dir)
-            run_cmd(f'oc delete -f {self.amq_dir_examples}', shell=True, check=True, cwd=self.dir)
         run_cmd(f'oc delete project {self.namespace}')
         # Reset namespace to default
         switch_to_default_rook_cluster_project()
