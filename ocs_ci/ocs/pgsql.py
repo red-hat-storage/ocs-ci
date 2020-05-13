@@ -3,7 +3,7 @@ Postgresql workload class
 """
 import logging
 import random
-from ocs_ci.ocs.node import get_node_objs
+
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -15,8 +15,6 @@ from subprocess import CalledProcessError
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj, get_operator_pods
 from tests.helpers import wait_for_resource_state
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE, RIPSAW_CRD
-from tests import disruption_helpers
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
 log = logging.getLogger(__name__)
 
@@ -145,11 +143,11 @@ class Postgresql(RipSaw):
                     f'but only found {len(pgbench_pods)}'
                 )
 
-    def get_postgresql_pods(self):
+    def get_postgres_pods(self):
         """
-        Get all postgresql pods
+        Get all postgres pods
         Returns:
-            List: postgresql pod objects list
+            List: postgres pod objects list
         """
         return get_all_pods(
             namespace=RIPSAW_NAMESPACE, selector=['postgres']
@@ -208,29 +206,25 @@ class Postgresql(RipSaw):
             'terminated'
         ]['reason']
 
-    def get_postgresql_status(self, status=constants.STATUS_RUNNING):
+    def wait_for_postgres_status(
+        self, status=constants.STATUS_RUNNING, timeout=None
+    ):
         """
-        Get all postgresql pods on cluster
-        Check that all postgresql pods in desired state
+        Wait for postgres pods status to reach running/completed
 
         Args:
-           status (str): Desired state of postgresql pods
-
-        Returns:
-            str: state of postgresql pod
+            status (str): status to reach Running or Completed
+            timeout (int): Time in seconds to wait
 
         """
-        try:
-            log.info(f"***********Check postgresql pods status***********")
-            postgresql_pods = self.get_postgresql_pods()
-            for pod in postgresql_pods:
-                wait_for_resource_state(
-                    resource=pod, state=status, timeout=300
-                )
-        except ResourceWrongStatusException:
-            log.error(f"{pod.name} not reached state {status}")
-            log.error(f"{pod.name} status is  {pod['data']['status']['phase']}")
-            raise TimeoutError(f"{pod.name} not reached state {status}")
+        timeout = timeout if timeout else 300
+        # Wait for postgres pods to initialized and running
+        log.info(f"Waiting for postgres pods to be reach {status} state")
+        postgres_pod_objs = self.get_postgres_pods()
+        for postgres_pod_obj in postgres_pod_objs:
+            wait_for_resource_state(
+                resource=postgres_pod_obj, state=status, timeout=timeout
+            )
 
     def wait_for_pgbench_status(self, status, timeout=None):
         """
@@ -283,60 +277,23 @@ class Postgresql(RipSaw):
             all_pgbench_pods_output.append(pg_output)
         return all_pgbench_pods_output
 
-    def get_nodes(self, pod_name, all_nodes=False):
+    def get_pgsql_nodes(self):
         """
-        Get nodes that contain a specific pod
-
-        Args:
-            pod_name (str): pod name
-
-            all_nodes (bool):
-                True-return all the nodes that contain postgres pod
-                False-return 1 node that contain postgres pod
+        Get nodes that contain a pgsql app pod
 
         Returns:
             list: Cluster node OCP objects
 
         """
-        if pod_name == 'osd':
-            pods_obj = self.pod_obj.get(selector=constants.OSD_APP_LABEL, all_namespaces=True)
-        elif pod_name == 'postgres':
-            pods_obj = self.pod_obj.get(selector=constants.PGSQL_APP_LABEL, all_namespaces=True)
-
-        log.info(f"Create a list of nodes (without duplicate nodes in the list)")
+        pgsql_pod_objs = self.pod_obj.get(selector=constants.PGSQL_APP_LABEL, all_namespaces=True)
+        log.info(f"Create a list of nodes that contain a pgsql app pod (without duplicate nodes in the list)")
         nodes_set = set()
-        for pod in pods_obj['items']:
+        for pod in pgsql_pod_objs['items']:
             log.info(f"pod {pod['metadata']['name']} located on node {pod['spec']['nodeName']}")
             nodes_set.add(pod['spec']['nodeName'])
+        return list(nodes_set)
 
-        if all_nodes:
-            node_list = get_node_objs(list(nodes_set))
-            return node_list
-        # Selects one Node (random)
-        node_obj = get_node_objs(list(nodes_set)[random.randint(0, len(nodes_set) - 1)])
-        log.info(f"Selects one Node (random) - {node_obj[0].name}")
-        return node_obj
-
-    def respin_pod(self, pod_name=''):
-        """
-        Respin a pod
-
-        Args:
-            pod_name (str)
-
-        Returns:
-            str: pod status
-
-        """
-        log.info(f"Respin pod {pod_name}")
-        if pod_name == 'postgers':
-            self.respin_app_pod()
-            return True
-        disruption = disruption_helpers.Disruptions()
-        disruption.set_resource(resource=f'{pod_name}')
-        disruption.delete_resource()
-
-    def respin_app_pod(self):
+    def respin_pgsql_app_pod(self):
         """
         Respin the pgsql app pod
 
@@ -346,7 +303,7 @@ class Postgresql(RipSaw):
         """
         app_pod_list = get_operator_pods(constants.PGSQL_APP_LABEL, constants.RIPSAW_NAMESPACE)
         app_pod = app_pod_list[random.randint(0, len(app_pod_list) - 1)]
-        log.info(f"respin pod {app_pod['metadata']['name']}")
+        log.info(f"respin pod {app_pod.name}")
         app_pod.delete(wait=True, force=False)
         wait_for_resource_state(
             resource=app_pod, state=constants.STATUS_RUNNING, timeout=300

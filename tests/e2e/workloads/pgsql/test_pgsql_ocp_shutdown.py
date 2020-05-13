@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     E2ETest, workloads, ignore_leftovers
 )
 from ocs_ci.ocs.pgsql import Postgresql
+from ocs_ci.ocs.node import get_node_objs
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ class TestPgSQLNodeShut(E2ETest):
         ]
     )
     @pytest.mark.usefixtures(pgsql_setup.__name__)
-    def test_run_pgsql_reboot_ocp(
+    def test_run_pgsql_shutdown_nodes(
         self, pgsql, nodes, transactions, pod_name
     ):
         """
@@ -67,19 +68,20 @@ class TestPgSQLNodeShut(E2ETest):
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)
 
         # Get all the nodes that contain postgres pods
-        node_list = pgsql.get_nodes(pod_name=pod_name, all_nodes=True)
+        node_list = pgsql.get_pgsql_nodes()
+        node_list_objs = get_node_objs(node_list)
 
         # Stop relevant nodes
-        nodes.stop_nodes(node_list)
+        nodes.stop_nodes(node_list_objs)
 
         # Sleep 2 min
         time.sleep(120)
 
         # Start relevant nodes
-        nodes.start_nodes(node_list)
+        nodes.start_nodes(node_list_objs)
 
         # Check that postgresql pods in running state
-        pgsql.get_postgresql_status(status=constants.STATUS_RUNNING)
+        pgsql.wait_for_postgres_status(status=constants.STATUS_RUNNING)
 
         # Check that pgbench pods in running state
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)

@@ -1,5 +1,6 @@
 import logging
 import pytest
+import random
 
 from ocs_ci.ocs import constants
 from tests.sanity_helpers import Sanity
@@ -7,6 +8,7 @@ from ocs_ci.framework.testlib import (
     E2ETest, workloads, ignore_leftovers
 )
 from ocs_ci.ocs.pgsql import Postgresql
+from ocs_ci.ocs.node import get_osd_running_nodes, get_node_objs
 
 log = logging.getLogger(__name__)
 
@@ -69,7 +71,11 @@ class TestPgSQLNodeReboot(E2ETest):
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)
 
         # Choose a node based on pod it contains
-        node_1 = pgsql.get_nodes(pod_name=pod_name, all_nodes=False)
+        if pod_name == 'postgres':
+            node_list = pgsql.get_pgsql_nodes()
+        elif pod_name == 'osd':
+            node_list = get_osd_running_nodes()
+        node_1 = get_node_objs(node_list[random.randint(0, len(node_list) - 1)])
 
         # Restart relevant node
         nodes.restart_nodes(node_1)
