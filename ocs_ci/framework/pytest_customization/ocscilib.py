@@ -390,4 +390,5 @@ def pytest_runtest_makereport(item, call):
         and rep.failed
         and (item.get_closest_marker('scale') or item.get_closest_marker('performance'))
     ):
-        collect_performance_stats()
+        test_case_name = item.name
+        collect_performance_stats(test_case_name)
