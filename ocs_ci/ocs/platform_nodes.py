@@ -1,6 +1,8 @@
 import logging
 import os
 import random
+import json
+import re
 
 import boto3
 import yaml
@@ -9,13 +11,15 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import aws, vsphere, templating
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.ocs import constants, ocp, exceptions
 from ocs_ci.ocs.node import get_node_objs, get_typed_worker_nodes
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
-    get_ocp_version, get_az_count, TimeoutSampler
+    get_ocp_version, get_az_count, TimeoutSampler,
+    download_file, delete_file
 )
 
 
@@ -109,31 +113,9 @@ class NodesBase(object):
         self.attach_nodes_to_cluster(node_list)
 
     def create_nodes(self, node_conf, node_type, num_nodes):
-        """
-        create aws instances of nodes
-
-        Args:
-            node_conf (dict): of node configuration
-            node_type (str): type of node to be created RHCOS/RHEL
-            num_nodes (int): Number of node instances to be created
-
-        Returns:
-           list: of AWSUPINode/AWSIPINode objects
-
-        """
-        node_list = []
-        node_cls = self.nodes_map[
-            f'{self.platform.upper()}{self.deployment_type.upper()}Node'
-        ]
-
-        rhel_cnt = len(get_typed_worker_nodes('rhel'))
-        rhcos_cnt = len(get_typed_worker_nodes('rhcos'))
-        for i in range(num_nodes):
-            node_id = rhel_cnt + rhcos_cnt + i
-            node_list.append(node_cls(node_conf, node_type))
-            node_list[i]._prepare_node(node_id)
-
-        return node_list
+        raise NotImplementedError(
+            "Create nodes functionality not implemented"
+        )
 
     def attach_nodes_to_cluster(self, node_list):
         raise NotImplementedError(
@@ -152,7 +134,7 @@ class NodesBase(object):
 
         """
         assert os.path.exists(default_config_path), (
-            f'Config file doesnt exists'
+            'Config file doesnt exists'
         )
 
         with open(default_config_path) as f:
@@ -556,6 +538,149 @@ class AWSNodes(NodesBase):
         if stopped_instances:
             self.aws.start_ec2_instances(instances=stopped_instances, wait=True)
 
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        """
+        create aws instances of nodes
+
+        Args:
+            node_conf (dict): of node configuration
+            node_type (str): type of node to be created RHCOS/RHEL
+            num_nodes (int): Number of node instances to be created
+
+        Returns:
+           list: of AWSUPINode objects
+
+        """
+        node_list = []
+        node_cls = self.nodes_map[
+            f'{self.platform.upper()}{self.deployment_type.upper()}Node'
+        ]
+
+        if node_type.upper() == 'RHCOS':
+            workers_stacks = self.aws.get_worker_stacks()
+            logger.info(f"Existing worker stacks: {workers_stacks}")
+            existing_indexes = self.get_existing_indexes(workers_stacks)
+            logger.info(f"Existing indexes: {existing_indexes}")
+            slots_available = self.get_available_slots(existing_indexes, num_nodes)
+            logger.info(f"Available indexes: {slots_available}")
+            for slot in slots_available:
+                node_id = slot
+                node_list.append(node_cls(node_conf, node_type))
+                node_list[-1]._prepare_node(node_id)
+        elif node_type.upper() == 'RHEL':
+            rhel_workers = len(get_typed_worker_nodes('rhel'))
+            for i in range(num_nodes):
+                node_id = i + rhel_workers
+                node_list.append(node_cls(node_conf, node_type))
+                node_list[-1]._prepare_node(node_id)
+
+        # Make sure that csr is approved for all the nodes
+        # not making use of csr.py functions as aws rhcos has long
+        # delays for csr to appear
+        if node_type.upper() == 'RHCOS':
+            self.approve_all_nodes_csr(node_list)
+
+        return node_list
+
+    @retry(
+        (exceptions.PendingCSRException, exceptions.TimeoutExpiredError),
+        tries=4,
+        delay=10,
+        backoff=1
+    )
+    def approve_all_nodes_csr(self, node_list):
+        """
+        Make sure that all the newly added nodes are in approved csr state
+
+        Args:
+            node_list (list): of AWSUPINode/AWSIPINode objects
+
+        Raises:
+             PendingCSRException: If any pending csrs exists
+
+        """
+        node_names = [
+            node.aws_instance_obj.private_dns_name for node in node_list
+        ]
+
+        sample = TimeoutSampler(
+            timeout=600, sleep=3, func=self.all_nodes_found,
+            node_names=node_names
+        )
+        if not sample.wait_for_func_status(result=True):
+            raise exceptions.PendingCSRException(
+                "All nodes csr not approved"
+            )
+
+    def all_nodes_found(self, node_names):
+        """
+        Relying on oc get nodes -o wide to confirm that
+        node is added to cluster
+
+        Args:
+            node_names (list): of node names as string
+
+        Returns:
+            bool: 'True' if all the node names appeared in 'get nodes'
+            else 'False'
+
+        """
+        approve_pending_csr()
+        get_nodes_cmd = "get nodes -o wide"
+        oc_obj = ocp.OCP()
+        nodes_wide_out = oc_obj.exec_oc_cmd(
+            get_nodes_cmd, out_yaml_format=False
+        )
+        for line in nodes_wide_out.splitlines():
+            for node in node_names:
+                if node in line:
+                    node_names.remove(node)
+                    break
+        if node_names:
+            logger.warning("Some of the nodes have not appeared in nodes list")
+        return not node_names
+
+    def get_available_slots(self, existing_indexes, required_slots):
+        """
+        Get indexes which are free
+
+        Args:
+            existing_indexes (list): of integers
+            required_slots (int): required number of integers
+
+        Returns:
+            list: of integers (available slots)
+
+        """
+        slots_available = []
+        count = 0
+        index = 0
+
+        while count < required_slots:
+            if index not in existing_indexes:
+                slots_available.append(index)
+                count = count + 1
+            index = index + 1
+        return slots_available
+
+    def get_existing_indexes(self, index_list):
+        """
+        Extract index suffixes from index_list
+
+        Args:
+            index_list (list): of stack names in the form of
+                'clustername-no$i'
+
+        Returns:
+            list: sorted list of Integers
+
+        """
+        temp = []
+        for index in index_list:
+            temp.append(int(index.split('-')[1][2:]))
+        temp.sort()
+        return temp
+
     def attach_nodes_to_cluster(self, node_list):
         """
         Attach nodes in the list to the cluster
@@ -570,6 +695,8 @@ class AWSNodes(NodesBase):
     def attach_nodes_to_upi_cluster(self, node_list):
         """
         Attach node to upi cluster
+        Note: For RHCOS nodes, create function itself would have
+        attached the nodes to cluster so nothing to do here
 
         Args:
             node_list (list): of AWSUPINode objects
@@ -800,7 +927,8 @@ class AWSUPINode(AWSNodes):
             'ec2', region_name=self.region
         )
         # cloudformation
-        self.cf = boto3.client('cloudformation', region_name=self.region)
+        self.cf = self.aws.cf_client
+        self.infra_id = get_infra_id(self.cluster_path)
 
     def _prepare_node(self, node_id):
         """
@@ -818,6 +946,202 @@ class AWSUPINode(AWSNodes):
             except Exception:
                 logger.error("Failed to create RHEL node")
                 raise
+        elif self.node_type == 'RHCOS':
+            conf = self._prepare_rhcos_node_conf()
+            conf['node_id'] = node_id
+            try:
+                self.aws_instance_obj = self._prepare_upi_rhcos_node(conf)
+            except Exception:
+                logger.error("Failed to create RHCOS node")
+                raise
+            approve_pending_csr()
+
+    def _prepare_rhcos_node_conf(self):
+        """
+        Merge default RHCOS node configuration for rhcos node
+        along with the user provided config
+
+        Returns:
+            dict: A dictionary of merged user and default values
+
+        """
+        conf = self.read_default_config(constants.RHCOS_WORKER_CONF)
+        default_conf = conf.get('ENV_DATA')
+        merge_dict(default_conf, self.node_conf)
+        logger.info(f"Config after merge is {default_conf}")
+        return default_conf
+
+    def _prepare_upi_rhcos_node(self, conf):
+        """
+        Handle RHCOS worker instance creation using cloudformation template,
+        Create RHCOS instance with ami same as master
+
+        Args:
+            conf (dict): configuration for node
+
+        Returns:
+            boto3.Instance: instance of ec2 instance resource
+
+        """
+        self.gather_worker_data()
+        worker_template_path = self.get_rhcos_worker_template()
+        self.bucket_name = constants.AWS_S3_UPI_BUCKET
+        self.template_obj_key = f'{self.cluster_name}-workertemplate'
+        self.add_cert_to_template(worker_template_path)
+        self.aws.upload_file_to_s3_bucket(
+            self.bucket_name, self.template_obj_key, worker_template_path
+        )
+        s3_url = self.aws.get_s3_bucket_object_url(
+            self.bucket_name, self.template_obj_key
+        )
+        params_list = self.build_stack_params(
+            conf['node_id'], conf
+        )
+        capabilities = ['CAPABILITY_NAMED_IAM']
+        self.stack_name, self.stack_id = self.aws.create_stack(
+            s3_url, conf['node_id'], params_list, capabilities
+        )
+        instance_id = self.aws.get_stack_instance_id(
+            self.stack_name, constants.AWS_WORKER_LOGICAL_RESOURCE_ID
+        )
+
+        delete_file(worker_template_path)
+        self.aws.delete_s3_object(self.bucket_name, self.template_obj_key)
+        return self.aws.get_ec2_instance(instance_id)
+
+    def build_stack_params(self, index, conf):
+        """
+        Build all the params required for a stack creation
+
+        Args:
+            index (int): An integer index for this stack
+            conf (dict): Node config
+
+        Returns:
+            list: of param dicts
+
+        """
+        param_list = []
+        pk = 'ParameterKey'
+        pv = 'ParameterValue'
+
+        param_list.append({pk: 'Index', pv: str(index)})
+        param_list.append({pk: 'InfrastructureName', pv: self.infra_id})
+        param_list.append({pk: 'RhcosAmi', pv: self.worker_image_id})
+        param_list.append(
+            {
+                pk: 'IgnitionLocation', pv: self.worker_ignition_location
+            }
+        )
+        param_list.append({pk: 'Subnet', pv: self.worker_subnet})
+        param_list.append(
+            {
+                pk: 'WorkerSecurityGroupId',
+                pv: self.worker_security_group[0].get('GroupId')
+            }
+        )
+        param_list.append(
+            {
+                pk: 'WorkerInstanceProfileName', pv: self.worker_instance_profile
+            }
+        )
+        param_list.append(
+            {
+                pk: 'WorkerInstanceType', pv: conf['worker_instance_type']
+            }
+        )
+
+        return param_list
+
+    def add_cert_to_template(self, worker_template_path):
+        """
+        Add cert to worker template
+
+        Args:
+            worker_template_path (str): Path where template file is located
+
+        """
+        worker_ignition_path = os.path.join(
+            self.cluster_path,
+            constants.WORKER_IGN
+        )
+        cert = self.get_cert_content(worker_ignition_path)
+        self.update_template_with_cert(worker_template_path, cert)
+
+    def update_template_with_cert(self, worker_template_path, cert):
+        """
+        Update the template file with cert provided
+
+        Args:
+            worker_template_path (str): template file path
+            cert (str): Certificate body
+
+        """
+        search_str = "ABC...xYz=="
+        temp = "/tmp/worker_temp.yaml"
+        with open(worker_template_path, "r") as fp:
+            orig_content = fp.read()
+            logger.info("=====ORIGINAL=====")
+            logger.info(orig_content)
+            final_content = re.sub(
+                r'{}'.format(search_str),
+                r'{}'.format(cert),
+                orig_content
+            )
+        with open(temp, 'w') as wfp:
+            logger.info(final_content)
+            wfp.write(final_content)
+        os.rename(temp, worker_template_path)
+
+    def get_cert_content(self, worker_ignition_path):
+        """
+        Get the certificate content from worker ignition file
+
+        Args:
+            worker_ignition_path (str): Path of the worker ignition file
+
+        Returns:
+            formatted_cert (str): certificate content
+
+        """
+        assert os.path.exists(worker_ignition_path)
+        with open(worker_ignition_path, "r") as fp:
+            content = json.loads(fp.read())
+            tls_data = content.get('ignition').get('security').get('tls')
+            cert_content = tls_data.get('certificateAuthorities')[0].get(
+                'source'
+            )
+            formatted_cert = cert_content.split(',')[1]
+        return formatted_cert
+
+    def get_rhcos_worker_template(self):
+        """
+        Download template and keep it locally
+
+        Returns:
+            path (str): local path to template file
+
+        """
+        common_base = 'v3-launch-templates/functionality-testing'
+        ocp_version = get_ocp_version('_')
+        relative_template_path = os.path.join(
+            f'aos-{ocp_version}',
+            'hosts/upi_on_aws-cloudformation-templates'
+        )
+
+        template_url = os.path.join(
+            f'{constants.OCP_QE_MISC_REPO}',
+            'plain',
+            f'{common_base}',
+            f'{relative_template_path}',
+            f'{constants.AWS_WORKER_NODE_TEMPLATE}'
+        )
+        logger.info(f"Getting template from url {template_url}")
+        tmp_file = os.path.join(
+            '/tmp', constants.AWS_WORKER_NODE_TEMPLATE
+        )
+        download_file(template_url, tmp_file)
+        return tmp_file
 
     def _prepare_rhel_node_conf(self):
         """
@@ -910,6 +1234,13 @@ class AWSUPINode(AWSNodes):
         self.worker_security_group = worker_instance.security_groups
         self.worker_iam_role = worker_instance.iam_instance_profile
         self.worker_tag = self.get_kube_tag(worker_instance.tags)
+        self.worker_image_id = worker_instance.image.id  # AMI id
+        self.worker_instance_profile = self.aws.get_worker_instance_profile_name(
+            stack_name
+        )
+        self.worker_ignition_location = self.aws.get_worker_ignition_location(
+            stack_name
+        )
         del self.worker_iam_role['Id']
 
     def get_kube_tag(self, tags):

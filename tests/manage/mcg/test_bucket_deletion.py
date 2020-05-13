@@ -209,7 +209,7 @@ class TestBucketDeletion:
             # Sync downloaded objects dir to the new bucket, sync to 3175
             # virtual dirs. With each dir around 315MB, and 3175 dirs will
             # reach targed 1TB data.
-            logger.info(f'Writing objects to bucket')
+            logger.info('Writing objects to bucket')
             for i in range(3175):
                 full_object_path = f"s3://{bucketname}/{i}/"
                 helpers.sync_object_directory(

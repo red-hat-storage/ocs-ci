@@ -76,7 +76,7 @@ def check_alert_list(
         assert_msg = f"Alert {label} is not in {state} state"
         assert target_alerts[key]['state'] == state, assert_msg
 
-    logger.info(f"Alerts were triggered correctly during utilization")
+    logger.info("Alerts were triggered correctly during utilization")
 
 
 def check_query_range_result(

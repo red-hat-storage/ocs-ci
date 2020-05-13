@@ -438,7 +438,7 @@ class CephCluster(object):
             return float(self.used_space)
         self.used_space = used_in_gb
         raise UnexpectedBehaviour(
-            f"In Rados df, Used size is varying"
+            "In Rados df, Used size is varying"
         )
 
     def get_ceph_health(self, detail=False):
@@ -475,7 +475,7 @@ class CephCluster(object):
         cmd = "ceph status"
         if format:
             cmd += f" -f {format}"
-        return self.toolbox.exec_cmd_on_pod(cmd)
+        return self.toolbox.exec_cmd_on_pod(cmd, out_yaml_format=False)
 
     def get_ceph_capacity(self):
         """
@@ -913,4 +913,4 @@ def validate_pg_balancer():
             )
             return False
     else:
-        logging.info(f"pg_balancer is not active")
+        logging.info("pg_balancer is not active")

@@ -10,6 +10,7 @@ from jsonschema import validate
 from ocs_ci.framework import config
 import logging
 from ocs_ci.ocs import constants, defaults, ocp
+from ocs_ci.ocs.resources import csv
 
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.packagemanifest import get_selector_for_ocs_operator, PackageManifest
@@ -341,7 +342,7 @@ def ocs_install_verification(
         # In case of upgrade with FIO we have to wait longer time to see
         # health OK. See discussion in BZ:
         # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
-        health_check_tries = 60
+        health_check_tries = 180
     assert utils.ceph_health_check(
         namespace, health_check_tries, health_check_delay
     )
@@ -496,7 +497,7 @@ def get_new_device_paths(device_sets_required, osd_size_capacity_requested):
         osd_size_capacity_requested (int) : Requested OSD size capacity
 
     Returns:
-        cur_device_list (list) : List containing added device paths
+        list : List containing added device paths
 
     """
     ocp_obj = OCP()
@@ -556,10 +557,15 @@ def check_local_volume():
         bool: True if LV present, False if LV not present
 
     """
-    ocp_obj = OCP()
-    command = "get localvolume -n local-storage "
-    status = ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
-    return "No resources found" not in status
+
+    if csv.get_csvs_start_with_prefix(
+        csv_prefix=defaults.LOCAL_STORAGE_OPERATOR_NAME,
+        namespace=constants.LOCAL_STORAGE_NAMESPACE
+    ):
+        ocp_obj = OCP()
+        command = "get localvolume localblock -n local-storage "
+        status = ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
+        return "No resources found" not in status
 
 
 @retry(AssertionError, 12, 10, 1)

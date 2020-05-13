@@ -140,7 +140,7 @@ CRITICAL_ERRORS = [
 ]
 must_gather_pod_label = "must-gather"
 
-OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
+KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
 
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
@@ -768,6 +768,10 @@ LOCAL_VOLUME_YAML = os.path.join(
 )
 
 # All worker default config files
+RHCOS_WORKER_CONF = os.path.join(CONF_DIR, 'ocsci/aws_upi_rhcos_workers.yaml')
+AWS_WORKER_NODE_TEMPLATE = "06_cluster_worker_node.yaml"
+AWS_S3_UPI_BUCKET = "ocs-qe-upi"
+AWS_WORKER_LOGICAL_RESOURCE_ID = "Worker0"
 RHEL_WORKERS_CONF = os.path.join(CONF_DIR, 'ocsci/aws_upi_rhel_workers.yaml')
 
 # Users
@@ -787,3 +791,10 @@ OCS_PROVISIONERS = [
 bucket_website_action_list = ['PutBucketWebsite', 'GetBucketWebsite', 'PutObject']
 bucket_version_action_list = ['PutBucketVersioning', 'GetBucketVersioning']
 object_version_action_list = ['PutObject', 'GetObjectVersion', 'DeleteObjectVersion']
+
+
+# URLs
+AUTH_CONFIG_DOCS = (
+    'https://ocs-ci.readthedocs.io/en/latest/docs/getting_started.html'
+    '#authentication-config'
+)

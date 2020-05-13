@@ -125,7 +125,7 @@ class OCS(object):
             self.name == constants.DEFAULT_STORAGECLASS_CEPHFS
             or self.name == constants.DEFAULT_STORAGECLASS_RBD
         ):
-            log.info(f"Attempt to delete default Secret or StorageClass")
+            log.info("Attempt to delete default Secret or StorageClass")
             return
 
         if self._is_deleted:
