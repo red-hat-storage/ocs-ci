@@ -1239,6 +1239,10 @@ def get_testrun_name():
             f"OSD {config.ENV_DATA.get('osd_type').upper()}"
         )
 
+    lso_deployment = ''
+    if not baremetal_config and config.DEPLOYMENT.get('local_storage'):
+        lso_deployment = 'LSO '
+
     if config.REPORTING.get('display_name'):
         testrun_name = config.REPORTING.get('display_name')
     else:
@@ -1254,6 +1258,7 @@ def get_testrun_name():
             f"{testrun_name}"
             f"{get_az_count()}AZ "
             f"{worker_os} "
+            f"{lso_deployment}"
             f"{config.ENV_DATA.get('master_replicas')}M "
             f"{config.ENV_DATA.get('worker_replicas')}W "
             f"{markers}"
