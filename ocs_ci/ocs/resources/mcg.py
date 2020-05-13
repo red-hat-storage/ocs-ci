@@ -38,7 +38,22 @@ class MCG(object):
         Constructor for the MCG class
         """
         self.namespace = config.ENV_DATA['cluster_namespace']
+
         ocp_obj = OCP(kind='noobaa', namespace=self.namespace)
+        
+        self.core_pod = Pod(
+            **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
+        )
+
+        # Copy the self-signed certificate to the local runner
+        # For usage with boto3 (in case the cert isn't found)
+        if not os.path.isfile(constants.MCG_CRT_LOCAL_PATH):
+            ocp_obj.exec_oc_cmd(
+                f'cp {self.core_pod.name}:'
+                f'{constants.MCG_CRT_REMOTE_PATH} '
+                f'{constants.MCG_CRT_LOCAL_PATH}'
+            )
+
         results = ocp_obj.get()
         self.s3_endpoint = (
             results.get('items')[0].get('status').get('services')
@@ -79,19 +94,6 @@ class MCG(object):
                 'password': self.noobaa_password
             }
         ).json().get('reply').get('token')
-
-        self.core_pod = Pod(
-            **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
-        )
-
-        # Copy the self-signed certificate to the local runner
-        # For usage with boto3 (in case the cert isn't found)
-        if not os.path.isfile(constants.MCG_CRT_LOCAL_PATH):
-            ocp_obj.exec_oc_cmd(
-                f'cp {self.core_pod.name}:'
-                f'{constants.MCG_CRT_REMOTE_PATH} '
-                f'{constants.MCG_CRT_LOCAL_PATH}'
-            )
 
         self.s3_resource = boto3.resource(
             's3', verify=constants.MCG_CRT_LOCAL_PATH,
