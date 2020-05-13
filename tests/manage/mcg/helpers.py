@@ -27,7 +27,7 @@ def retrieve_anon_s3_resource():
 
     Returns:
         boto3.resource(): An anonymous S3 resource
-        
+
     """
     anon_s3_resource = boto3.resource('s3')
     anon_s3_resource.meta.client.meta.events.register(
