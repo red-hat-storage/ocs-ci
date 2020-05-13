@@ -140,7 +140,7 @@ CRITICAL_ERRORS = [
 ]
 must_gather_pod_label = "must-gather"
 
-OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
+KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
 
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
