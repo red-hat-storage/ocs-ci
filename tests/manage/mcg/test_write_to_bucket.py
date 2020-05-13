@@ -1,7 +1,6 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
-import boto3
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (

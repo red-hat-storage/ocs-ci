@@ -1,6 +1,5 @@
 import logging
 
-import boto3
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
