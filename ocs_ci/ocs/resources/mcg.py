@@ -38,9 +38,7 @@ class MCG(object):
         Constructor for the MCG class
         """
         self.namespace = config.ENV_DATA['cluster_namespace']
-
         ocp_obj = OCP(kind='noobaa', namespace=self.namespace)
-        
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
