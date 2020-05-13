@@ -1498,7 +1498,7 @@ def delete_deploymentconfig_pods(pod_obj):
                 dc_ocp_obj.wait_for_delete(resource_name=pod_obj.get_labels().get('name'))
 
 
-def craft_s3_command(mcg_obj, cmd):
+def craft_s3_command(mcg_obj, cmd, api=False):
     """
     Crafts the AWS CLI S3 command including the
     login credentials and command to be ran
@@ -1506,55 +1506,26 @@ def craft_s3_command(mcg_obj, cmd):
     Args:
         mcg_obj: An MCG object containing the MCG S3 connection credentials
         cmd: The AWSCLI command to run
+        api: True if the call is for s3api, false if s3
 
     Returns:
         str: The crafted command, ready to be executed on the pod
 
     """
+    api = 'api' if api else ''
     if mcg_obj:
         base_command = (
-            f"sh -c \"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
-            f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
-            f"AWS_DEFAULT_REGION={mcg_obj.region} "
-            f"aws s3 "
-            f"--endpoint={mcg_obj.s3_endpoint} "
-            f"--no-verify-ssl "
+            f'sh -c "AWS_CA_BUNDLE={constants.MCG_CRT_AWSCLI_POD_PATH} '
+            f'AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} '
+            f'AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} '
+            f'AWS_DEFAULT_REGION={mcg_obj.region} '
+            f'aws s3{api} '
+            f'--endpoint={mcg_obj.s3_endpoint} '
         )
-        string_wrapper = "\""
+        string_wrapper = '"'
     else:
         base_command = (
-            "aws s3 --no-verify-ssl --no-sign-request "
-        )
-        string_wrapper = ''
-
-    return f"{base_command}{cmd}{string_wrapper}"
-
-
-def craft_s3_api_command(mcg_obj, cmd):
-    """
-    Crafts the AWS cli S3 API level commands
-
-    Args:
-        mcg_obj: An MCG object containing the MCG S3 connection credentials
-        cmd: The AWSCLI API command to run
-
-    Returns:
-        str: The crafted command, ready to be executed on the pod
-
-    """
-    if mcg_obj:
-        base_command = (
-            f"sh -c \"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
-            f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
-            f"AWS_DEFAULT_REGION={mcg_obj.region} "
-            f"aws s3api "
-            f"--endpoint={mcg_obj.s3_endpoint} "
-            f"--no-verify-ssl "
-        )
-        string_wrapper = "\""
-    else:
-        base_command = (
-            "aws s3api --no-verify-ssl --no-sign-request "
+            f"aws s3{api} --no-sign-request "
         )
         string_wrapper = ''
 
