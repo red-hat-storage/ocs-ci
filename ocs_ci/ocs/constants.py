@@ -791,3 +791,10 @@ OCS_PROVISIONERS = [
 bucket_website_action_list = ['PutBucketWebsite', 'GetBucketWebsite', 'PutObject']
 bucket_version_action_list = ['PutBucketVersioning', 'GetBucketVersioning']
 object_version_action_list = ['PutObject', 'GetObjectVersion', 'DeleteObjectVersion']
+
+
+# URLs
+AUTH_CONFIG_DOCS = (
+    'https://ocs-ci.readthedocs.io/en/latest/docs/getting_started.html'
+    '#authentication-config'
+)
