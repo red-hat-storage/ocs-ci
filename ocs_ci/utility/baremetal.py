@@ -8,7 +8,7 @@ from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.constants import VM_POWERED_OFF, VM_POWERED_ON
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, load_auth_config
 from tests import helpers
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ class BAREMETAL(object):
         Initialize the variables required
 
         """
-        self.mgmt_details = config.ENV_DATA['mgmt_details']
+        self.mgmt_details = load_auth_config()['ipmi']
 
     def get_ipmi_ctx(self, host, user, password):
         """
@@ -69,31 +69,31 @@ class BAREMETAL(object):
         """
         for node in baremetal_machine:
             if force:
-                for details in self.mgmt_details:
-                    if node.name == details['hostname']:
-                        ipmi_ctx = self.get_ipmi_ctx(
-                            host=details['mgmt_console'], user=details['mgmt_username'],
-                            password=details['mgmt_password']
-                        )
-                        logger.info(f"Powering Off {node.name}")
-                        ipmi_ctx.chassis_control_power_down()
+                if self.mgmt_details[node.name]:
+                    ipmi_ctx = self.get_ipmi_ctx(
+                        host=self.mgmt_details[node.name]['mgmt_console'],
+                        user=self.mgmt_details[node.name]['mgmt_username'],
+                        password=self.mgmt_details[node.name]['mgmt_password']
+                    )
+                    logger.info(f"Powering Off {node.name}")
+                    ipmi_ctx.chassis_control_power_down()
             else:
                 ocp = OCP(kind='node')
                 ocp.exec_oc_debug_cmd(node=node.name, cmd_list=["shutdown now"], timeout=60)
-                for details in self.mgmt_details:
-                    if node.name == details['hostname']:
-                        ipmi_ctx = self.get_ipmi_ctx(
-                            host=details['mgmt_console'], user=details['mgmt_username'],
-                            password=details['mgmt_password']
+                if self.mgmt_details[node.name]:
+                    ipmi_ctx = self.get_ipmi_ctx(
+                        host=self.mgmt_details[node.name]['mgmt_console'],
+                        user=self.mgmt_details[node.name]['mgmt_username'],
+                        password=self.mgmt_details[node.name]['mgmt_password']
+                    )
+                    for status in TimeoutSampler(600, 5, self.get_power_status, ipmi_ctx):
+                        logger.info(
+                            f"Waiting for Baremetal Machine {node.name} to power off"
+                            f"Current Baremetal status: {status}"
                         )
-                        for status in TimeoutSampler(600, 5, self.get_power_status, ipmi_ctx):
-                            logger.info(
-                                f"Waiting for Baremetal Machine {node.name} to power off"
-                                f"Current Baremetal status: {status}"
-                            )
-                            if status == VM_POWERED_OFF:
-                                logger.info(f"Baremetal Machine {node.name} reached poweredOff status")
-                                break
+                        if status == VM_POWERED_OFF:
+                            logger.info(f"Baremetal Machine {node.name} reached poweredOff status")
+                            break
 
     def start_baremetal_machines_with_ipmi_ctx(self, ipmi_ctxs, wait=True):
         """
@@ -138,30 +138,30 @@ class BAREMETAL(object):
 
         """
         for node in baremetal_machine:
-            for details in self.mgmt_details:
-                if node.name == details['hostname']:
-                    ipmi_ctx = self.get_ipmi_ctx(
-                        host=details['mgmt_console'], user=details['mgmt_username'],
-                        password=details['mgmt_password']
-                    )
-                    logger.info(f"Powering On {node.name}")
-                    ipmi_ctx.chassis_control_power_up()
+            if self.mgmt_details[node.name]:
+                ipmi_ctx = self.get_ipmi_ctx(
+                    host=self.mgmt_details[node.name]['mgmt_console'],
+                    user=self.mgmt_details[node.name]['mgmt_username'],
+                    password=self.mgmt_details[node.name]['mgmt_password']
+                )
+                logger.info(f"Powering On {node.name}")
+                ipmi_ctx.chassis_control_power_up()
             if wait:
-                for details in self.mgmt_details:
-                    if node.name == details['hostname']:
-                        ipmi_ctx = self.get_ipmi_ctx(
-                            host=details['mgmt_console'], user=details['mgmt_username'],
-                            password=details['mgmt_password']
+                if self.mgmt_details[node.name]:
+                    ipmi_ctx = self.get_ipmi_ctx(
+                        host=self.mgmt_details[node.name]['mgmt_console'],
+                        user=self.mgmt_details[node.name]['mgmt_username'],
+                        password=self.mgmt_details[node.name]['mgmt_password']
+                    )
+                    for status in TimeoutSampler(600, 5, self.get_power_status, ipmi_ctx):
+                        logger.info(
+                            f"Waiting for Baremetal Machine {node.name} to power on. "
+                            f"Current Baremetal status: {status}"
                         )
-                        for status in TimeoutSampler(600, 5, self.get_power_status, ipmi_ctx):
-                            logger.info(
-                                f"Waiting for Baremetal Machine {node.name} to power on. "
-                                f"Current Baremetal status: {status}"
-                            )
-                            if status == VM_POWERED_ON:
-                                logger.info(f"Baremetal Machine {node.name} reached poweredOn status")
-                                ipmi_ctx.session.close()
-                                break
+                        if status == VM_POWERED_ON:
+                            logger.info(f"Baremetal Machine {node.name} reached poweredOn status")
+                            ipmi_ctx.session.close()
+                            break
 
         wait_for_cluster_connectivity(delay=5)
         wait_for_nodes_status(
@@ -197,11 +197,11 @@ class BAREMETAL(object):
         """
         node_ipmi_ctx = list()
         for node in baremetal_machine:
-            for details in self.mgmt_details:
-                if node.name == details['hostname']:
+            if self.mgmt_details[node.name]:
                     ipmi_ctx = self.get_ipmi_ctx(
-                        host=details['mgmt_console'], user=details['mgmt_username'],
-                        password=details['mgmt_password']
+                        host=self.mgmt_details[node.name]['mgmt_console'],
+                        user=self.mgmt_details[node.name]['mgmt_username'],
+                        password=self.mgmt_details[node.name]['mgmt_password']
                     )
                     node_ipmi_ctx.append(ipmi_ctx)
         return node_ipmi_ctx
