@@ -379,7 +379,7 @@ class AWSNodes(NodesBase):
         )
         self.aws.stop_ec2_instances(instances=instances, wait=wait)
 
-    def start_nodes(self, instances, nodes, wait=True):
+    def start_nodes(self, instances=None, nodes=None, wait=True):
         """
         Start EC2 instances
 
