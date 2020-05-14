@@ -725,6 +725,7 @@ class MCG(object):
 
         Returns:
             bool: return False if any of the non optional components of noobaa is not available
+            
         """
         # Get noobaa status
         status = self.exec_mcg_cmd('status').stderr
