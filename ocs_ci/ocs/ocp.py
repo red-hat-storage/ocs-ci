@@ -841,19 +841,6 @@ class OCP(object):
         return output
 
 
-def get_provider():
-    """
-    Return the OCP Provider (Platform)
-
-    Returns:
-         str: The Provider that the OCP is running on
-
-    """
-
-    ocp_cluster = OCP(kind='', resource_name='nodes')
-    return ocp_cluster.get('nodes')['items'][0]['spec']['providerID'].split(':')[0]
-
-
 def get_clustername():
     """
     Return the name (DNS short name) of the cluster

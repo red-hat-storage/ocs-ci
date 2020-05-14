@@ -486,3 +486,16 @@ def get_node_from_machine_name(machine_name):
             return machine_obj.get().get(
                 'status'
             ).get('addresses')[1].get('address')
+
+
+def get_provider():
+    """
+    Return the OCP Provider (Platform)
+
+    Returns:
+         str: The Provider that the OCP is running on
+
+    """
+
+    ocp_cluster = OCP(kind='', resource_name='nodes')
+    return ocp_cluster.get('nodes')['items'][0]['spec']['providerID'].split(':')[0]

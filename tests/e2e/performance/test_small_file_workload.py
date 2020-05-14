@@ -6,7 +6,8 @@ import pytest
 import time
 
 from ocs_ci.ocs.ocp import (OCP, get_clustername, get_ocs_version,
-                            get_build, get_ocp_channel, get_provider)
+                            get_build, get_ocp_channel)
+from ocs_ci.ocs.node import get_provider
 from ocs_ci.utility.utils import TimeoutSampler, get_ocp_version, run_cmd
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
