@@ -21,7 +21,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     deployment, ignore_leftovers, tier_marks
 )
 from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes, registry
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException, CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.mcg import MCG
@@ -1515,10 +1515,18 @@ def mcg_obj_fixture(request):
     mcg_obj = MCG()
 
     def finalizer():
-        registry.remove_role_from_user(
-            'cluster-admin', constants.NOOBAA_SERVICE_ACCOUNT,
-            cluster_role=True
-        )
+        try:
+            registry.remove_role_from_user(
+                'cluster-admin', constants.NOOBAA_SERVICE_ACCOUNT,
+                cluster_role=True
+            )
+        except CommandFailed as e:
+            if 'unable to find target' in repr(e):
+                logging.warning(
+                    'Failed to remove cluster-admin role from the NooBaa serviceaccount'
+                )
+            else:
+                raise e
         if config.ENV_DATA['platform'].lower() == 'aws':
             mcg_obj.cred_req_obj.delete()
 
