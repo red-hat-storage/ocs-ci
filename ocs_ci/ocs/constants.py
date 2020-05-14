@@ -547,6 +547,7 @@ MASTER_IGN = "master.ign"
 WORKER_IGN = "worker.ign"
 
 # vSphere related constants
+VSPHERE_INSTALLER_BRANCH = "release-4.3"
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
 VSPHERE_SCALEUP_REPO = "https://code.engineering.redhat.com/gerrit/openshift-misc"
 VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")
