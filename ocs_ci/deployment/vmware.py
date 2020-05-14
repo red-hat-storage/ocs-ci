@@ -342,8 +342,8 @@ class VSPHEREUPI(VSPHEREBASE):
             # git clone repo from openshift installer
             # installer ( https://github.com/openshift/installer ) master and
             # other branches (greater than release-4.3) structure has been
-            # changed. use master branch when ocs-ci is ready to incorporated
-            # the changes from master
+            # changed. Use appropriate branch when ocs-ci is ready
+            # with the changes.
             clone_repo(
                 constants.VSPHERE_INSTALLER_REPO, self.upi_repo_path,
                 constants.VSPHERE_INSTALLER_BRANCH
