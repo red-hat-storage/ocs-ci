@@ -1098,21 +1098,22 @@ def check_root_volume(volume):
     return True if volume['attachments'][0]['DeleteOnTermination'] else False
 
 
-def get_auth_dict(bucket_name=constants.BUCKETNAME, filename=constants.AUTHYAML):
+def update_config_from_s3(bucket_name=constants.OCSCI_DATA_BUCKET, filename=constants.AUTHYAML):
     """
-    Get the auth file that has secrets from the S3 and return as dict
+    Get the config file that has secrets/configs from the S3 and update the config
 
     Args:
-        bucket_name(string): name of the bucket
-        filename(string): name of the file in bucket
+        bucket_name (string): name of the bucket
+        filename (string): name of the file in bucket
 
     Returns:
-        dict: returns the auth file as python dict
+        dict: returns the updated file contents as python dict
+
     """
     s3 = boto3.resource('s3')
-    with NamedTemporaryFile(mode='w', prefix='auth', delete=True) as auth:
+    with NamedTemporaryFile(mode='w', prefix='config', delete=True) as auth:
         s3.meta.client.download_file(bucket_name, filename, auth.name)
-        auth_yaml = load_yaml(auth.name)
+        config_yaml = load_yaml(auth.name)
     # set in config and store it for that scope
-    config.AUTH = auth_yaml
-    return auth_yaml
+    config.update(config_yaml)
+    return config_yaml

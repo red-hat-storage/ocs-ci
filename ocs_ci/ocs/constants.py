@@ -201,7 +201,7 @@ OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
 CEPH_ROOK_IO_PVC_LABEL = 'ceph.rook.io/pvc'
 
 # Auth Yaml
-BUCKETNAME = 'ocs-ci-data'
+OCSCI_DATA_BUCKET = 'ocs-ci-data'
 AUTHYAML = 'auth.yaml'
 
 
