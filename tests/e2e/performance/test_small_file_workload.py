@@ -109,9 +109,9 @@ class SmallFileResultsAnalyse(object):
 
         query = {'query': {'match': {'uuid': self.uuid}}}
         log.info('Reading all data from ES server')
-        self.all_results = self.es.search(index=self.index,
-                                          body=query,
-                                          size=self.records)
+        self.all_results = self.es.search(
+            index=self.index, body=query, size=self.records
+        )
 
     def write(self):
         """
