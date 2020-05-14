@@ -15,6 +15,12 @@ from ocs_ci.ocs.constants import (
     NODE_OBJ_FILE, NODE_FILE, INSTANCE_FILE
 )
 
+FORMAT = (
+    '%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s'
+)
+logging.basicConfig(format=FORMAT, level=logging.DEBUG)
+log = logging.getLogger(__name__)
+
 
 def cycle_nodes(cluster_path, action):
     """
@@ -35,18 +41,24 @@ def cycle_nodes(cluster_path, action):
         kls = platform_nodes.PlatformNodesFactory()
         nodes = kls.get_nodes_platform()
         with open(instance_file, "wb") as instance_file:
+            log.info("Storing ocs instances objects")
             pickle.dump(nodes.get_ec2_instances(nodes=node_objs), instance_file)
         with open(nodes_file, "wb") as node_file:
+            log.info("Storing ocp nodes objects")
             pickle.dump(nodes, node_file)
         with open(node_obj_file, "wb") as node_obj_file:
+            log.info("Stopping all nodes")
             pickle.dump(node_objs, node_obj_file)
             nodes.stop_nodes(nodes=node_objs)
     elif action == 'start':
         with open(instance_file, "rb") as instance_file:
+            log.info("Reading instance objects")
             instances = pickle.load(instance_file)
         with open(nodes_file, "rb") as node_file:
+            log.info("Reading ocp nodes object")
             nodes = pickle.load(node_file)
         with open(node_obj_file, "rb") as node_obj_file:
+            log.info("Starting ocs nodes")
             node_objs = pickle.load(node_obj_file)
             nodes.start_nodes(instances=instances, nodes=node_objs)
             unset_noout()
