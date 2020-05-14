@@ -26,10 +26,10 @@ class SmallFileResultsAnalyse(object):
     This class is reading all test results from elasticsearch server (which the
     ripsaw running of the benchmark is generate), aggregate them by :
         test operation (e.g. create / delete etc.)
-          sample (for test to be valid it need to run with more the one sample)
-            host (test can be run on more then one pod {called host})
+        sample (for test to be valid it need to run with more the one sample)
+        host (test can be run on more then one pod {called host})
 
-    it generate results for the all test as one unit which will be valid only
+    it generates results for all tests as one unit which will be valid only
     if the deviation between samples is less the 5%
 
     """
@@ -90,7 +90,8 @@ class SmallFileResultsAnalyse(object):
 
     def add_key(self, key, value):
         """
-        Adding key and value the this object results dict
+        Adding (key and value) to this object results dictionary as a new
+        dictionary.
 
         Args:
             key (str): String which will be the key for the value
@@ -127,8 +128,8 @@ class SmallFileResultsAnalyse(object):
 
         Args:
             host (str): the name of the pod that ran the test
-            op (str): the operation that tested.
-            snum (int): sample of test as string.
+            op (str): the operation that is tested
+            snum (int): sample of test as string
 
         Returns:
             dict : dictionary of results records
@@ -158,7 +159,7 @@ class SmallFileResultsAnalyse(object):
 
     def aggregate_threads_results(self, res):
         """
-        Aggregation one section of results, this can be threads in host,
+        Aggregation of one section of results, this can be threads in host,
         hosts in sample, samples in test
 
         Args:
