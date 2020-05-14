@@ -47,18 +47,18 @@ class MCG(object):
         ocp_obj = OCP(kind='noobaa', namespace=self.namespace)
         results = ocp_obj.get()
         self.s3_endpoint = (
-            results.get('items')[0].get('status').get('services').get('serviceS3').get(
-                'externalDNS')[-1]
+            results.get('items')[0].get('status').get('services')
+            .get('serviceS3').get('externalDNS')[-1]
         )
         self.mgmt_endpoint = (
-                                 results.get('items')[0].get('status').get('services').get(
-                                     'serviceMgmt').get('externalDNS')[-1]
-                             ) + '/rpc'
+            results.get('items')[0].get('status').get('services')
+            .get('serviceMgmt').get('externalDNS')[-1]
+        ) + '/rpc'
         self.region = config.ENV_DATA['region']
 
         creds_secret_name = (
-            results.get('items')[0].get('status').get('accounts').get('admin').get('secretRef').get(
-                'name')
+            results.get('items')[0].get('status').get('accounts')
+            .get('admin').get('secretRef').get('name')
         )
         secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
         creds_secret_obj = secret_ocp_obj.get(creds_secret_name)
@@ -104,8 +104,7 @@ class MCG(object):
             cluster_role=True
         )
 
-        self.operator_pod = Pod(
-            **get_pods_having_label(constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace)[0])
+        self.operator_pod = Pod(**get_pods_having_label(constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace)[0])
 
         if config.ENV_DATA['platform'].lower() == 'aws':
             (
@@ -122,8 +121,7 @@ class MCG(object):
                 aws_secret_access_key=self.aws_access_key
             )
             logger.info('Checking whether RGW pod is not present on AWS platform')
-            pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL,
-                                             namespace=self.namespace)
+            pods = pod.get_pods_having_label(label=constants.RGW_APP_LABEL, namespace=self.namespace)
             assert len(pods) == 0, 'RGW pod should not exist on AWS platform'
 
         elif config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
@@ -240,16 +238,13 @@ class MCG(object):
               bool: True if checksum matches, False otherwise
 
         """
-        md5sum = shlex.split(awscli_pod.exec_cmd_on_pod(
-            command=f'md5sum {original_object_path} {result_object_path}'))
+        md5sum = shlex.split(awscli_pod.exec_cmd_on_pod(command=f'md5sum {original_object_path} {result_object_path}'))
         if md5sum[0] == md5sum[2]:
-            logger.info(
-                f'Passed: MD5 comparison for {original_object_path} and {result_object_path}')
+            logger.info(f'Passed: MD5 comparison for {original_object_path} and {result_object_path}')
             return True
         else:
-            logger.error(
-                f'Failed: MD5 comparison of {original_object_path} and {result_object_path} - '
-                f'{md5sum[0]} ≠ {md5sum[2]}')
+            logger.error(f'Failed: MD5 comparison of {original_object_path} and {result_object_path} - '
+                         f'{md5sum[0]} ≠ {md5sum[2]}')
             return False
 
     def oc_verify_bucket_exists(self, bucketname):
@@ -338,8 +333,7 @@ class MCG(object):
             bucket_data_reduced = resp.json().get('reply').get('data').get('size_reduced')
 
             logger.info(
-                'Overall bytes stored: ' + str(bucket_data) + '. Reduced size: ' + str(
-                    bucket_data_reduced)
+                'Overall bytes stored: ' + str(bucket_data) + '. Reduced size: ' + str(bucket_data_reduced)
             )
 
             return bucket_data, bucket_data_reduced
@@ -468,8 +462,7 @@ class MCG(object):
 
         """
         if backingstore_info.get('name') is None:
-            backingstore_info['name'] = create_unique_resource_name('backingstorebucket',
-                                                                    'awsbucket')
+            backingstore_info['name'] = create_unique_resource_name('backingstorebucket', 'awsbucket')
 
         if backingstore_info.get('region') is None:
             self.aws_s3_resource.create_bucket(Bucket=backingstore_info['name'])
