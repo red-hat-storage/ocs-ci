@@ -847,6 +847,7 @@ def get_provider():
 
     Returns:
          str: The Provider that the OCP is running on
+
     """
 
     ocp_cluster = OCP(kind='', resource_name='nodes')
