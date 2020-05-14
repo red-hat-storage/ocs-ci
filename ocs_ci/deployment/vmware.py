@@ -642,7 +642,7 @@ class VSPHEREUPI(VSPHEREBASE):
         )
         clone_repo(
             constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
-            f'release-{get_ocp_version()}'
+            constants.VSPHERE_INSTALLER_BRANCH
         )
         if (
             os.path.exists(f"{constants.VSPHERE_MAIN}.backup")
