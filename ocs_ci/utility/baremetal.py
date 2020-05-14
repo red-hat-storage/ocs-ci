@@ -3,7 +3,6 @@ import logging
 import pyipmi
 import pyipmi.interfaces
 
-from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.constants import VM_POWERED_OFF, VM_POWERED_ON
 from ocs_ci.ocs.node import wait_for_nodes_status
@@ -198,10 +197,10 @@ class BAREMETAL(object):
         node_ipmi_ctx = list()
         for node in baremetal_machine:
             if self.mgmt_details[node.name]:
-                    ipmi_ctx = self.get_ipmi_ctx(
-                        host=self.mgmt_details[node.name]['mgmt_console'],
-                        user=self.mgmt_details[node.name]['mgmt_username'],
-                        password=self.mgmt_details[node.name]['mgmt_password']
-                    )
-                    node_ipmi_ctx.append(ipmi_ctx)
+                ipmi_ctx = self.get_ipmi_ctx(
+                    host=self.mgmt_details[node.name]['mgmt_console'],
+                    user=self.mgmt_details[node.name]['mgmt_username'],
+                    password=self.mgmt_details[node.name]['mgmt_password']
+                )
+                node_ipmi_ctx.append(ipmi_ctx)
         return node_ipmi_ctx
