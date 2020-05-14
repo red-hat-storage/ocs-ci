@@ -132,11 +132,11 @@ class TestBucketIO(ManageTest):
 
         # Download the file to pod
         awscli_pod.exec_cmd_on_pod(command=f'mkdir {data_dir}')
-        public_s3 = retrieve_anon_s3_resource()
+        public_s3_client = retrieve_anon_s3_resource().meta.client
         download_files = []
         # Use obj_key as prefix to download multiple files for large_small
         # case, it also works with single file
-        for obj in public_s3.list_objects(
+        for obj in public_s3_client.list_objects(
             Bucket=public_bucket,
             Prefix=obj_key
         ).get('Contents'):
