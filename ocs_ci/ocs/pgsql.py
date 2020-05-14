@@ -207,7 +207,7 @@ class Postgresql(RipSaw):
         ]['reason']
 
     def wait_for_postgres_status(
-        self, status=constants.STATUS_RUNNING, timeout=None
+        self, status=constants.STATUS_RUNNING, timeout=300
     ):
         """
         Wait for postgres pods status to reach running/completed
@@ -217,8 +217,6 @@ class Postgresql(RipSaw):
             timeout (int): Time in seconds to wait
 
         """
-        timeout = timeout if timeout else 300
-        # Wait for postgres pods to initialized and running
         log.info(f"Waiting for postgres pods to be reach {status} state")
         postgres_pod_objs = self.get_postgres_pods()
         for postgres_pod_obj in postgres_pod_objs:

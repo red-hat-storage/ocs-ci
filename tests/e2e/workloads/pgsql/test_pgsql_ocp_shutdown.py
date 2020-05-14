@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.node import get_node_objs
+from tests.helpers import get_worker_nodes
 
 log = logging.getLogger(__name__)
 
@@ -44,17 +45,17 @@ class TestPgSQLNodeShut(E2ETest):
 
     @pytest.mark.parametrize(
         argnames=[
-            "transactions", "pod_name"
+            "transactions"
         ],
         argvalues=[
             pytest.param(
-                *[600, 'postgres'], marks=pytest.mark.polarion_id("OCS-818")
+                *[600], marks=pytest.mark.polarion_id("OCS-818")
             )
         ]
     )
     @pytest.mark.usefixtures(pgsql_setup.__name__)
     def test_run_pgsql_shutdown_nodes(
-        self, pgsql, nodes, transactions, pod_name
+        self, pgsql, nodes, transactions
     ):
         """
         Test pgsql workload
@@ -67,24 +68,29 @@ class TestPgSQLNodeShut(E2ETest):
         # Wait for pgbench pod to reach running state
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)
 
-        # Get all the nodes that contain postgres pods
-        node_list = pgsql.get_pgsql_nodes()
+        # Get all the worker nodes
+        node_list = get_worker_nodes()
         node_list_objs = get_node_objs(node_list)
 
-        # Stop relevant nodes
+        # Stop worker nodes
         nodes.stop_nodes(node_list_objs)
 
-        # Sleep 2 min
-        time.sleep(120)
+        # Sleep 5 min
+        time.sleep(300)
 
-        # Start relevant nodes
+        # Start worker nodes
         nodes.start_nodes(node_list_objs)
 
         # Check that postgresql pods in running state
-        pgsql.wait_for_postgres_status(status=constants.STATUS_RUNNING)
+        pgsql.wait_for_postgres_status(status=constants.STATUS_RUNNING, timeout=600)
 
-        # Check that pgbench pods in running state
-        pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)
+        # Create pgbench benchmark
+        pgsql.create_pgbench_benchmark(
+            replicas=3, transactions=transactions, clients=3
+        )
+
+        # Wait for pg_bench pod to complete
+        pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
