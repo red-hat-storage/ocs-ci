@@ -340,14 +340,7 @@ class VSPHEREUPI(VSPHEREBASE):
             self.kubeconfig = os.path.join(self.cluster_path, config.RUN.get('kubeconfig_location'))
 
             # git clone repo from openshift installer
-            # installer ( https://github.com/openshift/installer ) master and
-            # other branches (greater than release-4.3) structure has been
-            # changed. Use appropriate branch when ocs-ci is ready
-            # with the changes.
-            clone_repo(
-                constants.VSPHERE_INSTALLER_REPO, self.upi_repo_path,
-                constants.VSPHERE_INSTALLER_BRANCH
-            )
+            clone_openshift_installer()
 
             # upload bootstrap ignition to public access server
             bootstrap_path = os.path.join(config.ENV_DATA.get('cluster_path'), constants.BOOTSTRAP_IGN)
@@ -640,10 +633,8 @@ class VSPHEREUPI(VSPHEREBASE):
             constants.TERRAFORM_DATA_DIR,
             constants.TERRAFORM_VARS
         )
-        clone_repo(
-            constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
-            constants.VSPHERE_INSTALLER_BRANCH
-        )
+
+        clone_openshift_installer()
         if (
             os.path.exists(f"{constants.VSPHERE_MAIN}.backup")
             and os.path.exists(f"{constants.VSPHERE_MAIN}.json")
@@ -721,3 +712,31 @@ def sync_time_with_host(machine_file, enable=False):
         to_change,
         sync_time
     )
+
+
+def clone_openshift_installer():
+    """
+    Clone the openshift installer repo
+    """
+    # git clone repo from openshift installer
+    # installer ( https://github.com/openshift/installer ) master and
+    # other branches (greater than release-4.3) structure has been
+    # changed. Use appropriate branch when ocs-ci is ready
+    # with the changes.
+    # Note: Currently use release-4.3 branch for the ocp versions
+    # which is greater than 4.3
+    upi_repo_path = os.path.join(
+        constants.EXTERNAL_DIR,
+        'installer'
+    )
+    ocp_version = get_ocp_version()
+    if Version.coerce(ocp_version) >= Version.coerce('4.4'):
+        clone_repo(
+            constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
+            constants.VSPHERE_INSTALLER_BRANCH
+        )
+    else:
+        clone_repo(
+            constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
+            f'release-{ocp_version}'
+        )
