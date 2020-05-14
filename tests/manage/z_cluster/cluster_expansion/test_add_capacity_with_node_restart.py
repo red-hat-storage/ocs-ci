@@ -14,18 +14,14 @@ from ocs_ci.ocs.node import get_typed_nodes, wait_for_nodes_status
 
 
 @pytest.mark.parametrize(
-    argnames=["node_type", "num_of_nodes"],
+    argnames=["node_type", "num_of_nodes", "workload_storageutilization_rbd"],
     argvalues=[
         pytest.param(
-            *['worker', 1],
+            *['worker', 1, (0.11, False, 120)],
             marks=pytest.mark.polarion_id("OCS-1313")
         ),
-     ]
-)
-@pytest.mark.parametrize(
-    "workload_storageutilization_rbd",
-    [(0.25, False, 120)],
-    indirect=["workload_storageutilization_rbd"]
+    ],
+    indirect=["workload_storageutilization_rbd"],
 )
 @ignore_leftovers
 @tier4
@@ -78,7 +74,7 @@ class TestAddCapacityNodeRestart(ManageTest):
         seconds_to_wait_for_io_operations = 40
         logging.info(f"Going to sleep for {seconds_to_wait_for_io_operations} seconds")
         time.sleep(seconds_to_wait_for_io_operations)
-
+        
         osd_size = storage_cluster.get_osd_size()
         logging.info("Calling add_capacity function...")
         result = storage_cluster.add_capacity(osd_size)
