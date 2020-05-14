@@ -622,7 +622,7 @@ def measure_noobaa_exceed_bucket_quota(
         nonlocal bucket_name
         nonlocal awscli_pod
         # run_time of operation
-        run_time = 60 * 11
+        run_time = 60 * 14
         awscli_pod.exec_cmd_on_pod(
             'dd if=/dev/zero of=/tmp/testfile bs=1M count=500'
         )
