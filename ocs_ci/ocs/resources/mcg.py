@@ -47,18 +47,18 @@ class MCG(object):
         ocp_obj = OCP(kind='noobaa', namespace=self.namespace)
         results = ocp_obj.get()
         self.s3_endpoint = (
-            results.get('items')[0].get('status').get('services')
-                .get('serviceS3').get('externalDNS')[-1]
+            results.get('items')[0].get('status').get('services').get('serviceS3').get(
+                'externalDNS')[-1]
         )
         self.mgmt_endpoint = (
-                                 results.get('items')[0].get('status').get('services')
-                                     .get('serviceMgmt').get('externalDNS')[-1]
+                                 results.get('items')[0].get('status').get('services').get(
+                                     'serviceMgmt').get('externalDNS')[-1]
                              ) + '/rpc'
         self.region = config.ENV_DATA['region']
 
         creds_secret_name = (
-            results.get('items')[0].get('status').get('accounts')
-                .get('admin').get('secretRef').get('name')
+            results.get('items')[0].get('status').get('accounts').get('admin').get('secretRef').get(
+                'name')
         )
         secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
         creds_secret_obj = secret_ocp_obj.get(creds_secret_name)
@@ -725,7 +725,7 @@ class MCG(object):
 
         Returns:
             bool: return False if any of the non optional components of noobaa is not available
-            
+
         """
         # Get noobaa status
         status = self.exec_mcg_cmd('status').stderr
