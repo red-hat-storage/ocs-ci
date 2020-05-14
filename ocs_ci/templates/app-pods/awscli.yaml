@@ -6,7 +6,9 @@ metadata:
 spec:
   containers:
     - name: awscli
-      # TODO: Replace the image with an official one once Amazon  publishes theirs
-      image: mikesir87/aws-cli:1.16.220
+      image: amazon/aws-cli:2.0.13
+      # Override the default `aws` entrypoint in order to 
+      # allow the pod to run continuously and act as a relay
+      command: ['/bin/sh']
       stdin: true
       tty: true
