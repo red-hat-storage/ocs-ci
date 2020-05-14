@@ -1113,4 +1113,6 @@ def get_auth_dict(bucket_name=constants.BUCKETNAME, filename=constants.AUTHYAML)
     with NamedTemporaryFile(mode='w', prefix='auth', delete=True) as auth:
         s3.meta.client.download_file(bucket_name, filename, auth.name)
         auth_yaml = load_yaml(auth.name)
+    # set in config and store it for that scope
+    config.AUTH = auth_yaml
     return auth_yaml
