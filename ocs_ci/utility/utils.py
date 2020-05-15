@@ -1995,3 +1995,23 @@ def destroy_cluster(installer, cluster_path, log_level="DEBUG"):
         raise
     except Exception:
         log.error(traceback.format_exc())
+
+
+class AZInfo(object):
+    """
+    A class for getting different az numbers across calls
+    """
+    zone_number = 0
+
+    def get_zone_number(self):
+        """
+        Increment current zone_number and perform modulus op
+        to roll-on to next available number
+
+        Returns:
+           int: zone number index
+        """
+        prev = AZInfo.zone_number
+        AZInfo.zone_number += 1
+        AZInfo.zone_number %= get_az_count()
+        return prev

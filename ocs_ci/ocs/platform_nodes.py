@@ -17,8 +17,8 @@ from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
-    get_ocp_version, get_az_count, TimeoutSampler,
-    download_file, delete_file
+    get_ocp_version, TimeoutSampler,
+    download_file, delete_file, AZInfo
 )
 
 
@@ -309,6 +309,7 @@ class AWSNodes(NodesBase):
     def __init__(self):
         super(AWSNodes, self).__init__()
         self.aws = aws.AWS()
+        self.az = AZInfo()
 
     def get_ec2_instances(self, nodes):
         """
@@ -563,14 +564,14 @@ class AWSNodes(NodesBase):
             slots_available = self.get_available_slots(existing_indexes, num_nodes)
             logger.info(f"Available indexes: {slots_available}")
             for slot in slots_available:
-                node_conf['zone'] = self.get_zone_number()
+                node_conf['zone'] = self.az.get_zone_number()
                 node_id = slot
                 node_list.append(node_cls(node_conf, node_type))
                 node_list[-1]._prepare_node(node_id)
         elif node_type.upper() == 'RHEL':
             rhel_workers = len(get_typed_worker_nodes('rhel'))
             for i in range(num_nodes):
-                node_conf['zone'] = self.get_zone_number()
+                node_conf['zone'] = self.az.get_zone_number()
                 node_id = i + rhel_workers
                 node_list.append(node_cls(node_conf, node_type))
                 node_list[-1]._prepare_node(node_id)
@@ -800,16 +801,18 @@ class AWSNodes(NodesBase):
         # install pod packages
         rhel_pod_obj.install_packages(constants.RHEL_POD_PACKAGES)
         # run ansible
-        cmd = (
-            f"ansible-playbook -i /hosts --private-key={pem_dst_path} "
-            f"{constants.SCALEUP_ANSIBLE_PLAYBOOK}"
-        )
+        try:
+            cmd = (
+                f"ansible-playbook -i /hosts --private-key={pem_dst_path} "
+                f"{constants.SCALEUP_ANSIBLE_PLAYBOOK}"
+            )
 
-        rhel_pod_obj.exec_cmd_on_pod(
-            cmd, out_yaml_format=False, timeout=timeout
-        )
-        self.verify_nodes_added(hosts)
-        rhel_pod_obj.delete()
+            rhel_pod_obj.exec_cmd_on_pod(
+                cmd, out_yaml_format=False, timeout=timeout
+            )
+            self.verify_nodes_added(hosts)
+        finally:
+            rhel_pod_obj.delete(force=True)
 
     def verify_nodes_added(self, hosts):
         """
@@ -908,26 +911,6 @@ class AWSNodes(NodesBase):
         rhel_pod_obj.exec_cmd_on_node(
             host, pem_dst_path, cmd, user=constants.EC2_USER
         )
-
-    def get_zone_number(self):
-        """
-        Get a zone number out of all available zones, we are looking for
-        sequential iteration over available zones. Note: This is not exact
-        zone info of aws, instead we are looking for an index to the
-        cloudformation stack whose zone info will be extracted later.
-
-        Returns:
-            int: Zone number, each call to this function returns next avaialable
-                zone number from available zones
-
-        """
-        num_zones = get_az_count()
-        try:
-            self.zone_count += 1
-        except AttributeError:
-            self.zone_count = 0
-
-        return self.zone_count % num_zones
 
 
 class AWSUPINode(AWSNodes):
