@@ -507,6 +507,7 @@ class AWSNodes(NodesBase):
 
         """
         # Get the cluster nodes ec2 instances
+        self.cluster_nodes = get_node_objs()
         ec2_instances = self.get_ec2_instances(self.cluster_nodes)
         assert ec2_instances, (
             f"Failed to get ec2 instances for nodes {[n.name for n in self.cluster_nodes]}"
