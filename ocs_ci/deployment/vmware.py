@@ -426,16 +426,27 @@ class VSPHEREUPI(VSPHEREBASE):
                 def_zone = 'provider "aws" { region = "%s" } \n' % config.ENV_DATA.get('region')
                 replace_content_in_file(constants.INSTALLER_ROUTE53, "xyz", def_zone)
 
-            # increase CPUs
+            # increase CPUs and memory
             worker_num_cpus = config.ENV_DATA.get('worker_num_cpus')
             master_num_cpus = config.ENV_DATA.get('master_num_cpus')
-            if worker_num_cpus or master_num_cpus:
+            worker_memory = config.ENV_DATA.get('compute_memory')
+            master_memory = config.ENV_DATA.get('master_memory')
+            if (
+                    worker_num_cpus
+                    or master_num_cpus
+                    or master_memory
+                    or worker_memory
+            ):
                 with open(constants.VSPHERE_MAIN, 'r') as fd:
                     obj = hcl.load(fd)
                     if worker_num_cpus:
                         obj['module']['compute']['num_cpu'] = worker_num_cpus
                     if master_num_cpus:
                         obj['module']['control_plane']['num_cpu'] = master_num_cpus
+                    if worker_memory:
+                        obj['module']['compute']['memory'] = worker_memory
+                    if master_memory:
+                        obj['module']['control_plane']['memory'] = master_memory
                 # Dump data to json file since hcl module
                 # doesn't support dumping of data in HCL format
                 dump_data_to_json(obj, f"{constants.VSPHERE_MAIN}.json")
