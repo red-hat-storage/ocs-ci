@@ -799,10 +799,11 @@ def verify_pvs_created(num_workers):
     logger.info("Verifying PVs are created")
     out = run_cmd("oc get pv -o json")
     pv_json = json.loads(out)
+    assert pv_json['items'], f"No PVs created but we are expecting {num_workers}"
     for pv in pv_json['items']:
         pv_state = pv['status']['phase']
         pv_name = pv['metadata']['name']
-        logger.info("%s is %s", pv_name, pv_state)
+        logger.info("%s is in %s state", pv_name, pv_state)
         assert pv_state == 'Available', (
             f"{pv_name} not in 'Available' state. Current state is {pv_state}"
         )
