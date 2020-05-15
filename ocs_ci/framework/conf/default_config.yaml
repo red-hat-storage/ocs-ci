@@ -19,7 +19,7 @@ RUN:
   cli_params: {}  # this will be filled with CLI parameters data
   # If the client version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version
-  client_version: '4.3.0-0.nightly'
+  client_version: '4.4.0-0.nightly'
   bin_dir: './bin'
   google_api_secret: '~/.ocs-ci/google_api_secret.json'
   rook_branch: "master"
@@ -40,7 +40,7 @@ DEPLOYMENT:
   # if the installer version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version. You can also use the
   # specific build version like: "4.2.0-0.nightly-2019-08-06-195545"
-  installer_version: "4.3.0-0.nightly"
+  installer_version: "4.4.0-0.nightly"
   force_download_installer: True
   force_download_client: True
   default_latest_tag: 'latest-4.4'
@@ -104,7 +104,7 @@ ENV_DATA:
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
   # Default RHCOS image to be used for VmWare deployment
-  vm_template: 'rhcos-4.3.0-x86_64-vmware'
+  vm_template: 'rhcos-4.4.0-rc.1-x86_64-vmware.x86_64'
   # minimal write speed of fio as used in workload_fio_storageutilization
   # fixtures, which is used to compute timeout of the write job (so that
   # when actual write speed of the operation is smaller than this value, the
