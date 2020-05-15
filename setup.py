@@ -45,6 +45,8 @@ setup(
         'semantic-version',
         'jsonschema>=3.2.0',
         'google-cloud-storage',
+        'elasticsearch',
+        'numpy',
     ],
     entry_points={
         'console_scripts': [
