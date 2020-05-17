@@ -1523,7 +1523,7 @@ def mcg_obj_fixture(request):
         except CommandFailed as e:
             if 'unable to find target' in repr(e):
                 logging.warning(
-                    'Failed to remove cluster-admin role from the NooBaa ServiceAccount'
+                    'Failed to remove cluster-admin role from the NooBaa service account'
                 )
             else:
                 raise e
