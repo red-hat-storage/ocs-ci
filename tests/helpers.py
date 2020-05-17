@@ -1338,9 +1338,9 @@ def change_default_storageclass(scname):
     return True
 
 
-def verify_volume_deleted_in_backend(interface, image_uuid, pool_name=None):
+def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
     """
-    Verify that Image/Subvolume is not present in the backend.
+    Check whether Image/Subvolume is present in the backend.
 
     Args:
         interface (str): The interface backed the PVC
@@ -1354,7 +1354,8 @@ def verify_volume_deleted_in_backend(interface, image_uuid, pool_name=None):
         pool_name (str): Name of the rbd-pool if interface is CephBlockPool
 
     Returns:
-        bool: True if volume is not present. False if volume is present
+        bool: True if volume is present and False if volume is not present
+
     """
     ct_pod = pod.get_ceph_tools_pod()
     if interface == constants.CEPHBLOCKPOOL:
@@ -1369,17 +1370,67 @@ def verify_volume_deleted_in_backend(interface, image_uuid, pool_name=None):
 
     try:
         ct_pod.exec_ceph_cmd(ceph_cmd=cmd, format='json')
-        return False
+        logger.info(
+            f"Verified: Volume corresponding to uuid {image_uuid} exists "
+            f"in backend"
+        )
+        return True
     except CommandFailed as ecf:
         assert valid_error in str(ecf), (
-            f"Error occurred while verifying volume is deleted in backend: "
+            f"Error occurred while verifying volume is present in backend: "
             f"{str(ecf)} ImageUUID: {image_uuid}. Interface type: {interface}"
         )
-    logger.info(
-        f"Verified: Volume corresponding to uuid {image_uuid} is deleted "
-        f"in backend"
-    )
-    return True
+        logger.info(
+            f"Volume corresponding to uuid {image_uuid} does not exist "
+            f"in backend"
+        )
+        return False
+
+
+def verify_volume_deleted_in_backend(
+    interface, image_uuid, pool_name=None, timeout=180
+):
+    """
+    Ensure that Image/Subvolume is deleted in the backend.
+
+    Args:
+        interface (str): The interface backed the PVC
+        image_uuid (str): Part of VolID which represents
+            corresponding image/subvolume in backend
+            eg: oc get pv/<volumeName> -o jsonpath='{.spec.csi.volumeHandle}'
+                Output is the CSI generated VolID and looks like:
+                '0001-000c-rook-cluster-0000000000000001-
+                f301898c-a192-11e9-852a-1eeeb6975c91' where
+                image_uuid is 'f301898c-a192-11e9-852a-1eeeb6975c91'
+        pool_name (str): Name of the rbd-pool if interface is CephBlockPool
+        timeout (int): Wait time for the volume to be deleted.
+
+    Returns:
+        bool: True if volume is deleted before timeout.
+            False if volume is not deleted.
+    """
+    try:
+        for ret in TimeoutSampler(
+            timeout, 2, is_volume_present_in_backend, interface=interface,
+            image_uuid=image_uuid, pool_name=pool_name
+        ):
+            if not ret:
+                break
+        logger.info(
+            f"Verified: Volume corresponding to uuid {image_uuid} is deleted "
+            f"in backend"
+        )
+        return True
+    except TimeoutExpiredError:
+        logger.error(
+            f"Volume corresponding to uuid {image_uuid} is not deleted "
+            f"in backend"
+        )
+        # Log 'ceph progress' and 'ceph rbd task list' for debugging purpose
+        ct_pod = pod.get_ceph_tools_pod()
+        ct_pod.exec_ceph_cmd('ceph progress')
+        ct_pod.exec_ceph_cmd('ceph rbd task list')
+        return False
 
 
 def create_serviceaccount(namespace):
