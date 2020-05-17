@@ -148,7 +148,7 @@ class TestBucketIO(ManageTest):
                 f'Downloading {obj["Key"]} from AWS bucket {public_bucket}'
             )
             download_obj_cmd = f'cp s3://{public_bucket}/{obj["Key"]}'
-            awscli_pod.exec_cmd_on_pod(command=craft_s3_command(download_obj_cmd))
+            awscli_pod.exec_cmd_on_pod(command=craft_s3_command(mcg_obj, download_obj_cmd))
             download_files.append(obj['Key'])
         # Write all downloaded objects to the new bucket
         bucketname = bucket_factory(1)[0].name
