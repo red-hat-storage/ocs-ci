@@ -1498,7 +1498,7 @@ def delete_deploymentconfig_pods(pod_obj):
                 dc_ocp_obj.wait_for_delete(resource_name=pod_obj.get_labels().get('name'))
 
 
-def craft_s3_command(mcg_obj, cmd):
+def craft_s3_command(cmd, mcg_obj=None):
     """
     Crafts the AWS CLI S3 command including the
     login credentials and command to be ran

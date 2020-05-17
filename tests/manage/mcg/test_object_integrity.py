@@ -120,7 +120,7 @@ class TestObjectIntegrity(ManageTest):
             logger.info(
                 f'Downloading {obj["Key"]} from AWS bucket {public_bucket}'
             )
-            download_obj_cmd = f'cp s3://{public_bucket}/{obj["Key"]}'
+            download_obj_cmd = f'cp s3://{public_bucket}/{obj["Key"]} {original_dir}'
             awscli_pod.exec_cmd_on_pod(command=craft_s3_command(download_obj_cmd))
             download_files.append(obj['Key'].split('/')[-1])
 

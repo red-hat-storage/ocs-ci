@@ -1650,7 +1650,7 @@ def uploaded_objects_fixture(
             log.info(f'Deleting object {uploaded_filename}')
             awscli_pod.exec_cmd_on_pod(
                 command=helpers.craft_s3_command(
-                    mcg_obj, "rm " + uploaded_filename
+                    "rm " + uploaded_filename, mcg_obj
                 ),
                 secrets=[
                     mcg_obj.access_key_id,

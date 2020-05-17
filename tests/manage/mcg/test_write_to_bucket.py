@@ -147,14 +147,17 @@ class TestBucketIO(ManageTest):
             logger.info(
                 f'Downloading {obj["Key"]} from AWS bucket {public_bucket}'
             )
-            download_obj_cmd = f'cp s3://{public_bucket}/{obj["Key"]}'
-            awscli_pod.exec_cmd_on_pod(command=craft_s3_command(mcg_obj, download_obj_cmd))
+            download_obj_cmd = f'cp s3://{public_bucket}/{obj["Key"]} {data_dir}'
+            awscli_pod.exec_cmd_on_pod(
+                command=craft_s3_command(download_obj_cmd),
+                out_yaml_format=False
+            )
             download_files.append(obj['Key'])
         # Write all downloaded objects to the new bucket
         bucketname = bucket_factory(1)[0].name
         base_path = f"s3://{bucketname}"
         for i in range(amount):
-            full_object_path = base_path + f"/{i}/" + obj_key.split('/')[-1]
+            full_object_path = base_path + f"/{i}/"
             helpers.sync_object_directory(
                 awscli_pod, data_dir, full_object_path, mcg_obj
             )
