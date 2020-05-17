@@ -7,7 +7,7 @@ import time
 import os
 
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility.utils import TimeoutSampler, ocsci_log_path, ceph_health_check
+from ocs_ci.utility.utils import TimeoutSampler, ocsci_log_path
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -47,8 +47,6 @@ def label_nodes(request, with_ocs):
     m_set = ''  # this will hold machine_set name that added
 
     def teardown():
-
-        ceph_health_check()
 
         if with_ocs:
             return
