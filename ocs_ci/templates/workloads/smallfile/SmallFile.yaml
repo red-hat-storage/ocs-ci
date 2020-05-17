@@ -11,12 +11,13 @@ spec:
   test_user: homer_simpson
   clustername: place-holder
   elasticsearch:
-    #server: 10.0.144.152 <- debuging server
-    server: 10.0.78.167
+    server: 10.0.144.152
+    #server: 10.0.78.167 <- debuging server
     port: 9200
   es_index: ripsaw-smallfile
-  metadata_collection: true
-  index_data: true
+  metadata_collection: False
+  index_data: False
+  output-json: STDOUT
   workload:
     name: smallfile
     args:
@@ -29,3 +30,4 @@ spec:
       files: 50000
       storageclass: ocs-storageclass-ceph-rbd
       storagesize: 100Gi
+
