@@ -102,7 +102,16 @@ def config_to_string(config):
     """
     string = ""
     sections = [config.default_section] + config.sections()
+
+    first = True
     for section in sections:
-        string += f"[{section}]\n"
-        string += "\n".join([f"{item[0]}={item[1]}" for item in config.items(section)])
+        if config.items(section):
+            if first:
+                first = False
+            else:
+                string += "\n\n"
+            string += f"[{section}]\n"
+            string += "\n".join(
+                [f"{item[0]}={item[1]}" for item in config.items(section)]
+            )
     return string
