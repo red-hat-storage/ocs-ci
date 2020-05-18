@@ -59,7 +59,7 @@ class BAREMETAL(object):
         return VM_POWERED_ON if chassis_status.power_on else VM_POWERED_OFF
 
     @retry(UnexpectedBehaviour, tries=4, delay=3, backoff=1)
-    def verify_machine_is_down(self,baremetal_machine):
+    def verify_machine_is_down(self, baremetal_machine):
         """
         Verifiy Baremetal machine is completely power off
 
