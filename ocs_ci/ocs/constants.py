@@ -841,3 +841,7 @@ VMDK = "VMDK"
 DIRECTPATH = "VMDirectPath"
 DISK_MODE = "independent_persistent"
 COMPATABILITY_MODE = "physicalMode"
+
+# OS
+RHEL_OS = "RHEL"
+RHCOS = "RHCOS"

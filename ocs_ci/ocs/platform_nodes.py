@@ -17,7 +17,9 @@ from ocs_ci.utility import aws, vsphere, templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.ocs import constants, ocp, exceptions
-from ocs_ci.ocs.node import get_node_objs, get_typed_worker_nodes
+from ocs_ci.ocs.node import (
+    get_node_objs, get_typed_worker_nodes, get_typed_nodes,
+)
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.csr import (
@@ -1328,7 +1330,7 @@ class VSPHEREUPINode(VMWareNodes):
         self.node_conf = node_conf
         self.node_type = node_type
         self.compute_count = compute_count
-        self.current_compute_count = config.ENV_DATA.get('worker_replicas', 3)
+        self.current_compute_count = len(get_typed_nodes())
         self.target_compute_count = (self.current_compute_count
                                      + self.compute_count)
         self.previous_dir = os.getcwd()
@@ -1411,7 +1413,7 @@ class VSPHEREUPINode(VMWareNodes):
         """
         Add nodes to the current cluster
         """
-        if self.node_type == "RHCOS":
+        if self.node_type == constants.RHCOS:
             logger.info(f"Adding Nodes of type {self.node_type}")
             logger.info(
                 f"Existing worker nodes: {self.current_compute_count}, "
