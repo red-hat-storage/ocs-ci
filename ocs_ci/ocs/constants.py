@@ -200,6 +200,10 @@ DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
 CEPH_ROOK_IO_PVC_LABEL = 'ceph.rook.io/pvc'
 
+# Auth Yaml
+OCSCI_DATA_BUCKET = 'ocs-ci-data'
+AUTHYAML = 'auth.yaml'
+
 # OBJ File representing serialized data
 NODE_OBJ_FILE = "node_file.objs"
 NODE_FILE = "nodes.objs"
