@@ -2,15 +2,15 @@
 # Obviously, you have to adjust the S3 credentials; for this example,
 # they're passed in via the environment.
 #
-# Taken from https://github.com/axboe/fio/blob/master/examples/http-s3.fio
+# Based on https://github.com/axboe/fio/blob/master/examples/http-s3.fio
 
 [global]
 ioengine=http
 name=test
 direct=1
 filename=/larsmb-fio-test/object
-http_verbose=0
-https=on
+http_verbose=1
+https=insecure
 http_mode=s3
 http_s3_key=${S3_KEY}
 http_s3_keyid=${S3_ID}
@@ -23,12 +23,12 @@ group_reporting=1
 rw=write
 bs=4k
 size=64k
-io_size=4k
-verify=sha256
-
-[trim]
-stonewall=1
-rw=trim
-bs=4k
-size=64k
-io_size=4k
+# io_size=4k
+# verify=sha256
+# 
+# [trim]
+# stonewall=1
+# rw=trim
+# bs=4k
+# size=64k
+# io_size=4k
