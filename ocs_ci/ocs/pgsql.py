@@ -121,7 +121,6 @@ class Postgresql(RipSaw):
                 ]['workload']['args']['scaling_factor'] = scaling_factor
             pg_obj = OCS(**pg_data)
             pg_obj.create()
-
         # Confirm that expected pgbench pods are spinned
         log.info("Checking if Getting pgbench pods name")
         timeout = timeout if timeout else 300
@@ -260,8 +259,20 @@ class Postgresql(RipSaw):
 
     def cleanup(self):
         """
-        Clean pgench pods
+        Clean up
 
         """
-        log.info("Deleting configuration created for ripsaw")
+        log.info("Deleting postgres pods and configuration")
+        if self.pgsql_is_setup:
+            self.pgsql_sset.delete()
+            self.pgsql_cmap.delete()
+            self.pgsql_service.delete()
+        log.info("Deleting pgbench pods")
+        pods_obj = self.get_pgbench_pods()
+        for pod in pods_obj:
+            pod.delete()
+            pod.ocp.wait_for_delete(pod.name)
+        log.info("Deleting ripsaw configuration")
+        import pdb
+        pdb.set_trace()
         RipSaw.cleanup(self)
