@@ -8,7 +8,6 @@ from ocs_ci.ocs.constants import VM_POWERED_OFF, VM_POWERED_ON
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
-from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, load_auth_config, exec_cmd
 from tests import helpers
 
