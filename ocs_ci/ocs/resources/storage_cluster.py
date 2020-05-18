@@ -62,7 +62,11 @@ def ocs_install_verification(
     """
     from ocs_ci.ocs.node import get_typed_nodes
     from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
-    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_all_pods
+    from ocs_ci.ocs.resources.pod import (
+        get_ceph_tools_pod, get_all_pods,
+        get_osd_pods, get_pod_node
+    )
+
     number_of_worker_nodes = len(get_typed_nodes())
     namespace = config.ENV_DATA['cluster_namespace']
     log.info("Verifying OCS installation")
@@ -261,10 +265,9 @@ def ocs_install_verification(
 
     # Verify ceph osd tree output
     log.info(
-        "Verifying ceph osd tree output and checking for device set PVC names "
-        "in the output."
+        "Verifying ceph osd tree output and checking for device set PVC "
+        "names or host names in the output."
     )
-    deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
     ct_pod = get_ceph_tools_pod()
     osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree', format='json')
     schemas = {
@@ -275,18 +278,27 @@ def ocs_install_verification(
         'region': constants.OSD_TREE_REGION,
         'zone': constants.OSD_TREE_ZONE
     }
-    schemas['host']['properties']['name'] = {'enum': deviceset_pvcs}
+
+    osd_pods = get_osd_pods()
+
+    # Deviceset PVC names will be present in 'ceph osd tree' output if osds
+    # are portable. Otherwise, hostnames will be present(eg: LSO based)
+    if osd_pods[0].labels.get('portable') == 'true':
+        devicesets_hosts = [pvc.name for pvc in get_deviceset_pvcs()]
+    else:
+        devicesets_hosts = [get_pod_node(osd_pod).name for osd_pod in osd_pods]
+    schemas['host']['properties']['name'] = {'enum': devicesets_hosts}
     for item in osd_tree['nodes']:
         validate(instance=item, schema=schemas[item['type']])
         if item['type'] == 'host':
-            deviceset_pvcs.remove(item['name'])
-    assert not deviceset_pvcs, (
-        f"These device set PVCs are not given in ceph osd tree output "
-        f"- {deviceset_pvcs}"
+            devicesets_hosts.remove(item['name'])
+    assert not devicesets_hosts, (
+        f"These device set PVC or host names are not given in ceph osd tree "
+        f"output - {devicesets_hosts}"
     )
     log.info(
-        "Verified ceph osd tree output. Device set PVC names are given in the "
-        "output."
+        "Verified ceph osd tree output. Device set PVC names or host names "
+        "are given in the output."
     )
 
     # TODO: Verify ceph osd tree output have osd listed as ssd
