@@ -284,7 +284,7 @@ class Postgresql(RipSaw):
 
         """
         pgsql_pod_objs = self.pod_obj.get(selector=constants.PGSQL_APP_LABEL, all_namespaces=True)
-        log.info(f"Create a list of nodes that contain a pgsql app pod (without duplicate nodes in the list)")
+        log.info("Create a list of nodes that contain a pgsql app pod")
         nodes_set = set()
         for pod in pgsql_pod_objs['items']:
             log.info(f"pod {pod['metadata']['name']} located on node {pod['spec']['nodeName']}")
