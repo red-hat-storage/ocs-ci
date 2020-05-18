@@ -25,7 +25,6 @@ def pgsql(request):
 
 
 @workloads
-@pytest.mark.polarion_id("OCS-820")
 class TestPgSQLNodeReboot(E2ETest):
     """
     Test running PGSQL and with Ceph pods respin
