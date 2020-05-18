@@ -58,22 +58,19 @@ class BAREMETAL(object):
         chassis_status = ipmi_ctx.get_chassis_status()
         return VM_POWERED_ON if chassis_status.power_on else VM_POWERED_OFF
 
-    @retry(UnexpectedBehaviour, tries=4, delay=3, backoff=1)
-    def verify_machine_is_down(self, baremetal_machine):
+    def verify_machine_is_down(self, node):
         """
         Verifiy Baremetal machine is completely power off
 
         Args:
-            baremetal_machine (list): BM objects
-
-        Raises:
-            UnexpectedBehaviour: If baremetal machine is still up
+            node (object): Node objects
 
         """
-        for node in baremetal_machine:
-            result = exec_cmd(cmd=f"ping {node.name} -c 100", ignore_error=True)
-            if result.returncode == 0:
-                raise UnexpectedBehaviour(f"Machine {node.name} is still up")
+        result = exec_cmd(cmd=f"ping {node.name} -c 50", ignore_error=True)
+        if result.returncode == 0:
+            return False
+        else:
+            return True
 
     def stop_baremetal_machines(self, baremetal_machine, force=True):
         """
@@ -113,7 +110,17 @@ class BAREMETAL(object):
                             logger.info(f"Baremetal Machine {node.name} reached poweredOff status")
                             break
         logger.info("Verifing machine is down")
-        self.verify_machine_is_down(baremetal_machine)
+        for node in baremetal_machine:
+            try:
+                for ret in TimeoutSampler(
+                    10, 10, self.verify_machine_is_down, node=node,
+                ):
+                    if ret:
+                        break
+            except UnexpectedBehaviour:
+                logger.error(
+                    f"Machine {node.name} is still Running"
+                )
 
     def start_baremetal_machines_with_ipmi_ctx(self, ipmi_ctxs, wait=True):
         """
