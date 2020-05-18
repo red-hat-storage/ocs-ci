@@ -113,7 +113,7 @@ class BAREMETAL(object):
                             logger.info(f"Baremetal Machine {node.name} reached poweredOff status")
                             break
         logger.info("Verifing machine is down")
-        self.verify_machine_is_down()
+        self.verify_machine_is_down(baremetal_machine)
 
     def start_baremetal_machines_with_ipmi_ctx(self, ipmi_ctxs, wait=True):
         """
