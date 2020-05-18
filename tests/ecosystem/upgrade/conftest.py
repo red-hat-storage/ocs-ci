@@ -227,8 +227,13 @@ def fio_conf_mcg(workload_bucket, mcg_obj_session):
     config.set('global', 'name', workload_bucket[0].name)
     config.set('global', 'http_s3_key', mcg_obj_session.access_key)
     config.set('global', 'http_s3_keyid', mcg_obj_session.access_key_id)
-    config.set('global', 'http_host', mcg_obj_session.s3_endpoint)
+    config.set(
+        'global',
+        'http_host',
+        mcg_obj_session.s3_endpoint.lstrip('https://').rstrip(':443')
+    )
     config.set('global', 'http_s3_region', mcg_obj_session.region)
+    config.set('global', 'filename', f"/{workload_bucket[0].name}/object")
     config.set('create', 'time_based', '1')
     config.set('create', 'runtime', '24h')
     return config_to_string(config)
@@ -606,6 +611,7 @@ def mcg_workload_job(
 
     job_name = fio_job_dict_mcg['metadata']['name']
 
+    log.info(f"Creating job {job_name}")
     job_file = ObjectConfFile(
         "fio_continuous",
         fio_objs,
@@ -615,6 +621,7 @@ def mcg_workload_job(
 
     # deploy the Job to the cluster and start it
     job_file.create()
+    log.info(f"Job {job_name} created")
 
     # get job object
     ocp_job_obj = ocp.OCP(kind=constants.JOB, namespace=fio_project.namespace)
@@ -707,27 +714,3 @@ def fio_job_dict_mcg(fio_job_dict_session):
     job_spec['containers'][0]['volumeMounts'].pop(0)
 
     return fio_job_dict_mcg
-
-
-@pytest.fixture(scope='session')
-def mcg_workload_jobs(
-    fio_job_dict_mcg,
-    fio_configmap_dict_session,
-    fio_conf_mcg,
-    fio_project,
-    tmp_path
-):
-    """
-    Creates kubernetes jobs that should utilize MCG during upgrade.
-
-    Returns:
-        list: List of job objects
-
-    """
-    fio_objs = [fio_configmap_dict_session, fio_job_dict_mcg]
-    job_file = ObjectConfFile(
-        "fio_continuous",
-        fio_objs,
-        fio_project,
-        tmp_path
-    )
