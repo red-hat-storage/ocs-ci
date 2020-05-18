@@ -65,7 +65,7 @@ class BAREMETAL(object):
             node (object): Node objects
 
         """
-        result = exec_cmd(cmd=f"ping {node.name} -c 50", ignore_error=True)
+        result = exec_cmd(cmd=f"ping {node.name} -c 10", ignore_error=True)
         if result.returncode == 0:
             return False
         else:
@@ -109,17 +109,12 @@ class BAREMETAL(object):
                             logger.info(f"Baremetal Machine {node.name} reached poweredOff status")
                             break
         logger.info("Verifing machine is down")
-        for node in baremetal_machine:
-            try:
-                for ret in TimeoutSampler(
-                    10, 10, self.verify_machine_is_down, node=node,
-                ):
-                    if ret:
-                        break
-            except UnexpectedBehaviour:
-                logger.error(
-                    f"Machine {node.name} is still Running"
-                )
+        ret = TimeoutSampler(
+            timeout=300, sleep=3, func=self.verify_machine_is_down, node=node,
+        )
+        logger.info(ret)
+        if not ret.wait_for_func_status(result=True):
+            raise UnexpectedBehaviour("Machine {node.name} is still Running")
 
     def start_baremetal_machines_with_ipmi_ctx(self, ipmi_ctxs, wait=True):
         """
