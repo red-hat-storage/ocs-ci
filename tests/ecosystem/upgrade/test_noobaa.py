@@ -196,7 +196,7 @@ def test_start_upgrade_mcg_io(mcg_workload_job):
     """
     job_status = None
     # wait a few seconds for fio job to start
-    for i in range(0,5):
+    for i in range(0, 5):
         job = mcg_workload_job.ocp.get(
             resource_name=mcg_workload_job.ocp.resource_name,
             out_yaml_format=True
