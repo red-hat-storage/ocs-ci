@@ -1,6 +1,7 @@
 import logging
 
 import pytest
+import time
 
 from ocs_ci.framework.pytest_customization.marks import (
     pre_upgrade, post_upgrade,
@@ -164,24 +165,6 @@ def test_noobaa_postupgrade(
     assert bucket.status == constants.STATUS_BOUND
 
 
-@pre_upgrade
-def test_start_upgrade_mcg_io(mcg_workload_job):
-    """
-    Confirm that there are MCG workload jobs running before upgrade.
-    """
-    # TODO(fbalak): check that all jobs are running
-    assert mcg_workload_job
-
-
-@post_upgrade
-def test_upgrade_mcg_io(mcg_workload_job):
-    """
-    Confirm that there are MCG workload jobs running after upgrade.
-    """
-    # TODO(fbalak): check that all jobs are running
-    assert mcg_workload_job
-
-
 @aws_platform_required
 @bugzilla('1820974')
 @pre_upgrade
@@ -207,20 +190,34 @@ def test_buckets_after_upgrade(upgrade_buckets, mcg_obj_session):
 
 
 @pre_upgrade
-@ignore_leftovers
-def test_start_upgrade_mcg_io(mcg_workload_jobs):
+def test_start_upgrade_mcg_io(mcg_workload_job):
     """
-    Confirm that there are MCG workload jobs running before upgrade.
+    Confirm that there is MCG workload job running before upgrade.
     """
-    # TODO(fbalak): check that all jobs are running
-    assert mcg_workload_jobs
+    job_status = None
+    # wait a few seconds for fio job to start
+    for i in range(0,5):
+        job = mcg_workload_job.ocp.get(
+            resource_name=mcg_workload_job.ocp.resource_name,
+            out_yaml_format=True
+        )
+        # 'active' attribute holds information about how many pods are running
+        job_status = job['items'][0]['status']['active']
+        if job_status == 1:
+            break
+        time.sleep(3)
+    assert job_status == 1
 
 
 @post_upgrade
-@ignore_leftovers
-def test_upgrade_mcg_io(mcg_workload_jobs):
+def test_upgrade_mcg_io(mcg_workload_job):
     """
-    Confirm that there are MCG workload jobs running after upgrade.
+    Confirm that there is MCG workload job running after upgrade.
     """
-    # TODO(fbalak): check that all jobs are running
-    assert mcg_workload_jobs
+    job = mcg_workload_job.ocp.get(
+        resource_name=mcg_workload_job.ocp.resource_name,
+        out_yaml_format=True
+    )
+    # 'active' attribute holds information about how many pods are running
+    job_status = job['items'][0]['status']['active']
+    assert job_status == 1
