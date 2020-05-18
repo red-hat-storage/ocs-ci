@@ -200,6 +200,10 @@ DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
 CEPH_ROOK_IO_PVC_LABEL = 'ceph.rook.io/pvc'
 
+# Auth Yaml
+OCSCI_DATA_BUCKET = 'ocs-ci-data'
+AUTHYAML = 'auth.yaml'
+
 
 # YAML paths
 TOOL_POD_YAML = os.path.join(
@@ -559,6 +563,7 @@ MASTER_IGN = "master.ign"
 WORKER_IGN = "worker.ign"
 
 # vSphere related constants
+VSPHERE_INSTALLER_BRANCH = "release-4.3"
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
 VSPHERE_SCALEUP_REPO = "https://code.engineering.redhat.com/gerrit/openshift-misc"
 VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")

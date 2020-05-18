@@ -497,7 +497,7 @@ def get_new_device_paths(device_sets_required, osd_size_capacity_requested):
         osd_size_capacity_requested (int) : Requested OSD size capacity
 
     Returns:
-        cur_device_list (list) : List containing added device paths
+        list : List containing added device paths
 
     """
     ocp_obj = OCP()
@@ -563,7 +563,7 @@ def check_local_volume():
         namespace=constants.LOCAL_STORAGE_NAMESPACE
     ):
         ocp_obj = OCP()
-        command = "get localvolume localblock -n local-storage "
+        command = "get localvolume local-block -n local-storage "
         status = ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
         return "No resources found" not in status
 

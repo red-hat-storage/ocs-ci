@@ -1239,6 +1239,10 @@ def get_testrun_name():
             f"OSD {config.ENV_DATA.get('osd_type').upper()}"
         )
 
+    lso_deployment = ''
+    if not baremetal_config and config.DEPLOYMENT.get('local_storage'):
+        lso_deployment = 'LSO '
+
     if config.REPORTING.get('display_name'):
         testrun_name = config.REPORTING.get('display_name')
     else:
@@ -1254,6 +1258,7 @@ def get_testrun_name():
             f"{testrun_name}"
             f"{get_az_count()}AZ "
             f"{worker_os} "
+            f"{lso_deployment}"
             f"{config.ENV_DATA.get('master_replicas')}M "
             f"{config.ENV_DATA.get('worker_replicas')}W "
             f"{markers}"
@@ -1990,3 +1995,23 @@ def destroy_cluster(installer, cluster_path, log_level="DEBUG"):
         raise
     except Exception:
         log.error(traceback.format_exc())
+
+
+class AZInfo(object):
+    """
+    A class for getting different az numbers across calls
+    """
+    zone_number = 0
+
+    def get_zone_number(self):
+        """
+        Increment current zone_number and perform modulus op
+        to roll-on to next available number
+
+        Returns:
+           int: zone number index
+        """
+        prev = AZInfo.zone_number
+        AZInfo.zone_number += 1
+        AZInfo.zone_number %= get_az_count()
+        return prev

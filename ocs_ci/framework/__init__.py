@@ -19,6 +19,7 @@ DEFAULT_CONFIG_PATH = os.path.join(THIS_DIR, "conf/default_config.yaml")
 
 @dataclass
 class Config:
+    AUTH: dict = field(default_factory=dict)
     DEPLOYMENT: dict = field(default_factory=dict)
     ENV_DATA: dict = field(default_factory=dict)
     REPORTING: dict = field(default_factory=dict)
