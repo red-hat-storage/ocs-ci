@@ -210,6 +210,7 @@ def test_start_upgrade_mcg_io(mcg_workload_job):
 
 
 @post_upgrade
+@pytest.mark.polarion_id("OCS-2207")
 def test_upgrade_mcg_io(mcg_workload_job):
     """
     Confirm that there is MCG workload job running after upgrade.
