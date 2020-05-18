@@ -5,9 +5,11 @@ import pyipmi.interfaces
 
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.constants import VM_POWERED_OFF, VM_POWERED_ON
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
-from ocs_ci.utility.utils import TimeoutSampler, load_auth_config
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import TimeoutSampler, load_auth_config, exec_cmd
 from tests import helpers
 
 logger = logging.getLogger(__name__)
@@ -56,6 +58,23 @@ class BAREMETAL(object):
         chassis_status = ipmi_ctx.get_chassis_status()
         return VM_POWERED_ON if chassis_status.power_on else VM_POWERED_OFF
 
+    @retry(UnexpectedBehaviour, tries=4, delay=3, backoff=1)
+    def verify_machine_is_down(self,baremetal_machine):
+        """
+        Verifiy Baremetal machine is completely power off
+
+        Args:
+            baremetal_machine (list): BM objects
+
+        Raises:
+            UnexpectedBehaviour: If baremetal machine is still up
+
+        """
+        for node in baremetal_machine:
+            result = exec_cmd(cmd=f"ping {node.name} -c 100", ignore_error=True)
+            if result.returncode == 0:
+                raise UnexpectedBehaviour(f"Machine {node.name} is still up")
+
     def stop_baremetal_machines(self, baremetal_machine, force=True):
         """
         Stop Baremetal Machines
@@ -93,6 +112,8 @@ class BAREMETAL(object):
                         if status == VM_POWERED_OFF:
                             logger.info(f"Baremetal Machine {node.name} reached poweredOff status")
                             break
+        logger.info("Verifing machine is down")
+        self.verify_machine_is_down()
 
     def start_baremetal_machines_with_ipmi_ctx(self, ipmi_ctxs, wait=True):
         """
