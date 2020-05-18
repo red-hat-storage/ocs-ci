@@ -91,7 +91,7 @@ class RipSaw(object):
     def cleanup(self):
         run(f'oc delete -f {self.crd}', shell=True, cwd=self.dir)
         run(f'oc delete -f {self.operator}', shell=True, cwd=self.dir)
-        run(f'oc delete -f deploy', shell=True, cwd=self.dir)
+        run('oc delete -f deploy', shell=True, cwd=self.dir)
         run_cmd(f'oc delete project {self.namespace}')
         self.ns_obj.wait_for_delete(resource_name=self.namespace)
         # Reset namespace to default

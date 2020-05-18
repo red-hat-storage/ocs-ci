@@ -273,6 +273,4 @@ class Postgresql(RipSaw):
             pod.delete()
             pod.ocp.wait_for_delete(pod.name)
         log.info("Deleting ripsaw configuration")
-        import pdb
-        pdb.set_trace()
         RipSaw.cleanup(self)
