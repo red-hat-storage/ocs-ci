@@ -16,7 +16,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
-from tests import helpers
 
 log = logging.getLogger(__name__)
 
@@ -75,7 +74,6 @@ class AMQ(object):
             self.hello_world_producer_yaml = constants.HELLO_WORLD_PRODUCER_YAML
             self.hello_world_consumer_yaml = constants.HELLO_WORLD_CONSUMER_YAML
 
-
         except (CommandFailed, CalledProcessError)as cf:
             log.error('Error during cloning of amq repository')
             raise cf
@@ -104,7 +102,7 @@ class AMQ(object):
         try:
             self.create_namespace(namespace)
         except CommandFailed as ef:
-            if str(ef) not in f"project.project.openshift.io {namespace} already exists":
+            if f'project.project.openshift.io "{namespace}" already exists' not in str(ef):
                 raise ef
 
         # Create strimzi-cluster-operator pod
@@ -163,52 +161,27 @@ class AMQ(object):
 
         return _rc
 
-    def change_cephfs_sc_to_default(self):
-        """
-        Change cephfs StorageClass to default
-
-        """
-        log.info(
-            f"Changing the default StorageClass to {constants.DEFAULT_STORAGECLASS_CEPHFS}"
-        )
-        helpers.change_default_storageclass(scname=constants.DEFAULT_STORAGECLASS_CEPHFS)
-
-        # Confirm that the default StorageClass is changed
-        tmp_default_sc = helpers.get_default_storage_class()
-        assert len(
-            tmp_default_sc
-        ) == 1, "More than 1 default storage class exist"
-        log.info(f"Current Default StorageClass is:{tmp_default_sc[0]}")
-        assert tmp_default_sc[0] == constants.DEFAULT_STORAGECLASS_CEPHFS, (
-            "Failed to change default StorageClass"
-        )
-        log.info(
-            f"Successfully changed the default StorageClass to "
-            f"{constants.DEFAULT_STORAGECLASS_CEPHFS}"
-        )
-        self.cephfs_sc_to_default = True
-        return self.cephfs_sc_to_default
-
-    def setup_amq_kafka_persistent(self, size=100, replicas=3):
+    def setup_amq_kafka_persistent(self, sc_name, size=100, replicas=3):
         """
         Function to setup amq-kafka-persistent, the file is pulling from github
         it will make kind: Kafka and will make sure the status is running
 
         Args:
+            sc_name (str): Name of sc
             size (int): Size of the storage in Gi
             replicas (int): Number of kafka and zookeeper pods to be created
 
         return : kafka_persistent
 
         """
-        # Change cephfs StorageClass to default
-        assert self.change_cephfs_sc_to_default()
         try:
             kafka_persistent = templating.load_yaml(os.path.join(self.dir, self.amq_kafka_pers_yaml))
             kafka_persistent['spec']['kafka']['replicas'] = replicas
+            kafka_persistent['spec']['kafka']['storage']['volumes'][0]['class'] = sc_name
             kafka_persistent['spec']['kafka']['storage']['volumes'][0]['size'] = f"{size}Gi"
 
             kafka_persistent['spec']['zookeeper']['replicas'] = replicas
+            kafka_persistent['spec']['zookeeper']['storage']['class'] = sc_name
             kafka_persistent['spec']['zookeeper']['storage']['size'] = f"{size}Gi"
             self.kafka_persistent = OCS(**kafka_persistent)
             self.kafka_persistent.create()
@@ -279,7 +252,6 @@ class AMQ(object):
         """
         try:
             kafka_topic = templating.load_yaml(os.path.join(self.dir, self.kafka_topic_yaml))
-            # ToDo: To support multiple topics
             kafka_topic["metadata"]["name"] = name
             kafka_topic["spec"]["partitions"] = partitions
             kafka_topic["spec"]["replicas"] = replicas
@@ -307,7 +279,6 @@ class AMQ(object):
         """
         try:
             kafka_user = templating.load_yaml(os.path.join(self.dir, self.kafka_user_yaml))
-            # ToDo: Support multiple user
             kafka_user["metadata"]["name"] = name
             self.kafka_user = OCS(**kafka_user)
             self.kafka_user.create()
@@ -375,6 +346,27 @@ class AMQ(object):
         else:
             raise ResourceWrongStatusException("consumer pod is not getting to running state")
 
+    def validate_msg(self, pod, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
+        """
+        Validate if messages are sent or received
+
+        Args:
+            pod (str): Name of the pod
+            namespace (str): Namespace of the pod
+            value (str): Number of messages are sent
+            since_time (int): Number of seconds to required to sent the msg
+
+        Returns:
+            bool : True if all messages are sent/received
+
+        """
+        cmd = f"oc logs -n {namespace} {pod} --since={since_time}s"
+        msg = run_cmd(cmd)
+        if msg.find(f"Hello world - {int(value) - 1} ") is -1:
+            return False
+        else:
+            return True
+
     def validate_messages_are_produced(self, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
         """
         Validates if all messages are sent in producer pod
@@ -387,17 +379,19 @@ class AMQ(object):
         Raises exception on failures
 
         """
-
+        # ToDo: Support multiple topics and users
         producer_pod_objs = [get_pod_obj(
             pod
         )for pod in get_pod_name_by_pattern('hello-world-produce', namespace)
         ]
         for pod in producer_pod_objs:
-            cmd = f"oc logs -n {namespace} {pod.name} --since={since_time}s"
-            msg = run_cmd(cmd)
-            if msg.find(f"{value} messages sent") is -1:
-                log.error(f"On producer {pod.name} all or few messages are not sent")
-                raise Exception(f"On producer {pod.name} all or few messages are not sent")
+            for msg in TimeoutSampler(
+                900, 30, self.validate_msg, pod.name, namespace, value, since_time
+            ):
+                if msg:
+                    break
+        log.error("Few messages are not sent")
+        raise Exception("All messages are not sent from the producer pod")
 
     def validate_messages_are_consumed(self, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
         """
@@ -411,16 +405,20 @@ class AMQ(object):
         Raises exception on failures
 
         """
+        # ToDo: Support multiple topics and users
         consumer_pod_objs = [get_pod_obj(
             pod
         )for pod in get_pod_name_by_pattern('hello-world-consumer', namespace)
         ]
         for pod in consumer_pod_objs:
-            cmd = f"oc logs -n {namespace} {pod.name} --since={since_time}s"
-            msg = run_cmd(cmd)
-            if msg.find(f"Hello world - {int(value) - 1} ") is -1:
-                log.error(f"On consumer {pod.name} all or few messages are not sent")
-                raise Exception(f"On consumer {pod.name} all or few messages are not sent")
+            for msg in TimeoutSampler(
+                900, 30, self.validate_msg, pod.name, namespace, value, since_time
+            ):
+                if msg:
+                    log.info("Consumer pod received all messages sent by producer")
+                    break
+        log.error("Few messages are not received")
+        raise Exception("Consumer pod received all messages sent by producer")
 
     def run_in_bg(self, namespace=constants.AMQ_NAMESPACE, value='10000', since_time=1800):
         """
@@ -473,18 +471,19 @@ class AMQ(object):
         self.create_consumer_pod(num_of_consumer_pods, value)
         self.messaging = True
 
-    def setup_amq_cluster(self, namespace=constants.AMQ_NAMESPACE, size=100, replicas=3):
+    def setup_amq_cluster(self, sc_name, namespace=constants.AMQ_NAMESPACE, size=100, replicas=3):
         """
         Creates amq cluster with persistent storage.
 
         Args:
+            sc_name (str): Name of sc
             namespace (str): Namespace for amq cluster
             size (int): Size of the storage
             replicas (int): Number of kafka and zookeeper pods to be created
 
         """
         self.setup_amq_cluster_operator(namespace)
-        self.setup_amq_kafka_persistent(size, replicas)
+        self.setup_amq_kafka_persistent(sc_name, size, replicas)
         self.setup_amq_kafka_connect()
         self.setup_amq_kafka_bridge()
         self.amq_is_setup = True
@@ -510,10 +509,6 @@ class AMQ(object):
             self.kafka_bridge.delete()
             run_cmd(f'oc delete -f {self.amq_dir}', shell=True, check=True, cwd=self.dir)
         run_cmd(f'oc delete project {namespace}')
-
-        # Change the existing default Storageclass ocs-storagecluster-cephfs annotation to false
-        if self.change_cephfs_sc_to_default():
-            helpers.change_default_storageclass(scname=constants.DEFAULT_STORAGECLASS_CEPHFS)
 
         # Reset namespace to default
         switch_to_default_rook_cluster_project()
