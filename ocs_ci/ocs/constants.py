@@ -847,3 +847,9 @@ COMPATABILITY_MODE = "physicalMode"
 # OS
 RHEL_OS = "RHEL"
 RHCOS = "RHCOS"
+
+# Elasticsearch and codespeed constants
+ES_SERVER_IP = '10.0.78.167'
+ES_SERVER_PORT = '9200'
+ES_SERVER_URL = 'https://10.0.78.167:9200'
+
