@@ -59,7 +59,7 @@ class TestPgSQLNodeShut(E2ETest):
         Test pgsql workload
         """
         # Create pgbench benchmark
-        pgsql.create_pgbench_benchmark(
+        pg_obj_list = pgsql.create_pgbench_benchmark(
             replicas=3, transactions=transactions, clients=3
         )
 
@@ -73,14 +73,17 @@ class TestPgSQLNodeShut(E2ETest):
         # Stop worker nodes
         nodes.stop_nodes(node_list_objs)
 
-        # Sleep 5 min
-        time.sleep(300)
+        # Sleep 2 min
+        time.sleep(120)
 
         # Start worker nodes
         nodes.start_nodes(node_list_objs)
 
         # Check that postgresql pods in running state
         pgsql.wait_for_postgres_status(status=constants.STATUS_RUNNING, timeout=600)
+
+        # Delete pgbench benchmark
+        pgsql.delete_pgbench_pods(pg_obj_list)
 
         # Create pgbench benchmark
         pgsql.create_pgbench_benchmark(

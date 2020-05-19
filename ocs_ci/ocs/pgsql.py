@@ -99,7 +99,11 @@ class Postgresql(RipSaw):
             scaling_factor (int): scaling factor
             timeout (int): Time in seconds to wait
 
+        Returns:
+            List: pgbench pod objects list
+
         """
+        pg_obj_list = []
         for i in range(replicas):
             log.info("Create resource file for pgbench workload")
             pg_data = templating.load_yaml(constants.PGSQL_BENCHMARK_YAML)
@@ -121,6 +125,7 @@ class Postgresql(RipSaw):
                     'spec'
                 ]['workload']['args']['scaling_factor'] = scaling_factor
             pg_obj = OCS(**pg_data)
+            pg_obj_list.append(pg_obj)
             pg_obj.create()
 
         # Confirm that expected pgbench pods are spinned
@@ -142,6 +147,7 @@ class Postgresql(RipSaw):
                     f'Expected number of pgbench pods are {replicas} '
                     f'but only found {len(pgbench_pods)}'
                 )
+        return pg_obj_list
 
     def get_postgres_pods(self):
         """
@@ -166,6 +172,18 @@ class Postgresql(RipSaw):
                 pod
             ) for pod in get_pod_name_by_pattern('pgbench', RIPSAW_NAMESPACE)
         ]
+
+    def delete_pgbench_pods(self, pg_obj_list):
+        """
+        Delete all pgbench pods on cluster
+
+        Returns:
+            bool: True if deleted, False otherwise
+
+        """
+        log.info("Delete pgbench Benchmark")
+        for pgbench_pod in pg_obj_list:
+            pgbench_pod.delete(force=True)
 
     def is_pgbench_running(self):
         """
