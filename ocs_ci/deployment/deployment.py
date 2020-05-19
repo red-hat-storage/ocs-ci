@@ -438,7 +438,7 @@ class Deployment(object):
         if config.DEPLOYMENT.get('local_storage'):
             cluster_data['spec']['manageNodes'] = False
             cluster_data['spec']['monDataDirHostPath'] = '/var/lib/rook'
-            cluster_data['spec']['portable'] = False
+            deviceset_data['portable'] = False
             deviceset_data['dataPVCTemplate']['spec'][
                 'storageClassName'
             ] = 'local-block'
