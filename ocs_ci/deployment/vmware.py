@@ -539,7 +539,12 @@ class VSPHEREUPI(VSPHEREBASE):
 
             OCP.set_kubeconfig(self.kubeconfig)
 
-            approve_pending_csr()
+            # wait for all nodes to generate CSR
+            # From OCP version 4.4 and above, we have to approve CSR manually
+            # for all the nodes
+            ocp_version = get_ocp_version()
+            if Version.coerce(ocp_version) >= Version.coerce('4.4'):
+                wait_for_all_nodes_csr_and_approve()
 
             # wait for image registry to show-up
             co = "image-registry"
@@ -557,12 +562,8 @@ class VSPHEREUPI(VSPHEREBASE):
                 timeout=1800
             )
 
-            # wait for all nodes to generate CSR
-            # From OCP version 4.4 and above, we have to approve CSR manually
-            # for all the nodes
-            ocp_version = get_ocp_version()
-            if Version.coerce(ocp_version) >= Version.coerce('4.4'):
-                wait_for_all_nodes_csr_and_approve()
+            # Approving CSRs here in-case if any exists
+            approve_pending_csr()
 
             self.test_cluster()
 
