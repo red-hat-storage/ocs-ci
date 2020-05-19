@@ -204,6 +204,10 @@ CEPH_ROOK_IO_PVC_LABEL = 'ceph.rook.io/pvc'
 OCSCI_DATA_BUCKET = 'ocs-ci-data'
 AUTHYAML = 'auth.yaml'
 
+# OBJ File representing serialized data
+NODE_OBJ_FILE = "node_file.objs"
+NODE_FILE = "nodes.objs"
+INSTANCE_FILE = "instances.objs"
 
 # YAML paths
 TOOL_POD_YAML = os.path.join(

@@ -361,6 +361,18 @@ class CephCluster(object):
         """
         return self.get_user_key('client.admin')
 
+    def set_noout(self):
+        """
+        Set noout flag for maintainance
+        """
+        self.toolbox.exec_cmd_on_pod("ceph osd set noout")
+
+    def unset_noout(self):
+        """
+        unset noout flag for peering
+        """
+        self.toolbox.exec_cmd_on_pod("ceph osd unset noout")
+
     def get_user_key(self, user):
         """
         Args:

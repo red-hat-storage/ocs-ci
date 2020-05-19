@@ -7,8 +7,9 @@ import os
 import re
 
 from botocore.exceptions import ClientError
-
 from ocs_ci.framework import config
+
+
 from ocs_ci.ocs.constants import CLEANUP_YAML, TEMPLATE_CLEANUP_DIR
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import get_openshift_installer, destroy_cluster
