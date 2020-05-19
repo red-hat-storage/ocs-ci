@@ -463,20 +463,41 @@ class AWS(object):
                 instance = self.get_ec2_instance(instance_id)
                 instance.wait_until_running()
 
-    def restart_ec2_instances(self, instances, wait=False, force=True):
+    def restart_ec2_instances_by_stop_and_start(
+        self, instances, wait=False, force=True
+    ):
         """
-        Stop and start ec2 instances
+        Restart EC2 instances by stop and start
 
         Args:
-            instances (dict): A dictionary of instance IDs and names to restart
+            instances (dict): A dictionary of instance IDs and names to stop
+                & start
             wait (bool): True in case wait for status is needed,
                 False otherwise
             force (bool): True for force instance stop, False otherwise
 
         """
-        logger.info(f"Restarting instances {list(instances.values())}")
+        logger.info(
+            f"Restarting instances {list(instances.values())} by stop & start"
+        )
         self.stop_ec2_instances(instances=instances, wait=wait, force=force)
         self.start_ec2_instances(instances=instances, wait=wait)
+
+    def restart_ec2_instances(self, instances):
+        """
+        Restart ec2 instances
+
+        Args:
+            instances (dict): A dictionary of instance IDs and names to restart
+
+        """
+        """
+        When reboot is initiated on an instance from the AWS, the instance 
+        stays at "Running" state throughout the reboot operation.
+        """
+        instance_ids, instance_names = zip(*instances.items())
+        logger.info(f"Rebooting instances {instance_names}")
+        self.ec2_client.reboot_instances(InstanceIds=instance_ids)
 
     def terminate_ec2_instances(self, instances, wait=True):
         """

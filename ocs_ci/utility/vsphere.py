@@ -372,9 +372,9 @@ class VSPHERE(object):
                 if not (None in ips or '<unset>' in ips):
                     break
 
-    def restart_vms(self, vms, force=True):
+    def restart_vms_by_stop_and_start(self, vms, force=True):
         """
-        Restart VMs
+        Stop and Start VMs
 
         Args:
             vms (list): VM (vm) objects
@@ -384,6 +384,24 @@ class VSPHERE(object):
         """
         self.stop_vms(vms, force=force)
         self.start_vms(vms)
+
+    def restart_vms(self, vms, force=False):
+        """
+        Restart VMs
+
+        Args:
+            vms (list): VM (vm) objects
+            force (bool): True for VM ungraceful power off, False for
+                graceful VM shutdown
+
+        """
+        logger.info(f"Rebooting VMs: {[vm.name for vm in vms]}")
+        if force:
+            tasks = [vm.ResetVM_Task() for vm in vms]
+        else:
+            tasks = [vm.RebootGuest() for vm in vms]
+        WaitForTasks(tasks, self._si)
+
 
     def is_resource_pool_exist(self, pool, dc, cluster):
         """
