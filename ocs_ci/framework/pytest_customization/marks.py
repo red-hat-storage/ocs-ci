@@ -114,9 +114,10 @@ ipi_deployment_required = pytest.mark.skipif(
     reason="Test runs ONLY on IPI deployed cluster"
 )
 
-lso_deployment_required = pytest.mark.skipif(
-    config.DEPLOYMENT.get('local_storage') is True,
-    reason="Tests are not running on LSO deployed cluster"
+awsi3_deployment_required = pytest.mark.skipif(
+    config.ENV_DATA['platform'].lower() == 'aws'
+    and config.DEPLOYMENT.get('local_storage') is True,
+    reason="Tests are not running on aws i3 instances deployed cluster"
 )
 
 # Filter warnings
