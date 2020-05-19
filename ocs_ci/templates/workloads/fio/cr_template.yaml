@@ -8,11 +8,11 @@ spec:
     server: 10.0.78.167
     port: 9200
   clustername: env_ocpversion_ocsversion
-  test_user: ocsversion_bs
+  test_user: interface_iopattern
   workload:
     name: "fio_distributed"
     args:
-      prefill: true
+      prefill: false
       samples: 3
       servers: 3
       pin_server: ''
@@ -27,12 +27,15 @@ spec:
       iodepth: 4
       read_runtime: 60
       read_ramp_time: 5
-      filesize: 5GiB
+      filesize: 80GiB
       log_sample_rate: 1000
       storageclass: ocs-storagecluster-ceph-rbd
-      storagesize: 500Gi
-      # rook_ceph_drop_caches: True
-      # rook_ceph_drop_cache_pod_ip: 192.168.111.20
+      storagesize: 100Gi
+      rook_ceph_drop_caches: True
+      rook_ceph_drop_cache_pod_ip:
+        - server1
+        - server2
+        - server3
 #######################################
 #  EXPERT AREA - MODIFY WITH CAUTION  #
 #######################################
