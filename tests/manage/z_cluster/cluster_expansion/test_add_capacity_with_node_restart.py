@@ -34,7 +34,7 @@ class TestAddCapacityNodeRestart(ManageTest):
     pvc_size = 100
 
     def test_add_capacity_node_restart(
-        self, nodes, multi_pvc_factory, pvc_factory, pod_factory, workload_storageutilization_rbd,
+        self, nodes, multi_pvc_factory, pod_factory, workload_storageutilization_rbd,
         node_type, num_of_nodes,
     ):
         """

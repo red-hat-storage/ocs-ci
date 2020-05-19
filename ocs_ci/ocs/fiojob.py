@@ -342,6 +342,13 @@ def workload_fio_storageutilization(
             fio is stored on the volume, and reclaim policy of the volume is
             changed to ``Retain`` so that the volume is not removed during test
             teardown for later verification runs
+        delete_fio_data_after_test (bool): If true, delete fio data after the fio
+            storageutilization is completed. Else if False, delete the fio data at
+            the end of all the tests. If if false you also need to provide the
+            request parameter.
+        request: The built-in pytest request object.
+        minimal_time (int): Minimal number of seconds to monitor a system.
+            (See more details in the function 'measure_operation')
 
     Returns:
         dict: measurement results with timestamps and other medatada from
