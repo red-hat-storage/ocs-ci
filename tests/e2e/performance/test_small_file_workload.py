@@ -259,13 +259,13 @@ class SmallFileResultsAnalyse(object):
                         results[self.managed_keys[key]["name"]]
                     )
                     if key == "IOPS":
-                        max = np.ma.max(results[self.managed_keys[key]["name"]])
-                        min = np.ma.min(results[self.managed_keys[key]["name"]])
+                        st_deviation = np.std(results[self.managed_keys[key]["name"]])
+                        mean = np.mean(results[self.managed_keys[key]["name"]])
 
-                        dev = (max - min) * 100 / min
-                        if dev > 5:
+                        pct_dev = (st_deviation / mean) * 100
+                        if pct_dev > 5:
                             log.error(
-                                f'Deviation for {op} IOPS is more the 5% ({dev})')
+                                f'Deviation for {op} IOPS is more the 5% ({pct_dev})')
                             test_pass = False
                     del results[self.managed_keys[key]["name"]]
                 self.results["full-res"][op] = results
