@@ -164,6 +164,21 @@ class OCS(object):
     def delete_temp_yaml_file(self):
         utils.delete_file(self.temp_yaml.name)
 
+    def __getstate__(self):
+        """
+        unset attributes for serializing the object
+        """
+        self_dict = self.__dict__
+        del self.temp_yaml
+        return self_dict
+
+    def __setstate__(self, d):
+        """
+        reset attributes for serializing the object
+        """
+        self.temp_yaml = None
+        self.__dict__.update(d)
+
 
 def get_version_info(namespace=None):
     operator_selector = get_selector_for_ocs_operator()
