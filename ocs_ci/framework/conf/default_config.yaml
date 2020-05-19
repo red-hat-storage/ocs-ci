@@ -45,7 +45,7 @@ DEPLOYMENT:
   installer_version: "4.4.0-0.nightly"
   force_download_installer: True
   force_download_client: True
-  default_latest_tag: 'latest-4.4'
+  default_latest_tag: 'latest-stable-4.4'
   # You can overwrite csv channel version by following parameter
   ocs_csv_channel: "stable-4.4"
   # you can overwrite the image for ocs operator catalog source by following parameter:
