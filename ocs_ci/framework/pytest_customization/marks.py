@@ -114,6 +114,11 @@ ipi_deployment_required = pytest.mark.skipif(
     reason="Test runs ONLY on IPI deployed cluster"
 )
 
+lso_deployment_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get('local_storage') is True,
+    reason="Tests are not running on LSO deployed cluster"
+)
+
 # Filter warnings
 filter_insecure_request_warning = pytest.mark.filterwarnings(
     'ignore::urllib3.exceptions.InsecureRequestWarning'
