@@ -48,21 +48,10 @@ def retrieve_test_objects_to_pod(podobj, target_dir):
         list: A list of the downloaded objects' names
 
     """
-    # Download test objects from the public bucket
-    downloaded_objects = []
-    # Retrieve a list of all objects on the test-objects bucket and downloads them to the pod
-    podobj.exec_cmd_on_pod(command=f'mkdir {target_dir}')
-    public_s3 = retrieve_anon_s3_resource()
-    with ThreadPoolExecutor() as p:
-        for obj in public_s3.Bucket(constants.TEST_FILES_BUCKET).objects.all():
-            logger.info(f'Downloading {obj.key} from AWS test bucket')
-            p.submit(podobj.exec_cmd_on_pod,
-                     command=f'sh -c "'
-                             f'wget -P {target_dir} '
-                             f'https://{constants.TEST_FILES_BUCKET}.s3.amazonaws.com/{obj.key}"'
-                     )
-            downloaded_objects.append(obj.key)
-        return downloaded_objects
+    sync_object_directory(podobj, f's3://{constants.TEST_FILES_BUCKET}', target_dir)
+    downloaded_objects = podobj.exec_cmd_on_pod(f'ls -A1 {target_dir}').split(' ')
+    logger.info(f'Downloaded objects: {downloaded_objects}')
+    return downloaded_objects
 
 
 def sync_object_directory(podobj, src, target, mcg_obj=None):
