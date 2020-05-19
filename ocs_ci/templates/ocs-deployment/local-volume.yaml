@@ -3,12 +3,16 @@ kind: LocalVolume
 metadata:
   name: local-block
   namespace: local-storage
+  labels:
+    app: ocs-storagecluster
 spec:
   nodeSelector:
     nodeSelectorTerms:
     - matchExpressions:
         - key: cluster.ocs.openshift.io/openshift-storage
-          operator: Exists
+          operator: In
+          values:
+          - ""
   storageClassDevices:
     - storageClassName: local-block
       volumeMode: Block

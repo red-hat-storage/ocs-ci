@@ -803,3 +803,9 @@ AUTH_CONFIG_DOCS = (
     'https://ocs-ci.readthedocs.io/en/latest/docs/getting_started.html'
     '#authentication-config'
 )
+
+# LSO
+ROOT_DISK_NAME = "sda"
+RDM = "RDM"
+VMDK = "VMDK"
+DIRECTPATH = "VMDirectPath"
