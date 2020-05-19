@@ -344,9 +344,10 @@ def workload_fio_storageutilization(
             teardown for later verification runs
         delete_fio_data_after_test (bool): If true, delete fio data after the fio
             storageutilization is completed. Else if False, delete the fio data at
-            the end of all the tests. If if false you also need to provide the
-            request parameter.
-        request: The built-in pytest request object.
+            the end of all the tests. If it set to false you also need to provide
+            the request parameter.
+        request: The built-in pytest request object. This is required if
+            'delete_fio_data_after_test' is set to false.
         minimal_time (int): Minimal number of seconds to monitor a system.
             (See more details in the function 'measure_operation')
 
@@ -555,13 +556,14 @@ def workload_fio_storageutilization(
         label = f'fixture={fixture_name}'
         ocp_pv.add_label(pv_name, label)
     else:
-        # Without checksum, we just need to make sure that data were deleted
-        # and wait for this to happen to avoid conflicts with tests executed
-        # right after this one.
-        if delete_fio_data_after_test:
-            delete_fio_data(fio_job_file, is_storage_reclaimed)
+        # Without checksum, we just need to make sure that data will be deleted.
+        # If 'delete_fio_data_after_test' is False, and 'request' object is provided
         # Wait until the end of the tests, and then delete the data.
-        else:
+        if not delete_fio_data_after_test and request:
             request.addfinalizer(lambda: delete_fio_data(fio_job_file, is_storage_reclaimed))
+        # Wait for the data to be deleted, to avoid conflicts with tests executed
+        # right after this one.
+        else:
+            delete_fio_data(fio_job_file, is_storage_reclaimed)
 
     return measured_op
