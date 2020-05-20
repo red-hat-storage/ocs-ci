@@ -798,6 +798,7 @@ NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
 
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
+NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [

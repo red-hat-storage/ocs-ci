@@ -11,7 +11,7 @@ import urllib3
 from botocore.client import ClientError
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, registry
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
@@ -19,6 +19,7 @@ from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 from tests.helpers import create_unique_resource_name, create_resource
+import subprocess
 
 logger = logging.getLogger(name=__file__)
 
@@ -98,13 +99,23 @@ class MCG(object):
             aws_secret_access_key=self.access_key
         )
 
-        # Give NooBaa's ServiceAccount permissions in order to execute CLI commands
-        registry.add_role_to_user(
-            'cluster-admin', constants.NOOBAA_SERVICE_ACCOUNT,
-            cluster_role=True
-        )
-
         self.operator_pod = Pod(**get_pods_having_label(constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace)[0])
+
+        # TODO: Add version verification to see if an additional cp isn't needed
+        # If the MCG CLI binary isn't found, copy it from the operator pod
+        if not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH):
+            cmd = (
+                f"oc exec -n {self.namespace} {self.operator_pod.name}"
+                f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
+                f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+            )
+            subprocess.run(cmd, shell=True)
+            # Add an executable bit in order to allow usage of the binary
+            exec_cmd(f'chmod +x {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}')
+            # Make sure the binary was copied properly and has the correct permissions
+            assert os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+            assert 'ELF' in exec_cmd(f'file {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}').stdout.decode()
+            assert os.access(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK)
 
         if config.ENV_DATA['platform'].lower() == 'aws':
             (
@@ -703,8 +714,7 @@ class MCG(object):
 
         namespace = f'-n {namespace}' if namespace else f'-n {self.namespace}'
         result = exec_cmd(
-            f'oc {kubeconfig} {namespace} rsh {self.operator_pod.name} '
-            f'{constants.NOOBAA_OPERATOR_POD_CLI_PATH} {cmd} {namespace}',
+            f'{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}',
             **kwargs
         )
         result.stdout = result.stdout.decode()
