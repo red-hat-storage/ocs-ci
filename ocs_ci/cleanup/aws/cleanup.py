@@ -369,8 +369,15 @@ def aws_cleanup():
     for p in procs:
         p.join()
     logger.info("Remaining clusters: %s", remaining_clusters)
+    filename = 'failed_cluster_deletions.txt'
+    content = 'None\n'
     if failed_deletions:
         logger.error("Failed cluster deletions: %s", failed_deletions)
+        content = ""
+        for cluster in failed_deletions:
+            content += f"{cluster}\n"
+    with open(filename, 'w') as f:
+        f.write(content)
 
 
 def prefix_hour_mapping(string):
