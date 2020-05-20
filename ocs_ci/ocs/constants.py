@@ -799,6 +799,11 @@ NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
 NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
+MCG_CRT_NAME = "service-ca.crt"
+MCG_CRT_REMOTE_PATH = f"/var/run/secrets/kubernetes.io/serviceaccount/..data/{MCG_CRT_NAME}"
+MCG_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{MCG_CRT_NAME}"
+MCG_CRT_AWSCLI_POD_PATH = f"/cert/mcg-{MCG_CRT_NAME}"
+AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [

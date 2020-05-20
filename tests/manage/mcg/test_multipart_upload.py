@@ -3,7 +3,6 @@ import logging
 import pytest
 import uuid
 
-from ocs_ci.framework.pytest_customization.marks import filter_insecure_request_warning
 from ocs_ci.framework.testlib import (
     ManageTest, tier1
 )
@@ -39,7 +38,6 @@ def setup(pod_obj, bucket_factory):
     return bucket, object_key, origin_dir, res_dir, full_object_path, parts
 
 
-@filter_insecure_request_warning
 class TestS3MultipartUpload(ManageTest):
     """
     Test Multipart upload on Noobaa buckets
