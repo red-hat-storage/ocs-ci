@@ -9,7 +9,6 @@ from ocs_ci.framework.testlib import ManageTest, tier1, tier2, tier3
 from ocs_ci.ocs import constants
 from tests.manage.mcg import helpers
 from tests.manage.mcg.helpers import retrieve_anon_s3_resource
-from tests.helpers import craft_s3_command
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +121,7 @@ class TestObjectIntegrity(ManageTest):
             )
             download_obj_cmd = f'cp s3://{public_bucket}/{obj["Key"]} {original_dir}'
             awscli_pod.exec_cmd_on_pod(
-                command=craft_s3_command(download_obj_cmd),
+                command=helpers.craft_s3_command(download_obj_cmd),
                 out_yaml_format=False
             )
             download_files.append(obj['Key'].split('/')[-1])
