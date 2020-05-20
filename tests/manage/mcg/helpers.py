@@ -2,6 +2,7 @@ import logging
 import os
 
 import boto3
+from botocore.handlers import disable_signing
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -9,9 +10,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.pod import get_rgw_pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
-from tests.helpers import create_resource
-from tests.helpers import logger, craft_s3_command
-from botocore.handlers import disable_signing
+from tests.helpers import craft_s3_command, create_resource, logger
 
 log = logging.getLogger(__name__)
 
