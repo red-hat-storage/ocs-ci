@@ -1,5 +1,4 @@
 import logging
-import pytest
 
 from ocs_ci.framework.testlib import polarion_id, bugzilla, tier4, tier4a
 from ocs_ci.ocs import constants
