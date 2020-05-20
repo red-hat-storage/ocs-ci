@@ -387,21 +387,20 @@ class VSPHERE(object):
 
     def restart_vms(self, vms, force=False):
         """
-        Restart VMs
+        Restart VMs by VM Reset or Guest reboot
 
         Args:
             vms (list): VM (vm) objects
-            force (bool): True for VM ungraceful power off, False for
-                graceful VM shutdown
+            force (bool): True for Hard reboot(VM Reset),
+                False for Soft reboot(Guest Reboot)
 
         """
         logger.info(f"Rebooting VMs: {[vm.name for vm in vms]}")
         if force:
             tasks = [vm.ResetVM_Task() for vm in vms]
+            WaitForTasks(tasks, self._si)
         else:
-            tasks = [vm.RebootGuest() for vm in vms]
-        WaitForTasks(tasks, self._si)
-
+            [vm.RebootGuest() for vm in vms]
 
     def is_resource_pool_exist(self, pool, dc, cluster):
         """

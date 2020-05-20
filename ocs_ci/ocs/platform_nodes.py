@@ -70,7 +70,7 @@ class NodesBase(object):
             "Start nodes functionality is not implemented"
         )
 
-    def restart_nodes(self, nodes, force=True):
+    def restart_nodes(self, nodes, wait=True):
         raise NotImplementedError(
             "Restart nodes functionality is not implemented"
         )
@@ -95,9 +95,10 @@ class NodesBase(object):
             "Wait for volume attach functionality is not implemented"
         )
 
-    def restart_nodes_teardown(self):
+    def restart_nodes_by_stop_and_start_teardown(self):
         raise NotImplementedError(
-            "Restart nodes teardown functionality is not implemented"
+            "Restart nodes by stop and start teardown functionality is "
+            "not implemented"
         )
 
     def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
@@ -234,13 +235,15 @@ class VMWareNodes(NodesBase):
         )
         self.vsphere.start_vms(vms)
 
-    def restart_nodes(self, nodes, force=True):
+    def restart_nodes(self, nodes, force=False, wait=True):
         """
         Restart vSphere VMs
 
         Args:
             nodes (list): The OCS objects of the nodes
-            force (bool): True for force VM stop, False otherwise
+            force (bool): True for Hard reboot, False for Soft reboot
+            wait (bool): True if need to wait till the restarted OCP node
+                reaches READY state. False otherwise
 
         """
         vms = self.get_vms(nodes)
@@ -248,6 +251,32 @@ class VMWareNodes(NodesBase):
             f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
         )
         self.vsphere.restart_vms(vms, force=force)
+
+        if wait:
+            """
+            When reboot is initiated on an instance from the VMware, the VM
+            stays at "Running" state throughout the reboot operation.
+
+            Once the OCP node detects that the node is not reachable then the
+            node reaches status NotReady.
+            When the reboot operation is completed and the VM is reachable the
+            OCP node reaches status Ready.
+            """
+            nodes_names = [n.name for n in nodes]
+            logger.info(
+                f"Waiting for nodes: {nodes_names} to reach not ready state"
+            )
+            wait_for_nodes_status(
+                node_names=nodes_names, status=constants.NODE_NOT_READY,
+                timeout=300
+            )
+            logger.info(
+                f"Waiting for nodes: {nodes_names} to reach ready state"
+            )
+            wait_for_nodes_status(
+                node_names=nodes_names, status=constants.NODE_READY,
+                timeout=300
+            )
 
     def restart_nodes_by_stop_and_start(self, nodes, force=True):
         """
@@ -302,7 +331,7 @@ class VMWareNodes(NodesBase):
         logger.info("Not waiting for volume to get re-attached")
         pass
 
-    def restart_nodes_teardown(self):
+    def restart_nodes_by_stop_and_start_teardown(self):
         """
         Make sure all VMs are up by the end of the test
 
@@ -427,7 +456,8 @@ class AWSNodes(NodesBase):
         """
         instances = self.get_ec2_instances(nodes)
         assert instances, (
-            f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
+            f"Failed to get the EC2 instances for "
+            f"nodes {[n.name for n in nodes]}"
         )
         self.aws.restart_ec2_instances(instances=instances)
         if wait:
@@ -436,7 +466,7 @@ class AWSNodes(NodesBase):
             stays at "Running" state throughout the reboot operation.
 
             Once the OCP node detects that the node is not reachable then the
-            node reaches status NotReady.
+            OCP node reaches status NotReady.
             When the reboot operation is completed and the instance is up and 
             reachable the OCP node reaches status Ready.
             """
@@ -471,7 +501,9 @@ class AWSNodes(NodesBase):
         assert instances, (
             f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
         )
-        self.aws.restart_ec2_instances_by_stop_and_start(instances=instances, wait=wait, force=force)
+        self.aws.restart_ec2_instances_by_stop_and_start(
+            instances=instances, wait=wait, force=force
+        )
 
 
     def terminate_nodes(self, nodes, wait=True):
@@ -561,7 +593,7 @@ class AWSNodes(NodesBase):
             )
             return False
 
-    def restart_nodes_teardown(self):
+    def restart_nodes_by_stop_and_start_teardown(self):
         """
         Make sure all EC2 instances are up. To be used in the test teardown
 

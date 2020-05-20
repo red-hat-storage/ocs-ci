@@ -491,10 +491,6 @@ class AWS(object):
             instances (dict): A dictionary of instance IDs and names to restart
 
         """
-        """
-        When reboot is initiated on an instance from the AWS, the instance 
-        stays at "Running" state throughout the reboot operation.
-        """
         instance_ids, instance_names = zip(*instances.items())
         logger.info(f"Rebooting instances {instance_names}")
         self.ec2_client.reboot_instances(InstanceIds=instance_ids)
