@@ -6,11 +6,15 @@ import ssl
 
 import atexit
 
+from copy import deepcopy
 from pyVmomi import vim, vmodl
 from pyVim.task import WaitForTask, WaitForTasks
 from pyVim.connect import Disconnect, SmartStubAdapter, VimSessionOrientedStub
 from ocs_ci.ocs.exceptions import VMMaxDisksReachedException
-from ocs_ci.ocs.constants import GB2KB, VM_DISK_TYPE, VM_DISK_MODE, VM_POWERED_OFF
+from ocs_ci.ocs.constants import (
+    GB2KB, VM_DISK_TYPE, VM_DISK_MODE, VM_POWERED_OFF,
+    DISK_MODE, COMPATABILITY_MODE,
+)
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -301,16 +305,16 @@ class VSPHERE(object):
             disk_mode (str): Disk mode. By default it will
                 add 'independent_persistent'. Available modes are 'append',
                 'independent_nonpersistent', 'independent_persistent',
-                 'nonpersistent', 'persistent', and 'undoable'
+                'nonpersistent', 'persistent', and 'undoable'
             compatibility_mode (str): Compatabilty mode. Either 'physicalMode'
                 or 'virtualMode'. By default it will add 'physicalMode'.
 
         """
         logger.info(f"Adding RDM disk {device_name} to {vm.config.name}")
         if not disk_mode:
-            disk_mode = "independent_persistent"
+            disk_mode = DISK_MODE
         if not compatibility_mode:
-            compatibility_mode = "physicalMode"
+            compatibility_mode = COMPATABILITY_MODE
 
         spec = vim.vm.ConfigSpec()
         controller = self.get_controller_for_adding_disk(vm)
@@ -735,10 +739,9 @@ class VSPHERE(object):
         used_devices = self.get_used_devices(host)
         active_partition = self.get_active_partition(host)
 
+        used_devices_all = deepcopy(mounted_devices)
         if used_devices:
-            used_devices_all = mounted_devices + used_devices
-        else:
-            used_devices_all = mounted_devices
+            used_devices_all += used_devices
 
         devices_with_active_disk = list(
             set(storage_devices) - set(used_devices_all)
@@ -793,10 +796,10 @@ class VSPHERE(object):
         Returns:
             dict: Dictionary contains host instance as key and
                 values as list lun ids
-                e.g: {
-                     'vim.HostSystem:host-6320': ['02000000193035e73d534d30'],
-                     'vim.HostSystem:host-6252': ['020000000060034d43333130']
-                     }
+                    e.g:{
+                        'vim.HostSystem:host-6320': ['02000000193035e73d534'],
+                        'vim.HostSystem:host-6252': ['020000000060034d43333']
+                        }
 
         """
         lunids = {}
@@ -816,8 +819,9 @@ class VSPHERE(object):
 
         Args:
             **kwargs (dict): Host to LUN mapping
-                e.g: data = get_lunids(dc)
-                     map_lunids_to_devices(**data)
+                e.g:
+                ``data = get_lunids(dc)
+                map_lunids_to_devices(**data)``
 
         Returns:
             dict: Dictionary contains host instance as key and
