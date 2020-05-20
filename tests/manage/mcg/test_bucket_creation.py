@@ -5,8 +5,7 @@ import botocore
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1, tier3, filter_insecure_request_warning,
-    acceptance, performance
+    tier1, tier3, acceptance, performance
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
@@ -14,7 +13,6 @@ from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 logger = logging.getLogger(__name__)
 
 
-@filter_insecure_request_warning
 class TestBucketCreation:
     """
     Test creation of a bucket
