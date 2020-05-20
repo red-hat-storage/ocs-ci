@@ -254,7 +254,7 @@ class VMWareNodes(NodesBase):
 
         if wait:
             """
-            When reboot is initiated on an instance from the VMware, the VM
+            When reboot is initiated on a VM from the VMware, the VM
             stays at "Running" state throughout the reboot operation.
 
             Once the OCP node detects that the node is not reachable then the
@@ -462,12 +462,12 @@ class AWSNodes(NodesBase):
         self.aws.restart_ec2_instances(instances=instances)
         if wait:
             """
-            When reboot is initiated on an instance from the AWS, the instance 
-            stays at "Running" state throughout the reboot operation.
+            When reboot is initiated on an instance from the AWS, the
+            instance stays at "Running" state throughout the reboot operation.
 
             Once the OCP node detects that the node is not reachable then the
-            OCP node reaches status NotReady.
-            When the reboot operation is completed and the instance is up and 
+            node reaches status NotReady.
+            When the reboot operation is completed and the instance is
             reachable the OCP node reaches status Ready.
             """
             nodes_names = [n.name for n in nodes]
@@ -504,7 +504,6 @@ class AWSNodes(NodesBase):
         self.aws.restart_ec2_instances_by_stop_and_start(
             instances=instances, wait=wait, force=force
         )
-
 
     def terminate_nodes(self, nodes, wait=True):
         """
