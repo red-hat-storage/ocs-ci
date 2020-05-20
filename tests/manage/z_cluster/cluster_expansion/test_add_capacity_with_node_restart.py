@@ -5,7 +5,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
@@ -66,15 +66,15 @@ class TestAddCapacityNodeRestart(ManageTest):
             for pvc_obj in pvc_objs:
                 executor.submit(pod_objs.append, (pod_factory(pvc=pvc_obj)))
 
-        with ThreadPoolExecutor(max_workers=self.num_of_pvcs-1) as executor:
+        with ThreadPoolExecutor(max_workers=self.num_of_pvcs - 1) as executor:
             for pod_obj in pod_objs:
-                pod_io_task = executor.submit(
+                executor.submit(
                     pod_obj.run_io, storage_type='fs', size=2, jobs=10, io_direction='wo', rate='200m')
 
         seconds_to_wait_for_io_operations = 40
         logging.info(f"Going to sleep for {seconds_to_wait_for_io_operations} seconds")
         time.sleep(seconds_to_wait_for_io_operations)
-        
+
         osd_size = storage_cluster.get_osd_size()
         logging.info("Calling add_capacity function...")
         result = storage_cluster.add_capacity(osd_size)

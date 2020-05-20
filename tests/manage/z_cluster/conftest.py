@@ -2,7 +2,6 @@
 
 import logging
 import pytest
-from tests.manage.monitoring.conftest import measurement_dir
 
 
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
@@ -36,7 +35,7 @@ def workload_storageutilization_rbd(
     """
 
     target_percentage, delete_fio_data_after_test, minimal_time = request.param
-    percent_to_fill = int(target_percentage*100)
+    percent_to_fill = int(target_percentage * 100)
     fixture_name = f"workload_storageutilization_{percent_to_fill}p_rbd"
     measured_op = workload_fio_storageutilization(
         fixture_name,
@@ -79,7 +78,7 @@ def workload_storageutilization_cephfs(
     """
 
     target_percentage, delete_fio_data_after_test, minimal_time = request.param
-    percent_to_fill = int(target_percentage*100)
+    percent_to_fill = int(target_percentage * 100)
     fixture_name = f"workload_storageutilization_{percent_to_fill}p_cephfs"
     measured_op = workload_fio_storageutilization(
         fixture_name,

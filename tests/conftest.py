@@ -2314,3 +2314,31 @@ def fio_job_dict_fixture():
         """)
     job_dict = yaml.safe_load(template)
     return job_dict
+
+
+@pytest.fixture
+def measurement_dir(tmp_path):
+    """
+    Returns directory path where should be stored all results related
+    to measurement. If 'measurement_dir' is provided by config then use it,
+    otherwise new directory is generated.
+
+    Returns:
+        str: Path to measurement directory
+    """
+    if config.ENV_DATA.get('measurement_dir'):
+        measurement_dir = config.ENV_DATA.get('measurement_dir')
+        log.info(
+            f"Using measurement dir from configuration: {measurement_dir}"
+        )
+    else:
+        measurement_dir = os.path.join(
+            os.path.dirname(tmp_path),
+            'measurement_results'
+        )
+    if not os.path.exists(measurement_dir):
+        log.info(
+            f"Measurement dir {measurement_dir} doesn't exist. Creating it."
+        )
+        os.mkdir(measurement_dir)
+    return measurement_dir
