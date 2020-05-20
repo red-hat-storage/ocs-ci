@@ -340,10 +340,7 @@ class VSPHEREUPI(VSPHEREBASE):
             self.kubeconfig = os.path.join(self.cluster_path, config.RUN.get('kubeconfig_location'))
 
             # git clone repo from openshift installer
-            clone_repo(
-                constants.VSPHERE_INSTALLER_REPO, self.upi_repo_path,
-                f'release-{get_ocp_version()}'
-            )
+            clone_openshift_installer()
 
             # upload bootstrap ignition to public access server
             bootstrap_path = os.path.join(config.ENV_DATA.get('cluster_path'), constants.BOOTSTRAP_IGN)
@@ -429,16 +426,27 @@ class VSPHEREUPI(VSPHEREBASE):
                 def_zone = 'provider "aws" { region = "%s" } \n' % config.ENV_DATA.get('region')
                 replace_content_in_file(constants.INSTALLER_ROUTE53, "xyz", def_zone)
 
-            # increase CPUs
+            # increase CPUs and memory
             worker_num_cpus = config.ENV_DATA.get('worker_num_cpus')
             master_num_cpus = config.ENV_DATA.get('master_num_cpus')
-            if worker_num_cpus or master_num_cpus:
+            worker_memory = config.ENV_DATA.get('compute_memory')
+            master_memory = config.ENV_DATA.get('master_memory')
+            if (
+                    worker_num_cpus
+                    or master_num_cpus
+                    or master_memory
+                    or worker_memory
+            ):
                 with open(constants.VSPHERE_MAIN, 'r') as fd:
                     obj = hcl.load(fd)
                     if worker_num_cpus:
                         obj['module']['compute']['num_cpu'] = worker_num_cpus
                     if master_num_cpus:
                         obj['module']['control_plane']['num_cpu'] = master_num_cpus
+                    if worker_memory:
+                        obj['module']['compute']['memory'] = worker_memory
+                    if master_memory:
+                        obj['module']['control_plane']['memory'] = master_memory
                 # Dump data to json file since hcl module
                 # doesn't support dumping of data in HCL format
                 dump_data_to_json(obj, f"{constants.VSPHERE_MAIN}.json")
@@ -542,7 +550,12 @@ class VSPHEREUPI(VSPHEREBASE):
 
             OCP.set_kubeconfig(self.kubeconfig)
 
-            approve_pending_csr()
+            # wait for all nodes to generate CSR
+            # From OCP version 4.4 and above, we have to approve CSR manually
+            # for all the nodes
+            ocp_version = get_ocp_version()
+            if Version.coerce(ocp_version) >= Version.coerce('4.4'):
+                wait_for_all_nodes_csr_and_approve()
 
             # wait for image registry to show-up
             co = "image-registry"
@@ -560,12 +573,8 @@ class VSPHEREUPI(VSPHEREBASE):
                 timeout=1800
             )
 
-            # wait for all nodes to generate CSR
-            # From OCP version 4.4 and above, we have to approve CSR manually
-            # for all the nodes
-            ocp_version = get_ocp_version()
-            if Version.coerce(ocp_version) >= Version.coerce('4.4'):
-                wait_for_all_nodes_csr_and_approve()
+            # Approving CSRs here in-case if any exists
+            approve_pending_csr()
 
             self.test_cluster()
 
@@ -636,10 +645,8 @@ class VSPHEREUPI(VSPHEREBASE):
             constants.TERRAFORM_DATA_DIR,
             constants.TERRAFORM_VARS
         )
-        clone_repo(
-            constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
-            f'release-{get_ocp_version()}'
-        )
+
+        clone_openshift_installer()
         if (
             os.path.exists(f"{constants.VSPHERE_MAIN}.backup")
             and os.path.exists(f"{constants.VSPHERE_MAIN}.json")
@@ -717,3 +724,31 @@ def sync_time_with_host(machine_file, enable=False):
         to_change,
         sync_time
     )
+
+
+def clone_openshift_installer():
+    """
+    Clone the openshift installer repo
+    """
+    # git clone repo from openshift installer
+    # installer ( https://github.com/openshift/installer ) master and
+    # other branches (greater than release-4.3) structure has been
+    # changed. Use appropriate branch when ocs-ci is ready
+    # with the changes.
+    # Note: Currently use release-4.3 branch for the ocp versions
+    # which is greater than 4.3
+    upi_repo_path = os.path.join(
+        constants.EXTERNAL_DIR,
+        'installer'
+    )
+    ocp_version = get_ocp_version()
+    if Version.coerce(ocp_version) >= Version.coerce('4.4'):
+        clone_repo(
+            constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
+            constants.VSPHERE_INSTALLER_BRANCH
+        )
+    else:
+        clone_repo(
+            constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
+            f'release-{ocp_version}'
+        )

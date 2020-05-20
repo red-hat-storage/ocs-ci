@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    filter_insecure_request_warning, vsphere_platform_required
+    vsphere_platform_required
 )
 from ocs_ci.framework.testlib import (
     ManageTest, tier1, tier2, tier3, acceptance
@@ -35,7 +35,6 @@ def pod_io(pods):
             p.submit(pod.run_io, 'fs', '1G')
 
 
-@filter_insecure_request_warning
 class TestBucketIO(ManageTest):
     """
     Test IO of a bucket

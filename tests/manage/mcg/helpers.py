@@ -2,6 +2,7 @@ import logging
 import os
 
 import boto3
+from botocore.handlers import disable_signing
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -9,9 +10,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.pod import get_rgw_pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
-from tests.helpers import create_resource
-from tests.helpers import logger, craft_s3_command, craft_s3_api_command
-from botocore.handlers import disable_signing
+from tests.helpers import craft_s3_command, create_resource, logger
 
 log = logging.getLogger(__name__)
 
@@ -164,7 +163,7 @@ def upload_parts(mcg_obj, awscli_pod, bucketname, object_key, body_path, upload_
         )
         # upload_cmd will return ETag, upload_id etc which is then split to get just the ETag
         part = awscli_pod.exec_cmd_on_pod(
-            command=craft_s3_api_command(mcg_obj, upload_cmd), out_yaml_format=False,
+            command=craft_s3_command(mcg_obj, upload_cmd, api=True), out_yaml_format=False,
             secrets=secrets
         ).split("\"")[-3].split("\\")[0]
         parts.append({"PartNumber": count, "ETag": f'"{part}"'})

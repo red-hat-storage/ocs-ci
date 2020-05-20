@@ -36,6 +36,7 @@ TEMPLATE_COUCHBASE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase")
 TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
 TEMPLATE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_SERVER_DIR, "pillowfight")
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
+TEMPLATE_AMQ_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "amq")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(
     TEMPLATE_DIR, "openshift-infra/"
 )
@@ -140,6 +141,8 @@ CRITICAL_ERRORS = [
 ]
 must_gather_pod_label = "must-gather"
 
+# AMQ
+AMQ_NAMESPACE = "myproject"
 KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
 
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
@@ -200,6 +203,14 @@ DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
 CEPH_ROOK_IO_PVC_LABEL = 'ceph.rook.io/pvc'
 
+# Auth Yaml
+OCSCI_DATA_BUCKET = 'ocs-ci-data'
+AUTHYAML = 'auth.yaml'
+
+# OBJ File representing serialized data
+NODE_OBJ_FILE = "node_file.objs"
+NODE_FILE = "nodes.objs"
+INSTANCE_FILE = "instances.objs"
 
 # YAML paths
 TOOL_POD_YAML = os.path.join(
@@ -362,6 +373,13 @@ COUCHBASE_WORKER_SECRET = os.path.join(
 
 COUCHBASE_WORKER_EXAMPLE = os.path.join(
     TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-example.yaml"
+)
+
+HELLO_WORLD_PRODUCER_YAML = os.path.join(
+    TEMPLATE_AMQ_DIR, "hello-world-producer.yaml"
+)
+HELLO_WORLD_CONSUMER_YAML = os.path.join(
+    TEMPLATE_AMQ_DIR, "hello-world-consumer.yaml"
 )
 
 NGINX_POD_YAML = os.path.join(
@@ -547,6 +565,7 @@ MASTER_IGN = "master.ign"
 WORKER_IGN = "worker.ign"
 
 # vSphere related constants
+VSPHERE_INSTALLER_BRANCH = "release-4.3"
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
 VSPHERE_SCALEUP_REPO = "https://code.engineering.redhat.com/gerrit/openshift-misc"
 VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")
@@ -779,6 +798,11 @@ NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
 
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
+MCG_CRT_NAME = "service-ca.crt"
+MCG_CRT_REMOTE_PATH = f"/var/run/secrets/kubernetes.io/serviceaccount/..data/{MCG_CRT_NAME}"
+MCG_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{MCG_CRT_NAME}"
+MCG_CRT_AWSCLI_POD_PATH = f"/cert/mcg-{MCG_CRT_NAME}"
+AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [

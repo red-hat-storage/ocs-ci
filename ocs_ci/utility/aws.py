@@ -12,6 +12,8 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import get_infra_id
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions
+from ocs_ci.utility.templating import load_yaml
+from tempfile import NamedTemporaryFile
 
 logger = logging.getLogger(name=__file__)
 
@@ -1094,3 +1096,24 @@ def check_root_volume(volume):
 
     """
     return True if volume['attachments'][0]['DeleteOnTermination'] else False
+
+
+def update_config_from_s3(bucket_name=constants.OCSCI_DATA_BUCKET, filename=constants.AUTHYAML):
+    """
+    Get the config file that has secrets/configs from the S3 and update the config
+
+    Args:
+        bucket_name (string): name of the bucket
+        filename (string): name of the file in bucket
+
+    Returns:
+        dict: returns the updated file contents as python dict
+
+    """
+    s3 = boto3.resource('s3')
+    with NamedTemporaryFile(mode='w', prefix='config', delete=True) as auth:
+        s3.meta.client.download_file(bucket_name, filename, auth.name)
+        config_yaml = load_yaml(auth.name)
+    # set in config and store it for that scope
+    config.update(config_yaml)
+    return config_yaml

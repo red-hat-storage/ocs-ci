@@ -1338,9 +1338,9 @@ def change_default_storageclass(scname):
     return True
 
 
-def verify_volume_deleted_in_backend(interface, image_uuid, pool_name=None):
+def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
     """
-    Verify that Image/Subvolume is not present in the backend.
+    Check whether Image/Subvolume is present in the backend.
 
     Args:
         interface (str): The interface backed the PVC
@@ -1354,7 +1354,8 @@ def verify_volume_deleted_in_backend(interface, image_uuid, pool_name=None):
         pool_name (str): Name of the rbd-pool if interface is CephBlockPool
 
     Returns:
-        bool: True if volume is not present. False if volume is present
+        bool: True if volume is present and False if volume is not present
+
     """
     ct_pod = pod.get_ceph_tools_pod()
     if interface == constants.CEPHBLOCKPOOL:
@@ -1369,17 +1370,67 @@ def verify_volume_deleted_in_backend(interface, image_uuid, pool_name=None):
 
     try:
         ct_pod.exec_ceph_cmd(ceph_cmd=cmd, format='json')
-        return False
+        logger.info(
+            f"Verified: Volume corresponding to uuid {image_uuid} exists "
+            f"in backend"
+        )
+        return True
     except CommandFailed as ecf:
         assert valid_error in str(ecf), (
-            f"Error occurred while verifying volume is deleted in backend: "
+            f"Error occurred while verifying volume is present in backend: "
             f"{str(ecf)} ImageUUID: {image_uuid}. Interface type: {interface}"
         )
-    logger.info(
-        f"Verified: Volume corresponding to uuid {image_uuid} is deleted "
-        f"in backend"
-    )
-    return True
+        logger.info(
+            f"Volume corresponding to uuid {image_uuid} does not exist "
+            f"in backend"
+        )
+        return False
+
+
+def verify_volume_deleted_in_backend(
+    interface, image_uuid, pool_name=None, timeout=180
+):
+    """
+    Ensure that Image/Subvolume is deleted in the backend.
+
+    Args:
+        interface (str): The interface backed the PVC
+        image_uuid (str): Part of VolID which represents
+            corresponding image/subvolume in backend
+            eg: oc get pv/<volumeName> -o jsonpath='{.spec.csi.volumeHandle}'
+                Output is the CSI generated VolID and looks like:
+                '0001-000c-rook-cluster-0000000000000001-
+                f301898c-a192-11e9-852a-1eeeb6975c91' where
+                image_uuid is 'f301898c-a192-11e9-852a-1eeeb6975c91'
+        pool_name (str): Name of the rbd-pool if interface is CephBlockPool
+        timeout (int): Wait time for the volume to be deleted.
+
+    Returns:
+        bool: True if volume is deleted before timeout.
+            False if volume is not deleted.
+    """
+    try:
+        for ret in TimeoutSampler(
+            timeout, 2, is_volume_present_in_backend, interface=interface,
+            image_uuid=image_uuid, pool_name=pool_name
+        ):
+            if not ret:
+                break
+        logger.info(
+            f"Verified: Volume corresponding to uuid {image_uuid} is deleted "
+            f"in backend"
+        )
+        return True
+    except TimeoutExpiredError:
+        logger.error(
+            f"Volume corresponding to uuid {image_uuid} is not deleted "
+            f"in backend"
+        )
+        # Log 'ceph progress' and 'ceph rbd task list' for debugging purpose
+        ct_pod = pod.get_ceph_tools_pod()
+        ct_pod.exec_ceph_cmd('ceph progress')
+        ct_pod.exec_ceph_cmd('ceph rbd task list')
+        return False
 
 
 def create_serviceaccount(namespace):
@@ -1498,7 +1549,7 @@ def delete_deploymentconfig_pods(pod_obj):
                 dc_ocp_obj.wait_for_delete(resource_name=pod_obj.get_labels().get('name'))
 
 
-def craft_s3_command(cmd, mcg_obj=None):
+def craft_s3_command(mcg_obj, cmd, api=False):
     """
     Crafts the AWS CLI S3 command including the
     login credentials and command to be ran
@@ -1506,55 +1557,26 @@ def craft_s3_command(cmd, mcg_obj=None):
     Args:
         mcg_obj: An MCG object containing the MCG S3 connection credentials
         cmd: The AWSCLI command to run
+        api: True if the call is for s3api, false if s3
 
     Returns:
         str: The crafted command, ready to be executed on the pod
 
     """
+    api = 'api' if api else ''
     if mcg_obj:
         base_command = (
-            f"sh -c \"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
-            f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
-            f"AWS_DEFAULT_REGION={mcg_obj.region} "
-            f"aws s3 "
-            f"--endpoint={mcg_obj.s3_endpoint} "
-            f"--no-verify-ssl "
+            f'sh -c "AWS_CA_BUNDLE={constants.MCG_CRT_AWSCLI_POD_PATH} '
+            f'AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} '
+            f'AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} '
+            f'AWS_DEFAULT_REGION={mcg_obj.region} '
+            f'aws s3{api} '
+            f'--endpoint={mcg_obj.s3_endpoint} '
         )
-        string_wrapper = "\""
+        string_wrapper = '"'
     else:
         base_command = (
-            "aws s3 --no-verify-ssl --no-sign-request "
-        )
-        string_wrapper = ''
-
-    return f"{base_command}{cmd}{string_wrapper}"
-
-
-def craft_s3_api_command(mcg_obj, cmd):
-    """
-    Crafts the AWS cli S3 API level commands
-
-    Args:
-        mcg_obj: An MCG object containing the MCG S3 connection credentials
-        cmd: The AWSCLI API command to run
-
-    Returns:
-        str: The crafted command, ready to be executed on the pod
-
-    """
-    if mcg_obj:
-        base_command = (
-            f"sh -c \"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
-            f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
-            f"AWS_DEFAULT_REGION={mcg_obj.region} "
-            f"aws s3api "
-            f"--endpoint={mcg_obj.s3_endpoint} "
-            f"--no-verify-ssl "
-        )
-        string_wrapper = "\""
-    else:
-        base_command = (
-            "aws s3api --no-verify-ssl --no-sign-request "
+            f"aws s3{api} --no-sign-request "
         )
         string_wrapper = ''
 

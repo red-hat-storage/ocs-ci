@@ -7,13 +7,16 @@ import os
 import re
 
 from botocore.exceptions import ClientError
-
 from ocs_ci.framework import config
+
+
 from ocs_ci.ocs.constants import CLEANUP_YAML, TEMPLATE_CLEANUP_DIR
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import get_openshift_installer, destroy_cluster
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import (
-    AWS, terminate_rhel_workers, destroy_volumes, get_rhel_worker_instances
+    AWS, StackStatusError, terminate_rhel_workers, destroy_volumes,
+    get_rhel_worker_instances
 )
 from ocs_ci.cleanup.aws import defaults
 
@@ -25,7 +28,7 @@ logging.basicConfig(format=FORMAT, level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-def cleanup(cluster_name, cluster_id, upi=False):
+def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
     """
     Cleanup existing cluster in AWS
 
@@ -33,6 +36,8 @@ def cleanup(cluster_name, cluster_id, upi=False):
         cluster_name (str): Name of the cluster
         cluster_id (str): Cluster id to cleanup
         upi (bool): True for UPI cluster, False otherwise
+        failed_deletions (list): list of clusters we failed to delete, used
+            for reporting purposes
 
     """
     data = {'cluster_name': cluster_name, 'cluster_id': cluster_id}
@@ -96,13 +101,25 @@ def cleanup(cluster_name, cluster_id, upi=False):
                 )
             except ClientError:
                 continue
-        aws.delete_cloudformation_stacks(stack_names)
+        try:
+            aws.delete_cloudformation_stacks(stack_names)
+        except StackStatusError:
+            logger.error('Failed to fully destroy cluster %s', cluster_name)
+            if failed_deletions:
+                failed_deletions.append(cluster_name)
+            raise
     else:
         logger.info(f"cleaning up {cluster_id}")
-        destroy_cluster(installer=oc_bin, cluster_path=cleanup_path)
+        try:
+            destroy_cluster(installer=oc_bin, cluster_path=cleanup_path)
+        except CommandFailed:
+            logger.error('Failed to fully destroy cluster %s', cluster_name)
+            if failed_deletions:
+                failed_deletions.append(cluster_name)
+            raise
 
 
-def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare):
+def get_clusters(time_to_delete, region_name, prefixes_hours_to_spare):
     """
     Get all cluster names that their EC2 instances running time is greater
     than the specified time to delete
@@ -117,7 +134,8 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
 
     Returns:
         tuple: List of the cluster names (e.g ebenahar-cluster-gqtd4) to be provided to the
-            ci-cleanup script and a list of VPCs that are part of cloudformations
+            ci-cleanup script, a list of VPCs that are part of cloudformation,
+            and a list of remaining clusters
 
     """
     def determine_cluster_deletion(ec2_instances, cluster_name):
@@ -154,6 +172,7 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
 
     aws = AWS(region_name=region_name)
     clusters_to_delete = list()
+    remaining_clusters = list()
     cloudformation_vpc_names = list()
     vpcs = aws.ec2_client.describe_vpcs()['Vpcs']
     vpc_ids = [vpc['VpcId'] for vpc in vpcs]
@@ -180,6 +199,8 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
             # Append to clusters_to_delete if cluster should be deleted
             if determine_cluster_deletion(vpc_instances, cluster_name):
                 clusters_to_delete.append(cluster_name)
+            else:
+                remaining_clusters.append(cluster_name)
         else:
             logger.info("No tags found for VPC")
 
@@ -208,8 +229,10 @@ def get_clusters_to_delete(time_to_delete, region_name, prefixes_hours_to_spare)
         cluster_name = cluster_io_tag[0].replace('kubernetes.io/cluster/', '')
         if determine_cluster_deletion(ec2_instances, cluster_name):
             cf_clusters_to_delete.append(cluster_name)
+        else:
+            remaining_clusters.append(cluster_name)
 
-    return clusters_to_delete, cf_clusters_to_delete
+    return clusters_to_delete, cf_clusters_to_delete, remaining_clusters
 
 
 def cluster_cleanup():
@@ -309,8 +332,8 @@ def aws_cleanup():
 
     time_to_delete = args.hours * 60 * 60
     region = defaults.AWS_REGION if not args.region else args.region
-    clusters_to_delete, cf_clusters_to_delete = (
-        get_clusters_to_delete(
+    clusters_to_delete, cf_clusters_to_delete, remaining_clusters = (
+        get_clusters(
             time_to_delete=time_to_delete, region_name=region,
             prefixes_hours_to_spare=prefixes_hours_to_spare,
         )
@@ -322,10 +345,14 @@ def aws_cleanup():
         logger.info("Deleting clusters: %s", clusters_to_delete)
         get_openshift_installer()
     procs = []
+    failed_deletions = []
     for cluster in clusters_to_delete:
         cluster_name = cluster.rsplit('-', 1)[0]
         logger.info(f"Deleting cluster {cluster_name}")
-        proc = threading.Thread(target=cleanup, args=(cluster_name, cluster))
+        proc = threading.Thread(
+            target=cleanup,
+            args=(cluster_name, cluster, False, failed_deletions)
+        )
         proc.start()
         procs.append(proc)
     for p in procs:
@@ -333,11 +360,17 @@ def aws_cleanup():
     for cluster in cf_clusters_to_delete:
         cluster_name = cluster.rsplit('-', 1)[0]
         logger.info(f"Deleting UPI cluster {cluster_name}")
-        proc = threading.Thread(target=cleanup, args=(cluster_name, cluster, True))
+        proc = threading.Thread(
+            target=cleanup,
+            args=(cluster_name, cluster, True, failed_deletions)
+        )
         proc.start()
         procs.append(proc)
     for p in procs:
         p.join()
+    logger.info("Remaining clusters: %s", remaining_clusters)
+    if failed_deletions:
+        logger.error("Failed cluster deletions: %s", failed_deletions)
 
 
 def prefix_hour_mapping(string):

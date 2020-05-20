@@ -52,19 +52,6 @@ class TestCouchbaseWorkload(E2ETest):
     cb_worker = OCS()
     cb_examples = OCS()
 
-    def add_serviceaccount_secret(self, acct_name, dockerstr):
-        """
-        Add secret for serviceaccount
-
-        Args:
-            acct_name (str): Name of the service account
-            dockerstr (str): Docker secret
-
-        """
-        self.secretsadder.exec_oc_cmd(
-            f"secrets add serviceaccount/{acct_name} secrets/{dockerstr} --for=pull"
-        )
-
     def is_up_and_running(self, pod_name, ocp_value):
         """
         Test if the pod specified is up and running.
@@ -159,8 +146,9 @@ class TestCouchbaseWorkload(E2ETest):
         newdockerstr = dockercfgs[startloc:]
         endloc = newdockerstr.find(' ')
         dockerstr = newdockerstr[:endloc]
-        self.add_serviceaccount_secret("couchbase-operator", dockerstr)
-        self.add_serviceaccount_secret("default", dockerstr)
+        self.secretsadder.exec_oc_cmd(
+            f"secrets add serviceaccount/couchbase-operator secrets/{dockerstr}"
+        )
         self.rolebinding = OCP(namespace=self.COUCHBASE_OPERATOR)
         rolebind_cmd = "".join([
             "create rolebinding couchbase-operator-rolebinding ",
