@@ -10,7 +10,10 @@ import boto3
 import yaml
 
 from ocs_ci.deployment.terraform import Terraform
-from ocs_ci.deployment.vmware import change_vm_root_disk_size
+from ocs_ci.deployment.vmware import (
+    change_vm_root_disk_size,
+    clone_openshift_installer,
+)
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import aws, vsphere, templating
@@ -1419,9 +1422,7 @@ class VSPHEREUPINode(VMWareNodes):
                 f"Existing worker nodes: {self.current_compute_count}, "
                 f"New nodes to add: {self.compute_count}"
             )
-            clone_repo(
-                constants.VSPHERE_INSTALLER_REPO, self.upi_repo_path, f'release-{get_ocp_version()}'
-            )
+            clone_openshift_installer()
             self._update_terraform()
             self._update_machine_conf()
 
