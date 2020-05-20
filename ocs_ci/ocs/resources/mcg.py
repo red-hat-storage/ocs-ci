@@ -121,9 +121,18 @@ class MCG(object):
             # Add an executable bit in order to allow usage of the binary
             exec_cmd(f'chmod +x {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}')
             # Make sure the binary was copied properly and has the correct permissions
-            assert os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-            assert 'ELF' in exec_cmd(f'file {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}').stdout.decode()
-            assert os.access(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK)
+            assert os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH), (
+                f'MCG CLI file not found at {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}'
+            )
+            assert 'ELF' in exec_cmd(
+                f'file {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}'
+            ).stdout.decode(), (
+                f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH } doesn't seem like an ELF file",
+                " and was probably not copied properly"
+            )
+            assert os.access(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK), (
+                "The MCG CLI binary does not have execution permissions"
+            )
 
         if config.ENV_DATA['platform'].lower() == 'aws':
             (
