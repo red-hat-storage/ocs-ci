@@ -103,7 +103,9 @@ class MCG(object):
 
         self.s3_client = self.s3_resource.meta.client
 
-        self.operator_pod = Pod(**get_pods_having_label(constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace)[0])
+        self.operator_pod = Pod(**get_pods_having_label(
+            constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace)[0]
+        )
 
         # TODO: Add version verification to see if an additional cp isn't needed
         # If the MCG CLI binary isn't found, copy it from the operator pod
