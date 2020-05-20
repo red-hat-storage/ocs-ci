@@ -109,7 +109,7 @@ class TestMonitoringBackedByOCS(E2ETest):
                 f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
             )
             if not_ready_nodes:
-                nodes.restart_nodes(not_ready_nodes)
+                nodes.restart_nodes_by_stop_and_start(not_ready_nodes)
                 wait_for_nodes_status()
 
             log.info("All nodes are in Ready status")

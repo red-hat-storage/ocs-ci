@@ -36,7 +36,7 @@ class TestNodesRestart(ManageTest):
 
         """
         def finalizer():
-            nodes.restart_nodes_teardown()
+            nodes.restart_nodes_by_stop_and_start_teardown()
         request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
