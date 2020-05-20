@@ -120,8 +120,12 @@ class SmallFileResultsAnalyse(object):
 
         """
         log.info('Writing all data to ES server')
+        log.info(f'Params : index={self.new_index}, doc_type=_doc,body={self.results},id={self.uuid}')
         log.info(f'the results data is {self.results}')
-        self.es.index(index=self.new_index, doc_type='_doc', body=self.results)
+        self.es.index(index=self.new_index,
+                      doc_type='_doc',
+                      body=self.results,
+                      id=self.uuid)
 
     def thread_read(self, host, op, snum):
         """
