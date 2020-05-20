@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 )
 def test_rbd_capacity_workload_alerts(workload_storageutilization_95p_rbd):
     """
-    Test that there are appropriate alerts when ceph cluster is utilizedi
+    Test that there are appropriate alerts when ceph cluster is utilized
     via RBD interface.
     """
     api = prometheus.PrometheusAPI()
