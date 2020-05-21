@@ -17,7 +17,7 @@ from ocs_ci.ocs.node import get_typed_nodes, wait_for_nodes_status
     argnames=["node_type", "num_of_nodes", "workload_storageutilization_rbd"],
     argvalues=[
         pytest.param(
-            *['worker', 1, (0.11, False, 120)],
+            *['worker', 1, (0.11, True, 120)],
             marks=pytest.mark.polarion_id("OCS-1313")
         ),
     ],
@@ -47,8 +47,9 @@ class TestAddCapacityNodeRestart(ManageTest):
         node_list = get_typed_nodes(node_type=node_type, num_of_nodes=num_of_nodes)
         assert node_list, "Condition 2 to start test failed: No node to restart"
 
+        max_osds = 12
         osd_pods_before = pod_helpers.get_osd_pods()
-        assert len(osd_pods_before) < 9, (
+        assert len(osd_pods_before) < max_osds, (
             "Condition 3 to start test failed: We have maximum of osd's in the cluster")
         logging.info("All start conditions are met!")
 

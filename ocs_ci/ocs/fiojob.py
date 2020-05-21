@@ -299,8 +299,7 @@ def workload_fio_storageutilization(
     target_percentage=None,
     target_size=None,
     with_checksum=False,
-    delete_fio_data_after_test=True,
-    request=None,
+    keep_fio_data=False,
     minimal_time=480,
 ):
     """
@@ -342,12 +341,8 @@ def workload_fio_storageutilization(
             fio is stored on the volume, and reclaim policy of the volume is
             changed to ``Retain`` so that the volume is not removed during test
             teardown for later verification runs
-        delete_fio_data_after_test (bool): If true, delete fio data after the fio
-            storageutilization is completed. Else if false, delete the fio data at
-            the end of all the tests. If it is set to false, you also need to
-            provide the request parameter.
-        request: The built-in pytest request object. This is required if
-            'delete_fio_data_after_test' is set to false.
+        keep_fio_data (bool): If true, keep the fio data after the fio
+            storage utilization is completed. Else if false, deletes the fio data.
         minimal_time (int): Minimal number of seconds to monitor a system.
             (See more details in the function 'measure_operation')
 
@@ -559,11 +554,9 @@ def workload_fio_storageutilization(
         # Without checksum, we just need to make sure that data were deleted
         # and wait for this to happen to avoid conflicts with tests executed
         # right after this one.
-        if delete_fio_data_after_test or not request:
+        if not keep_fio_data:
             delete_fio_data(fio_job_file, is_storage_reclaimed)
-        # If 'delete_fio_data_after_test' is false, and 'request' param is provided
-        # wait until the end of the tests, and then delete the data.
         else:
-            request.addfinalizer(lambda: delete_fio_data(fio_job_file, is_storage_reclaimed))
+            logging.info("The fio data will be deleted at the teardown part")
 
     return measured_op

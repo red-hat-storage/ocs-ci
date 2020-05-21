@@ -22,19 +22,19 @@ def workload_storageutilization_rbd(
         supported_configuration):
     """
     In order to use this fixture you need to pass 3 indirect parameters:
-    target_percentage(float): the percentage storage utilization(from 0.01 to 0.99).
-    delete_fio_data_after_test(bool): indicate if you want to delete the fio data after the test is finished.
-    minimal_time(int): Minimal number of seconds to monitor a system
+    target_percentage (float): the percentage storage utilization(from 0.01 to 0.99).
+    keep_fio_data (bool): indicate if you want to keep the fio data after the test is finished.
+    minimal_time (int): Minimal number of seconds to monitor a system
     (See more details in the function 'measure_operation').
 
     For example: Let's say I want to use workload_storageutilization_rbd fixture with
-    'target_percentage'=0.25, 'delete_fio_job_file'=True, 'minimal_time'=120
+    'target_percentage'=0.25, 'keep_fio_data'=True, 'minimal_time'=120
     then In my test I will specify these parameters:
     @pytest.mark.parametrize("workload_storageutilization_rbd",
-    [(0.25, False, 120)], indirect=["workload_storageutilization_rbd"])
+    [(0.25, True, 120)], indirect=["workload_storageutilization_rbd"])
     """
 
-    target_percentage, delete_fio_data_after_test, minimal_time = request.param
+    target_percentage, keep_fio_data, minimal_time = request.param
     percent_to_fill = int(target_percentage * 100)
     fixture_name = f"workload_storageutilization_{percent_to_fill}p_rbd"
     measured_op = workload_fio_storageutilization(
@@ -46,8 +46,7 @@ def workload_storageutilization_rbd(
         measurement_dir,
         tmp_path,
         target_percentage=target_percentage,
-        delete_fio_data_after_test=delete_fio_data_after_test,
-        request=request,
+        keep_fio_data=keep_fio_data,
         minimal_time=minimal_time,
     )
     return measured_op
@@ -65,19 +64,19 @@ def workload_storageutilization_cephfs(
         supported_configuration):
     """
     In order to use this fixture you need to pass 3 indirect parameters:
-    target_percentage(float): the percentage storage utilization(from 0.01 to 0.99).
-    delete_fio_data_after_test(bool): indicate if you want to delete the fio data after the test is finished.
-    minimal_time(int): Minimal number of seconds to monitor a system
+    target_percentage (float): the percentage storage utilization(from 0.01 to 0.99).
+    keep_fio_data (bool): indicate if you want to keep the fio data after the test is finished.
+    minimal_time (int): Minimal number of seconds to monitor a system
     (See more details in the function 'measure_operation').
 
     For example: Let's say I want to use workload_storageutilization_cephfs fixture with
-    'target_percentage'=0.25, 'delete_fio_job_file'=True, 'minimal_time'=120
+    'target_percentage'=0.25, 'keep_fio_data'=True, 'minimal_time'=120
     then In my test I will specify these parameters:
     @pytest.mark.parametrize("workload_storageutilization_cephfs",
-    [(0.25, False, 120)], indirect=["workload_storageutilization_cephfs"])
+    [(0.25, True, 120)], indirect=["workload_storageutilization_cephfs"])
     """
 
-    target_percentage, delete_fio_data_after_test, minimal_time = request.param
+    target_percentage, keep_fio_data, minimal_time = request.param
     percent_to_fill = int(target_percentage * 100)
     fixture_name = f"workload_storageutilization_{percent_to_fill}p_cephfs"
     measured_op = workload_fio_storageutilization(
@@ -89,8 +88,7 @@ def workload_storageutilization_cephfs(
         measurement_dir,
         tmp_path,
         target_percentage=target_percentage,
-        delete_fio_data_after_test=delete_fio_data_after_test,
-        request=request,
+        keep_fio_data=keep_fio_data,
         minimal_time=minimal_time,
     )
     return measured_op
