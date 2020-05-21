@@ -3,7 +3,7 @@ import logging
 import time
 
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4
+from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4a
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -24,7 +24,7 @@ from ocs_ci.ocs.node import get_typed_nodes, wait_for_nodes_status
     indirect=["workload_storageutilization_rbd"],
 )
 @ignore_leftovers
-@tier4
+@tier4a
 class TestAddCapacityNodeRestart(ManageTest):
     """
     Test add capacity when one of the nodes got restart
