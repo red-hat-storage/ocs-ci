@@ -67,7 +67,7 @@ class ClusterLoad:
         # make sure that the pods are running
         io_run_time = 100**3
         rate = '200M'
-        bs = '256K'
+        bs = '128K'
 
         if 0.1 < target_percentage > 0.95:
             self.logger.warning(
