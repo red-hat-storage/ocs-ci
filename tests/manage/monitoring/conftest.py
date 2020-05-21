@@ -629,8 +629,8 @@ def measure_noobaa_exceed_bucket_quota(
         for i in range(1, 6):
             awscli_pod.exec_cmd_on_pod(
                 helpers.craft_s3_command(
-                    mcg_obj,
-                    f"cp /tmp/testfile s3://{bucket_name}/testfile{i}"
+                    f"cp /tmp/testfile s3://{bucket_name}/testfile{i}",
+                    mcg_obj
                 ),
                 out_yaml_format=False,
                 secrets=[
@@ -658,8 +658,8 @@ def measure_noobaa_exceed_bucket_quota(
     for i in range(1, 6):
         awscli_pod.exec_cmd_on_pod(
             helpers.craft_s3_command(
-                mcg_obj,
-                f"rm s3://{bucket_name}/testfile{i}"
+                f"rm s3://{bucket_name}/testfile{i}",
+                mcg_obj
             ),
             out_yaml_format=False,
             secrets=[

@@ -71,7 +71,7 @@ def sync_object_directory(podobj, src, target, mcg_obj=None):
     else:
         secrets = None
     podobj.exec_cmd_on_pod(
-        command=craft_s3_command(mcg_obj, retrieve_cmd), out_yaml_format=False,
+        command=craft_s3_command(retrieve_cmd, mcg_obj), out_yaml_format=False,
         secrets=secrets
     ), 'Failed to sync objects'
     # Todo: check that all objects were synced successfully
@@ -92,7 +92,7 @@ def rm_object_recursive(podobj, target, mcg_obj, option=''):
     """
     rm_command = f"rm s3://{target} --recursive {option}"
     podobj.exec_cmd_on_pod(
-        command=craft_s3_command(mcg_obj, rm_command),
+        command=craft_s3_command(rm_command, mcg_obj),
         out_yaml_format=False,
         secrets=[mcg_obj.access_key_id, mcg_obj.access_key,
                  mcg_obj.s3_endpoint]
@@ -131,7 +131,7 @@ def write_individual_s3_objects(mcg_obj, awscli_pod, bucket_factory, downloaded_
         full_object_path = f"s3://{bucketname}/{obj_name}"
         copycommand = f"cp {target_dir}{obj_name} {full_object_path}"
         assert 'Completed' in awscli_pod.exec_cmd_on_pod(
-            command=craft_s3_command(mcg_obj, copycommand), out_yaml_format=False,
+            command=craft_s3_command(copycommand, mcg_obj), out_yaml_format=False,
             secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
         )
 

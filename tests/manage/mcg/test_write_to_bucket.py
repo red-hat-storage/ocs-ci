@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs import constants
 from tests.manage.mcg import helpers
 from tests.manage.mcg.helpers import retrieve_anon_s3_resource
+from tests.helpers import craft_s3_command
 
 logger = logging.getLogger(__name__)
 
@@ -145,15 +146,17 @@ class TestBucketIO(ManageTest):
             logger.info(
                 f'Downloading {obj["Key"]} from AWS bucket {public_bucket}'
             )
-            command = f'wget -P {data_dir} '
-            command += f'https://{public_bucket}.s3.amazonaws.com/{obj["Key"]}'
-            awscli_pod.exec_cmd_on_pod(command=command)
+            download_obj_cmd = f'cp s3://{public_bucket}/{obj["Key"]} {data_dir}'
+            awscli_pod.exec_cmd_on_pod(
+                command=craft_s3_command(download_obj_cmd),
+                out_yaml_format=False
+            )
             download_files.append(obj['Key'])
         # Write all downloaded objects to the new bucket
         bucketname = bucket_factory(1)[0].name
         base_path = f"s3://{bucketname}"
         for i in range(amount):
-            full_object_path = base_path + f"/{i}/" + obj_key.split('/')[-1]
+            full_object_path = base_path + f"/{i}/"
             helpers.sync_object_directory(
                 awscli_pod, data_dir, full_object_path, mcg_obj
             )
