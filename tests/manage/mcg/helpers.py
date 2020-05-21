@@ -163,7 +163,7 @@ def upload_parts(mcg_obj, awscli_pod, bucketname, object_key, body_path, upload_
         )
         # upload_cmd will return ETag, upload_id etc which is then split to get just the ETag
         part = awscli_pod.exec_cmd_on_pod(
-            command=craft_s3_command(mcg_obj, upload_cmd, api=True), out_yaml_format=False,
+            command=craft_s3_command(upload_cmd, mcg_obj, api=True), out_yaml_format=False,
             secrets=secrets
         ).split("\"")[-3].split("\\")[0]
         parts.append({"PartNumber": count, "ETag": f'"{part}"'})
