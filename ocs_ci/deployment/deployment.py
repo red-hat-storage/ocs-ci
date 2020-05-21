@@ -802,6 +802,14 @@ def verify_pvs_created(num_workers):
     assert pv_json['items'], (
         f"No PVs created but we are expecting {num_workers}"
     )
+
+    # check number of PVs created
+    num_pvs = len(pv_json['items'])
+    assert num_pvs == num_workers, (
+        f"{num_pvs} PVs created but we are expecting {num_workers}"
+    )
+
+    # checks the state of PV
     for pv in pv_json['items']:
         pv_state = pv['status']['phase']
         pv_name = pv['metadata']['name']
@@ -809,7 +817,7 @@ def verify_pvs_created(num_workers):
         assert pv_state == 'Available', (
             f"{pv_name} not in 'Available' state. Current state is {pv_state}"
         )
-    num_pvs = len(pv_json['items'])
+
     logger.debug("PVs, Workers: %s, %s", num_pvs, num_workers)
 
 
