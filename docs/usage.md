@@ -188,7 +188,7 @@ run-ci tests/
     --email=<emailid1>,<emailid2>,<emailid3>
  ```
 
-#### Running tests on deployed environment and sending reports
+#### Running tests with background IO load
 
 If you would like to run tests with IO load of 50% in the tests background,
 while background IO log messages are printed, append these arguments to the
