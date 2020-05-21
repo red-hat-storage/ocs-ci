@@ -37,6 +37,3 @@ class TestAddNode(ManageTest):
                 node_type = 'RHCOS'
             assert add_new_node_and_label_upi(node_type, new_nodes), "Add node failed"
             logger.info(f'The worker nodes number after expansion {len(helpers.get_worker_nodes())}')
-            pytest.skip("UPI not yet supported")
-        # ToDo run IOs
-

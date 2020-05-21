@@ -11,7 +11,6 @@ import yaml
 
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.deployment.vmware import (
-    change_vm_root_disk_size,
     clone_openshift_installer,
     update_machine_conf,
 )
@@ -32,7 +31,7 @@ from ocs_ci.utility.csr import (
 from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
     get_ocp_version, TimeoutSampler, download_file,
-    delete_file, AZInfo, replace_content_in_file, clone_repo,
+    delete_file, AZInfo, replace_content_in_file,
 )
 
 
