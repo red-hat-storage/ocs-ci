@@ -719,8 +719,13 @@ class VSPHERE(object):
             str: Active partition disk
 
         """
-        logger.debug(f"Getting the active partition device in host {host.name}")
+        logger.debug(
+            f"Getting the active partition device in host {host.name}"
+        )
         active_partition = host.config.activeDiagnosticPartition
+        if not active_partition:
+            active_partition = self.get_active_partition_from_mount_info(host)
+            return active_partition
         return active_partition.id.diskName
 
     def available_storage_devices(self, host):
@@ -890,3 +895,25 @@ class VSPHERE(object):
         lunids = self.get_lunids(dc)
         host_devices_mapping = self.map_lunids_to_devices(**lunids)
         return host_devices_mapping.get(host)
+
+    def get_active_partition_from_mount_info(self, host):
+        """
+        Gets the active partition from mount info
+
+        Args:
+            host (vim.HostSystem): Host instance
+
+        Returns:
+            str: Active partition disk
+
+        """
+        logger.debug(
+            "Fetching active partition from fileSystemVolume information"
+        )
+        mount_info = host.config.fileSystemVolume.mountInfo
+        for each in mount_info:
+            try:
+                if each.volume.extent:
+                    return each.volume.extent[0].diskName
+            except AttributeError:
+                continue
