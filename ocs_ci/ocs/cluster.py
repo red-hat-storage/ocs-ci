@@ -954,7 +954,6 @@ def validate_pg_balancer():
 
 def get_percent_used_capacity():
     """
-    ***This function was taken from PR 1996***
     Function to calculate the percentage of used capacity in a cluster
 
     Returns:

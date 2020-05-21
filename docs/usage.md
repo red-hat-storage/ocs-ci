@@ -105,7 +105,7 @@ to the pytest.
    the cluster throughput limit.
 * `--io-load` - IOs throughput target percentage. The value should be
    between 0 to 100. The default is 30 (30%)
-* `--enable-bg-io-logs` - If passed, background IO log messages, will be printed
+* `--enable-bg-io-logs` - If passed, background IO log messages will be printed
 
 ## Examples
 
