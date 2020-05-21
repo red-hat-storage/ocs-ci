@@ -557,6 +557,6 @@ def workload_fio_storageutilization(
         if not keep_fio_data:
             delete_fio_data(fio_job_file, is_storage_reclaimed)
         else:
-            logging.info("The fio data will be deleted at the teardown part")
+            logging.info("The fio data will be deleted during project teardown")
 
     return measured_op
