@@ -161,18 +161,6 @@ def fio_project(project_factory_session):
 
 
 @pytest.fixture(scope='session')
-def workload_bucket(bucket_factory_session):
-    """
-    MCG bucket where fio workload is supposed to be run.
-
-    Returns:
-        obj: Bucket object
-
-    """
-    return bucket_factory_session()
-
-
-@pytest.fixture(scope='session')
 def fio_conf_fs():
     """
     Basic fio configuration for upgrade utilization for fs based pvcs
@@ -217,11 +205,12 @@ def fio_conf_block():
 
 
 @pytest.fixture(scope='session')
-def fio_conf_mcg(workload_bucket, mcg_obj_session):
+def fio_conf_mcg(mcg_obj_session, bucket_factory_session):
     """
     Basic fio configuration for upgrade utilization for AWS S3 bucket.
 
     """
+    workload_bucket = bucket_factory_session()
     config = configparser.ConfigParser()
     config.read_file(open(constants.FIO_S3))
     config.set('global', 'name', workload_bucket[0].name)
