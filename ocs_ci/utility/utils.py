@@ -1995,3 +1995,31 @@ def destroy_cluster(installer, cluster_path, log_level="DEBUG"):
         raise
     except Exception:
         log.error(traceback.format_exc())
+
+
+def config_to_string(config):
+    """
+    Convert ConfigParser object to string in INI format.
+
+    Args:
+        config (obj): ConfigParser object
+
+    Returns:
+        str: Config in one string
+
+    """
+    string = ""
+    sections = [config.default_section] + config.sections()
+
+    first = True
+    for section in sections:
+        if config.items(section):
+            if first:
+                first = False
+            else:
+                string += "\n\n"
+            string += f"[{section}]\n"
+            string += "\n".join(
+                [f"{item[0]}={item[1]}" for item in config.items(section)]
+            )
+    return string

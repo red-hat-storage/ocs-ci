@@ -10,7 +10,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import Pod
-from ocs_ci.utility.workloads.fio import config_to_string
+from ocs_ci.utility.utils import config_to_string
 from tests import helpers
 
 log = logging.getLogger(__name__)
