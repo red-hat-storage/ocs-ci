@@ -2325,3 +2325,21 @@ def fio_job_dict_fixture():
         """)
     job_dict = yaml.safe_load(template)
     return job_dict
+
+
+@pytest.fixture(scope='session', autouse=True)
+def retrieve_mcg_certificate(request, mcg_obj_session):
+    """
+    Copy the self-signed certificate from the noobaa-core pod
+    to the local code runner for usage with boto3
+    """
+    OCP.exec_oc_cmd(
+        f'cp {mcg_obj_session.core_pod.name}:'
+        f'{constants.MCG_CRT_REMOTE_PATH} '
+        f'{constants.MCG_CRT_LOCAL_PATH}'
+    )
+
+    def crt_cleanup():
+        os.remove(constants.MCG_CRT_LOCAL_PATH)
+
+    request.addfinalizer(crt_cleanup)

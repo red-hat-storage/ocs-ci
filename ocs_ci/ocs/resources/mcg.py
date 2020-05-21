@@ -44,15 +44,6 @@ class MCG(object):
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
 
-        # Copy the self-signed certificate to the local runner
-        # For usage with boto3 (in case the cert isn't found)
-        if not os.path.isfile(constants.MCG_CRT_LOCAL_PATH):
-            ocp_obj.exec_oc_cmd(
-                f'cp {self.core_pod.name}:'
-                f'{constants.MCG_CRT_REMOTE_PATH} '
-                f'{constants.MCG_CRT_LOCAL_PATH}'
-            )
-
         results = ocp_obj.get()
         self.s3_endpoint = (
             results.get('items')[0].get('status').get('services')
