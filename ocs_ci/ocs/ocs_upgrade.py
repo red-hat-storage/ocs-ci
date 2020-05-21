@@ -231,6 +231,7 @@ def run_ocs_upgrade(ocs_registry_image,
         f'"{channel}", "source": "{ocs_source}"}}}}\''
     )
     run_cmd(patch_subscription_cmd)
+    # in line above upgrade actually starts (unless its manual)
 
     subscription_plan_approval = config.DEPLOYMENT.get(
         'subscription_plan_approval'

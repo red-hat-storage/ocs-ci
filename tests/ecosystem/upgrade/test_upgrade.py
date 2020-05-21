@@ -6,7 +6,7 @@ from ocs_ci.framework.testlib import ocs_upgrade
 from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.ocs_upgrade import (
-    run_ocs_upgrade, verify_image_versions,
+    run_ocs_upgrade, verify_image_versions, get_upgrade_version
 )
 from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
 
@@ -18,7 +18,7 @@ def test_upgrade():
     # Get versions and images information
     ocs_registry_image = config.UPGRADE.get('upgrade_ocs_registry_image')
     version_before_upgrade = config.ENV_DATA.get("ocs_version")
-    upgrade_version = ocs_upgrade.get_upgrade_version(
+    upgrade_version = get_upgrade_version(
         ocs_registry_image, version_before_upgrade
     )
     parsed_version_before_upgrade = parse_version(version_before_upgrade)
