@@ -434,7 +434,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             log.info(f"Waiting for {waiting_time} seconds")
             time.sleep(waiting_time)
 
-            nodes.start_nodes([prometheus_node_obj])
+            nodes.start_nodes(nodes=[prometheus_node_obj])
 
             # Validate all nodes are in READY state
             wait_for_nodes_status()

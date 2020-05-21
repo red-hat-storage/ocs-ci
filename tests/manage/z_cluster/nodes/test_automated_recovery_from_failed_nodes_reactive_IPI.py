@@ -228,7 +228,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
                     f"{self.osd_worker_node[0].name} instance"
                 )
             else:
-                nodes.start_nodes(self.osd_worker_node, wait=True)
+                nodes.start_nodes(nodes=self.osd_worker_node, wait=True)
             log.info(
                 f"Successfully started node : "
                 f"{self.osd_worker_node[0].name} instance"
@@ -304,7 +304,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
                 new_osd = pod_obj
                 break
 
-        nodes.start_nodes(self.osd_worker_node, wait=True)
+        nodes.start_nodes(nodes=self.osd_worker_node, wait=True)
         log.info(
             f"Successfully powered on node: {self.osd_worker_node[0].name}"
         )

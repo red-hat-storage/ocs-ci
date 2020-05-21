@@ -438,7 +438,7 @@ class Deployment(object):
         if config.DEPLOYMENT.get('local_storage'):
             cluster_data['spec']['manageNodes'] = False
             cluster_data['spec']['monDataDirHostPath'] = '/var/lib/rook'
-            cluster_data['spec']['portable'] = False
+            deviceset_data['portable'] = False
             deviceset_data['dataPVCTemplate']['spec'][
                 'storageClassName'
             ] = 'local-block'
@@ -799,10 +799,13 @@ def verify_pvs_created(num_workers):
     logger.info("Verifying PVs are created")
     out = run_cmd("oc get pv -o json")
     pv_json = json.loads(out)
+    assert pv_json['items'], (
+        f"No PVs created but we are expecting {num_workers}"
+    )
     for pv in pv_json['items']:
         pv_state = pv['status']['phase']
         pv_name = pv['metadata']['name']
-        logger.info("%s is %s", pv_name, pv_state)
+        logger.info(f"{pv_name} is in {pv_state} state")
         assert pv_state == 'Available', (
             f"{pv_name} not in 'Available' state. Current state is {pv_state}"
         )

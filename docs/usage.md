@@ -16,6 +16,12 @@ get information on various image version deployed by ocs-ci
    -master or -worker. This can be found by logging into AWS, Selecting the VM
    and clicking on Tags.
 
+# usage to shutdown AWS nodes when nodes are not in use
+  Following cli can be used when you want to shutdown the cluster
+  `ci-pause --cluster-path /home-dir/cluster-path --action [stop|start]`
+  action can be start or stop that performs the required action on all the nodes
+  in the cluster
+
 ## Required configuration
 
 * **AWS credentials** - if you have AWS already configured by `aws configure`,

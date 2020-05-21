@@ -45,12 +45,15 @@ setup(
         'semantic-version',
         'jsonschema>=3.2.0',
         'google-cloud-storage',
+        'elasticsearch',
+        'numpy',
     ],
     entry_points={
         'console_scripts': [
             'run-ci=ocs_ci.framework.main:main',
             'report-version=ocs_ci.ocs.version:main',
             'ci-cleanup=ocs_ci.cleanup.aws.cleanup:cluster_cleanup',
+            'ci-pause=ocs_ci.pause.pause:cluster_pause',
             'aws-cleanup=ocs_ci.cleanup.aws.cleanup:aws_cleanup'
         ],
     },

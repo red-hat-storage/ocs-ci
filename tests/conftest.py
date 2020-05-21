@@ -12,6 +12,7 @@ from time import sleep
 from shutil import copyfile
 
 import pytest
+import pathlib
 import yaml
 from botocore.exceptions import ClientError
 
@@ -20,7 +21,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     deployment, ignore_leftovers, tier_marks
 )
-from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes, registry
+from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
@@ -1515,10 +1516,6 @@ def mcg_obj_fixture(request):
     mcg_obj = MCG()
 
     def finalizer():
-        registry.remove_role_from_user(
-            'cluster-admin', constants.NOOBAA_SERVICE_ACCOUNT,
-            cluster_role=True
-        )
         if config.ENV_DATA['platform'].lower() == 'aws':
             mcg_obj.cred_req_obj.delete()
 
@@ -1575,13 +1572,27 @@ def awscli_pod_fixture(mcg_obj, created_pods):
 
     Returns:
         pod: A pod running the AWS CLI
+
     """
     awscli_pod_obj = helpers.create_pod(
         namespace=mcg_obj.namespace,
-        pod_dict_path=constants.AWSCLI_POD_YAML
+        pod_dict_path=constants.AWSCLI_POD_YAML,
+        pod_name=constants.AWSCLI_RELAY_POD_NAME
     )
     helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
     created_pods.append(awscli_pod_obj)
+
+    # Verify that the target dir for the self-signed MCG cert exists
+    cert_dir = pathlib.PurePath(constants.MCG_CRT_AWSCLI_POD_PATH).parent
+    awscli_pod_obj.exec_cmd_on_pod(f'mkdir --parents {cert_dir}')
+
+    # Copy the self-signed certificate to use with AWSCLI
+    OCP().exec_oc_cmd(
+        f'cp {constants.MCG_CRT_LOCAL_PATH} '
+        f'{constants.AWSCLI_RELAY_POD_NAME}:'
+        f'{constants.MCG_CRT_AWSCLI_POD_PATH}'
+    )
+
     return awscli_pod_obj
 
 

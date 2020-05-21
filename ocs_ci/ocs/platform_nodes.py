@@ -1,6 +1,5 @@
 import logging
 import os
-import random
 import json
 import re
 
@@ -18,8 +17,8 @@ from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
-    get_ocp_version, get_az_count, TimeoutSampler,
-    download_file, delete_file
+    get_ocp_version, TimeoutSampler,
+    download_file, delete_file, AZInfo
 )
 
 
@@ -46,7 +45,6 @@ class NodesBase(object):
 
     """
     def __init__(self):
-        self.cluster_nodes = get_node_objs()
         self.cluster_path = config.ENV_DATA['cluster_path']
         self.platform = config.ENV_DATA['platform']
         self.deployment_type = config.ENV_DATA['deployment_type']
@@ -289,6 +287,7 @@ class VMWareNodes(NodesBase):
         Make sure all VMs are up by the end of the test
 
         """
+        self.cluster_nodes = get_node_objs()
         vms = self.get_vms(self.cluster_nodes)
         assert vms, (
             f"Failed to get VM objects for nodes {[n.name for n in self.cluster_nodes]}"
@@ -310,6 +309,7 @@ class AWSNodes(NodesBase):
     def __init__(self):
         super(AWSNodes, self).__init__()
         self.aws = aws.AWS()
+        self.az = AZInfo()
 
     def get_ec2_instances(self, nodes):
         """
@@ -379,16 +379,17 @@ class AWSNodes(NodesBase):
         )
         self.aws.stop_ec2_instances(instances=instances, wait=wait)
 
-    def start_nodes(self, nodes, wait=True):
+    def start_nodes(self, instances=None, nodes=None, wait=True):
         """
         Start EC2 instances
 
         Args:
             nodes (list): The OCS objects of the nodes
+            instances (dict): instance-id and name dict
             wait (bool): True for waiting the instances to start, False otherwise
 
         """
-        instances = self.get_ec2_instances(nodes)
+        instances = instances or self.get_ec2_instances(nodes)
         assert instances, (
             f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
         )
@@ -506,6 +507,7 @@ class AWSNodes(NodesBase):
 
         """
         # Get the cluster nodes ec2 instances
+        self.cluster_nodes = get_node_objs()
         ec2_instances = self.get_ec2_instances(self.cluster_nodes)
         assert ec2_instances, (
             f"Failed to get ec2 instances for nodes {[n.name for n in self.cluster_nodes]}"
@@ -564,12 +566,14 @@ class AWSNodes(NodesBase):
             slots_available = self.get_available_slots(existing_indexes, num_nodes)
             logger.info(f"Available indexes: {slots_available}")
             for slot in slots_available:
+                node_conf['zone'] = self.az.get_zone_number()
                 node_id = slot
                 node_list.append(node_cls(node_conf, node_type))
                 node_list[-1]._prepare_node(node_id)
         elif node_type.upper() == 'RHEL':
             rhel_workers = len(get_typed_worker_nodes('rhel'))
             for i in range(num_nodes):
+                node_conf['zone'] = self.az.get_zone_number()
                 node_id = i + rhel_workers
                 node_list.append(node_cls(node_conf, node_type))
                 node_list[-1]._prepare_node(node_id)
@@ -799,16 +803,18 @@ class AWSNodes(NodesBase):
         # install pod packages
         rhel_pod_obj.install_packages(constants.RHEL_POD_PACKAGES)
         # run ansible
-        cmd = (
-            f"ansible-playbook -i /hosts --private-key={pem_dst_path} "
-            f"{constants.SCALEUP_ANSIBLE_PLAYBOOK}"
-        )
+        try:
+            cmd = (
+                f"ansible-playbook -i /hosts --private-key={pem_dst_path} "
+                f"{constants.SCALEUP_ANSIBLE_PLAYBOOK}"
+            )
 
-        rhel_pod_obj.exec_cmd_on_pod(
-            cmd, out_yaml_format=False, timeout=timeout
-        )
-        self.verify_nodes_added(hosts)
-        rhel_pod_obj.delete()
+            rhel_pod_obj.exec_cmd_on_pod(
+                cmd, out_yaml_format=False, timeout=timeout
+            )
+            self.verify_nodes_added(hosts)
+        finally:
+            rhel_pod_obj.delete(force=True)
 
     def verify_nodes_added(self, hosts):
         """
@@ -983,7 +989,7 @@ class AWSUPINode(AWSNodes):
             boto3.Instance: instance of ec2 instance resource
 
         """
-        self.gather_worker_data()
+        self.gather_worker_data(f"no{conf.get('zone')}")
         worker_template_path = self.get_rhcos_worker_template()
         self.bucket_name = constants.AWS_S3_UPI_BUCKET
         self.template_obj_key = f'{self.cluster_name}-workertemplate'
@@ -1165,11 +1171,7 @@ class AWSUPINode(AWSNodes):
         """
         cluster_id = get_infra_id(self.cluster_path)
         node_id = node_conf['node_id']
-        if not node_conf.get('zone'):
-            num_zone = get_az_count()
-            zone = random.randint(0, num_zone)
-        else:
-            zone = node_conf.get('zone')
+        zone = node_conf.get('zone')
         logger.info("Creating RHEL worker node")
         self.gather_worker_data(f'no{zone}')
         response = self.client.run_instances(

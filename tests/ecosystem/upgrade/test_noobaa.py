@@ -4,9 +4,7 @@ import pytest
 import time
 
 from ocs_ci.framework.pytest_customization.marks import (
-    pre_upgrade, post_upgrade,
-    aws_platform_required, filter_insecure_request_warning,
-    bugzilla
+    pre_upgrade, post_upgrade, aws_platform_required, bugzilla
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_OPTIMAL
@@ -22,7 +20,6 @@ DOWNLOADED_OBJS = []
 
 
 @aws_platform_required
-@filter_insecure_request_warning
 @pre_upgrade
 def test_fill_bucket(
     mcg_obj_session,
@@ -107,7 +104,6 @@ def test_fill_bucket(
 
 
 @aws_platform_required
-@filter_insecure_request_warning
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2038")
 def test_noobaa_postupgrade(

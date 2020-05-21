@@ -2023,3 +2023,23 @@ def config_to_string(config):
                 [f"{item[0]}={item[1]}" for item in config.items(section)]
             )
     return string
+
+
+class AZInfo(object):
+    """
+    A class for getting different az numbers across calls
+    """
+    zone_number = 0
+
+    def get_zone_number(self):
+        """
+        Increment current zone_number and perform modulus op
+        to roll-on to next available number
+
+        Returns:
+           int: zone number index
+        """
+        prev = AZInfo.zone_number
+        AZInfo.zone_number += 1
+        AZInfo.zone_number %= get_az_count()
+        return prev
