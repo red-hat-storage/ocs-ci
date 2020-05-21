@@ -13,6 +13,7 @@ from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.deployment.vmware import (
     change_vm_root_disk_size,
     clone_openshift_installer,
+    update_machine_conf,
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
@@ -1389,28 +1390,8 @@ class VSPHEREUPINode(VMWareNodes):
             add_file_block
         )
 
-        # change root disk size
-        change_vm_root_disk_size(constants.INSTALLER_MACHINE_CONF)
-
-        # update gateway and DNS
-        if config.ENV_DATA.get('gateway'):
-            replace_content_in_file(
-                constants.INSTALLER_IGNITION,
-                '${cidrhost(var.machine_cidr,1)}',
-                f"{config.ENV_DATA.get('gateway')}"
-            )
-
-        if config.ENV_DATA.get('dns'):
-            replace_content_in_file(
-                constants.INSTALLER_IGNITION,
-                constants.INSTALLER_DEFAULT_DNS,
-                f"{config.ENV_DATA.get('dns')}"
-            )
-
-        # update the zone in route
-        if config.ENV_DATA.get('region'):
-            def_zone = 'provider "aws" { region = "%s" } \n' % config.ENV_DATA.get('region')
-            replace_content_in_file(constants.INSTALLER_ROUTE53, "xyz", def_zone)
+        # update the machine configurations
+        update_machine_conf()
 
     def add_node(self):
         """
