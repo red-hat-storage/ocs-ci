@@ -1,7 +1,7 @@
 import logging
+import time
 
 import pytest
-import time
 
 from ocs_ci.framework.pytest_customization.marks import (
     pre_upgrade, post_upgrade, aws_platform_required, bugzilla
