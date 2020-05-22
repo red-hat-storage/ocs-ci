@@ -7,10 +7,14 @@ import tempfile
 
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.ocp import switch_to_default_rook_cluster_project
+from ocs_ci.utility import templating
 from subprocess import run, CalledProcessError
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE
+from ocs_ci.ocs import constants
+
 
 log = logging.getLogger(__name__)
 
@@ -75,14 +79,14 @@ class RipSaw(object):
             log.error('Error during cloning of ripsaw repository')
             raise cf
 
-    def apply_crd(self, crd):
+    def apply_crd(self, crd, drop_cache):
         """
         Apply the CRD
 
         Args:
             crd (str): Name of file to apply
+            drop_cache (bool): Enable if OSD cache needs to be dropped
         """
-        self.crd = crd
         self.dir += '/ripsaw'
         run('oc apply -f deploy', shell=True, check=True, cwd=self.dir)
         run(f'oc apply -f {crd}', shell=True, check=True, cwd=self.dir)

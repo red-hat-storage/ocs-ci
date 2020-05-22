@@ -12,49 +12,44 @@ spec:
   workload:
     name: "fio_distributed"
     args:
-      prefill: false
+      prefill: true
       samples: 3
-      servers: 3
+      servers: 50
       pin_server: ''
       jobs:
-        - write
-        - read
+        - randwrite
+        - randread
       bs:
         - 1024KiB
         - 64KiB
+        - 16KiB
+        - 4KiB
       numjobs:
         - 1
-      iodepth: 4
-      read_runtime: 60
+      iodepth: 16
+      read_runtime: 300
+      write_runtime: 300
       read_ramp_time: 5
-      filesize: 80GiB
-      log_sample_rate: 1000
+      write_ramp_time: 5
+      filesize: 10GiB
+      log_sample_rate: 2000
       storageclass: ocs-storagecluster-ceph-rbd
-      storagesize: 100Gi
-      rook_ceph_drop_caches: True
-      rook_ceph_drop_cache_pod_ip:
-        - server1
-        - server2
-        - server3
+      storagesize: 12Gi
+#      rook_ceph_drop_caches: True
+#      rook_ceph_drop_cache_pod_ip:
 #######################################
 #  EXPERT AREA - MODIFY WITH CAUTION  #
 #######################################
 #  global_overrides:
   job_params:
-    - jobname_match: w
+    - jobname_match: write
       params:
         - fsync_on_close=1
         - create_on_open=1
-        - runtime={{ fiod.read_runtime }}
-        - ramp_time={{ fiod.read_ramp_time }}
+        - runtime={{ fiod.write_runtime }}
+        - ramp_time={{ fiod.write_ramp_time }}
     - jobname_match: read
       params:
-        - time_based=1
-        - runtime={{ fiod.read_runtime }}
-        - ramp_time={{ fiod.read_ramp_time }}
-    - jobname_match: rw
-      params:
-        - rwmixread=50
         - time_based=1
         - runtime={{ fiod.read_runtime }}
         - ramp_time={{ fiod.read_ramp_time }}
@@ -64,6 +59,24 @@ spec:
         - time_based=1
         - runtime={{ fiod.read_runtime }}
         - ramp_time={{ fiod.read_ramp_time }}
-#    - jobname_match: <search_string>
-#      params:
-#        - key=value
+    - jobname_match: randread
+      params:
+        - time_based=1
+        - randrepeat=0
+        - allrandrepeat=0
+        - runtime={{ fiod.read_runtime }}
+        - ramp_time={{ fiod.read_ramp_time }}
+    - jobname_match: randwrite
+      params:
+        - time_based=1
+        - randrepeat=0
+        - allrandrepeat=0
+        - runtime={{ fiod.write_runtime }}
+        - ramp_time={{ fiod.write_ramp_time }}
+    - jobname_match: randrw
+      params:
+        - time_based=1
+        - randrepeat=0
+        - allrandrepeat=0
+        - runtime={{ fiod.write_runtime }}
+        - ramp_time={{ fiod.write_ramp_time }}
