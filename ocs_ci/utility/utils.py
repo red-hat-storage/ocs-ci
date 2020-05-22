@@ -2008,21 +2008,21 @@ def config_to_string(config):
         str: Config in one string
 
     """
-    string = ""
+    cfg_str = ""
     sections = [config.default_section] + config.sections()
 
-    first = True
+    first_iteration = True
     for section in sections:
         if config.items(section):
-            if first:
-                first = False
+            if first_iteration:
+                first_iteration = False
             else:
-                string += "\n\n"
-            string += f"[{section}]\n"
-            string += "\n".join(
+                cfg_str += "\n\n"
+            cfg_str += f"[{section}]\n"
+            cfg_str += "\n".join(
                 [f"{item[0]}={item[1]}" for item in config.items(section)]
             )
-    return string
+    return cfg_str
 
 
 class AZInfo(object):
