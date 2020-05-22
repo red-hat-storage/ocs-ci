@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 import random
 import tempfile
 import textwrap
@@ -29,16 +30,16 @@ from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import get_rgw_pod
+from ocs_ci.ocs.resources.pod import get_rgw_pod, get_ceph_tools_pod
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
+from ocs_ci.ocs.cluster_load import ClusterLoad
 from ocs_ci.utility import aws
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility import templating
 from ocs_ci.utility.environment_check import (
     get_status_before_execution, get_status_after_execution
 )
-from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     TimeoutSampler, get_rook_repo, get_ocp_version, ceph_health_check
@@ -687,7 +688,6 @@ def pod_factory_fixture(request, pvc_factory):
             pod_obj = helpers.create_resource(**custom_data)
         else:
             pvc = pvc or pvc_factory(interface=interface)
-
             pod_obj = helpers.create_pod(
                 pvc_name=pvc.name,
                 namespace=pvc.namespace,
@@ -1041,26 +1041,23 @@ def log_cli_level(pytestconfig):
 
 
 @pytest.fixture(scope="session")
-def run_io_in_background(request, pod_factory_session):
+def run_io_in_background(request, pvc_factory_session, pod_factory_session):
     """
     Run IO during the test execution
     """
-    if config.RUN['cli_params'].get('io_in_bg') or config.RUN['io_in_bg']:
+    if config.RUN.get('io_in_bg'):
+        io_load_param = config.RUN.get('io_load')
+        if io_load_param:
+            io_load = int(io_load_param) * 0.01
+        else:
+            io_load = 0.3
+        io_bg_logs = config.RUN.get('bg_io_logs')
         log.info(
             "\n===================================================\n"
             "Tests will be running while IO is in the background\n"
             "==================================================="
         )
 
-        g_sheet = None
-        if config.RUN['google_api_secret']:
-            g_sheet = GoogleSpreadSheetAPI("IO BG results", 0)
-        else:
-            log.warning(
-                "Google API secret was not found. IO won't be reported to "
-                "a Google spreadsheet"
-            )
-        results = list()
         temp_file = tempfile.NamedTemporaryFile(
             mode='w+', prefix='test_status', delete=False
         )
@@ -1073,63 +1070,60 @@ def run_io_in_background(request, pod_factory_session):
             with open(temp_file.name, 'w') as t_file:
                 t_file.writelines(status)
 
+        log.info(
+            "Start running IO in the background. The amount of IO that will be written "
+            "is going to be determined by the cluster capabilities according to its "
+            "throughput limit"
+        )
+        cl_load_obj = ClusterLoad()
+        cluster_limit, current_tp = cl_load_obj.reach_cluster_load_percentage_in_throughput(
+            pvc_factory=pvc_factory_session, pod_factory=pod_factory_session,
+            target_percentage=io_load
+        )
+
         set_test_status('running')
 
         def finalizer():
             """
-            Delete the resources created during setup, used for
-            running IO in the test background
+            Stop the thread that executed keep_io_running()
             """
             set_test_status('finished')
-            try:
-                for status in TimeoutSampler(90, 3, get_test_status):
-                    if status == 'terminated':
-                        break
-            except TimeoutExpiredError:
-                log.warning(
-                    "Background IO was still in progress before IO "
-                    "thread termination"
-                )
             if thread:
                 thread.join()
 
-            log.info("Background IO has stopped")
-            for result in results:
-                log.info(f"IOPs after FIO for pod {pod_obj.name}:")
-                log.info(f"Read: {result[0]}")
-                log.info(f"Write: {result[1]}")
-
         request.addfinalizer(finalizer)
 
-        pod_obj = pod_factory_session(interface=constants.CEPHBLOCKPOOL)
+        def keep_io_running():
+            """
+            This function purpose is to ensure that IO is running also after scenarios
+            in which the IO is stopped due to disruptive operations like node failures.
+            As long as Ceph health is OK, it watches the cluster throughput. In case it
+            is below 60% of the target throughput percentage defined with 'io_load',
+            it calls again reach_cluster_load_percentage_in_throughput()
 
-        def run_io_in_bg():
             """
-            Run IO by executing FIO and deleting the file created for FIO on
-            the pod, in a while true loop. Will be running as long as
-            the test is running.
-            """
+            cl_load_obj.__init__(propagate_logs=io_bg_logs)
             while get_test_status() == 'running':
-                pod_obj.run_io('fs', '1G')
-                result = pod_obj.get_fio_results()
-                reads = result.get('jobs')[0].get('read').get('iops')
-                writes = result.get('jobs')[0].get('write').get('iops')
-                if g_sheet:
-                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    g_sheet.insert_row([now, reads, writes])
+                try:
+                    cl_load_obj.cl_obj.toolbox = get_ceph_tools_pod()
+                    if cl_load_obj.cl_obj.is_health_ok():
+                        average_tp = cl_load_obj.cl_obj.calc_average_throughput(samples=10)
+                        if average_tp < current_tp * 0.5:
+                            cl_load_obj.reach_cluster_load_percentage_in_throughput(
+                                pvc_factory=pvc_factory_session,
+                                pod_factory=pod_factory_session,
+                                target_percentage=io_load,
+                                cluster_limit=cluster_limit
+                            )
+                # Any type of exception should be caught and we should continue.
+                # We don't want any test to fail
+                except Exception:
+                    continue
+                time.sleep(10)
 
-                results.append((reads, writes))
-
-                file_path = os.path.join(
-                    pod_obj.get_storage_path(storage_type='fs'),
-                    pod_obj.io_params['filename']
-                )
-                pod_obj.exec_cmd_on_pod(f'rm -rf {file_path}')
             set_test_status('terminated')
 
-        log.info("Start running IO in the test background")
-
-        thread = threading.Thread(target=run_io_in_bg)
+        thread = threading.Thread(target=keep_io_running)
         thread.start()
 
 
