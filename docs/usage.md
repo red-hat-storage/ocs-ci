@@ -100,6 +100,13 @@ to the pytest.
   bugzilla_password = yourPassword
   ```
 * `--collect-logs` - to collect OCS logs for failed test cases.
+* `--io-in-bg` - If passed, IO will be running in the test background.
+   The amount of IO load will be determined by the `--io-load` argument, if
+   provided. In case `--io-load` is not provided, IO load is set to 30% of
+   the cluster throughput limit.
+* `--io-load` - IOs throughput target percentage. The value should be
+   between 0 to 100. The default is 30 (30%)
+* `--enable-bg-io-logs` - If passed, background IO log messages will be printed
 
 ## Examples
 
@@ -181,6 +188,12 @@ run-ci tests/
     --html=report.html --self-contained-html \
     --email=<emailid1>,<emailid2>,<emailid3>
  ```
+
+#### Running tests with background IO load
+
+If you would like to run tests with IO load of 50% in the tests background,
+while background IO log messages are printed, append these arguments to the
+`run-ci` command: `--io-in-bg --io-load 50 --enable-bg-io-logs`
 
 #### Destroy of cluster
 
