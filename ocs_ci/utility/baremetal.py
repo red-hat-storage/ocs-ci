@@ -139,14 +139,16 @@ class BAREMETAL(object):
                         logger.info("Baremetal Machine reached poweredOn status")
                         break
 
-        wait_for_cluster_connectivity(delay=5)
+        wait_for_cluster_connectivity(tries=400)
         wait_for_nodes_status(
             node_names=helpers.get_master_nodes(),
-            status=constants.NODE_READY
+            status=constants.NODE_READY,
+            timeout=600
         )
         wait_for_nodes_status(
             node_names=helpers.get_worker_nodes(),
-            status=constants.NODE_READY
+            status=constants.NODE_READY,
+            timeout=600
         )
 
     def start_baremetal_machines(self, baremetal_machine, wait=True):
@@ -184,14 +186,16 @@ class BAREMETAL(object):
                             ipmi_ctx.session.close()
                             break
 
-        wait_for_cluster_connectivity(delay=5)
+        wait_for_cluster_connectivity(tries=400)
         wait_for_nodes_status(
             node_names=helpers.get_master_nodes(),
-            status=constants.NODE_READY
+            status=constants.NODE_READY,
+            timeout=600
         )
         wait_for_nodes_status(
             node_names=helpers.get_worker_nodes(),
-            status=constants.NODE_READY
+            status=constants.NODE_READY,
+            timeout=600
         )
 
     def restart_baremetal_machines(self, baremetal_machine, force=True):
