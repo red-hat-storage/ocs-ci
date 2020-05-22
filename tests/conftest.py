@@ -28,7 +28,7 @@ from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import get_rgw_pod
+from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label, get_rgw_pod
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.utility import aws
@@ -2328,13 +2328,22 @@ def fio_job_dict_fixture():
 
 
 @pytest.fixture(scope='session', autouse=True)
-def retrieve_mcg_certificate(request, mcg_obj_session):
+def retrieve_mcg_certificate(request):
     """
     Copy the self-signed certificate from the noobaa-core pod
     to the local code runner for usage with boto3
     """
-    OCP(namespace=mcg_obj_session.namespace).exec_oc_cmd(
-        f'cp {mcg_obj_session.core_pod.name}:'
+    mcg_core_pod = Pod(
+        **get_pods_having_label(
+            constants.NOOBAA_CORE_POD_LABEL, 
+            config.ENV_DATA['cluster_namespace']
+        )[0]
+    )
+
+    OCP(
+        namespace=config.ENV_DATA['cluster_namespace']
+    ).exec_oc_cmd(
+        f'cp {mcg_core_pod.name}:'
         f'{constants.MCG_CRT_REMOTE_PATH} '
         f'{constants.MCG_CRT_LOCAL_PATH}',
         out_yaml_format=False
