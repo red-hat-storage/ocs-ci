@@ -1493,6 +1493,7 @@ class BaremetalNodes(NodesBase):
         Make sure all BMs are up by the end of the test
 
         """
+        self.cluster_nodes = get_node_objs()
         bms = self.baremetal.get_nodes_ipmi_ctx(self.cluster_nodes)
         stopped_bms = [
             bm for bm in bms if self.baremetal.get_power_status(bm) == constants.VM_POWERED_OFF
