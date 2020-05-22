@@ -2335,7 +2335,7 @@ def retrieve_mcg_certificate(request):
     """
     mcg_core_pod = Pod(
         **get_pods_having_label(
-            constants.NOOBAA_CORE_POD_LABEL, 
+            constants.NOOBAA_CORE_POD_LABEL,
             config.ENV_DATA['cluster_namespace']
         )[0]
     )
