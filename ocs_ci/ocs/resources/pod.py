@@ -402,12 +402,16 @@ def get_all_pods(
         if exclude_selector:
             pods_new = [
                 pod for pod in pods if
-                pod['metadata']['labels'].get(selector_label) not in selector
+                pod['metadata'].get(
+                    'labels', {}
+                ).get(selector_label) not in selector
             ]
         else:
             pods_new = [
                 pod for pod in pods if
-                pod['metadata']['labels'].get(selector_label) in selector
+                pod['metadata'].get(
+                    'labels', {}
+                ).get(selector_label) in selector
             ]
         pods = pods_new
     pod_objs = [Pod(**pod) for pod in pods]
