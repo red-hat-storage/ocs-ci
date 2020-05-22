@@ -24,6 +24,7 @@ and functionality using AWS and other supported platforms.
    external dir README <external/README.md>
    pytest_customization dir README <ocs_ci/framework/pytest_customization/README.md>
    ocs-deployment dir README <ocs_ci/templates/ocs-deployment/README.md>
+   fio dir README <ocs_ci/templates/workloads/fio/README.md>
 
 
 .. toctree::
