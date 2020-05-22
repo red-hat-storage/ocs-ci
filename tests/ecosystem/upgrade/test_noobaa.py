@@ -202,7 +202,7 @@ def test_start_upgrade_mcg_io(mcg_workload_job):
     job_status = None
     job_name = mcg_workload_job.ocp.resource_name
     # wait a few seconds for fio job to start
-    log.info(f"Checking number of active pods for job {job_name}")
+    logger.info(f"Checking number of active pods for job {job_name}")
     for i in range(0, 5):
         job = mcg_workload_job.ocp.get(
             resource_name=job_name,
@@ -226,7 +226,7 @@ def test_upgrade_mcg_io(mcg_workload_job):
     Confirm that there is MCG workload job running after upgrade.
     """
     job_name = mcg_workload_job.ocp.resource_name
-    log.info(f"Checking number of active pods for job {job_name}")
+    logger.info(f"Checking number of active pods for job {job_name}")
     job = mcg_workload_job.ocp.get(
         resource_name=job_name,
         out_yaml_format=True
