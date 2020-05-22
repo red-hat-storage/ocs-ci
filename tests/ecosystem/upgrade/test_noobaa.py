@@ -81,7 +81,10 @@ def test_fill_bucket(
     )
 
     mcg_obj_session.check_if_mirroring_is_done(bucket.name)
-    assert bucket.status == constants.STATUS_BOUND
+    assert bucket.status == constants.STATUS_BOUND, (
+        f"bucket {bucket.name} doesn't have {constants.STATUS_BOUND} "
+        f"status, it has {bucket.status} status"
+    )
 
     # Retrieve all objects from MCG bucket to result dir in Pod
     sync_object_directory(
@@ -91,7 +94,10 @@ def test_fill_bucket(
         mcg_obj_session
     )
 
-    assert bucket.status == constants.STATUS_BOUND
+    assert bucket.status == constants.STATUS_BOUND, (
+        f"bucket {bucket.name} doesn't have {constants.STATUS_BOUND} "
+        f"status, it has {bucket.status} status"
+    )
 
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
@@ -100,7 +106,10 @@ def test_fill_bucket(
             result_object_path=f'{LOCAL_TEMP_PATH}/{obj}',
             awscli_pod=awscli_pod_session
         ), 'Checksum comparision between original and result object failed'
-    assert bucket.status == constants.STATUS_BOUND
+    assert bucket.status == constants.STATUS_BOUND, (
+        f"bucket {bucket.name} doesn't have {constants.STATUS_BOUND} "
+        f"status, it has {bucket.status} status"
+    )
 
 
 @aws_platform_required
@@ -191,10 +200,12 @@ def test_start_upgrade_mcg_io(mcg_workload_job):
     Confirm that there is MCG workload job running before upgrade.
     """
     job_status = None
+    job_name = mcg_workload_job.ocp.resource_name
     # wait a few seconds for fio job to start
+    log.info(f"Checking number of active pods for job {job_name}")
     for i in range(0, 5):
         job = mcg_workload_job.ocp.get(
-            resource_name=mcg_workload_job.ocp.resource_name,
+            resource_name=job_name,
             out_yaml_format=True
         )
         # 'active' attribute holds information about how many pods are running
@@ -202,7 +213,10 @@ def test_start_upgrade_mcg_io(mcg_workload_job):
         if job_status == 1:
             break
         time.sleep(3)
-    assert job_status == 1
+    assert job_status == 1, (
+        f"Number of running pods for job {job_name} is not 1, "
+        f"it is {job_status}"
+    )
 
 
 @post_upgrade
@@ -211,10 +225,15 @@ def test_upgrade_mcg_io(mcg_workload_job):
     """
     Confirm that there is MCG workload job running after upgrade.
     """
+    job_name = mcg_workload_job.ocp.resource_name
+    log.info(f"Checking number of active pods for job {job_name}")
     job = mcg_workload_job.ocp.get(
-        resource_name=mcg_workload_job.ocp.resource_name,
+        resource_name=job_name,
         out_yaml_format=True
     )
     # 'active' attribute holds information about how many pods are running
     job_status = job['items'][0]['status']['active']
-    assert job_status == 1
+    assert job_status == 1, (
+        f"Number of running pods for job {job_name} is not 1, "
+        f"it is {job_status}"
+    )
