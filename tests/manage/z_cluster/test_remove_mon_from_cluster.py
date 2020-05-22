@@ -9,7 +9,7 @@ Polarion-ID- OCS-355
 import logging
 import pytest
 from ocs_ci.ocs import ocp, constants
-from ocs_ci.framework.testlib import tier4, tier4c, ManageTest, ignore_leftovers
+from ocs_ci.framework.testlib import ManageTest, ignore_leftovers
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
 from tests.helpers import run_io_with_rados_bench, delete_cephblockpools, create_ceph_block_pool
@@ -53,10 +53,11 @@ def run_io_on_pool(pool_obj):
     )
 
 
-@tier4
-@tier4c
+# Test case is disabled, as per requirement not to support this scenario (PR 2025)
+# tier4
+# tier4c
 @ignore_leftovers
-@pytest.mark.polarion_id("OCS-355")
+# @pytest.mark.polarion_id("OCS-355")
 class TestRemoveMonFromCluster(ManageTest):
     pool_obj = ""
 
