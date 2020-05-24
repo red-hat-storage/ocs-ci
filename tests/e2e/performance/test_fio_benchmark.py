@@ -31,6 +31,7 @@ def ripsaw(request):
 
 def analyze_regression(io_pattern, es_username):
     """
+
     Args:
         io_pattern (str): 'sequential' or 'random' workload
         es_username (str): ocs_build used in the CR object
@@ -52,7 +53,7 @@ def analyze_regression(io_pattern, es_username):
             f"block_size: {object_size}\n"
             f"operation: {operation}\n"
             f"total_iops: {total_iops}\n"
-            )
+        )
         # Fail test if std deviation is above 5%
         # Todo: Remove the below skip for random workload once
         #  https://github.com/cloud-bulldozer/snafu/issues/180 is fixed

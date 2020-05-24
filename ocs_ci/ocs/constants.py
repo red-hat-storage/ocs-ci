@@ -305,7 +305,7 @@ CONFIGURE_PVC_ON_MONITORING_POD = os.path.join(
 )
 
 FIO_CR_YAML = os.path.join(
-    TEMPLATE_FIO_DIR, "cr_template.yaml"
+    TEMPLATE_FIO_DIR, "benchmark_fio.yaml"
 )
 
 PGSQL_SERVICE_YAML = os.path.join(

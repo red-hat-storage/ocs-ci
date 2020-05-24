@@ -7,13 +7,10 @@ import tempfile
 
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.ocp import switch_to_default_rook_cluster_project
-from ocs_ci.utility import templating
 from subprocess import run, CalledProcessError
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE
-from ocs_ci.ocs import constants
 
 
 log = logging.getLogger(__name__)
