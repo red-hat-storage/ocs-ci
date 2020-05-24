@@ -48,6 +48,7 @@ setup(
         'elasticsearch',
         'numpy',
         'python-ipmi',
+        'scipy',
     ],
     entry_points={
         'console_scripts': [

@@ -104,10 +104,10 @@ def pytest_addoption(parser):
         help="IOs throughput target percentage. Value should be between 0 to 100",
     )
     parser.addoption(
-        '--enable-bg-io-logs',
-        dest='enable_bg_io_logs',
+        '--log-cluster-utilization',
+        dest='log_cluster_utilization',
         action="store_true",
-        help="Enable background IO logs, if --io-in-bg is passed",
+        help="Enable logging of cluster utilization metrics every 10 seconds"
     )
     parser.addoption(
         '--ocs-version',
@@ -316,9 +316,9 @@ def process_cluster_cli_params(config):
         io_load = get_cli_param(config, 'io_load')
         if io_load:
             ocsci_config.RUN['io_load'] = io_load
-        io_bg_logs = get_cli_param(config, 'enable_bg_io_logs')
-        if io_bg_logs:
-            ocsci_config.RUN['io_bg_logs'] = True
+    log_utilization = get_cli_param(config, 'log_cluster_utilization')
+    if log_utilization:
+        ocsci_config.RUN['log_utilization'] = True
     upgrade_ocs_version = get_cli_param(config, "upgrade_ocs_version")
     if upgrade_ocs_version:
         ocsci_config.UPGRADE['upgrade_ocs_version'] = upgrade_ocs_version

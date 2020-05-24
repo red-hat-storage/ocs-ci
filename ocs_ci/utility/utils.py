@@ -13,6 +13,7 @@ import traceback
 from copy import deepcopy
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from scipy.stats import tmean, scoreatpercentile
 from shutil import which
 
 import hcl
@@ -2057,6 +2058,7 @@ def convert_device_size(unformatted_size, units_to_covert_to):
             return absolute_size
 
 
+<<<<<<< HEAD
 def mirror_image(image):
     """
     Mirror image to mirror image registry.
@@ -2158,3 +2160,30 @@ def update_container_with_mirrored_image(job_pod_dict):
             container = job_pod_dict['spec']['template']['spec']['containers'][0]
         container['image'] = mirror_image(container['image'])
     return job_pod_dict
+
+
+def get_trim_mean(values, percentage=20):
+    """
+    Get the trimmed mean of a list of values.
+    Explanation: This function finds the arithmetic mean of given values,
+    ignoring values outside the given limits.
+
+    Args:
+        values (list): The list of values
+        percentage (int): The percentage to be trimmed
+
+    Returns:
+        float: Trimmed mean. In case trimmed mean calculation fails,
+            the regular mean average is returned
+
+    """
+    lower_limit = scoreatpercentile(values, percentage)
+    upper_limit = scoreatpercentile(values, 100 - percentage)
+    try:
+        return tmean(values, limits=(lower_limit, upper_limit))
+    except ValueError:
+        log.warning(
+            f"Failed to calculate the trimmed mean of {values}. The "
+            f"Regular mean average will be calculated instead"
+        )
+    return sum(values) / len(values)

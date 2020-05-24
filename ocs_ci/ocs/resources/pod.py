@@ -15,8 +15,7 @@ import base64
 
 from ocs_ci.ocs.ocp import OCP, verify_images_upgraded
 from tests import helpers
-from ocs_ci.ocs import workload
-from ocs_ci.ocs import constants, defaults, node
+from ocs_ci.ocs import constants, defaults, node, workload, ocp
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import CommandFailed, NonUpgradedImagesFoundError, UnavailableResourceException
 from ocs_ci.ocs.utils import setup_ceph_toolbox
@@ -1305,4 +1304,23 @@ def wait_for_dc_app_pods_to_reach_running_state(
             if '-1-deploy' not in dpod.name and dpod.status != exclude_state:
                 helpers.wait_for_resource_state(
                     dpod, constants.STATUS_RUNNING, timeout=timeout
+                )
+
+
+def delete_deploymentconfig_pods(pod_obj):
+    """
+    Delete a DeploymentConfig pod and all the pods that are controlled by it
+
+    Args:
+         pod_obj (Pod): Pod object
+
+    """
+    dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG, namespace=pod_obj.namespace)
+    pod_data_list = dc_ocp_obj.get().get('items')
+    if pod_data_list:
+        for pod_data in pod_data_list:
+            if pod_obj.get_labels().get('name') == pod_data.get('metadata').get('name'):
+                dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
+                dc_ocp_obj.wait_for_delete(
+                    resource_name=pod_obj.get_labels().get('name')
                 )

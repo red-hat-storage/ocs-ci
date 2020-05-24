@@ -8,10 +8,9 @@ import pytest
 
 import random
 
-
 from tests import helpers, disruption_helpers
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj
+from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj, delete_deploymentconfig_pods
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3
 from ocs_ci.framework.testlib import E2ETest, workloads, tier1, ignore_leftovers
@@ -43,7 +42,7 @@ class Testopenshiftloggingonocs(E2ETest):
         """
         """
         def finalizer():
-            helpers.delete_deploymentconfig_pods(pod_obj)
+            delete_deploymentconfig_pods(pod_obj)
 
         request.addfinalizer(finalizer)
 
