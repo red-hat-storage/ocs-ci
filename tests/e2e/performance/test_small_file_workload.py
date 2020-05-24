@@ -454,6 +454,13 @@ class TestSmallFileWorkload(E2ETest):
         full_results.add_key('start_time',
                              time.strftime('%Y-%m-%dT%H:%M:%SGMT',
                                            time.gmtime()))
+
+        # Calculating the total size of the working data set - in GB
+        full_results.add_key(
+            'dataset',
+            file_size * files * threads * full_results.results['clients'] / constants.GB2KB
+        )
+
         full_results.add_key('global_options', {
             'files': files,
             'file_size': file_size,
