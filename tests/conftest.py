@@ -31,8 +31,8 @@ from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
-  get_rgw_pod, get_ceph_tools_pod, 
-  Pod, get_pods_having_label, get_rgw_pod
+    get_rgw_pod, get_ceph_tools_pod,
+    Pod, get_pods_having_label
 )
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
