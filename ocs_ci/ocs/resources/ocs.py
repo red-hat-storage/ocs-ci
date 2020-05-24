@@ -51,9 +51,10 @@ class OCS(object):
             api_version=self._api_version, kind=self.kind,
             namespace=self._namespace
         )
-        self.temp_yaml = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             mode='w+', prefix=self._kind, delete=False
-        )
+        ) as temp_file_info:
+            self.temp_yaml = temp_file_info.name
         # This _is_delete flag is set to True if the delete method was called
         # on object of this class and was successfull.
         self._is_deleted = False
@@ -101,8 +102,8 @@ class OCS(object):
 
     def create(self, do_reload=True):
         log.info(f"Adding {self.kind} with name {self.name}")
-        templating.dump_data_to_temp_yaml(self.data, self.temp_yaml.name)
-        status = self.ocp.create(yaml_file=self.temp_yaml.name)
+        templating.dump_data_to_temp_yaml(self.data, self.temp_yaml)
+        status = self.ocp.create(yaml_file=self.temp_yaml)
         if do_reload:
             self.reload()
         return status
@@ -142,9 +143,9 @@ class OCS(object):
         return result
 
     def apply(self, **data):
-        with open(self.temp_yaml.name, 'w') as yaml_file:
+        with open(self.temp_yaml, 'w') as yaml_file:
             yaml.dump(data, yaml_file)
-        assert self.ocp.apply(yaml_file=self.temp_yaml.name), (
+        assert self.ocp.apply(yaml_file=self.temp_yaml), (
             f"Failed to apply changes {data}"
         )
         self.reload()
@@ -162,7 +163,7 @@ class OCS(object):
         return status
 
     def delete_temp_yaml_file(self):
-        utils.delete_file(self.temp_yaml.name)
+        utils.delete_file(self.temp_yaml)
 
 
 def get_version_info(namespace=None):
