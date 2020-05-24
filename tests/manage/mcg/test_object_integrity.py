@@ -112,9 +112,11 @@ class TestObjectIntegrity(ManageTest):
             logger.info(
                 f'Downloading {obj["Key"]} from AWS bucket {public_bucket}'
             )
-            command = f'wget -P {original_dir} '
-            command += f'https://{public_bucket}.s3.amazonaws.com/{obj["Key"]}'
-            awscli_pod.exec_cmd_on_pod(command=command)
+            download_obj_cmd = f'cp s3://{public_bucket}/{obj["Key"]} {original_dir}'
+            awscli_pod.exec_cmd_on_pod(
+                command=helpers.craft_s3_command(download_obj_cmd),
+                out_yaml_format=False
+            )
             download_files.append(obj['Key'].split('/')[-1])
 
         # Write downloaded objects to the new bucket and check integrity

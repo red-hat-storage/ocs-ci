@@ -18,6 +18,10 @@ from tests import disruption_helpers, helpers
 
 logger = logging.getLogger(__name__)
 
+ISSUE_SKIP = pytest.mark.skip(
+    'Skip test due to https://github.com/red-hat-storage/ocs-ci/issues/2101'
+)
+
 
 @tier4
 @ignore_leftovers
@@ -519,7 +523,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         argvalues=[
             pytest.param(
                 *['colocated', 3, 1, False],
-                marks=pytest.mark.polarion_id("OCS-1423")
+                marks=[pytest.mark.polarion_id("OCS-1423"), ISSUE_SKIP]
             ),
             pytest.param(
                 *['dedicated', 2, 1, False],
@@ -531,11 +535,11 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             ),
             pytest.param(
                 *['colocated', 4, 1, False],
-                marks=pytest.mark.polarion_id("OCS-1426")
+                marks=[pytest.mark.polarion_id("OCS-1426"), ISSUE_SKIP]
             ),
             pytest.param(
                 *['colocated', 5, 3, True],
-                marks=pytest.mark.polarion_id("OCS-1424")
+                marks=[pytest.mark.polarion_id("OCS-1424"), ISSUE_SKIP]
             )
         ]
     )
@@ -661,11 +665,11 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             ),
             pytest.param(
                 *['colocated', 4, 1, False],
-                marks=pytest.mark.polarion_id("OCS-1427")
+                marks=[pytest.mark.polarion_id("OCS-1427"), ISSUE_SKIP]
             ),
             pytest.param(
                 *['colocated', 6, 3, True],
-                marks=pytest.mark.polarion_id("OCS-1430")
+                marks=[pytest.mark.polarion_id("OCS-1430"), ISSUE_SKIP]
             )
         ]
     )
@@ -807,7 +811,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             ),
             pytest.param(
                 *['colocated', 4, 1, True],
-                marks=pytest.mark.polarion_id("OCS-1431")
+                marks=[pytest.mark.polarion_id("OCS-1431"), ISSUE_SKIP]
             )
         ]
     )

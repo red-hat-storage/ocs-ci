@@ -99,10 +99,17 @@ def ocs_install_verification(
             f"Check if OCS registry image: {ocs_registry_image} matches with "
             f"CSV: {csv_version}"
         )
-        assert ocs_registry_image in csv_version, (
-            f"OCS registry image version: {ocs_registry_image} mismatch with "
-            f"CSV version {csv_version}"
-        )
+        ignore_csv_mismatch = config.DEPLOYMENT.get('ignore_csv_mismatch')
+        if ignore_csv_mismatch:
+            log.info(
+                "The possible mismatch will be ignored as you deployed "
+                "the different version than the default version from the CSV"
+            )
+        else:
+            assert ocs_registry_image in csv_version, (
+                f"OCS registry image version: {ocs_registry_image} mismatch "
+                f"with CSV version {csv_version}"
+            )
 
     # Verify OCS Cluster Service (ocs-storagecluster) is Ready
     storage_cluster_name = config.ENV_DATA['storage_cluster_name']
