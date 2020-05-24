@@ -159,6 +159,10 @@ skipif_external_mode = pytest.mark.skipif(
     reason="Test will not run on External Mode cluster"
 )
 
+skipif_lso = pytest.mark.skipif(
+    config.DEPLOYMENT.get('local_storage') is True,
+    reason="Test will not run on LSO deployed cluster"
+)
 
 # Filter warnings
 filter_insecure_request_warning = pytest.mark.filterwarnings(
