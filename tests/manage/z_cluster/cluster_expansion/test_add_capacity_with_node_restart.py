@@ -98,7 +98,7 @@ class TestAddCapacityNodeRestart(ManageTest):
             kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
         )
         pod.wait_for_resource(
-            timeout=300,
+            timeout=600,
             condition=constants.STATUS_RUNNING,
             selector='app=rook-ceph-osd',
             resource_count=result * 3
@@ -107,5 +107,5 @@ class TestAddCapacityNodeRestart(ManageTest):
         logging.info("Finished verifying add capacity osd storage with node restart")
         logging.info("Waiting for ceph health check to finished...")
         ceph_health_check(
-            namespace=config.ENV_DATA['cluster_namespace'], tries=60
+            namespace=config.ENV_DATA['cluster_namespace'], tries=90
         )
