@@ -16,6 +16,7 @@ from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import E2ETest, performance
 from tests.helpers import get_logs_with_errors
+from ocs_ci.ocs.exceptions import CommandFailed
 from elasticsearch import (Elasticsearch, exceptions as ESExp)
 import numpy as np
 
@@ -368,13 +369,19 @@ class TestSmallFileWorkload(E2ETest):
         Run SmallFile Workload
         """
 
+        sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
+
         # getting the name and email  of the user that running the test.
-        user = run_cmd('git config --get user.name').strip()
-        email = run_cmd('git config --get user.email').strip()
+        try:
+            user = run_cmd('git config --get user.name').strip()
+            email = run_cmd('git config --get user.email').strip()
+        except CommandFailed:
+            # if no git user define, use the default user from the CR file
+            user = sf_data['spec']['test_user']
+            email = ''
 
         log.info("Apply Operator CRD")
         ripsaw.apply_crd('resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml')
-        sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
         if interface == constants.CEPHBLOCKPOOL:
             storageclass = constants.DEFAULT_STORAGECLASS_RBD
         else:
