@@ -3,7 +3,7 @@
 **Lets use the following guidelines for Code Reviews and contribution:**
 
 * Create own fork of the repository and submit PR from your fork.
-* If a github issue describing the changes you are making does not exist be sure to
+* If a github issue describing the changes you are making does not exist, be sure to
     create one before creating a pull request. This is a *requirement* for all
     bugs, feature requests, and enhancements to the framework or our tests that
     involve more than a few lines of code changes. If the PR is extremely small,
