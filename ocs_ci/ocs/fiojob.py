@@ -400,23 +400,11 @@ def workload_fio_storageutilization(
             ceph_pool_name
         )
 
-    # To handle use case of test_workload_rbd_cephfs_minimal which writes data
-    # to reach a small fraction of the total capacity only (eg. 5%), the test
-    # is going increase the target 2x and try again.
-    if pvc_size <= 0 and target_percentage is not None and target_percentage <= 0.10:
-        new_target_percentage = 2 * target_percentage
-        logger.info(
-            "increasing storage utilization target percentage from %.2f to %.2f",
-            target_percentage,
-            new_target_percentage)
-        target_percentage = new_target_percentage
-        pvc_size = get_storageutilization_size(
-            target_percentage,
-            ceph_pool_name)
-    # If this is still not enough, the test will be skipped, because the idea
-    # of tests reaching a small total utilization is to do just that.
-    # Moreover this will also skip this test case for any other utilization
-    # level, which is easier to read in the test report than the actual
+    # If we are trying to utilize particular percentage of total OCS capacity
+    # and current usage is already higher, the test will be skipped, because
+    # the idea of tests reaching a particular total utilization is to do just
+    # that, and the fixture can't provide expected assumptions to the test.
+    # This skip is also easier to read in the test report than the actual
     # failure with negative pvc size.
     if pvc_size <= 0 and target_percentage is not None:
         skip_msg = (
