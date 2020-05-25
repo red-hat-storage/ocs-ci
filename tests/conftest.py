@@ -2381,4 +2381,3 @@ def measurement_dir(tmp_path):
         )
         os.mkdir(measurement_dir)
     return measurement_dir
-  
