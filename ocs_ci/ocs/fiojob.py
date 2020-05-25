@@ -299,6 +299,8 @@ def workload_fio_storageutilization(
     target_percentage=None,
     target_size=None,
     with_checksum=False,
+    keep_fio_data=False,
+    minimal_time=480,
 ):
     """
     This function implements core functionality of fio storage utilization
@@ -339,6 +341,10 @@ def workload_fio_storageutilization(
             fio is stored on the volume, and reclaim policy of the volume is
             changed to ``Retain`` so that the volume is not removed during test
             teardown for later verification runs
+        keep_fio_data (bool): If true, keep the fio data after the fio
+            storage utilization is completed. Else if false, deletes the fio data.
+        minimal_time (int): Minimal number of seconds to monitor a system.
+            (See more details in the function 'measure_operation')
 
     Returns:
         dict: measurement results with timestamps and other medatada from
@@ -486,7 +492,7 @@ def workload_fio_storageutilization(
             fio_job_file, write_timeout, pvc_size, target_percentage),
         test_file,
         measure_after=True,
-        minimal_time=480)
+        minimal_time=minimal_time)
 
     # we don't need to delete anything if this fixture has been already
     # executed
@@ -548,6 +554,9 @@ def workload_fio_storageutilization(
         # Without checksum, we just need to make sure that data were deleted
         # and wait for this to happen to avoid conflicts with tests executed
         # right after this one.
-        delete_fio_data(fio_job_file, is_storage_reclaimed)
+        if not keep_fio_data:
+            delete_fio_data(fio_job_file, is_storage_reclaimed)
+        else:
+            logging.info("The fio data will be deleted during project teardown")
 
     return measured_op
