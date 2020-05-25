@@ -95,7 +95,8 @@ class Disruptions:
         # on one node. eg: More than one osd on same node.
         pids = pid.split()
         self.pids = [pid.strip() for pid in pids]
-        pid = pids[0]
+        assert self.pids, "Obtained pid value is empty."
+        pid = self.pids[0]
 
         # ret will be 0 and err will be None if command is success
         assert not any([ret, err, not pid.isdigit()]), (
