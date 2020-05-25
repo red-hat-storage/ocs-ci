@@ -120,8 +120,12 @@ class SmallFileResultsAnalyse(object):
 
         """
         log.info('Writing all data to ES server')
+        log.info(f'Params : index={self.new_index}, doc_type=_doc,body={self.results},id={self.uuid}')
         log.info(f'the results data is {self.results}')
-        self.es.index(index=self.new_index, doc_type='_doc', body=self.results)
+        self.es.index(index=self.new_index,
+                      doc_type='_doc',
+                      body=self.results,
+                      id=self.uuid)
 
     def thread_read(self, host, op, snum):
         """
@@ -259,13 +263,13 @@ class SmallFileResultsAnalyse(object):
                         results[self.managed_keys[key]["name"]]
                     )
                     if key == "IOPS":
-                        max = np.ma.max(results[self.managed_keys[key]["name"]])
-                        min = np.ma.min(results[self.managed_keys[key]["name"]])
+                        st_deviation = np.std(results[self.managed_keys[key]["name"]])
+                        mean = np.mean(results[self.managed_keys[key]["name"]])
 
-                        dev = (max - min) * 100 / min
-                        if dev > 5:
+                        pct_dev = (st_deviation / mean) * 100
+                        if pct_dev > 5:
                             log.error(
-                                f'Deviation for {op} IOPS is more the 5% ({dev})')
+                                f'Deviation for {op} IOPS is more the 5% ({pct_dev})')
                             test_pass = False
                     del results[self.managed_keys[key]["name"]]
                 self.results["full-res"][op] = results
@@ -450,6 +454,13 @@ class TestSmallFileWorkload(E2ETest):
         full_results.add_key('start_time',
                              time.strftime('%Y-%m-%dT%H:%M:%SGMT',
                                            time.gmtime()))
+
+        # Calculating the total size of the working data set - in GB
+        full_results.add_key(
+            'dataset',
+            file_size * files * threads * full_results.results['clients'] / constants.GB2KB
+        )
+
         full_results.add_key('global_options', {
             'files': files,
             'file_size': file_size,
