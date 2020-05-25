@@ -306,3 +306,20 @@ def get_deviceset_pvs():
     """
     deviceset_pvcs = get_deviceset_pvcs()
     return [pvc.backed_pv_obj for pvc in deviceset_pvcs]
+
+
+def get_pvc_obj(name, namespace=None):
+    """
+    Returns the pvc obj for the given pvc
+
+    Args:
+        name (str): Name of the resources
+
+    Returns:
+        obj : A pvc object
+    """
+    ocp_obj = OCP(api_version='v1', kind=constants.PVC, namespace=namespace)
+    ocp_dict = ocp_obj.get(resource_name=name)
+    pvc_obj = PVC(**ocp_dict)
+    return pvc_obj
+

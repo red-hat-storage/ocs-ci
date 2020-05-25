@@ -175,4 +175,11 @@ class PendingCSRException(Exception):
 
 
 class RDMDiskNotFound(Exception):
+
+
+class ClusterUtilizationNotBalanced(Exception):
+    pass
+
+
+class OsdIsIncreasing(Exception):
     pass

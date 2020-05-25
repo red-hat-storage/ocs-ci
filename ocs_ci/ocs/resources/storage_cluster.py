@@ -10,8 +10,11 @@ from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.packagemanifest import get_selector_for_ocs_operator, PackageManifest
 from ocs_ci.ocs.node import get_compute_node_names
 from ocs_ci.utility import utils, localstorage
-
-
+from ocs_ci.utility import utils
+from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.exceptions import OsdIsIncreasing
+from ocs_ci.ocs.exceptions import ClusterUtilizationNotBalanced
 log = logging.getLogger(__name__)
 
 
@@ -498,3 +501,237 @@ def get_all_storageclass():
         )
     ]
     return storageclass
+
+
+def get_local_volume_cr():
+    """
+    Get localVolumeCR object
+
+    Returns:
+        local volume (obj): Local Volume object handler
+
+    """
+    ocp_obj = OCP(kind=constants.LOCAL_VOLUME, namespace=constants.LOCAL_STORAGE_NAMESPACE)
+    return ocp_obj
+
+
+def get_new_device_paths(device_sets_required, osd_size_capacity_requested):
+    """
+    Get new device paths to add capacity over Baremetal cluster
+
+    Args:
+        device_sets_required (int) : Count of device sets to be added
+        osd_size_capacity_requested (int) : Requested OSD size capacity
+
+    Returns:
+        list : List containing added device paths
+
+    """
+    ocp_obj = OCP()
+    workers = get_typed_nodes(node_type="worker")
+    worker_names = [worker.name for worker in workers]
+    output = ocp_obj.exec_oc_cmd("get localvolume local-block -n local-storage -o yaml")
+    cur_device_list = output["spec"]["storageClassDevices"][0]["devicePaths"]
+    path = os.path.join(constants.EXTERNAL_DIR, "device-by-id-ocp")
+    utils.clone_repo(constants.OCP_QE_DEVICEPATH_REPO, path)
+    os.chdir(path)
+    utils.run_cmd("ansible-playbook devices_by_id.yml")
+    with open("local-storage-block.yaml", "r") as cloned_file:
+        with open("local-block.yaml", "w") as our_file:
+            device_from_worker1 = device_sets_required
+            device_from_worker2 = device_sets_required
+            device_from_worker3 = device_sets_required
+            cur_line = cloned_file.readline()
+            while "devicePaths:" not in cur_line:
+                our_file.write(cur_line)
+                cur_line = cloned_file.readline()
+            our_file.write(cur_line)
+            cur_line = cloned_file.readline()
+            # Add required number of device path from each node
+            while cur_line:
+                if str(osd_size_capacity_requested) in cur_line:
+                    if device_from_worker1 and (str(worker_names[0]) in cur_line):
+                        if not any(s in cur_line for s in cur_device_list):
+                            our_file.write(cur_line)
+                            device_from_worker1 = device_from_worker1 - 1
+                    if device_from_worker2 and (str(worker_names[1]) in cur_line):
+                        if not any(s in cur_line for s in cur_device_list):
+                            our_file.write(cur_line)
+                            device_from_worker2 = device_from_worker2 - 1
+                    if device_from_worker3 and (str(worker_names[2]) in cur_line):
+                        if not any(s in cur_line for s in cur_device_list):
+                            our_file.write(cur_line)
+                            device_from_worker3 = device_from_worker3 - 1
+                cur_line = cloned_file.readline()
+    local_block_yaml = open("local-block.yaml")
+    lvcr = yaml.load(local_block_yaml, Loader=yaml.FullLoader)
+    new_dev_paths = lvcr["spec"]["storageClassDevices"][0]["devicePaths"]
+    log.info(f"Newly added devices are: {new_dev_paths}")
+    assert len(new_dev_paths) == (len(worker_names) * device_sets_required), (
+        f"Current devices available = {len(new_dev_paths)}"
+    )
+    os.chdir(constants.TOP_DIR)
+    shutil.rmtree(path)
+    cur_device_list.extend(new_dev_paths)
+    return cur_device_list
+
+
+def check_local_volume():
+    """
+    Function to check if Local-volume is present or not
+
+    Returns:
+        bool: True if LV present, False if LV not present
+
+    """
+
+    if csv.get_csvs_start_with_prefix(
+        csv_prefix=defaults.LOCAL_STORAGE_OPERATOR_NAME,
+        namespace=constants.LOCAL_STORAGE_NAMESPACE
+    ):
+        ocp_obj = OCP()
+        command = "get localvolume local-block -n local-storage "
+        status = ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
+        return "No resources found" not in status
+
+
+@retry(AssertionError, 12, 10, 1)
+def check_pvs_created(num_pvs_required):
+    """
+    Verify that exact number of PVs were created and are in the Available state
+
+    Args:
+        num_pvs_required (int): number of PVs required
+
+    Raises:
+        AssertionError: if the number of PVs are not in the Available state
+
+    """
+    log.info("Verifying PVs are created")
+    out = utils.run_cmd("oc get pv -o json")
+    pv_json = json.loads(out)
+    current_count = 0
+    for pv in pv_json['items']:
+        pv_state = pv['status']['phase']
+        pv_name = pv['metadata']['name']
+        log.info("%s is %s", pv_name, pv_state)
+        if pv_state == 'Available':
+            current_count = current_count + 1
+    assert current_count >= num_pvs_required, (
+        f"Current Available PV count is {current_count}"
+    )
+
+
+def check_rebalance_occur_after_expand(old_osds):
+    """
+    The function check data balance is initiating after add capacity to cluster. The function need 2 out 3 rounds
+    the old osd that had data will be decreased and new osd data will be increased.
+    Args:
+        old_osds: list of old [osd.0, osd.1...]
+
+    """
+    from time import sleep
+    from ocs_ci.ocs.exceptions import ClusterUtilizationNotBalanced
+    from ocs_ci.ocs.cluster import get_osd_utilization
+    num_of_fails_old_osd_increase = 0
+    num_of_fails_new_osd_decrease = 0
+    for num in range(1, 4):
+        log.info(f"Try number {num} out of 3 to check utilization")
+        first_utilization = get_osd_utilization()
+        log.info(f"The first utilization is {first_utilization}")
+        log.info(f"Waiting for 60 seconds to get second utilization")
+        sleep(30)
+        second_utilization = get_osd_utilization()
+        log.info(f"The second utilization is {second_utilization}")
+        sum_of_percentage_old_osd_first_utilization = 0
+        sum_of_percentage_old_osd_second_utilization = 0
+        sum_of_percentage_new_osd_first_utilization = 0
+        sum_of_percentage_new_osd_second_utilization = 0
+        for osd_name, osd_util in second_utilization.items():
+            old_osd_flag = 0
+            for old_osd in old_osds:
+                if old_osd == osd_name:
+                    old_osd_flag = 1
+                    sum_of_percentage_old_osd_first_utilization += first_utilization[osd_name]
+                    sum_of_percentage_old_osd_second_utilization += second_utilization[osd_name]
+            if old_osd_flag == 0:
+                sum_of_percentage_new_osd_first_utilization += first_utilization[osd_name]
+                sum_of_percentage_new_osd_second_utilization += second_utilization[osd_name]
+        if sum_of_percentage_old_osd_first_utilization < sum_of_percentage_old_osd_second_utilization:
+            log.info(f"sum of old osd utilization is not decreasing"
+                     f" first util sum is: {sum_of_percentage_old_osd_first_utilization}"
+                     f" and second util sum is "
+                     f"{sum_of_percentage_old_osd_second_utilization}")
+            num_of_fails_old_osd_increase += 1
+        else:
+            log.info(f"sum of old osd is decreasing from {sum_of_percentage_old_osd_first_utilization} "
+                     f"to {sum_of_percentage_old_osd_second_utilization}")
+        if sum_of_percentage_new_osd_first_utilization > sum_of_percentage_new_osd_second_utilization:
+            log.info(f"sum of new osd utilization is not increasing"
+                     f" first util sum is: {sum_of_percentage_new_osd_first_utilization}"
+                     f" and second util sum is "
+                     f"{sum_of_percentage_new_osd_second_utilization}")
+            num_of_fails_new_osd_decrease += 1
+        else:
+            log.info(f"sum of new osd is increasing from {sum_of_percentage_new_osd_first_utilization} "
+                     f"to {sum_of_percentage_new_osd_second_utilization}")
+        if num_of_fails_old_osd_increase > 1 or num_of_fails_new_osd_decrease > 1:
+            log.error(f"Cluster failed to balance more than 2 times out of 3")
+            raise ClusterUtilizationNotBalanced(f"Cluster failed to balance more than 2 times out of 3")
+
+
+@retry(OsdIsIncreasing, tries=10, delay=60, backoff=1)
+def check_until_osd_ratio_start_decrease_or_equal(osds, digit_point=None, ratio_stable=None):
+    """
+    The function gets a list of OSDs and check if the sum of utilization percentage is decreasing or stay equal
+    depends on what was requested. It checks for 3 times in a row and tolerates one fail out of 3.
+    Args:
+        osds (list): List of osds ie [osd.1, osd.2...]
+        digit_point (int): How many digit after decimal point to check. It was created because monitoring data
+        is always added so to cancel the increase of monitoring data you can choose like 2
+        ratio_stable(anything): If not none it will check that in time of 3 rounds the osd is not increasing and
+        can tolerate 1 fail out of 3
+
+    """
+    from time import sleep
+    from ocs_ci.ocs.cluster import get_osd_utilization
+
+    log.info(f"Starting 3 loop to check utilization")
+    for t in range(1, 4):
+        num_of_fails = 0
+        osd_first_utilization = get_osd_utilization()
+        log.info(f"First utilization is {osd_first_utilization}, waiting for 60 seconds to check next utilizaztion"
+                 f" for comparision")
+        sleep(60)
+        osd_second_utilization = get_osd_utilization()
+        log.info(f"Second utilization is {osd_second_utilization}")
+        sum_of_osd_first_util = 0
+        sum_of_osd_second_util = 0
+        for osd in osds:
+            if digit_point is not None:
+                osd_first_utilization[osd]=float(format(osd_first_utilization[osd],f".{digit_point}f"))
+                osd_second_utilization[osd] = float(format(osd_second_utilization[osd], f".{digit_point}f"))
+            sum_of_osd_first_util += osd_first_utilization[osd]
+            sum_of_osd_second_util += osd_second_utilization[osd]
+
+        if ratio_stable is None:
+            if sum_of_osd_first_util < sum_of_osd_second_util:
+                log.info(f"Sum of osd ration is still increasing from "
+                         f"{sum_of_osd_first_util} to {sum_of_osd_second_util}")
+                num_of_fails += 1
+            else:
+                log.info(f"sum of utilization is decreasing from {sum_of_osd_first_util} to {sum_of_osd_second_util}")
+        else:
+            if sum_of_osd_first_util != sum_of_osd_second_util:
+                log.info(f"Sum of osd ration is still not equal: sum of first util "
+                         f"{sum_of_osd_first_util} not equal to {sum_of_osd_second_util}")
+                num_of_fails +=1
+            else:
+                log.info(f"Sum of utilization is equal: first util is {sum_of_osd_first_util} and second "
+                         f"util is {sum_of_osd_second_util}")
+        if num_of_fails > 1:
+            log.error(f"Sum of osds has increased more than 1 out of 3")
+            raise OsdIsIncreasing(f"Sum of osds has increased more than 1 out of 3")
+
+    log.info(f"Sum of osds has not increased 2 out of 3 times, back to test")
+>>>>>>> Added test_balance_add_capacity.py and changes to storage_cluster.py and exceptions.py
