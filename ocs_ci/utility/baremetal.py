@@ -53,6 +53,8 @@ class BAREMETAL(object):
         Args:
             ipmi_ctx (object) : Ipmi host handler
 
+        Returns: (bool): bm power status
+
         """
         chassis_status = ipmi_ctx.get_chassis_status()
         return VM_POWERED_ON if chassis_status.power_on else VM_POWERED_OFF
@@ -63,6 +65,9 @@ class BAREMETAL(object):
 
         Args:
             node (object): Node objects
+
+        Returns:
+            bool: True if machine is down, False otherwise
 
         """
         result = exec_cmd(cmd=f"ping {node.name} -c 10", ignore_error=True)
@@ -79,6 +84,9 @@ class BAREMETAL(object):
             baremetal_machine (list): BM objects
             force (bool): True for BM ungraceful power off, False for
                 graceful BM shutdown
+
+        Raises:
+            UnexpectedBehaviour: If baremetal machine is still up
 
         """
         for node in baremetal_machine:
