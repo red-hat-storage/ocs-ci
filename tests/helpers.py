@@ -215,6 +215,26 @@ def create_pod(
             container = pod_data['spec']['template']['spec']['containers'][0]
         container['image'] = mirror_image(container['image'])
 
+    # configure http[s]_proxy env variable, if required
+    try:
+        if 'http_proxy' in config.ENV_DATA:
+            if 'containers' in pod_data['spec']:
+                container = pod_data['spec']['containers'][0]
+            else:
+                container = pod_data['spec']['template']['spec']['containers'][0]
+            if 'env' not in container:
+                container['env'] = []
+            container['env'].append({
+                'name': 'http_proxy',
+                'value': config.ENV_DATA['http_proxy'],
+            })
+            container['env'].append({
+                'name': 'https_proxy',
+                'value': config.ENV_DATA['http_proxy'],
+            })
+    except KeyError:
+        pass
+
     if dc_deployment:
         ocs_obj = create_resource(**pod_data)
         logger.info(ocs_obj.name)
