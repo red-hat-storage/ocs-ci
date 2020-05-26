@@ -2294,7 +2294,7 @@ def fio_job_dict_fixture():
         metadata:
           name: fio
         spec:
-          backoffLimit: 1
+          backoffLimit: 0
           template:
             metadata:
               name: fio
