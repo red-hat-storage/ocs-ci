@@ -700,10 +700,10 @@ def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=False):
         ):
             if sample:
                 break
-            logger.info( f"Waiting for I/O to start inside {pod_obj.name}")
+            logger.info(f"Waiting for I/O to start inside {pod_obj.name}")
     except TimeoutExpiredError:
-        logger.info(
-            "Wait timeout: I/O failed to start inside {pod_obj.name}. "
+        logger.error(
+            f"Wait timeout: I/O failed to start inside {pod_obj.name}. "
             "Collect file list."
         )
         parent_dir = os.path.join(TEST_FILE, os.pardir)
