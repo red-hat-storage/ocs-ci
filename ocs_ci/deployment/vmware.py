@@ -288,7 +288,7 @@ class VSPHEREBASE(Deployment):
         Attaches RDM disk to the compute nodes
 
         Raises:
-            RDMDiskNotFound: Incase there is no disks found on host
+            RDMDiskNotFound: In case there is no disks found on host
 
         """
         logger.info("Adding RDM disk to all compute nodes")
