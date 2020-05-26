@@ -21,6 +21,7 @@ import yaml
 from bs4 import BeautifulSoup
 from paramiko import SSHClient, AutoAddPolicy
 from semantic_version import Version
+from tempfile import NamedTemporaryFile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
@@ -2054,3 +2055,83 @@ def convert_device_size(unformatted_size, units_to_covert_to):
             return absolute_size / 1024
         elif units == 'Mi':
             return absolute_size
+
+
+def mirror_image(image):
+    """
+    Mirror image to mirror image registry.
+
+    Args:
+        image (str): image to be mirrored, can be defined just with name or
+                     with full url, with or without tag or digest
+
+    Returns:
+        str: the mirrored image link
+    """
+    # load pull-secret file to pull_secret dict
+    pull_secret_path = os.path.join(
+        constants.TOP_DIR,
+        "data",
+        "pull-secret"
+    )
+    with open(pull_secret_path) as pull_secret_fo:
+        pull_secret = json.load(pull_secret_fo)
+
+    # find all auths wich might be related to the specified image
+    tmp_auths = []
+    for auth in pull_secret['auths']:
+        if auth in image:
+            tmp_auths.append(auth)
+    # get the most specific auth for particular image
+    tmp_auths = sorted(tmp_auths, key=len, reverse=True)
+    if tmp_auths:
+        # if there is match to particular auth, prepare authfile just with the
+        # matching auth
+        auth = tmp_auths[0]
+        # as key use only server name, without namespace
+        authfile_content = {
+            'auths': {
+                auth.split('/', 1)[0]: pull_secret['auths'][auth]
+            }
+        }
+    else:
+        # else use whole pull-secret
+        authfile_content = pull_secret
+
+    # create temporary auth file
+    with NamedTemporaryFile(mode='w', prefix='authfile_') as authfile_fo:
+        json.dump(authfile_content, authfile_fo)
+        # ensure the content will be saved into the file
+        authfile_fo.flush()
+        # pull original image (to be able to inspect it)
+        exec_cmd(f'podman image pull {image} --authfile {authfile_fo.name}')
+        # inspect the image and get full image url with tag
+        cmd_result = exec_cmd(f'podman image inspect {image}')
+        image_inspect = json.loads(cmd_result.stdout)
+        # if there is any tag specified, use it in the full image url,
+        # othervise use url with digest
+        if image_inspect[0]['RepoTags']:
+            orig_image_full = image_inspect[0]['RepoTags'][0]
+        else:
+            orig_image_full = image_inspect[0]['RepoDigests'][0]
+        # prepare mirrored image url
+        mirror_registry = config.DEPLOYMENT['mirror_registry']
+        mirrored_image = mirror_registry + re.sub(r'^[^/]*', '', orig_image_full)
+        # login to mirror registry
+        mirror_registry_user = config.DEPLOYMENT['mirror_registry_user']
+        mirror_registry_password = config.DEPLOYMENT['mirror_registry_password']
+        login_cmd = (
+            f"podman login --authfile {authfile_fo.name} "
+            f"{mirror_registry} -u {mirror_registry_user} "
+            f"-p {mirror_registry_password} --tls-verify=false"
+        )
+        exec_cmd(login_cmd, (mirror_registry_user, mirror_registry_password))
+        # mirror the image
+        logging.info(
+            f"Mirroring image '{image}' ('{orig_image_full}') to '{mirrored_image}'"
+        )
+        exec_cmd(
+            f"oc image mirror --insecure --registry-config"
+            f" {authfile_fo.name} {orig_image_full} {mirrored_image}"
+        )
+    return mirrored_image

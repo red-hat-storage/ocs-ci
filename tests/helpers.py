@@ -28,7 +28,12 @@ from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler, ocsci_log_path, run_cmd
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    mirror_image,
+    ocsci_log_path,
+    run_cmd,
+)
 from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
@@ -201,6 +206,15 @@ def create_pod(
 
     if sa_name and dc_deployment:
         pod_data['spec']['template']['spec']['serviceAccountName'] = sa_name
+
+    # disconnected cluster related configuration updates
+    if config.DEPLOYMENT.get('disconnected'):
+        if 'containers' in pod_data['spec']:
+            container = pod_data['spec']['containers'][0]
+        else:
+            container = pod_data['spec']['template']['spec']['containers'][0]
+        container['image'] = mirror_image(container['image'])
+
     if dc_deployment:
         ocs_obj = create_resource(**pod_data)
         logger.info(ocs_obj.name)
