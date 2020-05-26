@@ -15,7 +15,7 @@ from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.packagemanifest import get_selector_for_ocs_operator, PackageManifest
 from ocs_ci.utility import utils
-from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.ocs.node import get_typed_nodes, get_compute_node_names
 from ocs_ci.utility.retry import retry
 
 log = logging.getLogger(__name__)
@@ -271,7 +271,16 @@ def ocs_install_verification(
         "Verifying ceph osd tree output and checking for device set PVC names "
         "in the output."
     )
-    deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
+
+    platform = config.ENV_DATA.get('platform').lower()
+    if (
+            config.DEPLOYMENT.get('local_storage')
+            and platform == constants.VSPHERE_PLATFORM
+    ):
+        deviceset_pvcs = get_compute_node_names()
+    else:
+        deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
+
     ct_pod = get_ceph_tools_pod()
     osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree', format='json')
     schemas = {

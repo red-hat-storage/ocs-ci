@@ -828,3 +828,11 @@ AUTH_CONFIG_DOCS = (
 TP_CONVERSION = {
     ' B/s': 0.000000976562, ' KiB/s': 0.000976562, ' MiB/s': 1
 }
+
+# LSO
+ROOT_DISK_NAME = "sda"
+RDM = "RDM"
+VMDK = "VMDK"
+DIRECTPATH = "VMDirectPath"
+DISK_MODE = "independent_persistent"
+COMPATABILITY_MODE = "physicalMode"
