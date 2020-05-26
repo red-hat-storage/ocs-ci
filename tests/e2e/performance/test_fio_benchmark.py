@@ -6,7 +6,9 @@ import pytest
 from elasticsearch import Elasticsearch
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.ocp import OCP, get_ocs_version, get_build
+from ocs_ci.ocs.ocp import (
+    OCP, get_ocs_version, get_build, get_platform
+)
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -31,10 +33,13 @@ def ripsaw(request):
 
 def analyze_regression(io_pattern, es_username):
     """
+    Analyzes the FIO result for variance and regression
+    The test fails ff the test run has more than 5% regression
 
     Args:
         io_pattern (str): 'sequential' or 'random' workload
         es_username (str): ocs_build used in the CR object
+
     """
     es = Elasticsearch([{'host': constants.ES_SERVER_IP, 'port': constants.ES_SERVER_PORT}])
     # Todo: Fetch benchmark values for FIO, which
@@ -64,6 +69,9 @@ def analyze_regression(io_pattern, es_username):
         # Todo: Fail test if 5% deviation from benchmark value
 
 
+@pytest.mark.skipif(
+    get_platform() == 'AWS', reason='AWS cant reach internal ES server'
+)
 @performance
 @pytest.mark.parametrize(
     argnames=["interface", "io_pattern"],
@@ -94,8 +102,7 @@ class TestFIOBenchmark(E2ETest):
         log.info("Deploying ripsaw operator")
         ripsaw.apply_crd(
             'resources/crds/'
-            'ripsaw_v1alpha1_ripsaw_crd.yaml',
-            drop_cache=True
+            'ripsaw_v1alpha1_ripsaw_crd.yaml'
         )
         sc = 'ocs-storagecluster-ceph-rbd' if interface == 'CephBlockPool' else 'ocs-storagecluster-cephfs'
 

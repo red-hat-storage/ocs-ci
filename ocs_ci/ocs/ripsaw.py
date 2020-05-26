@@ -76,13 +76,12 @@ class RipSaw(object):
             log.error('Error during cloning of ripsaw repository')
             raise cf
 
-    def apply_crd(self, crd, drop_cache):
+    def apply_crd(self, crd):
         """
         Apply the CRD
 
         Args:
             crd (str): Name of file to apply
-            drop_cache (bool): Enable if OSD cache needs to be dropped
         """
         self.dir += '/ripsaw'
         run('oc apply -f deploy', shell=True, check=True, cwd=self.dir)

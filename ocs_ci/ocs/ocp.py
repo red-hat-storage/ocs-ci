@@ -928,6 +928,20 @@ def get_build():
     return ocp_cluster.get()['items'][0]['status']['desired']['version']
 
 
+def get_platform():
+    """
+    Returns the platform type of the cluster (AWS, Vsphere etc)
+    Returns:
+        str: OCP platform type (AWS, Vsphere etc)
+
+    """
+
+    ocp_cluster = OCP(
+        namespace=config.ENV_DATA['cluster_namespace'],
+        kind='Infrastructure', resource_name='cluster')
+    return ocp_cluster.get()['status']['platform']
+
+
 def get_ocp_channel():
     """
     Return the OCP Channel
