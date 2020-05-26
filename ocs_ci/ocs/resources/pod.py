@@ -18,11 +18,14 @@ from tests import helpers
 from ocs_ci.ocs import workload
 from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import CommandFailed, NonUpgradedImagesFoundError, UnavailableResourceException
+from ocs_ci.ocs.exceptions import (
+    CommandFailed, NonUpgradedImagesFoundError, UnavailableResourceException,
+    TimeoutExpiredError
+)
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import run_cmd, check_timeout_reached
+from ocs_ci.utility.utils import run_cmd, check_timeout_reached, TimeoutSampler
 from ocs_ci.utility.utils import check_if_executable_in_path
 from ocs_ci.utility.retry import retry
 
@@ -688,10 +691,27 @@ def run_io_in_bg(pod_obj, expect_to_fail=False, fedora_dc=False):
     else:
         FILE = TEST_FILE
     test_file = FILE + "1"
-    assert check_file_existence(pod_obj, test_file), (
-        f"I/O failed to start inside {pod_obj.name}"
-    )
 
+    # Check I/O started
+    try:
+        for sample in TimeoutSampler(
+            timeout=20, sleep=1, func=check_file_existence,
+            pod_obj=pod_obj, file_path=test_file
+        ):
+            if sample:
+                break
+            logger.info( f"Waiting for I/O to start inside {pod_obj.name}")
+    except TimeoutExpiredError:
+        logger.info(
+            "Wait timeout: I/O failed to start inside {pod_obj.name}. "
+            "Collect file list."
+        )
+        parent_dir = os.path.join(TEST_FILE, os.pardir)
+        pod_obj.exec_cmd_on_pod(
+            command=f'ls -l {os.path.abspath(parent_dir)}',
+            out_yaml_format=False
+        )
+        raise TimeoutExpiredError(f"I/O failed to start inside {pod_obj.name}")
     return thread
 
 
