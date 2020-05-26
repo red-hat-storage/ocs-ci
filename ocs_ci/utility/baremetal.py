@@ -151,12 +151,12 @@ class BAREMETAL(object):
         wait_for_nodes_status(
             node_names=helpers.get_master_nodes(),
             status=constants.NODE_READY,
-            timeout=600
+            timeout=800
         )
         wait_for_nodes_status(
             node_names=helpers.get_worker_nodes(),
             status=constants.NODE_READY,
-            timeout=600
+            timeout=800
         )
 
     def start_baremetal_machines(self, baremetal_machine, wait=True):
@@ -198,12 +198,12 @@ class BAREMETAL(object):
         wait_for_nodes_status(
             node_names=helpers.get_master_nodes(),
             status=constants.NODE_READY,
-            timeout=600
+            timeout=800
         )
         wait_for_nodes_status(
             node_names=helpers.get_worker_nodes(),
             status=constants.NODE_READY,
-            timeout=600
+            timeout=800
         )
 
     def restart_baremetal_machines(self, baremetal_machine, force=True):
