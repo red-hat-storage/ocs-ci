@@ -793,7 +793,7 @@ def verify_pvs_created(num_of_pvs):
 
     Raises:
         AssertionError: if any PVs are not in the Available state or if the
-            number of PVs does not match the given parametr.
+            number of PVs does not match the given parameter.
 
     """
     logger.info("Verifying PVs are created")
