@@ -8,7 +8,7 @@ from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import utils, templating
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed, ResourceWrongStatusException
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
 from subprocess import CalledProcessError
@@ -251,14 +251,19 @@ class Postgresql(RipSaw):
             timeout (int): Time in seconds to wait
 
         """
-        timeout = timeout if timeout else 1200
+        timeout = timeout if timeout else 1500
         # Wait for pg_bench pods to initialized and running
         log.info(f"Waiting for pgbench pods to be reach {status} state")
         pgbench_pod_objs = self.get_pgbench_pods()
         for pgbench_pod_obj in pgbench_pod_objs:
-            wait_for_resource_state(
-                resource=pgbench_pod_obj, state=status, timeout=timeout
-            )
+            try:
+                wait_for_resource_state(
+                    resource=pgbench_pod_obj, state=status, timeout=timeout
+                )
+            except ResourceWrongStatusException:
+                output = run_cmd(f'oc logs {pgbench_pod_obj.name}')
+                log.error(f'{pgbench_pod_obj.name} did not reach to {status} state after {timeout} sec\n{output}')
+                raise UnexpectedBehaviour("pgbecnch pod did not reach to desired state")
 
     def validate_pgbench_run(self, pgbench_pods):
         """
