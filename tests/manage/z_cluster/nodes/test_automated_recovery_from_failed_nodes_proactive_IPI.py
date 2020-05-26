@@ -6,7 +6,7 @@ from ocs_ci.framework.testlib import (
     aws_platform_required,
     ipi_deployment_required, ignore_leftovers
 )
-from ocs_ci.ocs import machine, constants, defaults, ocp
+from ocs_ci.ocs import machine, constants
 from ocs_ci.ocs.resources import pod
 from tests.helpers import (
     get_worker_nodes, label_worker_node, remove_label_from_worker_node
@@ -17,8 +17,7 @@ from ocs_ci.ocs.node import (
     get_both_osd_and_app_pod_running_node,
     add_new_node_and_label_it
 )
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException
-from tests import helpers
+from tests.manage.z_cluster.nodes import helpers as nodes_helpers
 
 
 log = logging.getLogger(__name__)
@@ -129,33 +128,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj)
         log.info("All the dc pods reached running state")
 
-        # Check all OCS pods status, they should be in running state
-        all_pod_obj = pod.get_all_pods(
-            namespace=defaults.ROOK_CLUSTER_NAMESPACE
-        )
-        for pod_obj in all_pod_obj:
-            state = constants.STATUS_RUNNING
-            if any(i in pod_obj.name for i in ['-1-deploy', 'ocs-deviceset']):
-                state = constants.STATUS_COMPLETED
-            try:
-                helpers.wait_for_resource_state(resource=pod_obj, state=state, timeout=200)
-            except ResourceWrongStatusException:
-                # 'rook-ceph-crashcollector' on the failed node stucks at
-                # pending state. BZ 1810014 tracks it.
-                # Ignoring 'rook-ceph-crashcollector' pod health check as
-                # WA and deleting its deployment so that the pod
-                # disappears. Will revert this WA once the BZ is fixed
-                if 'rook-ceph-crashcollector' in pod_obj.name:
-                    ocp_obj = ocp.OCP(
-                        namespace=defaults.ROOK_CLUSTER_NAMESPACE
-                    )
-                    pod_name = pod_obj.name
-                    deployment_name = '-'.join(pod_name.split("-")[:-2])
-                    command = f"delete deployment {deployment_name}"
-                    ocp_obj.exec_oc_cmd(command=command)
-                    log.info(f"Deleted deployment for pod {pod_obj.name}")
-                else:
-                    raise
+        nodes_helpers.wait_for_all_pods()
 
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
