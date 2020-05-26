@@ -262,8 +262,9 @@ class Postgresql(RipSaw):
                 )
             except ResourceWrongStatusException:
                 output = run_cmd(f'oc logs {pgbench_pod_obj.name}')
-                log.error(f'{pgbench_pod_obj.name} did not reach to {status} state after {timeout} sec\n{output}')
-                raise UnexpectedBehaviour("pgbecnch pod did not reach to desired state")
+                error_msg = f'{pgbench_pod_obj.name} did not reach to {status} state after {timeout} sec\n{output}'
+                log.error(error_msg)
+                raise UnexpectedBehaviour(error_msg)
 
     def validate_pgbench_run(self, pgbench_pods):
         """

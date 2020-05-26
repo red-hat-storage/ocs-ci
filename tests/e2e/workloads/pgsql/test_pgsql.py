@@ -3,7 +3,7 @@ import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.framework.testlib import (
-    E2ETest, workloads, ignore_leftovers
+    E2ETest, workloads
 )
 
 log = logging.getLogger(__name__)
@@ -20,7 +20,6 @@ def pgsql(request):
     return pgsql
 
 
-@ignore_leftovers
 @workloads
 @pytest.mark.polarion_id("OCS-807")
 class TestPgSQLWorkload(E2ETest):
