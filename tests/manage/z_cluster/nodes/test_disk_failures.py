@@ -57,6 +57,7 @@ class TestDiskFailures(ManageTest):
 
     @aws_platform_required
     @pytest.mark.polarion_id("OCS-1085")
+    @bugzilla('1825675')
     def test_detach_attach_worker_volume(self, nodes, pvc_factory, pod_factory):
         """
         Detach and attach worker volume
