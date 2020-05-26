@@ -168,3 +168,7 @@ class NoBucketPolicyResponse(Exception):
 
 class PendingCSRException(Exception):
     pass
+
+
+class RDMDiskNotFound(Exception):
+    pass

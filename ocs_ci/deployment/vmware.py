@@ -15,7 +15,7 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, RDMDiskNotFound
 from ocs_ci.ocs.node import (
     get_node_ips, get_typed_worker_nodes, remove_nodes, wait_for_nodes_status
 )
@@ -279,7 +279,39 @@ class VSPHEREBASE(Deployment):
                 dc,
                 cluster
             )
-            return [vm for vm in vms if "compute" in vm.name or "rhel" in vm.name]
+            return [
+                vm for vm in vms if "compute" in vm.name or "rhel" in vm.name
+            ]
+
+    def add_rdm_disks(self):
+        """
+        Attaches RDM disk to the compute nodes
+
+        Raises:
+            RDMDiskNotFound: In case there is no disks found on host
+
+        """
+        logger.info("Adding RDM disk to all compute nodes")
+        compute_vms = self.get_compute_vms(self.datacenter, self.cluster)
+        for vm in compute_vms:
+            host = self.vsphere.get_host(vm)
+            logger.info(f"{vm.name} belongs to host {host.name}")
+            devices_available = self.vsphere.available_storage_devices(host)
+            if not devices_available:
+                raise RDMDiskNotFound
+            self.attach_rdm_disk(vm, devices_available[0])
+
+    def attach_rdm_disk(self, vm, device_name):
+        """
+        Attaches RDM disk to host
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+            device_name (str): Device name to add to VM.
+                e.g:"/vmfs/devices/disks/naa.600304801b540c0125ef160f3048faba"
+
+        """
+        self.vsphere.add_rdm_disk(vm, device_name)
 
     def post_destroy_checks(self):
         """
