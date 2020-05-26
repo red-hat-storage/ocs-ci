@@ -17,10 +17,141 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import E2ETest, performance
 from tests.helpers import get_logs_with_errors
 from ocs_ci.ocs.exceptions import CommandFailed
+<<<<<<< HEAD
 from elasticsearch import (Elasticsearch, exceptions as ESExp)
+=======
+from elasticsearch import (Elasticsearch, exceptions as esexp)
+>>>>>>> e430e25a... Changing the way all test data collected, pars it from the logs insted of
 import numpy as np
 
 log = logging.getLogger(__name__)
+
+"""
+Defining dictionary of keywords to look in the logs, foreach keyword we have the
+key-name in the final results output, the seperate charecter to split the line
+in the log file, the position of the result and the numpy operation to use when
+we have more then one pod in the test.
+
+"""
+
+keys_to_pars = {
+    'files/thread': {
+        'name': 'Files_per_Treads', 'sep': ' ', 'pos': -1, 'op': None
+    },
+    'file size (KB)': {
+        'name': 'File_size_KB', 'sep': ' ', 'pos': -1, 'op': None
+    },
+    'total threads': {
+        'name': 'Total_Treads', 'sep': ' ', 'pos': -1, 'op': np.sum
+    },
+    'total files': {
+        'name': 'Total_Files', 'sep': '=', 'pos': -1, 'op': np.sum
+    },
+    'elapsed time': {
+        'name': 'Elapsed_Time', 'sep': '=', 'pos': -1, 'op': np.average
+    },
+    'files/sec': {
+        'name': 'Files_per_Sec', 'sep': '=', 'pos': -1, 'op': np.sum
+    },
+    'IOPS': {
+        'name': 'IOPS', 'sep': ' ', 'pos': -1, 'op': np.sum
+    },
+    'MiB/sec': {
+        'name': 'Bandwidth', 'sep': '=', 'pos': -1, 'op': np.sum
+    },
+    'total data': {
+        'name': 'Total_Data_GB', 'sep': ' ', 'pos': -2, 'op': np.sum
+    },
+}
+
+
+class SmallFileLogParser(object):
+
+    """
+    This class is reading the benchmark pod logs, and pars it
+
+    """
+    def __init__(self, pod):
+        """
+        Initialize the parser object
+
+        Args:
+            pod (str): the pod name
+
+        """
+        self.podname = pod
+        self.bench_pod = OCP(kind='pod', namespace='my-ripsaw')
+        self.results = {}
+
+    def __str__(self):
+        """
+        Create the output of the print() command of this object
+
+        Returns:
+            str : string that contain the pod-name of the object and the results
+                  from this pod
+
+        """
+        output = f'podname = {self.podname}\n'
+        output += f'results = {self.results}\n'
+        return output
+
+    def read(self):
+        """
+        Read the logs from the pod and pars it into the results dictionary
+
+        """
+        log.info(f'Getting {self.podname} logs.')
+        logs = self.bench_pod.exec_oc_cmd(f'logs {self.podname}',
+                                          out_yaml_format=False
+                                          )
+        sec_res = {}  # used for one results section (operation)
+        for line in logs.split('\n'):
+            line = line.strip()
+            if 'completed sample' in line:
+                sample = line.split()[9]
+                if sample not in self.results.keys():
+                    self.results[sample] = {}
+
+                operation = line.split()[12]
+                if operation not in self.results[sample].keys():
+                    self.results[sample][operation] = sec_res
+                    sec_res = {}
+
+            for key in keys_to_pars.keys():
+                if key in line:
+                    value = line.split(keys_to_pars[key]['sep'])[
+                        keys_to_pars[key]['pos']].strip()
+                    sec_res[keys_to_pars[key]['name']] = float(value)
+        log.debug(f'The Results from {self.podname} are {self.results}')
+
+    def aggregate(self):
+        """
+        Aggregating all samples results from one pod to one set of results for
+        each operation
+
+        Returns:
+            dict: dictionary of aggregated results
+
+        """
+        log.info(f'Aggregating samples results for {self.podname}')
+        fr = {}
+        for smp in self.results.keys():
+            for op in self.results[smp].keys():
+                if op not in fr.keys():
+                    fr[op] = {}
+                for key in keys_to_pars.keys():
+                    key_name = keys_to_pars[key]['name']
+                    if key_name in self.results[smp][op]:
+                        if key_name not in fr[op]:
+                            fr[op][key_name] = [self.results[smp][op][key_name]]
+                        else:
+                            fr[op][key_name].append(
+                                self.results[smp][op][key_name])
+
+        log.debug(f'The results for {self.podname} after aggregation are : {self.results}')
+        self.results.update(fr)
+        return fr
 
 
 class SmallFileResultsAnalyse(object):
@@ -35,16 +166,6 @@ class SmallFileResultsAnalyse(object):
     if the deviation between samples is less the 5%
 
     """
-
-    managed_keys = {
-        'IOPS': {'name': 'iops', 'op': np.sum},
-        'MiBps': {'name': 'mbps', 'op': np.sum},
-        'elapsed': {'name': 'elapsed-time', 'op': np.average},
-        'files': {'name': 'Files-per-thread', 'op': np.sum},
-        'files-per-sec': {'name': 'Files-per-sec', 'op': np.sum},
-        'records': {'name': 'Rec-per-thread', 'op': np.sum},
-    }
-
     def __init__(self, uuid, crd):
         """
         Initialize the object by reading some of the data from the CRD file and
@@ -56,9 +177,7 @@ class SmallFileResultsAnalyse(object):
                         that modify it in the test itself.
 
         """
-
         self.uuid = uuid
-
         self.server = crd['spec']['elasticsearch']['server']
         self.port = crd['spec']['elasticsearch']['port']
         self.index = crd['spec']['es_index'] + '-results'
@@ -72,10 +191,8 @@ class SmallFileResultsAnalyse(object):
         log.info(f'Connecting to ES {self.server} on port {self.port}')
         try:
             self.es = Elasticsearch([{'host': self.server, 'port': self.port}])
-        except ESExp.ConnectionError:
-            log.error('can not connect to ES server {}:{}'.format(
-                self.server, self.port))
-            raise
+        except esexp.ConnectionError:
+            log.error(f'can not connect to ES server {self.server}:{self.port}')
 
         # Creating full results dictionary
         self.results = {
@@ -93,6 +210,26 @@ class SmallFileResultsAnalyse(object):
         self.records *= self.results['samples']
         self.records *= len(self.results['operations'])
 
+    def __str__(self):
+        """
+        Create the output of the print() command of this object
+
+        Returns:
+            str : string that contain all test information and results
+
+        """
+        output = 'ElasticSearch object information\n'
+        output += f'UUID = {self.uuid}\n'
+        output += f'server = {self.server}\n'
+        output += f'port = {self.port}\n'
+        output += f'index = {self.index}\n'
+        output += f'new_index = {self.new_index}\n'
+        output += f'all results = {self.all_results}\n'
+        output += f'results = {self.results}\n'
+        output += f'records = {self.records}\n'
+
+        return output
+
     def add_key(self, key, value):
         """
         Adding (key and value) to this object results dictionary as a new
@@ -105,6 +242,7 @@ class SmallFileResultsAnalyse(object):
         """
         self.results.update({key: value})
 
+<<<<<<< HEAD
     def read(self):
         """
         Reading all test records from the elasticsearch server into dictionary
@@ -129,128 +267,53 @@ class SmallFileResultsAnalyse(object):
                 'No data in ES server, disabling results calculation')
             self.dont_check = True
 
+=======
+>>>>>>> e430e25a... Changing the way all test data collected, pars it from the logs insted of
     def write(self):
         """
         Writing the results to the elasticsearch server
 
         """
         log.info('Writing all data to ES server')
-        log.info(f'Params : index={self.new_index}, doc_type=_doc,body={self.results},id={self.uuid}')
-        log.info(f'the results data is {self.results}')
-        self.es.index(index=self.new_index,
-                      doc_type='_doc',
-                      body=self.results,
-                      id=self.uuid)
+        try:
+            self.es.index(index=self.new_index,
+                          doc_type='_doc',
+                          body=self.results,
+                          id=self.uuid)
+        except esexp.ConnectionError:
+            log.error('can not write data to ES server')
 
-    def thread_read(self, host, op, snum):
-        """
-        This method read all threads record of one host / operation and sample
-
-        Args:
-            host (str): the name of the pod that ran the test
-            op (str): the operation that is tested
-            snum (int): sample of test as string
-
-        Returns:
-            dict : dictionary of results records
-
-        """
-
-        res = {}
-        log.debug(f'Reading all threads for {op} / {snum} / {host}')
-        for hit in self.all_results['hits']['hits']:
-
-            if (
-                hit['_source']['host'] == host and hit['_source'][
-                    'optype'] == op and hit['_source']['sample'] == snum
-            ):
-                for key in self.managed_keys.keys():
-                    # not all operation have all values, so i am using try
-                    try:
-                        val = float('{:.2f}'.format(hit['_source'][key]))
-                        if self.managed_keys[key]['name'] in res.keys():
-                            res[self.managed_keys[key]['name']].append(val)
-                        else:
-                            res[self.managed_keys[key]['name']] = [val]
-                    except Exception:
-                        pass
-        res = self.aggregate_threads_results(res)
-        return res
-
-    def aggregate_threads_results(self, res):
-        """
-        Aggregation of one section of results, this can be threads in host,
-        hosts in sample, samples in test
-
-        Args:
-            res (dict) : dictionary of results
-
-        Returns:
-            dict : dictionary with the aggregate results.
-
-        """
-
-        results = {}
-        for key in self.managed_keys.keys():
-            if self.managed_keys[key]['name'] in res.keys():
-                results[key] = self.managed_keys[key]['op'](
-                    res[self.managed_keys[key]['name']]
-                )
-
-        # This is the place to check in host (treads) deviation.
-
-        return results
-
-    def combine_results(self, results, clear):
-        """
-        Combine 2 or more results (hosts in sample / samples in test)
-        to one result.
-
-        Args:
-            results (dict): dictionary of results to combine
-            clear (bool): return only combined results or not.
-                          True - return only combined results
-                          False - add the combine results to originals results
-
-        Returns:
-            dict : dictionary of results records
-
-        """
-
-        res = {}
-        log.info(f'The results to combine {results}')
-        for rec in results.keys():
-            record = results[rec]
-            for key in self.managed_keys.keys():
-                # not all operation have all values, so i am using try
-                try:
-                    val = float('{:.2f}'.format(record[key]))
-                    if self.managed_keys[key]['name'] in res.keys():
-                        res[self.managed_keys[key]['name']].append(val)
-                    else:
-                        res[self.managed_keys[key]['name']] = [val]
-                except Exception:
-                    pass
-        if not clear:
-            res.update(self.aggregate_threads_results(res))
-        else:
-            res = self.aggregate_threads_results(res)
-        return res
-
-    def aggregate_host_results(self):
+    def aggregate_host_results(self, host_res):
         """
         Aggregation results from all hosts in single sample
 
+        Args:
+            host_res (dict): dictionary of host results - user for multi hosts
+                             test
+
+        Returns:
+            dict: dictionary of all the host results aggregated with the host
+                  results that provide as argument to one set of results
+
         """
-
         results = {}
-
-        for op in self.results['operations']:
-            for smp in range(self.results['samples']):
-                sample = smp + 1
-                if op in self.results['full-res'].keys():
-                    self.results['full-res'][op][sample] = self.combine_results(
-                        self.results['full-res'][op][sample], True)
+        log.info('Aggregating hosts results to one test-results')
+        if self.results['full-res'] == {}:
+            self.results['full-res'] = host_res
+            log.info('This is the first pod - return results as is')
+        else:
+            for op in self.results['operations']:
+                for key in keys_to_pars.keys():
+                    key_name = keys_to_pars[key]['name']
+                    oper = keys_to_pars[key]['op']
+                    if oper:
+                        if key_name in self.results['full-res'][op]:
+                            for index in range(self.results['samples']):
+                                cur_data = self.results[
+                                    'full-res'][op][key_name][index]
+                                new_data = host_res[op][key_name][index]
+                                self.results['full-res'][op][key_name][
+                                    index] = oper([cur_data, new_data])
 
         return results
 
@@ -264,71 +327,29 @@ class SmallFileResultsAnalyse(object):
                        to 5%, otherwise False
 
         """
-
         test_pass = True
         for op in self.results["operations"]:
-            log.info(f'Aggregating {op} - {self.results["full-res"][op]}')
-            results = self.combine_results(self.results["full-res"][op], False)
+            log.debug(f'Aggregating {op} - {self.results["full-res"][op]}')
+            results = self.results["full-res"][op]
 
-            log.info(f'Check IOPS {op} samples deviation')
-
-            for key in self.managed_keys.keys():
-                if self.managed_keys[key]["name"] in results.keys():
-                    results[key] = np.average(
-                        results[self.managed_keys[key]["name"]]
-                    )
+            for key in keys_to_pars.keys():
+                if keys_to_pars[key]["name"] in results.keys():
+                    average_res = np.average(results[keys_to_pars[key]["name"]])
                     if key == "IOPS":
-                        st_deviation = np.std(results[self.managed_keys[key]["name"]])
-                        mean = np.mean(results[self.managed_keys[key]["name"]])
+                        st_deviation = np.std(results[keys_to_pars[key]["name"]])
+                        mean = np.mean(results[keys_to_pars[key]["name"]])
 
                         pct_dev = (st_deviation / mean) * 100
-                        if pct_dev > 5:
-                            log.error(
-                                f'Deviation for {op} IOPS is more the 5% ({pct_dev})')
+                        # TODO: replace the 20% to 5% when we will have Perf HW
+                        if pct_dev > 20:
+                            log.error(f'IOPS Deviation for {op} is more the 20% ({pct_dev})')
                             test_pass = False
-                    del results[self.managed_keys[key]["name"]]
+
+                    results[keys_to_pars[key]["name"]] = average_res
+
                 self.results["full-res"][op] = results
 
         return test_pass
-
-    def get_clients_list(self):
-        """
-        Finding and creating a list of all hosts that was used in this test
-
-        Returns:
-            list: a list of pods name
-
-        """
-
-        res = []
-        for hit in self.all_results['hits']['hits']:
-            host = hit['_source']['host']
-            if host not in res:
-                res.append(host)
-        log.info(f'The pods names used in this test are {res}')
-        return res
-
-    def init_full_results(self):
-        """
-        Initialaze the full results Internal DB as dictionary.
-
-        """
-
-        log.info('Initialising results DB')
-
-        # High level of internal results DB is operation
-        for op in self.results['operations']:
-            self.results['full-res'][op] = {}
-
-            # second level is sample
-            for smp in range(self.results['samples']):
-                sample = smp + 1
-                self.results['full-res'][op][sample] = {}
-
-                # last level is host (all threads will be in the host)
-                for host in self.results['hosts']:
-                    self.results['full-res'][op][sample][
-                        host] = self.thread_read(host, op, sample)
 
 
 @pytest.fixture(scope='function')
@@ -388,6 +409,7 @@ class TestSmallFileWorkload(E2ETest):
         """
 
         sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
+<<<<<<< HEAD
 
         # getting the name and email  of the user that running the test.
         try:
@@ -397,16 +419,33 @@ class TestSmallFileWorkload(E2ETest):
             # if no git user define, use the default user from the CR file
             user = sf_data['spec']['test_user']
             email = ''
+=======
+>>>>>>> e430e25a... Changing the way all test data collected, pars it from the logs insted of
 
-        log.info("Apply Operator CRD")
+        # getting the name and email  of the user that running the test.
+        log.info(f'Getting the Username and email of the running user')
+        try:
+            user = run_cmd('git config --get user.name').strip()
+            email = run_cmd('git config --get user.email').strip()
+        except CommandFailed:
+            # if no git user define, use the default user from the CR file
+            user = sf_data['spec']['test_user']
+            email = ''
+        log.info(f'Test was triggered by {user} : <{email}>')
+
+        log.info('Apply Operator CRD')
         ripsaw.apply_crd('resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml')
+<<<<<<< HEAD
+=======
+
+>>>>>>> e430e25a... Changing the way all test data collected, pars it from the logs insted of
         if interface == constants.CEPHBLOCKPOOL:
             storageclass = constants.DEFAULT_STORAGECLASS_RBD
         else:
             storageclass = constants.DEFAULT_STORAGECLASS_CEPHFS
-        log.info(f"Using {storageclass} Storageclass")
+        log.info(f'Using {storageclass} Storage class')
         sf_data['spec']['workload']['args']['storageclass'] = storageclass
-        log.info("Running SmallFile bench")
+        log.info('Running SmallFile benchmark')
 
         """
             Setting up the parameters for this test
@@ -424,56 +463,88 @@ class TestSmallFileWorkload(E2ETest):
 
         Since the file_size is in Kb and the vol_size need to be in Gb, more
         calculation is needed.
+
         """
+        clients = sf_data['spec']['workload']['args']['clients']
+        test_files = files * threads * clients
+        dataset = test_files * file_size / constants.GB2KB
+        log.info(f'Total data set to use in the test is {dataset}')
         vol_size = int(files * threads * file_size * 3)
         vol_size = int(vol_size / constants.GB2KB)
         if vol_size < 100:
             vol_size = 100
-        sf_data['spec']['workload']['args']['storagesize'] = f"{vol_size}Gi"
+        sf_data['spec']['workload']['args']['storagesize'] = f'{vol_size}Gi'
 
         sf_obj = OCS(**sf_data)
         sf_obj.create()
-        log.info(f'The smallfile yaml file is {sf_data}')
 
         # wait for benchmark pods to get created - takes a while
-        for bench_pod in TimeoutSampler(
-            120, 3, get_pod_name_by_pattern, 'smallfile-client', 'my-ripsaw'
-        ):
-            try:
-                if bench_pod[0] is not None:
-                    small_file_client_pod = bench_pod[0]
-                    break
-            except IndexError:
-                log.info("Bench pod not ready yet")
+        clients = sf_data['spec']['workload']['args']['clients']
+        log.info(f'Going to run on {clients} pods, waiting for pods to start')
+        count = 10  # total number of retry for all benchmark pods to start
+        small_file_client_pods = {}
+        while count > 0:
+            for bench_pod in TimeoutSampler(
+                120, 5, get_pod_name_by_pattern, 'smallfile-client', 'my-ripsaw'
+            ):
+                try:
+                    if len(bench_pod) == clients:
+                        log.info(f'The list of benchmark pods is {bench_pod}')
+                        for bpod in bench_pod:
+                            small_file_client_pods[bpod] = SmallFileLogParser(
+                                bpod)
+                        small_file_client_pod = bench_pod
+                        count = 0
+                        break
+                except IndexError:
+                    log.info('Bench pod not ready yet')
+            count -= 1
+
+        # make sure all pods started
+        assert len(small_file_client_pod) == clients, \
+            f'Not All pods started {small_file_client_pod} out of {clients}'
 
         bench_pod = OCP(kind='pod', namespace='my-ripsaw')
-        log.info("Waiting for SmallFile benchmark to Run")
-        assert bench_pod.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            resource_name=small_file_client_pod,
-            sleep=30,
-            timeout=600
-        )
+        log.info('All PODs started, Waiting for SmallFile benchmark to Run')
+        for smf_pod in small_file_client_pods.keys():
+            assert bench_pod.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                resource_name=smf_pod,
+                sleep=10,
+                timeout=600
+            )
+
         start_time = time.time()
+<<<<<<< HEAD
 
         # After testing manually, changing the timeout
         timeout = 3600
+=======
+        timeout = 1800
+        log.info('The SmallFile benchmark is Running')
+>>>>>>> e430e25a... Changing the way all test data collected, pars it from the logs insted of
 
-        # Getting the UUID from inside the benchmark pod
-        output = bench_pod.exec_oc_cmd(f'exec {small_file_client_pod} env')
+        """
+        Getting the UUID from inside the benchmark pod (first one - since all
+        have the same UUID
+
+        """
+        output = bench_pod.exec_oc_cmd(f'exec {small_file_client_pod[0]} env')
+        uuid = ''
         for line in output.split():
             if 'uuid=' in line:
                 uuid = line.split('=')[1]
-        log.info(f'the UUID of the test is : {uuid}')
+                log.info(f'the UUID of the test is : {uuid}')
         full_results = SmallFileResultsAnalyse(uuid, sf_data)
 
-        # Initialaize the results doc file.
+        # Initialize the results doc file.
         full_results.add_key('user', sf_data['spec']['test_user'])
         full_results.add_key('ocp_version', get_ocp_version())
         full_results.add_key('ocp_build', get_build())
         full_results.add_key('ocp_channel', get_ocp_channel())
         full_results.add_key('ocs_version', get_ocs_version())
         full_results.add_key('vendor', get_provider())
+        full_results.add_key('hosts', small_file_client_pod)
         full_results.add_key('start_time',
                              time.strftime('%Y-%m-%dT%H:%M:%SGMT',
                                            time.gmtime()))
@@ -481,7 +552,8 @@ class TestSmallFileWorkload(E2ETest):
         # Calculating the total size of the working data set - in GB
         full_results.add_key(
             'dataset',
-            file_size * files * threads * full_results.results['clients'] / constants.GB2KB
+            file_size * files * threads * full_results.results[
+                'clients'] / constants.GB2KB
         )
 
         full_results.add_key('global_options', {
@@ -490,6 +562,7 @@ class TestSmallFileWorkload(E2ETest):
             'storageclass': sf_data['spec']['workload']['args']['storageclass'],
             'vol_size': sf_data['spec']['workload']['args']['storagesize']
         })
+        log.debug(f'The Initial results object is : {full_results}')
 
         while True:
             logs = bench_pod.exec_oc_cmd(
@@ -502,17 +575,50 @@ class TestSmallFileWorkload(E2ETest):
                                                    time.gmtime()))
                 full_results.read()
                 if not full_results.dont_check:
+            finished = 0
+            for smf_pod in small_file_client_pod:
+                logs = bench_pod.exec_oc_cmd(
+                    f'logs {smf_pod}',
+                    out_yaml_format=False
+                )
+                if 'RUN STATUS DONE' in logs:
+                    log.info(f'The pod {smf_pod} finished !')
+                    finished += 1
+                else:
+                    full_results.add_key('end_time',
+                                         time.strftime('%Y-%m-%dT%H:%M:%SGMT',
+                                                       time.gmtime()))
+                    full_results.read()
                     full_results.add_key('hosts', full_results.get_clients_list())
                     full_results.init_full_results()
                     full_results.aggregate_host_results()
-                    test_status = full_results.aggregate_samples_results()
-                    full_results.write()
-                else:
-                    test_status = True
 
+            if finished == clients:
+                full_results.add_key('end_time',
+                                     time.strftime('%Y-%m-%dT%H:%M:%SGMT',
+                                                   time.gmtime())
+                                     )
+                log.info('All Benchmark pods finished.')
+                for smf_pod in small_file_client_pod:
+                    small_file_client_pods[smf_pod].read()
+                    log.debug(f'Results after reading {smf_pod} are :')
+                    log.debug(small_file_client_pods[smf_pod].results)
+
+                    full_results.aggregate_host_results(
+                        small_file_client_pods[smf_pod].aggregate()
+                    )
+
+                    log.debug(f'The Results for {smf_pod} are : ')
+                    log.debug(small_file_client_pods[smf_pod].results)
+
+                test_status = full_results.aggregate_samples_results()
+                log.info(f'The Test results are : {full_results}')
+                log.info(f'The test status is {test_status}')
+                full_results.write()  # Writing the results to the ElasticSearch
                 break
 
             if timeout < (time.time() - start_time):
-                raise TimeoutError("Timed out waiting for benchmark to complete")
+                raise TimeoutError(
+                    'Timed out waiting for benchmark to complete')
             time.sleep(30)
         assert (not get_logs_with_errors() and test_status), 'Test Failed'
