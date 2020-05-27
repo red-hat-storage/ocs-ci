@@ -1,7 +1,8 @@
 import logging
+import pytest
 
 from tests import helpers
-from ocs_ci.framework.testlib import tier1, ignore_leftovers, ManageTest, aws_platform_required
+from ocs_ci.framework.testlib import tier1, ignore_leftovers, ManageTest
 from ocs_ci.ocs import machine as machine_utils
 from ocs_ci.framework import config
 from ocs_ci.ocs.node import add_new_node_and_label_it, add_new_node_and_label_upi
@@ -16,25 +17,33 @@ class TestAddNode(ManageTest):
     """
     Automates adding worker nodes to the cluster while IOs
     """
-    @aws_platform_required
-    def test_add_node_aws(self):
+    def test_add_node(self):
         """
         Test for adding worker nodes to the cluster while IOs
         """
-        dt = config.ENV_DATA['deployment_type']
-        if dt == 'ipi':
-            machines = machine_utils.get_machinesets()
-            logger.info(f'The worker nodes number before expansion {len(helpers.get_worker_nodes())}')
-            for machine in machines:
-                add_new_node_and_label_it(machine)
-            logger.info(f'The worker nodes number after expansion {len(helpers.get_worker_nodes())}')
+        new_nodes = 3
+        if config.ENV_DATA['platform'].lower() == constants.AWS_PLATFORM:
+            dt = config.ENV_DATA['deployment_type']
+            if dt == 'ipi':
+                machines = machine_utils.get_machinesets()
+                logger.info(f'The worker nodes number before expansion {len(helpers.get_worker_nodes())}')
+                for machine in machines:
+                    add_new_node_and_label_it(machine)
+                logger.info(f'The worker nodes number after expansion {len(helpers.get_worker_nodes())}')
 
-        else:
-            new_nodes = 3
-            logger.info(f'The worker nodes number before expansion {len(helpers.get_worker_nodes())}')
-            if config.ENV_DATA.get('rhel_workers'):
-                node_type = constants.RHEL_OS
             else:
-                node_type = constants.RHCOS
+                logger.info(f'The worker nodes number before expansion {len(helpers.get_worker_nodes())}')
+                if config.ENV_DATA.get('rhel_workers'):
+                    node_type = constants.RHEL_OS
+                else:
+                    node_type = constants.RHCOS
+                assert add_new_node_and_label_upi(node_type, new_nodes), "Add node failed"
+                logger.info(f'The worker nodes number after expansion {len(helpers.get_worker_nodes())}')
+
+        elif config.ENV_DATA['platform'].lower() == constants.VSPHERE_PLATFORM:
+            logger.info(f'The worker nodes number before expansion {len(helpers.get_worker_nodes())}')
+            if config.ENV_DATA.get('rhel_user'):
+                pytest.skip("Skipping add RHEL node, code unavailable")
+            node_type = constants.RHCOS
             assert add_new_node_and_label_upi(node_type, new_nodes), "Add node failed"
             logger.info(f'The worker nodes number after expansion {len(helpers.get_worker_nodes())}')
