@@ -23,6 +23,7 @@ from tests.helpers import (
     calc_local_file_md5_sum
 )
 import subprocess
+import stat
 
 logger = logging.getLogger(name=__file__)
 
@@ -756,7 +757,11 @@ class MCG(object):
             )
             subprocess.run(cmd, shell=True)
             # Add an executable bit in order to allow usage of the binary
-            exec_cmd(f'chmod +x {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}')
+            current_file_permissions = os.stat(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+            os.chmod(
+                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH,
+                current_file_permissions.st_mode | stat.S_IEXEC
+            )
             # Make sure the binary was copied properly and has the correct permissions
             assert os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
             assert 'ELF' in exec_cmd(f'file {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}').stdout.decode()
