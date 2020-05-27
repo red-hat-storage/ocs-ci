@@ -251,6 +251,13 @@ class Postgresql(RipSaw):
             timeout (int): Time in seconds to wait
 
         """
+        """
+        Sometimes with the default values in the benchmark yaml the pgbench pod is not
+        getting completed within the specified time and the tests are failing.
+        I think it is varying with the infrastructure.
+        So, for now we set the timeout to 30 mins and will start monitoring each pg bench
+        pods for each run.Based on the results we will define the timeout again
+        """
         timeout = timeout if timeout else 1800
         # Wait for pg_bench pods to initialized and running
         log.info(f"Waiting for pgbench pods to be reach {status} state")
