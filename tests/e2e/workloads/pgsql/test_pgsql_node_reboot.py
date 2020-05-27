@@ -1,12 +1,14 @@
 import logging
 import pytest
+import random
 
 from ocs_ci.ocs import constants
+from tests.sanity_helpers import Sanity
 from ocs_ci.framework.testlib import (
-    E2ETest, workloads, ignore_leftovers
+    E2ETest, workloads
 )
 from ocs_ci.ocs.pgsql import Postgresql
-from tests import disruption_helpers
+from ocs_ci.ocs.node import get_osd_running_nodes, get_node_objs
 
 log = logging.getLogger(__name__)
 
@@ -22,9 +24,8 @@ def pgsql(request):
     return pgsql
 
 
-@ignore_leftovers
 @workloads
-class TestPgSQLPodRespin(E2ETest):
+class TestPgSQLNodeReboot(E2ETest):
     """
     Test running PGSQL and with Ceph pods respin
     """
@@ -36,27 +37,26 @@ class TestPgSQLPodRespin(E2ETest):
         # Deployment of postgres database
         pgsql.setup_postgresql(replicas=3)
 
+        # Initialize Sanity instance
+        self.sanity_helpers = Sanity()
+
     @pytest.mark.parametrize(
         argnames=[
             "transactions", "pod_name"
         ],
         argvalues=[
             pytest.param(
-                *[600, 'mon'], marks=pytest.mark.polarion_id("OCS-802")
+                *[600, 'osd'], marks=pytest.mark.polarion_id("OCS-801")
             ),
             pytest.param(
-                *[600, 'osd'], marks=pytest.mark.polarion_id("OCS-803")
-            ),
-            pytest.param(
-                *[600, 'mgr'], marks=pytest.mark.polarion_id("OCS-804")
-            ),
-            pytest.param(
-                *[600, 'postgers'], marks=pytest.mark.polarion_id("OCS-809")
+                *[600, 'postgres'], marks=pytest.mark.polarion_id("OCS-799")
             )
         ]
     )
     @pytest.mark.usefixtures(pgsql_setup.__name__)
-    def test_run_pgsql_respin_pod(self, pgsql, transactions, pod_name):
+    def test_run_pgsql_reboot_node(
+        self, pgsql, nodes, transactions, pod_name
+    ):
         """
         Test pgsql workload
         """
@@ -68,14 +68,15 @@ class TestPgSQLPodRespin(E2ETest):
         # Wait for pgbench pod to reach running state
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)
 
-        # Respin pod
-        if pod_name == 'postgers':
-            pgsql.respin_pgsql_app_pod()
-        else:
-            log.info(f"Respin Ceph pod {pod_name}")
-            disruption = disruption_helpers.Disruptions()
-            disruption.set_resource(resource=f'{pod_name}')
-            disruption.delete_resource()
+        # Choose a node based on pod it contains
+        if pod_name == 'postgres':
+            node_list = pgsql.get_pgsql_nodes()
+        elif pod_name == 'osd':
+            node_list = get_osd_running_nodes()
+        node_1 = get_node_objs(node_list[random.randint(0, len(node_list) - 1)])
+
+        # Restart relevant node
+        nodes.restart_nodes(node_1)
 
         # Wait for pg_bench pod to complete
         pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
@@ -85,3 +86,6 @@ class TestPgSQLPodRespin(E2ETest):
 
         # Validate pgbench run and parse logs
         pgsql.validate_pgbench_run(pgbench_pods)
+
+        # Perform cluster and Ceph health checks
+        self.sanity_helpers.health_check()
