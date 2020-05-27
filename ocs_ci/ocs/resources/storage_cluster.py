@@ -15,7 +15,7 @@ from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.packagemanifest import get_selector_for_ocs_operator, PackageManifest
 from ocs_ci.utility import utils
-from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.ocs.node import get_typed_nodes, get_compute_node_names
 from ocs_ci.utility.retry import retry
 
 log = logging.getLogger(__name__)
@@ -63,6 +63,7 @@ def ocs_install_verification(
     from ocs_ci.ocs.node import get_typed_nodes
     from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_all_pods
+    from ocs_ci.ocs.cluster import validate_cluster_on_pvc
     number_of_worker_nodes = len(get_typed_nodes())
     namespace = config.ENV_DATA['cluster_namespace']
     log.info("Verifying OCS installation")
@@ -271,7 +272,16 @@ def ocs_install_verification(
         "Verifying ceph osd tree output and checking for device set PVC names "
         "in the output."
     )
-    deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
+
+    platform = config.ENV_DATA.get('platform').lower()
+    if (
+            config.DEPLOYMENT.get('local_storage')
+            and platform == constants.VSPHERE_PLATFORM
+    ):
+        deviceset_pvcs = get_compute_node_names()
+    else:
+        deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
+
     ct_pod = get_ceph_tools_pod()
     osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd='ceph osd tree', format='json')
     schemas = {
@@ -340,6 +350,8 @@ def ocs_install_verification(
                 item for item in crush_rule['steps'] if item.get('type') == 'zone'
             ], f"{crush_rule['rule_name']} is not with type as zone"
         log.info("Verified - pool crush rule is with type: zone")
+    log.info("Validate cluster on PVC")
+    validate_cluster_on_pvc()
 
     # Verify ceph health
     log.info("Verifying ceph health")

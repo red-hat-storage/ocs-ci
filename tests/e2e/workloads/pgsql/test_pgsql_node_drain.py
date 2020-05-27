@@ -5,7 +5,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs import node
 from tests.sanity_helpers import Sanity
 from ocs_ci.framework.testlib import (
-    E2ETest, workloads, ignore_leftovers
+    E2ETest, workloads
 )
 from ocs_ci.ocs.pgsql import Postgresql
 
@@ -24,7 +24,6 @@ def pgsql(request):
     return pgsql
 
 
-@ignore_leftovers
 @workloads
 @pytest.mark.polarion_id("OCS-820")
 class TestPgSQLNodeReboot(E2ETest):

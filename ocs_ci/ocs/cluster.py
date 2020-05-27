@@ -733,6 +733,33 @@ class CephHealthMonitor(threading.Thread):
         )
 
 
+def validate_ocs_pods_on_pvc(pods, pvc_names):
+    """
+    Validate if ocs pod has PVC. This validation checking if there is the pvc
+    like: rook-ceph-mon-a for the pod rook-ceph-mon-a-56f67f5968-6j4px.
+
+    Args:
+        pods (list): OCS pod names
+        pvc_names (list): names of all PVCs
+
+    Raises:
+         AssertionError: If no PVC found for one of the pod
+
+    """
+    logger.info(
+        f"Validating if each pod from: {pods} has PVC from {pvc_names}."
+    )
+    for pod_name in pods:
+        found_pvc = ""
+        for pvc in pvc_names:
+            if pvc in pod_name:
+                found_pvc = pvc
+        if found_pvc:
+            logger.info(f"PVC {found_pvc} found for pod {pod_name}")
+            continue
+        assert found_pvc, f"No PVC found for pod: {pod_name}!"
+
+
 def validate_cluster_on_pvc():
     """
     Validate creation of PVCs for MON and OSD pods.
@@ -759,11 +786,20 @@ def validate_cluster_on_pvc():
             pvc_names.append(pvc_obj.name)
 
     mon_pods = get_pod_name_by_pattern('rook-ceph-mon', ns)
-    osd_pods = get_pod_name_by_pattern('rook-ceph-osd', ns, filter='prepare')
     if not config.DEPLOYMENT.get('local_storage'):
-        assert len(mon_pods) + len(osd_pods) == len(pvc_names), (
-            "Not enough PVC's available for all Ceph Pods"
+        logger.info("Validating all mon pods have PVC")
+        validate_ocs_pods_on_pvc(mon_pods, pvc_names)
+    else:
+        logger.debug(
+            "Skipping validation if all mon pods have PVC because in LSO "
+            "deployment we don't have mon pods backed by PVC"
         )
+    logger.info("Validating all osd pods have PVC")
+    osd_deviceset_pods = get_pod_name_by_pattern(
+        'rook-ceph-osd-prepare-ocs-deviceset', ns
+    )
+    validate_ocs_pods_on_pvc(osd_deviceset_pods, pvc_names)
+    osd_pods = get_pod_name_by_pattern('rook-ceph-osd', ns, filter='prepare')
     for ceph_pod in mon_pods + osd_pods:
         out = run_cmd(f'oc -n {ns} get pods {ceph_pod} -o yaml')
         out_yaml = yaml.safe_load(out)
