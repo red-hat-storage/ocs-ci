@@ -251,7 +251,7 @@ class Postgresql(RipSaw):
             timeout (int): Time in seconds to wait
 
         """
-        timeout = timeout if timeout else 1500
+        timeout = timeout if timeout else 1800
         # Wait for pg_bench pods to initialized and running
         log.info(f"Waiting for pgbench pods to be reach {status} state")
         pgbench_pod_objs = self.get_pgbench_pods()
