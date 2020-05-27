@@ -592,6 +592,9 @@ VM_DISK_TYPE = "thin"
 VM_DISK_MODE = "persistent"
 INSTALLER_DEFAULT_DNS = "1.1.1.1"
 
+LIFECYCLE = 'lifecycle { ignore_changes = ["disk"] }'
+CSR_BOOTSTRAPPER_NODE = "node-bootstrapper"
+
 # Config related constants
 config_keys_patterns_to_censor = ['passw', 'token', 'secret']
 
@@ -838,3 +841,7 @@ VMDK = "VMDK"
 DIRECTPATH = "VMDirectPath"
 DISK_MODE = "independent_persistent"
 COMPATABILITY_MODE = "physicalMode"
+
+# OS
+RHEL_OS = "RHEL"
+RHCOS = "RHCOS"
