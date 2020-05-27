@@ -144,6 +144,8 @@ must_gather_pod_label = "must-gather"
 # AMQ
 AMQ_NAMESPACE = "myproject"
 KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
+OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
+CODESPEED_URL = 'http://10.0.78.167:8000/'
 
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
