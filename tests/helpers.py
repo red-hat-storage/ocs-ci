@@ -4,6 +4,7 @@ Helper functions file for OCS QE
 import logging
 import re
 import datetime
+import hashlib
 import statistics
 import os
 from subprocess import TimeoutExpired, run, PIPE
@@ -2257,3 +2258,19 @@ def validate_pods_are_running_and_not_restarted(
     logger.error(f"Pod is in {pod_state} state and restart count of pod {restart_count}")
     logger.info(f"{pod_obj}")
     return False
+
+
+def calc_local_file_md5_sum(path):
+    """
+    Calculate and return the MD5 checksum of a local file
+
+    Arguments:
+        path(str): The path to the file
+
+    Returns:
+        str: The MD5 checksum
+
+    """
+    with open(path, 'rb') as file_to_hash:
+        file_as_bytes = file_to_hash.read()
+    return hashlib.md5(file_as_bytes).hexdigest()

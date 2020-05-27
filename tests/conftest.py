@@ -30,10 +30,7 @@ from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import (
-    get_rgw_pod, get_ceph_tools_pod,
-    Pod, get_pods_having_label
-)
+from ocs_ci.ocs.resources.pod import get_rgw_pod, get_ceph_tools_pod
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad
@@ -2325,34 +2322,6 @@ def fio_job_dict_fixture():
         """)
     job_dict = yaml.safe_load(template)
     return job_dict
-
-
-@pytest.fixture(scope='session', autouse=True)
-def retrieve_mcg_certificate(request):
-    """
-    Copy the self-signed certificate from the noobaa-core pod
-    to the local code runner for usage with boto3
-    """
-    mcg_core_pod = Pod(
-        **get_pods_having_label(
-            constants.NOOBAA_CORE_POD_LABEL,
-            config.ENV_DATA['cluster_namespace']
-        )[0]
-    )
-
-    OCP(
-        namespace=config.ENV_DATA['cluster_namespace']
-    ).exec_oc_cmd(
-        f'cp {mcg_core_pod.name}:'
-        f'{constants.MCG_CRT_REMOTE_PATH} '
-        f'{constants.MCG_CRT_LOCAL_PATH}',
-        out_yaml_format=False
-    )
-
-    def crt_cleanup():
-        os.remove(constants.MCG_CRT_LOCAL_PATH)
-
-    request.addfinalizer(crt_cleanup)
 
 
 @pytest.fixture

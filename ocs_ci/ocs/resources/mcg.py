@@ -14,10 +14,14 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
-from tests.helpers import create_unique_resource_name, create_resource
+from tests.helpers import (
+    create_unique_resource_name, create_resource,
+    calc_local_file_md5_sum
+)
 import subprocess
 
 logger = logging.getLogger(name=__file__)
@@ -39,24 +43,32 @@ class MCG(object):
         Constructor for the MCG class
         """
         self.namespace = config.ENV_DATA['cluster_namespace']
-        ocp_obj = OCP(kind='noobaa', namespace=self.namespace)
+        self.operator_pod = Pod(
+            **get_pods_having_label(
+                constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace
+            )[0]
+        )
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
 
-        results = ocp_obj.get()
+        self.retrieve_noobaa_cli_binary()
+        self.retrieve_mcg_certificate()
+
+        get_noobaa = OCP(kind='noobaa', namespace=self.namespace).get()
+
         self.s3_endpoint = (
-            results.get('items')[0].get('status').get('services')
+            get_noobaa.get('items')[0].get('status').get('services')
             .get('serviceS3').get('externalDNS')[0]
         )
         self.mgmt_endpoint = (
-            results.get('items')[0].get('status').get('services')
+            get_noobaa.get('items')[0].get('status').get('services')
             .get('serviceMgmt').get('externalDNS')[0]
         ) + '/rpc'
         self.region = config.ENV_DATA['region']
 
         creds_secret_name = (
-            results.get('items')[0].get('status').get('accounts')
+            get_noobaa.get('items')[0].get('status').get('accounts')
             .get('admin').get('secretRef').get('name')
         )
         secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
@@ -94,36 +106,12 @@ class MCG(object):
 
         self.s3_client = self.s3_resource.meta.client
 
-        self.operator_pod = Pod(
-            **get_pods_having_label(
-                constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace
-            )[0]
-        )
-
-        # TODO: Add version verification to see if an additional cp isn't needed
-        # If the MCG CLI binary isn't found, copy it from the operator pod
-        if not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH):
-            cmd = (
-                f"oc exec -n {self.namespace} {self.operator_pod.name}"
-                f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
-                f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
-            )
-            subprocess.run(cmd, shell=True)
-            # Add an executable bit in order to allow usage of the binary
-            exec_cmd(f'chmod +x {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}')
-            # Make sure the binary was copied properly and has the correct permissions
-            assert os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-            assert 'ELF' in exec_cmd(f'file {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}').stdout.decode()
-            assert os.access(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK)
-
         if config.ENV_DATA['platform'].lower() == 'aws':
             (
                 self.cred_req_obj,
                 self.aws_access_key_id,
                 self.aws_access_key
             ) = self.request_aws_credentials()
-
-            self._ocp_resource = ocp_obj
 
             self.aws_s3_resource = boto3.resource(
                 's3', endpoint_url="https://s3.amazonaws.com",
@@ -731,3 +719,63 @@ class MCG(object):
         result.stdout = result.stdout.decode()
         result.stderr = result.stderr.decode()
         return result
+
+    def retrieve_noobaa_cli_binary(self):
+        """
+        Copy the NooBaa CLI binary from the operator pod
+        if it wasn't found locally, or if the hashes between
+        the two don't match.
+
+        """
+        def _compare_cli_hashes():
+            """
+            Verify that the remote and local CLI binaries are the same
+            in order to make sure the local bin is up to date
+
+            Returns:
+                bool: Whether the local and remote hashes are identical
+
+            """
+            remote_cli_bin_md5 = cal_md5sum(
+                self.operator_pod,
+                constants.NOOBAA_OPERATOR_POD_CLI_PATH
+            )
+            local_cli_bin_md5 = calc_local_file_md5_sum(
+                constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+            )
+            return remote_cli_bin_md5 == local_cli_bin_md5
+
+        if (
+            not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+            or not _compare_cli_hashes()
+        ):
+            cmd = (
+                f"oc exec -n {self.namespace} {self.operator_pod.name}"
+                f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
+                f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+            )
+            subprocess.run(cmd, shell=True)
+            # Add an executable bit in order to allow usage of the binary
+            exec_cmd(f'chmod +x {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}')
+            # Make sure the binary was copied properly and has the correct permissions
+            assert os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+            assert 'ELF' in exec_cmd(f'file {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}').stdout.decode()
+            assert os.access(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK)
+
+    def retrieve_mcg_certificate(self):
+        """
+        Copy the self-signed certificate from the noobaa-core pod
+        to the local code runner for usage with boto3.
+
+        The certificate will be copied on each mcg_obj instantiation since
+        it weighs around 7KB, which makes the redundant copy neglible
+        in comparison to the time a hash comparison will take.
+        """
+        OCP(
+            namespace=config.ENV_DATA['cluster_namespace']
+        ).exec_oc_cmd(
+            f'cp {self.core_pod.name}:'
+            f'{constants.MCG_CRT_REMOTE_PATH} '
+            f'{constants.MCG_CRT_LOCAL_PATH}',
+            out_yaml_format=False
+        )
