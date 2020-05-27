@@ -95,17 +95,17 @@ google_api_required = pytest.mark.skipif(
 
 aws_platform_required = pytest.mark.skipif(
     config.ENV_DATA['platform'].lower() != 'aws',
-    reason="Tests are not running on AWS deployed cluster"
+    reason="Test runs ONLY on AWS deployed cluster"
 )
 
 vsphere_platform_required = pytest.mark.skipif(
     config.ENV_DATA['platform'].lower() != 'vsphere',
-    reason="Tests are not running on VSPHERE deployed cluster"
+    reason="Test runs ONLY on VSPHERE deployed cluster"
 )
 
 ipi_deployment_required = pytest.mark.skipif(
     config.ENV_DATA['deployment_type'].lower() != 'ipi',
-    reason="Tests are not running on IPI deployed cluster"
+    reason="Test runs ONLY on IPI deployed cluster"
 )
 
 # Filter warnings
