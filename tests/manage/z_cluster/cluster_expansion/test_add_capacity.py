@@ -50,7 +50,7 @@ class TestAddCapacity(ManageTest):
         add_capacity_test()
 
 
-@skipif_ocs_version('<4.5')
+@skipif_ocs_version('<4.4')
 @pre_upgrade
 @ignore_leftovers
 @polarion_id('OCS-1191')
