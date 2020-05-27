@@ -63,6 +63,7 @@ def ocs_install_verification(
     from ocs_ci.ocs.node import get_typed_nodes
     from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_all_pods
+    from ocs_ci.ocs.cluster import validate_cluster_on_pvc
     number_of_worker_nodes = len(get_typed_nodes())
     namespace = config.ENV_DATA['cluster_namespace']
     log.info("Verifying OCS installation")
@@ -349,6 +350,8 @@ def ocs_install_verification(
                 item for item in crush_rule['steps'] if item.get('type') == 'zone'
             ], f"{crush_rule['rule_name']} is not with type as zone"
         log.info("Verified - pool crush rule is with type: zone")
+    log.info("Validate cluster on PVC")
+    validate_cluster_on_pvc()
 
     # Verify ceph health
     log.info("Verifying ceph health")
