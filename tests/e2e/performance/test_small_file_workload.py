@@ -65,6 +65,9 @@ class SmallFileResultsAnalyse(object):
         self.new_index = crd['spec']['es_index'] + '-fullres'
         self.all_results = {}
 
+        # WA for Cloud environment where pod can not send results to ES
+        self.dont_check = False
+
         # make sure we have connection to the elastic search server
         log.info(f'Connecting to ES {self.server} on port {self.port}')
         try:
@@ -111,9 +114,20 @@ class SmallFileResultsAnalyse(object):
 
         query = {'query': {'match': {'uuid': self.uuid}}}
         log.info('Reading all data from ES server')
-        self.all_results = self.es.search(
-            index=self.index, body=query, size=self.records
-        )
+        try:
+            self.all_results = self.es.search(
+                index=self.index, body=query, size=self.records
+            )
+            log.info(self.all_results)
+
+            if self.all_results['hits']['hits'] == []:
+                log.warning(
+                    'No data in ES server, disabling results calculation')
+                self.dont_check = True
+        except ESExp.NotFoundError:
+            log.warning(
+                'No data in ES server, disabling results calculation')
+            self.dont_check = True
 
     def write(self):
         """
@@ -474,11 +488,15 @@ class TestSmallFileWorkload(E2ETest):
                                      time.strftime('%Y-%m-%dT%H:%M:%SGMT',
                                                    time.gmtime()))
                 full_results.read()
-                full_results.add_key('hosts', full_results.get_clients_list())
-                full_results.init_full_results()
-                full_results.aggregate_host_results()
-                test_status = full_results.aggregate_samples_results()
-                full_results.write()
+                if not full_results.dont_check:
+                    full_results.add_key('hosts', full_results.get_clients_list())
+                    full_results.init_full_results()
+                    full_results.aggregate_host_results()
+                    test_status = full_results.aggregate_samples_results()
+                    full_results.write()
+                else:
+                    test_status = True
+
                 break
 
             if timeout < (time.time() - start_time):
