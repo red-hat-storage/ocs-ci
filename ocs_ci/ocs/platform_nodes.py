@@ -1334,8 +1334,9 @@ class VSPHEREUPINode(VMWareNodes):
         self.node_type = node_type
         self.compute_count = compute_count
         self.current_compute_count = len(get_typed_nodes())
-        self.target_compute_count = (self.current_compute_count
-                                     + self.compute_count)
+        self.target_compute_count = (
+            self.current_compute_count + self.compute_count
+        )
         self.previous_dir = os.getcwd()
         self.terraform_data_dir = os.path.join(
             self.cluster_path,
