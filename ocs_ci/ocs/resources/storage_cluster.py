@@ -442,6 +442,21 @@ def get_storage_cluster(namespace=defaults.ROOK_CLUSTER_NAMESPACE):
     return sc_obj
 
 
+def get_osd_count():
+    """
+    Get osd count from Storage cluster
+
+    Returns:
+        int: osd count
+
+    """
+    sc = get_storage_cluster()
+    return (
+        int(sc.data['spec']['storageDeviceSets'][0]['count'])
+        * int(sc.data['spec']['storageDeviceSets'][0]['replica'])
+    )
+
+
 def get_osd_size():
     """
     Get osd size from Storage cluster
