@@ -451,7 +451,9 @@ class TestSmallFileWorkload(E2ETest):
             timeout=600
         )
         start_time = time.time()
-        timeout = 1800
+
+        # After testing manually, changing the timeout
+        timeout = 3600
 
         # Getting the UUID from inside the benchmark pod
         output = bench_pod.exec_oc_cmd(f'exec {small_file_client_pod} env')
