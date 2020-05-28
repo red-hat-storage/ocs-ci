@@ -86,6 +86,13 @@ def init_ocsci_conf(arguments=None):
             CONF_DIR, 'ocs_version', f'ocs-{ocs_version}.yaml'
         )
         load_config([version_config_file])
+
+        default_ocp_version = framework.config.DEPLOYMENT['default_ocp_version']
+        ocp_version_config = os.path.join(
+            CONF_DIR, 'ocp_version', f'ocp-{default_ocp_version}-config.yaml'
+        )
+        load_config([ocp_version_config])
+
     framework.config.RUN['run_id'] = int(time.time())
     bin_dir = framework.config.RUN.get('bin_dir')
     if bin_dir:
