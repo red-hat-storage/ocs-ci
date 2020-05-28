@@ -134,6 +134,7 @@ def test_upgrade():
     ceph_cluster = CephCluster()
     with CephHealthMonitor(ceph_cluster):
         namespace = config.ENV_DATA['cluster_namespace']
+        osd_count = get_osd_count()
         version_before_upgrade = config.ENV_DATA.get("ocs_version")
         upgrade_version = config.UPGRADE.get(
             "upgrade_ocs_version", version_before_upgrade
@@ -257,7 +258,6 @@ def test_upgrade():
         if version_before_upgrade == '4.2' and upgrade_version == '4.3':
             log.info("Force creating Ceph toolbox after upgrade 4.2 -> 4.3")
             setup_ceph_toolbox(force_setup=True)
-        osd_count = get_osd_count()
         csv_post_upgrade.wait_for_phase("Succeeded", timeout=200 * osd_count)
         post_upgrade_images = get_images(csv_post_upgrade.get())
         old_images, _, _ = get_upgrade_image_info(
