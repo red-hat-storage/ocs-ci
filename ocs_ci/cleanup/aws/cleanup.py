@@ -166,7 +166,7 @@ def get_clusters(time_to_delete, region_name, prefixes_hours_to_spare):
                         f"(id: {instance.id}) running time is {running_time} hours while the allowed"
                         f" running time for it is {allowed_running_time/3600} hours"
                     )
-                    if running_time.seconds > allowed_running_time:
+                    if running_time.total_seconds() > allowed_running_time:
                         return True
         return False
 
