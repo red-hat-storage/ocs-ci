@@ -273,11 +273,7 @@ def ocs_install_verification(
         "in the output."
     )
 
-    platform = config.ENV_DATA.get('platform').lower()
-    if (
-            config.DEPLOYMENT.get('local_storage')
-            and platform == constants.VSPHERE_PLATFORM
-    ):
+    if config.DEPLOYMENT.get('local_storage'):
         deviceset_pvcs = get_compute_node_names()
     else:
         deviceset_pvcs = [pvc.name for pvc in get_deviceset_pvcs()]
