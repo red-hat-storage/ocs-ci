@@ -17,13 +17,15 @@ from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
-from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
+from ocs_ci.ocs.resources.storage_cluster import (
+    get_osd_count,
+    ocs_install_verification
+)
 from ocs_ci.ocs.resources.pod import verify_pods_upgraded
 from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
 )
-from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.ocs.utils import setup_ceph_toolbox
 from ocs_ci.utility.utils import (
     get_latest_ds_olm_tag,
@@ -85,16 +87,8 @@ def verify_image_versions(old_images, upgrade_version):
         upgrade_version (packaging.version.Version): version of OCS
 
     """
-    namespace = config.ENV_DATA['cluster_namespace']
     number_of_worker_nodes = len(get_typed_nodes())
-    storage_cluster = StorageCluster(
-        resource_name=config.ENV_DATA['storage_cluster_name'],
-        namespace=namespace
-    )
-    osd_count = (
-        int(storage_cluster.data['spec']['storageDeviceSets'][0]['count'])
-        * int(storage_cluster.data['spec']['storageDeviceSets'][0]['replica'])
-    )
+    osd_count = get_osd_count()
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
     # in 4.3 app selector nooba have those pods: noobaa-core-ID, noobaa-db-ID,
@@ -121,9 +115,12 @@ def verify_image_versions(old_images, upgrade_version):
     )
     verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
     verify_pods_upgraded(old_images, selector=constants.MON_APP_LABEL, count=3)
+    # OSD upgrade have timeout 10mins for new attempt if cluster is not health.
+    # https://bugzilla.redhat.com/show_bug.cgi?id=1840729 setting timeout for
+    # 12.5 minutes per OSD
     verify_pods_upgraded(
         old_images, selector=constants.OSD_APP_LABEL, count=osd_count,
-        timeout=1800,
+        timeout=750 * osd_count,
     )
     verify_pods_upgraded(old_images, selector=constants.MDS_APP_LABEL, count=2)
     if config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
@@ -260,7 +257,8 @@ def test_upgrade():
         if version_before_upgrade == '4.2' and upgrade_version == '4.3':
             log.info("Force creating Ceph toolbox after upgrade 4.2 -> 4.3")
             setup_ceph_toolbox(force_setup=True)
-        csv_post_upgrade.wait_for_phase("Succeeded", timeout=600)
+        osd_count = get_osd_count()
+        csv_post_upgrade.wait_for_phase("Succeeded", timeout=200 * osd_count)
         post_upgrade_images = get_images(csv_post_upgrade.get())
         old_images, _, _ = get_upgrade_image_info(
             pre_upgrade_images, post_upgrade_images
