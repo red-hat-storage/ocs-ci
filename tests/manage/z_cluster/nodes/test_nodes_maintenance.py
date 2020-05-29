@@ -88,7 +88,6 @@ class TestNodesMaintenance(ManageTest):
             # skip because ceph is not in good health
             pytest.skip(str(e))
 
-
     @tier1
     @pytest.mark.parametrize(
         argnames=["node_type"],
@@ -193,25 +192,25 @@ class TestNodesMaintenance(ManageTest):
         OCS-1273/OCs-1271:
         - Try draining 2 nodes from the same type - should fail
         - Check cluster and Ceph health
-    
+
         """
         # Get 2 nodes
         typed_nodes = get_typed_nodes(node_type=nodes_type, num_of_nodes=2)
         assert typed_nodes, f"Failed to find a {nodes_type} node for the test"
-    
+
         typed_node_names = [typed_node.name for typed_node in typed_nodes]
-    
+
         # Try draining 2 nodes - should fail
         try:
             drain_nodes(typed_node_names)
         except TimeoutExpired:
             log.info(f"Draining of nodes {typed_node_names} failed as expected")
-    
+
         schedule_nodes(typed_node_names)
-    
+
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
-    
+
     @tier2
     @pytest.mark.polarion_id("OCS-1274")
     def test_2_nodes_different_types(self, pvc_factory, pod_factory):
@@ -223,7 +222,7 @@ class TestNodesMaintenance(ManageTest):
           (pools, storageclasses, PVCs, pods - both CephFS and RBD)
         - Mark the nodes as scheduable
         - Check cluster and Ceph health
-    
+
         """
         # Get 1 node from each type
         nodes = [
@@ -232,24 +231,24 @@ class TestNodesMaintenance(ManageTest):
             )[0] for node_type in ['worker', 'master']
         ]
         assert nodes, "Failed to find a nodes for the test"
-    
+
         node_names = [typed_node.name for typed_node in nodes]
-    
+
         # Maintenance the nodes (unschedule and drain)
         drain_nodes(node_names)
-    
+
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
         # run IO and delete the resources
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
         self.sanity_helpers.delete_resources()
-    
+
         # Mark the nodes back to schedulable
         schedule_nodes(node_names)
-    
+
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
-    
+
     @tier4
     @tier4b
     @aws_platform_required
@@ -282,18 +281,18 @@ class TestNodesMaintenance(ManageTest):
         - Check cluster functionality by creating resources
           (pools, storageclasses, PVCs, pods - both CephFS and RBD)
         - Check cluster and Ceph health
-    
+
         """
         # Get OSD running nodes
         osd_running_worker_nodes = get_osd_running_nodes()
         log.info(f"OSDs are running on nodes {osd_running_worker_nodes}")
-    
+
         # Label osd nodes with fedora app
         label_worker_node(
             osd_running_worker_nodes, label_key='dc', label_value='fedora'
         )
         log.info("Successfully labeled worker nodes with {dc:fedora}")
-    
+
         # Create DC app pods
         log.info("Creating DC based app pods and starting IO in background")
         interface = (
@@ -307,7 +306,7 @@ class TestNodesMaintenance(ManageTest):
             )
             pod.run_io_in_bg(dc_pod, fedora_dc=True)
             dc_pod_obj.append(dc_pod)
-    
+
         # Get the machine name using the node name
         machine_names = [
             machine.get_machine_from_node_name(osd_running_worker_node)
@@ -317,7 +316,7 @@ class TestNodesMaintenance(ManageTest):
             f"{osd_running_worker_nodes} associated "
             f"machine are {machine_names}"
         )
-    
+
         # Get the machineset name using machine name
         machineset_names = [
             machine.get_machineset_from_machine_name(
@@ -329,14 +328,14 @@ class TestNodesMaintenance(ManageTest):
             f"{osd_running_worker_nodes} associated machineset "
             f"is {machineset_names}"
         )
-    
+
         # Add a new node and label it
         add_new_node_and_label_it(machineset_names[0])
         add_new_node_and_label_it(machineset_names[1])
-    
+
         # Drain 2 nodes
         drain_nodes(osd_running_worker_nodes[:2])
-    
+
         # Check the pods should be in running state
         all_pod_obj = pod.get_all_pods(wait=True)
         for pod_obj in all_pod_obj:
@@ -361,14 +360,14 @@ class TestNodesMaintenance(ManageTest):
                         command = f"delete deployment {deployment_name}"
                         ocp_obj.exec_oc_cmd(command=command)
                         log.info(f"Deleted deployment for pod {pod_obj.name}")
-    
+
         # DC app pods on the drained node will get automatically created on other
         # running node in same AZ. Waiting for all dc app pod to reach running state
         pod.wait_for_dc_app_pods_to_reach_running_state(
             dc_pod_obj, timeout=1200
         )
         log.info("All the dc pods reached running state")
-    
+
         # Remove unscheduled nodes
         # In scenarios where the drain is attempted on >3 worker setup,
         # post completion of drain we are removing the unscheduled nodes so
@@ -376,12 +375,12 @@ class TestNodesMaintenance(ManageTest):
         log.info(f"Removing scheduled nodes {osd_running_worker_nodes[:2]}")
         remove_node_objs = get_node_objs(osd_running_worker_nodes[:2])
         remove_nodes(remove_node_objs)
-    
+
         # Check basic cluster functionality by creating resources
         # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
         # run IO and delete the resources
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
         self.sanity_helpers.delete_resources()
-    
+
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
