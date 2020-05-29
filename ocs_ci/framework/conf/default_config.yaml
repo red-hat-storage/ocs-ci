@@ -120,10 +120,7 @@ ENV_DATA:
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true
-  # This default image for ocp upgrade based on 4.4 candidate build
-  # ocp_upgrade_version: "4.4.0"
-  # Once 4.4 is GAed, we will change to stable-4.4
-  ocp_channel: "candidate-4.4"
+  ocp_channel: "stable-4.4"
   ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
   ocp_arch: "x86_64"
 
