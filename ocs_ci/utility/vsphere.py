@@ -6,11 +6,15 @@ import ssl
 
 import atexit
 
+from copy import deepcopy
 from pyVmomi import vim, vmodl
 from pyVim.task import WaitForTask, WaitForTasks
 from pyVim.connect import Disconnect, SmartStubAdapter, VimSessionOrientedStub
 from ocs_ci.ocs.exceptions import VMMaxDisksReachedException
-from ocs_ci.ocs.constants import GB2KB, VM_DISK_TYPE, VM_DISK_MODE, VM_POWERED_OFF
+from ocs_ci.ocs.constants import (
+    GB2KB, VM_DISK_TYPE, VM_DISK_MODE, VM_POWERED_OFF,
+    DISK_MODE, COMPATABILITY_MODE,
+)
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -289,6 +293,51 @@ class VSPHERE(object):
         """
         for _ in range(int(num_disks)):
             self.add_disk(vm, size, disk_type)
+
+    def add_rdm_disk(self, vm, device_name, disk_mode=None, compatibility_mode=None):
+        """
+        Attaches RDM disk to vm
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+            device_name (str): Device name to add to VM.
+                e.g:"/vmfs/devices/disks/naa.600304801b540c0125ef160f3048faba"
+            disk_mode (str): Disk mode. By default it will
+                add 'independent_persistent'. Available modes are 'append',
+                'independent_nonpersistent', 'independent_persistent',
+                'nonpersistent', 'persistent', and 'undoable'
+            compatibility_mode (str): Compatabilty mode. Either 'physicalMode'
+                or 'virtualMode'. By default it will add 'physicalMode'.
+
+        """
+        logger.info(f"Adding RDM disk {device_name} to {vm.config.name}")
+        if not disk_mode:
+            disk_mode = DISK_MODE
+        if not compatibility_mode:
+            compatibility_mode = COMPATABILITY_MODE
+
+        spec = vim.vm.ConfigSpec()
+        controller = self.get_controller_for_adding_disk(vm)
+        unit_number = self.get_unit_number(vm)
+        logger.info(f"Unit number for new disk: {unit_number}")
+
+        device_changes = []
+        disk_spec = vim.vm.device.VirtualDeviceSpec()
+        disk_spec.fileOperation = "create"
+        disk_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+        disk_spec.device = vim.vm.device.VirtualDisk()
+        rdm_info = vim.vm.device.VirtualDisk.RawDiskMappingVer1BackingInfo()
+        disk_spec.device.backing = rdm_info
+        disk_spec.device.backing.compatibilityMode = compatibility_mode
+        disk_spec.device.backing.diskMode = disk_mode
+        disk_spec.device.backing.deviceName = device_name
+        disk_spec.device.unitNumber = unit_number
+        disk_spec.device.controllerKey = controller.key
+
+        device_changes.append(disk_spec)
+        spec.deviceChange = device_changes
+        WaitForTask(vm.ReconfigVM_Task(spec=spec))
+        logger.info(f"RDM disk {device_name} added successfully to {vm.config.name}")
 
     def get_vm_power_status(self, vm):
         """
@@ -619,3 +668,269 @@ class VSPHERE(object):
                     WaitForTask(vm.Destroy())
         else:
             logger.info(f"Folder {name} doesn't exist in templates")
+
+    def get_host(self, vm):
+        """
+        Fetches the Host for the VM. Host where VM resides
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+
+        Returns:
+             vim.HostSystem: Host instance
+
+        """
+        return vm.runtime.host
+
+    def get_storage_devices(self, host):
+        """
+        Fetches all the storage devices in the Host. It excludes
+        the enclosures.
+
+        Args:
+            host (vim.HostSystem): Host instance
+
+        Returns:
+            list: List of storage devices in Host
+
+        """
+        logger.debug(f"Fetching all the storage devices in host {host.name}")
+        storage_system = host.configManager.storageSystem
+        storage_device_info = storage_system.storageDeviceInfo
+        return [
+            ScsiDisk.deviceName for ScsiDisk in storage_device_info.scsiLun
+            if ScsiDisk.deviceType == 'disk'
+        ]
+
+    def get_mounted_devices(self, host):
+        """
+        Fetches the devices which was mounted
+
+        Args:
+            host (vim.HostSystem): Host instance
+
+        Returns:
+            list: List of storage devices which was mounted
+
+        """
+        device_list = []
+        logger.debug(
+            f"Fetching all the storage devices mounted in host {host.name}"
+        )
+        disk_mapping = host.config.vsanHostConfig.storageInfo.diskMapping
+        for each in disk_mapping:
+            device_list.append(each.ssd.devicePath)
+            for hd in each.nonSsd:
+                device_list.append(hd.devicePath)
+        logger.debug(f"Mounted devices in Host {host.name}: {device_list}")
+        return device_list
+
+    def get_active_partition(self, host):
+        """
+        Fetches the active partition disk on Host
+
+        Args:
+            host (vim.HostSystem): Host instance
+
+        Returns:
+            str: Active partition disk
+
+        """
+        logger.debug(
+            f"Getting the active partition device in host {host.name}"
+        )
+        active_partition = host.config.activeDiagnosticPartition
+        if not active_partition:
+            active_partition = self.get_active_partition_from_mount_info(host)
+            return active_partition
+        return active_partition.id.diskName
+
+    def available_storage_devices(self, host):
+        """
+        Fetches the available storage devices on Host.
+
+        Args:
+            host (vim.HostSystem): Host instance
+
+        Returns:
+            list: List of storage devices available for use
+
+        """
+        storage_devices = self.get_storage_devices(host)
+        mounted_devices = self.get_mounted_devices(host)
+        used_devices = self.get_used_devices(host)
+        active_partition = self.get_active_partition(host)
+
+        used_devices_all = deepcopy(mounted_devices)
+        if used_devices:
+            used_devices_all += used_devices
+
+        devices_with_active_disk = list(
+            set(storage_devices) - set(used_devices_all)
+        )
+        logger.debug(f"Host {host.name} Storage Devices information:")
+        logger.debug(f"Available Storage Devices: {storage_devices}")
+        logger.debug(f"Mounted Storage Devices: {mounted_devices}")
+        logger.debug(f"Used Storage Devices: {used_devices}")
+        logger.debug(
+            f"Storage Devices with active partition:"
+            f" {devices_with_active_disk}"
+        )
+
+        return [
+            device for device in devices_with_active_disk
+            if active_partition not in device
+        ]
+
+    def get_all_vms_in_dc(self, dc):
+        """
+        Fetches all VMs in Datacenter
+
+        Args:
+            dc (str): Datacenter name
+
+        Returns:
+            list: List of VMs instance in a Datacenter
+
+        """
+        vms = []
+        dc = self.get_dc(dc)
+        vmfolder = dc.vmFolder
+        vmlist = vmfolder.childEntity
+        for each in vmlist:
+            if hasattr(each, 'childEntity'):
+                for vm in each.childEntity:
+                    vms.append(vm)
+            else:
+                # Direct VMs created in cluster
+                # This are the VMs created directly on cluster
+                # without ResourcePool
+                vms.append(each)
+        return vms
+
+    def get_lunids(self, dc):
+        """
+        Fetches the LUN ids from the Datacenter
+
+        Args:
+            dc (str): Datacenter name
+
+        Returns:
+            dict: Dictionary contains host instance as key and
+                values as list lun ids
+                    e.g:{
+                        'vim.HostSystem:host-6320': ['02000000193035e73d534'],
+                        'vim.HostSystem:host-6252': ['020000000060034d43333']
+                        }
+
+        """
+        lunids = {}
+        vms = self.get_all_vms_in_dc(dc)
+        for vm in vms:
+            for device in vm.config.hardware.device:
+                if hasattr(device.backing, 'lunUuid'):
+                    host = self.get_host(vm).name
+                    if host not in lunids.keys():
+                        lunids[host] = []
+                    lunids[host].append(device.backing.lunUuid)
+        return lunids
+
+    def map_lunids_to_devices(self, **kwargs):
+        """
+        Maps the LUN ids to storage devices
+
+        Args:
+            **kwargs (dict): Host to LUN mapping
+                e.g:
+                ``data = get_lunids(dc)
+                map_lunids_to_devices(**data)``
+
+        Returns:
+            dict: Dictionary contains host instance as key and
+                value as list of device path
+
+        """
+        data = kwargs
+        host_devices_mapping = {}
+        logger.debug("Mapping LUN ids to Devices")
+        for each_host in data:
+            host = self.get_host_obj(each_host)
+            if host not in host_devices_mapping.keys():
+                host_devices_mapping[host] = []
+            storagedeviceinfo = (
+                host.configManager.storageSystem.storageDeviceInfo
+            )
+            scsilun = storagedeviceinfo.scsiLun
+            for scsidisk in scsilun:
+                if scsidisk.uuid in data[each_host]:
+                    host_devices_mapping[host].append(scsidisk.devicePath)
+        logger.debug(f"Host to Device Mapping: {host_devices_mapping}")
+        return host_devices_mapping
+
+    def get_host_obj(self, host_name):
+        """
+        Fetches the Host object
+
+        Args:
+            host_name (str): Host name
+
+        Returns:
+            vim.HostSystem: Host instance
+
+        """
+        content = self.get_content
+        host_view = content.viewManager.CreateContainerView(
+            content.rootFolder,
+            [vim.HostSystem],
+            True
+        )
+        host_obj = [host for host in host_view.view]
+        host_view.Destroy()
+        for host in host_obj:
+            if host.name == host_name:
+                return host
+
+    def get_used_devices(self, host):
+        """
+        Fetches the used storage devices in Host.
+
+        Note: Storage devices may be used in different Resource Pools
+        of OCS clusters.
+
+        Args:
+             host (vim.HostSystem): Host instance
+
+        Returns:
+            list: List of storage devices used
+
+        """
+        logger.debug(
+            f"Fetching all the storage devices used in host {host.name}"
+        )
+        cluster = host.parent
+        dc = cluster.parent.parent.name
+        lunids = self.get_lunids(dc)
+        host_devices_mapping = self.map_lunids_to_devices(**lunids)
+        return host_devices_mapping.get(host)
+
+    def get_active_partition_from_mount_info(self, host):
+        """
+        Gets the active partition from mount info
+
+        Args:
+            host (vim.HostSystem): Host instance
+
+        Returns:
+            str: Active partition disk
+
+        """
+        logger.debug(
+            "Fetching active partition from fileSystemVolume information"
+        )
+        mount_info = host.config.fileSystemVolume.mountInfo
+        for each in mount_info:
+            try:
+                if each.volume.extent:
+                    return each.volume.extent[0].diskName
+            except AttributeError:
+                continue

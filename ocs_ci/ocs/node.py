@@ -550,3 +550,14 @@ def get_provider():
 
     ocp_cluster = OCP(kind='', resource_name='nodes')
     return ocp_cluster.get('nodes')['items'][0]['spec']['providerID'].split(':')[0]
+
+
+def get_compute_node_names():
+    """
+    Gets the compute node names
+
+    Returns:
+        list: List of compute node names
+
+    """
+    return [node for node in get_all_nodes() if "compute" in node]

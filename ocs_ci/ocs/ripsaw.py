@@ -69,7 +69,7 @@ class RipSaw(object):
                 cwd=self.dir,
                 check=True
             )
-            self.crd = 'resources/crd/'
+            self.crd = 'resources/crds/'
             self.operator = 'resources/operator.yaml'
         except (CommandFailed, CalledProcessError)as cf:
             log.error('Error during cloning of ripsaw repository')

@@ -11,6 +11,7 @@ import requests
 from copy import deepcopy
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
@@ -435,6 +436,11 @@ class Deployment(object):
             'storage'
         ] = f"{device_size}Gi"
 
+        if self.platform.lower() == constants.VSPHERE_PLATFORM:
+            deviceset_data['dataPVCTemplate']['spec'][
+                'storageClassName'
+            ] = constants.DEFAULT_SC_VSPHERE
+
         if config.DEPLOYMENT.get('local_storage'):
             cluster_data['spec']['manageNodes'] = False
             cluster_data['spec']['monDataDirHostPath'] = '/var/lib/rook'
@@ -453,11 +459,6 @@ class Deployment(object):
                     'mon', 'mds', 'rgw', 'mgr', 'noobaa-core', 'noobaa-db',
                 ]
             }
-
-        if self.platform.lower() == constants.VSPHERE_PLATFORM:
-            deviceset_data['dataPVCTemplate']['spec'][
-                'storageClassName'
-            ] = constants.DEFAULT_SC_VSPHERE
 
         # Enable host network if enabled in config (this require all the
         # rules to be enabled on underlaying platform).
@@ -752,6 +753,28 @@ def setup_local_storage():
         timeout=600
     ), "Local storage operator did not reach running phase"
 
+    # Add RDM disk for vSphere platform
+    platform = config.ENV_DATA.get('platform').lower()
+    lso_type = config.DEPLOYMENT.get('type')
+    if platform == constants.VSPHERE_PLATFORM:
+        # Types of LSO Deployment
+        # Importing here to avoid circular dependancy
+        from ocs_ci.deployment.vmware import VSPHEREBASE
+        if lso_type == constants.RDM:
+            logger.info(f"LSO Deployment type: {constants.RDM}")
+            vsphere_base = VSPHEREBASE()
+            vsphere_base.add_rdm_disks()
+
+        if lso_type == constants.VMDK:
+            raise NotImplementedError(
+                "LSO Deployment for VMDk is not implemented"
+            )
+
+        if lso_type == constants.DIRECTPATH:
+            raise NotImplementedError(
+                "LSO Deployment for VMDirectPath is not implemented"
+            )
+
     # Retrieve NVME device path ID for each worker node
     device_paths = get_device_paths(worker_names)
 
@@ -827,7 +850,9 @@ def get_device_paths(worker_names):
     platform = config.ENV_DATA.get('platform').lower()
     if platform == 'aws':
         pattern = 'nvme-Amazon_EC2_NVMe_Instance_Storage'
-    # TODO: add patterns for vsphere and bare metal
+    elif platform == 'vsphere':
+        pattern = 'wwn'
+    # TODO: add patterns bare metal
     else:
         raise UnsupportedPlatformError(
             'LSO deployment is not supported for platform: %s', platform
@@ -840,7 +865,11 @@ def get_device_paths(worker_names):
         )
         out = run_cmd(cmd)
         out_lines = out.split('\n')
-        nvme_lines = [line for line in out_lines if pattern in line]
+        nvme_lines = [
+            line for line in out_lines if (
+                pattern in line and constants.ROOT_DISK_NAME not in line
+            )
+        ]
         for nvme_line in nvme_lines:
             device_path = [
                 part for part in nvme_line.split(' ') if pattern in part
