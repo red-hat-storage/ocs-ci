@@ -14,7 +14,7 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest, performance
+from ocs_ci.framework.testlib import E2ETest, performance, rh_internal_lab_required
 from tests import helpers
 from ocs_ci.ocs import machine, node
 
@@ -125,6 +125,7 @@ def ripsaw(request):
     return ripsaw
 
 
+@rh_internal_lab_required
 class TestVDBenchWorkload(E2ETest):
     """
     Deploy Ripsaw operator and run VDBench workload
