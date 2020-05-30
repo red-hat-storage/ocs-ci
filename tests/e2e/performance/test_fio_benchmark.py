@@ -6,15 +6,15 @@ import pytest
 from elasticsearch import Elasticsearch
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.ocp import (
-    OCP, get_ocs_version, get_build, get_platform
-)
+from ocs_ci.ocs.ocp import OCP, get_ocs_version, get_build
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import E2ETest, performance
+from ocs_ci.framework.testlib import (
+    E2ETest, performance, rh_internal_lab_required
+)
 
 log = logging.getLogger(__name__)
 
@@ -69,9 +69,7 @@ def analyze_regression(io_pattern, es_username):
         # Todo: Fail test if 5% deviation from benchmark value
 
 
-@pytest.mark.skipif(
-    get_platform() == 'AWS', reason='AWS cant reach internal ES server'
-)
+@rh_internal_lab_required
 @performance
 @pytest.mark.parametrize(
     argnames=["interface", "io_pattern"],
