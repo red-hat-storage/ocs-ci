@@ -9,7 +9,6 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from itertools import chain
 from math import floor
-from random import randrange
 from time import sleep
 from shutil import copyfile
 from functools import partial
@@ -27,6 +26,7 @@ from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.utils import setup_ceph_toolbox
+from ocs_ci.ocs.resources.backingstore import BackingStore
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
@@ -1931,12 +1931,6 @@ def cloud_uls_factory(request, cld_mgr):
                     if uls in all_existing_uls:
                         log.info(f'Cleaning up uls {uls}')
                         client.delete_uls(uls)
-                        log.info(
-                            f"Verifying whether uls: {uls} exists after deletion"
-                        )
-                        assert not client.verify_uls_exists(uls), (
-                            f'Unable to delete Underlying Storage {uls}'
-                        )
                     else:
                         log.warning(f'Underlying Storage {uls} not found.')
 
@@ -2026,7 +2020,13 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
                         )
                         # removing characters from name (pod name length bellow 64 characters issue)
                         backingstore_name = backingstore_name[:-16]
-                        created_backingstores.append(backingstore_name)
+                        created_backingstores.append(
+                            BackingStore(
+                                name=backingstore_name,
+                                uls_name=uls_name,
+                                secret="WIP"  # TODO: Implement
+                            )
+                        )
                         cmdMap[method.lower()][cloud.lower()](
                             cld_mgr, backingstore_name, uls_name, region
                         )
@@ -2055,16 +2055,16 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
 
 
 @pytest.fixture()
-def multiregion_resources(request, mcg_obj):
-    return multiregion_resources_fixture(request, mcg_obj)
+def multiregion_resources(request, cld_mgr, mcg_obj):
+    return multiregion_resources_fixture(request, cld_mgr, mcg_obj)
 
 
 @pytest.fixture(scope='session')
-def multiregion_resources_session(request, mcg_obj_session):
-    return multiregion_resources_fixture(request, mcg_obj_session)
+def multiregion_resources_session(request, cld_mgr, mcg_obj_session):
+    return multiregion_resources_fixture(request, cld_mgr, mcg_obj_session)
 
 
-def multiregion_resources_fixture(request, mcg_obj):
+def multiregion_resources_fixture(request, cld_mgr, mcg_obj):
     bs_objs, bs_secrets, bucketclasses, aws_buckets = (
         [] for _ in range(4)
     )
@@ -2083,7 +2083,7 @@ def multiregion_resources_fixture(request, mcg_obj):
             )
 
         for aws_bucket_name in aws_buckets:
-            mcg_obj.toggle_aws_bucket_readwrite(aws_bucket_name, block=False)
+            cld_mgr.toggle_aws_bucket_readwrite(aws_bucket_name, block=False)
             for _ in range(10):
                 try:
                     mcg_obj.aws_s3_resource.Bucket(
@@ -2103,10 +2103,11 @@ def multiregion_resources_fixture(request, mcg_obj):
 
 
 @pytest.fixture()
-def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
+def multiregion_mirror_setup(mcg_obj, multiregion_resources, backingstore_factory, bucket_factory):
     return multiregion_mirror_setup_fixture(
         mcg_obj,
         multiregion_resources,
+        backingstore_factory,
         bucket_factory
     )
 
@@ -2115,11 +2116,13 @@ def multiregion_mirror_setup(mcg_obj, multiregion_resources, bucket_factory):
 def multiregion_mirror_setup_session(
     mcg_obj_session,
     multiregion_resources_session,
+    backingstore_factory,
     bucket_factory_session
 ):
     return multiregion_mirror_setup_fixture(
         mcg_obj_session,
         multiregion_resources_session,
+        backingstore_factory,
         bucket_factory_session
     )
 
@@ -2127,6 +2130,7 @@ def multiregion_mirror_setup_session(
 def multiregion_mirror_setup_fixture(
     mcg_obj,
     multiregion_resources,
+    backingstore_factory,
     bucket_factory
 ):
     # Setup
@@ -2142,43 +2146,13 @@ def multiregion_mirror_setup_fixture(
     ) = multiregion_resources
 
     # Define backing stores
-    backingstore1 = {
-        'name': helpers.create_unique_resource_name(
-            resource_description='testbs',
-            resource_type='s3bucket'
-        ),
-        'region': f'us-west-{randrange(1, 3)}'
-    }
-    backingstore2 = {
-        'name': helpers.create_unique_resource_name(
-            resource_description='testbs',
-            resource_type='s3bucket'
-        ),
-        'region': 'us-east-2'
-    }
-    # Create target buckets for them
-    mcg_obj.create_new_backingstore_aws_bucket(backingstore1)
-    mcg_obj.create_new_backingstore_aws_bucket(backingstore2)
-    aws_buckets.extend((backingstore1['name'], backingstore2['name']))
-    # Create a backing store secret
-    backingstore_secret = mcg_obj.create_aws_backingstore_secret(
-        backingstore1['name'] + 'secret'
+    created_backingstores = backingstore_factory(
+        'OC',
+        {
+            'aws': [(1, 'us-west-1'), (1, 'us-east-2')]
+        }
     )
-    backingstore_secrets.append(backingstore_secret)
-    # Create AWS-backed backing stores on NooBaa
-    backingstore_obj_1 = mcg_obj.oc_create_aws_backingstore(
-        backingstore1['name'],
-        backingstore1['name'],
-        backingstore_secret.name,
-        backingstore1['region']
-    )
-    backingstore_obj_2 = mcg_obj.oc_create_aws_backingstore(
-        backingstore2['name'],
-        backingstore2['name'],
-        backingstore_secret.name,
-        backingstore2['region']
-    )
-    backingstore_objects.extend((backingstore_obj_1, backingstore_obj_2))
+
     # Create a new mirror bucketclass that'll use all the backing stores we
     # created
     bucketclass = mcg_obj.oc_create_bucketclass(
@@ -2186,14 +2160,14 @@ def multiregion_mirror_setup_fixture(
             resource_description='testbc',
             resource_type='bucketclass'
         ),
-        [backingstore.name for backingstore in backingstore_objects], 'Mirror'
+        [backingstore for backingstore in created_backingstores], 'Mirror'
     )
     bucketclasses.append(bucketclass)
     # Create a NooBucket that'll use the bucket class in order to test
     # the mirroring policy
     bucket = bucket_factory(1, 'OC', bucketclass=bucketclass.name)[0]
 
-    return bucket, backingstore1, backingstore2
+    return bucket, created_backingstores
 
 
 @pytest.fixture(scope='session')

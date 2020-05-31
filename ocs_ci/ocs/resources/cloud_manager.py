@@ -13,8 +13,9 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, load_auth_config
 from tests.helpers import create_resource
+import json
 
 logger = logging.getLogger(name=__file__)
 
@@ -27,12 +28,22 @@ class CloudManager(ABC):
     aws_client, google_client, azure_client, s3comp_client = (None,) * 4
 
     def __init__(self):
-        # TODO: solve credentials for clients (working with local creds for now)
-        self.aws_client = S3Client()
-        # TODO Need credentials to check
-        self.google_client = None
-        self.azure_client = None
-        self.s3comp_client = None
+        cred_dict = load_auth_config()
+        self.aws_client = S3Client(cred_dict['AWS'])
+
+        # cred_dict = load_auth_config()
+        # for cloud in cloud_map:
+        #     auth_dict = None
+        #     if cloud in cred_dict:
+        #         auth_dict = cred_dict[cloud]
+        #     cloud_map[cloud][0] = cloud_map[cloud][1](auth_dict)
+
+        # # TODO: solve credentials for clients (working with local creds for now)
+        # self.aws_client = S3Client()
+        # # TODO Need credentials to check
+        # self.google_client = None
+        # self.azure_client = None
+        # self.s3comp_client = None
 
 
 class CloudClient(ABC):
@@ -83,10 +94,12 @@ class S3Client(CloudClient):
     Implementation of a S3 Client using the S3 API
 
     """
-
     def __init__(self, key_id=None, access_key=None, endpoint="https://s3.amazonaws.com",
-                 verify=True, *args, **kwargs):
+                 verify=True, auth_dict=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if auth_dict:
+            key_id = auth_dict.get('AWS_ACCESS_KEY_ID')
+            access_key = auth_dict.get('AWS_SECRET_ACCESS_KEY')
         if key_id and access_key:
             self.client = boto3.resource(
                 's3', verify=verify, endpoint_url=endpoint,
@@ -103,6 +116,7 @@ class S3Client(CloudClient):
             credentials = session.get_credentials().get_frozen_credentials()
             self.access_key = credentials.access_key
             self.secret_key = credentials.secret_key
+
         bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
         bs_secret_data['metadata']['name'] += '-client-secret'
         bs_secret_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
@@ -143,18 +157,19 @@ class S3Client(CloudClient):
            name (str): The Underlying Storage name to be deleted
 
         """
+        assert self.exec_uls_deletion(name)
         # Todo: rename client to resource (or find an alternative)
         sample = TimeoutSampler(
-            timeout=30, sleep=3, func=self.exec_uls_deletion,
-            name=name
+            timeout=60, sleep=6, func=self.verify_uls_exists,
+            uls_name=name
         )
-        if not sample.wait_for_func_status(result=True):
+        if not sample.wait_for_func_status(result=False):
             logger.error(
                 f'Deletion of Underlying Storage {name} timed out. Unable to delete {name}'
             )
             raise TimeoutExpiredError
         else:
-            logger.info(f'Underlying Storage {name} deleted successfully')
+            logger.info(f'Underlying Storage {name} deleted successfully.')
 
     def exec_uls_deletion(self, name):
         """
@@ -176,10 +191,10 @@ class S3Client(CloudClient):
                 self.client.Bucket(name).delete()
                 return True
             except ClientError:
-                logger.info(f'Deletion of Underlying Storage {name} failed. Retrying...')
+                logger.info(f'Deletion of Underlying Storage {name} failed.')
                 return False
         else:
-            logger.warning(f'Underlying Storage {name} does not exist, and cannot be deleted!')
+            logger.warning(f'Underlying Storage {name} does not exist, and was not deleted.')
             return True
 
     def get_all_uls_names(self):
@@ -204,6 +219,47 @@ class S3Client(CloudClient):
         except ClientError:
             logger.info(f"{uls_name} does not exist")
             return False
+
+    def toggle_aws_bucket_readwrite(self, aws_bucket_name, block=True):
+        """
+        Toggles a bucket's IO using a bucket policy
+
+        Args:
+            aws_bucket_name: The name of the bucket that should be manipulated
+            block: Whether to block RW or un-block. True | False
+
+        """
+        if block:
+            bucket_policy = {
+                "Version": "2012-10-17",
+                "Id": "DenyReadWrite",
+                "Statement": [
+                    {
+                        "Effect": "Deny",
+                        "Principal": {
+                            "AWS": "*"
+                        },
+                        "Action": [
+                            "s3:GetObject",
+                            "s3:PutObject",
+                            "s3:ListBucket"
+                        ],
+                        "Resource": [
+                            f"arn:aws:s3:::{aws_bucket_name}/*",
+                            f"arn:aws:s3:::{aws_bucket_name}"
+                        ]
+                    }
+                ]
+            }
+            bucket_policy = json.dumps(bucket_policy)
+            s3_client = self.client.meta.client
+            s3_client.put_bucket_policy(
+                Bucket=aws_bucket_name, Policy=bucket_policy
+            )
+        else:
+            s3_client.delete_bucket_policy(
+                Bucket=aws_bucket_name
+            )
 
 
 class GoogleClient(CloudClient):
