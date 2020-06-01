@@ -64,7 +64,7 @@ class TestMultiRegion:
     @tier4
     @tier4a
     @bugzilla('1827317')
-    @skipif_ocs_version("<4.5")
+    @skipif_ocs_version("==4.4")
     @pytest.mark.polarion_id("OCS-1784")
     def test_multiregion_mirror(self, mcg_obj, awscli_pod, multiregion_mirror_setup):
         """
