@@ -14,6 +14,8 @@ from ocs_ci.ocs.resources.pod import (
     get_osd_deployments, get_osd_pods, get_pod_node, get_operator_pods, get_osd_prepare_pods
 )
 from ocs_ci.ocs.resources.ocs import get_job_obj
+from ocs_ci.utility.aws import AWSTimeoutException
+
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,19 @@ class TestDiskFailures(ManageTest):
             if not_ready_nodes:
                 nodes.restart_nodes(not_ready_nodes)
                 node.wait_for_nodes_status()
+
+            # Restart node if the osd stays at CLBO state
+            osd_pods_obj_list = get_osd_pods()
+            for pod in osd_pods_obj_list:
+                if pod.get().get(
+                    'status'
+                ).get(
+                    'containerStatuses'
+                )[0].get('state') == 'CrashLoopBackOff':
+                    node_obj = get_pod_node(pod)
+                    nodes.restart_nodes([node_obj])
+                    node.wait_for_nodes_status([node_obj.name])
+
         request.addfinalizer(finalizer)
 
     @pytest.fixture(autouse=True)
@@ -123,16 +138,28 @@ class TestDiskFailures(ManageTest):
 
         for worker_and_volume in workers_and_volumes:
             # Detach the volume (logging is done inside the function)
-            nodes.detach_volume(
-                worker_and_volume['volume'], nodes.detach_volume(worker_and_volume['worker'])
-            )
-
-        for worker_and_volume in workers_and_volumes:
-            # Wait for worker volume to be re-attached automatically to the node
-            assert nodes.wait_for_volume_attach(worker_and_volume['volume']), (
-                f"Volume {worker_and_volume['volume']} "
-                f"failed to be re-attached to a worker node"
-            )
+            try:
+                nodes.detach_volume(
+                worker_and_volume['volume'], worker_and_volume['worker']
+                )
+            except AWSTimeoutException as e:
+                if "Volume state: in-use" in e:
+                    logger.info(
+                    f"Volume {worker_and_volume['volume']} re-attached "
+                    f"successfully to worker "
+                    f"node {worker_and_volume['worker']}")
+                else:
+                    raise
+            else:
+                """
+                Wait for worker volume to be re-attached automatically 
+                to the node
+                """
+                assert nodes.wait_for_volume_attach(
+                    worker_and_volume['volume']
+                ), (f"Volume {worker_and_volume['volume']} failed to be "
+                    f"re-attached to a worker node"
+                    )
 
         # Restart the instances so the volume will get re-mounted
         nodes.restart_nodes(
