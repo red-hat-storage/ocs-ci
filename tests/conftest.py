@@ -9,13 +9,11 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from itertools import chain
 from math import floor
-from time import sleep
 from shutil import copyfile
 from functools import partial
 
 import pytest
 import yaml
-from botocore.exceptions import ClientError
 
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.framework import config
@@ -1573,20 +1571,18 @@ def cld_mgr(request):
         CloudManager: A CloudManager resource
 
     """
+    cld_mgr = CloudManager()
 
-    # Todo: Find a more elegant method
     def finalizer():
-        oc = ocp.OCP(
-            namespace='openshift-storage'
-        )
-        oc.exec_oc_cmd(
-            command='delete secret backing-store-secret-client-secret',
-            out_yaml_format=False
-        )
+        for client in vars(cld_mgr):
+            try:
+                getattr(cld_mgr, client).secret.delete()
+            except AttributeError:
+                log.info(f"{client} secret not found")
 
     request.addfinalizer(finalizer)
 
-    return CloudManager()
+    return cld_mgr
 
 
 @pytest.fixture()
@@ -1870,14 +1866,14 @@ def cloud_uls_factory(request, cld_mgr):
         'aws': set(),
         'google': set(),
         'azure': set(),
-        's3comp': set()
+        'ibmcos': set()
     }
 
     ulsMap = {
         'aws': cld_mgr.aws_client,
         'google': cld_mgr.google_client,
         'azure': cld_mgr.azure_client,
-        's3comp': cld_mgr.s3comp_client
+        'ibmcos': cld_mgr.ibmcos_client
     }
 
     def _create_uls(uls_dict):
@@ -1900,7 +1896,7 @@ def cloud_uls_factory(request, cld_mgr):
             'aws': set(),
             'google': set(),
             'azure': set(),
-            's3comp': set()
+            'ibmcos': set()
         }
 
         for cloud, params in uls_dict.items():
@@ -1957,14 +1953,14 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
             'aws': oc_create_aws_backingstore,
             'google': oc_create_google_backingstore,
             'azure': oc_create_azure_backingstore,
-            's3comp': oc_create_s3comp_backingstore,
+            'ibmcos': oc_create_s3comp_backingstore,
             'pv': oc_create_pv_backingstore
         },
         'cli': {
             'aws': cli_create_aws_backingstore,
             'google': cli_create_google_backingstore,
             'azure': cli_create_azure_backingstore,
-            's3comp': cli_create_s3comp_backingstore,
+            'ibmcos': cli_create_s3comp_backingstore,
             'pv': cli_create_pv_backingstore
         }
     }
@@ -2023,8 +2019,7 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
                         created_backingstores.append(
                             BackingStore(
                                 name=backingstore_name,
-                                uls_name=uls_name,
-                                secret="WIP"  # TODO: Implement
+                                uls_name=uls_name
                             )
                         )
                         cmdMap[method.lower()][cloud.lower()](
@@ -2035,19 +2030,8 @@ def backingstore_factory(request, cld_mgr, cloud_uls_factory):
         return created_backingstores
 
     def backingstore_cleanup():
-        for backingstore_name in created_backingstores:
-            log.info(f'Cleaning up backingstore {backingstore_name}')
-            oc = ocp.OCP(
-                namespace=config.ENV_DATA['cluster_namespace']
-            )
-            oc.exec_oc_cmd(
-                command=f'delete backingstore {backingstore_name}',
-                out_yaml_format=False
-            )
-            log.info(
-                f"Verifying whether backingstore {backingstore_name} exists after deletion"
-            )
-            # Todo: implement deletion assertion
+        for backingstore in created_backingstores:
+            backingstore.delete()
 
     request.addfinalizer(backingstore_cleanup)
 
@@ -2074,28 +2058,8 @@ def multiregion_resources_fixture(request, cld_mgr, mcg_obj):
         for resource in chain(bs_secrets, bucketclasses):
             resource.delete()
 
-        for backingstore in bs_objs:
-            backingstore.delete()
-            mcg_obj.send_rpc_query(
-                'pool_api',
-                'delete_pool',
-                {'name': backingstore.name}
-            )
-
-        for aws_bucket_name in aws_buckets:
-            cld_mgr.toggle_aws_bucket_readwrite(aws_bucket_name, block=False)
-            for _ in range(10):
-                try:
-                    mcg_obj.aws_s3_resource.Bucket(
-                        aws_bucket_name
-                    ).objects.all().delete()
-                    mcg_obj.aws_s3_resource.Bucket(aws_bucket_name).delete()
-                    break
-                except ClientError:
-                    log.info(
-                        f'Deletion of bucket {aws_bucket_name} failed. Retrying...'
-                    )
-                    sleep(3)
+        for aws_bucket in aws_buckets:
+            cld_mgr.toggle_aws_bucket_readwrite(aws_bucket.name, block=False)
 
     request.addfinalizer(resource_cleanup)
 
@@ -2160,7 +2124,7 @@ def multiregion_mirror_setup_fixture(
             resource_description='testbc',
             resource_type='bucketclass'
         ),
-        [backingstore for backingstore in created_backingstores], 'Mirror'
+        [backingstore.name for backingstore in created_backingstores], 'Mirror'
     )
     bucketclasses.append(bucketclass)
     # Create a NooBucket that'll use the bucket class in order to test

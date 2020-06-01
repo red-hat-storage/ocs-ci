@@ -25,25 +25,26 @@ class CloudManager(ABC):
     Class containing all client types
 
     """
-    aws_client, google_client, azure_client, s3comp_client = (None,) * 4
-
     def __init__(self):
+        cloud_map = {
+            'AWS': S3Client,
+            'GOOGLE': GoogleClient,
+            'AZURE': AzureClient,
+            'IBMCOS': S3Client
+        }
         cred_dict = load_auth_config()
-        self.aws_client = S3Client(cred_dict['AWS'])
-
-        # cred_dict = load_auth_config()
-        # for cloud in cloud_map:
-        #     auth_dict = None
-        #     if cloud in cred_dict:
-        #         auth_dict = cred_dict[cloud]
-        #     cloud_map[cloud][0] = cloud_map[cloud][1](auth_dict)
-
-        # # TODO: solve credentials for clients (working with local creds for now)
-        # self.aws_client = S3Client()
-        # # TODO Need credentials to check
-        # self.google_client = None
-        # self.azure_client = None
-        # self.s3comp_client = None
+        for cloud_name in cred_dict:
+            if cloud_name in cloud_map:
+                try:
+                    setattr(
+                        self, f'{cloud_name.lower()}_client',
+                        cloud_map[cloud_name](auth_dict=cred_dict[cloud_name])
+                    )
+                except DefaultCredentialsError:
+                    setattr(
+                        self, f'{cloud_name.lower()}_client',
+                        None
+                    )
 
 
 class CloudClient(ABC):
@@ -100,6 +101,8 @@ class S3Client(CloudClient):
         if auth_dict:
             key_id = auth_dict.get('AWS_ACCESS_KEY_ID')
             access_key = auth_dict.get('AWS_SECRET_ACCESS_KEY')
+            endpoint = endpoint or auth_dict.get('ENDPOINT')
+            s3_comp = auth_dict.get('S3_COMP')
         if key_id and access_key:
             self.client = boto3.resource(
                 's3', verify=verify, endpoint_url=endpoint,
@@ -108,25 +111,23 @@ class S3Client(CloudClient):
             )
             self.access_key = key_id
             self.secret_key = access_key
+        elif s3_comp:
+            logger.warn("Did not find S3 compatible credentials")
+            raise DefaultCredentialsError
         else:
-            self.client = boto3.resource('s3', endpoint_url=endpoint)
-            # create a secret for the underlying storage to use
-            session = boto3.Session()
-            # Retrieving the credentials of the existing session
-            credentials = session.get_credentials().get_frozen_credentials()
-            self.access_key = credentials.access_key
-            self.secret_key = credentials.secret_key
+            try:
+                self.client = boto3.resource('s3', endpoint_url=endpoint)
+                # create a secret for the underlying storage to use
+                session = boto3.Session()
+                # Retrieving the credentials of the existing session
+                credentials = session.get_credentials().get_frozen_credentials()
+                self.access_key = credentials.access_key
+                self.secret_key = credentials.secret_key
+            except AttributeError:
+                logger.warn("Failed to find default AWS credentials")
+                raise DefaultCredentialsError
 
-        bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
-        bs_secret_data['metadata']['name'] += '-client-secret'
-        bs_secret_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
-        bs_secret_data['data']['AWS_ACCESS_KEY_ID'] = base64.urlsafe_b64encode(
-            self.access_key.encode('UTF-8')
-        ).decode('ascii')
-        bs_secret_data['data']['AWS_SECRET_ACCESS_KEY'] = base64.urlsafe_b64encode(
-            self.secret_key.encode('UTF-8')
-        ).decode('ascii')
-        self.secret = create_resource(**bs_secret_data)
+        self.secret = self.create_aws_secret()
 
     def internal_create_uls(self, name, region=None):
         """
@@ -261,6 +262,19 @@ class S3Client(CloudClient):
                 Bucket=aws_bucket_name
             )
 
+    def create_aws_secret(self):
+        bs_secret_data = templating.load_yaml(constants.MCG_BACKINGSTORE_SECRET_YAML)
+        bs_secret_data['metadata']['name'] = 'cldmgr-aws-secret'
+        bs_secret_data['metadata']['namespace'] = config.ENV_DATA['cluster_namespace']
+        bs_secret_data['data']['AWS_ACCESS_KEY_ID'] = base64.urlsafe_b64encode(
+            self.access_key.encode('UTF-8')
+        ).decode('ascii')
+        bs_secret_data['data']['AWS_SECRET_ACCESS_KEY'] = base64.urlsafe_b64encode(
+            self.secret_key.encode('UTF-8')
+        ).decode('ascii')
+
+        return create_resource(**bs_secret_data)
+
 
 class GoogleClient(CloudClient):
     """
@@ -275,7 +289,7 @@ class GoogleClient(CloudClient):
         try:
             self.client = storage.Client()
         except DefaultCredentialsError:
-            logger.info('No credentials found failing test')
+            raise
 
     def internal_create_uls(self, name, region=None):
         """
@@ -325,7 +339,8 @@ class AzureClient(CloudClient):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        pass
+        # TODO: Implement
+        raise DefaultCredentialsError
 
     def internal_create_uls(self, name, region=None):
         """
