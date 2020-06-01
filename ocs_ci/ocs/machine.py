@@ -42,7 +42,6 @@ def get_machine_objs(machine_names=None):
 
 def get_machineset_objs(machineset_names=None):
     """
-
     Get machineset objects by machineset names
 
     Args:
@@ -51,6 +50,7 @@ def get_machineset_objs(machineset_names=None):
 
     Returns:
         list: Cluster machineset OCS objects
+
     """
     machinesets_obj = OCP(
         kind=constants.MACHINESETS,
@@ -445,7 +445,9 @@ def wait_for_new_node_to_be_ready(machine_set, timeout=300):
         machine_set (str): Name of the machine set
 
     Raises:
-        TimeoutExpiredError: In case the new spun machine fails to come
+        ResourceWrongStatusException: In case the new spun machine fails
+            to reach Ready state or replica count didn't match
+
     """
     replica_count = get_replica_count(machine_set)
     try:
@@ -462,8 +464,8 @@ def wait_for_new_node_to_be_ready(machine_set, timeout=300):
         )
         raise ResourceWrongStatusException(
             machine_set, [
-                m.describe() for m in get_machineset_objs(machine_set)]
-
+                m.describe() for m in get_machineset_objs(machine_set)
+            ]
         )
 
 
