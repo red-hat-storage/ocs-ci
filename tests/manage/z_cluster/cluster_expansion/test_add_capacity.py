@@ -5,7 +5,6 @@ from ocs_ci.framework.pytest_customization.marks import polarion_id, pre_upgrade
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
-    skipif_ocs_version,
     tier1,
 )
 from ocs_ci.ocs import constants
@@ -55,7 +54,6 @@ class TestAddCapacity(ManageTest):
         add_capacity_test()
 
 
-@skipif_ocs_version('<4.4')
 @pre_upgrade
 @ignore_leftovers
 @polarion_id('OCS-1191')
