@@ -101,10 +101,10 @@ class TestDiskFailures(ManageTest):
                 raise
         else:
             """
-            Wait for worker volume to be re-attached automatically 
+            Wait for worker volume to be re-attached automatically
             to the node
             """
-            assert nodes.wait_for_volume_attach(data_volume),(
+            assert nodes.wait_for_volume_attach(data_volume), (
                 f"Volume {data_volume} failed to be re-attached to worker "
                 f"node {worker}"
             )
@@ -151,19 +151,19 @@ class TestDiskFailures(ManageTest):
             # Detach the volume (logging is done inside the function)
             try:
                 nodes.detach_volume(
-                worker_and_volume['volume'], worker_and_volume['worker']
+                    worker_and_volume['volume'], worker_and_volume['worker']
                 )
             except AWSTimeoutException as e:
                 if "Volume state: in-use" in e:
                     logger.info(
-                    f"Volume {worker_and_volume['volume']} re-attached "
-                    f"successfully to worker "
-                    f"node {worker_and_volume['worker']}")
+                        f"Volume {worker_and_volume['volume']} re-attached "
+                        f"successfully to worker "
+                        f"node {worker_and_volume['worker']}")
                 else:
                     raise
             else:
                 """
-                Wait for worker volume to be re-attached automatically 
+                Wait for worker volume to be re-attached automatically
                 to the node
                 """
                 assert nodes.wait_for_volume_attach(
