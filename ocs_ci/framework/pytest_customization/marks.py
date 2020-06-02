@@ -114,6 +114,12 @@ ipi_deployment_required = pytest.mark.skipif(
     reason="Test runs ONLY on IPI deployed cluster"
 )
 
+skipif_aws_i3 = pytest.mark.skipif(
+    config.ENV_DATA['platform'].lower() == 'aws'
+    and config.DEPLOYMENT.get('local_storage') is True,
+    reason="Test will not run on AWS i3"
+)
+
 # Filter warnings
 filter_insecure_request_warning = pytest.mark.filterwarnings(
     'ignore::urllib3.exceptions.InsecureRequestWarning'
