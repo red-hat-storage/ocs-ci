@@ -16,7 +16,8 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
 from ocs_ci.ocs.exceptions import (
-    CommandFailed, UnavailableResourceException, UnsupportedPlatformError
+    CommandFailed, UnavailableResourceException, UnsupportedPlatformError,
+    ResourceWrongStatusException,
 )
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
@@ -579,7 +580,10 @@ class Deployment(object):
             time.sleep(waiting_time)
 
             # Validate the pods are respinned and in running state
-            retry(CommandFailed, tries=3, delay=15)(
+            retry(
+                (CommandFailed, ResourceWrongStatusException),
+                tries=3,
+                delay=15)(
                 validate_pods_are_respinned_and_running_state
             )(
                 pods_list
