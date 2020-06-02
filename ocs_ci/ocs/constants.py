@@ -160,6 +160,7 @@ IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
 DEFAULT_NOOBAA_BACKINGSTORE = "noobaa-default-backing-store"
 RIPSAW_NAMESPACE = "my-ripsaw"
 RIPSAW_CRD = "resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml"
+RIPSAW_DROP_CACHE = os.path.join(TEMPLATE_FIO_DIR, "drop_cache_pod.yaml")
 OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
 LOCAL_STORAGE_NAMESPACE = 'local-storage'
 
@@ -301,6 +302,10 @@ CSI_RBD_PVC_YAML = os.path.join(
 )
 CONFIGURE_PVC_ON_MONITORING_POD = os.path.join(
     TEMPLATE_CONFIGURE_PVC_MONITORING_POD, "configuring_pvc.yaml"
+)
+
+FIO_CR_YAML = os.path.join(
+    TEMPLATE_FIO_DIR, "benchmark_fio.yaml"
 )
 
 PGSQL_SERVICE_YAML = os.path.join(
@@ -847,3 +852,8 @@ COMPATABILITY_MODE = "physicalMode"
 # OS
 RHEL_OS = "RHEL"
 RHCOS = "RHCOS"
+
+# Elasticsearch and codespeed constants
+ES_SERVER_IP = '10.0.78.167'
+ES_SERVER_PORT = '9200'
+ES_SERVER_URL = 'https://10.0.78.167:9200'
