@@ -78,10 +78,10 @@ class TestDiskFailures(ManageTest):
         Detach and attach worker volume
 
         - Detach the data volume from one of the worker nodes
-        - Validate cluster functionality, without checking cluster and Ceph
-          health (as one node volume is detached, the cluster will be unhealthy)
-          by creating resources and running IO
         - Wait for the volumes to be re-attached back to the worker node
+        - Validate cluster functionality, without checking cluster and Ceph
+          health (as one node volume is detached, the cluster will be
+          unhealthy) by creating resources and running IO
         - Restart the node so the volume will get re-mounted
 
         """
@@ -89,9 +89,25 @@ class TestDiskFailures(ManageTest):
         data_volume = nodes.get_data_volumes()[0]
         # Get the worker node according to the volume attachment
         worker = nodes.get_node_by_attached_volume(data_volume)
-
-        # Detach volume (logging is done inside the function)
-        nodes.detach_volume(data_volume, worker)
+        try:
+            # Detach volume (logging is done inside the function)
+            nodes.detach_volume(data_volume, worker)
+        except AWSTimeoutException as e:
+            if "Volume state: in-use" in e:
+                logger.info(
+                    f"Volume {data_volume} re-attached successfully to worker"
+                    f" node {worker}")
+            else:
+                raise
+        else:
+            """
+            Wait for worker volume to be re-attached automatically 
+            to the node
+            """
+            assert nodes.wait_for_volume_attach(data_volume),(
+                f"Volume {data_volume} failed to be re-attached to worker "
+                f"node {worker}"
+            )
 
         # Validate cluster is still functional
         # In case the selected node that its volume disk was detached was the one
@@ -101,11 +117,6 @@ class TestDiskFailures(ManageTest):
         assert wait_for_ct_pod_recovery(), "Ceph tools pod failed to come up on another node"
 
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
-
-        # Wait for worker volume to be re-attached automatically to the node
-        assert nodes.wait_for_volume_attach(data_volume), (
-            "Volume failed to be re-attached to a worker node"
-        )
 
         # Restart the instance so the volume will get re-mounted
         nodes.restart_nodes([worker])
