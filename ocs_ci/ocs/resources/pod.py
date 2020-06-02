@@ -1011,6 +1011,10 @@ def validate_pods_are_respinned_and_running_state(pod_objs_list):
     Returns:
          bool : True if the pods are respinned and running, False otherwise
 
+    Raises:
+        ResourceWrongStatusException: In case the resources hasn't
+            reached the Running state
+
     """
     for pod in pod_objs_list:
         helpers.wait_for_resource_state(pod, constants.STATUS_RUNNING, timeout=180)
