@@ -408,12 +408,6 @@ class MCG(object):
         secret_ocp_obj = OCP(kind='secret', namespace=self.namespace)
         try:
             cred_req_secret_dict = secret_ocp_obj.get(resource_name=creds_request.name, retry=5)
-            aws_access_key_id = base64.b64decode(
-                cred_req_secret_dict.get('data').get('aws_access_key_id')
-            ).decode('utf-8')
-            aws_access_key = base64.b64decode(
-                cred_req_secret_dict.get('data').get('aws_secret_access_key')
-            ).decode('utf-8')
         except CommandFailed:
             logger.error(
                 'Failed to retrieve credentials request secret'
@@ -423,6 +417,13 @@ class MCG(object):
                 'Please make sure that the cluster used is an AWS cluster, '
                 'or that the `platform` var in your config is correct.'
             )
+
+        aws_access_key_id = base64.b64decode(
+            cred_req_secret_dict.get('data').get('aws_access_key_id')
+        ).decode('utf-8')
+        aws_access_key = base64.b64decode(
+            cred_req_secret_dict.get('data').get('aws_secret_access_key')
+        ).decode('utf-8')
 
         def _check_aws_credentials():
             try:
