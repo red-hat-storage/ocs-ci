@@ -16,7 +16,8 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.framework.testlib import (
     tier1, tier2, tier3, tier4, tier4b,
-    ManageTest, aws_platform_required, ignore_leftovers
+    ManageTest, aws_platform_required, ignore_leftovers,
+    ipi_deployment_required
 )
 
 from tests.sanity_helpers import Sanity
@@ -246,6 +247,7 @@ class TestNodesMaintenance(ManageTest):
     @tier4
     @tier4b
     @aws_platform_required
+    @ipi_deployment_required
     @pytest.mark.parametrize(
         argnames=["interface"],
         argvalues=[
