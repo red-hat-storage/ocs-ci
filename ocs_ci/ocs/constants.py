@@ -72,6 +72,7 @@ STATUS_BOUND = 'Bound'
 STATUS_RELEASED = 'Released'
 STATUS_COMPLETED = 'Completed'
 STATUS_ERROR = 'Error'
+STATUS_CLBO = 'CrashLoopBackOff'
 
 # NooBaa statuses
 BS_AUTH_FAILED = 'AUTH_FAILED'

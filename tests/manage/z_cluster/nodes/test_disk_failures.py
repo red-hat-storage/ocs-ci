@@ -55,7 +55,7 @@ class TestDiskFailures(ManageTest):
                     'status'
                 ).get(
                     'containerStatuses'
-                )[0].get('state') == 'CrashLoopBackOff':
+                )[0].get('state') == constants.STATUS_CLBO:
                     node_obj = get_pod_node(pod)
                     nodes.restart_nodes([node_obj])
                     node.wait_for_nodes_status([node_obj.name])
