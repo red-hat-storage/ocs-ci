@@ -305,7 +305,6 @@ class TestMonitoringBackedByOCS(E2ETest):
         self.sanity_helpers.health_check()
 
     @pytest.mark.polarion_id("OCS-606")
-    @skipif_aws_i3
     def test_monitoring_when_one_of_the_prometheus_node_down(self, nodes, pods):
         """
         Test case to validate when the prometheus pod is down and its
@@ -345,7 +344,6 @@ class TestMonitoringBackedByOCS(E2ETest):
             log.info(f"On prometheus pod for created pvc {pod_obj.pvc.name} related data is collected")
 
     @pytest.mark.polarion_id("OCS-709")
-    @skipif_aws_i3
     def test_monitoring_after_rebooting_master_node(self, nodes, pods):
         """
         Test case to validate rebooting master node shouldn't delete
@@ -366,7 +364,6 @@ class TestMonitoringBackedByOCS(E2ETest):
         self.sanity_helpers.health_check()
 
     @pytest.mark.polarion_id("OCS-710")
-    @skipif_aws_i3
     def test_monitoring_after_rebooting_node_where_mgr_is_running(self, nodes, pods):
         """
         Test case to validate rebooting a node where mgr is running
