@@ -31,6 +31,17 @@ class TestDynamicPvc(ManageTest):
         """
         Creates storage class with specified interface and reclaim policy.
         Fetches all worker nodes
+
+        Args:
+            interface_type (str): The type of the interface
+                (e.g. CephBlockPool, CephFileSystem)
+            reclaim_policy (str): The type of reclaim policy
+                (eg., 'Delete', 'Retain')
+            storageclass_factory: A fixture to create new storage class
+
+        Returns:
+            tuple: containing the storage class instance and list of worker nodes
+
         """
         # Create storage class
         sc_obj = storageclass_factory(
