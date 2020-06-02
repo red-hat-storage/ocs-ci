@@ -19,6 +19,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
+from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3
 
 log = logging.getLogger(__name__)
 
@@ -412,6 +413,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             )
 
     @pytest.mark.polarion_id("OCS-711")
+    @skipif_aws_i3
     def test_monitoring_shutdown_and_recovery_prometheus_node(self, nodes, pods):
         """
         Test case to validate whether shutdown and recovery of a
