@@ -113,8 +113,8 @@ def verify_image_versions(old_images, upgrade_version):
         old_images, selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
         count=2
     )
-    verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
     verify_pods_upgraded(old_images, selector=constants.MON_APP_LABEL, count=3)
+    verify_pods_upgraded(old_images, selector=constants.MGR_APP_LABEL)
     # OSD upgrade have timeout 10mins for new attempt if cluster is not health.
     # https://bugzilla.redhat.com/show_bug.cgi?id=1840729 setting timeout for
     # 12.5 minutes per OSD
