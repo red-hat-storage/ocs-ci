@@ -11,7 +11,7 @@ from botocore.client import ClientError
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed, CredReqSecretNotFound, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
@@ -413,7 +413,7 @@ class MCG(object):
                 'Failed to retrieve credentials request secret'
 
             )
-            assert False, (
+            raise CredReqSecretNotFound(
                 'Please make sure that the cluster used is an AWS cluster, '
                 'or that the `platform` var in your config is correct.'
             )
