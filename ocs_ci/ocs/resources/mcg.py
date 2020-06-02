@@ -421,6 +421,7 @@ class MCG(object):
         aws_access_key_id = base64.b64decode(
             cred_req_secret_dict.get('data').get('aws_access_key_id')
         ).decode('utf-8')
+
         aws_access_key = base64.b64decode(
             cred_req_secret_dict.get('data').get('aws_secret_access_key')
         ).decode('utf-8')
