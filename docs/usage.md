@@ -16,6 +16,12 @@ get information on various image version deployed by ocs-ci
    -master or -worker. This can be found by logging into AWS, Selecting the VM
    and clicking on Tags.
 
+# usage to shutdown AWS nodes when nodes are not in use
+  Following cli can be used when you want to shutdown the cluster
+  `ci-pause --cluster-path /home-dir/cluster-path --action [stop|start]`
+  action can be start or stop that performs the required action on all the nodes
+  in the cluster
+
 ## Required configuration
 
 * **AWS credentials** - if you have AWS already configured by `aws configure`,
@@ -51,8 +57,9 @@ to the pytest.
 
 * `--cluster-name <name>` - name of cluster (always required for deployment) must be 5-17 characters long.
 * `--ocs-version` - version of OCS to be used (e.g. 4.2 or 4.3). If not
-    specified, the default from ocs-ci will be used. If --ocs-registry-image passed
-    then this parameter is ignored and the version is parsed from the registry image.
+    specified, the default from ocs-ci will be used. If `--ocs-registry-image` is passed
+    then `--ocs-version` parameter has higher priority which allow us to install previous version
+    from CSV of the next build (e.g. we can install 4.3 from 4.4 build csv).
 * `--upgrade-ocs-version` - version of OCS to be used for upgrade (e.g. 4.2 or 4.3). If not specified, the default from ocs-ci will be used.
 * `--ocp-version` - OCP version to be used for deployment. This version will
     be used for load file from conf/ocp_version/ocp-VERSION-config.yaml.
@@ -62,8 +69,8 @@ to the pytest.
   * `4.2-ga-minus1`: for latest GAed 4.2 build (stable channel) - 1
 * `--ocs-registry-image` - ocs registry image to be used for deployment
     (e.g quay.io/rhceph-dev/ocs-olm-operator:latest-4.2). In case this parameter
-    is passed, the version is parsed from the registry image name and it overwrites
-    any version passed in via --ocs-version.
+    is passed, the version is parsed from the registry image name but only
+    if no version is passed via --ocs-version parameter.
 * `--upgrade-ocs-registry-image` - ocs registry image to be used for upgrade (e.g quay.io/rhceph-dev/ocs-olm-operator:latest-4.3)
 * `--ocsci-conf` - with this configuration parameter you can overwrite the
     default OCS-CI config parameters defined in
@@ -93,6 +100,13 @@ to the pytest.
   bugzilla_password = yourPassword
   ```
 * `--collect-logs` - to collect OCS logs for failed test cases.
+* `--io-in-bg` - If passed, IO will be running in the test background.
+   The amount of IO load will be determined by the `--io-load` argument, if
+   provided. In case `--io-load` is not provided, IO load is set to 30% of
+   the cluster throughput limit.
+* `--io-load` - IOs throughput target percentage. The value should be
+   between 0 to 100. The default is 30 (30%)
+* `--enable-bg-io-logs` - If passed, background IO log messages will be printed
 
 ## Examples
 
@@ -174,6 +188,12 @@ run-ci tests/
     --html=report.html --self-contained-html \
     --email=<emailid1>,<emailid2>,<emailid3>
  ```
+
+#### Running tests with background IO load
+
+If you would like to run tests with IO load of 50% in the tests background,
+while background IO log messages are printed, append these arguments to the
+`run-ci` command: `--io-in-bg --io-load 50 --enable-bg-io-logs`
 
 #### Destroy of cluster
 

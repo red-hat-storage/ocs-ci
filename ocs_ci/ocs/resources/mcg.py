@@ -7,11 +7,10 @@ from time import sleep
 
 import boto3
 import requests
-import urllib3
 from botocore.client import ClientError
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, registry
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
@@ -19,6 +18,7 @@ from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 from tests.helpers import create_unique_resource_name, create_resource
+import subprocess
 
 logger = logging.getLogger(name=__file__)
 
@@ -38,21 +38,29 @@ class MCG(object):
         """
         Constructor for the MCG class
         """
-
-        # Todo: find a better solution for not being able to verify requests with a self-signed cert
-        logger.warning('Suppressing InsecureRequestWarnings')
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
         self.namespace = config.ENV_DATA['cluster_namespace']
         ocp_obj = OCP(kind='noobaa', namespace=self.namespace)
+        self.core_pod = Pod(
+            **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
+        )
+
+        # Copy the self-signed certificate to the local runner
+        # For usage with boto3 (in case the cert isn't found)
+        if not os.path.isfile(constants.MCG_CRT_LOCAL_PATH):
+            ocp_obj.exec_oc_cmd(
+                f'cp {self.core_pod.name}:'
+                f'{constants.MCG_CRT_REMOTE_PATH} '
+                f'{constants.MCG_CRT_LOCAL_PATH}'
+            )
+
         results = ocp_obj.get()
         self.s3_endpoint = (
             results.get('items')[0].get('status').get('services')
-            .get('serviceS3').get('externalDNS')[-1]
+            .get('serviceS3').get('externalDNS')[0]
         )
         self.mgmt_endpoint = (
             results.get('items')[0].get('status').get('services')
-            .get('serviceMgmt').get('externalDNS')[-1]
+            .get('serviceMgmt').get('externalDNS')[0]
         ) + '/rpc'
         self.region = config.ENV_DATA['region']
 
@@ -87,24 +95,35 @@ class MCG(object):
         ).json().get('reply').get('token')
 
         self.s3_resource = boto3.resource(
-            's3', verify=False, endpoint_url=self.s3_endpoint,
+            's3', verify=constants.MCG_CRT_LOCAL_PATH,
+            endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
         )
 
-        self.s3_client = boto3.client(
-            's3', verify=False, endpoint_url=self.s3_endpoint,
-            aws_access_key_id=self.access_key_id,
-            aws_secret_access_key=self.access_key
+        self.s3_client = self.s3_resource.meta.client
+
+        self.operator_pod = Pod(
+            **get_pods_having_label(
+                constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace
+            )[0]
         )
 
-        # Give NooBaa's ServiceAccount permissions in order to execute CLI commands
-        registry.add_role_to_user(
-            'cluster-admin', constants.NOOBAA_SERVICE_ACCOUNT,
-            cluster_role=True
-        )
-
-        self.operator_pod = Pod(**get_pods_having_label(constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace)[0])
+        # TODO: Add version verification to see if an additional cp isn't needed
+        # If the MCG CLI binary isn't found, copy it from the operator pod
+        if not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH):
+            cmd = (
+                f"oc exec -n {self.namespace} {self.operator_pod.name}"
+                f" -- cat {constants.NOOBAA_OPERATOR_POD_CLI_PATH}"
+                f"> {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}"
+            )
+            subprocess.run(cmd, shell=True)
+            # Add an executable bit in order to allow usage of the binary
+            exec_cmd(f'chmod +x {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}')
+            # Make sure the binary was copied properly and has the correct permissions
+            assert os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+            assert 'ELF' in exec_cmd(f'file {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}').stdout.decode()
+            assert os.access(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK)
 
         if config.ENV_DATA['platform'].lower() == 'aws':
             (
@@ -116,7 +135,7 @@ class MCG(object):
             self._ocp_resource = ocp_obj
 
             self.aws_s3_resource = boto3.resource(
-                's3', verify=False, endpoint_url="https://s3.amazonaws.com",
+                's3', endpoint_url="https://s3.amazonaws.com",
                 aws_access_key_id=self.aws_access_key_id,
                 aws_secret_access_key=self.aws_access_key
             )
@@ -298,7 +317,11 @@ class MCG(object):
             'params': params,
             'auth_token': self.noobaa_token
         }
-        return requests.post(url=self.mgmt_endpoint, data=json.dumps(payload), verify=False)
+        return requests.post(
+            url=self.mgmt_endpoint,
+            data=json.dumps(payload),
+            verify=constants.MCG_CRT_LOCAL_PATH
+        )
 
     def check_data_reduction(self, bucketname):
         """
@@ -319,7 +342,11 @@ class MCG(object):
                 "auth_token": self.noobaa_token
             }
             request_str = json.dumps(payload)
-            resp = requests.post(url=self.mgmt_endpoint, data=request_str, verify=False)
+            resp = requests.post(
+                url=self.mgmt_endpoint,
+                data=request_str,
+                verify=constants.MCG_CRT_LOCAL_PATH
+            )
             bucket_data = resp.json().get('reply').get('data').get('size')
 
             payload = {
@@ -329,7 +356,11 @@ class MCG(object):
                 "auth_token": self.noobaa_token
             }
             request_str = json.dumps(payload)
-            resp = requests.post(url=self.mgmt_endpoint, data=request_str, verify=False)
+            resp = requests.post(
+                url=self.mgmt_endpoint,
+                data=request_str,
+                verify=constants.MCG_CRT_LOCAL_PATH
+            )
             bucket_data_reduced = resp.json().get('reply').get('data').get('size_reduced')
 
             logger.info(
@@ -388,7 +419,7 @@ class MCG(object):
         def _check_aws_credentials():
             try:
                 s3_res = boto3.resource(
-                    's3', verify=False, endpoint_url="https://s3.amazonaws.com",
+                    's3', endpoint_url="https://s3.amazonaws.com",
                     aws_access_key_id=aws_access_key_id,
                     aws_secret_access_key=aws_access_key
                 )
@@ -703,8 +734,7 @@ class MCG(object):
 
         namespace = f'-n {namespace}' if namespace else f'-n {self.namespace}'
         result = exec_cmd(
-            f'oc {kubeconfig} {namespace} rsh {self.operator_pod.name} '
-            f'{constants.NOOBAA_OPERATOR_POD_CLI_PATH} {cmd} {namespace}',
+            f'{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}',
             **kwargs
         )
         result.stdout = result.stdout.decode()

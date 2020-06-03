@@ -124,7 +124,7 @@ class TestNodesMaintenance(ManageTest):
         schedule_nodes([typed_node_name])
 
         # Perform cluster and Ceph health checks
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=30)
 
     @tier4
     @tier4b
@@ -158,10 +158,16 @@ class TestNodesMaintenance(ManageTest):
         drain_nodes([typed_node_name])
 
         # Restarting the node
-        nodes.restart_nodes(nodes=typed_nodes, wait=True)
+        nodes.restart_nodes(nodes=typed_nodes, wait=False)
 
         wait_for_nodes_status(
-            node_names=[typed_node_name], status=constants.NODE_READY_SCHEDULING_DISABLED
+            node_names=[typed_node_name],
+            status=constants.NODE_NOT_READY_SCHEDULING_DISABLED
+        )
+
+        wait_for_nodes_status(
+            node_names=[typed_node_name],
+            status=constants.NODE_READY_SCHEDULING_DISABLED
         )
         # Mark the node back to schedulable
         schedule_nodes([typed_node_name])

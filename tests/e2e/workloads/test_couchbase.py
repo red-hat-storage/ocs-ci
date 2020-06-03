@@ -147,7 +147,7 @@ class TestCouchbaseWorkload(E2ETest):
         endloc = newdockerstr.find(' ')
         dockerstr = newdockerstr[:endloc]
         self.secretsadder.exec_oc_cmd(
-            f"secrets add serviceaccount/couchbase-operator secrets/{dockerstr}"
+            f"secrets link serviceaccount/couchbase-operator secrets/{dockerstr}"
         )
         self.rolebinding = OCP(namespace=self.COUCHBASE_OPERATOR)
         rolebind_cmd = "".join([

@@ -51,3 +51,8 @@ website_config = {
 }
 index = "<html><body><h1>My Static Website on S3</h1></body></html>"
 error = "<html><body><h1>Oh. Something bad happened!</h1></body></html>"
+
+# pyipmi
+IPMI_INTERFACE_TYPE = "lanplus"
+IPMI_RMCP_PORT = 623
+IPMI_IPMB_ADDRESS = 0x20

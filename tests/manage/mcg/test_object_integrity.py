@@ -2,9 +2,6 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import (
-    filter_insecure_request_warning
-)
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2, tier3
 from ocs_ci.ocs import constants
 from tests.manage.mcg import helpers
@@ -18,14 +15,10 @@ FILESIZE_SKIP = pytest.mark.skip('Current test filesize is too large.')
 RUNTIME_SKIP = pytest.mark.skip('Runtime is too long; Code needs to be parallelized')
 
 
-@filter_insecure_request_warning
 class TestObjectIntegrity(ManageTest):
     """
     Test data integrity of various objects
     """
-    @pytest.mark.filterwarnings(
-        'ignore::urllib3.exceptions.InsecureRequestWarning'
-    )
     @pytest.mark.polarion_id("OCS-1321")
     @tier1
     def test_check_object_integrity(self, mcg_obj, awscli_pod, bucket_factory):
@@ -119,9 +112,11 @@ class TestObjectIntegrity(ManageTest):
             logger.info(
                 f'Downloading {obj["Key"]} from AWS bucket {public_bucket}'
             )
-            command = f'wget -P {original_dir} '
-            command += f'https://{public_bucket}.s3.amazonaws.com/{obj["Key"]}'
-            awscli_pod.exec_cmd_on_pod(command=command)
+            download_obj_cmd = f'cp s3://{public_bucket}/{obj["Key"]} {original_dir}'
+            awscli_pod.exec_cmd_on_pod(
+                command=helpers.craft_s3_command(download_obj_cmd),
+                out_yaml_format=False
+            )
             download_files.append(obj['Key'].split('/')[-1])
 
         # Write downloaded objects to the new bucket and check integrity

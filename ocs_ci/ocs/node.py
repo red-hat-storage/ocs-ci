@@ -550,3 +550,25 @@ def get_provider():
 
     ocp_cluster = OCP(kind='', resource_name='nodes')
     return ocp_cluster.get('nodes')['items'][0]['spec']['providerID'].split(':')[0]
+
+
+def get_compute_node_names():
+    """
+    Gets the compute node names
+
+    Returns:
+        list: List of compute node names
+
+    """
+    platform = config.ENV_DATA.get('platform').lower()
+
+    if platform == constants.VSPHERE_PLATFORM:
+        return [node for node in get_all_nodes() if "compute" in node]
+    elif platform == constants.AWS_PLATFORM:
+        compute_node_objs = get_typed_nodes()
+        return [
+            compute_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL]
+            for compute_obj in compute_node_objs
+        ]
+    else:
+        raise NotImplementedError

@@ -36,6 +36,7 @@ TEMPLATE_COUCHBASE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "couchbase")
 TEMPLATE_COUCHBASE_SERVER_DIR = os.path.join(TEMPLATE_COUCHBASE_DIR, "server")
 TEMPLATE_PILLOWFIGHT_DIR = os.path.join(TEMPLATE_COUCHBASE_SERVER_DIR, "pillowfight")
 TEMPLATE_MCG_DIR = os.path.join(TEMPLATE_DIR, "mcg")
+TEMPLATE_AMQ_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "amq")
 TEMPLATE_OPENSHIFT_INFRA_DIR = os.path.join(
     TEMPLATE_DIR, "openshift-infra/"
 )
@@ -140,7 +141,11 @@ CRITICAL_ERRORS = [
 ]
 must_gather_pod_label = "must-gather"
 
+# AMQ
+AMQ_NAMESPACE = "myproject"
 KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
+OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
+CODESPEED_URL = 'http://10.0.78.167:8000/'
 
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
@@ -155,6 +160,7 @@ IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
 DEFAULT_NOOBAA_BACKINGSTORE = "noobaa-default-backing-store"
 RIPSAW_NAMESPACE = "my-ripsaw"
 RIPSAW_CRD = "resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml"
+RIPSAW_DROP_CACHE = os.path.join(TEMPLATE_FIO_DIR, "drop_cache_pod.yaml")
 OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
 LOCAL_STORAGE_NAMESPACE = 'local-storage'
 
@@ -199,11 +205,17 @@ DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
 CEPH_ROOK_IO_PVC_LABEL = 'ceph.rook.io/pvc'
+PGSQL_APP_LABEL = "app=postgres"
+HOSTNAME_LABEL = "kubernetes.io/hostname"
 
 # Auth Yaml
 OCSCI_DATA_BUCKET = 'ocs-ci-data'
 AUTHYAML = 'auth.yaml'
 
+# OBJ File representing serialized data
+NODE_OBJ_FILE = "node_file.objs"
+NODE_FILE = "nodes.objs"
+INSTANCE_FILE = "instances.objs"
 
 # YAML paths
 TOOL_POD_YAML = os.path.join(
@@ -292,6 +304,10 @@ CONFIGURE_PVC_ON_MONITORING_POD = os.path.join(
     TEMPLATE_CONFIGURE_PVC_MONITORING_POD, "configuring_pvc.yaml"
 )
 
+FIO_CR_YAML = os.path.join(
+    TEMPLATE_FIO_DIR, "benchmark_fio.yaml"
+)
+
 PGSQL_SERVICE_YAML = os.path.join(
     TEMPLATE_PGSQL_SERVER_DIR, "Service.yaml"
 )
@@ -378,6 +394,13 @@ COUCHBASE_WORKER_SECRET = os.path.join(
 
 COUCHBASE_WORKER_EXAMPLE = os.path.join(
     TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-example.yaml"
+)
+
+HELLO_WORLD_PRODUCER_YAML = os.path.join(
+    TEMPLATE_AMQ_DIR, "hello-world-producer.yaml"
+)
+HELLO_WORLD_CONSUMER_YAML = os.path.join(
+    TEMPLATE_AMQ_DIR, "hello-world-consumer.yaml"
 )
 
 NGINX_POD_YAML = os.path.join(
@@ -502,6 +525,7 @@ VM_POWERED_ON = 'poweredOn'
 NODE_READY = 'Ready'
 NODE_NOT_READY = 'NotReady'
 NODE_READY_SCHEDULING_DISABLED = 'Ready,SchedulingDisabled'
+NODE_NOT_READY_SCHEDULING_DISABLED = 'NotReady,SchedulingDisabled'
 
 # Volume modes
 VOLUME_MODE_BLOCK = 'Block'
@@ -587,6 +611,9 @@ TERRAFORM_VARS = "terraform.tfvars"
 VM_DISK_TYPE = "thin"
 VM_DISK_MODE = "persistent"
 INSTALLER_DEFAULT_DNS = "1.1.1.1"
+
+LIFECYCLE = 'lifecycle { ignore_changes = ["disk"] }'
+CSR_BOOTSTRAPPER_NODE = "node-bootstrapper"
 
 # Config related constants
 config_keys_patterns_to_censor = ['passw', 'token', 'secret']
@@ -796,6 +823,12 @@ NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
 
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
+NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
+MCG_CRT_NAME = "service-ca.crt"
+MCG_CRT_REMOTE_PATH = f"/var/run/secrets/kubernetes.io/serviceaccount/..data/{MCG_CRT_NAME}"
+MCG_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{MCG_CRT_NAME}"
+MCG_CRT_AWSCLI_POD_PATH = f"/cert/mcg-{MCG_CRT_NAME}"
+AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [
@@ -815,3 +848,25 @@ AUTH_CONFIG_DOCS = (
     'https://ocs-ci.readthedocs.io/en/latest/docs/getting_started.html'
     '#authentication-config'
 )
+
+# Conversions
+TP_CONVERSION = {
+    ' B/s': 0.000000976562, ' KiB/s': 0.000976562, ' MiB/s': 1
+}
+
+# LSO
+ROOT_DISK_NAME = "sda"
+RDM = "RDM"
+VMDK = "VMDK"
+DIRECTPATH = "VMDirectPath"
+DISK_MODE = "independent_persistent"
+COMPATABILITY_MODE = "physicalMode"
+
+# OS
+RHEL_OS = "RHEL"
+RHCOS = "RHCOS"
+
+# Elasticsearch and codespeed constants
+ES_SERVER_IP = '10.0.78.167'
+ES_SERVER_PORT = '9200'
+ES_SERVER_URL = 'https://10.0.78.167:9200'

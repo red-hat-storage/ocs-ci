@@ -29,9 +29,9 @@ class Sanity:
         """
         Perform Ceph and cluster health checks
         """
-        wait_for_cluster_connectivity()
+        wait_for_cluster_connectivity(tries=400)
         logger.info("Checking cluster and Ceph health")
-        node.wait_for_nodes_status()
+        node.wait_for_nodes_status(timeout=300)
 
         ceph_health_check(namespace=config.ENV_DATA['cluster_namespace'], tries=tries)
         if cluster_check:

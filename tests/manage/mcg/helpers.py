@@ -1,8 +1,8 @@
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor
 
 import boto3
+from botocore.handlers import disable_signing
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -10,9 +10,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.pod import get_rgw_pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
-from tests.helpers import create_resource
-from tests.helpers import logger, craft_s3_command, craft_s3_api_command
-from botocore.handlers import disable_signing
+from tests.helpers import craft_s3_command, create_resource, logger
 
 log = logging.getLogger(__name__)
 
@@ -48,21 +46,10 @@ def retrieve_test_objects_to_pod(podobj, target_dir):
         list: A list of the downloaded objects' names
 
     """
-    # Download test objects from the public bucket
-    downloaded_objects = []
-    # Retrieve a list of all objects on the test-objects bucket and downloads them to the pod
-    podobj.exec_cmd_on_pod(command=f'mkdir {target_dir}')
-    public_s3 = retrieve_anon_s3_resource()
-    with ThreadPoolExecutor() as p:
-        for obj in public_s3.Bucket(constants.TEST_FILES_BUCKET).objects.all():
-            logger.info(f'Downloading {obj.key} from AWS test bucket')
-            p.submit(podobj.exec_cmd_on_pod,
-                     command=f'sh -c "'
-                             f'wget -P {target_dir} '
-                             f'https://{constants.TEST_FILES_BUCKET}.s3.amazonaws.com/{obj.key}"'
-                     )
-            downloaded_objects.append(obj.key)
-        return downloaded_objects
+    sync_object_directory(podobj, f's3://{constants.TEST_FILES_BUCKET}', target_dir)
+    downloaded_objects = podobj.exec_cmd_on_pod(f'ls -A1 {target_dir}').split(' ')
+    logger.info(f'Downloaded objects: {downloaded_objects}')
+    return downloaded_objects
 
 
 def sync_object_directory(podobj, src, target, mcg_obj=None):
@@ -84,7 +71,7 @@ def sync_object_directory(podobj, src, target, mcg_obj=None):
     else:
         secrets = None
     podobj.exec_cmd_on_pod(
-        command=craft_s3_command(mcg_obj, retrieve_cmd), out_yaml_format=False,
+        command=craft_s3_command(retrieve_cmd, mcg_obj), out_yaml_format=False,
         secrets=secrets
     ), 'Failed to sync objects'
     # Todo: check that all objects were synced successfully
@@ -105,7 +92,7 @@ def rm_object_recursive(podobj, target, mcg_obj, option=''):
     """
     rm_command = f"rm s3://{target} --recursive {option}"
     podobj.exec_cmd_on_pod(
-        command=craft_s3_command(mcg_obj, rm_command),
+        command=craft_s3_command(rm_command, mcg_obj),
         out_yaml_format=False,
         secrets=[mcg_obj.access_key_id, mcg_obj.access_key,
                  mcg_obj.s3_endpoint]
@@ -144,7 +131,7 @@ def write_individual_s3_objects(mcg_obj, awscli_pod, bucket_factory, downloaded_
         full_object_path = f"s3://{bucketname}/{obj_name}"
         copycommand = f"cp {target_dir}{obj_name} {full_object_path}"
         assert 'Completed' in awscli_pod.exec_cmd_on_pod(
-            command=craft_s3_command(mcg_obj, copycommand), out_yaml_format=False,
+            command=craft_s3_command(copycommand, mcg_obj), out_yaml_format=False,
             secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
         )
 
@@ -176,7 +163,7 @@ def upload_parts(mcg_obj, awscli_pod, bucketname, object_key, body_path, upload_
         )
         # upload_cmd will return ETag, upload_id etc which is then split to get just the ETag
         part = awscli_pod.exec_cmd_on_pod(
-            command=craft_s3_api_command(mcg_obj, upload_cmd), out_yaml_format=False,
+            command=craft_s3_command(upload_cmd, mcg_obj, api=True), out_yaml_format=False,
             secrets=secrets
         ).split("\"")[-3].split("\\")[0]
         parts.append({"PartNumber": count, "ETag": f'"{part}"'})

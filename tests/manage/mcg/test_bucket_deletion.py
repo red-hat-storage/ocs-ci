@@ -5,7 +5,7 @@ import botocore
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1, tier3, acceptance, performance, filter_insecure_request_warning
+    tier1, tier3, acceptance, performance
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 ERRATIC_TIMEOUTS_SKIP_REASON = 'Skipped because of erratic timeouts'
 
 
-@filter_insecure_request_warning
 class TestBucketDeletion:
     """
     Test bucket Creation Deletion of buckets
