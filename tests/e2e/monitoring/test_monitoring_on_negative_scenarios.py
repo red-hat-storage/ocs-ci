@@ -45,7 +45,7 @@ def wait_to_update_mgrpod_info_prometheus_pod():
     log.info("Ceph health status metrics is updated")
 
 
-@retry((CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException), tries=30, delay=3, backoff=1)
+@retry((CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException), tries=60, delay=5, backoff=1)
 def wait_for_nodes_status_and_prometheus_health_check(pods):
     """
     Waits for the all the nodes to be in running state
@@ -54,7 +54,7 @@ def wait_for_nodes_status_and_prometheus_health_check(pods):
     """
 
     # Validate all nodes are in READY state
-    wait_for_nodes_status(timeout=1200)
+    wait_for_nodes_status(timeout=1800)
 
     # Check for the created pvc metrics after rebooting the master nodes
     for pod_obj in pods:
