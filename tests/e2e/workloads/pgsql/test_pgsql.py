@@ -1,10 +1,12 @@
 import logging
 import pytest
+
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.framework.testlib import (
     E2ETest, workloads
 )
+from datetime import datetime
 
 log = logging.getLogger(__name__)
 
@@ -38,8 +40,19 @@ class TestPgSQLWorkload(E2ETest):
             replicas=3, clients=3, transactions=600
         )
 
+        # Start measuring time
+        start_time = datetime.now()
+
+        # Check node utilization
+        pgsql.get_node_utilization()
+
         # Wait for pg_bench pod to initialized and complete
         pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
+
+        # Calculate the time from running state to completed state
+        end_time = datetime.now()
+        diff_time = end_time - start_time
+        log.info(f"\npgbench pod reached to completed state after {diff_time.seconds} seconds\n")
 
         # Get pgbench pods
         pgbench_pods = pgsql.get_pgbench_pods()

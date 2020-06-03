@@ -8,7 +8,7 @@ from ocs_ci.framework.testlib import (
     E2ETest, workloads
 )
 from ocs_ci.ocs.pgsql import Postgresql
-
+from datetime import datetime
 
 log = logging.getLogger(__name__)
 
@@ -53,8 +53,14 @@ class TestPgSQLNodeReboot(E2ETest):
             replicas=3, transactions=transactions, clients=3
         )
 
+        # Start measuring time
+        start_time = datetime.now()
+
         # Wait for pgbench pod to reach running state
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)
+
+        # Check node utilization
+        pgsql.get_node_utilization()
 
         # Node drain with specific node type
         typed_nodes = node.get_typed_nodes(
@@ -73,6 +79,11 @@ class TestPgSQLNodeReboot(E2ETest):
 
         # Wait for pg_bench pod to complete
         pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
+
+        # Calculate the time from running state to completed state
+        end_time = datetime.now()
+        diff_time = end_time - start_time
+        log.info(f"\npgbench pod reached to completed state after {diff_time.seconds} seconds\n")
 
         # Get pgbench pods
         pgbench_pods = pgsql.get_pgbench_pods()
