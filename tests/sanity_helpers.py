@@ -52,7 +52,7 @@ class Sanity:
         for interface in [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]:
             pvc_obj = pvc_factory(interface)
             self.pvc_objs.append(pvc_obj)
-            self.pod_objs.append(pod_factory(pvc=pvc_obj))
+            self.pod_objs.append(pod_factory(pvc=pvc_obj, interface=interface))
         if run_io:
             for pod in self.pod_objs:
                 pod.run_io('fs', '1G')
