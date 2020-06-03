@@ -2,6 +2,7 @@
 Helper functions file for OCS QE
 """
 import logging
+import csv
 import re
 import datetime
 import statistics
@@ -2257,3 +2258,55 @@ def validate_pods_are_running_and_not_restarted(
     logger.error(f"Pod is in {pod_state} state and restart count of pod {restart_count}")
     logger.info(f"{pod_obj}")
     return False
+
+
+def delete_objs(pvc_objs):
+    """
+    Delete pvc objects
+    Args:
+        pvc_objs (list): pvc objects to delete
+    """
+    for obj in pvc_objs:
+        obj.delete()
+        obj.ocp.wait_for_delete(obj.name)
+
+
+def handle_threading(pvc_objs, target_parm, arg_parm=None):
+    """
+    For every element in a list of pvc objects, create a thread process and
+    join them together
+    Args:
+        pvc_objs (list): pvc_objects to start threads for
+        target_parm (func): function to set Thread target keyword argument
+        arg_parm (func): function to set Thread args keyword argument
+    """
+    threads = list()
+    for obj in pvc_objs:
+        thread_parms = {}
+        thread_parms['target'] = target_parm(obj)
+        if arg_parm:
+            thread_parms['args'] = arg_parm(obj)
+        process = threading.Thread(**thread_parms)
+        process.start()
+        threads.append(process)
+    for process in threads:
+        process.join()
+
+
+# TODO: Update below code with google API, to record value in spreadsheet
+# TODO: For now observing Google API limit to write more than 100 writes
+def write_csv_data(data_to_write, csv_file, adjective):
+    """
+    Write csv data to a file
+    Args:
+        data_to_write (dict): input data
+        csv_file (str): name of file to be written
+        adjective (str): text added to log message
+    """
+    with open(csv_file, "w") as fd:
+        csv_obj = csv.writer(fd)
+        for k, v in data_to_write.items():
+            csv_obj.writerow([k, v])
+    logger.info(
+        f"{adjective} data present in {csv_file}"
+    )
