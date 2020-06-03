@@ -336,7 +336,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             pod_node_obj = pod.get_pod_node(pod_obj)
 
             # Make one of the node down where the prometheus pod is hosted
-            nodes.restart_nodes([pod_node_obj])
+            nodes.restart_nodes([pod_node_obj], wait=False)
 
             # Wait some time after restart of nodes
             waiting_time = 30
@@ -380,7 +380,7 @@ class TestMonitoringBackedByOCS(E2ETest):
 
         # Reboot one after one master nodes
         for node in master_nodes:
-            nodes.restart_nodes([node])
+            nodes.restart_nodes([node], wait=False)
 
             # Wait some time after rebooting master
             waiting_time = 40
@@ -407,7 +407,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         mgr_node_obj = pod.get_pod_node(mgr_pod_obj[0])
 
         # Reboot the node where the mgr pod is hosted
-        nodes.restart_nodes([mgr_node_obj])
+        nodes.restart_nodes([mgr_node_obj], wait=False)
 
         # Wait some time after rebooting node
         waiting_time = 30
