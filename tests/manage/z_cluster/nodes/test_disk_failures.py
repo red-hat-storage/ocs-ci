@@ -1,8 +1,9 @@
 import logging
 import pytest
 import random
+import re
 
-from ocs_ci.ocs import node, constants
+from ocs_ci.ocs import node, constants, ocp
 from ocs_ci.framework.testlib import (
     tier4, tier4b, ignore_leftovers, ManageTest, aws_platform_required,
     vsphere_platform_required, bugzilla
@@ -11,10 +12,10 @@ from tests.sanity_helpers import Sanity
 from tests.helpers import wait_for_ct_pod_recovery
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs, get_deviceset_pvcs
 from ocs_ci.ocs.resources.pod import (
-    get_osd_deployments, get_osd_pods, get_pod_node, get_operator_pods, get_osd_prepare_pods
+    get_osd_deployments, get_osd_pods, get_pod_node, get_operator_pods, get_osd_prepare_pods, get_pod_obj, get_pod_logs
 )
-from ocs_ci.ocs.resources.ocs import get_job_obj
-from ocs_ci.utility.aws import AWSTimeoutException
+from ocs_ci.ocs.resources.ocs import get_job_obj, OCS
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 
 
 logger = logging.getLogger(__name__)
@@ -260,16 +261,16 @@ class TestDiskFailures(ManageTest):
         # Force delete OSD pod if necessary
         osd_pod_name = osd_pod.name
         logger.info(f"Waiting for OSD pod {osd_pod.name} to get deleted")
-        if osd_pod.ocp.wait_for_resource(
-            condition=constants.STATUS_TERMINATING, resource_name=osd_pod_name
-        ):
+        try:
+            osd_pod.ocp.wait_for_delete(resource_name=osd_pod_name)
+        except TimeoutError:
             osd_pod.delete(force=True)
-        osd_pod.ocp.wait_for_delete(resource_name=osd_pod_name)
+            osd_pod.ocp.wait_for_delete(resource_name=osd_pod_name)
 
         # Run ocs-osd-removal job
         logger.info(f"Executing OSD removal job on OSD-{osd_id}")
         osd_removal_job_yaml = ocp.OCP().exec_oc_cmd(
-            f"process -n openshift-storage ocs-osd-removal"
+            f"process ocs-osd-removal"
             f" -p FAILED_OSD_ID={osd_id} -o yaml"
         )
         osd_removal_job = OCS(**osd_removal_job_yaml)
@@ -280,7 +281,7 @@ class TestDiskFailures(ManageTest):
         osd_removal_pod_name = get_pod_name_by_pattern(
             f"ocs-osd-removal-{osd_id}"
         )[0]
-        osd_removal_pod_obj = get_pod_obj(osd_removal_pod_name)
+        osd_removal_pod_obj = get_pod_obj(osd_removal_pod_name, namespace='openshift-storage')
         osd_removal_pod_obj.ocp.wait_for_resource(
             condition=constants.STATUS_COMPLETED,
             resource_name=osd_removal_pod_name
@@ -308,7 +309,6 @@ class TestDiskFailures(ManageTest):
         osd_pvc.ocp.wait_for_delete(resource_name=osd_pvc_name)
 
         # Delete the OSD deployment
-        osd_deployment_name = osd_deployment.name
         logger.info(f"Deleting OSD deployment {osd_deployment_name}")
         osd_deployment.delete()
         osd_deployment.ocp.wait_for_delete(
@@ -317,11 +317,11 @@ class TestDiskFailures(ManageTest):
 
         # Delete PV
         logger.info(f"Verifying deletion of PV {osd_pv_name}")
-        if osd_pv.ocp.wait_for_resource(
-            condition="Failed", resource_name=osd_pv_name
-        ):
+        try:
+            osd_pv.ocp.wait_for_delete(resource_name=osd_pv_name)
+        except TimeoutError:
             osd_pv.delete()
-        osd_pv.ocp.wait_for_delete(resource_name=osd_pv_name)
+            osd_pv.ocp.wait_for_delete(resource_name=osd_pv_name)
 
         # Delete the rook ceph operator pod to trigger reconciliation
         rook_operator_pod = get_operator_pods()[0]
@@ -329,6 +329,14 @@ class TestDiskFailures(ManageTest):
             f"deleting Rook Ceph operator pod {rook_operator_pod.name}"
         )
         rook_operator_pod.delete()
+
+        # Delete the OSD removal job
+        logger.info(f"Deleting OSD removal job ocs-osd-removal-{osd_id}")
+        osd_removal_job = get_job_obj(f"ocs-osd-removal-{osd_id}")
+        osd_removal_job.delete()
+        osd_removal_job.ocp.wait_for_delete(
+            resource_name=f"ocs-osd-removal-{osd_id}"
+        )
 
         timeout = 600
         # Wait for OSD PVC to get created and reach Bound state
@@ -356,14 +364,6 @@ class TestDiskFailures(ManageTest):
             f"Cluster recovery failed after {timeout} seconds. "
             f"Expected to have {osd_pods_count} OSD pods in status Running. Current OSD pods status: "
             f"{[osd_pod.ocp.get_resource(pod.get().get('metadata').get('name'), 'STATUS') for pod in get_osd_pods()]}"
-        )
-
-        # Delete the OSD removal job
-        logger.info(f"Deleting OSD removal job ocs-osd-removal-{osd_id}")
-        osd_removal_job = get_job_obj(f"ocs-osd-removal-{osd_id}")
-        osd_removal_job.delete()
-        osd_removal_job.ocp.wait_for_delete(
-            resource_name=f"ocs-osd-removal-{osd_id}"
         )
 
         # Validate cluster is still functional
