@@ -25,7 +25,7 @@ from semantic_version import Version
 from tempfile import NamedTemporaryFile
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
     CommandFailed,
@@ -36,6 +36,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedOSType,
 )
 from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.node import get_typed_worker_nodes
 
 
 log = logging.getLogger(__name__)
@@ -2198,9 +2199,6 @@ def set_selinux_permissions(workers=None):
         workers (list): List of worker nodes to set selinux permissions
 
     """
-    # Importing here to avoid circular dependancy
-    from ocs_ci.ocs import ocp
-    from ocs_ci.ocs.node import get_typed_worker_nodes
     log.info("Running WA for ticket: RHSTOR-787")
     from ocs_ci.ocs import ocp
     ocp_obj = ocp.OCP()
