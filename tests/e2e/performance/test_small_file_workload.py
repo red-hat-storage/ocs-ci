@@ -17,11 +17,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import E2ETest, performance
 from tests.helpers import get_logs_with_errors
 from ocs_ci.ocs.exceptions import CommandFailed
-<<<<<<< HEAD
-from elasticsearch import (Elasticsearch, exceptions as ESExp)
-=======
 from elasticsearch import (Elasticsearch, exceptions as esexp)
->>>>>>> e430e25a... Changing the way all test data collected, pars it from the logs insted of
 import numpy as np
 
 log = logging.getLogger(__name__)
@@ -184,9 +180,6 @@ class SmallFileResultsAnalyse(object):
         self.new_index = crd['spec']['es_index'] + '-fullres'
         self.all_results = {}
 
-        # WA for Cloud environment where pod can not send results to ES
-        self.dont_check = False
-
         # make sure we have connection to the elastic search server
         log.info(f'Connecting to ES {self.server} on port {self.port}')
         try:
@@ -242,33 +235,6 @@ class SmallFileResultsAnalyse(object):
         """
         self.results.update({key: value})
 
-<<<<<<< HEAD
-    def read(self):
-        """
-        Reading all test records from the elasticsearch server into dictionary
-        inside this object
-
-        """
-
-        query = {'query': {'match': {'uuid': self.uuid}}}
-        log.info('Reading all data from ES server')
-        try:
-            self.all_results = self.es.search(
-                index=self.index, body=query, size=self.records
-            )
-            log.info(self.all_results)
-
-            if self.all_results['hits']['hits'] == []:
-                log.warning(
-                    'No data in ES server, disabling results calculation')
-                self.dont_check = True
-        except ESExp.NotFoundError:
-            log.warning(
-                'No data in ES server, disabling results calculation')
-            self.dont_check = True
-
-=======
->>>>>>> e430e25a... Changing the way all test data collected, pars it from the logs insted of
     def write(self):
         """
         Writing the results to the elasticsearch server
@@ -409,18 +375,6 @@ class TestSmallFileWorkload(E2ETest):
         """
 
         sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
-<<<<<<< HEAD
-
-        # getting the name and email  of the user that running the test.
-        try:
-            user = run_cmd('git config --get user.name').strip()
-            email = run_cmd('git config --get user.email').strip()
-        except CommandFailed:
-            # if no git user define, use the default user from the CR file
-            user = sf_data['spec']['test_user']
-            email = ''
-=======
->>>>>>> e430e25a... Changing the way all test data collected, pars it from the logs insted of
 
         # getting the name and email  of the user that running the test.
         log.info(f'Getting the Username and email of the running user')
@@ -435,10 +389,6 @@ class TestSmallFileWorkload(E2ETest):
 
         log.info('Apply Operator CRD')
         ripsaw.apply_crd('resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml')
-<<<<<<< HEAD
-=======
-
->>>>>>> e430e25a... Changing the way all test data collected, pars it from the logs insted of
         if interface == constants.CEPHBLOCKPOOL:
             storageclass = constants.DEFAULT_STORAGECLASS_RBD
         else:
@@ -515,14 +465,10 @@ class TestSmallFileWorkload(E2ETest):
             )
 
         start_time = time.time()
-<<<<<<< HEAD
 
         # After testing manually, changing the timeout
         timeout = 3600
-=======
-        timeout = 1800
         log.info('The SmallFile benchmark is Running')
->>>>>>> e430e25a... Changing the way all test data collected, pars it from the logs insted of
 
         """
         Getting the UUID from inside the benchmark pod (first one - since all
@@ -574,7 +520,7 @@ class TestSmallFileWorkload(E2ETest):
                                      time.strftime('%Y-%m-%dT%H:%M:%SGMT',
                                                    time.gmtime()))
                 full_results.read()
-                if not full_results.dont_check:
+
             finished = 0
             for smf_pod in small_file_client_pod:
                 logs = bench_pod.exec_oc_cmd(
