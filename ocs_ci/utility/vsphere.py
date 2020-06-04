@@ -917,3 +917,20 @@ class VSPHERE(object):
                     return each.volume.extent[0].diskName
             except AttributeError:
                 continue
+
+    def erase_partition(self, host, device_path):
+        """
+        Erase the partitions on the disk
+
+        Args:
+            host (vim.HostSystem): Host instance
+            device_path (str): Device path to erase the partition
+               e.g:"/vmfs/devices/disks/naa.910229801b540c0125ef160f3048faba"
+
+        """
+        # set empty partition spec
+        spec = vim.HostDiskPartitionSpec()
+        host.configManager.storageSystem.UpdateDiskPartitions(
+            device_path,
+            spec
+        )
