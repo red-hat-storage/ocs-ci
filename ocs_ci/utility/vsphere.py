@@ -816,11 +816,11 @@ class VSPHERE(object):
             dc (str): Datacenter name
 
         Returns:
-            dict: Dictionary contains host instance as key and
+            dict: Dictionary contains host name as key and
                 values as list lun ids
                     e.g:{
-                        'vim.HostSystem:host-6320': ['02000000193035e73d534'],
-                        'vim.HostSystem:host-6252': ['020000000060034d43333']
+                        'HostName1': ['02000000193035e73d534'],
+                        'HostName2': ['020000000060034d43333']
                         }
 
         """
