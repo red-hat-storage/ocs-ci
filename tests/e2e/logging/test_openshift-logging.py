@@ -65,7 +65,7 @@ class Testopenshiftloggingonocs(E2ETest):
         helpers.wait_for_resource_state(resource=pod_obj, state=constants.STATUS_RUNNING)
         return pod_obj, pvc_obj
 
-    @retry(ModuleNotFoundError, tries=10, delay=200, backoff=3)
+    @retry(ModuleNotFoundError, tries=5, delay=200, backoff=1)
     def validate_project_exists(self, pvc_obj):
         """
         This function checks whether the new project exists in the
