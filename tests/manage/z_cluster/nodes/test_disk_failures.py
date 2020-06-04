@@ -4,6 +4,7 @@ import random
 import re
 
 from ocs_ci.ocs import node, constants, ocp
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     tier4, tier4b, ignore_leftovers, ManageTest, aws_platform_required,
     vsphere_platform_required, bugzilla
@@ -269,7 +270,8 @@ class TestDiskFailures(ManageTest):
 
         # Run ocs-osd-removal job
         logger.info(f"Executing OSD removal job on OSD-{osd_id}")
-        osd_removal_job_yaml = ocp.OCP().exec_oc_cmd(
+        osd_removal_job_yaml = ocp.OCP(
+            namespace=config.ENV_DATA['cluster_namespace']).exec_oc_cmd(
             f"process ocs-osd-removal"
             f" -p FAILED_OSD_ID={osd_id} -o yaml"
         )
@@ -281,7 +283,9 @@ class TestDiskFailures(ManageTest):
         osd_removal_pod_name = get_pod_name_by_pattern(
             f"ocs-osd-removal-{osd_id}"
         )[0]
-        osd_removal_pod_obj = get_pod_obj(osd_removal_pod_name, namespace='openshift-storage')
+        osd_removal_pod_obj = get_pod_obj(
+            osd_removal_pod_name, namespace='openshift-storage'
+        )
         osd_removal_pod_obj.ocp.wait_for_resource(
             condition=constants.STATUS_COMPLETED,
             resource_name=osd_removal_pod_name
