@@ -29,13 +29,12 @@ def change_registry_backend_to_ocs():
         access_mode=constants.ACCESS_MODE_RWX
     )
     helpers.wait_for_resource_state(pv_obj, 'Bound')
-    ocp_obj = ocp.OCP(
-        kind=constants.CONFIG, namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
-    )
     param_cmd = f'[{{"op": "add", "path": "/spec/storage", "value": {{"pvc": {{"claim": "{pv_obj.name}"}}}}}}]'
-    assert ocp_obj.patch(
-        resource_name=constants.IMAGE_REGISTRY_RESOURCE_NAME, params=param_cmd, format_type='json'
-    ), "Registry pod storage backend to OCS is not success"
+
+    run_cmd(
+        f"oc patch {constants.IMAGE_REGISTRY_CONFIG} -p "
+        f"'{param_cmd}' --type json"
+    )
 
     # Validate registry pod status
     retry((CommandFailed, UnexpectedBehaviour), tries=3, delay=15)(

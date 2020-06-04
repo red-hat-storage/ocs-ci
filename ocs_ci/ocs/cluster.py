@@ -19,7 +19,7 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler, run_cmd
+from ocs_ci.utility.utils import TimeoutSampler, run_cmd, convert_device_size
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants, exceptions
@@ -568,24 +568,22 @@ class CephCluster(object):
         Function to get the throughput of ocs cluster
 
         Returns:
-            Throughput of the cluster in MiB/s
+            float: The write throughput of the cluster in MiB/s
 
         """
-
         ceph_status = self.get_ceph_status()
         for item in ceph_status.split("\n"):
             if 'client' in item:
                 throughput_data = item.strip('client: ').split(",")
                 throughput_data = throughput_data[:2:1]
                 # Converting all B/s and KiB/s to MiB/s
-                conversion = {'B/s': 0.000000976562, 'KiB/s': 0.000976562, 'MiB/s': 1}
                 throughput = 0
                 for val in throughput_data:
                     throughput += [
-                        float(re.findall(r'\d+', val)[0]) * conversion[key]
-                        for key in conversion.keys() if key in val
+                        float(re.findall(r'\d+', val)[0]) * constants.TP_CONVERSION[key]
+                        for key in constants.TP_CONVERSION.keys() if key in val
                     ][0]
-                    logger.info(f"The throughput is {throughput} MiB/s")
+                    logger.info(f"The {val[-2:].upper()} throughput is {throughput} MiB/s")
                 return throughput
 
     def get_throughput_percentage(self):
@@ -601,6 +599,22 @@ class CephCluster(object):
         throughput_percentage = (throughput_of_cluster / constants.THROUGHPUT_LIMIT_OSD) * 100
         logging.info(f"The throughput percentage of the cluster is {throughput_percentage}%")
         return throughput_percentage
+
+    def calc_average_throughput(self, samples=5):
+        """
+        Calculate the cluster average throughput out of a few samples
+
+        Args:
+            samples (int): The number of samples to take
+
+        Returns:
+            float: The average cluster throughput
+
+        """
+        throughput_vals = [
+            self.get_cluster_throughput() for _ in range(samples)
+        ]
+        return sum(throughput_vals) / samples
 
     def get_rebalance_status(self):
         """
@@ -719,6 +733,33 @@ class CephHealthMonitor(threading.Thread):
         )
 
 
+def validate_ocs_pods_on_pvc(pods, pvc_names):
+    """
+    Validate if ocs pod has PVC. This validation checking if there is the pvc
+    like: rook-ceph-mon-a for the pod rook-ceph-mon-a-56f67f5968-6j4px.
+
+    Args:
+        pods (list): OCS pod names
+        pvc_names (list): names of all PVCs
+
+    Raises:
+         AssertionError: If no PVC found for one of the pod
+
+    """
+    logger.info(
+        f"Validating if each pod from: {pods} has PVC from {pvc_names}."
+    )
+    for pod_name in pods:
+        found_pvc = ""
+        for pvc in pvc_names:
+            if pvc in pod_name:
+                found_pvc = pvc
+        if found_pvc:
+            logger.info(f"PVC {found_pvc} found for pod {pod_name}")
+            continue
+        assert found_pvc, f"No PVC found for pod: {pod_name}!"
+
+
 def validate_cluster_on_pvc():
     """
     Validate creation of PVCs for MON and OSD pods.
@@ -745,11 +786,20 @@ def validate_cluster_on_pvc():
             pvc_names.append(pvc_obj.name)
 
     mon_pods = get_pod_name_by_pattern('rook-ceph-mon', ns)
-    osd_pods = get_pod_name_by_pattern('rook-ceph-osd', ns, filter='prepare')
     if not config.DEPLOYMENT.get('local_storage'):
-        assert len(mon_pods) + len(osd_pods) == len(pvc_names), (
-            "Not enough PVC's available for all Ceph Pods"
+        logger.info("Validating all mon pods have PVC")
+        validate_ocs_pods_on_pvc(mon_pods, pvc_names)
+    else:
+        logger.debug(
+            "Skipping validation if all mon pods have PVC because in LSO "
+            "deployment we don't have mon pods backed by PVC"
         )
+    logger.info("Validating all osd pods have PVC")
+    osd_deviceset_pods = get_pod_name_by_pattern(
+        'rook-ceph-osd-prepare-ocs-deviceset', ns
+    )
+    validate_ocs_pods_on_pvc(osd_deviceset_pods, pvc_names)
+    osd_pods = get_pod_name_by_pattern('rook-ceph-osd', ns, filter='prepare')
     for ceph_pod in mon_pods + osd_pods:
         out = run_cmd(f'oc -n {ns} get pods {ceph_pod} -o yaml')
         out_yaml = yaml.safe_load(out)
@@ -936,3 +986,36 @@ def validate_pg_balancer():
             return False
     else:
         logging.info("pg_balancer is not active")
+
+
+def get_percent_used_capacity():
+    """
+    Function to calculate the percentage of used capacity in a cluster
+
+    Returns:
+        float: The percentage of the used capacity in the cluster
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    output = ct_pod.exec_ceph_cmd(ceph_cmd='ceph df')
+    total_used = (output.get('stats').get('total_used_raw_bytes'))
+    total_avail = (output.get('stats').get('total_bytes'))
+    return 100.0 * total_used / total_avail
+
+
+def get_osd_pods_memory_sum():
+    """
+    Get the sum of memory of all OSD pods. This is used to determine the size
+    needed for a PVC so when IO will be running over it the OSDs cache will be filled
+
+    Returns:
+        int: The sum of the OSD pods memory in GB
+
+    """
+    osd_pods = pod.get_osd_pods()
+    num_of_osd_pods = len(osd_pods)
+    osd_pod_mem_size_str = osd_pods[0].get_memory().get('osd')
+    osd_pod_mem_size = convert_device_size(
+        unformatted_size=osd_pod_mem_size_str, units_to_covert_to='GB'
+    )
+    return num_of_osd_pods * osd_pod_mem_size

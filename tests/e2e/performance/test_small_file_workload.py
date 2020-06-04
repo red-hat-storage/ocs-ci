@@ -16,6 +16,7 @@ from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import E2ETest, performance
 from tests.helpers import get_logs_with_errors
+from ocs_ci.ocs.exceptions import CommandFailed
 from elasticsearch import (Elasticsearch, exceptions as ESExp)
 import numpy as np
 
@@ -64,6 +65,9 @@ class SmallFileResultsAnalyse(object):
         self.new_index = crd['spec']['es_index'] + '-fullres'
         self.all_results = {}
 
+        # WA for Cloud environment where pod can not send results to ES
+        self.dont_check = False
+
         # make sure we have connection to the elastic search server
         log.info(f'Connecting to ES {self.server} on port {self.port}')
         try:
@@ -110,9 +114,20 @@ class SmallFileResultsAnalyse(object):
 
         query = {'query': {'match': {'uuid': self.uuid}}}
         log.info('Reading all data from ES server')
-        self.all_results = self.es.search(
-            index=self.index, body=query, size=self.records
-        )
+        try:
+            self.all_results = self.es.search(
+                index=self.index, body=query, size=self.records
+            )
+            log.info(self.all_results)
+
+            if self.all_results['hits']['hits'] == []:
+                log.warning(
+                    'No data in ES server, disabling results calculation')
+                self.dont_check = True
+        except ESExp.NotFoundError:
+            log.warning(
+                'No data in ES server, disabling results calculation')
+            self.dont_check = True
 
     def write(self):
         """
@@ -120,8 +135,12 @@ class SmallFileResultsAnalyse(object):
 
         """
         log.info('Writing all data to ES server')
+        log.info(f'Params : index={self.new_index}, doc_type=_doc,body={self.results},id={self.uuid}')
         log.info(f'the results data is {self.results}')
-        self.es.index(index=self.new_index, doc_type='_doc', body=self.results)
+        self.es.index(index=self.new_index,
+                      doc_type='_doc',
+                      body=self.results,
+                      id=self.uuid)
 
     def thread_read(self, host, op, snum):
         """
@@ -259,13 +278,13 @@ class SmallFileResultsAnalyse(object):
                         results[self.managed_keys[key]["name"]]
                     )
                     if key == "IOPS":
-                        max = np.ma.max(results[self.managed_keys[key]["name"]])
-                        min = np.ma.min(results[self.managed_keys[key]["name"]])
+                        st_deviation = np.std(results[self.managed_keys[key]["name"]])
+                        mean = np.mean(results[self.managed_keys[key]["name"]])
 
-                        dev = (max - min) * 100 / min
-                        if dev > 5:
+                        pct_dev = (st_deviation / mean) * 100
+                        if pct_dev > 5:
                             log.error(
-                                f'Deviation for {op} IOPS is more the 5% ({dev})')
+                                f'Deviation for {op} IOPS is more the 5% ({pct_dev})')
                             test_pass = False
                     del results[self.managed_keys[key]["name"]]
                 self.results["full-res"][op] = results
@@ -368,13 +387,19 @@ class TestSmallFileWorkload(E2ETest):
         Run SmallFile Workload
         """
 
+        sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
+
         # getting the name and email  of the user that running the test.
-        user = run_cmd('git config --get user.name').strip()
-        email = run_cmd('git config --get user.email').strip()
+        try:
+            user = run_cmd('git config --get user.name').strip()
+            email = run_cmd('git config --get user.email').strip()
+        except CommandFailed:
+            # if no git user define, use the default user from the CR file
+            user = sf_data['spec']['test_user']
+            email = ''
 
         log.info("Apply Operator CRD")
         ripsaw.apply_crd('resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml')
-        sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
         if interface == constants.CEPHBLOCKPOOL:
             storageclass = constants.DEFAULT_STORAGECLASS_RBD
         else:
@@ -430,7 +455,9 @@ class TestSmallFileWorkload(E2ETest):
             timeout=600
         )
         start_time = time.time()
-        timeout = 1800
+
+        # After testing manually, changing the timeout
+        timeout = 3600
 
         # Getting the UUID from inside the benchmark pod
         output = bench_pod.exec_oc_cmd(f'exec {small_file_client_pod} env')
@@ -450,6 +477,13 @@ class TestSmallFileWorkload(E2ETest):
         full_results.add_key('start_time',
                              time.strftime('%Y-%m-%dT%H:%M:%SGMT',
                                            time.gmtime()))
+
+        # Calculating the total size of the working data set - in GB
+        full_results.add_key(
+            'dataset',
+            file_size * files * threads * full_results.results['clients'] / constants.GB2KB
+        )
+
         full_results.add_key('global_options', {
             'files': files,
             'file_size': file_size,
@@ -467,11 +501,15 @@ class TestSmallFileWorkload(E2ETest):
                                      time.strftime('%Y-%m-%dT%H:%M:%SGMT',
                                                    time.gmtime()))
                 full_results.read()
-                full_results.add_key('hosts', full_results.get_clients_list())
-                full_results.init_full_results()
-                full_results.aggregate_host_results()
-                test_status = full_results.aggregate_samples_results()
-                full_results.write()
+                if not full_results.dont_check:
+                    full_results.add_key('hosts', full_results.get_clients_list())
+                    full_results.init_full_results()
+                    full_results.aggregate_host_results()
+                    test_status = full_results.aggregate_samples_results()
+                    full_results.write()
+                else:
+                    test_status = True
+
                 break
 
             if timeout < (time.time() - start_time):

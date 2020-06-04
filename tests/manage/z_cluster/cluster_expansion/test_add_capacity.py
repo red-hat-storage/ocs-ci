@@ -2,7 +2,12 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import polarion_id, pre_upgrade
-from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier1
+from ocs_ci.framework.testlib import (
+    ignore_leftovers,
+    ManageTest,
+    skipif_ocs_version,
+    tier1,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
@@ -23,12 +28,13 @@ def add_capacity_test():
     )
 
     # Verify status of rook-ceph-osd-prepare pods. Verifies bug 1769061
-    pod.wait_for_resource(
-        timeout=300,
-        condition=constants.STATUS_COMPLETED,
-        selector=constants.OSD_PREPARE_APP_LABEL,
-        resource_count=result * 3
-    )
+    # pod.wait_for_resource(
+    #     timeout=300,
+    #     condition=constants.STATUS_COMPLETED,
+    #     selector=constants.OSD_PREPARE_APP_LABEL,
+    #     resource_count=result * 3
+    # )
+    # Commented this lines as a workaround due to bug 1842500
 
     ceph_health_check(
         namespace=config.ENV_DATA['cluster_namespace'], tries=80
@@ -50,6 +56,7 @@ class TestAddCapacity(ManageTest):
         add_capacity_test()
 
 
+@skipif_ocs_version('<4.4')
 @pre_upgrade
 @ignore_leftovers
 @polarion_id('OCS-1191')

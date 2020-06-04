@@ -12,6 +12,7 @@ from subprocess import run, CalledProcessError
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE
 
+
 log = logging.getLogger(__name__)
 
 
@@ -69,7 +70,7 @@ class RipSaw(object):
                 cwd=self.dir,
                 check=True
             )
-            self.crd = 'resources/crd/'
+            self.crd = 'resources/crds/'
             self.operator = 'resources/operator.yaml'
         except (CommandFailed, CalledProcessError)as cf:
             log.error('Error during cloning of ripsaw repository')
@@ -82,7 +83,6 @@ class RipSaw(object):
         Args:
             crd (str): Name of file to apply
         """
-        self.crd = crd
         self.dir += '/ripsaw'
         run('oc apply -f deploy', shell=True, check=True, cwd=self.dir)
         run(f'oc apply -f {crd}', shell=True, check=True, cwd=self.dir)

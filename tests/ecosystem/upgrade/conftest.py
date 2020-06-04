@@ -641,8 +641,8 @@ def upgrade_buckets(
     for i in range(1, 7):
         awscli_pod_session.exec_cmd_on_pod(
             helpers.craft_s3_command(
-                mcg_obj_session,
-                f"cp /tmp/testfile s3://{buckets[0].name}/testfile{i}"
+                f"cp /tmp/testfile s3://{buckets[0].name}/testfile{i}",
+                mcg_obj_session
             ),
             out_yaml_format=False,
             secrets=[

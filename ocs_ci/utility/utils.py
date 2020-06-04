@@ -2032,3 +2032,42 @@ class AZInfo(object):
         AZInfo.zone_number += 1
         AZInfo.zone_number %= get_az_count()
         return prev
+
+
+def convert_device_size(unformatted_size, units_to_covert_to):
+    """
+    Convert a string representing a size to an int according to the given units
+    to convert to
+
+    Args:
+        unformatted_size (str): The size to convert (i.e, '1Gi'/'100Mi')
+        units_to_covert_to (str): The units to convert the size to (i.e, TB/GB/MB)
+
+    Returns:
+        int: The converted size
+
+    """
+    units = unformatted_size[-2:]
+    absolute_size = int(unformatted_size[:-2])
+
+    if units_to_covert_to == 'TB':
+        if units == 'Ti':
+            return absolute_size
+        elif units == 'Gi':
+            return absolute_size * 1024
+        elif units == 'Mi':
+            return absolute_size * 1024 * 1024
+    elif units_to_covert_to == 'GB':
+        if units == 'Ti':
+            return absolute_size / 1024
+        elif units == 'Gi':
+            return absolute_size
+        elif units == 'Mi':
+            return absolute_size * 1024
+    elif units_to_covert_to == 'MB':
+        if units == 'Ti':
+            return absolute_size / 1024 / 1024
+        elif units == 'Gi':
+            return absolute_size / 1024
+        elif units == 'Mi':
+            return absolute_size

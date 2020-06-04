@@ -166,7 +166,7 @@ def get_clusters(time_to_delete, region_name, prefixes_hours_to_spare):
                         f"(id: {instance.id}) running time is {running_time} hours while the allowed"
                         f" running time for it is {allowed_running_time/3600} hours"
                     )
-                    if running_time.seconds > allowed_running_time:
+                    if running_time.total_seconds() > allowed_running_time:
                         return True
         return False
 
@@ -369,8 +369,15 @@ def aws_cleanup():
     for p in procs:
         p.join()
     logger.info("Remaining clusters: %s", remaining_clusters)
+    filename = 'failed_cluster_deletions.txt'
+    content = 'None\n'
     if failed_deletions:
         logger.error("Failed cluster deletions: %s", failed_deletions)
+        content = ""
+        for cluster in failed_deletions:
+            content += f"{cluster}\n"
+    with open(filename, 'w') as f:
+        f.write(content)
 
 
 def prefix_hour_mapping(string):
