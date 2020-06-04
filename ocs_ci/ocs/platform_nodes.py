@@ -812,7 +812,7 @@ class AWSNodes(NodesBase):
         """
         temp = []
         for index in index_list:
-            temp.append(int(index.split('-')[1][2:]))
+            temp.append(int(re.findall(r'\d+', index.split('-')[-1])[-1]))
         temp.sort()
         return temp
 
