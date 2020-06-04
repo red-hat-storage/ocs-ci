@@ -45,7 +45,7 @@ def wait_to_update_mgrpod_info_prometheus_pod():
     log.info("Ceph health status metrics is updated")
 
 
-@retry((CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException), tries=60, delay=5, backoff=1)
+@retry((CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException), tries=60, delay=15, backoff=1)
 def wait_for_nodes_status_and_prometheus_health_check(pods):
     """
     Waits for the all the nodes to be in running state
@@ -54,6 +54,7 @@ def wait_for_nodes_status_and_prometheus_health_check(pods):
     """
 
     # Validate all nodes are in READY state
+    ocp.wait_for_cluster_connectivity(tries=400)
     wait_for_nodes_status(timeout=1800)
 
     # Check for the created pvc metrics after rebooting the master nodes
@@ -336,17 +337,12 @@ class TestMonitoringBackedByOCS(E2ETest):
             pod_node_obj = pod.get_pod_node(pod_obj)
 
             # Make one of the node down where the prometheus pod is hosted
-            nodes.restart_nodes([pod_node_obj], wait=False)
-
-            # Wait some time after restart of nodes
-            waiting_time = 30
-            log.info(f"Waiting {waiting_time} seconds...")
-            time.sleep(waiting_time)
+            nodes.restart_nodes([pod_node_obj])
 
             # Validate all nodes are in READY state
             retry(
                 (CommandFailed, ResourceWrongStatusException),
-                tries=5,
+                tries=20,
                 delay=15)(
                 wait_for_nodes_status()
             )
@@ -407,17 +403,12 @@ class TestMonitoringBackedByOCS(E2ETest):
         mgr_node_obj = pod.get_pod_node(mgr_pod_obj[0])
 
         # Reboot the node where the mgr pod is hosted
-        nodes.restart_nodes([mgr_node_obj], wait=False)
-
-        # Wait some time after rebooting node
-        waiting_time = 30
-        log.info(f"Waiting {waiting_time} seconds...")
-        time.sleep(waiting_time)
+        nodes.restart_nodes([mgr_node_obj])
 
         # Validate all nodes are in READY state
         retry(
             (CommandFailed, ResourceWrongStatusException),
-            tries=5,
+            tries=20,
             delay=15)(
             wait_for_nodes_status()
         )
@@ -477,15 +468,10 @@ class TestMonitoringBackedByOCS(E2ETest):
 
             nodes.start_nodes(nodes=[prometheus_node_obj])
 
-            # Wait some time after starting node
-            waiting_time = 30
-            log.info(f"Waiting {waiting_time} seconds...")
-            time.sleep(waiting_time)
-
             # Validate all nodes are in READY state
             retry(
                 (CommandFailed, ResourceWrongStatusException),
-                tries=5,
+                tries=20,
                 delay=15)(
                 wait_for_nodes_status()
             )
