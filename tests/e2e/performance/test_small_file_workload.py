@@ -377,7 +377,7 @@ class TestSmallFileWorkload(E2ETest):
         sf_data = templating.load_yaml(constants.SMALLFILE_BENCHMARK_YAML)
 
         # getting the name and email  of the user that running the test.
-        log.info(f'Getting the Username and email of the running user')
+        log.info('Getting the Username and email of the running user')
         try:
             user = run_cmd('git config --get user.name').strip()
             email = run_cmd('git config --get user.email').strip()
@@ -521,7 +521,6 @@ class TestSmallFileWorkload(E2ETest):
                 if 'RUN STATUS DONE' in logs:
                     log.info(f'The pod {smf_pod} finished !')
                     finished += 1
-
 
             if finished == clients:
                 full_results.add_key('end_time',
