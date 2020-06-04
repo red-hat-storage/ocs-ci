@@ -511,15 +511,6 @@ class TestSmallFileWorkload(E2ETest):
         log.debug(f'The Initial results object is : {full_results}')
 
         while True:
-            logs = bench_pod.exec_oc_cmd(
-                f'logs {small_file_client_pod}',
-                out_yaml_format=False
-            )
-            if "RUN STATUS DONE" in logs:
-                full_results.add_key('end_time',
-                                     time.strftime('%Y-%m-%dT%H:%M:%SGMT',
-                                                   time.gmtime()))
-                full_results.read()
 
             finished = 0
             for smf_pod in small_file_client_pod:
@@ -530,14 +521,7 @@ class TestSmallFileWorkload(E2ETest):
                 if 'RUN STATUS DONE' in logs:
                     log.info(f'The pod {smf_pod} finished !')
                     finished += 1
-                else:
-                    full_results.add_key('end_time',
-                                         time.strftime('%Y-%m-%dT%H:%M:%SGMT',
-                                                       time.gmtime()))
-                    full_results.read()
-                    full_results.add_key('hosts', full_results.get_clients_list())
-                    full_results.init_full_results()
-                    full_results.aggregate_host_results()
+
 
             if finished == clients:
                 full_results.add_key('end_time',
