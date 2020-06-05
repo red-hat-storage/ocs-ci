@@ -2067,6 +2067,7 @@ def mirror_image(image):
 
     Returns:
         str: the mirrored image link
+
     """
     # load pull-secret file to pull_secret dict
     pull_secret_path = os.path.join(
@@ -2077,7 +2078,7 @@ def mirror_image(image):
     with open(pull_secret_path) as pull_secret_fo:
         pull_secret = json.load(pull_secret_fo)
 
-    # find all auths wich might be related to the specified image
+    # find all auths which might be related to the specified image
     tmp_auths = []
     for auth in pull_secret['auths']:
         if auth in image:
@@ -2109,7 +2110,7 @@ def mirror_image(image):
         cmd_result = exec_cmd(f'podman image inspect {image}')
         image_inspect = json.loads(cmd_result.stdout)
         # if there is any tag specified, use it in the full image url,
-        # othervise use url with digest
+        # otherwise use url with digest
         if image_inspect[0]['RepoTags']:
             orig_image_full = image_inspect[0]['RepoTags'][0]
         else:
