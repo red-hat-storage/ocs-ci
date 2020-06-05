@@ -4,7 +4,6 @@ Test to measure pvc scale creation & deletion time. Total pvc count would be 150
 import logging
 import random
 import pytest
-import threading
 
 from tests import helpers
 from ocs_ci.framework.testlib import scale, E2ETest, polarion_id
@@ -23,6 +22,51 @@ class TestPVCCreationDeletionScale(E2ETest):
         # Code that will be run inside the various pvc creation and deletion
         # tests goes here
         log.info(msg)
+
+    @pytest.fixture()
+    def pvc_scale_teardown(self, request):
+        def pvc_scale_deletion():
+            log.info("tearing down pvc creation scale test")
+            # Delete PVC
+            helpers.delete_objs(self.pvc_objs)
+
+            # Get PVC deletion time
+            pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
+                interface=self.interface, pv_name_list=self.pv_nm_list
+            )
+
+            helpers.write_csv_data(
+                pvc_deletion_time,
+                f"{self.log_path}-deletion-time.csv",
+                "Delete"
+            )
+        request.addfinalizer(pvc_scale_deletion)
+        return pvc_scale_deletion
+
+    @pytest.fixture()
+    def pvc_4_type_teardown(self, request):
+        def pvc_4_type_deletion():
+            log.info("tearing down 4 type scale test")
+            # Delete PVC
+            pvc_objs = self.fs_pvc_obj + self.rbd_pvc_obj
+            helpers.delete_objs(pvc_objs)
+
+            # Get PVC deletion time
+            fs_pvc_deletion_time = helpers. measure_pv_deletion_time_bulk(
+                interface=constants.CEPHFS_INTERFACE, pv_name_list=self.fs_pv_name
+            )
+            rbd_pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
+                interface=constants.CEPHBLOCKPOOL, pv_name_list=self.rbd_pv_name
+            )
+            fs_pvc_deletion_time.update(rbd_pvc_deletion_time)
+
+            helpers.write_csv_data(
+                fs_pvc_deletion_time,
+                f"{self.log_path}-deletion-time.csv",
+                "Delete"
+            )
+        request.addfinalizer(pvc_4_type_deletion)
+        return pvc_4_type_deletion
 
     @pytest.fixture()
     def namespace(self, project_factory):
@@ -49,19 +93,21 @@ class TestPVCCreationDeletionScale(E2ETest):
             ),
         ]
     )
-
     @pytest.mark.usefixtures(namespace.__name__)
-    def test_multiple_pvc_creation_deletion_scale(self, namespace, access_mode, interface):
+    def test_multiple_pvc_creation_deletion_scale(self, namespace,
+                                                  pvc_scale_teardown,
+                                                  access_mode,
+                                                  interface):
         self.multiple_pvc_creation_scale(access_mode, interface)
         self.code_inside_pvc_test("running multiple_pvc creation and deletion")
-        self.multiple_pvc_deletion_scale(interface)
 
     def multiple_pvc_creation_scale(self, access_mode, interface):
         """
         Measuring PVC creation time while scaling PVC
         Measure PVC deletion time after creation test
         """
-        number_of_pvc = 10
+        self.interface = interface
+        number_of_pvc = 1500
         log.info(f"Start creating {access_mode}-{interface} {number_of_pvc} PVC")
 
         if interface == constants.CEPHBLOCKPOOL:
@@ -80,41 +126,30 @@ class TestPVCCreationDeletionScale(E2ETest):
         )
 
         # Check for PVC status using threads
-        helpers.handle_threading(
+        helpers.handle_pvc_scale_threading(
             self.pvc_objs,
             (lambda x: helpers.wait_for_resource_state),
             (lambda x: (x, constants.STATUS_BOUND))
         )
         # Get pvc_name, require pvc_name to fetch creation time data from log
-        helpers.handle_threading(
+        helpers.handle_pvc_scale_threading(
             self.pvc_objs,
             (lambda x: x.reload)
         )
-        pvc_nm_list, self.pv_name_list = ([] for i in range(2))
-        threads = list()
-        for pvc_obj in self.pvc_objs:
-            process1 = threading.Thread(target=pvc_nm_list.append(pvc_obj.name))
-            process2 = threading.Thread(target=self.pv_name_list.append(pvc_obj.backed_pv))
-            process1.start()
-            process2.start()
-            threads.append(process1)
-            threads.append(process2)
-        for process in threads:
-            process.join()
         self.pvc_nm_list = [x.name for x in self.pvc_objs]
         self.pv_nm_list = [x.backed_pv for x in self.pvc_objs]
-        helpers.handle_threading(
+        helpers.handle_pvc_scale_threading(
             self.pvc_objs,
             (lambda x: x.name)
         )
-        helpers.handle_threading(
+        helpers.handle_pvc_scale_threading(
             self.pvc_objs,
             (lambda x: x.backed_pv)
         )
 
         # Get PVC creation time
         pvc_create_time = helpers.measure_pvc_creation_time_bulk(
-            interface=interface, pvc_name_list=pvc_nm_list
+            interface=interface, pvc_name_list=self.pvc_nm_list
         )
         helpers.write_csv_data(
             pvc_create_time,
@@ -122,29 +157,11 @@ class TestPVCCreationDeletionScale(E2ETest):
             "Create"
         )
 
-
-    def multiple_pvc_deletion_scale(self, interface):
-        # Delete PVC
-        helpers.delete_objs(self.pvc_objs)
-
-        # Get PVC deletion time
-        pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
-            interface=interface, pv_name_list=self.pv_nm_list
-        )
-
-        helpers.write_csv_data(
-            pvc_deletion_time,
-            f"{self.log_path}-deletion-time.csv",
-            "Delete"
-        )
-
-
     @polarion_id('OCS-1885')
     @pytest.mark.usefixtures(namespace.__name__)
-    def test_all_4_type_pvc_creatGetion_deletion_scale(self, namespace):
+    def test_all_4_type_pvc_creation_deletion_scale(self, namespace, pvc_4_type_teardown):
         self.all_4_type_pvc_creation_scale()
         self.code_inside_pvc_test("running all_4_type")
-        self.all_4_type_pvc_deletion_scale()
 
     def all_4_type_pvc_creation_scale(self):
         """
@@ -152,7 +169,7 @@ class TestPVCCreationDeletionScale(E2ETest):
         will be created, i.e. 375 each pvc type
         Measure PVC deletion time in scale env
         """
-        number_of_pvc = 10
+        number_of_pvc = 375
         log.info(f"Start creating {number_of_pvc} PVC of all 4 types")
         self.log_path = f"{ocsci_log_path()}/pvc-of-all-4-types"
 
@@ -172,23 +189,23 @@ class TestPVCCreationDeletionScale(E2ETest):
             )
 
         # Check for PVC status using threads
-        helpers.handle_threading(
+        helpers.handle_pvc_scale_threading(
             self.fs_pvc_obj,
             (lambda x: helpers.wait_for_resource_state),
             (lambda x: (x, constants.STATUS_BOUND))
         )
-        helpers.handle_threading(
+        helpers.handle_pvc_scale_threading(
             self.rbd_pvc_obj,
             (lambda x: helpers.wait_for_resource_state),
             (lambda x: (x, constants.STATUS_BOUND))
         )
 
         # Get pvc_name, require pvc_name to fetch creation time data from log
-        helpers.handle_threading(
+        helpers.handle_pvc_scale_threading(
             self.fs_pvc_obj,
             (lambda x: x.reload)
         )
-        helpers.handle_threading(
+        helpers.handle_pvc_scale_threading(
             self.rbd_pvc_obj,
             (lambda x: x.reload)
         )
@@ -197,19 +214,19 @@ class TestPVCCreationDeletionScale(E2ETest):
         self.fs_pv_name = [x.backed_pv for x in self.fs_pvc_obj]
         self.rbd_pvc_name = [x.name for x in self.rbd_pvc_obj]
         self.rbd_pv_name = [x.backed_pv for x in self.rbd_pvc_obj]
-        helpers.handle_threading(
+        helpers.handle_pvc_scale_threading(
             self.fs_pvc_obj,
             (lambda x: x.name)
         )
-        helpers.handle_threading(
+        helpers.handle_pvc_scale_threading(
             self.rbd_pvc_obj,
             (lambda x: x.name)
         )
-        helpers.handle_threading(
+        helpers.handle_pvc_scale_threading(
             self.fs_pvc_obj,
             (lambda x: x.backed_pv)
         )
-        helpers.handle_threading(
+        helpers.handle_pvc_scale_threading(
             self.rbd_pvc_obj,
             (lambda x: x.backed_pv)
         )
@@ -227,24 +244,4 @@ class TestPVCCreationDeletionScale(E2ETest):
             fs_pvc_create_time,
             f"{self.log_path}-creation-time.csv",
             "Create"
-        )
-
-    def all_4_type_pvc_deletion_scale(self):
-        # Delete PVC
-        pvc_objs = self.fs_pvc_obj + self.rbd_pvc_obj
-        helpers.delete_objs(pvc_objs)
-
-        # Get PVC deletion time
-        fs_pvc_deletion_time = helpers. measure_pv_deletion_time_bulk(
-            interface=constants.CEPHFS_INTERFACE, pv_name_list=self.fs_pv_name
-        )
-        rbd_pvc_deletion_time = helpers.measure_pv_deletion_time_bulk(
-            interface=constants.CEPHBLOCKPOOL, pv_name_list=self.rbd_pv_name
-        )
-        fs_pvc_deletion_time.update(rbd_pvc_deletion_time)
-
-        helpers.write_csv_data(
-            fs_pvc_deletion_time,
-            f"{self.log_path}-deletion-time.csv",
-            "Delete"
         )

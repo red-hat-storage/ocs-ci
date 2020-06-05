@@ -1022,6 +1022,47 @@ def get_master_nodes():
     return master_nodes_list
 
 
+def get_csi_provisioner_logs(interface, wait_time=0):
+    """
+    Get provision log time.
+
+    Args:
+        interface (str): name of the interface backed by the PVC
+        wait_time: Seconds to wait before collecting CSI logs
+    """
+    # Get the correct provisioner pod based on the interface
+    pod_name = pod.get_csi_provisioner_pod(interface)
+    # wait is sometimes needed due to some delay in CSI log generation
+    if wait_time > 0:
+        time.sleep(wait_time)
+    # get the logs from the csi-provisioner containers
+    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
+    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
+    logs = logs.split("\n")
+    return logs
+
+
+def extract_time_from_pvc_logs(logs, log_names):
+    """
+    Extract time from creation/deletion logs
+
+    Args:
+        logs (list): pod logs extracted from the csi-provisioner
+        log_names -- log file name pattern passed to re.search
+    """
+    # Extract the starting time for the PVC provisioning
+    startorend = [
+        i for i in logs if re.search(log_names, i)
+    ]
+    lformat = '%H:%M:%S.%f'
+    # If log does not yet exist, use current time.
+    if not startorend:
+        logger.info("No logs exist -- using current time.")
+        return datetime.datetime.now()
+    startorend = startorend[0].split(' ')[1]
+    return datetime.datetime.strptime(startorend, lformat)
+
+
 def get_start_creation_time(interface, pvc_name):
     """
     Get the starting creation time of a PVC based on provisioner logs
@@ -1034,20 +1075,13 @@ def get_start_creation_time(interface, pvc_name):
         datetime object: Start time of PVC creation
 
     """
-    format = '%H:%M:%S.%f'
-    # Get the correct provisioner pod based on the interface
-    pod_name = pod.get_csi_provisioner_pod(interface)
-    # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
-    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
 
-    logs = logs.split("\n")
+    logs = get_csi_provisioner_logs(interface)
     # Extract the starting time for the PVC provisioning
-    start = [
-        i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)
-    ]
-    start = start[0].split(' ')[1]
-    return datetime.datetime.strptime(start, format)
+    return extract_time_from_pvc_logs(
+        logs,
+        f"provision.*{pvc_name}.*started"
+    )
 
 
 def get_end_creation_time(interface, pvc_name):
@@ -1062,20 +1096,12 @@ def get_end_creation_time(interface, pvc_name):
         datetime object: End time of PVC creation
 
     """
-    format = '%H:%M:%S.%f'
-    # Get the correct provisioner pod based on the interface
-    pod_name = pod.get_csi_provisioner_pod(interface)
-    # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
-    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
 
-    logs = logs.split("\n")
-    # Extract the starting time for the PVC provisioning
-    end = [
-        i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)
-    ]
-    end = end[0].split(' ')[1]
-    return datetime.datetime.strptime(end, format)
+    logs = get_csi_provisioner_logs(interface)
+    return extract_time_from_pvc_logs(
+        logs,
+        f"provision.*{pvc_name}.*succeeded"
+    )
 
 
 def measure_pvc_creation_time(interface, pvc_name):
@@ -1109,30 +1135,20 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
         pvc_dict (dict): Dictionary of pvc_name with creation time.
 
     """
-    # Get the correct provisioner pod based on the interface
-    pod_name = pod.get_csi_provisioner_pod(interface)
-    # due to some delay in CSI log generation added wait
-    time.sleep(wait_time)
-    # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
-    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
-    logs = logs.split("\n")
+    logs = get_csi_provisioner_logs(interface, wait_time)
 
     pvc_dict = dict()
-    format = '%H:%M:%S.%f'
     for pvc_name in pvc_name_list:
         # Extract the starting time for the PVC provisioning
-        start = [
-            i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)
-        ]
-        start = start[0].split(' ')[1]
-        start_time = datetime.datetime.strptime(start, format)
+        start_time = extract_time_from_pvc_logs(
+            logs,
+            f"provision.*{pvc_name}.*started"
+        )
         # Extract the end time for the PVC provisioning
-        end = [
-            i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)
-        ]
-        end = end[0].split(' ')[1]
-        end_time = datetime.datetime.strptime(end, format)
+        end_time = extract_time_from_pvc_logs(
+            logs,
+            f"provision.*{pvc_name}.*succeeded"
+        )
         total = end_time - start_time
         pvc_dict[pvc_name] = total.total_seconds()
 
@@ -1152,30 +1168,20 @@ def measure_pv_deletion_time_bulk(interface, pv_name_list, wait_time=60):
         pv_dict (dict): Dictionary of pv_name with deletion time.
 
     """
-    # Get the correct provisioner pod based on the interface
-    pod_name = pod.get_csi_provisioner_pod(interface)
-    # due to some delay in CSI log generation added wait
-    time.sleep(wait_time)
-    # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
-    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
-    logs = logs.split("\n")
+    logs = get_csi_provisioner_logs(interface, wait_time)
 
     pv_dict = dict()
-    format = '%H:%M:%S.%f'
     for pv_name in pv_name_list:
         # Extract the deletion start time for the PV
-        start = [
-            i for i in logs if re.search(f"delete \"{pv_name}\": started", i)
-        ]
-        start = start[0].split(' ')[1]
-        start_time = datetime.datetime.strptime(start, format)
-        # Extract the deletion end time for the PV
-        end = [
-            i for i in logs if re.search(f"delete \"{pv_name}\": succeeded", i)
-        ]
-        end = end[0].split(' ')[1]
-        end_time = datetime.datetime.strptime(end, format)
+        start_time = extract_time_from_pvc_logs(
+            logs,
+            f"delete \"{pv_name}\": started"
+        )
+        # Extract the end time for the PVC provisioning
+        end_time = extract_time_from_pvc_logs(
+            logs,
+            f"delete \"{pv_name}\": succeeded"
+        )
         total = end_time - start_time
         pv_dict[pv_name] = total.total_seconds()
 
@@ -1194,20 +1200,11 @@ def get_start_deletion_time(interface, pv_name):
         datetime object: Start time of PVC deletion
 
     """
-    format = '%H:%M:%S.%f'
-    # Get the correct provisioner pod based on the interface
-    pod_name = pod.get_csi_provisioner_pod(interface)
-    # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
-    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
-
-    logs = logs.split("\n")
-    # Extract the starting time for the PVC deletion
-    start = [
-        i for i in logs if re.search(f"delete \"{pv_name}\": started", i)
-    ]
-    start = start[0].split(' ')[1]
-    return datetime.datetime.strptime(start, format)
+    logs = get_csi_provisioner_logs(interface)
+    return extract_time_from_pvc_logs(
+        logs,
+        f"delete \"{pv_name}\": started"
+    )
 
 
 def get_end_deletion_time(interface, pv_name):
@@ -1222,20 +1219,12 @@ def get_end_deletion_time(interface, pv_name):
         datetime object: End time of PVC deletion
 
     """
-    format = '%H:%M:%S.%f'
-    # Get the correct provisioner pod based on the interface
-    pod_name = pod.get_csi_provisioner_pod(interface)
-    # get the logs from the csi-provisioner containers
-    logs = pod.get_pod_logs(pod_name[0], 'csi-provisioner')
-    logs += pod.get_pod_logs(pod_name[1], 'csi-provisioner')
-
-    logs = logs.split("\n")
+    logs = get_csi_provisioner_logs(interface)
     # Extract the starting time for the PV deletion
-    end = [
-        i for i in logs if re.search(f"delete \"{pv_name}\": succeeded", i)
-    ]
-    end = end[0].split(' ')[1]
-    return datetime.datetime.strptime(end, format)
+    return extract_time_from_pvc_logs(
+        logs,
+        f"delete \"{pv_name}\": succeeded"
+    )
 
 
 def measure_pvc_deletion_time(interface, pv_name):
@@ -2260,18 +2249,20 @@ def validate_pods_are_running_and_not_restarted(
     return False
 
 
-def delete_objs(pvc_objs):
+def delete_objs(obj_list):
     """
-    Delete pvc objects
+    Delete elements in a list of objects
     Args:
-        pvc_objs (list): pvc objects to delete
+        obj_list (list): objects to delete
     """
-    for obj in pvc_objs:
+    for obj in obj_list:
         obj.delete()
+    # all the deletes are happening without waiting.  Now wait for all to be done.
+    for obj in obj_list:
         obj.ocp.wait_for_delete(obj.name)
 
 
-def handle_threading(pvc_objs, target_parm, arg_parm=None):
+def handle_pvc_scale_threading(pvc_objs, target_parm, arg_parm=None):
     """
     For every element in a list of pvc objects, create a thread process and
     join them together
