@@ -20,34 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture
-def measurement_dir(tmp_path):
-    """
-    Returns directory path where should be stored all results related
-    to measurement. If 'measurement_dir' is provided by config then use it,
-    otherwise new directory is generated.
-
-    Returns:
-        str: Path to measurement directory
-    """
-    if config.ENV_DATA.get('measurement_dir'):
-        measurement_dir = config.ENV_DATA.get('measurement_dir')
-        logger.info(
-            f"Using measurement dir from configuration: {measurement_dir}"
-        )
-    else:
-        measurement_dir = os.path.join(
-            os.path.dirname(tmp_path),
-            'measurement_results'
-        )
-    if not os.path.exists(measurement_dir):
-        logger.info(
-            f"Measurement dir {measurement_dir} doesn't exist. Creating it."
-        )
-        os.mkdir(measurement_dir)
-    return measurement_dir
-
-
-@pytest.fixture
 def measure_stop_ceph_mgr(measurement_dir):
     """
     Downscales Ceph Manager deployment, measures the time when it was
@@ -385,7 +357,7 @@ def workload_storageutilization_checksum_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.10,
+        target_size=10,
         with_checksum=True)
     return measured_op
 
@@ -622,15 +594,15 @@ def measure_noobaa_exceed_bucket_quota(
         nonlocal bucket_name
         nonlocal awscli_pod
         # run_time of operation
-        run_time = 60 * 11
+        run_time = 60 * 14
         awscli_pod.exec_cmd_on_pod(
             'dd if=/dev/zero of=/tmp/testfile bs=1M count=500'
         )
         for i in range(1, 6):
             awscli_pod.exec_cmd_on_pod(
                 helpers.craft_s3_command(
-                    mcg_obj,
-                    f"cp /tmp/testfile s3://{bucket_name}/testfile{i}"
+                    f"cp /tmp/testfile s3://{bucket_name}/testfile{i}",
+                    mcg_obj
                 ),
                 out_yaml_format=False,
                 secrets=[
@@ -658,8 +630,8 @@ def measure_noobaa_exceed_bucket_quota(
     for i in range(1, 6):
         awscli_pod.exec_cmd_on_pod(
             helpers.craft_s3_command(
-                mcg_obj,
-                f"rm s3://{bucket_name}/testfile{i}"
+                f"rm s3://{bucket_name}/testfile{i}",
+                mcg_obj
             ),
             out_yaml_format=False,
             secrets=[

@@ -301,6 +301,51 @@ def add_new_node_and_label_it(machineset_name):
     return new_spun_node[0]
 
 
+def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True):
+    """
+    Add a new node for aws upi platform and label it
+
+    Args:
+        node_type (str): Type of node, RHEL or RHCOS
+        num_nodes (int): number of nodes to add
+        mark_for_ocs_label (bool): True if label the new node
+
+    Retuns:
+        bool: True if node addition has done successfully
+
+    """
+
+    initial_nodes = tests.helpers.get_worker_nodes()
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
+    node_util.create_and_attach_nodes_to_cluster({}, node_type, num_nodes)
+    for sample in TimeoutSampler(
+        timeout=600, sleep=6, func=tests.helpers.get_worker_nodes
+    ):
+        if len(sample) == len(initial_nodes) + num_nodes:
+            break
+
+    nodes_after_exp = tests.helpers.get_worker_nodes()
+    wait_for_nodes_status(
+        node_names=tests.helpers.get_worker_nodes(),
+        status=constants.NODE_READY
+    )
+
+    if mark_for_ocs_label:
+        new_spun_nodes = list(set(nodes_after_exp) - set(initial_nodes))
+        node_obj = ocp.OCP(kind='node')
+        for new_spun_node in new_spun_nodes:
+            node_obj.add_label(
+                resource_name=new_spun_node,
+                label=constants.OPERATOR_NODE_LABEL
+            )
+            logging.info(
+                f"Successfully labeled {new_spun_node} with OCS storage label"
+            )
+    return True
+
+
 def get_node_logs(node_name):
     """
     Get logs from a given node
@@ -505,3 +550,25 @@ def get_provider():
 
     ocp_cluster = OCP(kind='', resource_name='nodes')
     return ocp_cluster.get('nodes')['items'][0]['spec']['providerID'].split(':')[0]
+
+
+def get_compute_node_names():
+    """
+    Gets the compute node names
+
+    Returns:
+        list: List of compute node names
+
+    """
+    platform = config.ENV_DATA.get('platform').lower()
+
+    if platform == constants.VSPHERE_PLATFORM:
+        return [node for node in get_all_nodes() if "compute" in node]
+    elif platform == constants.AWS_PLATFORM:
+        compute_node_objs = get_typed_nodes()
+        return [
+            compute_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL]
+            for compute_obj in compute_node_objs
+        ]
+    else:
+        raise NotImplementedError

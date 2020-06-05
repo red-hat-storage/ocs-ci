@@ -3,8 +3,8 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1, aws_platform_required,
-    filter_insecure_request_warning, tier4, tier4a
+    tier1, aws_platform_required, tier4, tier4a,
+    bugzilla, skipif_ocs_version
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_AUTH_FAILED, BS_OPTIMAL
@@ -15,7 +15,6 @@ from tests.manage.mcg.helpers import retrieve_test_objects_to_pod, sync_object_d
 logger = logging.getLogger(__name__)
 
 
-@filter_insecure_request_warning
 @aws_platform_required
 class TestMultiRegion:
     """
@@ -64,6 +63,8 @@ class TestMultiRegion:
 
     @tier4
     @tier4a
+    @bugzilla('1827317')
+    @skipif_ocs_version("==4.4")
     @pytest.mark.polarion_id("OCS-1784")
     def test_multiregion_mirror(self, mcg_obj, awscli_pod, multiregion_mirror_setup):
         """

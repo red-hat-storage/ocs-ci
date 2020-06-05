@@ -3,14 +3,12 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    pre_upgrade, post_upgrade,
-    aws_platform_required, filter_insecure_request_warning,
-    bugzilla
+    pre_upgrade, post_upgrade, aws_platform_required, bugzilla
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_OPTIMAL
 from tests.manage.mcg.helpers import (
-    retrieve_anon_s3_resource, sync_object_directory
+    retrieve_test_objects_to_pod, sync_object_directory
 )
 
 logger = logging.getLogger(__name__)
@@ -21,7 +19,6 @@ DOWNLOADED_OBJS = []
 
 
 @aws_platform_required
-@filter_insecure_request_warning
 @pre_upgrade
 def test_fill_bucket(
     mcg_obj_session,
@@ -44,43 +41,20 @@ def test_fill_bucket(
     awscli_pod_session.exec_cmd_on_pod(
         command=f'mkdir {LOCAL_TESTOBJS_DIR_PATH}'
     )
-    test_objects = retrieve_anon_s3_resource().Bucket(
-        constants.TEST_FILES_BUCKET
-    ).objects.all()
-
-    for obj in test_objects:
-        logger.info(f'Downloading {obj.key} from AWS test bucket')
-        awscli_pod_session.exec_cmd_on_pod(
-            command=(
-                f'sh -c "wget -P {LOCAL_TESTOBJS_DIR_PATH} '
-                f'https://{constants.TEST_FILES_BUCKET}.s3.amazonaws.com/{obj.key}"'
-            )
-        )
-        DOWNLOADED_OBJS.append(f'{obj.key}')
-        # Use 3x time more objects than there is in test objects pod
-        for i in range(2):
-            awscli_pod_session.exec_cmd_on_pod(
-                command=f'sh -c "'
-                        f'cp {LOCAL_TESTOBJS_DIR_PATH}/{obj.key} '
-                        f'{LOCAL_TESTOBJS_DIR_PATH}/{obj.key}.{i}"'
-            )
-            DOWNLOADED_OBJS.append(f'{obj.key}.{i}')
+    DOWNLOADED_OBJS = retrieve_test_objects_to_pod(
+        awscli_pod_session, LOCAL_TESTOBJS_DIR_PATH
+    )
 
     logger.info('Uploading all pod objects to MCG bucket')
 
-    sync_object_directory(
-        awscli_pod_session,
-        's3://' + constants.TEST_FILES_BUCKET,
-        LOCAL_TESTOBJS_DIR_PATH
-    )
-
-    # Upload test objects to the NooBucket
-    sync_object_directory(
-        awscli_pod_session,
-        LOCAL_TESTOBJS_DIR_PATH,
-        mcg_bucket_path,
-        mcg_obj_session
-    )
+    # Upload test objects to the NooBucket 3 times
+    for i in range(3):
+        sync_object_directory(
+            awscli_pod_session,
+            LOCAL_TESTOBJS_DIR_PATH,
+            f'{mcg_bucket_path}/{i}/',
+            mcg_obj_session
+        )
 
     mcg_obj_session.check_if_mirroring_is_done(bucket.name)
     assert bucket.status == constants.STATUS_BOUND
@@ -97,16 +71,16 @@ def test_fill_bucket(
 
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
-        assert mcg_obj_session.verify_s3_object_integrity(
-            original_object_path=f'{LOCAL_TESTOBJS_DIR_PATH}/{obj}',
-            result_object_path=f'{LOCAL_TEMP_PATH}/{obj}',
-            awscli_pod=awscli_pod_session
-        ), 'Checksum comparision between original and result object failed'
+        for i in range(3):
+            assert mcg_obj_session.verify_s3_object_integrity(
+                original_object_path=f'{LOCAL_TESTOBJS_DIR_PATH}/{obj}',
+                result_object_path=f'{LOCAL_TEMP_PATH}/{i}/{obj}',
+                awscli_pod=awscli_pod_session
+            ), 'Checksum comparison between original and result object failed'
     assert bucket.status == constants.STATUS_BOUND
 
 
 @aws_platform_required
-@filter_insecure_request_warning
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2038")
 def test_noobaa_postupgrade(
@@ -161,7 +135,7 @@ def test_noobaa_postupgrade(
         LOCAL_TEMP_PATH,
         mcg_obj_session
     )
-    assert bucket.phase == constants.STATUS_BOUND
+    assert bucket.status == constants.STATUS_BOUND
 
 
 @aws_platform_required

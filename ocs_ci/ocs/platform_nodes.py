@@ -1,26 +1,40 @@
+import json
 import logging
 import os
-import json
 import re
+import shutil
+import time
+
 
 import boto3
 import yaml
 
+from ocs_ci.deployment.terraform import Terraform
+from ocs_ci.deployment.vmware import (
+    clone_openshift_installer,
+    update_machine_conf,
+)
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework import config, merge_dict
-from ocs_ci.utility import aws, vsphere, templating
+from ocs_ci.utility import aws, vsphere, templating, baremetal
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.ocs import constants, ocp, exceptions
-from ocs_ci.ocs.node import get_node_objs, get_typed_worker_nodes
+from ocs_ci.ocs.node import (
+    get_node_objs, get_typed_worker_nodes, get_typed_nodes,
+)
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
+from ocs_ci.utility.csr import (
+    get_nodes_csr, wait_for_all_nodes_csr_and_approve,
+)
 from ocs_ci.utility.utils import (
     get_cluster_name, get_infra_id, create_rhelpod,
+    replace_content_in_file,
     get_ocp_version, TimeoutSampler,
     download_file, delete_file, AZInfo
 )
-
+from ocs_ci.ocs.node import wait_for_nodes_status
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +45,12 @@ class PlatformNodesFactory:
 
     """
     def __init__(self):
-        self.cls_map = {'AWS': AWSNodes, 'vsphere': VMWareNodes, 'aws': AWSNodes, 'baremetal': NodesBase}
+        self.cls_map = {
+            'AWS': AWSNodes,
+            'vsphere': VMWareNodes,
+            'aws': AWSNodes,
+            'baremetal': BaremetalNodes
+        }
 
     def get_nodes_platform(self):
         platform = config.ENV_DATA['platform']
@@ -45,11 +64,13 @@ class NodesBase(object):
 
     """
     def __init__(self):
-        self.cluster_nodes = get_node_objs()
         self.cluster_path = config.ENV_DATA['cluster_path']
         self.platform = config.ENV_DATA['platform']
         self.deployment_type = config.ENV_DATA['deployment_type']
-        self.nodes_map = {'AWSUPINode': AWSUPINode}
+        self.nodes_map = {
+            'AWSUPINode': AWSUPINode, 'VSPHEREUPINode': VSPHEREUPINode
+        }
+        self.wait_time = 120
 
     def get_data_volumes(self):
         raise NotImplementedError(
@@ -71,9 +92,14 @@ class NodesBase(object):
             "Start nodes functionality is not implemented"
         )
 
-    def restart_nodes(self, nodes, force=True):
+    def restart_nodes(self, nodes, wait=True):
         raise NotImplementedError(
             "Restart nodes functionality is not implemented"
+        )
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        raise NotImplementedError(
+            "Restart nodes by stop and start functionality is not implemented"
         )
 
     def detach_volume(self, volume, node=None, delete_from_backend=True):
@@ -91,9 +117,10 @@ class NodesBase(object):
             "Wait for volume attach functionality is not implemented"
         )
 
-    def restart_nodes_teardown(self):
+    def restart_nodes_by_stop_and_start_teardown(self):
         raise NotImplementedError(
-            "Restart nodes teardown functionality is not implemented"
+            "Restart nodes by stop and start teardown functionality is "
+            "not implemented"
         )
 
     def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
@@ -230,7 +257,50 @@ class VMWareNodes(NodesBase):
         )
         self.vsphere.start_vms(vms)
 
-    def restart_nodes(self, nodes, force=True):
+    def restart_nodes(self, nodes, force=False, wait=True):
+        """
+        Restart vSphere VMs
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for Hard reboot, False for Soft reboot
+            wait (bool): True if need to wait till the restarted OCP node
+                reaches READY state. False otherwise
+
+        """
+        vms = self.get_vms(nodes)
+        assert vms, (
+            f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
+        )
+        self.vsphere.restart_vms(vms, force=force)
+
+        if wait:
+            """
+            When reboot is initiated on a VM from the VMware, the VM
+            stays at "Running" state throughout the reboot operation.
+
+            Once the OCP node detects that the node is not reachable then the
+            node reaches status NotReady.
+            When the reboot operation is completed and the VM is reachable the
+            OCP node reaches status Ready.
+            """
+            nodes_names = [n.name for n in nodes]
+            logger.info(
+                f"Waiting for nodes: {nodes_names} to reach not ready state"
+            )
+            wait_for_nodes_status(
+                node_names=nodes_names, status=constants.NODE_NOT_READY,
+                timeout=300
+            )
+            logger.info(
+                f"Waiting for nodes: {nodes_names} to reach ready state"
+            )
+            wait_for_nodes_status(
+                node_names=nodes_names, status=constants.NODE_READY,
+                timeout=300
+            )
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
         """
         Restart vSphere VMs
 
@@ -243,7 +313,7 @@ class VMWareNodes(NodesBase):
         assert vms, (
             f"Failed to get VM objects for nodes {[n.name for n in nodes]}"
         )
-        self.vsphere.restart_vms(vms, force=force)
+        self.vsphere.restart_vms_by_stop_and_start(vms, force=force)
 
     def detach_volume(self, volume, node=None, delete_from_backend=True):
         """
@@ -283,11 +353,12 @@ class VMWareNodes(NodesBase):
         logger.info("Not waiting for volume to get re-attached")
         pass
 
-    def restart_nodes_teardown(self):
+    def restart_nodes_by_stop_and_start_teardown(self):
         """
         Make sure all VMs are up by the end of the test
 
         """
+        self.cluster_nodes = get_node_objs()
         vms = self.get_vms(self.cluster_nodes)
         assert vms, (
             f"Failed to get VM objects for nodes {[n.name for n in self.cluster_nodes]}"
@@ -299,6 +370,24 @@ class VMWareNodes(NodesBase):
         if stopped_vms:
             logger.info(f"The following VMs are powered off: {stopped_vms}")
             self.vsphere.start_vms(stopped_vms)
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        """
+        Create nodes and attach them to cluster
+        Use this function if you want to do both creation/attachment in
+        a single call
+
+        Args:
+            node_conf (dict): of node configuration
+            node_type (str): type of node to be created RHCOS/RHEL
+            num_nodes (int): Number of node instances to be created
+
+        """
+        node_cls = self.nodes_map[
+            f'{self.platform.upper()}{self.deployment_type.upper()}Node'
+        ]
+        node_cls_obj = node_cls(node_conf, node_type, num_nodes)
+        node_cls_obj.add_node()
 
 
 class AWSNodes(NodesBase):
@@ -379,39 +468,82 @@ class AWSNodes(NodesBase):
         )
         self.aws.stop_ec2_instances(instances=instances, wait=wait)
 
-    def start_nodes(self, nodes, wait=True):
+    def start_nodes(self, instances=None, nodes=None, wait=True):
         """
         Start EC2 instances
 
         Args:
             nodes (list): The OCS objects of the nodes
+            instances (dict): instance-id and name dict
             wait (bool): True for waiting the instances to start, False otherwise
 
         """
-        instances = self.get_ec2_instances(nodes)
+        instances = instances or self.get_ec2_instances(nodes)
         assert instances, (
             f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
         )
         self.aws.start_ec2_instances(instances=instances, wait=wait)
 
-    def restart_nodes(self, nodes, wait=True, force=True):
+    def restart_nodes(self, nodes, wait=True):
         """
         Restart EC2 instances
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True if need to wait till the restarted node reaches
+                READY state. False otherwise
+
+        """
+        instances = self.get_ec2_instances(nodes)
+        assert instances, (
+            f"Failed to get the EC2 instances for "
+            f"nodes {[n.name for n in nodes]}"
+        )
+        self.aws.restart_ec2_instances(instances=instances)
+        if wait:
+            """
+            When reboot is initiated on an instance from the AWS, the
+            instance stays at "Running" state throughout the reboot operation.
+
+            Once the OCP node detects that the node is not reachable then the
+            node reaches status NotReady.
+            When the reboot operation is completed and the instance is
+            reachable the OCP node reaches status Ready.
+            """
+            nodes_names = [n.name for n in nodes]
+            logger.info(
+                f"Waiting for nodes: {nodes_names} to reach not ready state"
+            )
+            wait_for_nodes_status(
+                node_names=nodes_names, status=constants.NODE_NOT_READY,
+                timeout=300
+            )
+            logger.info(
+                f"Waiting for nodes: {nodes_names} to reach ready state"
+            )
+            wait_for_nodes_status(
+                node_names=nodes_names, status=constants.NODE_READY,
+                timeout=300
+            )
+
+    def restart_nodes_by_stop_and_start(self, nodes, wait=True, force=True):
+        """
+        Restart nodes by stopping and starting EC2 instances
 
         Args:
             nodes (list): The OCS objects of the nodes
             wait (bool): True in case wait for status is needed,
                 False otherwise
             force (bool): True for force instance stop, False otherwise
-
         Returns:
-
         """
         instances = self.get_ec2_instances(nodes)
         assert instances, (
             f"Failed to get the EC2 instances for nodes {[n.name for n in nodes]}"
         )
-        self.aws.restart_ec2_instances(instances=instances, wait=wait, force=force)
+        self.aws.restart_ec2_instances_by_stop_and_start(
+            instances=instances, wait=wait, force=force
+        )
 
     def terminate_nodes(self, nodes, wait=True):
         """
@@ -500,12 +632,13 @@ class AWSNodes(NodesBase):
             )
             return False
 
-    def restart_nodes_teardown(self):
+    def restart_nodes_by_stop_and_start_teardown(self):
         """
         Make sure all EC2 instances are up. To be used in the test teardown
 
         """
         # Get the cluster nodes ec2 instances
+        self.cluster_nodes = get_node_objs()
         ec2_instances = self.get_ec2_instances(self.cluster_nodes)
         assert ec2_instances, (
             f"Failed to get ec2 instances for nodes {[n.name for n in self.cluster_nodes]}"
@@ -679,7 +812,7 @@ class AWSNodes(NodesBase):
         """
         temp = []
         for index in index_list:
-            temp.append(int(index.split('-')[1][2:]))
+            temp.append(int(re.findall(r'\d+', index.split('-')[-1])[-1]))
         temp.sort()
         return temp
 
@@ -1272,3 +1405,235 @@ class AWSUPINode(AWSNodes):
 
         """
         return resource['StackResourceSummaries'][0]['PhysicalResourceId']
+
+
+class VSPHEREUPINode(VMWareNodes):
+    """
+    Node object representing VMWARE UPI nodes
+    """
+    def __init__(self, node_conf, node_type, compute_count):
+        """
+        Initialize necessary variables
+
+        Args:
+            node_conf (dict): of node configuration
+            node_type (str): type of node to be created RHCOS/RHEL
+            compute_count (int): number of nodes to add to existing cluster
+
+        """
+        super(VSPHEREUPINode, self).__init__()
+        self.node_conf = node_conf
+        self.node_type = node_type
+        self.compute_count = compute_count
+        self.current_compute_count = len(get_typed_nodes())
+        self.target_compute_count = (
+            self.current_compute_count + self.compute_count
+        )
+        self.previous_dir = os.getcwd()
+        self.terraform_data_dir = os.path.join(
+            self.cluster_path,
+            constants.TERRAFORM_DATA_DIR
+        )
+        self.terraform_work_dir = constants.VSPHERE_DIR
+        self.terraform = Terraform(self.terraform_work_dir)
+        self.upi_repo_path = os.path.join(
+            constants.EXTERNAL_DIR, 'installer',
+        )
+
+    def _update_terraform(self):
+        """
+        Update terraform variables
+        """
+        logger.debug("Updating terraform variables")
+        self.terraform_var = os.path.join(
+            self.cluster_path,
+            constants.TERRAFORM_DATA_DIR,
+            "terraform.tfvars"
+        )
+        compute_str = 'compute_count ='
+        to_change = f"{compute_str} \"{self.current_compute_count}\""
+        updated_compute_str = f"{compute_str} \"{self.target_compute_count}\""
+        logging.debug(f"Updating {updated_compute_str} in {self.terraform_var}")
+
+        # backup the terraform variable file
+        original_file = f"{self.terraform_var}_{int(time.time())}"
+        shutil.copyfile(self.terraform_var, original_file)
+        logging.info(f"original terraform file: {original_file}")
+
+        replace_content_in_file(
+            self.terraform_var,
+            to_change,
+            updated_compute_str
+        )
+
+    def _update_machine_conf(self):
+        """
+        Update the machine config for vsphere
+        """
+        to_change = "clone {"
+        add_file_block = f"{constants.LIFECYCLE}\n  {to_change}"
+        logging.debug(
+            f"Adding {constants.LIFECYCLE} to"
+            f" {constants.INSTALLER_MACHINE_CONF}"
+        )
+        replace_content_in_file(
+            constants.INSTALLER_MACHINE_CONF,
+            to_change,
+            add_file_block
+        )
+
+        # update the machine configurations
+        update_machine_conf()
+
+    def add_node(self):
+        """
+        Add nodes to the current cluster
+        """
+        if self.node_type == constants.RHCOS:
+            logger.info(f"Adding Nodes of type {self.node_type}")
+            logger.info(
+                f"Existing worker nodes: {self.current_compute_count}, "
+                f"New nodes to add: {self.compute_count}"
+            )
+            clone_openshift_installer()
+            self._update_terraform()
+            self._update_machine_conf()
+
+            # Gets the existing CSR data
+            existing_csr_data = get_nodes_csr()
+            pre_count_csr = len(existing_csr_data)
+            logger.debug(f"Existing CSR count before adding nodes: {pre_count_csr}")
+
+            os.chdir(self.terraform_data_dir)
+            self.terraform.initialize()
+            self.terraform.apply(self.terraform_var)
+            os.chdir(self.previous_dir)
+            time.sleep(self.wait_time)
+
+            if constants.CSR_BOOTSTRAPPER_NODE in existing_csr_data:
+                nodes_approve_csr_num = pre_count_csr + self.compute_count
+            else:
+                nodes_approve_csr_num = pre_count_csr + self.compute_count + 1
+
+            wait_for_all_nodes_csr_and_approve(
+                expected_node_num=nodes_approve_csr_num
+            )
+
+
+class BaremetalNodes(NodesBase):
+    """
+    Baremetal Nodes class
+    """
+    def __init__(self):
+        super(BaremetalNodes, self).__init__()
+        self.baremetal = baremetal.BAREMETAL()
+
+    def stop_nodes(self, nodes, force=True):
+        """
+        Stop Baremetal Machine
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force nodes stop, False otherwise
+
+        """
+        self.baremetal.stop_baremetal_machines(nodes, force=force)
+
+    def start_nodes(self, nodes, wait=True):
+        """
+        Start Baremetal Machine
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): Wait for node status
+
+        """
+        self.baremetal.start_baremetal_machines(nodes, wait=wait)
+
+    def restart_nodes(self, nodes, force=True):
+        """
+        Restart Baremetal Machine
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force BM stop, False otherwise
+
+        """
+        self.baremetal.restart_baremetal_machines(nodes, force=force)
+
+    def restart_nodes_teardown(self):
+        """
+        Make sure all BMs are up by the end of the test
+
+        """
+        self.cluster_nodes = get_node_objs()
+        bms = self.baremetal.get_nodes_ipmi_ctx(self.cluster_nodes)
+        stopped_bms = [
+            bm for bm in bms if self.baremetal.get_power_status(bm) == constants.VM_POWERED_OFF
+        ]
+
+        if stopped_bms:
+            logger.info(f"The following BMs are powered off: {stopped_bms}")
+            self.baremetal.start_baremetal_machines_with_ipmi_ctx(stopped_bms)
+        for bm in bms:
+            bm.session.close()
+
+    def get_data_volumes(self):
+        raise NotImplementedError(
+            "Get data volume functionality is not implemented"
+        )
+
+    def get_node_by_attached_volume(self, volume):
+        raise NotImplementedError(
+            "Get node by attached volume functionality is not implemented"
+        )
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        raise NotImplementedError(
+            "Detach volume functionality is not implemented"
+        )
+
+    def attach_volume(self, volume, node):
+        raise NotImplementedError(
+            "Attach volume functionality is not implemented"
+        )
+
+    def wait_for_volume_attach(self, volume):
+        raise NotImplementedError(
+            "Wait for volume attach functionality is not implemented"
+        )
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def attach_nodes_to_cluster(self, node_list):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def read_default_config(self, default_config_path):
+        """
+        Commonly used function to read default config
+
+        Args:
+            default_config_path (str): Path to default config file
+
+        Returns:
+            dict: of default config loaded
+
+        """
+        assert os.path.exists(default_config_path), (
+            'Config file doesnt exists'
+        )
+
+        with open(default_config_path) as f:
+            default_config_dict = yaml.safe_load(f)
+
+        return default_config_dict

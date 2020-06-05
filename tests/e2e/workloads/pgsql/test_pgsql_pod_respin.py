@@ -2,11 +2,11 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from tests import disruption_helpers
 from ocs_ci.framework.testlib import (
     E2ETest, workloads, ignore_leftovers
 )
 from ocs_ci.ocs.pgsql import Postgresql
+from tests import disruption_helpers
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ def pgsql(request):
 
 @ignore_leftovers
 @workloads
-class TestPgSQLCephPodRespin(E2ETest):
+class TestPgSQLPodRespin(E2ETest):
     """
     Test running PGSQL and with Ceph pods respin
     """
@@ -50,10 +50,13 @@ class TestPgSQLCephPodRespin(E2ETest):
             pytest.param(
                 *[600, 'mgr'], marks=pytest.mark.polarion_id("OCS-804")
             ),
+            pytest.param(
+                *[600, 'postgers'], marks=pytest.mark.polarion_id("OCS-809")
+            )
         ]
     )
     @pytest.mark.usefixtures(pgsql_setup.__name__)
-    def test_run_pgsql(self, pgsql, transactions, pod_name):
+    def test_run_pgsql_respin_pod(self, pgsql, transactions, pod_name):
         """
         Test pgsql workload
         """
@@ -65,11 +68,14 @@ class TestPgSQLCephPodRespin(E2ETest):
         # Wait for pgbench pod to reach running state
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)
 
-        # Respin Ceph pod
-        log.info(f"Respin Ceph pod {pod_name}")
-        disruption = disruption_helpers.Disruptions()
-        disruption.set_resource(resource=f'{pod_name}')
-        disruption.delete_resource()
+        # Respin pod
+        if pod_name == 'postgers':
+            pgsql.respin_pgsql_app_pod()
+        else:
+            log.info(f"Respin Ceph pod {pod_name}")
+            disruption = disruption_helpers.Disruptions()
+            disruption.set_resource(resource=f'{pod_name}')
+            disruption.delete_resource()
 
         # Wait for pg_bench pod to complete
         pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)

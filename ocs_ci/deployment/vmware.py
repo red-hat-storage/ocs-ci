@@ -15,7 +15,7 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, RDMDiskNotFound
 from ocs_ci.ocs.node import (
     get_node_ips, get_typed_worker_nodes, remove_nodes, wait_for_nodes_status
 )
@@ -279,7 +279,39 @@ class VSPHEREBASE(Deployment):
                 dc,
                 cluster
             )
-            return [vm for vm in vms if "compute" in vm.name or "rhel" in vm.name]
+            return [
+                vm for vm in vms if "compute" in vm.name or "rhel" in vm.name
+            ]
+
+    def add_rdm_disks(self):
+        """
+        Attaches RDM disk to the compute nodes
+
+        Raises:
+            RDMDiskNotFound: In case there is no disks found on host
+
+        """
+        logger.info("Adding RDM disk to all compute nodes")
+        compute_vms = self.get_compute_vms(self.datacenter, self.cluster)
+        for vm in compute_vms:
+            host = self.vsphere.get_host(vm)
+            logger.info(f"{vm.name} belongs to host {host.name}")
+            devices_available = self.vsphere.available_storage_devices(host)
+            if not devices_available:
+                raise RDMDiskNotFound
+            self.attach_rdm_disk(vm, devices_available[0])
+
+    def attach_rdm_disk(self, vm, device_name):
+        """
+        Attaches RDM disk to host
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+            device_name (str): Device name to add to VM.
+                e.g:"/vmfs/devices/disks/naa.600304801b540c0125ef160f3048faba"
+
+        """
+        self.vsphere.add_rdm_disk(vm, device_name)
 
     def post_destroy_checks(self):
         """
@@ -406,54 +438,8 @@ class VSPHEREUPI(VSPHEREBASE):
                 f.write(terraform_config_str)
             self.terraform_var = convert_yaml2tfvars(terraform_var_yaml)
 
-            # update gateway and DNS
-            if config.ENV_DATA.get('gateway'):
-                replace_content_in_file(
-                    constants.INSTALLER_IGNITION,
-                    '${cidrhost(var.machine_cidr,1)}',
-                    f"{config.ENV_DATA.get('gateway')}"
-                )
-
-            if config.ENV_DATA.get('dns'):
-                replace_content_in_file(
-                    constants.INSTALLER_IGNITION,
-                    constants.INSTALLER_DEFAULT_DNS,
-                    f"{config.ENV_DATA.get('dns')}"
-                )
-
-            # update the zone in route
-            if config.ENV_DATA.get('region'):
-                def_zone = 'provider "aws" { region = "%s" } \n' % config.ENV_DATA.get('region')
-                replace_content_in_file(constants.INSTALLER_ROUTE53, "xyz", def_zone)
-
-            # increase CPUs and memory
-            worker_num_cpus = config.ENV_DATA.get('worker_num_cpus')
-            master_num_cpus = config.ENV_DATA.get('master_num_cpus')
-            worker_memory = config.ENV_DATA.get('compute_memory')
-            master_memory = config.ENV_DATA.get('master_memory')
-            if (
-                    worker_num_cpus
-                    or master_num_cpus
-                    or master_memory
-                    or worker_memory
-            ):
-                with open(constants.VSPHERE_MAIN, 'r') as fd:
-                    obj = hcl.load(fd)
-                    if worker_num_cpus:
-                        obj['module']['compute']['num_cpu'] = worker_num_cpus
-                    if master_num_cpus:
-                        obj['module']['control_plane']['num_cpu'] = master_num_cpus
-                    if worker_memory:
-                        obj['module']['compute']['memory'] = worker_memory
-                    if master_memory:
-                        obj['module']['control_plane']['memory'] = master_memory
-                # Dump data to json file since hcl module
-                # doesn't support dumping of data in HCL format
-                dump_data_to_json(obj, f"{constants.VSPHERE_MAIN}.json")
-                os.rename(constants.VSPHERE_MAIN, f"{constants.VSPHERE_MAIN}.backup")
-
-            # change root disk size
-            change_vm_root_disk_size(constants.INSTALLER_MACHINE_CONF)
+            # update the machine configurations
+            update_machine_conf()
 
             # sync guest time with host
             if config.ENV_DATA.get('sync_time_with_host'):
@@ -550,7 +536,12 @@ class VSPHEREUPI(VSPHEREBASE):
 
             OCP.set_kubeconfig(self.kubeconfig)
 
-            approve_pending_csr()
+            # wait for all nodes to generate CSR
+            # From OCP version 4.4 and above, we have to approve CSR manually
+            # for all the nodes
+            ocp_version = get_ocp_version()
+            if Version.coerce(ocp_version) >= Version.coerce('4.4'):
+                wait_for_all_nodes_csr_and_approve()
 
             # wait for image registry to show-up
             co = "image-registry"
@@ -568,12 +559,8 @@ class VSPHEREUPI(VSPHEREBASE):
                 timeout=1800
             )
 
-            # wait for all nodes to generate CSR
-            # From OCP version 4.4 and above, we have to approve CSR manually
-            # for all the nodes
-            ocp_version = get_ocp_version()
-            if Version.coerce(ocp_version) >= Version.coerce('4.4'):
-                wait_for_all_nodes_csr_and_approve()
+            # Approving CSRs here in-case if any exists
+            approve_pending_csr()
 
             self.test_cluster()
 
@@ -751,3 +738,81 @@ def clone_openshift_installer():
             constants.VSPHERE_INSTALLER_REPO, upi_repo_path,
             f'release-{ocp_version}'
         )
+
+
+def change_mem_and_cpu():
+    """
+    Increase CPUs and memory for nodes
+    """
+    worker_num_cpus = config.ENV_DATA.get('worker_num_cpus')
+    master_num_cpus = config.ENV_DATA.get('master_num_cpus')
+    worker_memory = config.ENV_DATA.get('compute_memory')
+    master_memory = config.ENV_DATA.get('master_memory')
+    if (
+            worker_num_cpus
+            or master_num_cpus
+            or master_memory
+            or worker_memory
+    ):
+        with open(constants.VSPHERE_MAIN, 'r') as fd:
+            obj = hcl.load(fd)
+            if worker_num_cpus:
+                obj['module']['compute']['num_cpu'] = worker_num_cpus
+            if master_num_cpus:
+                obj['module']['control_plane']['num_cpu'] = master_num_cpus
+            if worker_memory:
+                obj['module']['compute']['memory'] = worker_memory
+            if master_memory:
+                obj['module']['control_plane']['memory'] = master_memory
+        # Dump data to json file since hcl module
+        # doesn't support dumping of data in HCL format
+        dump_data_to_json(obj, f"{constants.VSPHERE_MAIN}.json")
+        os.rename(constants.VSPHERE_MAIN, f"{constants.VSPHERE_MAIN}.backup")
+
+
+def update_gw_and_dns():
+    """
+    Updates the gateway and DNS
+    """
+    # update gateway
+    if config.ENV_DATA.get('gateway'):
+        replace_content_in_file(
+            constants.INSTALLER_IGNITION,
+            '${cidrhost(var.machine_cidr,1)}',
+            f"{config.ENV_DATA.get('gateway')}"
+        )
+
+    # update DNS
+    if config.ENV_DATA.get('dns'):
+        replace_content_in_file(
+            constants.INSTALLER_IGNITION,
+            constants.INSTALLER_DEFAULT_DNS,
+            f"{config.ENV_DATA.get('dns')}"
+        )
+
+
+def update_zone():
+    """
+    Updates the zone in constants.INSTALLER_ROUTE53
+    """
+    # update the zone in route
+    if config.ENV_DATA.get('region'):
+        def_zone = 'provider "aws" { region = "%s" } \n' % config.ENV_DATA.get('region')
+        replace_content_in_file(constants.INSTALLER_ROUTE53, "xyz", def_zone)
+
+
+def update_machine_conf():
+    """
+    Updates the machine configurations
+    """
+    # update gateway and DNS
+    update_gw_and_dns()
+
+    # update the zone in route
+    update_zone()
+
+    # increase CPUs and memory
+    change_mem_and_cpu()
+
+    # change root disk size
+    change_vm_root_disk_size(constants.INSTALLER_MACHINE_CONF)

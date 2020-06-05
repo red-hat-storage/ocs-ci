@@ -299,6 +299,8 @@ def workload_fio_storageutilization(
     target_percentage=None,
     target_size=None,
     with_checksum=False,
+    keep_fio_data=False,
+    minimal_time=480,
 ):
     """
     This function implements core functionality of fio storage utilization
@@ -339,6 +341,10 @@ def workload_fio_storageutilization(
             fio is stored on the volume, and reclaim policy of the volume is
             changed to ``Retain`` so that the volume is not removed during test
             teardown for later verification runs
+        keep_fio_data (bool): If true, keep the fio data after the fio
+            storage utilization is completed. Else if false, deletes the fio data.
+        minimal_time (int): Minimal number of seconds to monitor a system.
+            (See more details in the function 'measure_operation')
 
     Returns:
         dict: measurement results with timestamps and other medatada from
@@ -376,15 +382,25 @@ def workload_fio_storageutilization(
     # BZ 1775432 and check that there is no more recent BZ or JIRA in this
     # area)
     ceph_full_ratios = [
-        'mon_osd_full_ratio',
-        'mon_osd_backfillfull_ratio',
-        'mon_osd_nearfull_ratio',
+        'full_ratio',
+        'backfillfull_ratio',
+        'nearfull_ratio',
     ]
     ct_pod = pod.get_ceph_tools_pod()
+    # As noted in ceph docs:
+    # https://docs.ceph.com/docs/nautilus/rados/configuration/mon-config-ref/
+    # we need to look for full ratio values in OSDMap of the cluster:
+    # > These settings only apply during cluster creation. Afterwards they need
+    # > to be changed in the OSDMap using ceph osd set-nearfull-ratio and ceph
+    # > osd set-full-ratio
+    logger.info("inspecting values of ceph *full ratios in osd map")
+    osd_dump_dict = ct_pod.exec_ceph_cmd('ceph osd dump')
     for ceph_ratio in ceph_full_ratios:
-        logger.info("checking value of %s", ceph_ratio)
-        value = ct_pod.exec_ceph_cmd(f'ceph config get mon.* {ceph_ratio}')
-        logger.info(f"{ceph_ratio} is {value}")
+        ratio_value = osd_dump_dict.get(ceph_ratio)
+        if ratio_value is not None:
+            logger.info(f"{ceph_ratio} is {ratio_value}")
+        else:
+            logger.warning(f"{ceph_ratio} not found in osd map")
 
     if target_size is not None:
         pvc_size = target_size
@@ -394,23 +410,11 @@ def workload_fio_storageutilization(
             ceph_pool_name
         )
 
-    # To handle use case of test_workload_rbd_cephfs_minimal which writes data
-    # to reach a small fraction of the total capacity only (eg. 5%), the test
-    # is going increase the target 2x and try again.
-    if pvc_size <= 0 and target_percentage is not None and target_percentage <= 0.10:
-        new_target_percentage = 2 * target_percentage
-        logger.info(
-            "increasing storage utilization target percentage from %.2f to %.2f",
-            target_percentage,
-            new_target_percentage)
-        target_percentage = new_target_percentage
-        pvc_size = get_storageutilization_size(
-            target_percentage,
-            ceph_pool_name)
-    # If this is still not enough, the test will be skipped, because the idea
-    # of tests reaching a small total utilization is to do just that.
-    # Moreover this will also skip this test case for any other utilization
-    # level, which is easier to read in the test report than the actual
+    # If we are trying to utilize particular percentage of total OCS capacity
+    # and current usage is already higher, the test will be skipped, because
+    # the idea of tests reaching a particular total utilization is to do just
+    # that, and the fixture can't provide expected assumptions to the test.
+    # This skip is also easier to read in the test report than the actual
     # failure with negative pvc size.
     if pvc_size <= 0 and target_percentage is not None:
         skip_msg = (
@@ -486,7 +490,7 @@ def workload_fio_storageutilization(
             fio_job_file, write_timeout, pvc_size, target_percentage),
         test_file,
         measure_after=True,
-        minimal_time=480)
+        minimal_time=minimal_time)
 
     # we don't need to delete anything if this fixture has been already
     # executed
@@ -548,6 +552,9 @@ def workload_fio_storageutilization(
         # Without checksum, we just need to make sure that data were deleted
         # and wait for this to happen to avoid conflicts with tests executed
         # right after this one.
-        delete_fio_data(fio_job_file, is_storage_reclaimed)
+        if not keep_fio_data:
+            delete_fio_data(fio_job_file, is_storage_reclaimed)
+        else:
+            logging.info("The fio data will be deleted during project teardown")
 
     return measured_op

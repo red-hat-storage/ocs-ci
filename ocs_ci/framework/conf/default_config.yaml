@@ -30,6 +30,8 @@ RUN:
   force_chrome_branch_base: "665006"
   force_chrome_branch_sha256sum: "a1ae2e0950828f991119825f62c24464ab3765aa219d150a94fb782a4c66a744"
   io_in_bg: False
+  io_load: null
+  bg_io_logs: False
 
 # In this section we are storing all deployment related configuration but not
 # the environment related data as those are defined in ENV_DATA section.
@@ -118,10 +120,7 @@ ENV_DATA:
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true
-  # This default image for ocp upgrade based on 4.4 candidate build
-  # ocp_upgrade_version: "4.4.0"
-  # Once 4.4 is GAed, we will change to stable-4.4
-  ocp_channel: "candidate-4.4"
+  ocp_channel: "stable-4.4"
   ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
   ocp_arch: "x86_64"
 
@@ -130,4 +129,3 @@ UPGRADE:
 # or ping in ocs infra chat room.
 AUTH:
     test_quay_auth: test_secret
-  

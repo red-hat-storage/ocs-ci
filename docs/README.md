@@ -26,3 +26,5 @@ Rest of the information you can find in those sections
 * [Debugging](debugging.md) - useful debugging information.
 * [Unit tests](unit_tests.md) - how to run and write unit tests.
 * [Workarounds](workarounds.md) - how to manage workarounds in ocs-ci.
+* [Using ocs-ci to deploy OCP cluster without default OCS
+  installation](deployment_without_ocs.md)
