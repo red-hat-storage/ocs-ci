@@ -3,7 +3,7 @@ import pytest
 from datetime import datetime
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
-    E2ETest, workloads, ignore_leftovers
+    E2ETest, workloads, ignore_leftovers, google_api_required
 )
 from ocs_ci.ocs.pgsql import Postgresql
 from tests import disruption_helpers
@@ -23,6 +23,7 @@ def pgsql(request):
     return pgsql
 
 
+@google_api_required
 @ignore_leftovers
 @workloads
 class TestPgSQLPodRespin(E2ETest):

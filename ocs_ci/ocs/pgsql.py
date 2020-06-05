@@ -358,6 +358,7 @@ class Postgresql(RipSaw):
             resource=app_pod, state=constants.STATUS_RUNNING, timeout=300
         )
 
+<<<<<<< HEAD
     def get_pgbech_pod_status_table(self, pgbench_pods):
         """
         Get pgbench pod data and print results on a table
@@ -383,6 +384,8 @@ class Postgresql(RipSaw):
                     ])
         log.info(f'\n{pgbench_pod_table}\n')
 
+=======
+>>>>>>> fix flake8
     def export_pgoutput_to_googlesheet(self, pg_output, sheet_index):
         """
         Collect pgbench output to google spreadsheet
@@ -417,10 +420,9 @@ class Postgresql(RipSaw):
         g_sheet.insert_row(
             [f"ocp_version:{utils.get_cluster_version()}",
              f"ocs_build_number:{utils.get_ocs_build_number()}",
-            f"ceph_version:{utils.get_ceph_version()}",
-            f"test_run_name:{utils.get_testrun_name()}"], 2
+             f"ceph_version:{utils.get_ceph_version()}",
+             f"test_run_name:{utils.get_testrun_name()}"], 2
         )
-
 
     def cleanup(self):
         """
