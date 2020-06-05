@@ -2063,7 +2063,7 @@ def mirror_image(image):
 
     Args:
         image (str): image to be mirrored, can be defined just with name or
-                     with full url, with or without tag or digest
+            with full url, with or without tag or digest
 
     Returns:
         str: the mirrored image link
@@ -2111,7 +2111,7 @@ def mirror_image(image):
         image_inspect = json.loads(cmd_result.stdout)
         # if there is any tag specified, use it in the full image url,
         # otherwise use url with digest
-        if image_inspect[0]['RepoTags']:
+        if image_inspect[0].get('RepoTags'):
             orig_image_full = image_inspect[0]['RepoTags'][0]
         else:
             orig_image_full = image_inspect[0]['RepoDigests'][0]

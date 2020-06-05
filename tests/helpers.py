@@ -230,10 +230,15 @@ def create_pod(
             })
             container['env'].append({
                 'name': 'https_proxy',
-                'value': config.ENV_DATA['http_proxy'],
+                'value': config.ENV_DATA.get(
+                    'https_proxy', config.ENV_DATA['http_proxy']
+                ),
             })
-    except KeyError:
-        pass
+    except KeyError as err:
+        logging.warning(
+            "Http(s)_proxy variable wasn't configured, "
+            "'%s' key not found.", err
+        )
 
     if dc_deployment:
         ocs_obj = create_resource(**pod_data)
