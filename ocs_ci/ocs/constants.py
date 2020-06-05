@@ -629,8 +629,11 @@ ORDER_AFTER_UPGRADE = 80
 OCS_CSV_PREFIX = 'ocs-operator'
 LOCAL_STORAGE_CSV_PREFIX = 'local-storage-operator'
 LATEST_TAGS = (
-    'latest', 'latest-stable', '4.2-rc', 'latest-4.2', 'latest-stable-4.2',
+    'latest', 'latest-stable',
+    '4.2-rc', 'latest-4.2', 'latest-stable-4.2',
     '4.3-rc', 'latest-4.3', 'latest-stable-4.3',
+    '4.4-rc', 'latest-4.4', 'latest-stable-4.4',
+    '4.5-rc', 'latest-4.5', 'latest-stable-4.5',
 )
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
