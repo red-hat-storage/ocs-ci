@@ -398,7 +398,7 @@ class Postgresql(RipSaw):
         """
         # Collect data and export to Google doc spreadsheet
         g_sheet = GoogleSpreadSheetAPI(
-            sheet_name='E2E Workloads - PGSQL', sheet_index=sheet_index
+            sheet_name='E2E Workloads', sheet_index=sheet_index
         )
         log.info("Exporting pgoutput data to google spreadsheet")
         for i in range(len(pg_output)):
