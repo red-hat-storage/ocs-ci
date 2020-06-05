@@ -2159,6 +2159,7 @@ def install_logging(request):
     Setup and teardown
     * The setup will deploy openshift-logging in the cluster
     * The teardown will uninstall cluster-logging from the cluster
+
     """
 
     def finalizer():
@@ -2166,8 +2167,18 @@ def install_logging(request):
 
     request.addfinalizer(finalizer)
 
-    # Checks OCP version
+    csv = ocp.OCP(
+        kind=constants.CLUSTER_SERVICE_VERSION,
+        namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
+    logging_csv = csv.get().get('items')
+    if logging_csv:
+        log.info("Logging is already configured, Skipping Installation")
+        return
 
+    log.info("Configuring Openshift-logging")
+
+    # Checks OCP version
     ocp_version = get_ocp_version()
 
     # Creates namespace opensift-operators-redhat
