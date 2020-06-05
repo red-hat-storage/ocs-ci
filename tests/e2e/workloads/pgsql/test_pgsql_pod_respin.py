@@ -3,7 +3,7 @@ import pytest
 from datetime import datetime
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
-    E2ETest, workloads, ignore_leftovers, google_api_required
+    E2ETest, workloads, ignore_leftovers
 )
 from ocs_ci.ocs.pgsql import Postgresql
 from tests import disruption_helpers
@@ -23,7 +23,6 @@ def pgsql(request):
     return pgsql
 
 
-@google_api_required
 @ignore_leftovers
 @workloads
 class TestPgSQLPodRespin(E2ETest):
@@ -98,9 +97,4 @@ class TestPgSQLPodRespin(E2ETest):
         pgbench_pods = pgsql.get_pgbench_pods()
 
         # Validate pgbench run and parse logs
-        pg_out = pgsql.validate_pgbench_run(pgbench_pods)
-
-        # Export pgdata to google  google spreadsheet
-        pgsql.export_pgoutput_to_googlesheet(
-            pg_output=pg_out, sheet_index=3
-        )
+        pgsql.validate_pgbench_run(pgbench_pods)

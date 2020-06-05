@@ -6,14 +6,7 @@ from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.framework.testlib import (
     E2ETest, workloads, google_api_required
 )
-<<<<<<< HEAD
-<<<<<<< HEAD
 from ocs_ci.ocs.node import get_node_resource_utilization_from_adm_top
-=======
-from ocs_ci.framework.testlib import google_api_required
->>>>>>> Export all pgbench pods run outputs to google spreadsheet
-=======
->>>>>>> fix flake8
 
 log = logging.getLogger(__name__)
 
