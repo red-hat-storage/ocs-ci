@@ -6,7 +6,11 @@ from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.framework.testlib import (
     E2ETest, workloads
 )
+<<<<<<< HEAD
 from ocs_ci.ocs.node import get_node_resource_utilization_from_adm_top
+=======
+from ocs_ci.framework.testlib import google_api_required
+>>>>>>> Export all pgbench pods run outputs to google spreadsheet
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +25,7 @@ def pgsql(request):
     request.addfinalizer(teardown)
     return pgsql
 
-
+@google_api_required
 @workloads
 @pytest.mark.polarion_id("OCS-807")
 class TestPgSQLWorkload(E2ETest):
@@ -60,4 +64,9 @@ class TestPgSQLWorkload(E2ETest):
         pgbench_pods = pgsql.get_pgbench_pods()
 
         # Validate pgbench run and parse logs
-        pgsql.validate_pgbench_run(pgbench_pods)
+        pg_out = pgsql.validate_pgbench_run(pgbench_pods)
+
+        # Export pgdata to google  google spreadsheet
+        pgsql.export_pgoutput_to_googlesheet(
+            pg_output=pg_out, sheet_index=0
+        )

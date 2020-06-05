@@ -16,6 +16,8 @@ from subprocess import CalledProcessError
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj, get_operator_pods
 from tests.helpers import wait_for_resource_state
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE, RIPSAW_CRD
+from ocs_ci.utility.spreadsheet.spreadsheet_api import GoogleSpreadSheetAPI
+
 
 log = logging.getLogger(__name__)
 
@@ -129,7 +131,7 @@ class Postgresql(RipSaw):
             pg_obj_list.append(pg_obj)
             pg_obj.create()
         # Confirm that expected pgbench pods are spinned
-        log.info("Checking if Getting pgbench pods name")
+        log.info("Searching the pgbench pods by its name pattern")
         timeout = timeout if timeout else 300
         for pgbench_pods in TimeoutSampler(
             timeout, replicas, get_pod_name_by_pattern,
@@ -380,6 +382,45 @@ class Postgresql(RipSaw):
                         pod['latency_avg'], pod['lat_stddev'], pod['tps_incl'], pod['tps_excl']
                     ])
         log.info(f'\n{pgbench_pod_table}\n')
+
+    def export_pgoutput_to_googlesheet(self, pg_output, sheet_index):
+        """
+        Collect pgbench output to google spreadsheet
+
+        Args:
+            pg_output (list):  pgbench outputs in list
+            sheet_name (str): Name of the sheet
+            sheet_index (int): Index of sheet
+
+        """
+        # Collect data and export to Google doc spreadsheet
+        g_sheet = GoogleSpreadSheetAPI(
+            sheet_name='E2E Workloads - PGSQL', sheet_index=sheet_index
+        )
+        log.info("Exporting pgoutput data to google spreadsheet")
+        for i in range(len(pg_output)):
+            for j in range(len(pg_output[i])):
+                run_id = list(pg_output[i][j].keys())[0]
+                lat_avg = pg_output[i][j][run_id]['latency_avg']
+                lat_stddev = pg_output[i][j][run_id]['lat_stddev']
+                tps_incl = pg_output[i][j][run_id]['tps_incl']
+                tps_excl = pg_output[i][j][run_id]['tps_excl']
+                g_sheet.insert_row(
+                    [int(lat_avg),
+                     int(lat_stddev),
+                     int(tps_incl),
+                     int(tps_excl)], 2
+                )
+            g_sheet.insert_row([f"Pgbench-pod{i}"], 2)
+
+        # Capturing versions(OCP, OCS and Ceph) and test run name
+        g_sheet.insert_row(
+            [f"ocp_version:{utils.get_cluster_version()}",
+             f"ocs_build_number:{utils.get_ocs_build_number()}",
+            f"ceph_version:{utils.get_ceph_version()}",
+            f"test_run_name:{utils.get_testrun_name()}"], 2
+        )
+
 
     def cleanup(self):
         """

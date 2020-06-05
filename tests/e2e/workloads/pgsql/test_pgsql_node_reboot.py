@@ -102,7 +102,15 @@ class TestPgSQLNodeReboot(E2ETest):
         pgbench_pods = pgsql.get_pgbench_pods()
 
         # Validate pgbench run and parse logs
-        pgsql.validate_pgbench_run(pgbench_pods)
+        pg_out = pgsql.validate_pgbench_run(pgbench_pods)
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
+
+        # Validate pgbench run and parse logs
+        pg_out = pgsql.validate_pgbench_run(pgbench_pods)
+
+        # Export pgdata to google  google spreadsheet
+        pgsql.export_pgoutput_to_googlesheet(
+            pg_output=pg_out, sheet_index=2
+        )
