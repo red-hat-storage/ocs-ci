@@ -47,6 +47,7 @@ setup(
         'google-cloud-storage',
         'elasticsearch',
         'numpy',
+        'python-ipmi',
         'PrettyTable'
     ],
     entry_points={
