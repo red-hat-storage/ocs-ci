@@ -740,3 +740,21 @@ class MCG(object):
         result.stdout = result.stdout.decode()
         result.stderr = result.stderr.decode()
         return result
+
+    @property
+    def status(self):
+        """
+        Verify noobaa status output is clean without any errors
+
+        Returns:
+            bool: return False if any of the non optional components of noobaa is not available
+
+        """
+        # Get noobaa status
+        status = self.exec_mcg_cmd('status').stderr
+        for line in status.split('\n'):
+            if 'Not Found' in line and 'Optional' not in line:
+                logger.error(f"Error in noobaa status output- {line}")
+                return False
+        logger.info("Verified: noobaa status does not contain any error.")
+        return True
