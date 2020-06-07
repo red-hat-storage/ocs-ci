@@ -375,6 +375,31 @@ class Postgresql(RipSaw):
                                             f'{worker_oc_describe[node_worker]["memory"]}%'])
         log.info(f'\n{usage_memory_table}\n')
 
+    def get_pgbech_pod_status_table(self, pgbench_pods):
+        """
+        Get pgbench pod data and print results on a table
+
+        Args:
+            pgbench pods (list): List of pgbench pods
+
+        """
+        pgbench_pod_table = PrettyTable()
+        pgbench_pod_table.field_names = ['pod_name', 'scaling_factor', 'num_clients', 'num_threads',
+                                         'trans_client', 'actually_trans', 'latency_avg',
+                                         'lat_stddev', 'tps_incl', 'tps_excl']
+        for pgbench_pod in pgbench_pods:
+            output = run_cmd(f'oc logs {pgbench_pod.name}')
+            pg_output = utils.parse_pgsql_logs(output)
+            for pod_output in pg_output:
+                for pod in pod_output.values():
+                    pgbench_pod_table.add_row([pgbench_pod.name, pod['scaling_factor'],
+                                               pod['num_clients'], pod['num_threads'],
+                                               pod['number_of_transactions_per_client'],
+                                               pod['number_of_transactions_actually_processed'],
+                                               pod['latency_avg'], pod['lat_stddev'],
+                                               pod['tps_incl'], pod['tps_excl']])
+        log.info(f'\n{pgbench_pod_table}\n')
+
     def cleanup(self):
         """
         Clean pgench pods
