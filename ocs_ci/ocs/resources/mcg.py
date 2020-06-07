@@ -20,7 +20,7 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 from tests.helpers import (
     create_unique_resource_name, create_resource,
-    calc_local_file_md5_sum
+    calc_local_file_md5_sum, retrieve_default_ingress_crt
 )
 import subprocess
 import stat
@@ -54,7 +54,7 @@ class MCG(object):
         )
 
         self.retrieve_noobaa_cli_binary()
-        self.retrieve_mcg_certificate()
+        retrieve_default_ingress_crt()
 
         get_noobaa = OCP(kind='noobaa', namespace=self.namespace).get()
 
@@ -99,7 +99,7 @@ class MCG(object):
         ).json().get('reply').get('token')
 
         self.s3_resource = boto3.resource(
-            's3', verify=constants.MCG_CRT_LOCAL_PATH,
+            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH,
             endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key
@@ -300,7 +300,7 @@ class MCG(object):
         return requests.post(
             url=self.mgmt_endpoint,
             data=json.dumps(payload),
-            verify=constants.MCG_CRT_LOCAL_PATH
+            verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
         )
 
     def check_data_reduction(self, bucketname):
@@ -325,7 +325,7 @@ class MCG(object):
             resp = requests.post(
                 url=self.mgmt_endpoint,
                 data=request_str,
-                verify=constants.MCG_CRT_LOCAL_PATH
+                verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
             )
             bucket_data = resp.json().get('reply').get('data').get('size')
 
@@ -339,7 +339,7 @@ class MCG(object):
             resp = requests.post(
                 url=self.mgmt_endpoint,
                 data=request_str,
-                verify=constants.MCG_CRT_LOCAL_PATH
+                verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
             )
             bucket_data_reduced = resp.json().get('reply').get('data').get('size_reduced')
 
@@ -766,21 +766,3 @@ class MCG(object):
             assert os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
             assert 'ELF' in exec_cmd(f'file {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}').stdout.decode()
             assert os.access(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK)
-
-    def retrieve_mcg_certificate(self):
-        """
-        Copy the self-signed certificate from the noobaa-core pod
-        to the local code runner for usage with boto3.
-
-        The certificate will be copied on each mcg_obj instantiation since
-        it weighs around 7KB, which makes the redundant copy neglible
-        in comparison to the time a hash comparison will take.
-        """
-        OCP(
-            namespace=config.ENV_DATA['cluster_namespace']
-        ).exec_oc_cmd(
-            f'cp {self.core_pod.name}:'
-            f'{constants.MCG_CRT_REMOTE_PATH} '
-            f'{constants.MCG_CRT_LOCAL_PATH}',
-            out_yaml_format=False
-        )

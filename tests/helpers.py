@@ -1,36 +1,36 @@
 """
 Helper functions file for OCS QE
 """
-import logging
-import re
+import base64
 import datetime
 import hashlib
-import statistics
-import os
-from subprocess import TimeoutExpired, run, PIPE
-import tempfile
-import time
-import yaml
 import json
+import logging
+import os
+import re
+import statistics
+import tempfile
 import threading
-
-from ocs_ci.ocs.ocp import OCP
-
-from uuid import uuid4
-from ocs_ci.ocs.exceptions import (
-    TimeoutExpiredError,
-    UnexpectedBehaviour,
-    UnavailableBuildException
-)
+import time
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.ocs import constants, defaults, ocp, node
-from ocs_ci.utility import templating
+from subprocess import PIPE, TimeoutExpired, run
+from uuid import uuid4
+
+import yaml
+
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, defaults, node, ocp
+from ocs_ci.ocs.exceptions import (
+    CommandFailed, ResourceWrongStatusException,
+    TimeoutExpiredError, UnavailableBuildException,
+    UnexpectedBehaviour
+)
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
+from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, ocsci_log_path, run_cmd
-from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
@@ -1567,7 +1567,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
     api = 'api' if api else ''
     if mcg_obj:
         base_command = (
-            f'sh -c "AWS_CA_BUNDLE={constants.MCG_CRT_AWSCLI_POD_PATH} '
+            f'sh -c "AWS_CA_BUNDLE={constants.DEFAULT_INGRESS_CRT_REMOTE_PATH} '
             f'AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} '
             f'AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} '
             f'AWS_DEFAULT_REGION={mcg_obj.region} '
@@ -2274,3 +2274,24 @@ def calc_local_file_md5_sum(path):
     with open(path, 'rb') as file_to_hash:
         file_as_bytes = file_to_hash.read()
     return hashlib.md5(file_as_bytes).hexdigest()
+
+
+def retrieve_default_ingress_crt():
+    """
+    Copy the default ingress certificate from the router-ca secret
+    to the local code runner for usage with boto3.
+
+    The certificate will be copied on each mcg_obj instantiation since
+    the process is light and quick, that the time required for the redundant
+    copy is neglible in comparison to the time a hash comparison will take.
+    """
+    default_ingress_crt_b64 = OCP(
+        kind='secret',
+        namespace='openshift-ingress-operator',
+        resource_name='router-ca'
+    ).get().get('data').get('tls.crt')
+
+    decoded_crt = base64.b64decode(default_ingress_crt_b64).decode('utf-8')
+
+    with open(constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, 'w') as crtfile:
+        crtfile.write(decoded_crt)
