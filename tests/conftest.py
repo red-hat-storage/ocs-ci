@@ -1729,7 +1729,10 @@ def bucket_factory_fixture(request, mcg_obj):
         'cli': CLIBucket
     }
 
-    def _create_buckets(amount=1, interface='S3', *args, **kwargs):
+    def _create_buckets(
+        amount=1, interface='S3',
+        verify_health=True, *args, **kwargs
+    ):
         """
         Creates and deletes all buckets that were created as part of the test
 
@@ -1752,14 +1755,17 @@ def bucket_factory_fixture(request, mcg_obj):
             bucket_name = helpers.create_unique_resource_name(
                 resource_description='bucket', resource_type=interface.lower()
             )
-            created_buckets.append(
-                bucketMap[interface.lower()](
-                    mcg_obj,
-                    bucket_name,
-                    *args,
-                    **kwargs
-                )
+            created_bucket = bucketMap[interface.lower()](
+                mcg_obj,
+                bucket_name,
+                *args,
+                **kwargs
             )
+            created_buckets.append(created_bucket)
+            if verify_health:
+                assert created_bucket.verify_health(), (
+                    f"{bucket_name} did not reach a healthy state in time."
+                )
         return created_buckets
 
     def bucket_cleanup():

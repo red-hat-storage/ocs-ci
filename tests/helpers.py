@@ -1577,7 +1577,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
         string_wrapper = '"'
     else:
         base_command = (
-            f"aws s3{api} --no-sign-request "
+            f"aws s3{api} "
         )
         string_wrapper = ''
 
