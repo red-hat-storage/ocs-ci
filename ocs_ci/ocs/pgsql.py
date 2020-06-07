@@ -15,6 +15,10 @@ from subprocess import CalledProcessError
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj, get_operator_pods
 from tests.helpers import wait_for_resource_state
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE, RIPSAW_CRD
+from ocs_ci.ocs.node import (
+    get_node_resource_utilization_from_adm_top, get_node_resource_utilization_from_oc_describe
+)
+from prettytable import PrettyTable
 
 log = logging.getLogger(__name__)
 
@@ -336,6 +340,55 @@ class Postgresql(RipSaw):
         wait_for_resource_state(
             resource=app_pod, state=constants.STATUS_RUNNING, timeout=300
         )
+
+    def get_node_utilization(self, node_type=('worker', 'master')):
+        """
+
+        Check CPU and Memory usage and print a table of the data.
+
+        Args:
+            master (bool): if True, check check CPU and Memory usage on master nodes
+            worker (bool): if True, check check CPU and Memory usage on worker nodes
+
+        """
+        usage_memory_table = PrettyTable()
+        usage_memory_table.field_names = ["Node Name", "CPU USAGE adm_top", "CPU USAGE oc_describe",
+                                          "Memory USAGE adm_top", "Memory USAGE oc_describe"]
+
+        for node in node_type:
+            get_adm = get_node_resource_utilization_from_adm_top(node_type=node)
+            get_oc_describe = get_node_resource_utilization_from_oc_describe(node_type=node)
+            for node_master in get_adm:
+                usage_memory_table.add_row([node_master, f'{get_adm[node_master]["cpu"]}%',
+                                            f'{get_oc_describe[node_master]["cpu"]}%',
+                                            f'{get_adm[node_master]["memory"]}%',
+                                            f'{get_oc_describe[node_master]["memory"]}%'])
+        log.info(f'\n{usage_memory_table}\n')
+
+    def get_pgbech_pod_status_table(self, pgbench_pods):
+        """
+        Get pgbench pod data and print results on a table
+
+        Args:
+            pgbench pods (list): List of pgbench pods
+
+        """
+        pgbench_pod_table = PrettyTable()
+        pgbench_pod_table.field_names = ['pod_name', 'scaling_factor', 'num_clients', 'num_threads',
+                                         'trans_client', 'actually_trans', 'latency_avg',
+                                         'lat_stddev', 'tps_incl', 'tps_excl']
+        for pgbench_pod in pgbench_pods:
+            output = run_cmd(f'oc logs {pgbench_pod.name}')
+            pg_output = utils.parse_pgsql_logs(output)
+            for pod_output in pg_output:
+                for pod in pod_output.values():
+                    pgbench_pod_table.add_row([pgbench_pod.name, pod['scaling_factor'],
+                                               pod['num_clients'], pod['num_threads'],
+                                               pod['number_of_transactions_per_client'],
+                                               pod['number_of_transactions_actually_processed'],
+                                               pod['latency_avg'], pod['lat_stddev'],
+                                               pod['tps_incl'], pod['tps_excl']])
+        log.info(f'\n{pgbench_pod_table}\n')
 
     def cleanup(self):
         """

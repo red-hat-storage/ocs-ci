@@ -49,6 +49,7 @@ setup(
         'numpy',
         'python-ipmi',
         'scipy',
+        'PrettyTable'
     ],
     entry_points={
         'console_scripts': [
