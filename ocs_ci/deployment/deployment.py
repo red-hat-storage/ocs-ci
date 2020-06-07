@@ -811,24 +811,32 @@ def setup_local_storage():
 
 
 @retry(AssertionError, 12, 10, 1)
-def verify_pvs_created(num_workers):
+def verify_pvs_created(expected_pvs):
     """
     Verify that PVs were created and are in the Available state
 
     Args:
-        num_workers (int): number of worker nodes in the cluster
+        expected_pvs (int): number of PVs to verify
 
     Raises:
         AssertionError: if any PVs are not in the Available state or if the
-            number of PVs does not match the number of workers in the cluster.
+            number of PVs does not match the given parameter.
 
     """
     logger.info("Verifying PVs are created")
     out = run_cmd("oc get pv -o json")
     pv_json = json.loads(out)
     assert pv_json['items'], (
-        f"No PVs created but we are expecting {num_workers}"
+        f"No PVs created but we are expecting {expected_pvs}"
     )
+
+    # check number of PVs created
+    num_pvs = len(pv_json['items'])
+    assert num_pvs == expected_pvs, (
+        f"{num_pvs} PVs created but we are expecting {expected_pvs}"
+    )
+
+    # checks the state of PV
     for pv in pv_json['items']:
         pv_state = pv['status']['phase']
         pv_name = pv['metadata']['name']
@@ -836,8 +844,8 @@ def verify_pvs_created(num_workers):
         assert pv_state == 'Available', (
             f"{pv_name} not in 'Available' state. Current state is {pv_state}"
         )
-    num_pvs = len(pv_json['items'])
-    logger.debug("PVs, Workers: %s, %s", num_pvs, num_workers)
+
+    logger.debug("PVs, Workers: %s, %s", num_pvs, expected_pvs)
 
 
 def get_device_paths(worker_names):
