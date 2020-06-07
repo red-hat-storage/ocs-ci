@@ -11,7 +11,8 @@ from tests.sanity_helpers import Sanity
 from tests.helpers import wait_for_ct_pod_recovery
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs, get_deviceset_pvcs
 from ocs_ci.ocs.resources.pod import (
-    get_osd_deployments, get_osd_pods, get_pod_node, get_operator_pods, get_osd_prepare_pods
+    get_osd_deployments, get_osd_pods, get_pod_node, get_operator_pods, get_osd_prepare_pods,
+    get_ceph_tools_pod
 )
 from ocs_ci.ocs.resources.ocs import get_job_obj
 
@@ -54,10 +55,11 @@ class TestDiskFailures(ManageTest):
 
         """
         self.sanity_helpers = Sanity()
+        ct_pod = get_ceph_tools_pod()
+        ct_pod.exec_ceph_cmd(ceph_cmd='ceph config set osd debug_osd 30')
 
     @aws_platform_required
     @pytest.mark.polarion_id("OCS-1085")
-    @bugzilla('1825675')
     def test_detach_attach_worker_volume(self, nodes, pvc_factory, pod_factory):
         """
         Detach and attach worker volume
