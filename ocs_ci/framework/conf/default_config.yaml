@@ -120,7 +120,7 @@ ENV_DATA:
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true
-  ocp_channel: "stable-4.5"
+  ocp_channel: "candidate-4.5"
   ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
   ocp_arch: "x86_64"
 
