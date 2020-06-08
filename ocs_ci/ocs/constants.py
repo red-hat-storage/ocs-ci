@@ -893,6 +893,24 @@ bucket_website_action_list = ['PutBucketWebsite', 'GetBucketWebsite', 'PutObject
 bucket_version_action_list = ['PutBucketVersioning', 'GetBucketVersioning']
 object_version_action_list = ['PutObject', 'GetObjectVersion', 'DeleteObjectVersion']
 
+# Flexy config constants
+FLEXY_MNT_CONTAINER_DIR = '/mnt'
+FLEXY_MNT_PRIVATE_CONF_DIR = '/mnt/private-ocs-conf'
+FLEXY_DEFAULT_ENV_FILE = "ocs-osp.env"
+OPENSHIFT_MISC_BASE = "private-openshift-misc/v3-launch_templates/functionality-testing"
+FLEXY_BAREMETAL_UPI_TEMPLATE = "upi-on-baremetal/versioned-installer-openstack"
+FLEXY_PRIVATE_CONF_URL = "git@gitlab.cee.redhat.com:ocs/flexy-ocs-private.git"
+FLEXY_GIT_CRYPT_KEYFILE = "~/git_crypt_keyfile"
+NTP_CHRONY_CONF = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "ntp_chrony.yaml"
+)
+FLEXY_SERVICE_CONF = os.path.join(
+    DATA_DIR, "flexy_service_config.conf"
+)
+
+# PSI-openstack constants
+NOVA_CLNT_VERSION = "2.0"
+CINDER_CLNT_VERSION = "3.0"
 
 # URLs
 AUTH_CONFIG_DOCS = (

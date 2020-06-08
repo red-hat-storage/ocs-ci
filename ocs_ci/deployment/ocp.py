@@ -26,7 +26,8 @@ class OCPDeployment:
         self.metadata = {}
         self.deployment_platform = config.ENV_DATA['platform'].lower()
         self.deployment_type = config.ENV_DATA['deployment_type'].lower()
-        self.installer = self.download_installer()
+        if self.deployment_platform != 'baremetalpsi':
+            self.installer = self.download_installer()
         self.cluster_path = config.ENV_DATA['cluster_path']
 
     def download_installer(self):
@@ -112,7 +113,8 @@ class OCPDeployment:
                 "stored at: %s",
                 self.cluster_path
             )
-        self.create_config()
+        if self.deployment_platform != 'baremetalpsi':
+            self.create_config()
 
     def create_config(self):
         """

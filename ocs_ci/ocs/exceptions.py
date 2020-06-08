@@ -170,6 +170,10 @@ class NoBucketPolicyResponse(Exception):
     pass
 
 
+class PSIVolumeCreationFailed(Exception):
+    pass
+
+
 class PendingCSRException(Exception):
     pass
 

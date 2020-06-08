@@ -1,0 +1,3 @@
+ENV_DATA:
+  platform: 'baremetalpsi'
+  deployment_type: 'upi'

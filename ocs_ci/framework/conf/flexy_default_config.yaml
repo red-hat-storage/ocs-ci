@@ -1,0 +1,6 @@
+ENV_DATA:
+  platform: 'baremetalpsi'
+  deployment_type: 'upi'
+  # Volume which will be attached to instance,
+  # which will be consumed for osd. (size in GB)
+  volume_size: 500
