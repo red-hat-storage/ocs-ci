@@ -30,9 +30,9 @@ from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
-    mirror_image,
     ocsci_log_path,
     run_cmd,
+    update_container_with_mirrored_image,
 )
 from ocs_ci.framework import config
 
@@ -207,13 +207,8 @@ def create_pod(
     if sa_name and dc_deployment:
         pod_data['spec']['template']['spec']['serviceAccountName'] = sa_name
 
-    # disconnected cluster related configuration updates
-    if config.DEPLOYMENT.get('disconnected'):
-        if 'containers' in pod_data['spec']:
-            container = pod_data['spec']['containers'][0]
-        else:
-            container = pod_data['spec']['template']['spec']['containers'][0]
-        container['image'] = mirror_image(container['image'])
+    # overwrite used image (required for disconnected installation)
+    update_container_with_mirrored_image(pod_data)
 
     # configure http[s]_proxy env variable, if required
     try:

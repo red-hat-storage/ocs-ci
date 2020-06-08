@@ -2136,3 +2136,25 @@ def mirror_image(image):
             f" {authfile_fo.name} {orig_image_full} {mirrored_image}"
         )
     return mirrored_image
+
+
+def update_container_with_mirrored_image(job_pod_dict):
+    """
+    Update Job or Pod configuration dict with mirrored image (required for
+    disconnected installation).
+
+    Args:
+        job_pod_dict (dict): dictionary with Job or Pod configuration
+
+    Returns:
+        dict: for disconnected installation, returns updated Job or Pod dict,
+            for normal installation return unchanged job_pod_dict
+
+    """
+    if config.DEPLOYMENT.get('disconnected'):
+        if 'containers' in job_pod_dict['spec']:
+            container = job_pod_dict['spec']['containers'][0]
+        else:
+            container = job_pod_dict['spec']['template']['spec']['containers'][0]
+        container['image'] = mirror_image(container['image'])
+    return job_pod_dict
