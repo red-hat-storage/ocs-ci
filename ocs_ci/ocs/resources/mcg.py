@@ -766,14 +766,11 @@ class MCG(object):
             assert os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH), (
                 f'MCG CLI file not found at {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}'
             )
-            assert 'ELF' in exec_cmd(
-                f'file {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}'
-            ).stdout.decode(), (
-                f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH } doesn't seem like an ELF file",
-                " and was probably not copied properly"
-            )
             assert os.access(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK), (
                 "The MCG CLI binary does not have execution permissions"
+            )
+            assert _compare_cli_hashes(), (
+                "Binary hash doesn't match the one on the operator pod"
             )
 
     @property
