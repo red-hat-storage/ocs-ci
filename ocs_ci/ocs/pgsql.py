@@ -341,7 +341,7 @@ class Postgresql(RipSaw):
             resource=app_pod, state=constants.STATUS_RUNNING, timeout=300
         )
 
-    def get_node_utilization(self, node_type=('worker', 'master')):
+    def get_node_utilization(self, node_types=('worker',)):
         """
 
         Check CPU and Memory usage and print a table of the data.
@@ -355,7 +355,7 @@ class Postgresql(RipSaw):
         usage_memory_table.field_names = ["Node Name", "CPU USAGE adm_top", "CPU USAGE oc_describe",
                                           "Memory USAGE adm_top", "Memory USAGE oc_describe"]
 
-        for node in node_type:
+        for node in node_types:
             get_adm = get_node_resource_utilization_from_adm_top(node_type=node)
             get_oc_describe = get_node_resource_utilization_from_oc_describe(node_type=node)
             for node_master in get_adm:
