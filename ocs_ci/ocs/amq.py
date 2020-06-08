@@ -49,13 +49,14 @@ class AMQ(object):
         self.kafka_user_obj = OCP(kind="KafkaUser")
         self.amq_is_setup = False
         self.messaging = False
+        self.benchmark = False
+        self.dir = tempfile.mkdtemp(prefix='amq_')
         self._clone_amq()
 
     def _clone_amq(self):
         """
         clone the amq repo
         """
-        self.dir = tempfile.mkdtemp(prefix='amq_')
         try:
             log.info(f'cloning amq in {self.dir}')
             git_clone_cmd = f'git clone -b {self.branch} {self.repo} '
@@ -446,7 +447,169 @@ class AMQ(object):
 
         return threads
 
-    # ToDo: Install helm and get kafka metrics
+    def run_amq_benchmark(
+        self, name="benchmark", kafka_namespace=constants.AMQ_NAMESPACE,
+        tiller_namespace="tiller", num_of_clients=8, worker=None, timeout=1200,
+        workload_name='1-topic-16-partition-1Kb', topics=1,
+        partitions_per_topic=16, message_size=1024, payload_file="payload/payload-1Kb.data",
+        subscriptions_per_topic=1, consumer_per_subscription=3, producers_per_topic=3,
+        producer_rate=50000, consumer_backlog_sizegb=0, test_duration_minutes=15
+    ):
+        """
+        Run benchmark pod and get the results
+
+        Args:
+            name (str): Name of the benchmark pod
+            kafka_namespace (str): Namespace where kafka cluster created
+            tiller_namespace (str): Namespace where tiller pod needs to be created
+            num_of_clients (int): Number of clients to be created
+            worker (str) : Loads to create on workloads separated with commas
+             e.g http://benchmark-worker-0.benchmark-worker:8080,
+                 http://benchmark-worker-1.benchmark-worker:8080
+            timeout (int): Time to complete the run
+            workload_name (str): Name of the workloads
+            topics (int): Number of topics created
+            partitions_per_topic (int): Number of partitions per topic
+            message_size (int): Message size
+            payload_file (str): Load to run on workload
+            subscriptions_per_topic (int): Number of subscriptions per topic
+            consumer_per_subscription (int): Number of consumers per subscription
+            producers_per_topic (int): Number of producers per topic
+            consumer_backlog_sizegb (int): Size of block in gb
+            test_duration_minutes (int): Time to run the workloads
+
+        Return:
+            result (json): Returns the test result
+
+        """
+
+        # Namespace for to helm/tiller
+        try:
+            self.create_namespace(tiller_namespace)
+        except CommandFailed as ef:
+            if f'project.project.openshift.io "{tiller_namespace}" already exists' not in str(ef):
+                raise ef
+
+        # Create rbac file
+        try:
+            sa_tiller = list(templating.load_yaml(constants.AMQ_RBAC_YAML, multi_document=True))
+            sa_tiller[0]["metadata"]["namespace"] = tiller_namespace
+            sa_tiller[1]["subjects"][0]["namespace"] = tiller_namespace
+            self.sa_tiller = OCS(**sa_tiller[0])
+            self.crb_tiller = OCS(**sa_tiller[1])
+            self.sa_tiller.create()
+            self.crb_tiller.create()
+        except(CommandFailed, CalledProcessError) as cf:
+            log.error('Failed during creation of service account tiller')
+            raise cf
+
+        # Install helm cli (version v2.16.0 as we need tiller component)
+        # And create tiller pods
+        url = "https://get.helm.sh/helm-v2.16.1-linux-amd64.tar.gz"
+        try:
+            log.info(f'Install helm on {self.dir}')
+            wget_cmd = f"wget -c --read-timeout=5 --tries=0 {url}"
+            untar_cmd = f"tar -zxvf helm-v2.16.1-linux-amd64.tar.gz"
+            tiller_cmd = (
+                f"linux-amd64/helm init --tiller-namespace {tiller_namespace}"
+                f" --service-account {tiller_namespace}"
+            )
+            run(
+                wget_cmd,
+                shell=True,
+                cwd=self.dir,
+                check=True
+            )
+            run(
+                untar_cmd,
+                shell=True,
+                cwd=self.dir,
+                check=True
+            )
+            run(
+                tiller_cmd,
+                shell=True,
+                cwd=self.dir,
+                check=True
+            )
+        except (CommandFailed, CalledProcessError)as cf:
+            log.error('Error during installing helm')
+            raise cf
+
+        # Validate tiller pod is running
+        log.info("Waiting for 30s")
+        time.sleep(30)
+        if self.is_amq_pod_running(pod_pattern="tiller", expected_pods=1, namespace=tiller_namespace):
+            log.info("Tiller pod is running")
+        else:
+            raise ResourceWrongStatusException("Tiller pod is not in running state")
+
+        # Create benchmark pods
+        log.info("Create benchmark pods")
+        try:
+            values = templating.load_yaml(constants.AMQ_BENCHMARK_VALUE_YAML)
+            values["numWorkers"] = num_of_clients
+            benchmark_cmd = (
+                f"linux-amd64/helm install {constants.AMQ_BENCHMARK_POD_YAML}"
+                f" --name {name} --tiller-namespace {tiller_namespace}"
+            )
+            run(
+                benchmark_cmd,
+                shell=True,
+                cwd=self.dir,
+                check=True
+            )
+        except(CommandFailed, CalledProcessError) as cf:
+            log.error('Failed during creation of benchmark pods')
+            raise cf
+
+        # Making sure the benchmark pod and clients are running
+        if self.is_amq_pod_running(
+            pod_pattern="benchmark", expected_pods=(1 + num_of_clients), namespace=tiller_namespace
+        ):
+            log.info("All benchmark pod is up and running")
+        else:
+            raise ResourceWrongStatusException("Benchmark pod is not getting to running state")
+
+        # Update commonConfig with kafka-bootstrap server details
+        driver_kafka = templating.load_yaml(constants.AMQ_DRIVER_KAFKA_YAML)
+        driver_kafka['commonConfig'] = (
+            f'bootstrap.servers=my-cluster-kafka-bootstrap.{kafka_namespace}.svc.cluster.local:9092'
+        )
+        json_file = f'{self.dir}/driver_kafka'
+        templating.dump_data_to_json(driver_kafka, json_file)
+        cmd = f'oc cp {json_file} {name}-driver:/'
+        run_cmd(cmd)
+
+        # Update the workload yaml
+        amq_workload_yaml = templating.load_yaml(constants.AMQ_WORKLOAD_YAML)
+        amq_workload_yaml['name'] = workload_name
+        amq_workload_yaml['topics'] = topics
+        amq_workload_yaml['partitionsPerTopic'] = partitions_per_topic
+        amq_workload_yaml['messageSize'] = message_size
+        amq_workload_yaml['payloadFile'] = payload_file
+        amq_workload_yaml['subscriptionsPerTopic'] = subscriptions_per_topic
+        amq_workload_yaml['consumerPerSubscription'] = consumer_per_subscription
+        amq_workload_yaml['producersPerTopic'] = producers_per_topic
+        amq_workload_yaml['producerRate'] = producer_rate
+        amq_workload_yaml['consumerBacklogSizeGB'] = consumer_backlog_sizegb
+        amq_workload_yaml['testDurationMinutes'] = test_duration_minutes
+        yaml_file = f'{self.dir}/amq_workload.yaml'
+        templating.dump_data_to_temp_yaml(amq_workload_yaml, yaml_file)
+        cmd = f'oc cp {yaml_file} {name}-driver:/'
+        run_cmd(cmd)
+
+        # Run the benchmark
+        if worker:
+            cmd = f"bin/benchmark --drivers /driver_kafka --workers {worker} /amq_workload.yaml"
+        else:
+            cmd = f"bin/benchmark --drivers /driver_kafka /amq_workload.yaml"
+        log.info(f"Run benchmark and running command {cmd} inside the benchmark pod ")
+        pod_obj = get_pod_obj(name=f"{name}-driver", namespace=tiller_namespace)
+        result = pod_obj.exec_cmd_on_pod(command=cmd, out_yaml_format=False, timeout=timeout)
+
+        self.benchmark = True
+        return result
 
     def create_messaging_on_amq(self, topic_name='my-topic', user_name="my-user", partitions=1,
                                 replicas=1, num_of_producer_pods=1, num_of_consumer_pods=1,
@@ -489,14 +652,15 @@ class AMQ(object):
         self.amq_is_setup = True
         return self
 
-    def cleanup(self, namespace=constants.AMQ_NAMESPACE):
+    def cleanup(self, kafka_namespace=constants.AMQ_NAMESPACE, tiller_namespace='tiller'):
         """
         Clean up function,
         will start to delete from amq cluster operator
         then amq-connector, persistent, bridge, at the end it will delete the created namespace
 
         Args:
-            namespace (str): Created namespace for amq
+            kafka_namespace (str): Created namespace for amq
+            tiller_namespace (str): Created namespace for benchmark
         """
         if self.amq_is_setup:
             if self.messaging:
@@ -504,12 +668,31 @@ class AMQ(object):
                 self.producer_pod.delete()
                 self.kafka_user.delete()
                 self.kafka_topic.delete()
+            if self.benchmark:
+                # Delete the helm app
+                try:
+                    purge_cmd = f"linux-amd64/helm delete benchmark --purge --tiller-namespace {tiller_namespace}"
+                    run(
+                        purge_cmd,
+                        shell=True,
+                        cwd=self.dir,
+                        check=True
+                    )
+                except (CommandFailed, CalledProcessError)as cf:
+                    log.error('Failed to delete help app')
+                    raise cf
+
+                # Delete the pods and namespace created
+                self.sa_tiller.delete()
+                self.crb_tiller.delete()
+                run_cmd(f'oc delete project {tiller_namespace}')
+                self.ns_obj.wait_for_delete(resource_name=tiller_namespace)
             self.kafka_persistent.delete()
             self.kafka_connect.delete()
             self.kafka_bridge.delete()
             run_cmd(f'oc delete -f {self.amq_dir}', shell=True, check=True, cwd=self.dir)
-        run_cmd(f'oc delete project {namespace}')
+        run_cmd(f'oc delete project {kafka_namespace}')
 
         # Reset namespace to default
         switch_to_default_rook_cluster_project()
-        self.ns_obj.wait_for_delete(resource_name=namespace)
+        self.ns_obj.wait_for_delete(resource_name=kafka_namespace)

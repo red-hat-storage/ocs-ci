@@ -393,8 +393,29 @@ COUCHBASE_OPERATOR = 'couchbase-operator-namespace'
 HELLO_WORLD_PRODUCER_YAML = os.path.join(
     TEMPLATE_AMQ_DIR, "hello-world-producer.yaml"
 )
+
 HELLO_WORLD_CONSUMER_YAML = os.path.join(
     TEMPLATE_AMQ_DIR, "hello-world-consumer.yaml"
+)
+
+AMQ_RBAC_YAML = os.path.join(
+    TEMPLATE_AMQ_DIR, "rbac.yaml"
+)
+
+AMQ_BENCHMARK_POD_YAML = os.path.join(
+    TEMPLATE_AMQ_DIR, "benchmark"
+)
+
+AMQ_BENCHMARK_VALUE_YAML = os.path.join(
+    AMQ_BENCHMARK_POD_YAML, "values.yaml"
+)
+
+AMQ_DRIVER_KAFKA_YAML = os.path.join(
+    TEMPLATE_AMQ_DIR, "driver-kafka.yaml"
+)
+
+AMQ_WORKLOAD_YAML = os.path.join(
+    TEMPLATE_AMQ_DIR, "amq_workload.yaml"
 )
 
 NGINX_POD_YAML = os.path.join(
