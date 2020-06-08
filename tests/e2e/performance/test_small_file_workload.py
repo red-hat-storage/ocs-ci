@@ -22,14 +22,10 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-"""
-Defining dictionary of keywords to look in the logs, foreach keyword we have the
-key-name in the final results output, the separate character to split the line
-in the log file, the position of the result and the numpy operation to use when
-we have more then one pod in the test.
-
-"""
-
+# Defining dictionary of keywords to look in the logs, foreach keyword we have
+# the key-name in the final results output, the separate character to split the
+# line in the log file, the position of the result and the numpy operation to
+# use when we have more then one pod in the test.
 keys_to_pars = {
     'files/thread': {
         'name': 'Files_per_Treads', 'sep': ' ', 'pos': -1, 'op': None
@@ -457,24 +453,20 @@ class TestSmallFileWorkload(E2ETest):
         # wait for benchmark pods to get created - takes a while
         clients = sf_data['spec']['workload']['args']['clients']
         log.info(f'Going to run on {clients} pods, waiting for pods to start')
-        count = 10  # total number of retry for all benchmark pods to start
         small_file_client_pods = {}
-        while count > 0:
-            for bench_pod in TimeoutSampler(
-                120, 5, get_pod_name_by_pattern, 'smallfile-client', 'my-ripsaw'
-            ):
-                try:
-                    if len(bench_pod) == clients:
-                        log.info(f'The list of benchmark pods is {bench_pod}')
-                        for bpod in bench_pod:
-                            small_file_client_pods[bpod] = SmallFileLogParser(
-                                bpod)
-                        small_file_client_pod = bench_pod
-                        count = 0
-                        break
-                except IndexError:
-                    log.info('Bench pod not ready yet')
-            count -= 1
+        for bench_pod in TimeoutSampler(
+            1200, 5, get_pod_name_by_pattern, 'smallfile-client', 'my-ripsaw'
+        ):
+            try:
+                if len(bench_pod) == clients:
+                    log.info(f'The list of benchmark pods is {bench_pod}')
+                    for bpod in bench_pod:
+                        small_file_client_pods[bpod] = SmallFileLogParser(
+                            bpod)
+                    small_file_client_pod = bench_pod
+                    break
+            except IndexError:
+                log.info('Bench pod not ready yet')
 
         # make sure all pods started
         assert len(small_file_client_pod) == clients, \
