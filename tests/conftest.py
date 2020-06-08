@@ -65,7 +65,7 @@ class OCSLogFormatter(logging.Formatter):
 
     def __init__(self):
         fmt = (
-            "%(asctime)s - %(levelname)s - %(name)s.%(funcName)s.%(lineno)d "
+            "%(asctime)s - %(threadName)s - %(levelname)s - %(name)s.%(funcName)s.%(lineno)d "
             "- %(message)s"
         )
         super(OCSLogFormatter, self).__init__(fmt)
