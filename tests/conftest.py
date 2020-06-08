@@ -66,7 +66,7 @@ class OCSLogFormatter(logging.Formatter):
 
     def __init__(self):
         fmt = (
-            "%(asctime)s - %(levelname)s - %(name)s.%(funcName)s.%(lineno)d "
+            "%(asctime)s - %(threadName)s - %(levelname)s - %(name)s.%(funcName)s.%(lineno)d "
             "- %(message)s"
         )
         super(OCSLogFormatter, self).__init__(fmt)
@@ -1578,16 +1578,19 @@ def awscli_pod_fixture(mcg_obj, created_pods):
     helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
     created_pods.append(awscli_pod_obj)
 
+    # FIXME: Use service-ca.crt instead of copying the Ingress crt into the pod
+    # https://github.com/red-hat-storage/ocs-ci/issues/2260
+
     # Verify that the target dir for the self-signed MCG cert exists
-    cert_dir = pathlib.PurePath(constants.MCG_CRT_AWSCLI_POD_PATH).parent
+    cert_dir = pathlib.PurePath(constants.DEFAULT_INGRESS_CRT_REMOTE_PATH).parent
     awscli_pod_obj.exec_cmd_on_pod(f'mkdir --parents {cert_dir}')
 
     # Copy the self-signed certificate to use with AWSCLI
     # Use cat and sed since the pod does not have tar or rsync
     cmd = (
-        f"cat {constants.MCG_CRT_LOCAL_PATH} | "
+        f"cat {constants.DEFAULT_INGRESS_CRT_LOCAL_PATH} | "
         f"oc exec -i -n {mcg_obj.namespace} {constants.AWSCLI_RELAY_POD_NAME} "
-        f"-- sed -n 'w {constants.MCG_CRT_AWSCLI_POD_PATH}'"
+        f"-- sed -n 'w {constants.DEFAULT_INGRESS_CRT_REMOTE_PATH}'"
     )
     subprocess.run(cmd, shell=True)
 
@@ -1727,7 +1730,10 @@ def bucket_factory_fixture(request, mcg_obj):
         'cli': CLIBucket
     }
 
-    def _create_buckets(amount=1, interface='S3', *args, **kwargs):
+    def _create_buckets(
+        amount=1, interface='S3',
+        verify_health=True, *args, **kwargs
+    ):
         """
         Creates and deletes all buckets that were created as part of the test
 
@@ -1750,14 +1756,17 @@ def bucket_factory_fixture(request, mcg_obj):
             bucket_name = helpers.create_unique_resource_name(
                 resource_description='bucket', resource_type=interface.lower()
             )
-            created_buckets.append(
-                bucketMap[interface.lower()](
-                    mcg_obj,
-                    bucket_name,
-                    *args,
-                    **kwargs
-                )
+            created_bucket = bucketMap[interface.lower()](
+                mcg_obj,
+                bucket_name,
+                *args,
+                **kwargs
             )
+            created_buckets.append(created_bucket)
+            if verify_health:
+                assert created_bucket.verify_health(), (
+                    f"{bucket_name} did not reach a healthy state in time."
+                )
         return created_buckets
 
     def bucket_cleanup():
@@ -2160,6 +2169,7 @@ def install_logging(request):
     Setup and teardown
     * The setup will deploy openshift-logging in the cluster
     * The teardown will uninstall cluster-logging from the cluster
+
     """
 
     def finalizer():
@@ -2167,8 +2177,18 @@ def install_logging(request):
 
     request.addfinalizer(finalizer)
 
-    # Checks OCP version
+    csv = ocp.OCP(
+        kind=constants.CLUSTER_SERVICE_VERSION,
+        namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
+    logging_csv = csv.get().get('items')
+    if logging_csv:
+        log.info("Logging is already configured, Skipping Installation")
+        return
 
+    log.info("Configuring Openshift-logging")
+
+    # Checks OCP version
     ocp_version = get_ocp_version()
 
     # Creates namespace opensift-operators-redhat

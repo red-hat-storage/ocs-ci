@@ -54,15 +54,11 @@ def check_no_pending_csr():
 
     """
     logger.info("Checking for Pending CSRs")
-    csr_conf = get_csr_resource()
-    pending = False
-    for item in csr_conf.data.get('items'):
-        if item.get('status') == {}:
-            logger.warning(
-                f"{item.get('metadata').get('name')} is not Approved"
-            )
-            pending = True
-    if pending:
+    pending_csrs = get_pending_csr()
+    logger.debug(f"pending CSRs: {pending_csrs}")
+    if pending_csrs:
+        logger.warning(f"{pending_csrs} are not Approved")
+        approve_csrs(pending_csrs)
         raise exceptions.PendingCSRException(
             "Some CSRs are in 'Pending' state"
         )
@@ -95,6 +91,7 @@ def get_pending_csr():
     ]
 
 
+@retry(exceptions.CommandFailed, tries=7, delay=5, backoff=3)
 def approve_csrs(pending_csrs):
     """
     Approves the CSRs

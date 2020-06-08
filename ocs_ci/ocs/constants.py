@@ -144,6 +144,8 @@ must_gather_pod_label = "must-gather"
 # AMQ
 AMQ_NAMESPACE = "myproject"
 KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
+OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
+CODESPEED_URL = 'http://10.0.78.167:8000/'
 
 UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
@@ -158,6 +160,7 @@ IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
 DEFAULT_NOOBAA_BACKINGSTORE = "noobaa-default-backing-store"
 RIPSAW_NAMESPACE = "my-ripsaw"
 RIPSAW_CRD = "resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml"
+RIPSAW_DROP_CACHE = os.path.join(TEMPLATE_FIO_DIR, "drop_cache_pod.yaml")
 OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
 LOCAL_STORAGE_NAMESPACE = 'local-storage'
 
@@ -202,6 +205,8 @@ DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
 CEPH_ROOK_IO_PVC_LABEL = 'ceph.rook.io/pvc'
+PGSQL_APP_LABEL = "app=postgres"
+HOSTNAME_LABEL = "kubernetes.io/hostname"
 
 # Auth Yaml
 OCSCI_DATA_BUCKET = 'ocs-ci-data'
@@ -297,6 +302,10 @@ CSI_RBD_PVC_YAML = os.path.join(
 )
 CONFIGURE_PVC_ON_MONITORING_POD = os.path.join(
     TEMPLATE_CONFIGURE_PVC_MONITORING_POD, "configuring_pvc.yaml"
+)
+
+FIO_CR_YAML = os.path.join(
+    TEMPLATE_FIO_DIR, "benchmark_fio.yaml"
 )
 
 PGSQL_SERVICE_YAML = os.path.join(
@@ -504,6 +513,7 @@ VM_POWERED_ON = 'poweredOn'
 NODE_READY = 'Ready'
 NODE_NOT_READY = 'NotReady'
 NODE_READY_SCHEDULING_DISABLED = 'Ready,SchedulingDisabled'
+NODE_NOT_READY_SCHEDULING_DISABLED = 'NotReady,SchedulingDisabled'
 
 # Volume modes
 VOLUME_MODE_BLOCK = 'Block'
@@ -590,6 +600,9 @@ VM_DISK_TYPE = "thin"
 VM_DISK_MODE = "persistent"
 INSTALLER_DEFAULT_DNS = "1.1.1.1"
 
+LIFECYCLE = 'lifecycle { ignore_changes = ["disk"] }'
+CSR_BOOTSTRAPPER_NODE = "node-bootstrapper"
+
 # Config related constants
 config_keys_patterns_to_censor = ['passw', 'token', 'secret']
 
@@ -616,8 +629,11 @@ ORDER_AFTER_UPGRADE = 80
 OCS_CSV_PREFIX = 'ocs-operator'
 LOCAL_STORAGE_CSV_PREFIX = 'local-storage-operator'
 LATEST_TAGS = (
-    'latest', 'latest-stable', '4.2-rc', 'latest-4.2', 'latest-stable-4.2',
+    'latest', 'latest-stable',
+    '4.2-rc', 'latest-4.2', 'latest-stable-4.2',
     '4.3-rc', 'latest-4.3', 'latest-stable-4.3',
+    '4.4-rc', 'latest-4.4', 'latest-stable-4.4',
+    '4.5-rc', 'latest-4.5', 'latest-stable-4.5',
 )
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
@@ -799,10 +815,9 @@ NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
 NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
-MCG_CRT_NAME = "service-ca.crt"
-MCG_CRT_REMOTE_PATH = f"/var/run/secrets/kubernetes.io/serviceaccount/..data/{MCG_CRT_NAME}"
-MCG_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{MCG_CRT_NAME}"
-MCG_CRT_AWSCLI_POD_PATH = f"/cert/mcg-{MCG_CRT_NAME}"
+DEFAULT_INGRESS_CRT = "router-ca.crt"
+DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
+DEFAULT_INGRESS_CRT_REMOTE_PATH = f"/cert/{DEFAULT_INGRESS_CRT}"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 
 # Storage classes provisioners
@@ -828,3 +843,20 @@ AUTH_CONFIG_DOCS = (
 TP_CONVERSION = {
     ' B/s': 0.000000976562, ' KiB/s': 0.000976562, ' MiB/s': 1
 }
+
+# LSO
+ROOT_DISK_NAME = "sda"
+RDM = "RDM"
+VMDK = "VMDK"
+DIRECTPATH = "VMDirectPath"
+DISK_MODE = "independent_persistent"
+COMPATABILITY_MODE = "physicalMode"
+
+# OS
+RHEL_OS = "RHEL"
+RHCOS = "RHCOS"
+
+# Elasticsearch and codespeed constants
+ES_SERVER_IP = '10.0.78.167'
+ES_SERVER_PORT = '9200'
+ES_SERVER_URL = 'https://10.0.78.167:9200'

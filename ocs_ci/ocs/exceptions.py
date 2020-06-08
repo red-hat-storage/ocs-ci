@@ -10,6 +10,10 @@ class CephHealthException(Exception):
     pass
 
 
+class NoobaaHealthException(Exception):
+    pass
+
+
 class UnexpectedBehaviour(Exception):
     pass
 
@@ -167,4 +171,8 @@ class NoBucketPolicyResponse(Exception):
 
 
 class PendingCSRException(Exception):
+    pass
+
+
+class RDMDiskNotFound(Exception):
     pass

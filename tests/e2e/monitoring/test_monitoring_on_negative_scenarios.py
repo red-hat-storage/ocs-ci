@@ -19,6 +19,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
+from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3
 
 log = logging.getLogger(__name__)
 
@@ -109,7 +110,7 @@ class TestMonitoringBackedByOCS(E2ETest):
                 f"Nodes in NotReady status found: {[n.name for n in not_ready_nodes]}"
             )
             if not_ready_nodes:
-                nodes.restart_nodes(not_ready_nodes)
+                nodes.restart_nodes_by_stop_and_start(not_ready_nodes)
                 wait_for_nodes_status()
 
             log.info("All nodes are in Ready status")
@@ -412,6 +413,7 @@ class TestMonitoringBackedByOCS(E2ETest):
             )
 
     @pytest.mark.polarion_id("OCS-711")
+    @skipif_aws_i3
     def test_monitoring_shutdown_and_recovery_prometheus_node(self, nodes, pods):
         """
         Test case to validate whether shutdown and recovery of a

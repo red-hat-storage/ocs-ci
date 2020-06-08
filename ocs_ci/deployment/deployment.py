@@ -11,11 +11,13 @@ import requests
 from copy import deepcopy
 
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import validate_cluster_on_pvc, validate_pdb_creation
 from ocs_ci.ocs.exceptions import (
-    CommandFailed, UnavailableResourceException, UnsupportedPlatformError
+    CommandFailed, UnavailableResourceException, UnsupportedPlatformError,
+    ResourceWrongStatusException,
 )
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
@@ -435,6 +437,11 @@ class Deployment(object):
             'storage'
         ] = f"{device_size}Gi"
 
+        if self.platform.lower() == constants.VSPHERE_PLATFORM:
+            deviceset_data['dataPVCTemplate']['spec'][
+                'storageClassName'
+            ] = constants.DEFAULT_SC_VSPHERE
+
         if config.DEPLOYMENT.get('local_storage'):
             cluster_data['spec']['manageNodes'] = False
             cluster_data['spec']['monDataDirHostPath'] = '/var/lib/rook'
@@ -453,11 +460,6 @@ class Deployment(object):
                     'mon', 'mds', 'rgw', 'mgr', 'noobaa-core', 'noobaa-db',
                 ]
             }
-
-        if self.platform.lower() == constants.VSPHERE_PLATFORM:
-            deviceset_data['dataPVCTemplate']['spec'][
-                'storageClassName'
-            ] = constants.DEFAULT_SC_VSPHERE
 
         # Enable host network if enabled in config (this require all the
         # rules to be enabled on underlaying platform).
@@ -578,7 +580,10 @@ class Deployment(object):
             time.sleep(waiting_time)
 
             # Validate the pods are respinned and in running state
-            retry(CommandFailed, tries=3, delay=15)(
+            retry(
+                (CommandFailed, ResourceWrongStatusException),
+                tries=3,
+                delay=15)(
                 validate_pods_are_respinned_and_running_state
             )(
                 pods_list
@@ -752,6 +757,28 @@ def setup_local_storage():
         timeout=600
     ), "Local storage operator did not reach running phase"
 
+    # Add RDM disk for vSphere platform
+    platform = config.ENV_DATA.get('platform').lower()
+    lso_type = config.DEPLOYMENT.get('type')
+    if platform == constants.VSPHERE_PLATFORM:
+        # Types of LSO Deployment
+        # Importing here to avoid circular dependancy
+        from ocs_ci.deployment.vmware import VSPHEREBASE
+        if lso_type == constants.RDM:
+            logger.info(f"LSO Deployment type: {constants.RDM}")
+            vsphere_base = VSPHEREBASE()
+            vsphere_base.add_rdm_disks()
+
+        if lso_type == constants.VMDK:
+            raise NotImplementedError(
+                "LSO Deployment for VMDk is not implemented"
+            )
+
+        if lso_type == constants.DIRECTPATH:
+            raise NotImplementedError(
+                "LSO Deployment for VMDirectPath is not implemented"
+            )
+
     # Retrieve NVME device path ID for each worker node
     device_paths = get_device_paths(worker_names)
 
@@ -784,24 +811,32 @@ def setup_local_storage():
 
 
 @retry(AssertionError, 12, 10, 1)
-def verify_pvs_created(num_workers):
+def verify_pvs_created(expected_pvs):
     """
     Verify that PVs were created and are in the Available state
 
     Args:
-        num_workers (int): number of worker nodes in the cluster
+        expected_pvs (int): number of PVs to verify
 
     Raises:
         AssertionError: if any PVs are not in the Available state or if the
-            number of PVs does not match the number of workers in the cluster.
+            number of PVs does not match the given parameter.
 
     """
     logger.info("Verifying PVs are created")
     out = run_cmd("oc get pv -o json")
     pv_json = json.loads(out)
     assert pv_json['items'], (
-        f"No PVs created but we are expecting {num_workers}"
+        f"No PVs created but we are expecting {expected_pvs}"
     )
+
+    # check number of PVs created
+    num_pvs = len(pv_json['items'])
+    assert num_pvs == expected_pvs, (
+        f"{num_pvs} PVs created but we are expecting {expected_pvs}"
+    )
+
+    # checks the state of PV
     for pv in pv_json['items']:
         pv_state = pv['status']['phase']
         pv_name = pv['metadata']['name']
@@ -809,8 +844,8 @@ def verify_pvs_created(num_workers):
         assert pv_state == 'Available', (
             f"{pv_name} not in 'Available' state. Current state is {pv_state}"
         )
-    num_pvs = len(pv_json['items'])
-    logger.debug("PVs, Workers: %s, %s", num_pvs, num_workers)
+
+    logger.debug("PVs, Workers: %s, %s", num_pvs, expected_pvs)
 
 
 def get_device_paths(worker_names):
@@ -827,7 +862,9 @@ def get_device_paths(worker_names):
     platform = config.ENV_DATA.get('platform').lower()
     if platform == 'aws':
         pattern = 'nvme-Amazon_EC2_NVMe_Instance_Storage'
-    # TODO: add patterns for vsphere and bare metal
+    elif platform == 'vsphere':
+        pattern = 'wwn'
+    # TODO: add patterns bare metal
     else:
         raise UnsupportedPlatformError(
             'LSO deployment is not supported for platform: %s', platform
@@ -840,7 +877,11 @@ def get_device_paths(worker_names):
         )
         out = run_cmd(cmd)
         out_lines = out.split('\n')
-        nvme_lines = [line for line in out_lines if pattern in line]
+        nvme_lines = [
+            line for line in out_lines if (
+                pattern in line and constants.ROOT_DISK_NAME not in line
+            )
+        ]
         for nvme_line in nvme_lines:
             device_path = [
                 part for part in nvme_line.split(' ') if pattern in part

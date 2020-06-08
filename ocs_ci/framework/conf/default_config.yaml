@@ -45,7 +45,7 @@ DEPLOYMENT:
   installer_version: "4.4.0-0.nightly"
   force_download_installer: True
   force_download_client: True
-  default_latest_tag: 'latest-4.4'
+  default_latest_tag: 'latest-stable-4.4'
   # You can overwrite csv channel version by following parameter
   ocs_csv_channel: "stable-4.4"
   # you can overwrite the image for ocs operator catalog source by following parameter:
@@ -120,10 +120,7 @@ ENV_DATA:
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true
-  # This default image for ocp upgrade based on 4.4 candidate build
-  # ocp_upgrade_version: "4.4.0"
-  # Once 4.4 is GAed, we will change to stable-4.4
-  ocp_channel: "candidate-4.4"
+  ocp_channel: "stable-4.4"
   ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
   ocp_arch: "x86_64"
 
