@@ -464,8 +464,8 @@ class AMQ(object):
             tiller_namespace (str): Namespace where tiller pod needs to be created
             num_of_clients (int): Number of clients to be created
             worker (str) : Loads to create on workloads separated with commas
-             e.g http://benchmark-worker-0.benchmark-worker:8080,
-                 http://benchmark-worker-1.benchmark-worker:8080
+                e.g http://benchmark-worker-0.benchmark-worker:8080,
+                http://benchmark-worker-1.benchmark-worker:8080
             timeout (int): Time to complete the run
             workload_name (str): Name of the workloads
             topics (int): Number of topics created
@@ -475,6 +475,7 @@ class AMQ(object):
             subscriptions_per_topic (int): Number of subscriptions per topic
             consumer_per_subscription (int): Number of consumers per subscription
             producers_per_topic (int): Number of producers per topic
+            producer_rate (int): Producer rate
             consumer_backlog_sizegb (int): Size of block in gb
             test_duration_minutes (int): Time to run the workloads
 
@@ -509,7 +510,7 @@ class AMQ(object):
         try:
             log.info(f'Install helm on {self.dir}')
             wget_cmd = f"wget -c --read-timeout=5 --tries=0 {url}"
-            untar_cmd = f"tar -zxvf helm-v2.16.1-linux-amd64.tar.gz"
+            untar_cmd = "tar -zxvf helm-v2.16.1-linux-amd64.tar.gz"
             tiller_cmd = (
                 f"linux-amd64/helm init --tiller-namespace {tiller_namespace}"
                 f" --service-account {tiller_namespace}"
@@ -603,7 +604,7 @@ class AMQ(object):
         if worker:
             cmd = f"bin/benchmark --drivers /driver_kafka --workers {worker} /amq_workload.yaml"
         else:
-            cmd = f"bin/benchmark --drivers /driver_kafka /amq_workload.yaml"
+            cmd = "bin/benchmark --drivers /driver_kafka /amq_workload.yaml"
         log.info(f"Run benchmark and running command {cmd} inside the benchmark pod ")
         pod_obj = get_pod_obj(name=f"{name}-driver", namespace=tiller_namespace)
         result = pod_obj.exec_cmd_on_pod(command=cmd, out_yaml_format=False, timeout=timeout)
