@@ -54,6 +54,12 @@ class MCG(object):
         )
 
         self.retrieve_noobaa_cli_binary()
+
+        """
+        The certificate will be copied on each mcg_obj instantiation since
+        the process is so light and quick, that the time required for the redundant
+        copy is neglible in comparison to the time a hash comparison will take.
+        """
         retrieve_default_ingress_crt()
 
         get_noobaa = OCP(kind='noobaa', namespace=self.namespace).get()

@@ -2281,9 +2281,6 @@ def retrieve_default_ingress_crt():
     Copy the default ingress certificate from the router-ca secret
     to the local code runner for usage with boto3.
 
-    The certificate will be copied on each mcg_obj instantiation since
-    the process is light and quick, that the time required for the redundant
-    copy is neglible in comparison to the time a hash comparison will take.
     """
     default_ingress_crt_b64 = OCP(
         kind='secret',
