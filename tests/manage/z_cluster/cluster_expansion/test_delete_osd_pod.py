@@ -8,7 +8,6 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.ocs.cluster_load import ClusterLoad
 from ocs_ci.utility.utils import ceph_health_check
 from tests.disruption_helpers import Disruptions
 
@@ -32,7 +31,7 @@ class TestAddCapacityWithOSDPodDelete(ManageTest):
     """
 
     def test_add_capacity_osd_pod_delete(
-        self, nodes, multi_pvc_factory, pvc_factory, pod_factory, workload_storageutilization_rbd
+        self, nodes, workload_storageutilization_rbd
     ):
         """ Test add capacity when one of the osd pods gets deleted
         in the middle of the process.
@@ -41,15 +40,11 @@ class TestAddCapacityWithOSDPodDelete(ManageTest):
         # Please notice: When the branch 'wip-add-capacity-e_e' will be merged into master
         # the test will include more much data both before, and after calling 'add_capacity'function.
 
-        max_osds = 12
+        max_osds = 15
         osd_pods_before = pod_helpers.get_osd_pods()
         assert len(osd_pods_before) < max_osds, (
             "Condition 2 to start test failed: We have maximum of osd's in the cluster")
         logging.info("All start conditions are met!")
-
-        logging.info("Perform some IO operations...")
-        cluster_load = ClusterLoad()
-        cluster_load.reach_cluster_load_percentage_in_throughput(pvc_factory, pod_factory, target_percentage=0.3)
 
         d = Disruptions()
         d.set_resource('osd')
