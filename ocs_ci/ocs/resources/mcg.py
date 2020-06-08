@@ -668,7 +668,7 @@ class MCG(object):
                 if pool.get('name') == backingstore_name:
                     current_state = pool.get('mode')
                     logger.info(
-                        f'Current state of backingstore ''{backingstore_name} '
+                        f'Current state of backingstore {backingstore_name} '
                         f'is {current_state}'
                     )
                     if current_state == desired_state:
