@@ -91,6 +91,7 @@ def get_pending_csr():
     ]
 
 
+@retry(exceptions.CommandFailed, tries=7, delay=5, backoff=3)
 def approve_csrs(pending_csrs):
     """
     Approves the CSRs

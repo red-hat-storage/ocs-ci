@@ -58,9 +58,10 @@ class Pod(OCS):
         self.pod_data = kwargs
         super(Pod, self).__init__(**kwargs)
 
-        self.temp_yaml = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             mode='w+', prefix='POD_', delete=False
-        )
+        ) as temp_info:
+            self.temp_yaml = temp_info.name
         self._name = self.pod_data.get('metadata').get('name')
         self._labels = self.get_labels()
         self._roles = []
@@ -1009,6 +1010,10 @@ def validate_pods_are_respinned_and_running_state(pod_objs_list):
 
     Returns:
          bool : True if the pods are respinned and running, False otherwise
+
+    Raises:
+        ResourceWrongStatusException: In case the resources hasn't
+            reached the Running state
 
     """
     for pod in pod_objs_list:

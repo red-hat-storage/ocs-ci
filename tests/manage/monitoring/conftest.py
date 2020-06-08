@@ -357,7 +357,7 @@ def workload_storageutilization_checksum_rbd(
         fio_configmap_dict,
         measurement_dir,
         tmp_path,
-        target_percentage=0.10,
+        target_size=10,
         with_checksum=True)
     return measured_op
 

@@ -160,6 +160,7 @@ IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
 DEFAULT_NOOBAA_BACKINGSTORE = "noobaa-default-backing-store"
 RIPSAW_NAMESPACE = "my-ripsaw"
 RIPSAW_CRD = "resources/crds/ripsaw_v1alpha1_ripsaw_crd.yaml"
+RIPSAW_DROP_CACHE = os.path.join(TEMPLATE_FIO_DIR, "drop_cache_pod.yaml")
 OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
 LOCAL_STORAGE_NAMESPACE = 'local-storage'
 
@@ -205,6 +206,7 @@ DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
 CEPH_ROOK_IO_PVC_LABEL = 'ceph.rook.io/pvc'
 PGSQL_APP_LABEL = "app=postgres"
+HOSTNAME_LABEL = "kubernetes.io/hostname"
 
 # Auth Yaml
 OCSCI_DATA_BUCKET = 'ocs-ci-data'
@@ -300,6 +302,10 @@ CSI_RBD_PVC_YAML = os.path.join(
 )
 CONFIGURE_PVC_ON_MONITORING_POD = os.path.join(
     TEMPLATE_CONFIGURE_PVC_MONITORING_POD, "configuring_pvc.yaml"
+)
+
+FIO_CR_YAML = os.path.join(
+    TEMPLATE_FIO_DIR, "benchmark_fio.yaml"
 )
 
 PGSQL_SERVICE_YAML = os.path.join(
@@ -507,6 +513,7 @@ VM_POWERED_ON = 'poweredOn'
 NODE_READY = 'Ready'
 NODE_NOT_READY = 'NotReady'
 NODE_READY_SCHEDULING_DISABLED = 'Ready,SchedulingDisabled'
+NODE_NOT_READY_SCHEDULING_DISABLED = 'NotReady,SchedulingDisabled'
 
 # Volume modes
 VOLUME_MODE_BLOCK = 'Block'
@@ -622,8 +629,11 @@ ORDER_AFTER_UPGRADE = 80
 OCS_CSV_PREFIX = 'ocs-operator'
 LOCAL_STORAGE_CSV_PREFIX = 'local-storage-operator'
 LATEST_TAGS = (
-    'latest', 'latest-stable', '4.2-rc', 'latest-4.2', 'latest-stable-4.2',
+    'latest', 'latest-stable',
+    '4.2-rc', 'latest-4.2', 'latest-stable-4.2',
     '4.3-rc', 'latest-4.3', 'latest-stable-4.3',
+    '4.4-rc', 'latest-4.4', 'latest-stable-4.4',
+    '4.5-rc', 'latest-4.5', 'latest-stable-4.5',
 )
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
@@ -845,3 +855,8 @@ COMPATABILITY_MODE = "physicalMode"
 # OS
 RHEL_OS = "RHEL"
 RHCOS = "RHCOS"
+
+# Elasticsearch and codespeed constants
+ES_SERVER_IP = '10.0.78.167'
+ES_SERVER_PORT = '9200'
+ES_SERVER_URL = 'https://10.0.78.167:9200'

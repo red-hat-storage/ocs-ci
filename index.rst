@@ -21,6 +21,8 @@ and functionality using AWS and other supported platforms.
    bin dir README<bin/README.md>
    conf dir README <conf/README.md>
    ocsci conf dir README <conf/ocsci/README.md>
+   ocp version conf dir README <conf/ocp_version/README.md>
+   ocs version conf dir README <conf/ocs_version/README.md>
    external dir README <external/README.md>
    pytest_customization dir README <ocs_ci/framework/pytest_customization/README.md>
    ocs-deployment dir README <ocs_ci/templates/ocs-deployment/README.md>

@@ -766,3 +766,21 @@ class MCG(object):
             assert os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
             assert 'ELF' in exec_cmd(f'file {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH}').stdout.decode()
             assert os.access(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH, os.X_OK)
+
+    @property
+    def status(self):
+        """
+        Verify noobaa status output is clean without any errors
+
+        Returns:
+            bool: return False if any of the non optional components of noobaa is not available
+
+        """
+        # Get noobaa status
+        status = self.exec_mcg_cmd('status').stderr
+        for line in status.split('\n'):
+            if 'Not Found' in line and 'Optional' not in line:
+                logger.error(f"Error in noobaa status output- {line}")
+                return False
+        logger.info("Verified: noobaa status does not contain any error.")
+        return True
