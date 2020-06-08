@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 
 """
 Defining dictionary of keywords to look in the logs, foreach keyword we have the
-key-name in the final results output, the seperate charecter to split the line
+key-name in the final results output, the separate character to split the line
 in the log file, the position of the result and the numpy operation to use when
 we have more then one pod in the test.
 
@@ -64,7 +64,7 @@ keys_to_pars = {
 class SmallFileLogParser(object):
 
     """
-    This class is reading the benchmark pod logs, and pars it
+    This class is reading the benchmark pod logs, and parse it
 
     """
     def __init__(self, pod):
@@ -252,6 +252,7 @@ class SmallFileResultsAnalyse(object):
     def aggregate_host_results(self, host_res):
         """
         Aggregation results from all hosts in single sample
+        (each host is actually a pod)
 
         Args:
             host_res (dict): dictionary of host results - user for multi hosts
@@ -268,12 +269,37 @@ class SmallFileResultsAnalyse(object):
             self.results['full-res'] = host_res
             log.info('This is the first pod - return results as is')
         else:
+
+            """
+            Each test can do some operations, so i am running loop on all
+            operations that we have in this particular test.
+
+            """
             for op in self.results['operations']:
+
+                """
+                For each operation, I am looking for all interesting lines
+                that need to be parse.
+
+                """
                 for key in keys_to_pars.keys():
                     key_name = keys_to_pars[key]['name']
                     oper = keys_to_pars[key]['op']
-                    if oper:
+                    if oper:  # if operation to do on samples op is not None
+
+                        """
+                        Not all operations must have all information
+                        (e.g. create operation does not have IOPS)
+
+                        """
                         if key_name in self.results['full-res'][op]:
+
+                            """
+                            For each samples combine the host information (that
+                            passed as parameter) to the total results by using
+                            the particular operation (e.g. sum or average)
+
+                            """
                             for index in range(self.results['samples']):
                                 cur_data = self.results[
                                     'full-res'][op][key_name][index]
