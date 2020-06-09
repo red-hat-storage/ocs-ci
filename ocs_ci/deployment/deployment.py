@@ -867,6 +867,9 @@ def get_device_paths(worker_names):
         pattern = 'wwn'
     elif platform == 'baremetal':
         pattern = config.ENV_DATA.get('disk_pattern')
+    elif platform == 'baremetalpsi':
+        pattern = 'virtio'
+    # TODO: add patterns bare metal
     else:
         raise UnsupportedPlatformError(
             'LSO deployment is not supported for platform: %s', platform
