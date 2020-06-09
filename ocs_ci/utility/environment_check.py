@@ -93,9 +93,11 @@ def assign_get_values(
 
     for item in items:
         ns = item.get('metadata', {}).get('namespace')
+        if item.get('kind') == constants.PV:
+            ns = item.get('spec').get('claimRef').get('namespace')
         app_label = item.get('metadata', {}).get('labels', {}).get('app')
         if (ns is not None
-                and ns.startswith("openshift-")
+                and ns.startswith(("openshift-", defaults.BG_LOAD_NAMESPACE))
                 and ns != defaults.ROOK_CLUSTER_NAMESPACE):
             log.debug("ignoring item in %s namespace: %s", ns, item)
             continue
@@ -105,7 +107,7 @@ def assign_get_values(
         items_filtered.append(item)
 
     ignored = len(items) - len(items_filtered)
-    log.debug("total %d items are ignored during invironment check", ignored)
+    log.debug("total %d items are ignored during environment check", ignored)
 
     env_status_dict[key] = items_filtered
 
