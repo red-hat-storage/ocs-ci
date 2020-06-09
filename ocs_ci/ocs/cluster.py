@@ -20,7 +20,9 @@ from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler, run_cmd, convert_device_size
+from ocs_ci.utility.utils import (
+    TimeoutSampler, run_cmd, convert_device_size, get_trim_mean
+)
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants, exceptions
@@ -590,7 +592,7 @@ class CephCluster(object):
         logging.info(f"The throughput percentage of the cluster is {throughput_percentage}%")
         return throughput_percentage
 
-    def calc_average_throughput(self, samples=5):
+    def calc_trim_mean_throughput(self, samples=8):
         """
         Calculate the cluster average throughput out of a few samples
 
@@ -604,7 +606,7 @@ class CephCluster(object):
         throughput_vals = [
             self.get_cluster_throughput() for _ in range(samples)
         ]
-        return sum(throughput_vals) / samples
+        return round(get_trim_mean(throughput_vals), 3)
 
     def get_rebalance_status(self):
         """

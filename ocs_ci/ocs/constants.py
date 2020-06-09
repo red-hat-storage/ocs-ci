@@ -475,6 +475,9 @@ FIO_IO_PARAMS_YAML = os.path.join(
 FIO_IO_RW_PARAMS_YAML = os.path.join(
     TEMPLATE_FIO_DIR, "workload_io_rw.yaml"
 )
+FIO_DC_YAML = os.path.join(
+    TEMPLATE_FIO_DIR, "fio_dc.yaml"
+)
 
 # Openshift infra yamls:
 RSYNC_POD_YAML = os.path.join(
@@ -860,3 +863,9 @@ RHCOS = "RHCOS"
 ES_SERVER_IP = '10.0.78.167'
 ES_SERVER_PORT = '9200'
 ES_SERVER_URL = 'https://10.0.78.167:9200'
+
+# Cluster metrics
+THROUGHPUT_QUERY = "(sum(rate(ceph_pool_wr_bytes[1m]) + rate(ceph_pool_rd_bytes[1m])))"
+LATENCY_QUERY = "cluster:ceph_disk_latency:join_ceph_node_disk_irate1m"
+IOPS_QUERY = "sum(rate(ceph_pool_wr[1m])) + sum(rate(ceph_pool_rd[1m]))"
+USED_SPACE_QUERY = "ceph_cluster_total_used_bytes"

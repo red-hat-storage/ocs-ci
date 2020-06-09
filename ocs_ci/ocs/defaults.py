@@ -48,3 +48,6 @@ error = "<html><body><h1>Oh. Something bad happened!</h1></body></html>"
 IPMI_INTERFACE_TYPE = "lanplus"
 IPMI_RMCP_PORT = 623
 IPMI_IPMB_ADDRESS = 0x20
+
+# Background load FIO pod name
+BG_LOAD_NAMESPACE = "bg-fio-load"
