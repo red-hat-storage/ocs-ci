@@ -36,7 +36,6 @@ from ocs_ci.utility.utils import (
     run_cmd,
     update_container_with_mirrored_image,
 )
-from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
