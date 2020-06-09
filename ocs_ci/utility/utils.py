@@ -2058,7 +2058,6 @@ def convert_device_size(unformatted_size, units_to_covert_to):
             return absolute_size
 
 
-<<<<<<< HEAD
 def mirror_image(image):
     """
     Mirror image to mirror image registry.
