@@ -169,7 +169,6 @@ def test_buckets_after_upgrade(upgrade_buckets, mcg_obj_session):
     """
     for bucket in mcg_obj_session.read_system().get('buckets'):
         assert bucket.get('mode') == BS_OPTIMAL
-    assert bucket.status == constants.STATUS_BOUND
 
 
 @pre_upgrade
