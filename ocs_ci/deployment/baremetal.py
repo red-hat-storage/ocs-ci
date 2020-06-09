@@ -39,6 +39,8 @@ class BAREMETALPSIUPI(Deployment):
         def __init__(self):
             super().__init__()
             self.flexy_instance = FlexyBaremetalPSI()
+            self.build_psi_conf()
+            self.utils = psiutils.PSIUtils(self.psi_conf)
 
         def deploy_prereq(self):
             """
@@ -65,13 +67,13 @@ class BAREMETALPSIUPI(Deployment):
             logger.info("creating ntp chrony")
             run_cmd(f"oc create -f {constants.NTP_CHRONY_CONF}")
             # add disks to instances
-            psi_conf = self.build_psi_conf()
-            utils = psiutils.PSIUtils(psi_conf)
+            self.build_psi_conf()
+            self.utils = psiutils.PSIUtils(self.psi_conf)
             # Get all instances and for each instance add
             # one disk
             pattern = config.ENV_DATA['cluster_name']
-            for instance in utils.get_instances_with_pattern(pattern):
-                vol = utils.create_volume(
+            for instance in self.utils.get_instances_with_pattern(pattern):
+                vol = self.utils.create_volume(
                     name=f'disk0',
                     size=config.ENV_DATA['volume_size'],
                 )
@@ -81,7 +83,7 @@ class BAREMETALPSIUPI(Deployment):
                         logger("waiting for volume to be avaialble")
 
                 # attach the volume
-                utils.attach_volume(vol, instance.id, "/dev/vdb")
+                self.utils.attach_volume(vol, instance.id, "/dev/vdb")
 
         def build_psi_conf(self):
             """
@@ -89,15 +91,23 @@ class BAREMETALPSIUPI(Deployment):
             PSI openstack instances and volumes
 
             """
-            psi_conf = dict()
+            self.psi_conf = dict()
             fd = open(constants.FLEXY_SERVICE_CONF, "r")
             conf = yaml.safe_load(fd)
             upshift_conf = conf['services']['openstack_upshift']
-            psi_conf['auth_url'] = upshift_conf['url']
-            psi_conf['username'] = upshift_conf['user']
-            psi_conf['password'] = upshift_conf['password']
-            psi_conf['project_id'] = upshift_conf['project_id']
-            psi_conf['user_domain_name'] = upshift_conf['domain']['name']
+            self.psi_conf['auth_url'] = upshift_conf['url']
+            self.psi_conf['username'] = upshift_conf['user']
+            self.psi_conf['password'] = upshift_conf['password']
+            self.psi_conf['project_id'] = upshift_conf['project_id']
+            self.psi_conf['user_domain_name'] = upshift_conf['domain']['name']
 
         def destroy(self):
+            """
+            Destroy volumes attached if any and then the cluster
+            """
+            # Get all the additional volumes and detach,delete.
+            vollist = self.utils.get_volumes_with_tag(
+                {'cluster_name': config.ENV_DATA['cluster_name']}
+            )
+            self.utils.detach_and_delete_vols(vollist)
             self.flexy_instance.destroy()

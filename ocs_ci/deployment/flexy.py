@@ -60,13 +60,15 @@ class FlexyBase(object):
         )
         self.exitThread = False
 
-    def run_container(self):
-        run_cmd = "sudo podman run --rm=true"
-        flexy_container_args = self.build_container_args()
+    def run_container(self, cmd_string):
+        """
+        Actualy container run happens here, a thread will be
+        spawned to asynchronously print flexy container logs
+
+        """
         logger.info(
-            f"Starting Flexy container with options {flexy_container_args}"
+            f"Starting Flexy container with options {cmd_string}"
         )
-        cmd_string = " ".join([run_cmd, " ".join(flexy_container_args)])
         # Launch a seperate thread for getting the log file contents
         # simultaneously while flexy container running else logging will be
         # blocked till container terminates
@@ -84,6 +86,26 @@ class FlexyBase(object):
         for res in TimeoutSampler(60, 1, future.done):
             if not res:
                 logger.info("Waiting for logger thread to join")
+
+    def build_install_cmd(self):
+        """
+        Build flexy command line for 'deploy' operation
+
+        """
+        cmd = "sudo podman run --rm=true"
+        flexy_container_args = self.build_container_args()
+        cmd_string = " ".join([cmd, " ".join(flexy_container_args)])
+        return cmd_string
+
+    def build_destroy_cmd(self):
+        """
+        Build flexy command line for 'destroy' operation
+
+        """
+        cmd = "sudo podman run --rm=true"
+        flexy_container_args = self.build_container_args()
+        cmd_string = " ".join([cmd, " ".join(flexy_container_args), 'destroy'])
+        return cmd_string
 
     def get_log(self):
         """
@@ -107,6 +129,10 @@ class FlexyBase(object):
         sys.exit()
 
     def build_container_args(self):
+        """
+        Builds most commonly used arguments for flexy container
+
+        """
         args = list()
         args.append(f"--log-opt={self.flexy_log_file}")
         args.append(f"--env-file={self.flex_env_file}")
@@ -211,6 +237,12 @@ class FlexyBaremetalPSI(FlexyBase):
             self.template_file = config.ENV_DATA.get('template_file_path')
 
     def deploy_prereq(self):
+        """
+        Common flexy prerequisites like cloning the private-conf
+        repo locally and updating the contents with user supplied
+        values
+
+        """
         if not os.path.exists(self.flexy_mnt_host_dir):
             os.mkdir(self.flexy_mnt_host_dir)
             os.chmod(self.flexy_mnt_host_dir, mode=0o777)
@@ -221,8 +253,22 @@ class FlexyBaremetalPSI(FlexyBase):
         config.ENV_DATA['INSTANCE_NAME_PREFIX'] = self.cluster_name
         self.merge_flexy_env()
 
-    def deploy(self, log_level):
-        self.run_container()
+    def deploy(self, log_level='debug'):
+        """
+        build and invoke flexy deployer here
+
+        Args:
+            log_level (str): log level for flexy container
+
+        """
+        cmd = self.build_install_cmd()
+        run_cmd = " ".join([cmd, log_level])
+        self.run_container(run_cmd)
 
     def destroy(self):
-        pass
+        """
+        Invokes flexy container with 'destroy' argument
+
+        """
+        cmd = self.build_destroy_cmd()
+        self.run_container(cmd)

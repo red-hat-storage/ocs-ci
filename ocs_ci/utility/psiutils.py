@@ -2,6 +2,8 @@
 A module for all PSI-openstack related utilities
 """
 
+import logging
+
 from keystoneauth1 import loading
 from keystoneauth1 import session
 from cinderclient import client as cinderc
@@ -9,6 +11,9 @@ from novaclient import client as novac
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions
+from ocs_ci.utility.utils import TimeoutSampler
+
+logger = logging.getLogger(__name__)
 
 
 class PSIUtils(object):
@@ -119,3 +124,28 @@ class PSIUtils(object):
                     matching_vols.append(vol)
 
         return matching_vols
+
+    def detach_and_delete_vols(self, vollist):
+        """
+        Detach and delete volumes from the list
+
+        Args:
+            list: of Volume objects
+
+        """
+        for v in vollist:
+            if v.status == 'in-use':
+                v.detach()
+                v.get()
+                if v.status == 'available':
+                    logger.info(f"Volume {v.name} detached successfully ")
+                else:
+                    for res in TimeoutSampler(60, 1, v.status == 'available'):
+                        if not res:
+                            logger.info(f"Waiting for {v.name} to detach")
+                            v.get()
+            v.delete()
+            try:
+                v.get()
+            except Exception:
+                logger.info(f"Volume {v.name} deleted successfully")
