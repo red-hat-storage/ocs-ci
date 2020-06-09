@@ -42,7 +42,8 @@ from ocs_ci.utility.environment_check import (
 )
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
-    TimeoutSampler, get_rook_repo, get_ocp_version, ceph_health_check
+    TimeoutSampler, get_rook_repo, get_ocp_version, ceph_health_check,
+    update_container_with_mirrored_image,
 )
 from ocs_ci.utility.utils import (
     get_openshift_client, ocsci_log_path, get_testrun_name,
@@ -2341,6 +2342,10 @@ def fio_job_dict_fixture():
                     name: fio-config
         """)
     job_dict = yaml.safe_load(template)
+
+    # overwrite used image (required for disconnected installation)
+    update_container_with_mirrored_image(job_dict)
+
     return job_dict
 
 

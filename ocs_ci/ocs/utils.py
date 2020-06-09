@@ -27,7 +27,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import create_directory_path, run_cmd
+from ocs_ci.utility.utils import create_directory_path, mirror_image, run_cmd
 
 log = logging.getLogger(__name__)
 
@@ -781,11 +781,19 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True):
         ocs_log_dir_path = os.path.join(log_dir_path, 'ocs_must_gather')
         ocs_must_gather_image = ocsci_config.REPORTING['ocs_must_gather_image']
         ocs_must_gather_image_and_tag = f"{ocs_must_gather_image}:{latest_tag}"
+        if ocsci_config.DEPLOYMENT.get('disconnected'):
+            ocs_must_gather_image_and_tag = (
+                mirror_image(ocs_must_gather_image_and_tag)
+            )
         run_must_gather(ocs_log_dir_path, ocs_must_gather_image_and_tag)
 
     if ocp:
         ocp_log_dir_path = os.path.join(log_dir_path, 'ocp_must_gather')
         ocp_must_gather_image = ocsci_config.REPORTING['ocp_must_gather_image']
+        if ocsci_config.DEPLOYMENT.get('disconnected'):
+            ocp_must_gather_image = (
+                mirror_image(ocp_must_gather_image)
+            )
         run_must_gather(ocp_log_dir_path, ocp_must_gather_image)
         run_must_gather(
             ocp_log_dir_path, ocp_must_gather_image,
