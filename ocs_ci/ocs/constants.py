@@ -634,8 +634,11 @@ ORDER_AFTER_UPGRADE = 80
 OCS_CSV_PREFIX = 'ocs-operator'
 LOCAL_STORAGE_CSV_PREFIX = 'local-storage-operator'
 LATEST_TAGS = (
-    'latest', 'latest-stable', '4.2-rc', 'latest-4.2', 'latest-stable-4.2',
+    'latest', 'latest-stable',
+    '4.2-rc', 'latest-4.2', 'latest-stable-4.2',
     '4.3-rc', 'latest-4.3', 'latest-stable-4.3',
+    '4.4-rc', 'latest-4.4', 'latest-stable-4.4',
+    '4.5-rc', 'latest-4.5', 'latest-stable-4.5',
 )
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
@@ -817,10 +820,9 @@ NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
 NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
-MCG_CRT_NAME = "service-ca.crt"
-MCG_CRT_REMOTE_PATH = f"/var/run/secrets/kubernetes.io/serviceaccount/..data/{MCG_CRT_NAME}"
-MCG_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{MCG_CRT_NAME}"
-MCG_CRT_AWSCLI_POD_PATH = f"/cert/mcg-{MCG_CRT_NAME}"
+DEFAULT_INGRESS_CRT = "router-ca.crt"
+DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
+DEFAULT_INGRESS_CRT_REMOTE_PATH = f"/cert/{DEFAULT_INGRESS_CRT}"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 
 # Storage classes provisioners

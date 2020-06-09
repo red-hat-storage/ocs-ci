@@ -816,11 +816,11 @@ class VSPHERE(object):
             dc (str): Datacenter name
 
         Returns:
-            dict: Dictionary contains host instance as key and
+            dict: Dictionary contains host name as key and
                 values as list lun ids
                     e.g:{
-                        'vim.HostSystem:host-6320': ['02000000193035e73d534'],
-                        'vim.HostSystem:host-6252': ['020000000060034d43333']
+                        'HostName1': ['02000000193035e73d534'],
+                        'HostName2': ['020000000060034d43333']
                         }
 
         """
@@ -934,3 +934,20 @@ class VSPHERE(object):
                     return each.volume.extent[0].diskName
             except AttributeError:
                 continue
+
+    def erase_partition(self, host, device_path):
+        """
+        Erase the partitions on the disk
+
+        Args:
+            host (vim.HostSystem): Host instance
+            device_path (str): Device path to erase the partition
+               e.g:"/vmfs/devices/disks/naa.910229801b540c0125ef160f3048faba"
+
+        """
+        # set empty partition spec
+        spec = vim.HostDiskPartitionSpec()
+        host.configManager.storageSystem.UpdateDiskPartitions(
+            device_path,
+            spec
+        )
