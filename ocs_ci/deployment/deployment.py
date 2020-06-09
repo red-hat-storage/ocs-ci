@@ -390,7 +390,7 @@ class Deployment(object):
             deviceset_data['portable'] = False
             deviceset_data['dataPVCTemplate']['spec'][
                 'storageClassName'
-            ] = 'local-block'
+            ] = 'localblock'
 
         # Allow lower instance requests and limits for OCS deployment
         if config.DEPLOYMENT.get('allow_lower_instance_requirements'):
