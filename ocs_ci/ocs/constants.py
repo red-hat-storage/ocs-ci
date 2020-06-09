@@ -384,6 +384,8 @@ COUCHBASE_WORKER_EXAMPLE = os.path.join(
     TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-example.yaml"
 )
 
+COUCHBASE_OPERATOR = 'couchbase-operator-namespace'
+
 HELLO_WORLD_PRODUCER_YAML = os.path.join(
     TEMPLATE_AMQ_DIR, "hello-world-producer.yaml"
 )
