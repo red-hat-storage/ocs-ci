@@ -299,7 +299,13 @@ class VSPHEREBASE(Deployment):
             devices_available = self.vsphere.available_storage_devices(host)
             if not devices_available:
                 raise RDMDiskNotFound
-            self.attach_rdm_disk(vm, devices_available[0])
+
+            # Erase the partition on the disk before adding to node
+            device = devices_available[0]
+            self.vsphere.erase_partition(host, device)
+
+            # Attach RDM disk to node
+            self.attach_rdm_disk(vm, device)
 
     def attach_rdm_disk(self, vm, device_name):
         """
