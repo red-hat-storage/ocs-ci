@@ -1577,22 +1577,6 @@ def awscli_pod_fixture(mcg_obj, created_pods):
     helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
     created_pods.append(awscli_pod_obj)
 
-    # FIXME: Use service-ca.crt instead of copying the Ingress crt into the pod
-    # https://github.com/red-hat-storage/ocs-ci/issues/2260
-
-    # Verify that the target dir for the self-signed MCG cert exists
-    cert_dir = pathlib.PurePath(constants.DEFAULT_INGRESS_CRT_REMOTE_PATH).parent
-    awscli_pod_obj.exec_cmd_on_pod(f'mkdir --parents {cert_dir}')
-
-    # Copy the self-signed certificate to use with AWSCLI
-    # Use cat and sed since the pod does not have tar or rsync
-    cmd = (
-        f"cat {constants.DEFAULT_INGRESS_CRT_LOCAL_PATH} | "
-        f"oc exec -i -n {mcg_obj.namespace} {constants.AWSCLI_RELAY_POD_NAME} "
-        f"-- sed -n 'w {constants.DEFAULT_INGRESS_CRT_REMOTE_PATH}'"
-    )
-    subprocess.run(cmd, shell=True)
-
     return awscli_pod_obj
 
 

@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: awscli
-  namespace: default
+  namespace: openshift-storage
 spec:
   containers:
     - name: awscli
@@ -12,3 +12,11 @@ spec:
       command: ['/bin/sh']
       stdin: true
       tty: true
+      volumeMounts:
+      - name: service-ca
+        mountPath: /cert/service-ca.crt
+        subPath: service-ca.crt
+  volumes:
+  - name: service-ca
+    configMap:
+      name: awscli-service-ca
