@@ -307,14 +307,14 @@ class SmallFileResultsAnalyse(object):
         else:
 
             """
-            Each test can do some operations, so i am running loop on all
+            Each test can do some operations, so it is running loop on all
             operations that we have in this particular test.
 
             """
             for op in self.results['operations']:
 
                 """
-                For each operation, I am looking for all interesting lines
+                For each operation, it is looking for all interesting lines
                 that need to be parse.
 
                 """
