@@ -7,6 +7,9 @@ from ocs_ci.framework.testlib import (
     E2ETest, workloads
 )
 from datetime import datetime
+from ocs_ci.ocs.node import (
+    get_node_resource_utilization_from_adm_top, get_node_resource_utilization_from_oc_describe
+)
 
 log = logging.getLogger(__name__)
 
@@ -43,8 +46,11 @@ class TestPgSQLWorkload(E2ETest):
         # Start measuring time
         start_time = datetime.now()
 
-        # Check node utilization
-        pgsql.get_node_utilization()
+        # Check worker node utilization (adm_top)
+        get_node_resource_utilization_from_adm_top(node_type='worker', print_table=True)
+
+        # Check worker node utilization (oc_describe)
+        get_node_resource_utilization_from_oc_describe(node_type='worker', print_table=True)
 
         # Wait for pg_bench pod to initialized and complete
         pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)

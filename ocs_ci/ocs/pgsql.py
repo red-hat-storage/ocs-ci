@@ -355,14 +355,14 @@ class Postgresql(RipSaw):
         usage_memory_table.field_names = ["Node Name", "CPU USAGE adm_top", "CPU USAGE oc_describe",
                                           "Memory USAGE adm_top", "Memory USAGE oc_describe"]
 
-        for node in node_types:
-            get_adm = get_node_resource_utilization_from_adm_top(node_type=node)
-            get_oc_describe = get_node_resource_utilization_from_oc_describe(node_type=node)
-            for node_master in get_adm:
-                usage_memory_table.add_row([node_master, f'{get_adm[node_master]["cpu"]}%',
-                                            f'{get_oc_describe[node_master]["cpu"]}%',
-                                            f'{get_adm[node_master]["memory"]}%',
-                                            f'{get_oc_describe[node_master]["memory"]}%'])
+        for node_type in node_types:
+            get_adm = get_node_resource_utilization_from_adm_top(node_type=node_type)
+            get_oc_describe = get_node_resource_utilization_from_oc_describe(node_type=node_type)
+            for node in get_adm:
+                usage_memory_table.add_row([node, f'{get_adm[node]["cpu"]}%',
+                                            f'{get_oc_describe[node]["cpu"]}%',
+                                            f'{get_adm[node]["memory"]}%',
+                                            f'{get_oc_describe[node]["memory"]}%'])
         log.info(f'\n{usage_memory_table}\n')
 
     def get_pgbech_pod_status_table(self, pgbench_pods):

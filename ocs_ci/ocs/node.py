@@ -16,7 +16,7 @@ from ocs_ci.ocs import machine
 import tests.helpers
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions
-
+from prettytable import PrettyTable
 
 log = logging.getLogger(__name__)
 
@@ -363,7 +363,7 @@ def get_node_logs(node_name):
     return node.exec_oc_debug_cmd(node_name, ["dmesg"])
 
 
-def get_node_resource_utilization_from_adm_top(nodename=None, node_type='worker'):
+def get_node_resource_utilization_from_adm_top(nodename=None, node_type='worker', print_table=False):
     """
     Gets the node's cpu and memory utilization in percentage using adm top command.
 
@@ -395,21 +395,30 @@ def get_node_resource_utilization_from_adm_top(nodename=None, node_type='worker'
     for node in node_names:
         for value in resource_utilization_all_nodes:
             if node in value:
-                value = re.findall(r'\d+', value.strip())
-                cpu_utilization = value[2]
+                value = re.findall(r'(\d{1,3})%', value.strip())
+                cpu_utilization = value[0]
                 log.info("The CPU utilized by the node "
                          f"{node} is {cpu_utilization}%")
-                memory_utilization = value[4]
+                memory_utilization = value[1]
                 log.info("The memory utilized of the node "
                          f"{node} is {memory_utilization}%")
                 utilization_dict[node] = {
                     'cpu': int(cpu_utilization),
                     'memory': int(memory_utilization)
                 }
+
+    if print_table:
+        usage_memory_table = PrettyTable()
+        usage_memory_table.field_names = ["Node Name", "CPU USAGE adm_top",
+                                          "Memory USAGE adm_top"]
+        for node, util_node in utilization_dict.items():
+            usage_memory_table.add_row([node, f'{util_node["cpu"]}%', f'{util_node["memory"]}%'])
+        log.info(f'\n{usage_memory_table}\n')
     return utilization_dict
 
 
-def get_node_resource_utilization_from_oc_describe(nodename=None, node_type='worker'):
+def get_node_resource_utilization_from_oc_describe(nodename=None,
+                                                   node_type='worker', print_table=False):
     """
     Gets the node's cpu and memory utilization in percentage using oc describe node
 
@@ -443,6 +452,14 @@ def get_node_resource_utilization_from_oc_describe(nodename=None, node_type='wor
             'cpu': int(cpu[0]),
             'memory': int(mem[0])
         }
+
+    if print_table:
+        usage_memory_table = PrettyTable()
+        usage_memory_table.field_names = ["Node Name", "CPU USAGE oc_describe",
+                                          "Memory USAGE oc_describe"]
+        for node, util_node in utilization_dict.items():
+            usage_memory_table.add_row([node, f'{util_node["cpu"]}%', f'{util_node["memory"]}%'])
+        log.info(f'\n{usage_memory_table}\n')
 
     return utilization_dict
 
