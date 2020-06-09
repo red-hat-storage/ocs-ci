@@ -250,6 +250,46 @@ class SmallFileResultsAnalyse(object):
         Aggregation results from all hosts in single sample
         (each host is actually a pod)
 
+        Example of log to parse :
+
+                                     version : 3.1
+                               hosts in test : None
+                            launch by daemon : False
+                       top test directory(s) : ['/mnt/pvc/smallfile_test_data']
+                                   operation : create
+                                files/thread : 50000
+                                     threads : 4
+               record size (KB, 0 = maximum) : 0
+                              file size (KB) : 4
+                      file size distribution : fixed
+                               files per dir : 100
+                                dirs per dir : 10
+                  threads share directories? : N
+                             filename prefix :
+                             filename suffix :
+                 hash file number into dir.? : N
+                         fsync after modify? : N
+              pause between files (microsec) : 50
+                 minimum directories per sec : 50
+                        finish all requests? : Y
+                                  stonewall? : Y
+                     measure response times? : Y
+                                verify read? : Y
+                                    verbose? : False
+                              log to stderr? : False
+            total threads = 4
+            total files = 200000
+            total IOPS = 12980
+            total data =     0.763 GiB
+            100.00% of requested files processed, warning threshold is  70.00
+            elapsed time =    17.079
+            files/sec = 12980.622480
+            IOPS = 12980.622480
+            MiB/sec = 50.705557
+            2020-05-04T13:50:01Z - INFO     - MainProcess - trigger_smallfile:
+                completed sample 1 for operation create , results in /var/tmp/RESULTS/1/create.json
+
+
         Args:
             host_res (dict): dictionary of host results - user for multi hosts
                              test
