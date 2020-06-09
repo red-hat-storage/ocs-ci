@@ -223,6 +223,12 @@ def pre_upgrade_filesystem_pods(
     pods = []
     pvc_size = 10
     fio_configmap_dict_session["data"]["workload.fio"] = fio_conf_fs
+    # By setting ``backoffLimit`` to 1, fio job would be restarted if it fails.
+    # One such restart may be necessary to make sure the job is running IO
+    # during whole upgrade.
+    # See also:
+    # https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/
+    fio_job_dict_session["spec"]["backoffLimit"] = 1
 
     for reclaim_policy in (
         constants.RECLAIM_POLICY_DELETE,
@@ -308,6 +314,10 @@ def pre_upgrade_block_pods(
 
     pvc_size = 10
     fio_configmap_dict_session["data"]["workload.fio"] = fio_conf_block
+    # By setting ``backoffLimit`` to 1, fio job would be restarted if it fails.
+    # One such restart may be necessary to make sure the job is running IO
+    # during whole upgrade.
+    fio_job_dict_session["spec"]["backoffLimit"] = 1
 
     for reclaim_policy in (
         constants.RECLAIM_POLICY_DELETE,
