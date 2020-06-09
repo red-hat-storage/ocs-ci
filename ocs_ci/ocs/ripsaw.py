@@ -92,10 +92,6 @@ class RipSaw(object):
         run(f'oc delete -f {self.crd}', shell=True, cwd=self.dir)
         run(f'oc delete -f {self.operator}', shell=True, cwd=self.dir)
         run('oc delete -f deploy', shell=True, cwd=self.dir)
-        if self.pgsql_is_setup:
-            self.pgsql_sset.delete()
-            self.pgsql_cmap.delete()
-            self.pgsql_service.delete()
         run_cmd(f'oc delete project {self.namespace}')
         self.ns_obj.wait_for_delete(resource_name=self.namespace)
         # Reset namespace to default

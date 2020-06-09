@@ -58,6 +58,7 @@ from tests.manage.mcg.helpers import (
     cli_create_google_backingstore, cli_create_azure_backingstore, cli_create_s3comp_backingstore,
     cli_create_pv_backingstore
 )
+from ocs_ci.ocs.pgsql import Postgresql
 
 log = logging.getLogger(__name__)
 
@@ -2417,6 +2418,60 @@ def fio_job_dict_fixture():
     update_container_with_mirrored_image(job_dict)
 
     return job_dict
+
+
+@pytest.fixture(scope='function')
+def pgsql_factory_fixture(request):
+    """
+    Pgsql factory fixture
+    """
+    pgsql = Postgresql()
+
+    def factory(
+        replicas, clients=None, threads=None,
+        transactions=None, scaling_factor=None,
+        timeout=None
+    ):
+        """
+        Factory to start pgsql workload
+
+        Args:
+            replicas (int): Number of pgbench pods to be deployed
+            clients (int): Number of clients
+            threads (int): Number of threads
+            transactions (int): Number of transactions
+            scaling_factor (int): scaling factor
+            timeout (int): Time in seconds to wait
+
+        """
+        # Setup postgres
+        pgsql.setup_postgresql(replicas=replicas)
+
+        # Create pgbench benchmark
+        pgsql.create_pgbench_benchmark(
+            replicas=replicas, clients=clients, threads=threads,
+            transactions=transactions, scaling_factor=scaling_factor,
+            timeout=timeout
+        )
+
+        # Wait for pg_bench pod to initialized and complete
+        pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
+
+        # Get pgbench pods
+        pgbench_pods = pgsql.get_pgbench_pods()
+
+        # Validate pgbench run and parse logs
+        pgsql.validate_pgbench_run(pgbench_pods)
+        return pgsql
+
+    def finalizer():
+        """
+        Clean up
+        """
+        pgsql.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
 
 
 @pytest.fixture
