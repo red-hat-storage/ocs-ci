@@ -391,6 +391,8 @@ class Deployment(object):
             deviceset_data['dataPVCTemplate']['spec'][
                 'storageClassName'
             ] = 'localblock'
+            if self.platform.lower() == constants.AWS_PLATFORM:
+                deviceset_data['count'] = 2
 
         # Allow lower instance requests and limits for OCS deployment
         if config.DEPLOYMENT.get('allow_lower_instance_requirements'):
@@ -749,7 +751,10 @@ def setup_local_storage():
     logger.info("Creating LocalVolume CR")
     run_cmd(f"oc create -f {lv_data_yaml.name}")
     logger.info("Waiting 30 seconds for PVs to create")
-    verify_pvs_created(len(worker_names))
+    storage_class_device_count = 1
+    if platform == constants.AWS_PLATFORM:
+        storage_class_device_count = 2
+    verify_pvs_created(len(worker_names) * storage_class_device_count)
 
 
 @retry(AssertionError, 12, 10, 1)
