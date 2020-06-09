@@ -47,7 +47,7 @@ def get_node_objs(node_names=None):
     return nodes
 
 
-def get_typed_nodes(node_type='worker', num_of_nodes=None):
+def get_typed_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None, ocs_node=False):
     """
     Get cluster's nodes according to the node type (e.g. worker, master) and the
     number of requested nodes from that type
@@ -55,13 +55,21 @@ def get_typed_nodes(node_type='worker', num_of_nodes=None):
     Args:
         node_type (str): The node type (e.g. worker, master)
         num_of_nodes (int): The number of nodes to be returned
+        ocs_node (bool): If true, then chooses only ocs nodes. Else if false,
+            it will choose a node not necessarily from the ocs nodes.
 
     Returns:
         list: The nodes OCP instances
 
     """
+    node_list = get_node_objs()
+    if ocs_node and node_type == constants.WORKER_MACHINE:
+        node_list = [
+            node for node in node_list if constants.OPERATOR_NODE_LABEL in node
+            .get(resource_name=node.name, column='ROLES').get('metadata').get('labels')
+        ]
     typed_nodes = [
-        node for node in get_node_objs() if node_type in node
+        node for node in node_list if node_type in node
         .ocp.get_resource(resource_name=node.name, column='ROLES')
     ]
     if num_of_nodes:
