@@ -395,6 +395,10 @@ NGINX_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "nginx.yaml"
 )
 
+AWSCLI_SERVICE_CA_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "aws-cli-service-ca-configmap.yaml"
+)
+
 AWSCLI_POD_YAML = os.path.join(
     TEMPLATE_APP_POD_DIR, "awscli.yaml"
 )
@@ -820,6 +824,7 @@ DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
 SERVICE_CA_CRT = "service-ca.crt"
 SERVICE_CA_CRT_AWSCLI_PATH = f"/cert/{SERVICE_CA_CRT}"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
+AWSCLI_SERVICE_CA_CONFIGMAP_NAME = "awscli-service-ca"
 
 # Storage classes provisioners
 OCS_PROVISIONERS = [

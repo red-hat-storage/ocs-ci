@@ -11,10 +11,8 @@ from math import floor
 from random import randrange
 from time import sleep
 from shutil import copyfile
-import subprocess
 
 import pytest
-import pathlib
 import yaml
 from botocore.exceptions import ClientError
 
@@ -1520,62 +1518,43 @@ def mcg_obj_fixture(request):
 
 
 @pytest.fixture()
-def created_pods(request):
-    return created_pods_fixture(request)
+def awscli_pod(request, mcg_obj):
+    return awscli_pod_fixture(request, mcg_obj)
 
 
 @pytest.fixture(scope='session')
-def created_pods_session(request):
-    return created_pods_fixture(request)
+def awscli_pod_session(request, mcg_obj_session):
+    return awscli_pod_fixture(request, mcg_obj_session)
 
 
-def created_pods_fixture(request):
-    """
-    Deletes all pods that were created as part of the test
-
-    Returns:
-        list: An empty list of pods
-    """
-    created_pods_objects = []
-
-    def pod_cleanup():
-        for pod in created_pods_objects:
-            log.info(f'Deleting pod {pod.name}')
-            pod.delete()
-
-    request.addfinalizer(pod_cleanup)
-    return created_pods_objects
-
-
-@pytest.fixture()
-def awscli_pod(mcg_obj, created_pods):
-    return awscli_pod_fixture(mcg_obj, created_pods)
-
-
-@pytest.fixture(scope='session')
-def awscli_pod_session(mcg_obj_session, created_pods_session):
-    return awscli_pod_fixture(mcg_obj_session, created_pods_session)
-
-
-def awscli_pod_fixture(mcg_obj, created_pods):
+def awscli_pod_fixture(request, mcg_obj):
     """
     Creates a new AWSCLI pod for relaying commands
 
     Args:
-        created_pods (Fixture/list): A fixture used to keep track of created
-             pods and clean them up in the teardown
+        mcg_obj: An object representing the current
+        state of the MCG in the cluster
 
     Returns:
         pod: A pod running the AWS CLI
 
     """
+    # Create the service-ca configmap to be mounted upon pod creation
+    service_ca_configmap = helpers.create_resource(
+        **templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
+    )
     awscli_pod_obj = helpers.create_pod(
         namespace=mcg_obj.namespace,
         pod_dict_path=constants.AWSCLI_POD_YAML,
         pod_name=constants.AWSCLI_RELAY_POD_NAME
     )
     helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
-    created_pods.append(awscli_pod_obj)
+
+    def _awscli_pod_cleanup():
+        awscli_pod_obj.delete()
+        service_ca_configmap.delete()
+
+    request.addfinalizer(_awscli_pod_cleanup)
 
     return awscli_pod_obj
 

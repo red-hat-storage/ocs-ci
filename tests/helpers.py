@@ -1572,7 +1572,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
             f'AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} '
             f'AWS_DEFAULT_REGION={mcg_obj.region} '
             f'aws s3{api} '
-            f'--endpoint={mcg_obj.s3_endpoint} '
+            f'--endpoint={mcg_obj.s3_internal_endpoint} '
         )
         string_wrapper = '"'
     else:
