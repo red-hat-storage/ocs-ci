@@ -30,7 +30,12 @@ from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler, ocsci_log_path, run_cmd
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    ocsci_log_path,
+    run_cmd,
+    update_container_with_mirrored_image,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +207,35 @@ def create_pod(
 
     if sa_name and dc_deployment:
         pod_data['spec']['template']['spec']['serviceAccountName'] = sa_name
+
+    # overwrite used image (required for disconnected installation)
+    update_container_with_mirrored_image(pod_data)
+
+    # configure http[s]_proxy env variable, if required
+    try:
+        if 'http_proxy' in config.ENV_DATA:
+            if 'containers' in pod_data['spec']:
+                container = pod_data['spec']['containers'][0]
+            else:
+                container = pod_data['spec']['template']['spec']['containers'][0]
+            if 'env' not in container:
+                container['env'] = []
+            container['env'].append({
+                'name': 'http_proxy',
+                'value': config.ENV_DATA['http_proxy'],
+            })
+            container['env'].append({
+                'name': 'https_proxy',
+                'value': config.ENV_DATA.get(
+                    'https_proxy', config.ENV_DATA['http_proxy']
+                ),
+            })
+    except KeyError as err:
+        logging.warning(
+            "Http(s)_proxy variable wasn't configured, "
+            "'%s' key not found.", err
+        )
+
     if dc_deployment:
         ocs_obj = create_resource(**pod_data)
         logger.info(ocs_obj.name)
