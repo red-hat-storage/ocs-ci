@@ -194,7 +194,7 @@ class TestNodesMaintenance(ManageTest):
 
         wait_for_nodes_status(
             node_names=[typed_node_name],
-            status=constants.NODE_READY_SCHEDULING_DISABLED, timeout=360
+            status=constants.NODE_READY_SCHEDULING_DISABLED
         )
 
         # Mark the node back to schedulable
