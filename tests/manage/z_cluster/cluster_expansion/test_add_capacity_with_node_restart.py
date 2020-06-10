@@ -60,7 +60,7 @@ class TestAddCapacityNodeRestart(ManageTest):
         # Restart nodes while additional storage is being added
         logging.info("Restart nodes:")
         logging.info([n.name for n in node_list])
-        nodes.restart_nodes(nodes=node_list, wait=True)
+        nodes.restart_nodes(nodes=node_list, wait=True, timeout=420)
         logging.info("Finished restarting the node list")
 
         # The exit criteria verification conditions here are not complete. When the branch

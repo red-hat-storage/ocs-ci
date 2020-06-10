@@ -257,13 +257,15 @@ class VMWareNodes(NodesBase):
         )
         self.vsphere.start_vms(vms)
 
-    def restart_nodes(self, nodes, force=False, wait=True):
+    def restart_nodes(self, nodes, force=False, timeout=300, wait=True):
         """
         Restart vSphere VMs
 
         Args:
             nodes (list): The OCS objects of the nodes
             force (bool): True for Hard reboot, False for Soft reboot
+            timeout (int): time in seconds to wait for node to reach 'not ready' state, 
+                and 'ready' state.
             wait (bool): True if need to wait till the restarted OCP node
                 reaches READY state. False otherwise
 
@@ -290,14 +292,14 @@ class VMWareNodes(NodesBase):
             )
             wait_for_nodes_status(
                 node_names=nodes_names, status=constants.NODE_NOT_READY,
-                timeout=300
+                timeout=timeout
             )
             logger.info(
                 f"Waiting for nodes: {nodes_names} to reach ready state"
             )
             wait_for_nodes_status(
                 node_names=nodes_names, status=constants.NODE_READY,
-                timeout=300
+                timeout=timeout
             )
 
     def restart_nodes_by_stop_and_start(self, nodes, force=True):
@@ -484,7 +486,7 @@ class AWSNodes(NodesBase):
         )
         self.aws.start_ec2_instances(instances=instances, wait=wait)
 
-    def restart_nodes(self, nodes, wait=True):
+    def restart_nodes(self, nodes, timeout=300, wait=True):
         """
         Restart EC2 instances
 
@@ -492,6 +494,8 @@ class AWSNodes(NodesBase):
             nodes (list): The OCS objects of the nodes
             wait (bool): True if need to wait till the restarted node reaches
                 READY state. False otherwise
+            timeout (int): time in seconds to wait for node to reach 'not ready' state, 
+                and 'ready' state.
 
         """
         instances = self.get_ec2_instances(nodes)
@@ -516,14 +520,14 @@ class AWSNodes(NodesBase):
             )
             wait_for_nodes_status(
                 node_names=nodes_names, status=constants.NODE_NOT_READY,
-                timeout=300
+                timeout=timeout
             )
             logger.info(
                 f"Waiting for nodes: {nodes_names} to reach ready state"
             )
             wait_for_nodes_status(
                 node_names=nodes_names, status=constants.NODE_READY,
-                timeout=300
+                timeout=timeout
             )
 
     def restart_nodes_by_stop_and_start(self, nodes, wait=True, force=True):
