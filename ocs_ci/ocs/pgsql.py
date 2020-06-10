@@ -15,9 +15,6 @@ from subprocess import CalledProcessError
 from ocs_ci.ocs.resources.pod import get_all_pods, get_pod_obj, get_operator_pods
 from tests.helpers import wait_for_resource_state
 from ocs_ci.ocs.constants import RIPSAW_NAMESPACE, RIPSAW_CRD
-from ocs_ci.ocs.node import (
-    get_node_resource_utilization_from_adm_top, get_node_resource_utilization_from_oc_describe
-)
 from prettytable import PrettyTable
 
 log = logging.getLogger(__name__)
@@ -340,30 +337,6 @@ class Postgresql(RipSaw):
         wait_for_resource_state(
             resource=app_pod, state=constants.STATUS_RUNNING, timeout=300
         )
-
-    def get_node_utilization(self, node_types=('worker',)):
-        """
-
-        Check CPU and Memory usage and print a table of the data.
-
-        Args:
-            master (bool): if True, check check CPU and Memory usage on master nodes
-            worker (bool): if True, check check CPU and Memory usage on worker nodes
-
-        """
-        usage_memory_table = PrettyTable()
-        usage_memory_table.field_names = ["Node Name", "CPU USAGE adm_top", "CPU USAGE oc_describe",
-                                          "Memory USAGE adm_top", "Memory USAGE oc_describe"]
-
-        for node_type in node_types:
-            get_adm = get_node_resource_utilization_from_adm_top(node_type=node_type)
-            get_oc_describe = get_node_resource_utilization_from_oc_describe(node_type=node_type)
-            for node in get_adm:
-                usage_memory_table.add_row([node, f'{get_adm[node]["cpu"]}%',
-                                            f'{get_oc_describe[node]["cpu"]}%',
-                                            f'{get_adm[node]["memory"]}%',
-                                            f'{get_oc_describe[node]["memory"]}%'])
-        log.info(f'\n{usage_memory_table}\n')
 
     def get_pgbech_pod_status_table(self, pgbench_pods):
         """
