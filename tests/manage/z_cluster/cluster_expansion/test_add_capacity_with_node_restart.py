@@ -8,7 +8,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.ocs.node import get_typed_nodes
+from ocs_ci.ocs.node import get_typed_ocs_nodes
 
 
 @pytest.mark.parametrize(
@@ -40,7 +40,7 @@ class TestAddCapacityNodeRestart(ManageTest):
         # Please notice: When the branch 'wip-add-capacity-e_e' will be merged into master
         # the test will include more much data both before, and after calling 'add_capacity'function.
 
-        node_list = get_typed_nodes(node_type=node_type, num_of_nodes=num_of_nodes, ocs_node=True)
+        node_list = get_typed_ocs_nodes(node_type=node_type, num_of_nodes=num_of_nodes)
         assert node_list, "Condition 2 to start test failed: No node to restart"
 
         max_osds = 15

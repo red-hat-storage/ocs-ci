@@ -47,7 +47,7 @@ def get_node_objs(node_names=None):
     return nodes
 
 
-def get_typed_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None, ocs_node=False):
+def get_typed_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
     """
     Get cluster's nodes according to the node type (e.g. worker, master) and the
     number of requested nodes from that type
@@ -55,19 +55,13 @@ def get_typed_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None, ocs_n
     Args:
         node_type (str): The node type (e.g. worker, master)
         num_of_nodes (int): The number of nodes to be returned
-        ocs_node (bool): If true, then chooses only ocs nodes. Else if false,
-            it will choose a node not necessarily from the ocs nodes.
 
     Returns:
         list: The nodes OCP instances
 
     """
-    node_list = get_node_objs()
-    if ocs_node and node_type == constants.WORKER_MACHINE:
-        ocs_node_names = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
-        node_list = [node for node in node_list if node.name in ocs_node_names]
     typed_nodes = [
-        node for node in node_list if node_type in node
+        node for node in get_node_objs() if node_type in node
         .ocp.get_resource(resource_name=node.name, column='ROLES')
     ]
     if num_of_nodes:
@@ -582,3 +576,12 @@ def get_compute_node_names():
         ]
     else:
         raise NotImplementedError
+
+
+def get_typed_ocs_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
+    typed_nodes = get_typed_nodes(node_type=node_type)
+    ocs_node_names = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+    typed_ocs_nodes = [node for node in typed_nodes if node.name in ocs_node_names]
+    num_of_nodes = num_of_nodes or len(typed_ocs_nodes)
+
+    return typed_ocs_nodes[:num_of_nodes]
