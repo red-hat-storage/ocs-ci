@@ -37,6 +37,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility.retry import retry
 
+
 log = logging.getLogger(__name__)
 
 # variables
@@ -2186,3 +2187,79 @@ def get_trim_mean(values, percentage=20):
             f"Regular mean average will be calculated instead"
         )
     return sum(values) / len(values)
+
+
+def set_selinux_permissions(workers=None):
+    """
+    Workaround for #1777384 - enable container_use_cephfs on RHEL workers
+    Ticket: RHSTOR-787, see more details in the issue: #1151
+
+    Args:
+        workers (list): List of worker nodes to set selinux permissions
+
+    """
+    log.info("Running WA for ticket: RHSTOR-787")
+    from ocs_ci.ocs import ocp
+    ocp_obj = ocp.OCP()
+    cmd = ['/usr/sbin/setsebool -P container_use_cephfs on']
+    cmd_list = cmd.copy()
+    if not workers:
+        from ocs_ci.ocs.node import get_typed_worker_nodes
+        worker_nodes = get_typed_worker_nodes(os_id="rhel")
+    else:
+        worker_nodes = workers
+
+    for worker in worker_nodes:
+        node = worker.get().get('metadata').get('name') if not workers else worker
+        log.info(
+            f"{node} is a RHEL based worker - applying '{cmd_list}'"
+        )
+        retry(CommandFailed)(ocp_obj.exec_oc_debug_cmd)(
+            node=node, cmd_list=cmd_list
+        )
+
+
+def set_registry_to_managed_state():
+    """
+    In order to be able to deploy from stage we need to change
+    image registry config to Managed state.
+    More described in BZs:
+    https://bugzilla.redhat.com/show_bug.cgi?id=1806593
+    https://bugzilla.redhat.com/show_bug.cgi?id=1807471#c3
+    We need to change to managed state as described here:
+    https://github.com/red-hat-storage/ocs-ci/issues/1436
+    So this is not suppose to be deleted as WA case we really need to do
+    this operation for OCS deployment as was originally done here:
+    https://github.com/red-hat-storage/ocs-ci/pull/1437
+    Currently it has to be moved here to enable CA certificate to be
+    properly propagated for the stage deployment as mentioned in BZ.
+    """
+    if(config.ENV_DATA['platform'] not in constants.CLOUD_PLATFORMS):
+        run_cmd(
+            f'oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p '
+            f'\'{{"spec":{{"storage": {{"emptyDir":{{}}}}}}}}\''
+        )
+        run_cmd(
+            f'oc patch {constants.IMAGE_REGISTRY_CONFIG} --type merge -p '
+            f'\'{{"spec":{{"managementState": "Managed"}}}}\''
+        )
+
+
+def add_stage_cert():
+    """
+    Deploy stage certificate to the cluster.
+    """
+    log.info("Create configmap stage-registry-config with stage CA.")
+    run_cmd(
+        f"oc -n openshift-config create configmap stage-registry-config"
+        f" --from-file=registry.stage.redhat.io={constants.STAGE_CA_FILE}"
+    )
+
+    log.info("Add stage-registry-config to additionalTrustedCA.")
+    additional_trusted_ca_patch = (
+        '{"spec":{"additionalTrustedCA":{"name":"stage-registry-config"}}}'
+    )
+    run_cmd(
+        f"oc patch image.config.openshift.io cluster --type=merge"
+        f" -p '{additional_trusted_ca_patch}'"
+    )
