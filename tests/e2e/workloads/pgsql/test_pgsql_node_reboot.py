@@ -1,7 +1,7 @@
 import logging
 import pytest
 import random
-
+from datetime import datetime
 from ocs_ci.ocs import constants
 from tests.sanity_helpers import Sanity
 from ocs_ci.framework.testlib import (
@@ -9,7 +9,6 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.node import get_osd_running_nodes, get_node_objs
-from datetime import datetime
 from ocs_ci.ocs.node import (
     get_node_resource_utilization_from_adm_top, get_node_resource_utilization_from_oc_describe
 )

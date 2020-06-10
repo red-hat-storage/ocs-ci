@@ -1,12 +1,11 @@
 import logging
 import pytest
-
+from datetime import datetime
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.framework.testlib import (
     E2ETest, workloads
 )
-from datetime import datetime
 from ocs_ci.ocs.node import (
     get_node_resource_utilization_from_adm_top, get_node_resource_utilization_from_oc_describe
 )

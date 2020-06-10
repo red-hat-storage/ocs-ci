@@ -347,9 +347,11 @@ class Postgresql(RipSaw):
 
         """
         pgbench_pod_table = PrettyTable()
-        pgbench_pod_table.field_names = ['pod_name', 'scaling_factor', 'num_clients', 'num_threads',
-                                         'trans_client', 'actually_trans', 'latency_avg',
-                                         'lat_stddev', 'tps_incl', 'tps_excl']
+        pgbench_pod_table.field_names = ['pod_name', 'scaling_factor',
+                                         'num_clients', 'num_threads',
+                                         'trans_client', 'actually_trans',
+                                         'latency_avg', 'lat_stddev',
+                                         'tps_incl', 'tps_excl']
         for pgbench_pod in pgbench_pods:
             output = run_cmd(f'oc logs {pgbench_pod.name}')
             pg_output = utils.parse_pgsql_logs(output)
