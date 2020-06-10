@@ -154,28 +154,37 @@ class TestNodesMaintenance(ManageTest):
         assert typed_nodes, f"Failed to find a {node_type} node for the test"
         typed_node_name = typed_nodes[0].name
 
+        reboot_events_cmd = (
+            f"get events -A --field-selector involvedObject.name="
+            f"{typed_node_name},reason=Rebooted -o yaml"
+        )
+
+        # Find the number of reboot events in 'typed_node_name'
+        num_events = typed_nodes[0].ocp.exec_oc_cmd(reboot_events_cmd)['items']
+
         # Maintenance the node (unschedule and drain). The function contains logging
         drain_nodes([typed_node_name])
 
         platform = config.ENV_DATA['platform']
 
         # Restarting the node
-        if platform == 'vsphere':
-            nodes.restart_nodes(nodes=typed_nodes, force=True, wait=False)
-        elif platform == 'baremetal':
+        if platform == 'baremetal':
             nodes.restart_nodes(nodes=typed_nodes)
         else:
             nodes.restart_nodes(nodes=typed_nodes, wait=False)
 
         wait_for_nodes_status(
             node_names=[typed_node_name],
-            status=constants.NODE_NOT_READY_SCHEDULING_DISABLED
+            status=constants.NODE_READY_SCHEDULING_DISABLED, timeout=360
         )
 
-        wait_for_nodes_status(
-            node_names=[typed_node_name],
-            status=constants.NODE_READY_SCHEDULING_DISABLED
+        # Verify the node was actually restarted by checking the reboot
+        # events count
+        new_num_events = typed_nodes[0].ocp.exec_oc_cmd(reboot_events_cmd)['items']
+        assert new_num_events > num_events, (
+            f"Reboot event not found. Node {typed_node_name} didn't restart."
         )
+
         # Mark the node back to schedulable
         schedule_nodes([typed_node_name])
 
