@@ -580,10 +580,12 @@ def get_compute_node_names():
 
 def get_ocs_nodes(num_of_nodes=None):
     """
-    Gets the ocs nodes.
+    Gets the ocs nodes
     Args:
         num_of_nodes (int): The number of ocs nodes to return. If not specified,
             it returns all the ocs nodes.
+    Returns:
+        list: List of ocs nodes
     """
     ocs_node_names = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
     ocs_nodes = get_node_objs(ocs_node_names)
