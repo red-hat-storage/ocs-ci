@@ -160,7 +160,9 @@ class TestNodesMaintenance(ManageTest):
         )
 
         # Find the number of reboot events in 'typed_node_name'
-        num_events = typed_nodes[0].ocp.exec_oc_cmd(reboot_events_cmd)['items']
+        num_events = len(
+            typed_nodes[0].ocp.exec_oc_cmd(reboot_events_cmd)['items']
+        )
 
         # Maintenance the node (unschedule and drain). The function contains logging
         drain_nodes([typed_node_name])
@@ -173,16 +175,26 @@ class TestNodesMaintenance(ManageTest):
         else:
             nodes.restart_nodes(nodes=typed_nodes, wait=False)
 
+        try:
+            wait_for_nodes_status(
+                node_names=[typed_node_name],
+                status=constants.NODE_NOT_READY_SCHEDULING_DISABLED
+            )
+        except ResourceWrongStatusException:
+            # Sometimes, the node will be back to running state quickly so
+            # that the status change won't be detected. Verify the node was
+            # actually restarted by checking the reboot events count
+            new_num_events = len(
+                typed_nodes[0].ocp.exec_oc_cmd(reboot_events_cmd)['items']
+            )
+            assert new_num_events > num_events, (
+                f"Reboot event not found."
+                f"Node {typed_node_name} did not restart."
+            )
+
         wait_for_nodes_status(
             node_names=[typed_node_name],
             status=constants.NODE_READY_SCHEDULING_DISABLED, timeout=360
-        )
-
-        # Verify the node was actually restarted by checking the reboot
-        # events count
-        new_num_events = typed_nodes[0].ocp.exec_oc_cmd(reboot_events_cmd)['items']
-        assert new_num_events > num_events, (
-            f"Reboot event not found. Node {typed_node_name} didn't restart."
         )
 
         # Mark the node back to schedulable
