@@ -9,9 +9,8 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.node import get_osd_running_nodes, get_node_objs
-from ocs_ci.ocs.node import (
-    get_node_resource_utilization_from_adm_top, get_node_resource_utilization_from_oc_describe
-)
+from ocs_ci.ocs.node import \
+    get_node_resource_utilization_from_adm_top
 
 log = logging.getLogger(__name__)
 
@@ -83,10 +82,9 @@ class TestPgSQLNodeReboot(E2ETest):
         node_1 = get_node_objs(node_list[random.randint(0, len(node_list) - 1)])
 
         # Check worker node utilization (adm_top)
-        get_node_resource_utilization_from_adm_top(node_type='worker', print_table=True)
-
-        # Check worker node utilization (oc_describe)
-        get_node_resource_utilization_from_oc_describe(node_type='worker', print_table=True)
+        get_node_resource_utilization_from_adm_top(
+            node_type='worker', print_table=True
+        )
 
         # Restart relevant node
         nodes.restart_nodes(node_1)
@@ -103,7 +101,7 @@ class TestPgSQLNodeReboot(E2ETest):
         pgbench_pods = pgsql.get_pgbench_pods()
 
         # Validate pgbench run and parse logs
-        pgsql.get_pgbech_pod_status_table(pgbench_pods)
+        pgsql.validate_pgbench_run(pgbench_pods)
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()

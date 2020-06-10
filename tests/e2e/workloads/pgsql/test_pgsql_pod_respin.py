@@ -7,9 +7,8 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.pgsql import Postgresql
 from tests import disruption_helpers
-from ocs_ci.ocs.node import (
-    get_node_resource_utilization_from_adm_top, get_node_resource_utilization_from_oc_describe
-)
+from ocs_ci.ocs.node import \
+    get_node_resource_utilization_from_adm_top
 
 log = logging.getLogger(__name__)
 
@@ -74,10 +73,9 @@ class TestPgSQLPodRespin(E2ETest):
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)
 
         # Check worker node utilization (adm_top)
-        get_node_resource_utilization_from_adm_top(node_type='worker', print_table=True)
-
-        # Check worker node utilization (oc_describe)
-        get_node_resource_utilization_from_oc_describe(node_type='worker', print_table=True)
+        get_node_resource_utilization_from_adm_top(
+            node_type='worker', print_table=True
+        )
 
         # Respin pod
         if pod_name == 'postgers':
@@ -100,4 +98,4 @@ class TestPgSQLPodRespin(E2ETest):
         pgbench_pods = pgsql.get_pgbench_pods()
 
         # Validate pgbench run and parse logs
-        pgsql.get_pgbech_pod_status_table(pgbench_pods)
+        pgsql.validate_pgbench_run(pgbench_pods)

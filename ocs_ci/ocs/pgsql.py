@@ -303,7 +303,7 @@ class Postgresql(RipSaw):
                         "no data found on latency_avg"
                     )
             log.info(f"PGBench on {pgbench_pod.name} completed successfully")
-            all_pgbench_pods_output.append(pg_output)
+            all_pgbench_pods_output.append((pg_output, pgbench_pod.name))
 
         if print_table:
             pgbench_pod_table = PrettyTable()
@@ -312,12 +312,10 @@ class Postgresql(RipSaw):
                                              'trans_client', 'actually_trans',
                                              'latency_avg', 'lat_stddev',
                                              'tps_incl', 'tps_excl']
-            for pgbench_pod in all_pgbench_pods_output:
-                output = run_cmd(f'oc logs {pgbench_pod.name}')
-                pg_output = utils.parse_pgsql_logs(output)
-                for pod_output in pg_output:
+            for pgbench_pod_out in all_pgbench_pods_output:
+                for pod_output in pgbench_pod_out[0]:
                     for pod in pod_output.values():
-                        pgbench_pod_table.add_row([pgbench_pod.name, pod['scaling_factor'],
+                        pgbench_pod_table.add_row([pgbench_pod_out[1], pod['scaling_factor'],
                                                    pod['num_clients'], pod['num_threads'],
                                                    pod['number_of_transactions_per_client'],
                                                    pod['number_of_transactions_actually_processed'],

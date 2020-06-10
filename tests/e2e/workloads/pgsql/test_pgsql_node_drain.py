@@ -8,9 +8,8 @@ from ocs_ci.framework.testlib import (
     E2ETest, workloads
 )
 from ocs_ci.ocs.pgsql import Postgresql
-from ocs_ci.ocs.node import (
-    get_node_resource_utilization_from_adm_top, get_node_resource_utilization_from_oc_describe
-)
+from ocs_ci.ocs.node import \
+    get_node_resource_utilization_from_adm_top
 
 log = logging.getLogger(__name__)
 
@@ -62,10 +61,9 @@ class TestPgSQLNodeReboot(E2ETest):
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)
 
         # Check worker node utilization (adm_top)
-        get_node_resource_utilization_from_adm_top(node_type='worker', print_table=True)
-
-        # Check worker node utilization (oc_describe)
-        get_node_resource_utilization_from_oc_describe(node_type='worker', print_table=True)
+        get_node_resource_utilization_from_adm_top(
+            node_type='worker', print_table=True
+        )
 
         # Node drain with specific node type
         typed_nodes = node.get_typed_nodes(
@@ -94,4 +92,4 @@ class TestPgSQLNodeReboot(E2ETest):
         pgbench_pods = pgsql.get_pgbench_pods()
 
         # Validate pgbench run and parse logs
-        pgsql.get_pgbech_pod_status_table(pgbench_pods)
+        pgsql.validate_pgbench_run(pgbench_pods)
