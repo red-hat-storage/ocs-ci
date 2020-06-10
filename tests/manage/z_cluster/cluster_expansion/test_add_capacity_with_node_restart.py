@@ -8,14 +8,14 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.ocs.node import get_typed_ocs_nodes
+from ocs_ci.ocs.node import get_ocs_nodes
 
 
 @pytest.mark.parametrize(
-    argnames=["node_type", "num_of_nodes", "workload_storageutilization_rbd"],
+    argnames=["num_of_nodes", "workload_storageutilization_rbd"],
     argvalues=[
         pytest.param(
-            *[constants.WORKER_MACHINE, 1, (0.11, True, 120)],
+            *[1, (0.11, True, 120)],
             marks=pytest.mark.polarion_id("OCS-1313")
         ),
     ],
@@ -25,22 +25,22 @@ from ocs_ci.ocs.node import get_typed_ocs_nodes
 @tier4a
 class TestAddCapacityNodeRestart(ManageTest):
     """
-    Test add capacity when one of the nodes got restart
+    Test add capacity when one of the worker nodes got restart
     in the middle of the process.
     """
 
     def test_add_capacity_node_restart(
-        self, nodes, multi_pvc_factory, pod_factory, workload_storageutilization_rbd,
-        node_type, num_of_nodes,
+        self, nodes, multi_pvc_factory, pod_factory,
+        workload_storageutilization_rbd, num_of_nodes,
     ):
         """
-        test add capacity when one of the nodes got restart in the middle of the process
+        test add capacity when one of the worker nodes got restart in the middle of the process
         """
         logging.info("Condition 1 to start the test is met: storageutilization is completed")
         # Please notice: When the branch 'wip-add-capacity-e_e' will be merged into master
         # the test will include more much data both before, and after calling 'add_capacity'function.
 
-        node_list = get_typed_ocs_nodes(node_type=node_type, num_of_nodes=num_of_nodes)
+        node_list = get_ocs_nodes(num_of_nodes=num_of_nodes)
         assert node_list, "Condition 2 to start test failed: No node to restart"
 
         max_osds = 15

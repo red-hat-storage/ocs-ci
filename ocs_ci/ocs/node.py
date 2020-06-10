@@ -578,10 +578,15 @@ def get_compute_node_names():
         raise NotImplementedError
 
 
-def get_typed_ocs_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
-    typed_nodes = get_typed_nodes(node_type=node_type)
+def get_ocs_nodes(num_of_nodes=None):
+    """
+    Gets the ocs nodes.
+    Args:
+        num_of_nodes (int): The number of ocs nodes to return. If not specified,
+            it returns all the ocs nodes.
+    """
     ocs_node_names = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
-    typed_ocs_nodes = [node for node in typed_nodes if node.name in ocs_node_names]
-    num_of_nodes = num_of_nodes or len(typed_ocs_nodes)
+    ocs_nodes = get_node_objs(ocs_node_names)
+    num_of_nodes = num_of_nodes or len(ocs_nodes)
 
-    return typed_ocs_nodes[:num_of_nodes]
+    return ocs_nodes[:num_of_nodes]
