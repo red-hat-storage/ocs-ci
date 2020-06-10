@@ -273,7 +273,7 @@ class Postgresql(RipSaw):
                 log.error(error_msg)
                 raise UnexpectedBehaviour(error_msg)
 
-    def validate_pgbench_run(self, pgbench_pods):
+    def validate_pgbench_run(self, pgbench_pods, print_table=True):
         """
         Validate pgbench run
 
@@ -304,6 +304,27 @@ class Postgresql(RipSaw):
                     )
             log.info(f"PGBench on {pgbench_pod.name} completed successfully")
             all_pgbench_pods_output.append(pg_output)
+
+        if print_table:
+            pgbench_pod_table = PrettyTable()
+            pgbench_pod_table.field_names = ['pod_name', 'scaling_factor',
+                                             'num_clients', 'num_threads',
+                                             'trans_client', 'actually_trans',
+                                             'latency_avg', 'lat_stddev',
+                                             'tps_incl', 'tps_excl']
+            for pgbench_pod in all_pgbench_pods_output:
+                output = run_cmd(f'oc logs {pgbench_pod.name}')
+                pg_output = utils.parse_pgsql_logs(output)
+                for pod_output in pg_output:
+                    for pod in pod_output.values():
+                        pgbench_pod_table.add_row([pgbench_pod.name, pod['scaling_factor'],
+                                                   pod['num_clients'], pod['num_threads'],
+                                                   pod['number_of_transactions_per_client'],
+                                                   pod['number_of_transactions_actually_processed'],
+                                                   pod['latency_avg'], pod['lat_stddev'],
+                                                   pod['tps_incl'], pod['tps_excl']])
+            log.info(f'\n{pgbench_pod_table}\n')
+
         return all_pgbench_pods_output
 
     def get_pgsql_nodes(self):
