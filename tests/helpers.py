@@ -1,35 +1,41 @@
 """
 Helper functions file for OCS QE
 """
-import logging
-import re
+import base64
 import datetime
-import statistics
-import os
-from subprocess import TimeoutExpired, run, PIPE
-import tempfile
-import time
-import yaml
+import hashlib
 import json
+import logging
+import os
+import re
+import statistics
+import tempfile
 import threading
-
-from ocs_ci.ocs.ocp import OCP
-
-from uuid import uuid4
-from ocs_ci.ocs.exceptions import (
-    TimeoutExpiredError,
-    UnexpectedBehaviour,
-    UnavailableBuildException
-)
+import time
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.ocs import constants, defaults, ocp, node
-from ocs_ci.utility import templating
+from subprocess import PIPE, TimeoutExpired, run
+from uuid import uuid4
+
+import yaml
+
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, defaults, node, ocp
+from ocs_ci.ocs.exceptions import (
+    CommandFailed, ResourceWrongStatusException,
+    TimeoutExpiredError, UnavailableBuildException,
+    UnexpectedBehaviour
+)
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
+from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler, ocsci_log_path, run_cmd
-from ocs_ci.framework import config
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    ocsci_log_path,
+    run_cmd,
+    update_container_with_mirrored_image,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +116,8 @@ def create_pod(
     do_reload=True, namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     node_name=None, pod_dict_path=None, sa_name=None, dc_deployment=False,
     raw_block_pv=False, raw_block_device=constants.RAW_BLOCK_DEVICE, replica_count=1,
-    pod_name=None, node_selector=None, deploy_pod_status=constants.STATUS_COMPLETED
+    pod_name=None, node_selector=None, command=None, command_args=None,
+    deploy_pod_status=constants.STATUS_COMPLETED
 ):
     """
     Create a pod
@@ -130,6 +137,9 @@ def create_pod(
         pod_name (str): Name of the pod to create
         node_selector (dict): dict of key-value pair to be used for nodeSelector field
             eg: {'nodetype': 'app-pod'}
+        command (list): The command to be executed on the pod
+        command_args (list): The arguments to be sent to the command running
+            on the pod
         deploy_pod_status (str): Expected status of deploy pod. Applicable
             only if dc_deployment is True
 
@@ -138,6 +148,7 @@ def create_pod(
 
     Raises:
         AssertionError: In case of any failure
+
     """
     if interface_type == constants.CEPHBLOCKPOOL:
         pod_dict = pod_dict_path if pod_dict_path else constants.CSI_RBD_POD_YAML
@@ -168,12 +179,13 @@ def create_pod(
             pod_data['spec']['volumes'][0]['persistentVolumeClaim']['claimName'] = pvc_name
 
     if interface_type == constants.CEPHBLOCKPOOL and raw_block_pv:
-        if pod_dict_path == constants.FEDORA_DC_YAML:
+        if pod_dict_path in [constants.FEDORA_DC_YAML, constants.FIO_DC_YAML]:
             temp_dict = [
                 {'devicePath': raw_block_device, 'name': pod_data.get('spec').get(
                     'template').get('spec').get('volumes')[0].get('name')}
             ]
-            del pod_data['spec']['template']['spec']['containers'][0]['volumeMounts']
+            if pod_dict_path == constants.FEDORA_DC_YAML:
+                del pod_data['spec']['template']['spec']['containers'][0]['volumeMounts']
             pod_data['spec']['template']['spec']['containers'][0]['volumeDevices'] = temp_dict
         elif pod_dict_path == constants.NGINX_POD_YAML:
             temp_dict = [
@@ -186,6 +198,17 @@ def create_pod(
             pod_data['spec']['containers'][0]['volumeDevices'][0]['devicePath'] = raw_block_device
             pod_data['spec']['containers'][0]['volumeDevices'][0]['name'] = pod_data.get('spec').get('volumes')[
                 0].get('name')
+
+    if command:
+        if dc_deployment:
+            pod_data['spec']['template']['spec']['containers'][0]['command'] = command
+        else:
+            pod_data['spec']['containers'][0]['command'] = command
+    if command_args:
+        if dc_deployment:
+            pod_data['spec']['template']['spec']['containers'][0]['args'] = command_args
+        else:
+            pod_data['spec']['containers'][0]['args'] = command_args
 
     if node_name:
         if dc_deployment:
@@ -201,6 +224,35 @@ def create_pod(
 
     if sa_name and dc_deployment:
         pod_data['spec']['template']['spec']['serviceAccountName'] = sa_name
+
+    # overwrite used image (required for disconnected installation)
+    update_container_with_mirrored_image(pod_data)
+
+    # configure http[s]_proxy env variable, if required
+    try:
+        if 'http_proxy' in config.ENV_DATA:
+            if 'containers' in pod_data['spec']:
+                container = pod_data['spec']['containers'][0]
+            else:
+                container = pod_data['spec']['template']['spec']['containers'][0]
+            if 'env' not in container:
+                container['env'] = []
+            container['env'].append({
+                'name': 'http_proxy',
+                'value': config.ENV_DATA['http_proxy'],
+            })
+            container['env'].append({
+                'name': 'https_proxy',
+                'value': config.ENV_DATA.get(
+                    'https_proxy', config.ENV_DATA['http_proxy']
+                ),
+            })
+    except KeyError as err:
+        logging.warning(
+            "Http(s)_proxy variable wasn't configured, "
+            "'%s' key not found.", err
+        )
+
     if dc_deployment:
         ocs_obj = create_resource(**pod_data)
         logger.info(ocs_obj.name)
@@ -226,15 +278,18 @@ def create_pod(
         return pod_obj
 
 
-def create_project():
+def create_project(project_name=None):
     """
     Create a project
+
+    Args:
+        project_name (str): The name for the new project
 
     Returns:
         OCP: Project object
 
     """
-    namespace = create_unique_resource_name('test', 'namespace')
+    namespace = project_name or create_unique_resource_name('test', 'namespace')
     project_obj = ocp.OCP(kind='Project', namespace=namespace)
     assert project_obj.new_project(namespace), f"Failed to create namespace {namespace}"
     return project_obj
@@ -1533,22 +1588,6 @@ def remove_scc_policy(sa_name, namespace):
     logger.info(out)
 
 
-def delete_deploymentconfig_pods(pod_obj):
-    """
-    Delete deploymentconfig pod
-
-    Args:
-         pod_obj (object): Pod object
-    """
-    dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG, namespace=pod_obj.namespace)
-    pod_data_list = dc_ocp_obj.get()['items']
-    if pod_data_list:
-        for pod_data in pod_data_list:
-            if pod_obj.get_labels().get('name') == pod_data.get('metadata').get('name'):
-                dc_ocp_obj.delete(resource_name=pod_obj.get_labels().get('name'))
-                dc_ocp_obj.wait_for_delete(resource_name=pod_obj.get_labels().get('name'))
-
-
 def craft_s3_command(cmd, mcg_obj=None, api=False):
     """
     Crafts the AWS CLI S3 command including the
@@ -1566,7 +1605,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False):
     api = 'api' if api else ''
     if mcg_obj:
         base_command = (
-            f'sh -c "AWS_CA_BUNDLE={constants.MCG_CRT_AWSCLI_POD_PATH} '
+            f'sh -c "AWS_CA_BUNDLE={constants.DEFAULT_INGRESS_CRT_REMOTE_PATH} '
             f'AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} '
             f'AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} '
             f'AWS_DEFAULT_REGION={mcg_obj.region} '
@@ -2257,3 +2296,37 @@ def validate_pods_are_running_and_not_restarted(
     logger.error(f"Pod is in {pod_state} state and restart count of pod {restart_count}")
     logger.info(f"{pod_obj}")
     return False
+
+
+def calc_local_file_md5_sum(path):
+    """
+    Calculate and return the MD5 checksum of a local file
+
+    Arguments:
+        path(str): The path to the file
+
+    Returns:
+        str: The MD5 checksum
+
+    """
+    with open(path, 'rb') as file_to_hash:
+        file_as_bytes = file_to_hash.read()
+    return hashlib.md5(file_as_bytes).hexdigest()
+
+
+def retrieve_default_ingress_crt():
+    """
+    Copy the default ingress certificate from the router-ca secret
+    to the local code runner for usage with boto3.
+
+    """
+    default_ingress_crt_b64 = OCP(
+        kind='secret',
+        namespace='openshift-ingress-operator',
+        resource_name='router-ca'
+    ).get().get('data').get('tls.crt')
+
+    decoded_crt = base64.b64decode(default_ingress_crt_b64).decode('utf-8')
+
+    with open(constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, 'w') as crtfile:
+        crtfile.write(decoded_crt)

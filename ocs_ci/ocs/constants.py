@@ -396,6 +396,8 @@ COUCHBASE_WORKER_EXAMPLE = os.path.join(
     TEMPLATE_COUCHBASE_SERVER_DIR, "couchbase-worker-example.yaml"
 )
 
+COUCHBASE_OPERATOR = 'couchbase-operator-namespace'
+
 HELLO_WORLD_PRODUCER_YAML = os.path.join(
     TEMPLATE_AMQ_DIR, "hello-world-producer.yaml"
 )
@@ -486,6 +488,9 @@ FIO_IO_PARAMS_YAML = os.path.join(
 )
 FIO_IO_RW_PARAMS_YAML = os.path.join(
     TEMPLATE_FIO_DIR, "workload_io_rw.yaml"
+)
+FIO_DC_YAML = os.path.join(
+    TEMPLATE_FIO_DIR, "fio_dc.yaml"
 )
 
 # Openshift infra yamls:
@@ -641,8 +646,11 @@ ORDER_AFTER_UPGRADE = 80
 OCS_CSV_PREFIX = 'ocs-operator'
 LOCAL_STORAGE_CSV_PREFIX = 'local-storage-operator'
 LATEST_TAGS = (
-    'latest', 'latest-stable', '4.2-rc', 'latest-4.2', 'latest-stable-4.2',
+    'latest', 'latest-stable',
+    '4.2-rc', 'latest-4.2', 'latest-stable-4.2',
     '4.3-rc', 'latest-4.3', 'latest-stable-4.3',
+    '4.4-rc', 'latest-4.4', 'latest-stable-4.4',
+    '4.5-rc', 'latest-4.5', 'latest-stable-4.5',
 )
 INTERNAL_MIRROR_PEM_FILE = "ops-mirror.pem"
 EC2_USER = "ec2-user"
@@ -824,10 +832,9 @@ NOOBAA_SERVICE_ACCOUNT = "system:serviceaccount:openshift-storage:noobaa"
 # Miscellaneous
 NOOBAA_OPERATOR_POD_CLI_PATH = "/usr/local/bin/noobaa-operator"
 NOOBAA_OPERATOR_LOCAL_CLI_PATH = os.path.join(DATA_DIR, "mcg-cli")
-MCG_CRT_NAME = "service-ca.crt"
-MCG_CRT_REMOTE_PATH = f"/var/run/secrets/kubernetes.io/serviceaccount/..data/{MCG_CRT_NAME}"
-MCG_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{MCG_CRT_NAME}"
-MCG_CRT_AWSCLI_POD_PATH = f"/cert/mcg-{MCG_CRT_NAME}"
+DEFAULT_INGRESS_CRT = "router-ca.crt"
+DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
+DEFAULT_INGRESS_CRT_REMOTE_PATH = f"/cert/{DEFAULT_INGRESS_CRT}"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 
 # Storage classes provisioners
@@ -870,3 +877,9 @@ RHCOS = "RHCOS"
 ES_SERVER_IP = '10.0.78.167'
 ES_SERVER_PORT = '9200'
 ES_SERVER_URL = 'https://10.0.78.167:9200'
+
+# Cluster metrics
+THROUGHPUT_QUERY = "(sum(rate(ceph_pool_wr_bytes[1m]) + rate(ceph_pool_rd_bytes[1m])))"
+LATENCY_QUERY = "cluster:ceph_disk_latency:join_ceph_node_disk_irate1m"
+IOPS_QUERY = "sum(rate(ceph_pool_wr[1m])) + sum(rate(ceph_pool_rd[1m]))"
+USED_SPACE_QUERY = "ceph_cluster_total_used_bytes"

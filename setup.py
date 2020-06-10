@@ -44,10 +44,15 @@ setup(
         'funcy',
         'semantic-version',
         'jsonschema>=3.2.0',
+        # issue opened for google-cloud-storage
+        # https://github.com/googleapis/python-storage/issues/174
+        # till above issue fixed, manually pointing rsa to 4.0
+        'rsa==4.0',
         'google-cloud-storage',
         'elasticsearch',
         'numpy',
         'python-ipmi',
+        'scipy',
     ],
     entry_points={
         'console_scripts': [

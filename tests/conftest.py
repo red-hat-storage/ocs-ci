@@ -1,7 +1,7 @@
 import logging
 import os
-import time
 import random
+import time
 import tempfile
 import textwrap
 import threading
@@ -30,7 +30,7 @@ from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import get_rgw_pod, get_ceph_tools_pod
+from ocs_ci.ocs.resources.pod import get_rgw_pod, delete_deploymentconfig_pods
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.version import get_ocs_version, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad
@@ -42,7 +42,8 @@ from ocs_ci.utility.environment_check import (
 )
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
-    TimeoutSampler, get_rook_repo, get_ocp_version, ceph_health_check
+    TimeoutSampler, get_rook_repo, get_ocp_version, ceph_health_check,
+    update_container_with_mirrored_image,
 )
 from ocs_ci.utility.utils import (
     get_openshift_client, ocsci_log_path, get_testrun_name,
@@ -57,6 +58,7 @@ from tests.manage.mcg.helpers import (
     cli_create_google_backingstore, cli_create_azure_backingstore, cli_create_s3comp_backingstore,
     cli_create_pv_backingstore
 )
+from ocs_ci.ocs.pgsql import Postgresql
 
 log = logging.getLogger(__name__)
 
@@ -65,7 +67,7 @@ class OCSLogFormatter(logging.Formatter):
 
     def __init__(self):
         fmt = (
-            "%(asctime)s - %(levelname)s - %(name)s.%(funcName)s.%(lineno)d "
+            "%(asctime)s - %(threadName)s - %(levelname)s - %(name)s.%(funcName)s.%(lineno)d "
             "- %(message)s"
         )
         super(OCSLogFormatter, self).__init__(fmt)
@@ -431,13 +433,15 @@ def project_factory_fixture(request):
     """
     instances = []
 
-    def factory():
+    def factory(project_name=None):
         """
+        Args:
+            project_name (str): The name for the new project
 
         Returns:
             object: ocs_ci.ocs.resources.ocs instance of 'Project' kind.
         """
-        proj_obj = helpers.create_project()
+        proj_obj = helpers.create_project(project_name=project_name)
         instances.append(proj_obj)
         return proj_obj
 
@@ -532,7 +536,7 @@ def pvc_factory_fixture(
         access_mode=constants.ACCESS_MODE_RWO,
         custom_data=None,
         status=constants.STATUS_BOUND,
-        volume_mode=None
+        volume_mode=None,
     ):
         """
         Args:
@@ -587,7 +591,7 @@ def pvc_factory_fixture(
                 size=pvc_size,
                 do_reload=False,
                 access_mode=access_mode,
-                volume_mode=volume_mode
+                volume_mode=volume_mode,
             )
             assert pvc_obj, "Failed to create PVC"
 
@@ -664,7 +668,12 @@ def pod_factory_fixture(request, pvc_factory):
         custom_data=None,
         status=constants.STATUS_RUNNING,
         pod_dict_path=None,
-        raw_block_pv=False
+        raw_block_pv=False,
+        deployment_config=False,
+        service_account=None,
+        replica_count=1,
+        command=None,
+        command_args=None
     ):
         """
         Args:
@@ -680,10 +689,20 @@ def pod_factory_fixture(request, pvc_factory):
             pod_dict_path (str): YAML path for the pod.
             raw_block_pv (bool): True for creating raw block pv based pod,
                 False otherwise.
+            deployment_config (bool): True for DeploymentConfig creation,
+                False otherwise
+            service_account (OCS): Service account object, in case DeploymentConfig
+                is to be created
+            replica_count (int): The replica count for deployment config
+            command (list): The command to be executed on the pod
+            command_args (list): The arguments to be sent to the command running
+                on the pod
 
         Returns:
-            object: helpers.create_pvc instance.
+            object: helpers.create_pod instance
+
         """
+        sa_name = service_account.name if service_account else None
         if custom_data:
             pod_obj = helpers.create_resource(**custom_data)
         else:
@@ -693,20 +712,35 @@ def pod_factory_fixture(request, pvc_factory):
                 namespace=pvc.namespace,
                 interface_type=interface,
                 pod_dict_path=pod_dict_path,
-                raw_block_pv=raw_block_pv
+                raw_block_pv=raw_block_pv,
+                dc_deployment=deployment_config,
+                sa_name=sa_name,
+                replica_count=replica_count,
+                command=command,
+                command_args=command_args
             )
-            assert pod_obj, "Failed to create PVC"
-        instances.append(pod_obj)
+            assert pod_obj, "Failed to create pod"
+        if deployment_config:
+            dc_name = pod_obj.get_labels().get('name')
+            dc_ocp_dict = ocp.OCP(
+                kind=constants.DEPLOYMENTCONFIG, namespace=pod_obj.namespace
+            ).get(resource_name=dc_name)
+            dc_obj = OCS(**dc_ocp_dict)
+            instances.append(dc_obj)
+
+        else:
+            instances.append(pod_obj)
         if status:
             helpers.wait_for_resource_state(pod_obj, status)
             pod_obj.reload()
         pod_obj.pvc = pvc
-
+        if deployment_config:
+            return dc_obj
         return pod_obj
 
     def finalizer():
         """
-        Delete the Pod
+        Delete the Pod or the DeploymentConfig
         """
         for instance in instances:
             instance.delete()
@@ -775,8 +809,22 @@ def teardown_factory_fixture(request):
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope='class')
+def service_account_factory_class(request):
+    return service_account_factory_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def service_account_factory_session(request):
+    return service_account_factory_fixture(request)
+
+
+@pytest.fixture(scope='function')
 def service_account_factory(request):
+    return service_account_factory_fixture(request)
+
+
+def service_account_factory_fixture(request):
     """
     Create a service account
     """
@@ -898,7 +946,7 @@ def dc_pod_factory(
         Delete dc pods
         """
         for instance in instances:
-            helpers.delete_deploymentconfig_pods(instance)
+            delete_deploymentconfig_pods(instance)
 
     request.addfinalizer(finalizer)
     return factory
@@ -1040,23 +1088,41 @@ def log_cli_level(pytestconfig):
     return pytestconfig.getini('log_cli_level') or 'DEBUG'
 
 
-@pytest.fixture(scope="session")
-def run_io_in_background(request, pvc_factory_session, pod_factory_session):
+@pytest.fixture(scope="session", autouse=True)
+def cluster_load(
+    request, project_factory_session, pvc_factory_session,
+    service_account_factory_session, pod_factory_session
+):
     """
     Run IO during the test execution
     """
+    cl_load_obj = None
     if config.RUN.get('io_in_bg'):
-        io_load_param = config.RUN.get('io_load')
-        if io_load_param:
-            io_load = int(io_load_param) * 0.01
-        else:
-            io_load = 0.3
-        io_bg_logs = config.RUN.get('bg_io_logs')
+        io_load = int(config.RUN.get('io_load')) * 0.01
         log.info(
             "\n===================================================\n"
             "Tests will be running while IO is in the background\n"
             "==================================================="
         )
+
+        log.info(
+            "Start running IO in the background. The amount of IO that "
+            "will be written is going to be determined by the cluster "
+            "capabilities according to its limit"
+        )
+
+        cl_load_obj = ClusterLoad(
+            project_factory=project_factory_session,
+            sa_factory=service_account_factory_session,
+            pvc_factory=pvc_factory_session,
+            pod_factory=pod_factory_session,
+            target_percentage=io_load
+        )
+        cl_load_obj.reach_cluster_load_percentage()
+
+    if config.RUN.get('log_utilization') or config.RUN.get('io_in_bg'):
+        if not cl_load_obj:
+            cl_load_obj = ClusterLoad()
 
         temp_file = tempfile.NamedTemporaryFile(
             mode='w+', prefix='test_status', delete=False
@@ -1070,17 +1136,6 @@ def run_io_in_background(request, pvc_factory_session, pod_factory_session):
             with open(temp_file.name, 'w') as t_file:
                 t_file.writelines(status)
 
-        log.info(
-            "Start running IO in the background. The amount of IO that will be written "
-            "is going to be determined by the cluster capabilities according to its "
-            "throughput limit"
-        )
-        cl_load_obj = ClusterLoad()
-        cluster_limit, current_tp = cl_load_obj.reach_cluster_load_percentage_in_throughput(
-            pvc_factory=pvc_factory_session, pod_factory=pod_factory_session,
-            target_percentage=io_load
-        )
-
         set_test_status('running')
 
         def finalizer():
@@ -1093,37 +1148,54 @@ def run_io_in_background(request, pvc_factory_session, pod_factory_session):
 
         request.addfinalizer(finalizer)
 
-        def keep_io_running():
+        def watch_load():
             """
-            This function purpose is to ensure that IO is running also after scenarios
-            in which the IO is stopped due to disruptive operations like node failures.
-            As long as Ceph health is OK, it watches the cluster throughput. In case it
-            is below 60% of the target throughput percentage defined with 'io_load',
-            it calls again reach_cluster_load_percentage_in_throughput()
+            Watch the cluster load by monitoring the cluster latency.
+            In case the latency goes beyond 1 second, start deleting FIO pods.
+            Once latency drops back below 0.5 seconds, re-create the FIO pods
+            to make sure that cluster load is around the target percentage
 
             """
-            cl_load_obj.__init__(propagate_logs=io_bg_logs)
+            initial_num_of_pods = len(cl_load_obj.dc_objs)
             while get_test_status() == 'running':
                 try:
-                    cl_load_obj.cl_obj.toolbox = get_ceph_tools_pod()
-                    if cl_load_obj.cl_obj.is_health_ok():
-                        average_tp = cl_load_obj.cl_obj.calc_average_throughput(samples=10)
-                        if average_tp < current_tp * 0.5:
-                            cl_load_obj.reach_cluster_load_percentage_in_throughput(
-                                pvc_factory=pvc_factory_session,
-                                pod_factory=pod_factory_session,
-                                target_percentage=io_load,
-                                cluster_limit=cluster_limit
+                    cl_load_obj.print_metrics()
+                    if config.RUN.get('io_in_bg'):
+                        latency = cl_load_obj.calc_trim_metric_mean(
+                            constants.LATENCY_QUERY
+                        )
+
+                        if latency > 1 and len(cl_load_obj.dc_objs) > 0:
+                            log.warning(
+                                f"Latency is higher than 1 second ({latency * 1000} ms). "
+                                f"Lowering IO load by deleting an FIO pod that is running "
+                                f"in the test background. Once the latency drops back to "
+                                f"less than 0.5 seconds, FIO pod will be re-spawned"
                             )
+                            cl_load_obj.decrease_load()
+
+                        diff = initial_num_of_pods - len(cl_load_obj.dc_objs)
+                        while latency < 0.5 and diff > 0 and (
+                            get_test_status() == 'running'
+                        ):
+                            log.info(
+                                f"Latency is lower than 0.5 seconds ({latency * 1000} ms). "
+                                f"Re-spinning FIO pod"
+                            )
+                            cl_load_obj.increase_load(rate='15M')
+                            latency = cl_load_obj.calc_trim_metric_mean(
+                                constants.LATENCY_QUERY
+                            )
+                            diff -= 1
+
                 # Any type of exception should be caught and we should continue.
                 # We don't want any test to fail
                 except Exception:
                     continue
-                time.sleep(10)
+                if get_test_status() == 'running':
+                    time.sleep(10)
 
-            set_test_status('terminated')
-
-        thread = threading.Thread(target=keep_io_running)
+        thread = threading.Thread(target=watch_load)
         thread.start()
 
 
@@ -1577,16 +1649,19 @@ def awscli_pod_fixture(mcg_obj, created_pods):
     helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
     created_pods.append(awscli_pod_obj)
 
+    # FIXME: Use service-ca.crt instead of copying the Ingress crt into the pod
+    # https://github.com/red-hat-storage/ocs-ci/issues/2260
+
     # Verify that the target dir for the self-signed MCG cert exists
-    cert_dir = pathlib.PurePath(constants.MCG_CRT_AWSCLI_POD_PATH).parent
+    cert_dir = pathlib.PurePath(constants.DEFAULT_INGRESS_CRT_REMOTE_PATH).parent
     awscli_pod_obj.exec_cmd_on_pod(f'mkdir --parents {cert_dir}')
 
     # Copy the self-signed certificate to use with AWSCLI
     # Use cat and sed since the pod does not have tar or rsync
     cmd = (
-        f"cat {constants.MCG_CRT_LOCAL_PATH} | "
+        f"cat {constants.DEFAULT_INGRESS_CRT_LOCAL_PATH} | "
         f"oc exec -i -n {mcg_obj.namespace} {constants.AWSCLI_RELAY_POD_NAME} "
-        f"-- sed -n 'w {constants.MCG_CRT_AWSCLI_POD_PATH}'"
+        f"-- sed -n 'w {constants.DEFAULT_INGRESS_CRT_REMOTE_PATH}'"
     )
     subprocess.run(cmd, shell=True)
 
@@ -1726,7 +1801,10 @@ def bucket_factory_fixture(request, mcg_obj):
         'cli': CLIBucket
     }
 
-    def _create_buckets(amount=1, interface='S3', *args, **kwargs):
+    def _create_buckets(
+        amount=1, interface='S3',
+        verify_health=True, *args, **kwargs
+    ):
         """
         Creates and deletes all buckets that were created as part of the test
 
@@ -1749,14 +1827,17 @@ def bucket_factory_fixture(request, mcg_obj):
             bucket_name = helpers.create_unique_resource_name(
                 resource_description='bucket', resource_type=interface.lower()
             )
-            created_buckets.append(
-                bucketMap[interface.lower()](
-                    mcg_obj,
-                    bucket_name,
-                    *args,
-                    **kwargs
-                )
+            created_bucket = bucketMap[interface.lower()](
+                mcg_obj,
+                bucket_name,
+                *args,
+                **kwargs
             )
+            created_buckets.append(created_bucket)
+            if verify_health:
+                assert created_bucket.verify_health(), (
+                    f"{bucket_name} did not reach a healthy state in time."
+                )
         return created_buckets
 
     def bucket_cleanup():
@@ -2159,6 +2240,7 @@ def install_logging(request):
     Setup and teardown
     * The setup will deploy openshift-logging in the cluster
     * The teardown will uninstall cluster-logging from the cluster
+
     """
 
     def finalizer():
@@ -2166,8 +2248,18 @@ def install_logging(request):
 
     request.addfinalizer(finalizer)
 
-    # Checks OCP version
+    csv = ocp.OCP(
+        kind=constants.CLUSTER_SERVICE_VERSION,
+        namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
+    )
+    logging_csv = csv.get().get('items')
+    if logging_csv:
+        log.info("Logging is already configured, Skipping Installation")
+        return
 
+    log.info("Configuring Openshift-logging")
+
+    # Checks OCP version
     ocp_version = get_ocp_version()
 
     # Creates namespace opensift-operators-redhat
@@ -2294,7 +2386,7 @@ def fio_job_dict_fixture():
         metadata:
           name: fio
         spec:
-          backoffLimit: 1
+          backoffLimit: 0
           template:
             metadata:
               name: fio
@@ -2321,7 +2413,65 @@ def fio_job_dict_fixture():
                     name: fio-config
         """)
     job_dict = yaml.safe_load(template)
+
+    # overwrite used image (required for disconnected installation)
+    update_container_with_mirrored_image(job_dict)
+
     return job_dict
+
+
+@pytest.fixture(scope='function')
+def pgsql_factory_fixture(request):
+    """
+    Pgsql factory fixture
+    """
+    pgsql = Postgresql()
+
+    def factory(
+        replicas, clients=None, threads=None,
+        transactions=None, scaling_factor=None,
+        timeout=None
+    ):
+        """
+        Factory to start pgsql workload
+
+        Args:
+            replicas (int): Number of pgbench pods to be deployed
+            clients (int): Number of clients
+            threads (int): Number of threads
+            transactions (int): Number of transactions
+            scaling_factor (int): scaling factor
+            timeout (int): Time in seconds to wait
+
+        """
+        # Setup postgres
+        pgsql.setup_postgresql(replicas=replicas)
+
+        # Create pgbench benchmark
+        pgsql.create_pgbench_benchmark(
+            replicas=replicas, clients=clients, threads=threads,
+            transactions=transactions, scaling_factor=scaling_factor,
+            timeout=timeout
+        )
+
+        # Wait for pg_bench pod to initialized and complete
+        pgsql.wait_for_pgbench_status(status=constants.STATUS_COMPLETED)
+
+        # Get pgbench pods
+        pgbench_pods = pgsql.get_pgbench_pods()
+
+        # Validate pgbench run and parse logs
+        pgsql.validate_pgbench_run(pgbench_pods)
+        return pgsql
+
+    def finalizer():
+        """
+        Clean up
+        """
+        pgsql.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
 
 
 @pytest.fixture

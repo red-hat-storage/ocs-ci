@@ -1,7 +1,7 @@
 ---
 DEPLOYMENT:
   default_ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:4.2-rc"
-  default_latest_tag: '4.2-rc'
+  default_latest_tag: 'latest-stable-4.2'
   ocs_csv_channel: 'stable-4.2'
   default_ocp_version: '4.2'
 ENV_DATA:
