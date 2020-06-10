@@ -129,7 +129,6 @@ class TestNodesMaintenance(ManageTest):
 
     @tier4
     @tier4b
-    @aws_platform_required
     @pytest.mark.parametrize(
         argnames=["node_type"],
         argvalues=[
