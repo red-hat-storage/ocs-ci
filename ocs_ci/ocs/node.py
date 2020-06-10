@@ -15,6 +15,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import machine
 import tests.helpers
 from ocs_ci.ocs.resources import pod
+from ocs_ci.utility.utils import set_selinux_permissions
 
 
 log = logging.getLogger(__name__)
@@ -332,8 +333,11 @@ def add_new_node_and_label_upi(node_type, num_nodes, mark_for_ocs_label=True):
         status=constants.NODE_READY
     )
 
+    new_spun_nodes = list(set(nodes_after_exp) - set(initial_nodes))
+    if node_type == constants.RHEL_OS:
+        set_selinux_permissions(workers=new_spun_nodes)
+
     if mark_for_ocs_label:
-        new_spun_nodes = list(set(nodes_after_exp) - set(initial_nodes))
         node_obj = ocp.OCP(kind='node')
         for new_spun_node in new_spun_nodes:
             node_obj.add_label(
