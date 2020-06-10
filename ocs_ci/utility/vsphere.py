@@ -1147,4 +1147,3 @@ class VSPHERE(object):
             datacenter_name
         )
         return self.get_datastore_type(datastore)
-
