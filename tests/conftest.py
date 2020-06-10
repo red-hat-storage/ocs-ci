@@ -1544,9 +1544,14 @@ def awscli_pod_fixture(request, mcg_obj):
         **templating.load_yaml(constants.AWSCLI_SERVICE_CA_YAML)
     )
     awscli_pod_obj = helpers.create_pod(
-        namespace=mcg_obj.namespace,
+        namespace=constants.DEFAULT_NAMESPACE,
         pod_dict_path=constants.AWSCLI_POD_YAML,
         pod_name=constants.AWSCLI_RELAY_POD_NAME
+    )
+    OCP(namespace=constants.DEFAULT_NAMESPACE, kind='ConfigMap').wait_for_resource(
+        resource_name=service_ca_configmap.name,
+        column='DATA',
+        condition='1'
     )
     helpers.wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING)
 
