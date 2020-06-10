@@ -8,6 +8,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket
@@ -62,6 +63,12 @@ def measure_stop_ceph_mgr(measurement_dir):
     measured_op = measure_operation(stop_mgr, test_file)
     logger.info(f"Upscaling deployment {mgr} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
+
+    # wait for ceph to return into HEALTH_OK state after mgr deployment
+    # is returned back to normal
+    ceph_cluster = CephCluster()
+    ceph_cluster.cluster_health_check()
+
     return measured_op
 
 
@@ -140,6 +147,11 @@ def measure_stop_ceph_mon(measurement_dir):
         msg = f"Downscaled monitors {mons_to_stop} were not replaced"
         assert check_old_mons_deleted, msg
 
+    # wait for ceph to return into HEALTH_OK state after mon deployment
+    # is returned back to normal
+    ceph_cluster = CephCluster()
+    ceph_cluster.cluster_health_check()
+
     return measured_op
 
 
@@ -196,6 +208,11 @@ def measure_stop_ceph_osd(measurement_dir):
     measured_op = measure_operation(stop_osd, test_file)
     logger.info(f"Upscaling deployment {osd_to_stop} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_to_stop}")
+
+    # wait for ceph to return into HEALTH_OK state after osd deployment
+    # is returned back to normal
+    ceph_cluster = CephCluster()
+    ceph_cluster.cluster_health_check()
 
     return measured_op
 
@@ -283,6 +300,11 @@ def measure_corrupt_pg(measurement_dir):
 
     logger.info(f"Deleting deployment {dummy_deployment}")
     oc.delete(resource_name=dummy_deployment)
+
+    # wait for ceph to return into HEALTH_OK state after osd deployment
+    # is returned back to normal
+    ceph_cluster = CephCluster()
+    ceph_cluster.cluster_health_check()
 
     return measured_op
 
