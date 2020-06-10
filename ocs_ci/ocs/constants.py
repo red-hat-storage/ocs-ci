@@ -608,6 +608,10 @@ INSTALLER_DEFAULT_DNS = "1.1.1.1"
 LIFECYCLE = 'lifecycle { ignore_changes = ["disk"] }'
 CSR_BOOTSTRAPPER_NODE = "node-bootstrapper"
 
+# VMware Datastore types
+VMFS = "VMFS"
+VSAN = "vsan"
+
 # Config related constants
 config_keys_patterns_to_censor = ['passw', 'token', 'secret']
 
@@ -856,6 +860,7 @@ VMDK = "VMDK"
 DIRECTPATH = "VMDirectPath"
 DISK_MODE = "independent_persistent"
 COMPATABILITY_MODE = "physicalMode"
+DISK_PATH_PREFIX = "/vmfs/devices/disks/"
 
 # OS
 RHEL_OS = "RHEL"
