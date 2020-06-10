@@ -264,7 +264,7 @@ class VMWareNodes(NodesBase):
         Args:
             nodes (list): The OCS objects of the nodes
             force (bool): True for Hard reboot, False for Soft reboot
-            timeout (int): time in seconds to wait for node to reach 'not ready' state, 
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
                 and 'ready' state.
             wait (bool): True if need to wait till the restarted OCP node
                 reaches READY state. False otherwise
@@ -494,7 +494,7 @@ class AWSNodes(NodesBase):
             nodes (list): The OCS objects of the nodes
             wait (bool): True if need to wait till the restarted node reaches
                 READY state. False otherwise
-            timeout (int): time in seconds to wait for node to reach 'not ready' state, 
+            timeout (int): time in seconds to wait for node to reach 'not ready' state,
                 and 'ready' state.
 
         """
