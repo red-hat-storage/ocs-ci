@@ -64,10 +64,8 @@ def get_typed_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None, ocs_n
     """
     node_list = get_node_objs()
     if ocs_node and node_type == constants.WORKER_MACHINE:
-        node_list = [
-            node for node in node_list if constants.OPERATOR_NODE_LABEL in node
-            .get(resource_name=node.name, column='ROLES').get('metadata').get('labels')
-        ]
+        ocs_node_names = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+        node_list = [node for node in node_list if node.name in ocs_node_names]
     typed_nodes = [
         node for node in node_list if node_type in node
         .ocp.get_resource(resource_name=node.name, column='ROLES')
