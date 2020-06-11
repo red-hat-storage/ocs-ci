@@ -37,14 +37,12 @@ class TestAddCapacityWithOSDPodDelete(ManageTest):
         in the middle of the process.
         """
         used_percentage = get_percent_used_capacity()
-        logging.info("Condition 1 to start the test is met: storageutilization is completed")
-        logging.info(f"used capacity = {used_percentage}")
+        logging.info(f"storageutilization is completed. used capacity = {used_percentage}")
 
         max_osds = 15
         osd_pods_before = pod_helpers.get_osd_pods()
-        assert len(osd_pods_before) < max_osds, (
-            "Condition 2 to start test failed: We have maximum of osd's in the cluster")
-        logging.info("All start conditions are met!")
+        if len(osd_pods_before) >= max_osds:
+            pytest.skip("We have maximum of osd's in the cluster")
 
         d = Disruptions()
         d.set_resource('osd')
