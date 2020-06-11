@@ -30,15 +30,12 @@ class TestAddCapacityWithOSDPodDelete(ManageTest):
     in the middle of the process.
     """
 
-    def test_add_capacity_osd_pod_delete(
-        self, nodes, workload_storageutilization_rbd
-    ):
-        """ Test add capacity when one of the osd pods gets deleted
+    def test_add_capacity_osd_pod_delete(self, workload_storageutilization_rbd):
+        """
+        Test add capacity when one of the osd pods gets deleted
         in the middle of the process.
         """
         logging.info("Condition 1 to start the test is met: storageutilization is completed")
-        # Please notice: When the branch 'wip-add-capacity-e_e' will be merged into master
-        # the test will include more much data both before, and after calling 'add_capacity'function.
 
         max_osds = 15
         osd_pods_before = pod_helpers.get_osd_pods()
@@ -48,19 +45,17 @@ class TestAddCapacityWithOSDPodDelete(ManageTest):
 
         d = Disruptions()
         d.set_resource('osd')
+
         osd_size = storage_cluster.get_osd_size()
         logging.info("Calling add_capacity function...")
         result = storage_cluster.add_capacity(osd_size)
-
-        logging.info("Delete osd resource")
-        d.delete_resource(1)
         if result:
             logging.info("add capacity finished successfully")
         else:
             logging.info("add capacity failed")
 
-        # The exit criteria verification conditions here are not complete. When the branch
-        # 'wip-add-capacity-e_e' will be merged into master I will use the functions from this branch.
+        logging.info("Delete osd resource")
+        d.delete_resource(1)
 
         pod = OCP(
             kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
