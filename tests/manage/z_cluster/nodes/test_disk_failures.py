@@ -14,6 +14,8 @@ from ocs_ci.ocs.resources.pod import (
     get_osd_deployments, get_osd_pods, get_pod_node, get_operator_pods, get_osd_prepare_pods
 )
 from ocs_ci.ocs.resources.ocs import get_job_obj
+from ocs_ci.utility.aws import AWSTimeoutException
+
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,40 @@ class TestDiskFailures(ManageTest):
     Test class for detach and attach worker volume
 
     """
+
+    def detach_volume_and_wait_for_attach(
+        self, nodes, data_volume, worker_node
+    ):
+        """
+         Detach an EBS volume from an AWS instance and wait for the volume
+         to be re-attached
+
+         Args:
+             node (OCS): The OCS object representing the node
+             data_volume (Volume): The ec2 volume to delete
+             worker_node (OCS): The OCS object of the EC2 instance
+
+         """
+        try:
+            # Detach volume (logging is done inside the function)
+            nodes.detach_volume(data_volume, worker_node)
+        except AWSTimeoutException as e:
+            if "Volume state: in-use" in e:
+                logger.info(
+                    f"Volume {data_volume} re-attached successfully to worker"
+                    f" node {worker_node}")
+            else:
+                raise
+        else:
+            """
+            Wait for worker volume to be re-attached automatically
+            to the node
+            """
+            assert nodes.wait_for_volume_attach(data_volume), (
+                f"Volume {data_volume} failed to be re-attached to worker "
+                f"node {worker_node}"
+            )
+
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
         """
@@ -45,6 +81,19 @@ class TestDiskFailures(ManageTest):
             if not_ready_nodes:
                 nodes.restart_nodes(not_ready_nodes)
                 node.wait_for_nodes_status()
+
+            # Restart node if the osd stays at CLBO state
+            osd_pods_obj_list = get_osd_pods()
+            for pod in osd_pods_obj_list:
+                if pod.get().get(
+                    'status'
+                ).get(
+                    'containerStatuses'
+                )[0].get('state') == constants.STATUS_CLBO:
+                    node_obj = get_pod_node(pod)
+                    nodes.restart_nodes([node_obj])
+                    node.wait_for_nodes_status([node_obj.name])
+
         request.addfinalizer(finalizer)
 
     @pytest.fixture(autouse=True)
@@ -63,10 +112,10 @@ class TestDiskFailures(ManageTest):
         Detach and attach worker volume
 
         - Detach the data volume from one of the worker nodes
-        - Validate cluster functionality, without checking cluster and Ceph
-          health (as one node volume is detached, the cluster will be unhealthy)
-          by creating resources and running IO
         - Wait for the volumes to be re-attached back to the worker node
+        - Validate cluster functionality, without checking cluster and Ceph
+          health (as one node volume is detached, the cluster will be
+          unhealthy) by creating resources and running IO
         - Restart the node so the volume will get re-mounted
 
         """
@@ -75,8 +124,8 @@ class TestDiskFailures(ManageTest):
         # Get the worker node according to the volume attachment
         worker = nodes.get_node_by_attached_volume(data_volume)
 
-        # Detach volume (logging is done inside the function)
-        nodes.detach_volume(data_volume, worker)
+        # Detach volume and wait for the volume to attach
+        self.detach_volume_and_wait_for_attach(nodes, data_volume, worker)
 
         # Validate cluster is still functional
         # In case the selected node that its volume disk was detached was the one
@@ -86,11 +135,6 @@ class TestDiskFailures(ManageTest):
         assert wait_for_ct_pod_recovery(), "Ceph tools pod failed to come up on another node"
 
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
-
-        # Wait for worker volume to be re-attached automatically to the node
-        assert nodes.wait_for_volume_attach(data_volume), (
-            "Volume failed to be re-attached to a worker node"
-        )
 
         # Restart the instance so the volume will get re-mounted
         nodes.restart_nodes([worker])
@@ -120,20 +164,12 @@ class TestDiskFailures(ManageTest):
             {'worker': nodes.get_node_by_attached_volume(vol), 'volume': vol}
             for vol in data_volumes
         ]
-
         for worker_and_volume in workers_and_volumes:
-            # Detach the volume (logging is done inside the function)
-            nodes.detach_volume(
-                worker_and_volume['volume'], nodes.detach_volume(worker_and_volume['worker'])
+            # Detach volume and wait for the volume to attach
+            self.detach_volume_and_wait_for_attach(
+                nodes, worker_and_volume['volume'],
+                worker_and_volume['worker']
             )
-
-        for worker_and_volume in workers_and_volumes:
-            # Wait for worker volume to be re-attached automatically to the node
-            assert nodes.wait_for_volume_attach(worker_and_volume['volume']), (
-                f"Volume {worker_and_volume['volume']} "
-                f"failed to be re-attached to a worker node"
-            )
-
         # Restart the instances so the volume will get re-mounted
         nodes.restart_nodes(
             [worker_and_volume['worker'] for worker_and_volume in workers_and_volumes]
