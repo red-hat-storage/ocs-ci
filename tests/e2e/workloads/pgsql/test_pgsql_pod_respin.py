@@ -71,12 +71,12 @@ class TestPgSQLPodRespin(E2ETest):
         # Wait for pgbench pod to reach running state
         pgsql.wait_for_pgbench_status(status=constants.STATUS_RUNNING)
 
-        # Check worker node utilization (adm_top)
+        # Check worker node utilization(adm_top)
         get_node_resource_utilization_from_adm_top(
             node_type='worker', print_table=True
         )
 
-        # Respin pod
+        # Respin relevant pod
         if pod_name == 'postgers':
             pgsql.respin_pgsql_app_pod()
         else:
