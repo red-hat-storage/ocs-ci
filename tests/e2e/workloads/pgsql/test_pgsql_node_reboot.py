@@ -8,9 +8,10 @@ from ocs_ci.framework.testlib import (
     E2ETest, workloads, ignore_leftovers
 )
 from ocs_ci.ocs.pgsql import Postgresql
-from ocs_ci.ocs.node import get_osd_running_nodes, get_node_objs
-from ocs_ci.ocs.node import \
-    get_node_resource_utilization_from_adm_top
+from ocs_ci.ocs.node import (
+    get_osd_running_nodes, get_node_objs, get_node_resource_utilization_from_adm_top
+)
+
 
 log = logging.getLogger(__name__)
 

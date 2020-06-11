@@ -6,8 +6,7 @@ from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.framework.testlib import (
     E2ETest, workloads
 )
-from ocs_ci.ocs.node import \
-    get_node_resource_utilization_from_adm_top
+from ocs_ci.ocs.node import get_node_resource_utilization_from_adm_top
 
 log = logging.getLogger(__name__)
 

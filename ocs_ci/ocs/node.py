@@ -1,6 +1,7 @@
 import copy
 import logging
 import re
+from prettytable import PrettyTable
 
 from subprocess import TimeoutExpired
 
@@ -16,7 +17,6 @@ from ocs_ci.ocs import machine
 import tests.helpers
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions
-from prettytable import PrettyTable
 
 log = logging.getLogger(__name__)
 
@@ -363,7 +363,9 @@ def get_node_logs(node_name):
     return node.exec_oc_debug_cmd(node_name, ["dmesg"])
 
 
-def get_node_resource_utilization_from_adm_top(nodename=None, node_type='worker', print_table=False):
+def get_node_resource_utilization_from_adm_top(
+    nodename=None, node_type=constants.WORKER_MACHINE, print_table=False
+):
     """
     Gets the node's cpu and memory utilization in percentage using adm top command.
 
@@ -409,16 +411,18 @@ def get_node_resource_utilization_from_adm_top(nodename=None, node_type='worker'
 
     if print_table:
         usage_memory_table = PrettyTable()
-        usage_memory_table.field_names = ["Node Name", "CPU USAGE adm_top",
-                                          "Memory USAGE adm_top"]
+        usage_memory_table.field_names = [
+            "Node Name", "CPU USAGE adm_top", "Memory USAGE adm_top"
+        ]
         for node, util_node in utilization_dict.items():
             usage_memory_table.add_row([node, f'{util_node["cpu"]}%', f'{util_node["memory"]}%'])
         log.info(f'\n{usage_memory_table}\n')
     return utilization_dict
 
 
-def get_node_resource_utilization_from_oc_describe(nodename=None,
-                                                   node_type='worker', print_table=False):
+def get_node_resource_utilization_from_oc_describe(
+    nodename=None, node_type=constants.WORKER_MACHINE, print_table=False
+):
     """
     Gets the node's cpu and memory utilization in percentage using oc describe node
 
@@ -455,8 +459,9 @@ def get_node_resource_utilization_from_oc_describe(nodename=None,
 
     if print_table:
         usage_memory_table = PrettyTable()
-        usage_memory_table.field_names = ["Node Name", "CPU USAGE oc_describe",
-                                          "Memory USAGE oc_describe"]
+        usage_memory_table.field_names = [
+            "Node Name", "CPU USAGE oc_describe", "Memory USAGE oc_describe"
+        ]
         for node, util_node in utilization_dict.items():
             usage_memory_table.add_row([node, f'{util_node["cpu"]}%', f'{util_node["memory"]}%'])
         log.info(f'\n{usage_memory_table}\n')
