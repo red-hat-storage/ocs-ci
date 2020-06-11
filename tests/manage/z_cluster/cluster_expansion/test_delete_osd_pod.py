@@ -8,6 +8,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod as pod_helpers
 from ocs_ci.ocs.resources import storage_cluster
+from ocs_ci.ocs.cluster import get_percent_used_capacity
 from ocs_ci.utility.utils import ceph_health_check
 from tests.disruption_helpers import Disruptions
 
@@ -35,7 +36,9 @@ class TestAddCapacityWithOSDPodDelete(ManageTest):
         Test add capacity when one of the osd pods gets deleted
         in the middle of the process.
         """
+        used_percentage = get_percent_used_capacity()
         logging.info("Condition 1 to start the test is met: storageutilization is completed")
+        logging.info(f"used capacity = {used_percentage}")
 
         max_osds = 15
         osd_pods_before = pod_helpers.get_osd_pods()
