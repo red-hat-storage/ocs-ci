@@ -65,7 +65,7 @@ def analyze_regression(io_pattern, es_username):
         if io_pattern == 'sequential':
             std_dev = 'std-dev-' + object_size
             variance = test_data[std_dev]
-            log.warning(f'variance - {variance} is greater than 5%')
+            log.info(f'variance - {variance}')
         # Todo: Fail test if 5% deviation from benchmark value
 
 
@@ -110,8 +110,10 @@ class TestFIOBenchmark(E2ETest):
         # Todo: have pvc_size set to 'get_osd_pods_memory_sum * 5'
         #  once pr-2037 is merged
         fio_cr['spec']['clustername'] = config.ENV_DATA['platform'] + get_build() + get_ocs_version()
-        fio_cr['spec']['test_user'] = interface + io_pattern
+        fio_cr['spec']['test_user'] = get_ocs_version() + interface + io_pattern
         fio_cr['spec']['workload']['args']['storageclass'] = sc
+        if io_pattern == 'sequential':
+            fio_cr['spec']['workload']['args']['jobs'] = ['write', 'read']
         log.info(f'fio_cr: {fio_cr}')
         fio_cr_obj = OCS(**fio_cr)
         fio_cr_obj.create()
@@ -133,7 +135,7 @@ class TestFIOBenchmark(E2ETest):
         pod_obj.wait_for_resource(
             condition='Completed',
             resource_name=fio_client_pod,
-            timeout=36000,
+            timeout=18000,
             sleep=300,
         )
 
