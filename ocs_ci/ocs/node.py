@@ -47,7 +47,7 @@ def get_node_objs(node_names=None):
     return nodes
 
 
-def get_typed_nodes(node_type='worker', num_of_nodes=None):
+def get_typed_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
     """
     Get cluster's nodes according to the node type (e.g. worker, master) and the
     number of requested nodes from that type
@@ -576,3 +576,22 @@ def get_compute_node_names():
         ]
     else:
         raise NotImplementedError
+
+
+def get_ocs_nodes(num_of_nodes=None):
+    """
+    Gets the ocs nodes
+
+    Args:
+        num_of_nodes (int): The number of ocs nodes to return. If not specified,
+            it returns all the ocs nodes.
+
+    Returns:
+        list: List of ocs nodes
+
+    """
+    ocs_node_names = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+    ocs_nodes = get_node_objs(ocs_node_names)
+    num_of_nodes = num_of_nodes or len(ocs_nodes)
+
+    return ocs_nodes[:num_of_nodes]
