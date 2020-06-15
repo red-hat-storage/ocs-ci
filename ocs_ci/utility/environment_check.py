@@ -75,7 +75,7 @@ def compare_dicts(before, after):
 
 
 def assign_get_values(
-    env_status_dict, key, kind=None, get_environment_status=None
+    env_status_dict, key, kind=None, exclude_labels=None
 ):
     """
     Assigning kind status into env_status_dict
