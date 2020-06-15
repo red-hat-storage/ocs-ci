@@ -410,11 +410,11 @@ def get_node_resource_utilization_from_adm_top(
                 }
 
     if print_table:
-        print_table_node_resource_utilization(utilization_dict=utilization_dict,
-                                              field_names=[
-                                                  "Node Name", "CPU USAGE adm_top",
-                                                  "Memory USAGE adm_top"
-                                              ])
+        print_table_node_resource_utilization(
+            utilization_dict=utilization_dict, field_names=[
+                "Node Name", "CPU USAGE adm_top", "Memory USAGE adm_top"
+            ]
+        )
     return utilization_dict
 
 
@@ -456,11 +456,11 @@ def get_node_resource_utilization_from_oc_describe(
         }
 
     if print_table:
-        print_table_node_resource_utilization(utilization_dict=utilization_dict,
-                                              field_names=[
-                                                  "Node Name", "CPU USAGE oc_describe",
-                                                  "Memory USAGE oc_describe"
-                                              ])
+        print_table_node_resource_utilization(
+            utilization_dict=utilization_dict, field_names=[
+                "Node Name", "CPU USAGE oc_describe", "Memory USAGE oc_describe"
+            ]
+        )
 
     return utilization_dict
 
