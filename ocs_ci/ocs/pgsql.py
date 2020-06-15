@@ -3,6 +3,7 @@ Postgresql workload class
 """
 import logging
 import random
+from prettytable import PrettyTable
 
 from ocs_ci.ocs.ripsaw import RipSaw
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
@@ -272,7 +273,7 @@ class Postgresql(RipSaw):
                 log.error(error_msg)
                 raise UnexpectedBehaviour(error_msg)
 
-    def validate_pgbench_run(self, pgbench_pods):
+    def validate_pgbench_run(self, pgbench_pods, print_table=True):
         """
         Validate pgbench run
 
@@ -302,7 +303,25 @@ class Postgresql(RipSaw):
                         "no data found on latency_avg"
                     )
             log.info(f"PGBench on {pgbench_pod.name} completed successfully")
-            all_pgbench_pods_output.append(pg_output)
+            all_pgbench_pods_output.append((pg_output, pgbench_pod.name))
+
+        if print_table:
+            pgbench_pod_table = PrettyTable()
+            pgbench_pod_table.field_names = [
+                'pod_name', 'scaling_factor', 'num_clients', 'num_threads', 'trans_client',
+                'actually_trans', 'latency_avg', 'lat_stddev', 'tps_incl', 'tps_excl'
+            ]
+            for pgbench_pod_out in all_pgbench_pods_output:
+                for pod_output in pgbench_pod_out[0]:
+                    for pod in pod_output.values():
+                        pgbench_pod_table.add_row([
+                            pgbench_pod_out[1], pod['scaling_factor'], pod['num_clients'],
+                            pod['num_threads'], pod['number_of_transactions_per_client'],
+                            pod['number_of_transactions_actually_processed'], pod['latency_avg'],
+                            pod['lat_stddev'], pod['tps_incl'], pod['tps_excl']
+                        ])
+            log.info(f'\n{pgbench_pod_table}\n')
+
         return all_pgbench_pods_output
 
     def get_pgsql_nodes(self):
@@ -336,6 +355,31 @@ class Postgresql(RipSaw):
         wait_for_resource_state(
             resource=app_pod, state=constants.STATUS_RUNNING, timeout=300
         )
+
+    def get_pgbech_pod_status_table(self, pgbench_pods):
+        """
+        Get pgbench pod data and print results on a table
+
+        Args:
+            pgbench pods (list): List of pgbench pods
+
+        """
+        pgbench_pod_table = PrettyTable()
+        pgbench_pod_table.field_names = [
+            'pod_name', 'scaling_factor', 'num_clients', 'num_threads', 'trans_client',
+            'actually_trans', 'latency_avg', 'lat_stddev', 'tps_incl', 'tps_excl'
+        ]
+        for pgbench_pod in pgbench_pods:
+            output = run_cmd(f'oc logs {pgbench_pod.name}')
+            pg_output = utils.parse_pgsql_logs(output)
+            for pod_output in pg_output:
+                for pod in pod_output.values():
+                    pgbench_pod_table.add_row([
+                        pgbench_pod.name, pod['scaling_factor'], pod['num_clients'], pod['num_threads'],
+                        pod['number_of_transactions_per_client'], pod['number_of_transactions_actually_processed'],
+                        pod['latency_avg'], pod['lat_stddev'], pod['tps_incl'], pod['tps_excl']
+                    ])
+        log.info(f'\n{pgbench_pod_table}\n')
 
     def cleanup(self):
         """
