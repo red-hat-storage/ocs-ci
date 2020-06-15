@@ -410,13 +410,11 @@ def get_node_resource_utilization_from_adm_top(
                 }
 
     if print_table:
-        usage_memory_table = PrettyTable()
-        usage_memory_table.field_names = [
-            "Node Name", "CPU USAGE adm_top", "Memory USAGE adm_top"
-        ]
-        for node, util_node in utilization_dict.items():
-            usage_memory_table.add_row([node, f'{util_node["cpu"]}%', f'{util_node["memory"]}%'])
-        log.info(f'\n{usage_memory_table}\n')
+        print_table_node_resource_utilization(utilization_dict=utilization_dict,
+                                              field_names=[
+                                                  "Node Name", "CPU USAGE adm_top",
+                                                  "Memory USAGE adm_top"
+                                              ])
     return utilization_dict
 
 
@@ -458,15 +456,29 @@ def get_node_resource_utilization_from_oc_describe(
         }
 
     if print_table:
-        usage_memory_table = PrettyTable()
-        usage_memory_table.field_names = [
-            "Node Name", "CPU USAGE oc_describe", "Memory USAGE oc_describe"
-        ]
-        for node, util_node in utilization_dict.items():
-            usage_memory_table.add_row([node, f'{util_node["cpu"]}%', f'{util_node["memory"]}%'])
-        log.info(f'\n{usage_memory_table}\n')
+        print_table_node_resource_utilization(utilization_dict=utilization_dict,
+                                              field_names=[
+                                                  "Node Name", "CPU USAGE oc_describe",
+                                                  "Memory USAGE oc_describe"
+                                              ])
 
     return utilization_dict
+
+
+def print_table_node_resource_utilization(utilization_dict, field_names):
+    """
+    Print table of node utilization
+
+    Args:
+        utilization_dict (dict) : CPU and Memory utilization per Node
+        field_names (list) : The field names of the table
+
+    """
+    usage_memory_table = PrettyTable()
+    usage_memory_table.field_names = field_names
+    for node, util_node in utilization_dict.items():
+        usage_memory_table.add_row([node, f'{util_node["cpu"]}%', f'{util_node["memory"]}%'])
+    log.info(f'\n{usage_memory_table}\n')
 
 
 def node_network_failure(node_names, wait=True):
