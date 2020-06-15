@@ -39,28 +39,27 @@ def remove_ocp_registry_from_ocs(platform):
     image_registry_obj = ocp.OCP(
         kind=constants.CONFIG, namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE
     )
-    param_cmd = ''
+    param_cmd = None
     if platform.lower() == constants.AWS_PLATFORM:
         param_cmd = '[{"op": "remove", "path": "/spec/storage"}]'
 
     elif platform.lower() == constants.VSPHERE_PLATFORM:
         param_cmd = '[{"op": "replace", "path": "/spec/storage", "value": {"emptyDir": "{}"}}]'
 
+    if param_cmd:
+        image_registry_obj.patch(
+            resource_name=constants.IMAGE_REGISTRY_RESOURCE_NAME, params=param_cmd, format_type='json'
+        )
     else:
         log.info("platform registry not supported")
-        return
-
-    image_registry_obj.patch(
-        resource_name=constants.IMAGE_REGISTRY_RESOURCE_NAME, params=param_cmd, format_type='json'
-    )
 
 
 def uninstall_ocs():
     """
-        The function uninstalls the OCS operator from a openshift
-        cluster and removes all its settings and dependencies
+    The function uninstalls the OCS operator from a openshift
+    cluster and removes all its settings and dependencies
 
-        """
+    """
     ocp_obj = ocp.OCP()
     provisioners = constants.OCS_PROVISIONERS
 
@@ -127,7 +126,7 @@ def uninstall_ocs():
         log.info(f"deleting pod {pod.name}")
         pod.delete()
 
-    log.info("removing rook from nodes")
+    log.info("removing rook directory from nodes")
     nodes_list = get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
     for node in nodes_list:
         log.info(f"removing rook from {node}")
@@ -143,8 +142,8 @@ def uninstall_ocs():
     nodes_list = get_all_nodes()
     for node in nodes_list:
         node_obj = ocp.OCP(kind=constants.NODE, resource_name=node)
-        node_obj.add_label(resource_name=node, label='cluster.ocs.openshift.io/openshift-storage-')
-        node_obj.add_label(resource_name=node, label='topology.rook.io/rack-')
+        node_obj.add_label(resource_name=node, label=constants.OPERATOR_NODE_LABEL[:-3] + '-')
+        node_obj.add_label(resource_name=node, label=constants.TOPOLOGY_ROOK_LABEL + '-')
 
     log.info("deleting storageCluster object")
     storage_cluster = ocp.OCP(kind=constants.STORAGECLUSTER, resource_name=constants.DEFAULT_CLUSTERNAME)
