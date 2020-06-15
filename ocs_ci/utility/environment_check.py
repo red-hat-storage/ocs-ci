@@ -75,7 +75,7 @@ def compare_dicts(before, after):
 
 
 def assign_get_values(
-    env_status_dict, key, kind=None, exclude_labels=None
+    env_status_dict, key, kind=None, get_environment_status=None
 ):
     """
     Assigning kind status into env_status_dict
@@ -120,7 +120,10 @@ def get_environment_status(env_dict, exclude_labels=None):
     """
     with ThreadPoolExecutor(max_workers=len(KINDS)) as executor:
         for key, kind in zip(env_dict.keys(), KINDS):
-            executor.submit(assign_get_values, env_dict, key, kind, exclude_labels=exclude_labels)
+            executor.submit(
+                assign_get_values, env_dict, key, kind,
+                exclude_labels=exclude_labels
+            )
 
 
 def get_status_before_execution(exclude_labels=None):
