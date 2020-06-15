@@ -292,11 +292,19 @@ class VSPHEREBASE(Deployment):
 
         """
         logger.info("Adding RDM disk to all compute nodes")
+        datastore_type = self.vsphere.get_datastore_type_by_name(
+            self.datastore,
+            self.datacenter
+        )
+
         compute_vms = self.get_compute_vms(self.datacenter, self.cluster)
         for vm in compute_vms:
             host = self.vsphere.get_host(vm)
             logger.info(f"{vm.name} belongs to host {host.name}")
-            devices_available = self.vsphere.available_storage_devices(host)
+            devices_available = self.vsphere.available_storage_devices(
+                host,
+                datastore_type=datastore_type
+            )
             if not devices_available:
                 raise RDMDiskNotFound
 

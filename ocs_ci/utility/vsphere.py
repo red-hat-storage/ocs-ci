@@ -2,6 +2,7 @@
 This module contains the vSphere related methods
 """
 import logging
+import os
 import ssl
 
 import atexit
@@ -13,7 +14,8 @@ from pyVim.connect import Disconnect, SmartStubAdapter, VimSessionOrientedStub
 from ocs_ci.ocs.exceptions import VMMaxDisksReachedException
 from ocs_ci.ocs.constants import (
     GB2KB, VM_DISK_TYPE, VM_DISK_MODE, VM_POWERED_OFF,
-    DISK_MODE, COMPATABILITY_MODE,
+    DISK_MODE, COMPATABILITY_MODE, DISK_PATH_PREFIX,
+    VMFS,
 )
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -90,6 +92,80 @@ class VSPHERE(object):
 
         """
         return self.get_content.searchIndex
+
+    def get_all_objs(self, content, vimtype, folder=None, recurse=True):
+        """
+        Generate objects of type vimtype
+
+        Args:
+            content (vim.ServiceInstanceContent): Service Instance Content
+            vimtype (vim.type): Type of vim
+                (e.g: For VM's, type is vim.VirtualMachine
+                For Hosts, type is vim.HostSystem)
+            folder (str): Folder name
+            recurse (bool): True for recursive search
+
+        Returns:
+            dict: Dictionary of objects and corresponding name
+               e.g:{
+                   'vim.Datastore:datastore-12158': 'datastore1 (1)',
+                   'vim.Datastore:datastore-12157': 'datastore1 (2)'
+                   }
+
+        """
+        if not folder:
+            folder = content.rootFolder
+
+        obj = {}
+        container = content.viewManager.CreateContainerView(
+            folder,
+            vimtype,
+            recurse
+        )
+        for managed_object_ref in container.view:
+            obj.update({managed_object_ref: managed_object_ref.name})
+        container.Destroy()
+        return obj
+
+    def find_object_by_name(
+            self,
+            content,
+            name,
+            obj_type,
+            folder=None,
+            recurse=True
+    ):
+        """
+        Finds object by given name
+
+        Args:
+            content (vim.ServiceInstanceContent): Service Instance Content
+            name (str): Name to search
+            obj_type (list): list of vim.type
+                (e.g: For VM's, type is vim.VirtualMachine
+                For Hosts, type is vim.HostSystem)
+            folder (str): Folder name
+            recurse (bool): True for recursive search
+
+        Returns:
+            vim.type: Type of vim instance
+            None: If vim.type doesn't exists
+
+        """
+        if not isinstance(obj_type, list):
+            obj_type = [obj_type]
+
+        objects = self.get_all_objs(
+            content,
+            obj_type,
+            folder=folder,
+            recurse=recurse
+        )
+        for obj in objects:
+            if obj.name == name:
+                return obj
+
+        return None
 
     def get_vm_by_ip(self, ip, dc, vm_search=True):
         """
@@ -702,9 +778,9 @@ class VSPHERE(object):
             if ScsiDisk.deviceType == 'disk'
         ]
 
-    def get_mounted_devices(self, host):
+    def get_mounted_devices_in_vsan(self, host):
         """
-        Fetches the devices which was mounted
+        Fetches the devices which was mounted in VSAN
 
         Args:
             host (vim.HostSystem): Host instance
@@ -724,6 +800,55 @@ class VSPHERE(object):
                 device_list.append(hd.devicePath)
         logger.debug(f"Mounted devices in Host {host.name}: {device_list}")
         return device_list
+
+    def get_mounted_devices_in_vmfs(self, host):
+        """
+        Fetches the devices which was mounted in VMFS
+
+        Args:
+            host (vim.HostSystem): Host instance
+
+        Returns:
+            list: List of storage devices which was mounted
+
+        """
+        device_list = []
+        logger.debug(
+            f"Fetching all the storage devices mounted in host {host.name}"
+        )
+        mount_info = host.config.fileSystemVolume.mountInfo
+        for each in mount_info:
+            try:
+                if each.volume.extent:
+                    extent = each.volume.extent
+                    for scsidisk in extent:
+                        disk_path = os.path.join(
+                            DISK_PATH_PREFIX,
+                            scsidisk.diskName
+                        )
+                        device_list.append(disk_path)
+            except AttributeError:
+                continue
+        logger.debug(f"Mounted devices in Host {host.name}: {device_list}")
+        return device_list
+
+    def get_mounted_devices(self, host, datastore_type="VMFS"):
+        """
+        Fetches the available storage devices on Host.
+
+        Args:
+            host (vim.HostSystem): Host instance
+            datastore_type (str): Type of datastore. Either VMFS or vsan
+                By default, it will take VMFS as datastore type.
+
+        Returns:
+            list: List of storage devices available for use
+
+        """
+        if datastore_type == VMFS:
+            return self.get_mounted_devices_in_vmfs(host)
+        else:
+            return self.get_mounted_devices_in_vsan(host)
 
     def get_active_partition(self, host):
         """
@@ -745,19 +870,21 @@ class VSPHERE(object):
             return active_partition
         return active_partition.id.diskName
 
-    def available_storage_devices(self, host):
+    def available_storage_devices(self, host, datastore_type="VMFS"):
         """
         Fetches the available storage devices on Host.
 
         Args:
             host (vim.HostSystem): Host instance
+            datastore_type (str): Type of datastore. Either VMFS or vsan
+                By default, it will take VMFS as datastore type.
 
         Returns:
             list: List of storage devices available for use
 
         """
         storage_devices = self.get_storage_devices(host)
-        mounted_devices = self.get_mounted_devices(host)
+        mounted_devices = self.get_mounted_devices(host, datastore_type)
         used_devices = self.get_used_devices(host)
         active_partition = self.get_active_partition(host)
 
@@ -951,3 +1078,72 @@ class VSPHERE(object):
             device_path,
             spec
         )
+
+    def find_datastore_by_name(self, datastore_name, datacenter_name):
+        """
+        Fetches the Datastore
+
+        Args:
+            datastore_name (str): Name of the Datastore
+            datacenter_name (str): Name of the Datacenter
+
+        Returns:
+            vim.Datastore: Datastore instance
+
+        """
+        dc = self.find_datacenter_by_name(datacenter_name)
+        folder = dc.datastoreFolder
+        return self.find_object_by_name(
+            self.get_content,
+            datastore_name,
+            [vim.Datastore],
+            folder=folder
+        )
+
+    def find_datacenter_by_name(self, datacenter_name):
+        """
+        Fetches the Datacenter
+
+        Args:
+            datacenter_name (str): Name of the Datacenter
+
+        Returns:
+            vim.Datacenter: Datacenter instance
+
+        """
+        return self.find_object_by_name(
+            self.get_content,
+            datacenter_name,
+            [vim.Datacenter]
+        )
+
+    def get_datastore_type(self, datastore):
+        """
+        Gets the Datastore Type
+
+        Args:
+            datastore (vim.Datastore): Datastore instance
+
+        Returns:
+            str: Datastore type. Either VMFS or vsan
+
+        """
+        return datastore.summary.type
+
+    def get_datastore_type_by_name(self, datastore_name, datacenter_name):
+        """
+        Gets the Datastore Type
+
+        Args:
+            datastore_name (str): Name of the Datastore
+            datacenter_name (str): Name of the Datacenter
+
+        Returns:
+            str: Datastore type. Either VMFS or vsan
+
+        """
+        datastore = self.find_datastore_by_name(
+            datastore_name,
+            datacenter_name
+        )
+        return self.get_datastore_type(datastore)
