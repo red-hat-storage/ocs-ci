@@ -19,7 +19,7 @@ def couchbase(request):
 
 
 @workloads
-@pytest.mark.polarion_id("OCS-807")
+@pytest.mark.polarion_id("OCS-785")
 class TestCouchBaseWorkload(E2ETest):
     """
     Deploy an CouchBase workload using operator
