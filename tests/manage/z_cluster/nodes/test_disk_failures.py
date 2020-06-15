@@ -17,6 +17,7 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.resources.ocs import get_job_obj, OCS
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.utility.aws import AWSTimeoutException
 
 
 logger = logging.getLogger(__name__)
