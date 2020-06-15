@@ -1,6 +1,7 @@
 import copy
 import logging
 import re
+from prettytable import PrettyTable
 
 from subprocess import TimeoutExpired
 
@@ -16,7 +17,6 @@ from ocs_ci.ocs import machine
 import tests.helpers
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions
-
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def get_node_objs(node_names=None):
     return nodes
 
 
-def get_typed_nodes(node_type='worker', num_of_nodes=None):
+def get_typed_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
     """
     Get cluster's nodes according to the node type (e.g. worker, master) and the
     number of requested nodes from that type
@@ -363,7 +363,9 @@ def get_node_logs(node_name):
     return node.exec_oc_debug_cmd(node_name, ["dmesg"])
 
 
-def get_node_resource_utilization_from_adm_top(nodename=None, node_type='worker'):
+def get_node_resource_utilization_from_adm_top(
+    nodename=None, node_type=constants.WORKER_MACHINE, print_table=False
+):
     """
     Gets the node's cpu and memory utilization in percentage using adm top command.
 
@@ -395,21 +397,30 @@ def get_node_resource_utilization_from_adm_top(nodename=None, node_type='worker'
     for node in node_names:
         for value in resource_utilization_all_nodes:
             if node in value:
-                value = re.findall(r'\d+', value.strip())
-                cpu_utilization = value[2]
+                value = re.findall(r'(\d{1,3})%', value.strip())
+                cpu_utilization = value[0]
                 log.info("The CPU utilized by the node "
                          f"{node} is {cpu_utilization}%")
-                memory_utilization = value[4]
+                memory_utilization = value[1]
                 log.info("The memory utilized of the node "
                          f"{node} is {memory_utilization}%")
                 utilization_dict[node] = {
                     'cpu': int(cpu_utilization),
                     'memory': int(memory_utilization)
                 }
+
+    if print_table:
+        print_table_node_resource_utilization(
+            utilization_dict=utilization_dict, field_names=[
+                "Node Name", "CPU USAGE adm_top", "Memory USAGE adm_top"
+            ]
+        )
     return utilization_dict
 
 
-def get_node_resource_utilization_from_oc_describe(nodename=None, node_type='worker'):
+def get_node_resource_utilization_from_oc_describe(
+    nodename=None, node_type=constants.WORKER_MACHINE, print_table=False
+):
     """
     Gets the node's cpu and memory utilization in percentage using oc describe node
 
@@ -444,7 +455,30 @@ def get_node_resource_utilization_from_oc_describe(nodename=None, node_type='wor
             'memory': int(mem[0])
         }
 
+    if print_table:
+        print_table_node_resource_utilization(
+            utilization_dict=utilization_dict, field_names=[
+                "Node Name", "CPU USAGE oc_describe", "Memory USAGE oc_describe"
+            ]
+        )
+
     return utilization_dict
+
+
+def print_table_node_resource_utilization(utilization_dict, field_names):
+    """
+    Print table of node utilization
+
+    Args:
+        utilization_dict (dict) : CPU and Memory utilization per Node
+        field_names (list) : The field names of the table
+
+    """
+    usage_memory_table = PrettyTable()
+    usage_memory_table.field_names = field_names
+    for node, util_node in utilization_dict.items():
+        usage_memory_table.add_row([node, f'{util_node["cpu"]}%', f'{util_node["memory"]}%'])
+    log.info(f'\n{usage_memory_table}\n')
 
 
 def node_network_failure(node_names, wait=True):
@@ -576,3 +610,22 @@ def get_compute_node_names():
         ]
     else:
         raise NotImplementedError
+
+
+def get_ocs_nodes(num_of_nodes=None):
+    """
+    Gets the ocs nodes
+
+    Args:
+        num_of_nodes (int): The number of ocs nodes to return. If not specified,
+            it returns all the ocs nodes.
+
+    Returns:
+        list: List of ocs nodes
+
+    """
+    ocs_node_names = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
+    ocs_nodes = get_node_objs(ocs_node_names)
+    num_of_nodes = num_of_nodes or len(ocs_nodes)
+
+    return ocs_nodes[:num_of_nodes]

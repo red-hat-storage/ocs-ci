@@ -72,6 +72,7 @@ STATUS_BOUND = 'Bound'
 STATUS_RELEASED = 'Released'
 STATUS_COMPLETED = 'Completed'
 STATUS_ERROR = 'Error'
+STATUS_CLBO = 'CrashLoopBackOff'
 
 # NooBaa statuses
 BS_AUTH_FAILED = 'AUTH_FAILED'
@@ -130,6 +131,7 @@ OPENSHIFT_IMAGE_REGISTRY_NAMESPACE = "openshift-image-registry"
 OPENSHIFT_IMAGE_REGISTRY_DEPLOYMENT = "image-registry"
 OPENSHIFT_IMAGE_SELECTOR = "docker-registry=default"
 OPENSHIFT_INGRESS_NAMESPACE = "openshift-ingress"
+OPENSHIFT_MONITORING_NAMESPACE = "openshift-monitoring"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
 MOUNT_POINT = '/var/lib/www/html'
@@ -552,6 +554,7 @@ ALERT_CLUSTERCRITICALLYFULL = 'CephClusterCriticallyFull'
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
+TOPOLOGY_ROOK_LABEL = "topology.rook.io/rack"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
 OPERATOR_CATALOG_SOURCE_NAME = "ocs-catalogsource"
 MARKETPLACE_NAMESPACE = "openshift-marketplace"
@@ -619,6 +622,10 @@ INSTALLER_DEFAULT_DNS = "1.1.1.1"
 
 LIFECYCLE = 'lifecycle { ignore_changes = ["disk"] }'
 CSR_BOOTSTRAPPER_NODE = "node-bootstrapper"
+
+# VMware Datastore types
+VMFS = "VMFS"
+VSAN = "vsan"
 
 # Config related constants
 config_keys_patterns_to_censor = ['passw', 'token', 'secret']
@@ -868,6 +875,7 @@ VMDK = "VMDK"
 DIRECTPATH = "VMDirectPath"
 DISK_MODE = "independent_persistent"
 COMPATABILITY_MODE = "physicalMode"
+DISK_PATH_PREFIX = "/vmfs/devices/disks/"
 
 # OS
 RHEL_OS = "RHEL"
