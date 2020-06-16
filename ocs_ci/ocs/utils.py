@@ -16,7 +16,7 @@ from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
 
 from ocs_ci.framework import config as ocsci_config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -746,7 +746,7 @@ def run_must_gather(log_dir_path, image, command=None):
         )
 
 
-def collect_ocs_logs(dir_name, ocp=True, ocs=True):
+def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
     """
     Collects OCS logs
 
@@ -755,6 +755,7 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True):
             in dir_name suffix with _ocs_logs.
         ocp (bool): Whether to gather OCP logs
         ocs (bool): Whether to gather OCS logs
+        mcg (bool): True for collecting MCG logs (noobaa db dump)
 
     """
     if not (
@@ -798,6 +799,21 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True):
         run_must_gather(
             ocp_log_dir_path, ocp_must_gather_image,
             '/usr/bin/gather_service_logs worker'
+        )
+    if mcg:
+        from ocs_ci.ocs.resources.pod import get_pods_having_label, download, Pod
+        nb_db_pod = Pod(
+            **get_pods_having_label(
+                label=constants.NOOBAA_DB_LABEL,
+                namespace=defaults.ROOK_CLUSTER_NAMESPACE
+            )[0]
+        )
+        ocs_log_dir_path = os.path.join(log_dir_path, 'noobaa_db_dump')
+        create_directory_path(ocs_log_dir_path)
+        nb_db_pod.exec_cmd_on_pod("mongodump")
+        download(
+            pod_name=nb_db_pod.name, remotepath="dump",
+            localpath=ocs_log_dir_path, namespace=defaults.ROOK_CLUSTER_NAMESPACE
         )
 
 

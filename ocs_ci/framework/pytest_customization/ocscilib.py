@@ -386,7 +386,8 @@ def pytest_runtest_makereport(item, call):
         and ocsci_config.RUN.get('cli_params').get('collect-logs')
     ):
         test_case_name = item.name
-        collect_ocs_logs(test_case_name)
+        mcg = True if 'mcg' in item.location[0] else False
+        collect_ocs_logs(dir_name=test_case_name, mcg=mcg)
 
     # Collect Prometheus metrics if specified in gather_metrics_on_fail marker
     if (
