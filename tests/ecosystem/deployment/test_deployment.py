@@ -1,12 +1,10 @@
 import logging
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import defaults
 from ocs_ci.framework.testlib import deployment, polarion_id
-from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
+from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification, change_noobaa_endpoints_count
 from ocs_ci.utility.reporting import get_deployment_polarion_id
 from ocs_ci.utility.utils import is_cluster_running
-from ocs_ci.ocs.ocp import OCP
 from tests.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
@@ -25,12 +23,11 @@ def test_deployment(pvc_factory, pod_factory):
                 'ocs_registry_image'
             )
             ocs_install_verification(ocs_registry_image=ocs_registry_image)
+
             nb_eps = config.DEPLOYMENT.get('noobaa_endpoints')
             if nb_eps > 1:
-                log.info(f"Scaling up Noobaa endpoints to maximum of {nb_eps}")
-                params = f'{{"spec":{{"endpoints":{{"maxCount":{nb_eps},"minCount":1}}}}}}'
-                noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-                noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+                change_noobaa_endpoints_count(nb_eps)
+
             # Check basic cluster functionality by creating resources
             # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
             # run IO and delete the resources

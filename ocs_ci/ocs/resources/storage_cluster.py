@@ -498,3 +498,17 @@ def get_all_storageclass():
         )
     ]
     return storageclass
+
+
+def change_noobaa_endpoints_count(nb_eps):
+    """
+    Scale up or down the number of maximum NooBaa emdpoints
+
+    Args:
+        nb_eps (int): The number of required Noobaa endpoints
+
+    """
+    log.info(f"Scaling up Noobaa endpoints to a maximum of {nb_eps}")
+    params = f'{{"spec":{{"endpoints":{{"maxCount":{nb_eps},"minCount":1}}}}}}'
+    noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
