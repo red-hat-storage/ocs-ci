@@ -1,20 +1,20 @@
 """
 This module contains local-storage related methods
 """
+import json
 import logging
 import os
 import shutil
 import yaml
-import json
 
-from ocs_ci.utility.utils import clone_repo, get_ocp_version, run_cmd
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants, defaults
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import get_typed_nodes
-from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import csv
-from ocs_ci.utility import utils
-from ocs_ci.ocs import constants, defaults
-from ocs_ci.framework import config
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import clone_repo, get_ocp_version, run_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +62,9 @@ def get_new_device_paths(device_sets_required, osd_size_capacity_requested):
     cur_device_list = output["spec"]["storageClassDevices"][0]["devicePaths"]
     # Clone repo and run playbook to fetch all device paths from each node
     path = os.path.join(constants.EXTERNAL_DIR, "device-by-id-ocp")
-    utils.clone_repo(constants.OCP_QE_DEVICEPATH_REPO, path)
+    clone_repo(constants.OCP_QE_DEVICEPATH_REPO, path)
     os.chdir(path)
-    utils.run_cmd("ansible-playbook devices_by_id.yml")
+    run_cmd("ansible-playbook devices_by_id.yml")
     # Filter unused/unallocated device paths
     with open("local-storage-block.yaml", "r") as cloned_file:
         with open("local-block.yaml", "w") as our_file:
@@ -113,7 +113,11 @@ def check_local_volume():
     ):
         ocp_obj = OCP()
         command = "get localvolume local-block -n local-storage "
-        status = ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
+        try:
+            status = ocp_obj.exec_oc_cmd(command, out_yaml_format=False)
+        except CommandFailed as ex:
+            logger.debug(f"Local volume does not exists! Exception: {ex}")
+            return False
         return "No resources found" not in status
 
 
@@ -130,7 +134,7 @@ def check_pvs_created(num_pvs_required):
 
     """
     logger.info("Verifying PVs are created")
-    out = utils.run_cmd("oc get pv -o json")
+    out = run_cmd("oc get pv -o json")
     pv_json = json.loads(out)
     current_count = 0
     for pv in pv_json['items']:
