@@ -1,5 +1,6 @@
 import pytest
 import logging
+import time
 
 
 from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4a
@@ -50,17 +51,17 @@ class TestAddCapacityWithOSDPodDelete(ManageTest):
         osd_size = storage_cluster.get_osd_size()
         logging.info("Calling add_capacity function...")
         result = storage_cluster.add_capacity(osd_size)
-        if result:
-            logging.info("add capacity finished successfully")
-        else:
-            logging.info("add capacity failed")
+        logging.info("finished executing 'add_capacity' function")
 
-        logging.info("Delete osd resource")
+        time_to_wait_before_delete_osd_pod = 20
+        time.sleep(time_to_wait_before_delete_osd_pod)
+        logging.info("Delete an osd pod while storage capacity is getting increased")
         d.delete_resource(1)
 
         pod = OCP(
             kind=constants.POD, namespace=config.ENV_DATA['cluster_namespace']
         )
+
         pod.wait_for_resource(
             timeout=420,
             condition=constants.STATUS_RUNNING,
