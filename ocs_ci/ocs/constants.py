@@ -142,6 +142,7 @@ CRITICAL_ERRORS = [
     "core dumped", "oom_reaper"
 ]
 must_gather_pod_label = "must-gather"
+drain_canary_pod_label = "rook-ceph-drain-canary"
 
 # AMQ
 AMQ_NAMESPACE = "myproject"

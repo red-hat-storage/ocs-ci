@@ -12,6 +12,7 @@ from random import randrange
 from time import sleep
 from shutil import copyfile
 import subprocess
+from functools import partial
 
 import pytest
 import pathlib
@@ -21,7 +22,7 @@ from botocore.exceptions import ClientError
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    deployment, ignore_leftovers, tier_marks
+    deployment, ignore_leftovers, tier_marks, ignore_leftover_label
 )
 from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
@@ -1068,12 +1069,18 @@ def environment_checker(request):
     node = request.node
     # List of marks for which we will ignore the leftover checker
     marks_to_ignore = [m.mark for m in [deployment, ignore_leftovers]]
+
+    # app labels of resources to be excluded for leftover check
+    exclude_labels = [constants.must_gather_pod_label]
     for mark in node.iter_markers():
         if mark in marks_to_ignore:
             return
-
-    request.addfinalizer(get_status_after_execution)
-    get_status_before_execution()
+        if mark.name == ignore_leftover_label.name:
+            exclude_labels.extend(list(mark.args))
+    request.addfinalizer(
+        partial(get_status_after_execution, exclude_labels=exclude_labels)
+    )
+    get_status_before_execution(exclude_labels=exclude_labels)
 
 
 @pytest.fixture(scope="session")
