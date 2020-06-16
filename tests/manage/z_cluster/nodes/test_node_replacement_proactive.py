@@ -52,13 +52,13 @@ class TestNodeReplacement(ManageTest):
         log.info("Creating dc pod backed with rbd pvc and running io in bg")
         for worker_node in worker_node_list:
             if worker_node != osd_node_name:
-                rbd_dc_pod = dc_pod_factory(interface=constants.CEPHBLOCKPOOL, node_name=worker_node, size=20)
+                rbd_dc_pod = dc_pod_factory(interface=constants.CEPHBLOCKPOOL, node_name=worker_node, size=10)
                 pod.run_io_in_bg(rbd_dc_pod, expect_to_fail=False, fedora_dc=True)
 
         log.info("Creating dc pod backed with cephfs pvc and running io in bg")
         for worker_node in worker_node_list:
             if worker_node != osd_node_name:
-                cephfs_dc_pod = dc_pod_factory(interface=constants.CEPHFILESYSTEM, node_name=worker_node, size=20)
+                cephfs_dc_pod = dc_pod_factory(interface=constants.CEPHFILESYSTEM, node_name=worker_node, size=10)
                 pod.run_io_in_bg(cephfs_dc_pod, expect_to_fail=False, fedora_dc=True)
 
         # Unscheduling node
@@ -97,4 +97,4 @@ class TestNodeReplacement(ManageTest):
         self.sanity_helpers.delete_resources()
         # Verify everything running fine
         log.info("Verifying All resources are Running and matches expected result")
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=120)

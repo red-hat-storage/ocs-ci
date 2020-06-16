@@ -495,7 +495,7 @@ def get_csi_provisioner_pod(interface):
     return provisioner_pod
 
 
-def get_rgw_pod(rgw_label=constants.RGW_APP_LABEL, namespace=None):
+def get_rgw_pod(rgw_label=constants.RGW_APP_LABEL, namespace=None, return_list=False):
     """
     Fetches info about rgw pods in the cluster
 
@@ -504,13 +504,15 @@ def get_rgw_pod(rgw_label=constants.RGW_APP_LABEL, namespace=None):
             (default: defaults.RGW_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
             (default: none)
+        return_list (bool): Return pod object in list
+            (default: False)
 
     Returns:
         Pod object: rgw pod object
     """
     namespace = namespace or config.ENV_DATA['cluster_namespace']
     rgws = get_pods_having_label(rgw_label, namespace)
-    rgw_pod = Pod(**rgws[0])
+    rgw_pod = [Pod(**rgw) for rgw in rgws] if return_list else Pod(**rgws[0])
     return rgw_pod
 
 
@@ -1324,3 +1326,20 @@ def delete_deploymentconfig_pods(pod_obj):
                 dc_ocp_obj.wait_for_delete(
                     resource_name=pod_obj.get_labels().get('name')
                 )
+
+
+def get_draincanary_pods(draincanary_label=constants.DRAIN_CANARY_APP_LABEL, namespace=None):
+    """
+    Fetches info about draincanary pods in the cluster
+    Args:
+        draincanary_label (str): label associated with draincanary pods
+            (default: constants.DRAIN_CANARY_APP_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: None)
+    Returns:
+        list : of draincanary pod objects
+    """
+    namespace = namespace or config.ENV_DATA['cluster_namespace']
+    draincanarys = get_pods_having_label(draincanary_label, namespace)
+    draincanarys_pods = [Pod(**draincanary) for draincanary in draincanarys]
+    return draincanarys_pods

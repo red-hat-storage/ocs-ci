@@ -210,6 +210,7 @@ OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
 CEPH_ROOK_IO_PVC_LABEL = 'ceph.rook.io/pvc'
 PGSQL_APP_LABEL = "app=postgres"
 HOSTNAME_LABEL = "kubernetes.io/hostname"
+DRAIN_CANARY_APP_LABEL = "app=rook-ceph-drain-canary"
 
 # Auth Yaml
 OCSCI_DATA_BUCKET = 'ocs-ci-data'
@@ -572,6 +573,7 @@ VDBENCH_MIN_CAPACITY = 300  # minimum storage capacity (in GB) for the test to r
 # Platforms
 AWS_PLATFORM = 'aws'
 VSPHERE_PLATFORM = 'vsphere'
+BAREMETAL_PLATFORM = 'baremetal'
 CLOUD_PLATFORMS = (AWS_PLATFORM)
 
 # Default SC based on platforms
