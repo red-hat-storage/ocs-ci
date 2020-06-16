@@ -25,6 +25,12 @@ def test_deployment(pvc_factory, pod_factory):
                 'ocs_registry_image'
             )
             ocs_install_verification(ocs_registry_image=ocs_registry_image)
+            nb_eps = config.DEPLOYMENT.get('noobaa_endpoints')
+            if nb_eps > 1:
+                log.info(f"Scaling up Noobaa endpoints to maximum of {nb_eps}")
+                params = f'{{"spec":{{"endpoints":{{"maxCount":{nb_eps},"minCount":1}}}}}}'
+                noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+                noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
             # Check basic cluster functionality by creating resources
             # (pools, storageclasses, PVCs, pods - both CephFS and RBD),
             # run IO and delete the resources
@@ -32,11 +38,6 @@ def test_deployment(pvc_factory, pod_factory):
             sanity_helpers.health_check()
             sanity_helpers.create_resources(pvc_factory, pod_factory)
             sanity_helpers.delete_resources()
-
-            nb_eps = config.DEPLOYMENT.get('noobaa_endpoints')
-            params = f'{{"spec":{{"endpoints":{{"maxCount":{nb_eps},"minCount":1}}}}}}'
-            noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
-            noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
 
     if teardown:
         log.info(
