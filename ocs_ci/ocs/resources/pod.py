@@ -1210,6 +1210,22 @@ def upload(pod_name, localpath, remotepath, namespace=None):
     run_cmd(cmd)
 
 
+def download_file_from_pod(pod_name, remotepath, localpath, namespace=None):
+    """
+    Download a file from a pod
+
+    Args:
+        pod_name (str): Name of the pod
+        remotepath (str): Target path on the pod
+        localpath (str): Local file to upload
+        namespace (str): The namespace of the pod
+
+    """
+    namespace = namespace or constants.DEFAULT_NAMESPACE
+    cmd = f"oc -n {namespace} cp {pod_name}:{remotepath} {os.path.expanduser(localpath)}"
+    run_cmd(cmd)
+
+
 def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
     """
     Verify that all pods do not have old image.
