@@ -1,12 +1,12 @@
 import logging
 
 from ocs_ci.framework import config
-# from ocs_ci.ocs import defaults
+from ocs_ci.ocs import defaults
 from ocs_ci.framework.testlib import deployment, polarion_id
 from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
 from ocs_ci.utility.reporting import get_deployment_polarion_id
 from ocs_ci.utility.utils import is_cluster_running
-# from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP
 from tests.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
@@ -32,7 +32,11 @@ def test_deployment(pvc_factory, pod_factory):
             sanity_helpers.health_check()
             sanity_helpers.create_resources(pvc_factory, pod_factory)
             sanity_helpers.delete_resources()
-            # noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+
+            nb_eps = config.DEPLOYMENT.get('noobaa_endpoints')
+            params = f'{{"spec":{{"endpoints":{{"maxCount":{nb_eps},"minCount":1}}}}}}'
+            noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+            noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
 
     if teardown:
         log.info(
