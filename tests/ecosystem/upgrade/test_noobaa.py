@@ -1,5 +1,4 @@
 import logging
-import time
 
 import pytest
 
@@ -8,15 +7,58 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_OPTIMAL
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from tests.manage.mcg.helpers import (
     retrieve_test_objects_to_pod, sync_object_directory
 )
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
 LOCAL_TESTOBJS_DIR_PATH = '/aws/original'
 LOCAL_TEMP_PATH = '/aws/temp'
 DOWNLOADED_OBJS = []
+
+
+# TODO: move this to ocs_ci/ocs/resources/job.py when the file is created
+def wait_for_active_pods(job, desired_count, timeout=3):
+    """
+    Wait for job to load desired number of active pods in time specified
+    in timeout.
+
+    Args:
+        job (obj): OCS job object
+        desired_count (str): Number of desired active pods for provided job
+        timeout (int): Number of seconds to wait for the job to get into state
+
+    Returns:
+        bool: If job has desired number of active pods
+
+    """
+    job_name = job.ocp.resource_name
+    logger.info(f"Checking number of active pods for job {job_name}")
+
+    def _retrieve_job_state():
+        job_obj = job.ocp.get(resource_name=job_name, out_yaml_format=True)
+        return job_obj.get('items').get(0).get('status').get('active')
+
+    try:
+        for state in TimeoutSampler(
+            timeout=timeout,
+            sleep=3,
+            func=_retrieve_job_state
+        ):
+            if state == desired_count:
+                return True
+            else:
+                logger.debug(
+                    f"Number of active pods for job {job_name}: {state}"
+                )
+    except TimeoutExpiredError:
+        logger.error(
+            f"Job {job_name} doesn't have correct number of active pods ({desired_count})"
+        )
+        return False
 
 
 @aws_platform_required
@@ -58,10 +100,7 @@ def test_fill_bucket(
         )
 
     mcg_obj_session.check_if_mirroring_is_done(bucket.name)
-    assert bucket.status == constants.STATUS_BOUND, (
-        f"bucket {bucket.name} doesn't have {constants.STATUS_BOUND} "
-        f"status, it has {bucket.status} status"
-    )
+    assert bucket.status == constants.STATUS_BOUND
 
     # Retrieve all objects from MCG bucket to result dir in Pod
     sync_object_directory(
@@ -71,10 +110,7 @@ def test_fill_bucket(
         mcg_obj_session
     )
 
-    assert bucket.status == constants.STATUS_BOUND, (
-        f"bucket {bucket.name} doesn't have {constants.STATUS_BOUND} "
-        f"status, it has {bucket.status} status"
-    )
+    assert bucket.status == constants.STATUS_BOUND
 
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
@@ -84,10 +120,7 @@ def test_fill_bucket(
                 result_object_path=f'{LOCAL_TEMP_PATH}/{i}/{obj}',
                 awscli_pod=awscli_pod_session
             ), 'Checksum comparison between original and result object failed'
-    assert bucket.status == constants.STATUS_BOUND, (
-        f"bucket {bucket.name} doesn't have {constants.STATUS_BOUND} "
-        f"status, it has {bucket.status} status"
-    )
+    assert bucket.status == constants.STATUS_BOUND
 
 
 @aws_platform_required
@@ -176,24 +209,8 @@ def test_start_upgrade_mcg_io(mcg_workload_job):
     """
     Confirm that there is MCG workload job running before upgrade.
     """
-    job_status = None
-    job_name = mcg_workload_job.ocp.resource_name
     # wait a few seconds for fio job to start
-    logger.info(f"Checking number of active pods for job {job_name}")
-    for i in range(0, 5):
-        job = mcg_workload_job.ocp.get(
-            resource_name=job_name,
-            out_yaml_format=True
-        )
-        # 'active' attribute holds information about how many pods are running
-        job_status = job['items'][0]['status']['active']
-        if job_status == 1:
-            break
-        time.sleep(3)
-    assert job_status == 1, (
-        f"Number of running pods for job {job_name} is not 1, "
-        f"it is {job_status}"
-    )
+    assert wait_for_active_pods(mcg_workload_job, 1, timeout=20)
 
 
 @post_upgrade
@@ -202,15 +219,4 @@ def test_upgrade_mcg_io(mcg_workload_job):
     """
     Confirm that there is MCG workload job running after upgrade.
     """
-    job_name = mcg_workload_job.ocp.resource_name
-    logger.info(f"Checking number of active pods for job {job_name}")
-    job = mcg_workload_job.ocp.get(
-        resource_name=job_name,
-        out_yaml_format=True
-    )
-    # 'active' attribute holds information about how many pods are running
-    job_status = job['items'][0]['status']['active']
-    assert job_status == 1, (
-        f"Number of running pods for job {job_name} is not 1, "
-        f"it is {job_status}"
-    )
+    assert wait_for_active_pods(mcg_workload_job, 1)

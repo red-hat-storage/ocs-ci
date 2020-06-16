@@ -207,7 +207,7 @@ def fio_conf_block():
 @pytest.fixture(scope='session')
 def fio_conf_mcg(mcg_obj_session, bucket_factory_session):
     """
-    Basic fio configuration for upgrade utilization for AWS S3 bucket.
+    Basic fio configuration for upgrade utilization for NooBaa S3 bucket.
 
     """
     workload_bucket = bucket_factory_session()
@@ -555,6 +555,31 @@ def fio_configmap_dict_mcg(fio_configmap_dict_session, fio_job_dict_mcg):
 
 
 @pytest.fixture(scope='session')
+def fio_job_dict_mcg(fio_job_dict_session):
+    """
+    Fio job dictionary with configuration set for MCG workload.
+    """
+    fio_job_dict_mcg = copy.deepcopy(fio_job_dict_session)
+
+    job_name = 'mcg-workload'
+    config_name = f"{job_name}-config"
+    volume_name = f"{config_name}-vol"
+
+    fio_job_dict_mcg['metadata']['name'] = job_name
+    fio_job_dict_mcg['spec']['template']['metadata']['name'] = job_name
+
+    job_spec = fio_job_dict_mcg['spec']['template']['spec']
+    job_spec['volumes'][1]['name'] = volume_name
+    job_spec['volumes'][1]['configMap']['name'] = config_name
+    job_spec['containers'][0]['volumeMounts'][1]['name'] = volume_name
+
+    job_spec['volumes'].pop(0)
+    job_spec['containers'][0]['volumeMounts'].pop(0)
+
+    return fio_job_dict_mcg
+
+
+@pytest.fixture(scope='session')
 def mcg_workload_job(
     fio_job_dict_mcg,
     fio_configmap_dict_mcg,
@@ -653,28 +678,3 @@ def upgrade_buckets(
         )
 
     return buckets
-
-
-@pytest.fixture(scope='session')
-def fio_job_dict_mcg(fio_job_dict_session):
-    """
-    Fio job dictionary with configuration set for MCG workload.
-    """
-    fio_job_dict_mcg = copy.deepcopy(fio_job_dict_session)
-
-    job_name = 'mcg-workload'
-    config_name = f"{job_name}-config"
-    volume_name = f"{config_name}-vol"
-
-    fio_job_dict_mcg['metadata']['name'] = job_name
-    fio_job_dict_mcg['spec']['template']['metadata']['name'] = job_name
-
-    job_spec = fio_job_dict_mcg['spec']['template']['spec']
-    job_spec['volumes'][1]['name'] = volume_name
-    job_spec['volumes'][1]['configMap']['name'] = config_name
-    job_spec['containers'][0]['volumeMounts'][1]['name'] = volume_name
-
-    job_spec['volumes'].pop(0)
-    job_spec['containers'][0]['volumeMounts'].pop(0)
-
-    return fio_job_dict_mcg
