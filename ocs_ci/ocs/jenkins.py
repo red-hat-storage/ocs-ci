@@ -190,4 +190,4 @@ class Jenkins(object):
         """
         log.info("Deleting jenkins project and template")
         run_cmd(f'oc delete project {constants.JENKINS_NAMESPACE}')
-        run_cmd(f'oc delete template.template.openshift.io/jenkins-persistent-ocs -n openshift')
+        run_cmd('oc delete template.template.openshift.io/jenkins-persistent-ocs -n openshift')
