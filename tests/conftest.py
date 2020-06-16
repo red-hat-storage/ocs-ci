@@ -1053,8 +1053,9 @@ def cluster(request, log_cli_level):
 
     teardown = config.RUN['cli_params']['teardown']
     deploy = config.RUN['cli_params']['deploy']
-    factory = dep_factory.DeploymentFactory()
-    deployer = factory.get_deployment()
+    if teardown or deploy:
+        factory = dep_factory.DeploymentFactory()
+        deployer = factory.get_deployment()
 
     # Add a finalizer to teardown the cluster after test execution is finished
     if teardown:
