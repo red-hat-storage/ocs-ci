@@ -813,7 +813,7 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
         ocs_log_dir_path = os.path.join(ocs_log_dir_path, 'nbcore.gz')
         nb_db_pod.exec_cmd_on_pod("mongodump --archive=nbcore.gz --gzip --db=nbcore")
         download_file_from_pod(
-            pod_name=nb_db_pod.name, remotepath="nbcore.gz",
+            pod_name=nb_db_pod.name, remotepath="/opt/app-root/src/nbcore.gz",
             localpath=ocs_log_dir_path, namespace=defaults.ROOK_CLUSTER_NAMESPACE
         )
 
