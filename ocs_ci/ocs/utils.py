@@ -801,7 +801,7 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
             '/usr/bin/gather_service_logs worker'
         )
     if mcg:
-        from ocs_ci.ocs.resources.pod import get_pods_having_label, download, Pod
+        from ocs_ci.ocs.resources.pod import get_pods_having_label, download_file_from_pod, Pod
         nb_db_pod = Pod(
             **get_pods_having_label(
                 label=constants.NOOBAA_DB_LABEL,
@@ -812,7 +812,7 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
         create_directory_path(ocs_log_dir_path)
         ocs_log_dir_path = os.path.join(ocs_log_dir_path, 'nbcore.gz')
         nb_db_pod.exec_cmd_on_pod("mongodump --archive=nbcore.gz --gzip --db=nbcore")
-        download(
+        download_file_from_pod(
             pod_name=nb_db_pod.name, remotepath="nbcore.gz",
             localpath=ocs_log_dir_path, namespace=defaults.ROOK_CLUSTER_NAMESPACE
         )

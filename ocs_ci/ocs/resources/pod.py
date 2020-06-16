@@ -1210,7 +1210,7 @@ def upload(pod_name, localpath, remotepath, namespace=None):
     run_cmd(cmd)
 
 
-def download(pod_name, remotepath, localpath, namespace=None):
+def download_file_from_pod(pod_name, remotepath, localpath, namespace=None):
     """
     Download a file from a pod
 
