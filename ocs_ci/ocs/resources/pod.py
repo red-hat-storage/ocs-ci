@@ -1331,11 +1331,13 @@ def delete_deploymentconfig_pods(pod_obj):
 def get_draincanary_pods(draincanary_label=constants.DRAIN_CANARY_APP_LABEL, namespace=None):
     """
     Fetches info about draincanary pods in the cluster
+
     Args:
         draincanary_label (str): label associated with draincanary pods
             (default: constants.DRAIN_CANARY_APP_LABEL)
         namespace (str): Namespace in which ceph cluster lives
             (default: None)
+
     Returns:
         list : of draincanary pod objects
     """

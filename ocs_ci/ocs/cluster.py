@@ -970,6 +970,7 @@ class CephCluster(object):
                 f" {count}"
             )
 
+
 class CephHealthMonitor(threading.Thread):
     """
     Context manager class for monitoring ceph health status of CephCluster.
