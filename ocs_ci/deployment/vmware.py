@@ -71,7 +71,7 @@ class VSPHEREBASE(Deployment):
 
         self.wait_time = 90
 
-    def attach_disk(self, size=100):
+    def attach_disk(self, size=100, disk_type=constants.VM_DISK_TYPE):
         """
         Add a new disk to all the workers nodes
 
@@ -91,7 +91,7 @@ class VSPHEREBASE(Deployment):
                     config.ENV_DATA.get("extra_disks", 1),
                     vm,
                     size,
-                    constants.VM_DISK_TYPE
+                    disk_type
                 )
 
     def add_nodes(self):
