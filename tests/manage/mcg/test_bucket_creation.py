@@ -83,6 +83,7 @@ class TestBucketCreation:
         Test bucket creation using the S3 SDK, OC command or MCG CLI.
         The factory checks the bucket's health by default.
         """
+        pytest.fail()
         bucket_factory(amount, interface)
 
     @pytest.mark.parametrize(

@@ -746,6 +746,31 @@ def run_must_gather(log_dir_path, image, command=None):
         )
 
 
+def collect_noobaa_db_dump(log_dir_path):
+    """
+    Collect the Noobaa DB dump
+
+    Args:
+        log_dir_path (str): directory for dumped Noobaa DB
+
+    """
+    from ocs_ci.ocs.resources.pod import get_pods_having_label, download_file_from_pod, Pod
+    nb_db_pod = Pod(
+        **get_pods_having_label(
+            label=constants.NOOBAA_DB_LABEL,
+            namespace=defaults.ROOK_CLUSTER_NAMESPACE
+        )[0]
+    )
+    ocs_log_dir_path = os.path.join(log_dir_path, 'noobaa_db_dump')
+    create_directory_path(ocs_log_dir_path)
+    ocs_log_dir_path = os.path.join(ocs_log_dir_path, 'nbcore.gz')
+    nb_db_pod.exec_cmd_on_pod("mongodump --archive=nbcore.gz --gzip --db=nbcore")
+    download_file_from_pod(
+        pod_name=nb_db_pod.name, remotepath="/opt/app-root/src/nbcore.gz",
+        localpath=ocs_log_dir_path, namespace=defaults.ROOK_CLUSTER_NAMESPACE
+    )
+
+
 def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
     """
     Collects OCS logs
@@ -801,21 +826,7 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
             '/usr/bin/gather_service_logs worker'
         )
     if mcg:
-        from ocs_ci.ocs.resources.pod import get_pods_having_label, download_file_from_pod, Pod
-        nb_db_pod = Pod(
-            **get_pods_having_label(
-                label=constants.NOOBAA_DB_LABEL,
-                namespace=defaults.ROOK_CLUSTER_NAMESPACE
-            )[0]
-        )
-        ocs_log_dir_path = os.path.join(log_dir_path, 'noobaa_db_dump')
-        create_directory_path(ocs_log_dir_path)
-        ocs_log_dir_path = os.path.join(ocs_log_dir_path, 'nbcore.gz')
-        nb_db_pod.exec_cmd_on_pod("mongodump --archive=nbcore.gz --gzip --db=nbcore")
-        download_file_from_pod(
-            pod_name=nb_db_pod.name, remotepath="/opt/app-root/src/nbcore.gz",
-            localpath=ocs_log_dir_path, namespace=defaults.ROOK_CLUSTER_NAMESPACE
-        )
+        collect_noobaa_db_dump(log_dir_path)
 
 
 def collect_prometheus_metrics(
