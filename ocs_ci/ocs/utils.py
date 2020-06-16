@@ -810,9 +810,10 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False):
         )
         ocs_log_dir_path = os.path.join(log_dir_path, 'noobaa_db_dump')
         create_directory_path(ocs_log_dir_path)
-        nb_db_pod.exec_cmd_on_pod("mongodump")
+        ocs_log_dir_path = os.path.join(ocs_log_dir_path, 'nbcore.gz')
+        nb_db_pod.exec_cmd_on_pod("mongodump --archive=nbcore.gz --gzip --db=nbcore")
         download(
-            pod_name=nb_db_pod.name, remotepath="dump",
+            pod_name=nb_db_pod.name, remotepath="nbcore.gz",
             localpath=ocs_log_dir_path, namespace=defaults.ROOK_CLUSTER_NAMESPACE
         )
 
