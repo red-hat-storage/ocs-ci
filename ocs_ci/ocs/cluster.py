@@ -522,17 +522,12 @@ class CephCluster(object):
 
         """
 
-        ceph_status = self.get_ceph_status()
-        for item in ceph_status.split("\n"):
-            if 'client' in item:
-                iops = re.findall(r'\d+\.+\d+|\d\d*', item.strip())
-                iops = iops[2::1]
-                if len(iops) == 2:
-                    iops_in_cluster = float(iops[0]) + float(iops[1])
-                else:
-                    iops_in_cluster = float(iops[0])
-                logging.info(f"IOPS in the cluster is {iops_in_cluster}")
-                return iops_in_cluster
+        ceph_pod = pod.get_ceph_tools_pod()
+        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph status")
+        read_ops = int(ceph_status['pgmap']['read_op_per_sec'])
+        write_ops = int(ceph_status['pgmap']['write_op_per_sec'])
+        cluster_iops = read_ops + write_ops
+        return cluster_iops
 
     def get_iops_percentage(self, osd_size=2):
         """
@@ -617,7 +612,8 @@ class CephCluster(object):
 
         """
 
-        ceph_status = self.get_ceph_status(format='json-pretty')
+        ceph_pod = pod.get_ceph_tools_pod()
+        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph status")
         ceph_health = ceph_status['health']['status']
         total_pg_count = ceph_status['pgmap']['num_pgs']
         pg_states = ceph_status['pgmap']['pgs_by_state']
@@ -886,7 +882,7 @@ def validate_osd_utilization(osd_used=80):
             logger.info(f"{osd} used value {value}")
         else:
             _rc = False
-            logger.warn(f"{osd} used value {value}")
+            logger.warning(f"{osd} used value {value}")
 
     return _rc
 
