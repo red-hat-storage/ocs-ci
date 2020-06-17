@@ -164,7 +164,7 @@ class Jenkins(object):
         create application jenkins
 
         """
-        cmd = f'new-app --name=jenkins-ocs-rbd --template=jenkins-persistent-ocs'
+        cmd = 'new-app --name=jenkins-ocs-rbd --template=jenkins-persistent-ocs'
         self.ocp.exec_oc_cmd(command=cmd, out_yaml_format=False)
 
     def start_build(self):
