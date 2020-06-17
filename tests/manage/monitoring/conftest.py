@@ -8,10 +8,10 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.mcg_bucket import S3Bucket
+from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility.workloadfixture import measure_operation
 from tests import helpers
 from tests.helpers import create_unique_resource_name
@@ -66,8 +66,7 @@ def measure_stop_ceph_mgr(measurement_dir):
 
     # wait for ceph to return into HEALTH_OK state after mgr deployment
     # is returned back to normal
-    ceph_cluster = CephCluster()
-    ceph_cluster.cluster_health_check()
+    ceph_health_check(tries=20, delay=15)
 
     return measured_op
 
@@ -149,8 +148,7 @@ def measure_stop_ceph_mon(measurement_dir):
 
     # wait for ceph to return into HEALTH_OK state after mon deployment
     # is returned back to normal
-    ceph_cluster = CephCluster()
-    ceph_cluster.cluster_health_check()
+    ceph_health_check(tries=20, delay=15)
 
     return measured_op
 
@@ -211,8 +209,7 @@ def measure_stop_ceph_osd(measurement_dir):
 
     # wait for ceph to return into HEALTH_OK state after osd deployment
     # is returned back to normal
-    ceph_cluster = CephCluster()
-    ceph_cluster.cluster_health_check()
+    ceph_health_check(tries=20, delay=15)
 
     return measured_op
 
@@ -303,8 +300,7 @@ def measure_corrupt_pg(measurement_dir):
 
     # wait for ceph to return into HEALTH_OK state after osd deployment
     # is returned back to normal
-    ceph_cluster = CephCluster()
-    ceph_cluster.cluster_health_check()
+    ceph_health_check(tries=20, delay=15)
 
     return measured_op
 
