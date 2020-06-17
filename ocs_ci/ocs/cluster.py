@@ -524,8 +524,8 @@ class CephCluster(object):
 
         ceph_pod = pod.get_ceph_tools_pod()
         ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph status")
-        read_ops = int(ceph_status['pgmap']['read_op_per_sec'])
-        write_ops = int(ceph_status['pgmap']['write_op_per_sec'])
+        read_ops = ceph_status['pgmap']['read_op_per_sec']
+        write_ops = ceph_status['pgmap']['write_op_per_sec']
         cluster_iops = read_ops + write_ops
         return cluster_iops
 
