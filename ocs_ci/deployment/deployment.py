@@ -716,7 +716,7 @@ def setup_local_storage():
             logger.info(f"LSO Deployment type: {constants.VMDK}")
             vsphere_base.attach_disk(
                 config.ENV_DATA.get('device_size', defaults.DEVICE_SIZE),
-                config.DEPLOYMENT.get('disk_type', constants.VM_DISK_TYPE)
+                config.DEPLOYMENT.get('provision_type', constants.VM_DISK_TYPE)
             )
 
         if lso_type == constants.DIRECTPATH:
