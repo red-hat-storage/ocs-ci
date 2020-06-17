@@ -10,6 +10,7 @@ from ocs_ci.ocs.constants import BS_OPTIMAL
 from tests.manage.mcg.helpers import (
     retrieve_test_objects_to_pod, sync_object_directory
 )
+from tests.helpers import verify_s3_object_integrity
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ def test_fill_bucket(
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
         for i in range(3):
-            assert mcg_obj_session.verify_s3_object_integrity(
+            assert verify_s3_object_integrity(
                 original_object_path=f'{LOCAL_TESTOBJS_DIR_PATH}/{obj}',
                 result_object_path=f'{LOCAL_TEMP_PATH}/{i}/{obj}',
                 awscli_pod=awscli_pod_session
@@ -101,7 +102,7 @@ def test_noobaa_postupgrade(
 
     # Checksum is compared between original and result object
     for obj in DOWNLOADED_OBJS:
-        assert mcg_obj_session.verify_s3_object_integrity(
+        assert verify_s3_object_integrity(
             original_object_path=f'{LOCAL_TESTOBJS_DIR_PATH}/{obj}',
             result_object_path=f'{LOCAL_TEMP_PATH}/{obj}',
             awscli_pod=awscli_pod_session

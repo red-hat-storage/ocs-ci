@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     ManageTest, tier1
 )
 from tests.manage.mcg import helpers
+from tests.helpers import verify_s3_object_integrity
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ class TestS3MultipartUpload(ManageTest):
         helpers.sync_object_directory(
             awscli_pod, object_path, res_dir, mcg_obj
         )
-        assert mcg_obj.verify_s3_object_integrity(
+        assert verify_s3_object_integrity(
             original_object_path=f'{origin_dir}/{key}',
             result_object_path=f'{res_dir}/{key}', awscli_pod=awscli_pod
         ), 'Checksum comparision between original and result object failed'

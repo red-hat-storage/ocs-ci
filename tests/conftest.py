@@ -29,7 +29,9 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.mcg import MCG
-from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
+from ocs_ci.ocs.resources.objectbucket import (
+    MCG_CLIBucket, MCG_OCBucket, MCG_S3Bucket, RGW_OCBucket
+)
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import get_rgw_pod, delete_deploymentconfig_pods
 from ocs_ci.ocs.resources.pvc import PVC
@@ -60,6 +62,7 @@ from tests.manage.mcg.helpers import (
     cli_create_pv_backingstore
 )
 from ocs_ci.ocs.pgsql import Postgresql
+from ocs_ci.ocs.resources.rgw import RGW
 
 log = logging.getLogger(__name__)
 
@@ -1570,6 +1573,27 @@ def cld_mgr(request):
 
 
 @pytest.fixture()
+def rgw_obj(request):
+    return rgw_obj_fixture(request)
+
+
+@pytest.fixture(scope='session')
+def rgw_obj_session(request):
+    return rgw_obj_fixture(request)
+
+
+def rgw_obj_fixture(request):
+    """
+    Returns an RGW resource that represents RGW in the cluster
+
+    Returns:
+        RGW: An RGW resource
+    """
+
+    return RGW()
+
+
+@pytest.fixture()
 def mcg_obj(request):
     return mcg_obj_fixture(request)
 
@@ -1627,16 +1651,16 @@ def created_pods_fixture(request):
 
 
 @pytest.fixture()
-def awscli_pod(mcg_obj, created_pods):
-    return awscli_pod_fixture(mcg_obj, created_pods)
+def awscli_pod(created_pods):
+    return awscli_pod_fixture(created_pods)
 
 
 @pytest.fixture(scope='session')
-def awscli_pod_session(mcg_obj_session, created_pods_session):
-    return awscli_pod_fixture(mcg_obj_session, created_pods_session)
+def awscli_pod_session(created_pods_session):
+    return awscli_pod_fixture(created_pods_session)
 
 
-def awscli_pod_fixture(mcg_obj, created_pods):
+def awscli_pod_fixture(created_pods):
     """
     Creates a new AWSCLI pod for relaying commands
 
@@ -1649,7 +1673,7 @@ def awscli_pod_fixture(mcg_obj, created_pods):
 
     """
     awscli_pod_obj = helpers.create_pod(
-        namespace=mcg_obj.namespace,
+        namespace=config.ENV_DATA['cluster_namespace'],
         pod_dict_path=constants.AWSCLI_POD_YAML,
         pod_name=constants.AWSCLI_RELAY_POD_NAME
     )
@@ -1667,7 +1691,7 @@ def awscli_pod_fixture(mcg_obj, created_pods):
     # Use cat and sed since the pod does not have tar or rsync
     cmd = (
         f"cat {constants.DEFAULT_INGRESS_CRT_LOCAL_PATH} | "
-        f"oc exec -i -n {mcg_obj.namespace} {constants.AWSCLI_RELAY_POD_NAME} "
+        f"oc exec -i -n {config.ENV_DATA['cluster_namespace']} {constants.AWSCLI_RELAY_POD_NAME} "
         f"-- sed -n 'w {constants.DEFAULT_INGRESS_CRT_REMOTE_PATH}'"
     )
     subprocess.run(cmd, shell=True)
@@ -1781,16 +1805,26 @@ def verify_rgw_restart_count_fixture(request):
 
 
 @pytest.fixture()
+def rgw_bucket_factory(request, rgw_obj):
+    return bucket_factory_fixture(request, mcg_obj=None, rgw_obj=rgw_obj)
+
+
+@pytest.fixture(scope='session')
+def rgw_bucket_factory_session(request, rgw_obj_session):
+    return bucket_factory_fixture(request, mcg_obj=None, rgw_obj=rgw_obj_session)
+
+
+@pytest.fixture()
 def bucket_factory(request, mcg_obj):
-    return bucket_factory_fixture(request, mcg_obj)
+    return bucket_factory_fixture(request, mcg_obj, rgw_obj=None)
 
 
 @pytest.fixture(scope='session')
 def bucket_factory_session(request, mcg_obj_session):
-    return bucket_factory_fixture(request, mcg_obj_session)
+    return bucket_factory_fixture(request, mcg_obj_session, rgw_obj_session=None)
 
 
-def bucket_factory_fixture(request, mcg_obj):
+def bucket_factory_fixture(request, mcg_obj, rgw_obj):
     """
     Create a bucket factory. Calling this fixture creates a new bucket(s).
     For a custom amount, provide the 'amount' parameter.
@@ -1803,9 +1837,10 @@ def bucket_factory_fixture(request, mcg_obj):
     created_buckets = []
 
     bucketMap = {
-        's3': S3Bucket,
-        'oc': OCBucket,
-        'cli': CLIBucket
+        's3': MCG_S3Bucket,
+        'oc': MCG_OCBucket,
+        'cli': MCG_CLIBucket,
+        'rgw-oc': RGW_OCBucket
     }
 
     def _create_buckets(
@@ -1835,8 +1870,9 @@ def bucket_factory_fixture(request, mcg_obj):
                 resource_description='bucket', resource_type=interface.lower()
             )
             created_bucket = bucketMap[interface.lower()](
-                mcg_obj,
                 bucket_name,
+                mcg=mcg_obj,
+                rgw=rgw_obj,
                 *args,
                 **kwargs
             )
@@ -1848,18 +1884,10 @@ def bucket_factory_fixture(request, mcg_obj):
         return created_buckets
 
     def bucket_cleanup():
-        all_existing_buckets = mcg_obj.s3_get_all_bucket_names()
         for bucket in created_buckets:
-            if bucket.name in all_existing_buckets:
-                log.info(f'Cleaning up bucket {bucket.name}')
-                bucket.delete()
-                log.info(
-                    f"Verifying whether bucket: {bucket.name} exists after"
-                    f" deletion"
-                )
-                assert not mcg_obj.s3_verify_bucket_exists(bucket.name)
-            else:
-                log.info(f'Bucket {bucket.name} not found.')
+            log.info(f'Cleaning up bucket {bucket.name}')
+            bucket.delete()
+            # Todo: Implement deletion verification
 
     request.addfinalizer(bucket_cleanup)
 

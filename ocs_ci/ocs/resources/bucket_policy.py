@@ -1,64 +1,11 @@
+import datetime
 import logging
 
 import boto3
-import datetime
-import base64
 
-from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
-
-
-class OBC(object):
-    """
-    Wrapper class for Object Bucket Claim credentials
-    """
-
-    (
-        s3_resource, s3_endpoint, obc_name,
-        ob_name, bucket_name, obc_account,
-        access_key_id, access_key, namespace
-    ) = (None,) * 9
-
-    def __init__(self, mcg, obc):
-        """
-        Initializer function
-
-        Args:
-            mcg (obj): Multi cloud gateway object
-            obc (str): Name of the Object Bucket Claim
-        """
-        self.obc_name = obc
-        self.namespace = config.ENV_DATA['cluster_namespace']
-        obc_resource = OCP(namespace=self.namespace, kind='ObjectBucketClaim', resource_name=self.obc_name)
-        obc_results = obc_resource.get()
-        self.ob_name = obc_results.get('spec').get('ObjectBucketName')
-        self.bucket_name = obc_results.get('spec').get('bucketName')
-        ob_obj = OCP(namespace=self.namespace, kind='ObjectBucket', resource_name=self.ob_name).get()
-        self.obc_account = ob_obj.get('spec').get('additionalState').get('account')
-        secret_obc_obj = OCP(kind='secret', namespace=self.namespace, resource_name=self.obc_name).get()
-
-        self.access_key_id = base64.b64decode(
-            secret_obc_obj.get('data').get('AWS_ACCESS_KEY_ID')
-        ).decode('utf-8')
-        self.access_key = base64.b64decode(
-            secret_obc_obj.get('data').get('AWS_SECRET_ACCESS_KEY')
-        ).decode('utf-8')
-        self.s3_endpoint = mcg.s3_endpoint
-
-        self.s3_resource = boto3.resource(
-            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
-            aws_access_key_id=self.access_key_id,
-            aws_secret_access_key=self.access_key
-        )
-
-        self.s3_client = boto3.client(
-            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
-            aws_access_key_id=self.access_key_id,
-            aws_secret_access_key=self.access_key
-        )
 
 
 class HttpResponseParser(object):

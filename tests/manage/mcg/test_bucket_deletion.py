@@ -9,7 +9,9 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.mcg_bucket import S3Bucket, OCBucket, CLIBucket
+from ocs_ci.ocs.resources.objectbucket import (
+    MCG_S3Bucket, MCG_OCBucket, MCG_CLIBucket
+)
 from tests.helpers import create_unique_resource_name
 from tests.manage.mcg import helpers
 
@@ -99,15 +101,15 @@ class TestBucketDeletion:
         Negative test with deletion of bucket has objects stored in.
         """
         bucket_map = {
-            's3': S3Bucket,
-            'oc': OCBucket,
-            'cli': CLIBucket
+            's3': MCG_S3Bucket,
+            'oc': MCG_OCBucket,
+            'cli': MCG_CLIBucket
         }
         bucketname = create_unique_resource_name(
             resource_description='bucket', resource_type=interface.lower()
         )
         try:
-            bucket = bucket_map[interface.lower()](mcg_obj, bucketname)
+            bucket = bucket_map[interface.lower()](bucketname, mcg=mcg_obj)
 
             logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
             logger.info(f"aws region is {mcg_obj.region}")
@@ -199,7 +201,7 @@ class TestBucketDeletion:
             resource_description='bucket', resource_type='s3'
         )
         try:
-            bucket = S3Bucket(mcg_obj, bucketname)
+            bucket = MCG_S3Bucket(bucketname, mcg_obj)
             logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
             logger.info(f"aws region is {mcg_obj.region}")
             data_dir = '/data'

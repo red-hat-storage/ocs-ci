@@ -7,7 +7,8 @@ import uuid
 
 from ocs_ci.ocs.exceptions import NoBucketPolicyResponse, InvalidStatusCode, UnexpectedBehaviour
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2, tier3, skipif_ocs_version
-from ocs_ci.ocs.resources.bucket_policy import OBC, NoobaaAccount, HttpResponseParser, gen_bucket_policy
+from ocs_ci.ocs.resources.bucket_policy import NoobaaAccount, HttpResponseParser, gen_bucket_policy
+from ocs_ci.ocs.resources.objectbucket import OBC
 from tests.manage.mcg import helpers
 from ocs_ci.ocs.defaults import website_config, index, error
 from ocs_ci.ocs.constants import bucket_website_action_list, bucket_version_action_list, object_version_action_list

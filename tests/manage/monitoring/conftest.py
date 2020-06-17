@@ -10,7 +10,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.resources.mcg_bucket import S3Bucket
+from ocs_ci.ocs.resources.objectbucket import MCG_S3Bucket
 from ocs_ci.utility.workloadfixture import measure_operation
 from tests import helpers
 from tests.helpers import create_unique_resource_name
@@ -556,9 +556,9 @@ def measure_noobaa_exceed_bucket_quota(
         resource_description='bucket',
         resource_type='s3'
     )
-    bucket = S3Bucket(
-        mcg_obj,
-        bucket_name
+    bucket = MCG_S3Bucket(
+        bucket_name,
+        mcg=mcg_obj
     )
     mcg_obj.send_rpc_query(
         'bucket_api',

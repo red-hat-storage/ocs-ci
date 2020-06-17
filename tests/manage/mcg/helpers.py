@@ -52,7 +52,7 @@ def retrieve_test_objects_to_pod(podobj, target_dir):
     return downloaded_objects
 
 
-def sync_object_directory(podobj, src, target, mcg_obj=None):
+def sync_object_directory(podobj, src, target, s3_obj=None):
     """
     Syncs objects between a target and source directories
 
@@ -60,18 +60,18 @@ def sync_object_directory(podobj, src, target, mcg_obj=None):
         podobj (OCS): The pod on which to execute the commands and download the objects to
         src (str): Fully qualified object source path
         target (str): Fully qualified object target path
-        mcg_obj (MCG, optional): The MCG object to use in case the target or source
+        s3_obj (MCG, optional): The MCG object to use in case the target or source
                                  are in an MCG
 
     """
     logger.info(f'Syncing all objects and directories from {src} to {target}')
     retrieve_cmd = f'sync {src} {target}'
-    if mcg_obj:
-        secrets = [mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+    if s3_obj:
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_endpoint]
     else:
         secrets = None
     podobj.exec_cmd_on_pod(
-        command=craft_s3_command(retrieve_cmd, mcg_obj), out_yaml_format=False,
+        command=craft_s3_command(retrieve_cmd, s3_obj), out_yaml_format=False,
         secrets=secrets
     ), 'Failed to sync objects'
     # Todo: check that all objects were synced successfully
