@@ -122,6 +122,7 @@ NAMESPACE = 'Namespace'
 IGNORE_SC_GP2 = "gp2"
 IGNORE_SC_FLEX = "rook-ceph-block"
 TEST_FILES_BUCKET = "ocsci-test-files"
+TEST_FILES_BUCKET_URL = "https://ocsci-test-files.s3.amazonaws.com/"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
 OPENSHIFT_LOGGING_NAMESPACE = "openshift-logging"

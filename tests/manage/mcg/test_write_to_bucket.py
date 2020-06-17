@@ -7,7 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required
 )
 from ocs_ci.framework.testlib import (
-    ManageTest, tier1, tier2, tier3, acceptance
+    ManageTest, tier1, tier2, tier3, acceptance, performance
 )
 from ocs_ci.ocs import constants
 from tests.manage.mcg import helpers
@@ -69,9 +69,65 @@ class TestBucketIO(ManageTest):
     @pytest.mark.polarion_id("OCS-1949")
     @tier1
     @acceptance
-    def test_data_reduction(self, mcg_obj, awscli_pod, bucket_factory):
+    def test_data_deduplication(self, mcg_obj, awscli_pod, bucket_factory):
         """
         Test data reduction mechanics
+        Args:
+            mcg_obj (obj): An object representing the current state of the MCG in the cluster
+            awscli_pod (pod): A pod running the AWSCLI tools
+            bucket_factory: Calling this fixture creates a new bucket(s)
+
+        """
+        download_dir = '/aws/deduplication/'
+        for i in range(2, 4):
+            awscli_pod.exec_cmd_on_pod(
+                f'wget {constants.TEST_FILES_BUCKET_URL}danny{i}.webm -O {download_dir}danny{1}.webm'
+            )
+        bucket = bucket_factory(1)[0]
+        bucketname = bucket.name
+        full_object_path = f"s3://{bucketname}"
+        helpers.sync_object_directory(
+            awscli_pod, download_dir, full_object_path, mcg_obj
+        )
+        # TODO: new function to test any reduction at all
+        assert mcg_obj.check_data_reduction(bucketname, 43 * 1024 * 1024), (
+            'Data deduplication did not work as anticipated.'
+        )
+
+    @pytest.mark.polarion_id("OCS-1949")
+    @tier1
+    @acceptance
+    def test_data_reduction_functionality(self, mcg_obj, awscli_pod, bucket_factory):
+        """
+        Test data reduction mechanics
+        Args:
+            mcg_obj (obj): An object representing the current state of the MCG in the cluster
+            awscli_pod (pod): A pod running the AWSCLI tools
+            bucket_factory: Calling this fixture creates a new bucket(s)
+
+        """
+        download_dir = '/aws/reduction'
+        awscli_pod.exec_cmd_on_pod(
+            f'wget {constants.TEST_FILES_BUCKET_URL}enwik8 -O {download_dir}/enwik8'
+        )
+        bucket = bucket_factory(1)[0]
+        bucketname = bucket.name
+        full_object_path = f"s3://{bucketname}"
+        helpers.sync_object_directory(
+            awscli_pod, download_dir, full_object_path, mcg_obj
+        )
+
+        # TODO: new function to test any reduction at all
+        assert mcg_obj.check_data_reduction(bucketname, 35 * 1024 * 1024), (
+            'Data reduction did not work as anticipated.'
+        )
+
+    @pytest.mark.polarion_id("OCS-1949")
+    @tier2
+    @performance
+    def test_data_reduction_performance(self, mcg_obj, awscli_pod, bucket_factory):
+        """
+        Test data reduction performance
 
         """
         # TODO: Privatize test bucket
@@ -84,7 +140,7 @@ class TestBucketIO(ManageTest):
             awscli_pod, download_dir, full_object_path, mcg_obj
         )
 
-        assert mcg_obj.check_data_reduction(bucketname), (
+        assert mcg_obj.check_data_reduction(bucketname, 100 * 1024 * 1024), (
             'Data reduction did not work as anticipated.'
         )
 

@@ -309,10 +309,12 @@ class MCG(object):
             verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
         )
 
-    def check_data_reduction(self, bucketname):
+    def check_data_reduction(self, bucketname, amount_reduced):
         """
         Checks whether the data reduction on the MCG server works properly
         Args:
+            amount_reduced: amount of data that is supposed to be reduced after data reduction
+                            and deduplication.
             bucketname: An example bucket name that contains compressed/deduped data
 
         Returns:
@@ -357,7 +359,7 @@ class MCG(object):
 
         try:
             for total_size, total_reduced in TimeoutSampler(140, 5, _retrieve_reduction_data):
-                if total_size - total_reduced > 100 * 1024 * 1024:
+                if total_size - total_reduced > amount_reduced:
                     logger.info(
                         'Data reduced:' + str(total_size - total_reduced)
                     )
@@ -593,13 +595,14 @@ class MCG(object):
                 Bucket=bucketname
             )
 
-    def check_if_mirroring_is_done(self, bucket_name):
+    def check_if_mirroring_is_done(self, bucket_name, timeout=140):
         """
         Check whether all object chunks in a bucket
         are mirrored across all backing stores.
 
         Args:
             bucket_name: The name of the bucket that should be checked
+            timeout: timeout in seconds to check if mirroring
 
         Returns:
             bool: Whether mirroring finished successfully
@@ -633,7 +636,7 @@ class MCG(object):
             return all(results)
 
         try:
-            for mirroring_is_complete in TimeoutSampler(140, 5, _check_mirroring):
+            for mirroring_is_complete in TimeoutSampler(timeout, 5, _check_mirroring):
                 if mirroring_is_complete:
                     logger.info(
                         'All objects mirrored successfully.'

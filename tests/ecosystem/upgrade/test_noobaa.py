@@ -56,7 +56,7 @@ def test_fill_bucket(
             mcg_obj_session
         )
 
-    mcg_obj_session.check_if_mirroring_is_done(bucket.name)
+    mcg_obj_session.check_if_mirroring_is_done(bucket.name, timeout=420)
     assert bucket.status == constants.STATUS_BOUND
 
     # Retrieve all objects from MCG bucket to result dir in Pod
