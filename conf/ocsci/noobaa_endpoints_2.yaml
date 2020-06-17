@@ -1,3 +1,4 @@
 ---
+#This config file specifies that the max noobaa endpoints will be scaled up to 2 instead of 1
 DEPLOYMENT:
   noobaa_endpoints: 2
