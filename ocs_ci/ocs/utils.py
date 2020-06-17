@@ -636,26 +636,6 @@ def get_pod_name_by_pattern(
     return pod_list
 
 
-def get_build_name_by_pattern(
-    pattern='client',
-    namespace=None,
-    filter=None,
-):
-    namespace = namespace if namespace else ocsci_config.ENV_DATA['cluster_namespace']
-    ocp_obj = OCP(kind='Build', namespace=namespace)
-    build_names = ocp_obj.exec_oc_cmd('get build -o name', out_yaml_format=False)
-    build_names = build_names.split('\n')
-    build_list = []
-    for name in build_names:
-        if filter is not None and re.search(filter, name):
-            log.info(f'build name filtered {name}')
-        elif re.search(pattern, name):
-            (_, name) = name.split('/')
-            log.info(f'pod name match found appending {name}')
-            build_list.append(name)
-    return build_list
-
-
 def setup_ceph_toolbox(force_setup=False):
     """
     Setup ceph-toolbox - also checks if toolbox exists, if it exists it

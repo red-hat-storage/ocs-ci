@@ -2,6 +2,8 @@
 Jenkins Class to run jenkins specific tests
 """
 import logging
+import re
+
 from ocs_ci.ocs.exceptions import (
     CommandFailed, ResourceWrongStatusException, UnexpectedBehaviour
 )
@@ -11,10 +13,9 @@ from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
 from subprocess import CalledProcessError
 from tests.helpers import create_pvc
-from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.resources.pod import get_pod_obj
 from tests.helpers import wait_for_resource_state
-from ocs_ci.ocs.utils import get_pod_name_by_pattern, get_build_name_by_pattern
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 
 
 log = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ class Jenkins(object):
         Initializer function
 
         """
-        self.ocp = OCP()
+        self.ocp = OCP(namespace=constants.JENKINS_NAMESPACE)
         self.build_completed = []
 
     def create_ocs_jenkins_template(self):
@@ -42,7 +43,7 @@ class Jenkins(object):
             self.ocs_jenkins_template = OCS(**ocs_jenkins_template)
             self.ocs_jenkins_template.create()
         except(CommandFailed, CalledProcessError) as cf:
-            log.error('Failed during create ocs jenkins template')
+            log.error('Failed to create jenkins template')
             raise cf
 
     def create_namespace(self):
@@ -61,7 +62,7 @@ class Jenkins(object):
             self.jenkins_build_config = OCS(**jenkins_build_config)
             self.jenkins_build_config.create()
         except(CommandFailed, CalledProcessError) as cf:
-            log.error('Failed during setup of Jenkins build config')
+            log.error('Failed to create Jenkins build config')
             raise cf
 
     def wait_for_jenkins_deploy_status(self, status, timeout=None):
@@ -83,14 +84,15 @@ class Jenkins(object):
                     resource=jenkins_deploy_pod, state=status, timeout=timeout
                 )
             except ResourceWrongStatusException:
-                output = run_cmd(f'oc logs {jenkins_deploy_pod.name} -n {constants.JENKINS_NAMESPACE}')
+                cmd = f'logs {jenkins_deploy_pod.name}'
+                output = self.ocp.exec_oc_cmd(command=cmd, out_yaml_format=False)
                 error_msg = f'{jenkins_deploy_pod.name} did not reach to {status} state after {timeout} sec\n{output}'
                 log.error(error_msg)
                 raise UnexpectedBehaviour(error_msg)
 
     def wait_for_build_status(self, status, timeout=None):
         """
-        Wait for jenkins deploy pods status to reach running/completed
+        Wait for build status to reach running/completed
 
         Args:
             status (str): status to reach Running or Completed
@@ -102,14 +104,17 @@ class Jenkins(object):
         log.info(f"Waiting build to be reach {status} state")
         jenkins_builds = self.get_builds_obj()
         for jenkins_build in jenkins_builds:
-            try:
-                wait_for_resource_state(
-                    resource=jenkins_build, state=status, timeout=timeout
-                )
-            except ResourceWrongStatusException:
-                error_msg = f'{jenkins_build.name} did not reach to {status} state after {timeout} sec\n'
-                log.error(error_msg)
-                raise UnexpectedBehaviour(error_msg)
+            if jenkins_build.name not in self.build_completed:
+                try:
+                    wait_for_resource_state(
+                        resource=jenkins_build, state=status, timeout=timeout
+                    )
+                    self.build_completed.append(jenkins_build.name)
+                except ResourceWrongStatusException:
+                    error_msg = f'{jenkins_build.name} did not reach to ' \
+                                f'{status} state after {timeout} sec\n'
+                    log.error(error_msg)
+                    raise UnexpectedBehaviour(error_msg)
 
     def get_jenkins_deploy_pods(self):
         """
@@ -134,7 +139,9 @@ class Jenkins(object):
 
         """
         build_obj_list = []
-        build_list = get_build_name_by_pattern('jax-rs', namespace=constants.JENKINS_NAMESPACE)
+        build_list = self.get_build_name_by_pattern(
+            pattern=constants.JENKINS_BUILD, namespace=constants.JENKINS_NAMESPACE
+        )
         for build_name in build_list:
             ocp_obj = OCP(api_version='v1', kind='Build', namespace=constants.JENKINS_NAMESPACE)
             ocp_dict = ocp_obj.get(resource_name=build_name)
@@ -157,8 +164,8 @@ class Jenkins(object):
         create application jenkins
 
         """
-        cmd = f"oc new-app -n {constants.JENKINS_NAMESPACE} --name=jenkins-ocs-rbd --template=jenkins-persistent-ocs"
-        run_cmd(cmd)
+        cmd = f'new-app --name=jenkins-ocs-rbd --template=jenkins-persistent-ocs'
+        self.ocp.exec_oc_cmd(command=cmd, out_yaml_format=False)
 
     def start_build(self):
         """
@@ -166,8 +173,8 @@ class Jenkins(object):
 
         """
         log.info("Start build on jenkins")
-        cmd = f"oc -n {constants.JENKINS_NAMESPACE} start-build {constants.JENKINS_BUILD}"
-        run_cmd(cmd)
+        cmd = f"start-build {constants.JENKINS_BUILD}"
+        self.ocp.exec_oc_cmd(command=cmd, out_yaml_format=False)
 
     def setup_jenkins(self):
         """
@@ -180,14 +187,35 @@ class Jenkins(object):
         self.create_app_jenkins()
         self.setup_jenkins_build_config()
         self.wait_for_jenkins_deploy_status(status=constants.STATUS_COMPLETED)
-        self.start_build()
-        self.wait_for_build_status(status='Complete')
+
+    def get_build_name_by_pattern(
+        self,
+        pattern='client',
+        namespace=None,
+        filter=None,
+    ):
+        """
+        Get build name by pattern
+        """
+        ocp_obj = OCP(kind='Build', namespace=namespace)
+        build_names = ocp_obj.exec_oc_cmd('get build -o name', out_yaml_format=False)
+        build_names = build_names.split('\n')
+        build_list = []
+        for name in build_names:
+            if filter is not None and re.search(filter, name):
+                log.info(f'build name filtered {name}')
+            elif re.search(pattern, name):
+                (_, name) = name.split('/')
+                log.info(f'pod name match found appending {name}')
+                build_list.append(name)
+        return build_list
 
     def cleanup(self):
         """
         Clean up
 
         """
-        log.info("Deleting jenkins project and template")
-        run_cmd(f'oc delete project {constants.JENKINS_NAMESPACE}')
-        run_cmd('oc delete template.template.openshift.io/jenkins-persistent-ocs -n openshift')
+        self.ocp.delete_project(constants.JENKINS_NAMESPACE)
+        ocp_obj = OCP()
+        cmd = "delete template.template.openshift.io/jenkins-persistent-ocs -n openshift"
+        ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
