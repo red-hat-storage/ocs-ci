@@ -14,13 +14,13 @@ log = logging.getLogger(__name__)
 @tier1
 @skipif_ocs_version('<4.5')
 @pytest.mark.polarion_id('OCS-302')
-class TestPvcExpandExpandedPvc(ManageTest):
+class TestPvcExpand(ManageTest):
     """
-    Tests to verify PVC expansion of already expanded PVC
+    Tests to verify PVC expansion
 
     """
     @pytest.fixture(autouse=True)
-    def test_setup(self, multi_pvc_factory, pod_factory):
+    def setup(self, multi_pvc_factory, pod_factory):
         """
         Create resources for the test
 
@@ -63,7 +63,6 @@ class TestPvcExpandExpandedPvc(ManageTest):
             pvc_size_new (int): Size of PVC(in Gb) to expand
 
         """
-
         for pvc_obj in self.pvcs_cephfs + self.pvcs_rbd:
             log.info(
                 f"Expanding size of PVC {pvc_obj.name} to {pvc_size_new}G"
@@ -72,7 +71,15 @@ class TestPvcExpandExpandedPvc(ManageTest):
 
         log.info(f"Verified: Size of all PVCs are expanded to {pvc_size_new}G")
 
+        log.info(f"Verifying new size on pods.")
         for pod_obj in self.pods:
+            if pod_obj.pvc.get()['spec']['volumeMode'] == 'Block':
+                log.info(
+                    f"Skipping check on pod {pod_obj.name} as volume "
+                    f"mode is Block."
+                )
+                continue
+
             # Wait for 240 seconds to reflect the change on pod
             log.info(f"Checking pod {pod_obj.name} to verify the change.")
             for df_out in TimeoutSampler(
@@ -83,7 +90,8 @@ class TestPvcExpandExpandedPvc(ManageTest):
                     df_out.index(pod_obj.get_storage_path()) - 4
                 ]
                 if new_size_mount in [
-                    f'{pvc_size_new - 0.1}G', f'{float(pvc_size_new)}G'
+                    f'{pvc_size_new - 0.1}G', f'{float(pvc_size_new)}G',
+                    f'{pvc_size_new}G'
                 ]:
                     log.info(
                         f"Verified: Expanded size of PVC {pod_obj.pvc.name} "
@@ -113,12 +121,20 @@ class TestPvcExpandExpandedPvc(ManageTest):
         """
         for pod_obj in self.pods:
             pvc_info = pod_obj.pvc.get()
-            storage_type = 'block' if pvc_info['spec']['volumeMode'] == 'Block' else 'fs'
-            file_size = f'{file_size/2}G' if pod_obj.pvc.access_mode == constants.ACCESS_MODE_RWX else f'{file_size}G'
+            storage_type = (
+                'block' if pvc_info['spec']['volumeMode'] == 'Block' else 'fs'
+            )
+
+            # Split file size and write from two pods if access mode is RWX
+            size = (
+                f'{int(file_size/2)}G' if (
+                    pod_obj.pvc.access_mode == constants.ACCESS_MODE_RWX
+                ) else f'{file_size}G'
+            )
             log.info(f"Starting {io_phase} IO on pod {pod_obj.name}.")
             pod_obj.run_io(
-                storage_type=storage_type, size=file_size, io_direction='write', runtime=60,
-                fio_filename=f'{pod_obj.name}_{io_phase}'
+                storage_type=storage_type, size=size, io_direction='write',
+                runtime=60, fio_filename=f'{pod_obj.name}_{io_phase}'
             )
             log.info(f"{io_phase} IO started on pod {pod_obj.name}.")
         log.info(f"{io_phase} IO started on pods.")
@@ -131,7 +147,8 @@ class TestPvcExpandExpandedPvc(ManageTest):
             fio_result = pod_obj.get_fio_results()
             err_count = fio_result.get('jobs')[0].get('error')
             assert err_count == 0, (
-                f"{io_phase} IO error on pod {pod_obj.name}. FIO result: {fio_result}"
+                f"{io_phase} IO error on pod {pod_obj.name}. "
+                f"FIO result: {fio_result}"
             )
             log.info(f"Verified {io_phase} IO on pod {pod_obj.name}.")
 
@@ -197,12 +214,15 @@ class TestPvcExpandExpandedPvc(ManageTest):
             "Starting IO on all pods with file size larger than "
             "remaining space."
         )
-        self.run_io_and_verify(5, 'failure_expected', False)
-
+        self.run_io_and_verify(8, 'failure_expected', False)
+        fio_errors = ["No space left on device", "Disk quota exceeded"]
         for pod_obj in self.pods:
             try:
                 pod_obj.get_fio_results()
-                # TODO: Verify failure
-                raise UnexpectedBehaviour(f"fio did not fail on pod {pod_obj.name} as expected.")
-            except CommandFailed:
+                raise UnexpectedBehaviour(
+                    f"fio did not fail on pod {pod_obj.name} as expected."
+                )
+            except CommandFailed as exe:
+                if not any(exp_err in str(exe) for exp_err in fio_errors):
+                    raise
                 log.info(f"Expected: fio failed on pod {pod_obj.name}")
