@@ -182,7 +182,11 @@ class CephCluster(object):
         )
         self.drain_canarys = pod.get_draincanary_pods(self.drain_canary_selector, self.namespace)
 
-        if config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM:
+        if (
+            config.ENV_DATA.get('platform') == constants.VSPHERE_PLATFORM
+        ) or (
+            config.ENV_DATA.get('platform') == constants.BAREMETAL_PLATFORM
+        ):
             self.rgws = pod.get_rgw_pod(self.rgw_selector, self.namespace)
 
         # set port attrib on mon pods
@@ -765,10 +769,12 @@ class CephCluster(object):
     def osd_health_check(self, count):
         """
         OSD health check based on pod count
+
         Args:
             count (int): Expected number of Osd pods
         Raises:
             OsdCountException: if osd pod count doesn't match
+
         """
         timeout = 10 * len(self.pods)
         logger.info(f"Expected OSDs count= {count}")
@@ -790,12 +796,13 @@ class CephCluster(object):
 
     def mgr_health_check(self, count):
         """
-                MGR health check based on pod count
-                Args:
-                    count (int): Expected number of Mgr pods
-                Raises:
-                    MgrCountException: if mgr pod count doesn't match
-                """
+        MGR health check based on pod count
+
+        Args:
+            count (int): Expected number of Mgr pods
+        Raises:
+            MgrCountException: if mgr pod count doesn't match
+        """
         timeout = 10 * len(self.pods)
         logger.info(f"Expected Mgr count= {count}")
         try:
@@ -817,6 +824,7 @@ class CephCluster(object):
     def rgw_health_check(self, count):
         """
         Rgw health check based on pod count
+
         Args:
             count (int): Expected number of Rgw pods
         Raises:
@@ -843,6 +851,7 @@ class CephCluster(object):
     def rbdplugin_health_check(self, count):
         """
         csi-rbdplugin health check based on pod count
+
         Args:
             count (int): Expected number of csi-rbdplugin pods
         Raises:
@@ -869,6 +878,7 @@ class CephCluster(object):
     def cephfsplugin_health_check(self, count):
         """
         csi-cephfsplugin health check based on pod count
+
         Args:
             count (int): Expected number of csi-cephfsplugin pods
         Raises:
@@ -895,6 +905,7 @@ class CephCluster(object):
     def rbdplugin_provisioner_health_check(self, count):
         """
         csi-rbdplugin-provisioner health check based on pod count
+
         Args:
             count (int): Expected number of csi-rbdplugin-provisioner pods
         Raises:
@@ -921,6 +932,7 @@ class CephCluster(object):
     def cephfsplugin_provisioner_health_check(self, count):
         """
         csi-cephfsplugin-provisioner health check based on pod count
+
         Args:
             count (int): Expected number of csi-cephfsplugin-provisioner pods
         Raises:
@@ -947,6 +959,7 @@ class CephCluster(object):
     def drain_canary_health_check(self, count):
         """
         drain_canary health check based on pod count
+
         Args:
             count (int): Expected number of drain_canary pods
         Raises:
