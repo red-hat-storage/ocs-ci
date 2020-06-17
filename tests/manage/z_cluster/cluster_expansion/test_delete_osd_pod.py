@@ -49,9 +49,9 @@ class TestAddCapacityWithOSDPodDelete(ManageTest):
         d.set_resource('osd')
 
         osd_size = storage_cluster.get_osd_size()
-        logging.info("Calling add_capacity function...")
+        logging.info(f"Adding one new set of OSDs. osd size = {osd_size}")
         result = storage_cluster.add_capacity(osd_size)
-        logging.info("finished executing 'add_capacity' function")
+        logging.info("Adding one new set of OSDs was issued without problems")
 
         time_to_wait_before_delete_osd_pod = 20
         time.sleep(time_to_wait_before_delete_osd_pod)
