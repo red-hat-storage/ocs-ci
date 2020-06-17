@@ -5,7 +5,6 @@ import logging
 import re
 
 from jsonschema import validate
-
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.exceptions import ResourceNotFoundError
@@ -17,6 +16,8 @@ from ocs_ci.utility import localstorage, utils
 from ocs_ci.ocs.node import get_osd_running_nodes
 from ocs_ci.ocs.exceptions import UnsupportedFeatureError
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility import utils, localstorage
+
 
 log = logging.getLogger(__name__)
 
@@ -555,3 +556,168 @@ def get_all_storageclass():
         )
     ]
     return storageclass
+
+
+def change_noobaa_endpoints_count(min_nb_eps=None, max_nb_eps=None):
+    """
+    Scale up or down the number of maximum NooBaa emdpoints
+
+    Args:
+        min_nb_eps (int): The number of required minimum Noobaa endpoints
+        max_nb_eps (int): The number of required maximum Noobaa endpoints
+
+    """
+    noobaa = OCP(kind='noobaa', namespace=defaults.ROOK_CLUSTER_NAMESPACE)
+    if min_nb_eps:
+        log.info(f"Changing minimum Noobaa endpoints to {min_nb_eps}")
+        params = f'{{"spec":{{"endpoints":{{"minCount":{min_nb_eps}}}}}}}'
+        noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+    if max_nb_eps:
+        log.info(f"Changing maximum Noobaa endpoints to {max_nb_eps}")
+        params = f'{{"spec":{{"endpoints":{{"maxCount":{max_nb_eps}}}}}}}'
+        noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+    noobaa.patch(resource_name='noobaa', params=params, format_type='merge')
+
+
+def check_rebalance_occur_after_expand(old_osds, exp_time=600):
+
+    """
+    The function check data balance is initiating after add capacity to cluster. The function need 2 out 3 rounds
+    the old osd that had data will be decreased and new osd data will be increased.
+    Args:
+        old_osds: list of old [osd.0, osd.1...]
+        exp_time (int): Time to check osds utilization
+
+    """
+    from time import sleep, time
+    from ocs_ci.ocs.exceptions import ClusterUtilizationNotBalanced
+    from ocs_ci.ocs.cluster import get_osd_utilization
+
+    general_num_of_success = 0
+    general_num_of_fails = 0
+    attempt = 0
+    begin_time = time()
+    while general_num_of_success < 2:
+        num_of_fails_old_osd_increase = 0
+        num_of_fails_new_osd_decrease = 0
+        attempt += 1
+        log.info(f"Try number {attempt} out of to check utilization")
+        first_utilization = get_osd_utilization()
+        log.info(f"The first utilization is {first_utilization}")
+        log.info("Waiting for 30 seconds to get second utilization")
+        sleep(30)
+        second_utilization = get_osd_utilization()
+        log.info(f"The second utilization is {second_utilization}")
+        sum_of_percentage_old_osd_first_utilization = 0
+        sum_of_percentage_old_osd_second_utilization = 0
+        sum_of_percentage_new_osd_first_utilization = 0
+        sum_of_percentage_new_osd_second_utilization = 0
+        for osd_name, osd_util in second_utilization.items():
+            old_osd_flag = 0
+            for old_osd in old_osds:
+                if old_osd == osd_name:
+                    old_osd_flag = 1
+                    sum_of_percentage_old_osd_first_utilization += first_utilization[osd_name]
+                    sum_of_percentage_old_osd_second_utilization += second_utilization[osd_name]
+            if old_osd_flag == 0:
+                sum_of_percentage_new_osd_first_utilization += first_utilization[osd_name]
+                sum_of_percentage_new_osd_second_utilization += second_utilization[osd_name]
+        if sum_of_percentage_old_osd_first_utilization < sum_of_percentage_old_osd_second_utilization:
+            log.info(f"sum of old osd utilization is not decreasing"
+                     f" first util sum is: {sum_of_percentage_old_osd_first_utilization}"
+                     f" and second util sum is "
+                     f"{sum_of_percentage_old_osd_second_utilization}")
+            num_of_fails_old_osd_increase += 1
+        else:
+            log.info(f"sum of old osd is decreasing from {sum_of_percentage_old_osd_first_utilization} "
+                     f"to {sum_of_percentage_old_osd_second_utilization}")
+        if sum_of_percentage_new_osd_first_utilization > sum_of_percentage_new_osd_second_utilization:
+            log.info(f"sum of new osd utilization is not increasing"
+                     f" first util sum is: {sum_of_percentage_new_osd_first_utilization}"
+                     f" and second util sum is "
+                     f"{sum_of_percentage_new_osd_second_utilization}")
+            num_of_fails_new_osd_decrease += 1
+        else:
+            log.info(f"sum of new osd is increasing from {sum_of_percentage_new_osd_first_utilization} "
+                     f"to {sum_of_percentage_new_osd_second_utilization}")
+        if num_of_fails_old_osd_increase == 1 or num_of_fails_new_osd_decrease == 1:
+            log.error("Cluster failed to balance this attempt")
+            general_num_of_fails += 1
+        if general_num_of_fails == 2:
+            log.error("Cluster failed to balance 2 times, resetting success counters")
+            general_num_of_fails = 0
+            general_num_of_success = 0
+        if num_of_fails_new_osd_decrease + num_of_fails_old_osd_increase == 0:
+            general_num_of_success += 1
+        curr_time = time()
+        if curr_time - begin_time > exp_time and general_num_of_success < 2:
+            log.error(f"Osds failed to reach desired state in {exp_time} - failing")
+            raise ClusterUtilizationNotBalanced(f"Osds failed to reach desired state in {exp_time} - failing")
+        if general_num_of_success == 2:
+            log.info(f"OSDs utilization has been balancing for 2 time  within {exp_time} - continuing")
+
+
+def check_until_osd_ratio_start_decrease_or_equal(osds, digit_point=None, ratio_stable=None, exp_time=300):
+    """
+    The function gets a list of OSDs and check if the sum of utilization percentage is decreasing or stay equal
+    depends on what was requested. It checks for 3 times in a row and tolerates one fail out of 3.
+    Args:
+        osds (list): List of osds ie [osd.1, osd.2...]
+        digit_point (int): How many digit after decimal point to check. It was created because monitoring data
+        is always added so to cancel the increase of monitoring data you can choose like 2
+        ratio_stable(anything): If not none it will check that in time of 3 rounds the osd is not increasing and
+        can tolerate 1 fail out of 3
+        exp_time (int): How much time to check the utilization change before giving up
+
+    """
+    from time import sleep, time
+    from ocs_ci.ocs.cluster import get_osd_utilization
+    from ocs_ci.ocs.exceptions import OsdIsIncreasing
+    num_of_fails = 0
+    num_of_success = 0
+    begin_time = time()
+    while num_of_success < 2:
+        osd_first_utilization = get_osd_utilization()
+        log.info(f"First utilization is {osd_first_utilization}, waiting for 60 seconds to check next utilizaztion"
+                 f" for comparision")
+        sleep(60)
+        osd_second_utilization = get_osd_utilization()
+        log.info(f"Second utilization is {osd_second_utilization}")
+        sum_of_osd_first_util = 0
+        sum_of_osd_second_util = 0
+        for osd in osds:
+            if digit_point is not None:
+                osd_first_utilization[osd] = float(format(osd_first_utilization[osd], f".{digit_point}f"))
+                osd_second_utilization[osd] = float(format(osd_second_utilization[osd], f".{digit_point}f"))
+            sum_of_osd_first_util += osd_first_utilization[osd]
+            sum_of_osd_second_util += osd_second_utilization[osd]
+
+        if ratio_stable is None:
+            expression_action = 'decreased'
+            if sum_of_osd_first_util < sum_of_osd_second_util:
+                log.info("Sum of osd ration is still increasing from "
+                         f"{sum_of_osd_first_util} to {sum_of_osd_second_util}")
+                num_of_fails += 1
+            else:
+                log.info(f"sum of utilization is decreasing from {sum_of_osd_first_util} to {sum_of_osd_second_util}")
+                num_of_success += 1
+        else:
+            expression_action = 'equal'
+            if sum_of_osd_first_util != sum_of_osd_second_util:
+                log.info(f"Sum of osd ration is still not equal: sum of first util "
+                         f"{sum_of_osd_first_util} not equal to {sum_of_osd_second_util}")
+                num_of_fails += 1
+            else:
+                log.info(f"Sum of utilization is equal: first util is {sum_of_osd_first_util} and second "
+                         f"util is {sum_of_osd_second_util}")
+                num_of_success += 1
+        if num_of_fails == 1:
+            num_of_success = 0
+            num_of_fails = 0
+        curr_time = time()
+        time_diff = curr_time - begin_time
+        if time_diff > exp_time and num_of_success < 2:
+            log.error(f"Sum of osds has not {expression_action} 2 times within"
+                      f" {exp_time} seconds, back to test")
+            raise OsdIsIncreasing(f"Sum of osds has not {expression_action} 2 times within"
+                                  f" {exp_time} seconds, failing")

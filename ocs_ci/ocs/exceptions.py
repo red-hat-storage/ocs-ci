@@ -228,3 +228,11 @@ class MemoryNotSufficientException(Exception):
 
 class CPUNotSufficientException(Exception):
     pass
+
+
+class ClusterUtilizationNotBalanced(Exception):
+    pass
+
+
+class OsdIsIncreasing(Exception):
+    pass

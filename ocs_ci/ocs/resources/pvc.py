@@ -460,3 +460,22 @@ def create_pvc_clone(
     assert created_pvc, f"Failed to create resource {pvc_name}"
     ocs_obj.reload()
     return ocs_obj
+
+
+def get_pvc_obj(name, namespace=None):
+
+    """
+    Returns the pvc obj for the given pvc
+
+    Args:
+        name (str): Name of the resources
+        namespace (str): namespace of the pvc
+
+    Returns:
+        obj : A pvc object
+
+    """
+    ocp_obj = OCP(api_version='v1', kind=constants.PVC, namespace=namespace)
+    ocp_dict = ocp_obj.get(resource_name=name)
+    pvc_obj = PVC(**ocp_dict)
+    return pvc_obj
