@@ -128,17 +128,17 @@ class OCSUpgrade(object):
     """
     def __init__(self, namespace, version_before_upgrade, ocs_registry_image, upgrade_in_current_source):
         self.namespace = namespace
-        self.version_before_upgrade = version_before_upgrade
-        self.ocs_registry_image = ocs_registry_image
+        self._version_before_upgrade = version_before_upgrade
+        self._ocs_registry_image = ocs_registry_image
         self.upgrade_in_current_source = upgrade_in_current_source
 
     @property
-    def get_version_before_upgrade(self):
-        return self.version_before_upgrade
+    def version_before_upgrade(self):
+        return self._version_before_upgrade
 
     @property
-    def get_ocs_registry_image(self):
-        return self.ocs_registry_image
+    def ocs_registry_image(self):
+        return self._ocs_registry_image
 
     def get_upgrade_version(self):
         """
