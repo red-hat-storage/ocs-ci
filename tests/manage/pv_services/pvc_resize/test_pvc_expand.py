@@ -214,13 +214,14 @@ class TestPvcExpand(ManageTest):
             "Starting IO on all pods with file size larger than "
             "remaining space."
         )
-        self.run_io_and_verify(8, 'failure_expected', False)
+        self.run_io_and_verify(15, 'failure_expected', False)
         fio_errors = ["No space left on device", "Disk quota exceeded"]
         for pod_obj in self.pods:
             try:
                 pod_obj.get_fio_results()
                 raise UnexpectedBehaviour(
-                    f"fio did not fail on pod {pod_obj.name} as expected."
+                    f"fio did not fail on pod {pod_obj.name} as expected when"
+                    f" file size is larger than available space."
                 )
             except CommandFailed as exe:
                 if not any(exp_err in str(exe) for exp_err in fio_errors):
