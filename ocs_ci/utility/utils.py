@@ -1452,7 +1452,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
         upgrade = False
     for tag in tags:
         if tag['name'] == latest_tag:
-            latest_image = tag['image_id']
+            latest_image = tag['manifest_digest']
             break
     if not latest_image:
         raise TagNotFoundException("Couldn't find latest tag!")
@@ -1461,7 +1461,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
         if not upgrade:
             if (
                 tag['name'] not in constants.LATEST_TAGS
-                and tag['image_id'] == latest_image
+                and tag['manifest_digest'] == latest_image
             ):
                 return tag['name']
         if upgrade:
@@ -1472,7 +1472,7 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
                 continue
             if (
                 tag['name'] not in constants.LATEST_TAGS
-                and tag['image_id'] != latest_image
+                and tag['manifest_digest'] != latest_image
                 and ocs_version in tag['name']
             ):
                 if (
