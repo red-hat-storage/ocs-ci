@@ -587,7 +587,11 @@ def get_provider():
     """
 
     ocp_cluster = OCP(kind='', resource_name='nodes')
-    return ocp_cluster.get('nodes')['items'][0]['spec']['providerID'].split(':')[0]
+    results = ocp_cluster.get('nodes')['items'][0]['spec']
+    if 'providerID' in results:
+        return results['providerID'].split(':')[0]
+    else:
+        return "BareMetal"
 
 
 def get_compute_node_names():
