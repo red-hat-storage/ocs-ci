@@ -1,12 +1,16 @@
 import logging
 import pytest
+
 from ocs_ci.framework.testlib import (
     tier4, tier4a, tier4b, ManageTest, aws_platform_required,
     ipi_deployment_required, ignore_leftovers
 )
-from ocs_ci.ocs import machine, constants, defaults
-from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.resources.pod import get_all_pods, get_osd_pods, get_pod_node
+from ocs_ci.ocs import machine, constants, defaults, node
+from ocs_ci.ocs.resources.pod import (
+    get_all_pods, get_osd_pods, get_pod_node,
+    wait_for_dc_app_pods_to_reach_running_state,
+    run_io_in_bg
+)
 from ocs_ci.utility.utils import ceph_health_check
 from tests.sanity_helpers import Sanity
 from tests.helpers import (
@@ -19,6 +23,9 @@ from ocs_ci.ocs.node import (
     add_new_node_and_label_it
 )
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
+from ocs_ci.ocs.machine import (
+    delete_machine_and_wait_for_it_to_reach_running_state
+)
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +42,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     threads = []
 
     @pytest.fixture(autouse=True)
-    def teardown(self, request):
+    def teardown(self, request, nodes):
 
         def finalizer():
             worker_nodes = get_worker_nodes()
@@ -45,6 +52,33 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 thread.join()
             ceph_health_check()
 
+            # Start the nodes which are in poweredoff state
+            not_ready_nodes = [
+                n for n in node.get_node_objs() if
+                n.ocp.get_resource_status(n.name) == constants.NODE_NOT_READY
+            ]
+            log.warning(
+                f"Nodes in NotReady status "
+                f"found: {[n.name for n in not_ready_nodes]}"
+            )
+            if not_ready_nodes:
+                nodes.start_nodes(nodes=not_ready_nodes)
+                node.wait_for_nodes_status()
+
+            # Delete the failed machines
+            failed_machines = [
+                m for m in machine.get_machine_objs() if
+                machine.get_machine_status(m) == "Failed"
+            ]
+            log.warning(
+                f"Machines in failed status "
+                f"found: {[m.name for m in failed_machines]}"
+            )
+            if failed_machines:
+                for fmachine in failed_machines:
+                    delete_machine_and_wait_for_it_to_reach_running_state(
+                        fmachine.name
+                    )
         request.addfinalizer(finalizer)
 
     @pytest.fixture(autouse=True)
@@ -109,7 +143,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             dc_pod = dc_pod_factory(
                 interface=interface, node_selector={'dc': 'fedora'}
             )
-            self.threads.append(pod.run_io_in_bg(dc_pod, fedora_dc=True))
+            self.threads.append(run_io_in_bg(dc_pod, fedora_dc=True))
             dc_pod_obj.append(dc_pod)
 
         # Get app pods running nodes
@@ -157,12 +191,23 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         try:
             # DC app pods on the failed node will get automatically created on other
             # running node. Waiting for all dc app pod to reach running state
-            pod.wait_for_dc_app_pods_to_reach_running_state(
-                dc_pod_obj, timeout=720
-            )
-            log.info("All the dc pods reached running state")
-            pod.wait_for_storage_pods()
-
+            try:
+                wait_for_dc_app_pods_to_reach_running_state(
+                    dc_pod_obj, timeout=720
+                )
+            except ResourceWrongStatusException:
+                # Apply WA in BZ-1841611; ocs-ci issue-2212
+                log.info("Applying WA in BZ-1841611; ocs-ci issue-2212")
+                if failure == "shutdown":
+                    for pod in dc_pod_obj:
+                        pod.delete(force=True)
+                    wait_for_dc_app_pods_to_reach_running_state(
+                        dc_pod_obj, timeout=720
+                    )
+                else:
+                    raise
+                log.info("All the dc pods reached running state")
+                pod.wait_for_all_pods()
         except ResourceWrongStatusException:
             if failure == "shutdown":
                 nodes.terminate_nodes(failure_node_obj, wait=True)
@@ -177,9 +222,6 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         # run IO and delete the resources
         self.sanity_helpers.create_resources(pvc_factory, pod_factory)
         self.sanity_helpers.delete_resources()
-
-        # Perform cluster and Ceph health checks
-        self.sanity_helpers.health_check()
 
 
 @ignore_leftovers

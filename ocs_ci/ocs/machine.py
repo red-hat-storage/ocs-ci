@@ -124,6 +124,20 @@ def get_machine_type(machine_name):
         break
 
 
+def get_machine_status(machine_obj):
+    """
+    Get the status of machine
+
+    Args:
+        machine_obj : machine obj
+
+    Returns:
+        str: The machine status (Running/Failed/Provisioned)
+
+    """
+    return machine_obj.get().get('status').get('phase')
+
+
 def get_labeled_nodes(label):
     """
     Fetches all nodes with specific label.
@@ -139,37 +153,57 @@ def get_labeled_nodes(label):
     return labeled_nodes_list
 
 
-def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
+def delete_machine_and_wait_for_it_to_reach_running_state(
+    machine_name
+):
     """
-    Deletes a machine and checks the state of the newly spinned
-    machine
+    Deletes the machine and wait for the new machine to reach running state
 
     Args:
         machine_name (str): Name of the machine you want to delete
 
+    Raises:
+        ResourceWrongStatusException: If the new spun machine fails
+            to reach running state
+
     Returns:
-        bool: True in case of success, False otherwise
+        machine_obj: New spinned machine object
+
     """
-    machine_type = get_machine_type(machine_name)
+    machine_names_before_delete = [m.name for m in get_machine_objs()]
+    machineset_name = get_machineset_from_machine_name(machine_name)
+    machineset_replica_count = get_replica_count(machineset_name)
     delete_machine(machine_name)
-    machines = get_machines(machine_type=machine_type)
+    machine_names_after_delete = [m.name for m in get_machine_objs()]
+    machines = get_machines(machine_type=get_machine_type(machine_name))
+    counter = 0
     for machine in machines:
         if re.match(machine.name[:-6], machine_name):
-            log.info(f"New spinned machine name is {machine.name}")
-            new_machine = machine
-            break
-    if new_machine is not None:
-        log.info(
-            f"Checking the state of new spinned machine {new_machine.name}"
+            counter += 1
+    if counter != machineset_replica_count:
+        raise Exception("Unable to find new machine")
+    new_machine_name = list(
+        set(machine_names_after_delete) - set(machine_names_before_delete)
+    )
+    log.info(f"New spinned machine is {new_machine_name[0]}")
+    new_machine_obj = get_machine_objs(new_machine_name)
+    try:
+        for timer in TimeoutSampler(
+            300, 5, get_machine_status, machine_obj=new_machine_obj[0]
+        ):
+            if timer == 'Running':
+                log.info(
+                    f"New spun machine {new_machine_name[0]} reached "
+                    f"running state"
+                )
+                break
+    except TimeoutExpiredError:
+        log.error(
+            f"New spun machine {new_machine_name[0]} failed "
+            f"to reach running state "
         )
-        state = new_machine.get().get(
-            'metadata'
-        ).get('annotations').get(
-            'machine.openshift.io/instance-state'
-        )
-        log.info(f"{new_machine.name} is in {state} state")
-        return state == constants.STATUS_RUNNING.islower()
-    return False
+        raise ResourceWrongStatusException
+    return new_machine_obj[0]
 
 
 def create_custom_machineset(

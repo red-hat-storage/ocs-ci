@@ -1,5 +1,4 @@
 import logging
-import re
 
 import pytest
 import random
@@ -13,6 +12,11 @@ from ocs_ci.ocs import (
     machine, constants, ocp, node
 )
 from tests.sanity_helpers import Sanity
+from ocs_ci.ocs.machine import (
+    delete_machine_and_wait_for_it_to_reach_running_state
+)
+from ocs_ci.ocs.node import (
+    get_node_objs, schedule_nodes)
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +31,27 @@ class TestNodeReplacement(ManageTest):
     Knip-894 Node replacement - AWS-IPI-Proactive
 
     """
+
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        """
+        Tear down function
+
+        """
+        def finalizer():
+            """
+            Make sure that all cluster's nodes are in 'Ready' state and if not,
+            change them back to 'Ready' state by marking them as schedulable
+            """
+            scheduling_disabled_nodes = [
+                n.name for n in get_node_objs() if n.ocp.get_resource_status(
+                    n.name
+                ) == constants.NODE_READY_SCHEDULING_DISABLED
+            ]
+            if scheduling_disabled_nodes:
+                schedule_nodes(scheduling_disabled_nodes)
+        request.addfinalizer(finalizer)
+
     @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
@@ -69,18 +94,15 @@ class TestNodeReplacement(ManageTest):
         machine_name = machine.get_machine_from_node_name(osd_node_name)
         log.info(f"Node {osd_node_name} associated machine is {machine_name}")
         log.info(f"Deleting machine {machine_name} and waiting for new machine to come up")
-        machine.delete_machine_and_check_state_of_new_spinned_machine(machine_name)
-        new_machine_list = machine.get_machines()
-        for machines in new_machine_list:
-            # Trimming is done to get just machine name
-            # eg:- machine_name:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b-nlgkr
-            # After trimming:- prsurve-40-ocs-43-kbrvf-worker-us-east-2b
-            if re.match(machines.name[:-6], machine_name):
-                new_machine_name = machines.name
-        machineset_name = machine.get_machineset_from_machine_name(new_machine_name)
+        new_machine = delete_machine_and_wait_for_it_to_reach_running_state(
+            machine_name
+        )
+        machineset_name = machine.get_machineset_from_machine_name(
+            new_machine.name
+        )
         log.info("Waiting for new worker node to be in ready state")
         machine.wait_for_new_node_to_be_ready(machineset_name)
-        new_node_name = node.get_node_from_machine_name(new_machine_name)
+        new_node_name = node.get_node_from_machine_name(new_machine.name)
         log.info("Adding ocs label to newly created worker node")
         node_obj = ocp.OCP(kind='node')
         node_obj.add_label(
