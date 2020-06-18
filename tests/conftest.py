@@ -29,9 +29,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.mcg import MCG
-from ocs_ci.ocs.resources.objectbucket import (
-    MCG_CLIBucket, MCG_OCBucket, MCG_S3Bucket, RGW_OCBucket
-)
+from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import get_rgw_pod, delete_deploymentconfig_pods
 from ocs_ci.ocs.resources.pvc import PVC
@@ -1836,13 +1834,6 @@ def bucket_factory_fixture(request, mcg_obj, rgw_obj):
     """
     created_buckets = []
 
-    bucketMap = {
-        's3': MCG_S3Bucket,
-        'oc': MCG_OCBucket,
-        'cli': MCG_CLIBucket,
-        'rgw-oc': RGW_OCBucket
-    }
-
     def _create_buckets(
         amount=1, interface='S3',
         verify_health=True, *args, **kwargs
@@ -1860,16 +1851,16 @@ def bucket_factory_fixture(request, mcg_obj, rgw_obj):
                 buckets
 
         """
-        if interface.lower() not in bucketMap:
+        if interface.lower() not in BUCKET_MAP:
             raise RuntimeError(
                 f'Invalid interface type received: {interface}. '
-                f'available types: {", ".join(bucketMap.keys())}'
+                f'available types: {", ".join(BUCKET_MAP.keys())}'
             )
         for i in range(amount):
             bucket_name = helpers.create_unique_resource_name(
                 resource_description='bucket', resource_type=interface.lower()
             )
-            created_bucket = bucketMap[interface.lower()](
+            created_bucket = BUCKET_MAP[interface.lower()](
                 bucket_name,
                 mcg=mcg_obj,
                 rgw=rgw_obj,
@@ -1886,8 +1877,7 @@ def bucket_factory_fixture(request, mcg_obj, rgw_obj):
     def bucket_cleanup():
         for bucket in created_buckets:
             log.info(f'Cleaning up bucket {bucket.name}')
-            bucket.delete()
-            # Todo: Implement deletion verification
+            assert bucket.delete()
 
     request.addfinalizer(bucket_cleanup)
 

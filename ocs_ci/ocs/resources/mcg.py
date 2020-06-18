@@ -175,17 +175,6 @@ class MCG(object):
         logger.warning(f'Bucket {bucket_name} was not found')
         return None
 
-    def oc_get_all_bucket_names(self):
-        """
-        Returns:
-            set: A set of all bucket names
-
-        """
-        all_obcs_in_namespace = OCP(namespace=self.namespace, kind='obc').get().get('items')
-        return {bucket.get('spec').get('bucketName')
-                for bucket
-                in all_obcs_in_namespace}
-
     def cli_get_all_bucket_names(self):
         """
         Returns:

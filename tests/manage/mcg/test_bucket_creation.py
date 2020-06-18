@@ -8,9 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1, tier3, acceptance, performance
 )
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.resources.objectbucket import (
-    MCG_S3Bucket, MCG_OCBucket, MCG_CLIBucket
-)
+from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -111,11 +109,6 @@ class TestBucketCreation:
         command or MCG CLI
         """
         expected_err = "BucketAlready|Already ?Exists"
-        bucket_map = {
-            's3': MCG_S3Bucket,
-            'oc': MCG_OCBucket,
-            'cli': MCG_CLIBucket
-        }
         bucket_set = set(
             bucket.name for bucket in bucket_factory(
                 amount, interface, verify_health=False
@@ -123,7 +116,7 @@ class TestBucketCreation:
         )
         for bucket_name in bucket_set:
             try:
-                bucket = bucket_map[interface.lower()](bucket_name, mcg=mcg_obj)
+                bucket = BUCKET_MAP[interface.lower()](bucket_name, mcg=mcg_obj)
                 assert not bucket, (
                     "Unexpected: Duplicate creation hasn't failed."
                 )

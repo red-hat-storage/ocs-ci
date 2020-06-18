@@ -5,12 +5,13 @@ from tests.helpers import create_resource, create_unique_resource_name
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
 import base64
 import boto3
+from ocs_ci.ocs.utils import oc_get_all_obc_names
 
 logger = logging.getLogger(name=__file__)
 
@@ -99,14 +100,25 @@ class ObjectBucket(ABC):
         elif type(other) == ObjectBucket:
             return self.name == other.name
 
-    def delete(self):
+    def delete(self, verify=True):
         """
         Super method that first logs the bucket deletion and then calls
         the appropriate implementation
 
         """
         logger.info(f"Deleting bucket: {self.name}")
-        self.internal_delete()
+        try:
+            self.internal_delete()
+        except CommandFailed as e:
+            if 'not found' in str(e):
+                logger.warning(f'{self.name} was not found, or already deleted.')
+                return True
+            else:
+                raise e
+        if verify:
+            return self.verify_deletion()
+        else:
+            return True
 
     @property
     def status(self):
@@ -118,6 +130,26 @@ class ObjectBucket(ABC):
         status_var = self.internal_status
         logger.info(f"{self.name} status is {status_var}")
         return status_var
+
+    def verify_deletion(self, timeout=60, interval=5):
+        """
+        Super method used for logging the deletion verification
+        process and then calls the appropriate implementatation
+
+        """
+        logger.info(f"Verifying deletion of {self.name}")
+        try:
+            for del_check in TimeoutSampler(timeout, interval, self.internal_verify_deletion):
+                if del_check:
+                    logger.info(f'{self.name} was deleted successfuly')
+                    return True
+                else:
+                    logger.info(f'{self.name} still exists. Retrying...')
+        except TimeoutExpiredError:
+            logger.error(
+                f'{self.name} was not deleted within {timeout} seconds.'
+            )
+            assert False
 
     def verify_health(self, timeout=30, interval=5):
         """
@@ -171,6 +203,14 @@ class ObjectBucket(ABC):
         """
         raise NotImplementedError()
 
+    @abstractmethod
+    def internal_verify_deletion(self):
+        """
+        Abstract deletion verification method
+
+        """
+        raise NotImplementedError()
+
 
 class MCG_CLIBucket(ObjectBucket):
     """
@@ -211,6 +251,9 @@ class MCG_CLIBucket(ObjectBucket):
                 in [constants.HEALTHY_OB_CLI_MODE, constants.HEALTHY_OBC_CLI_PHASE])
         )
 
+    def internal_verify_deletion(self):
+        assert self.name not in self.mcg.cli_get_all_bucket_names()
+
 
 class MCG_S3Bucket(ObjectBucket):
     """
@@ -248,12 +291,15 @@ class MCG_S3Bucket(ObjectBucket):
         """
         return self.status == constants.HEALTHY_OB
 
+    def internal_verify_deletion(self):
+        return self.name not in self.mcg.s3_get_all_bucket_names()
+
 
 class OCBucket(ObjectBucket):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def internal_delete(self):
+    def internal_delete(self, verify=True):
         """
         Deletes the bucket using the OC CLI
         """
@@ -268,9 +314,9 @@ class OCBucket(ObjectBucket):
             str: OBC phase
 
         """
-        return OCP(kind='obc', namespace=self.namespace).get(
-            resource_name=self.name
-        )['status']['phase']
+        return OCP(
+            kind='obc', namespace=self.namespace, resource_name=self.name
+        ).get()['status']['phase']
 
     def internal_verify_health(self):
         """
@@ -281,6 +327,9 @@ class OCBucket(ObjectBucket):
 
         """
         return self.status == constants.HEALTHY_OBC
+
+    def internal_verify_deletion(self):
+        return self.name not in oc_get_all_obc_names()
 
 
 class MCG_OCBucket(OCBucket):
@@ -315,3 +364,11 @@ class RGW_OCBucket(OCBucket):
         obc_data['spec']['storageClassName'] = constants.INDEPENDENT_DEFAULT_STORAGECLASS_RGW
         obc_data['metadata']['namespace'] = self.namespace
         create_resource(**obc_data)
+
+
+BUCKET_MAP = {
+    's3': MCG_S3Bucket,
+    'oc': MCG_OCBucket,
+    'cli': MCG_CLIBucket,
+    'rgw-oc': RGW_OCBucket
+}

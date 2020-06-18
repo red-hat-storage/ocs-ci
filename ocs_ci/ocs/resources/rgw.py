@@ -20,3 +20,4 @@ class RGW(object):
         # Todo: Implement retrieval in cases where CephObjectStoreUser is available
         self.key_id = None
         self.secret_key = None
+        self.s3_resource = None
