@@ -668,6 +668,7 @@ def pod_factory_fixture(request, pvc_factory):
         pvc=None,
         custom_data=None,
         status=constants.STATUS_RUNNING,
+        node_name=None,
         pod_dict_path=None,
         raw_block_pv=False,
         deployment_config=False,
@@ -687,6 +688,7 @@ def pod_factory_fixture(request, pvc_factory):
                 is set if provided.
             status (str): If provided then factory waits for object to reach
                 desired state.
+            node_name (str): The name of specific node to schedule the pod
             pod_dict_path (str): YAML path for the pod.
             raw_block_pv (bool): True for creating raw block pv based pod,
                 False otherwise.
@@ -712,6 +714,7 @@ def pod_factory_fixture(request, pvc_factory):
                 pvc_name=pvc.name,
                 namespace=pvc.namespace,
                 interface_type=interface,
+                node_name=node_name,
                 pod_dict_path=pod_dict_path,
                 raw_block_pv=raw_block_pv,
                 dc_deployment=deployment_config,
