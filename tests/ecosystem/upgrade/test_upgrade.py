@@ -36,7 +36,6 @@ def test_upgrade():
         f"{upgrade_ocs.version_before_upgrade}"
     )
     csv_name_pre_upgrade = upgrade_ocs.get_csv_name_pre_upgrade()
-    # TODO: find way not to use clusterversion here, as it keeps old major version
     pre_upgrade_images = upgrade_ocs.get_pre_upgrade_image(csv_name_pre_upgrade)
     upgrade_ocs.load_version_config_file(upgrade_version)
     with CephHealthMonitor(ceph_cluster):
