@@ -40,12 +40,12 @@ from ocs_ci.ocs.utils import (
     setup_ceph_toolbox, collect_ocs_logs
 )
 from ocs_ci.utility import templating
+from ocs_ci.utility.localstorage import get_lso_channel
 from ocs_ci.utility.openshift_console import OpenshiftConsole
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     ceph_health_check,
     get_latest_ds_olm_tag,
-    get_ocp_version,
     is_cluster_running,
     run_cmd,
     set_selinux_permissions,
@@ -676,7 +676,7 @@ def setup_local_storage():
     # Update local-storage-operator subscription data with channel
     for data in lso_data:
         if data['kind'] == 'Subscription':
-            data['spec']['channel'] = get_ocp_version()
+            data['spec']['channel'] = get_lso_channel()
 
     # Create temp yaml file and create local storage operator
     logger.info(
