@@ -5,7 +5,7 @@ import pytest
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2, tier3
 from ocs_ci.ocs import constants
 from tests.manage.mcg import helpers
-from tests.manage.mcg.helpers import retrieve_anon_s3_resource
+from tests.helpers import retrieve_anon_s3_resource
 from tests.helpers import verify_s3_object_integrity
 
 logger = logging.getLogger(__name__)

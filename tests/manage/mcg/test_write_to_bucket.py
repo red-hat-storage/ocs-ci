@@ -11,7 +11,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants
 from tests.manage.mcg import helpers
-from tests.manage.mcg.helpers import retrieve_anon_s3_resource
+from tests.helpers import retrieve_anon_s3_resource
 from tests.helpers import craft_s3_command
 
 logger = logging.getLogger(__name__)

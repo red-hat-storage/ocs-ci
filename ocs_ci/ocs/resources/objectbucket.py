@@ -149,7 +149,7 @@ class ObjectBucket(ABC):
             logger.error(
                 f'{self.name} was not deleted within {timeout} seconds.'
             )
-            assert False
+            assert False, f'{self.name} was not deleted within {timeout} seconds.'
 
     def verify_health(self, timeout=30, interval=5):
         """
@@ -177,7 +177,7 @@ class ObjectBucket(ABC):
             logger.error(
                 f'{self.name} did not reach a healthy state within {timeout} seconds.'
             )
-            assert False
+            assert False, f'{self.name} did not reach a healthy state within {timeout} seconds.'
 
     @abstractmethod
     def internal_delete(self):

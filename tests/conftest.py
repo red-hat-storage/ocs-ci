@@ -52,12 +52,11 @@ from ocs_ci.utility.utils import (
 )
 from tests import helpers
 from tests.helpers import create_unique_resource_name
-from tests.manage.mcg.helpers import get_rgw_restart_count
-from tests.manage.mcg.helpers import (
+from tests.helpers import (
     oc_create_aws_backingstore, oc_create_google_backingstore, oc_create_azure_backingstore,
     oc_create_s3comp_backingstore, oc_create_pv_backingstore, cli_create_aws_backingstore,
     cli_create_google_backingstore, cli_create_azure_backingstore, cli_create_s3comp_backingstore,
-    cli_create_pv_backingstore
+    cli_create_pv_backingstore, get_rgw_restart_count
 )
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW

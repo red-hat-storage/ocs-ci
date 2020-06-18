@@ -7,7 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_OPTIMAL
-from tests.manage.mcg.helpers import (
+from tests.helpers import (
     retrieve_test_objects_to_pod, sync_object_directory
 )
 from tests.helpers import verify_s3_object_integrity
