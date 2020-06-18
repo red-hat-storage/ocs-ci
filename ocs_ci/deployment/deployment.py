@@ -689,6 +689,8 @@ def setup_local_storage():
     templating.dump_data_to_temp_yaml(
         lso_data, lso_data_yaml.name
     )
+    with open(lso_data_yaml.name, 'r') as f:
+        logger.info(f.read())
     logger.info("Creating local-storage-operator")
     run_cmd(f"oc create -f {lso_data_yaml.name}")
 
