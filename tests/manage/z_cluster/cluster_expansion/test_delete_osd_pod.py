@@ -3,7 +3,7 @@ import logging
 import time
 
 
-from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4a
+from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4a, bugzilla
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -26,6 +26,7 @@ from tests.disruption_helpers import Disruptions
 )
 @ignore_leftovers
 @tier4a
+@bugzilla('1847098')
 class TestAddCapacityWithOSDPodDelete(ManageTest):
     """
     Test add capacity when one of the osd pods gets deleted
@@ -50,9 +51,11 @@ class TestAddCapacityWithOSDPodDelete(ManageTest):
 
         osd_size = storage_cluster.get_osd_size()
         logging.info(f"Adding one new set of OSDs. osd size = {osd_size}")
-        result = storage_cluster.add_capacity(osd_size)
+        storagedeviceset_count = storage_cluster.add_capacity(osd_size)
         logging.info("Adding one new set of OSDs was issued without problems")
 
+        # OSD number go down by one and then gradually go up by 1
+        # and finally the OSD number will be storagedeviceset_count*3
         time_to_wait_before_delete_osd_pod = 20
         time.sleep(time_to_wait_before_delete_osd_pod)
         logging.info("Delete an osd pod while storage capacity is getting increased")
@@ -66,7 +69,7 @@ class TestAddCapacityWithOSDPodDelete(ManageTest):
             timeout=420,
             condition=constants.STATUS_RUNNING,
             selector='app=rook-ceph-osd',
-            resource_count=result * 3
+            resource_count=storagedeviceset_count * 3
         )
 
         logging.info("Finished verifying add capacity osd storage with node restart")
