@@ -4,9 +4,12 @@ import botocore
 import pytest
 from tests import helpers
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    acceptance, tier1
+    acceptance, tier1, tier3
 )
+from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import OBC
 
 logger = logging.getLogger(__name__)
@@ -73,3 +76,31 @@ class TestBucketDeletion:
                     )
         finally:
             bucket.delete()
+
+    @pytest.mark.parametrize(
+        argnames="interface",
+        argvalues=[
+            pytest.param(
+                *['RGW-OC'],
+                marks=[tier3, pytest.mark.polarion_id("OCS-1400")]
+            ),
+        ]
+    )
+    def test_nonexist_bucket_delete(self, interface):
+        """
+        Negative test with deletion of non-exist OBC.
+        """
+        name = "test_nonexist_bucket_name"
+        if interface == "RGW-OC":
+            try:
+                oc_del = OCP(
+                    kind='obc', namespace=config.ENV_DATA['cluster_namespace']
+                ).delete(resource_name=name)
+                assert oc_del, "Unexpected oc delete non-exist OBC succeed"
+            except CommandFailed as err:
+                assert "NotFound" in str(err), (
+                    "Couldn't verify delete non-exist OBC with oc"
+                )
+        logger.info(
+            f"Delete non-exist OBC {name} failed as expected"
+        )

@@ -6,8 +6,12 @@ import uuid
 from ocs_ci.framework.testlib import (
     ManageTest, tier1
 )
-from tests.manage.mcg import helpers
-from tests.helpers import verify_s3_object_integrity
+from tests.helpers import (
+    verify_s3_object_integrity, abort_all_multipart_upload,
+    create_multipart_upload, list_multipart_upload,
+    upload_parts, list_uploaded_parts, complete_multipart_upload,
+    sync_object_directory
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,27 +57,27 @@ class TestS3MultipartUpload(ManageTest):
 
         # Abort all Multipart Uploads for this Bucket (optional, for starting over)
         logger.info(f'Aborting any Multipart Upload on bucket:{bucket}')
-        helpers.abort_all_multipart_upload(mcg_obj, bucket, key)
+        abort_all_multipart_upload(mcg_obj, bucket, key)
 
         # Create & list Multipart Upload on the Bucket
         logger.info(f'Initiating Multipart Upload on Bucket: {bucket} with Key {key}')
-        upload_id = helpers.create_multipart_upload(mcg_obj, bucket, key)
-        logger.info(f'Listing the Multipart Upload : {helpers.list_multipart_upload(mcg_obj, bucket)}')
+        upload_id = create_multipart_upload(mcg_obj, bucket, key)
+        logger.info(f'Listing the Multipart Upload : {list_multipart_upload(mcg_obj, bucket)}')
 
         # Uploading individual parts to the Bucket
         logger.info(f'Uploading individual parts to the bucket {bucket}')
-        uploaded_parts = helpers.upload_parts(mcg_obj, awscli_pod, bucket, key, res_dir, upload_id, parts)
+        uploaded_parts = upload_parts(mcg_obj, awscli_pod, bucket, key, res_dir, upload_id, parts)
 
         # Listing the Uploaded parts
-        logger.info(f'Listing the individual parts : {helpers.list_uploaded_parts(mcg_obj, bucket, key, upload_id)}')
+        logger.info(f'Listing the individual parts : {list_uploaded_parts(mcg_obj, bucket, key, upload_id)}')
 
         # Completing the Multipart Upload
         logger.info(f'Completing the Multipart Upload on bucket: {bucket}')
-        logger.info(helpers.complete_multipart_upload(mcg_obj, bucket, key, upload_id, uploaded_parts))
+        logger.info(complete_multipart_upload(mcg_obj, bucket, key, upload_id, uploaded_parts))
 
         # Checksum Validation: Downloading the object after completing Multipart Upload and verifying its integrity
         logger.info('Downloading the completed multipart object from MCG bucket to awscli pod')
-        helpers.sync_object_directory(
+        sync_object_directory(
             awscli_pod, object_path, res_dir, mcg_obj
         )
         assert verify_s3_object_integrity(

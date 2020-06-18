@@ -2360,7 +2360,6 @@ def verify_s3_object_integrity(original_object_path, result_object_path, awscli_
         return False
 
 
-# MCG helpers
 def retrieve_test_objects_to_pod(podobj, target_dir):
     """
     Downloads all the test objects to a given directory in a given pod.
@@ -2964,3 +2963,16 @@ def s3_list_object_versions(s3_obj, bucketname, prefix=''):
         dict : List object version response
     """
     return s3_obj.s3_client.list_object_versions(Bucket=bucketname, Prefix=prefix)
+
+
+def storagecluster_independent_check():
+    """
+    Check whether the storagecluster is running in independent mode
+    by checking the value of spec.externalStorage.enable
+    """
+    return OCP(
+        kind='StorageCluster',
+        namespace=config.ENV_DATA['cluster_namespace']
+    ).get().get('items')[0].get('spec').get(
+        'externalStorage'
+    ).get('enable')

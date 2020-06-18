@@ -1,6 +1,7 @@
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
+from tests.helpers import storagecluster_independent_check
 
 
 class RGW(object):
@@ -10,10 +11,15 @@ class RGW(object):
 
     def __init__(self, namespace=None):
         self.namespace = namespace if namespace else config.ENV_DATA['cluster_namespace']
-        # Todo: Check if the cluster is in independent mode or not, and retrieve the appropriate SC name
+
+        if storagecluster_independent_check():
+            sc_name = constants.INDEPENDENT_DEFAULT_STORAGECLASS_RGW
+        else:
+            sc_name = constants.DEFAULT_STORAGECLASS_RGW
+
         self.storageclass = OCP(
             kind='storageclass', namespace=namespace,
-            resource_name=constants.INDEPENDENT_DEFAULT_STORAGECLASS_RGW
+            resource_name=sc_name
         )
         self.s3_endpoint = self.storageclass.get().get('parameters').get('endpoint')
         self.region = self.storageclass.get().get('parameters').get('region')

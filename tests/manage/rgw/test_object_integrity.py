@@ -2,7 +2,7 @@ import logging
 
 
 from ocs_ci.framework.testlib import ManageTest, tier1
-from tests.manage.mcg import helpers
+from tests.helpers import sync_object_directory, retrieve_test_objects_to_pod
 from tests.helpers import verify_s3_object_integrity
 from ocs_ci.ocs.resources.objectbucket import OBC
 
@@ -26,17 +26,17 @@ class TestObjectIntegrity(ManageTest):
         # Retrieve a list of all objects on the test-objects bucket and
         # downloads them to the pod
         full_object_path = f"s3://{bucketname}"
-        downloaded_files = helpers.retrieve_test_objects_to_pod(
+        downloaded_files = retrieve_test_objects_to_pod(
             awscli_pod, original_dir
         )
         # Write all downloaded objects to the new bucket
-        helpers.sync_object_directory(
+        sync_object_directory(
             awscli_pod, original_dir, full_object_path, obc_obj
         )
 
         # Retrieve all objects from MCG bucket to result dir in Pod
         logger.info('Downloading all objects from MCG bucket to awscli pod')
-        helpers.sync_object_directory(
+        sync_object_directory(
             awscli_pod, full_object_path, result_dir, obc_obj
         )
 

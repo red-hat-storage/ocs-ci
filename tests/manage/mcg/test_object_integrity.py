@@ -4,7 +4,10 @@ import pytest
 
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2, tier3
 from ocs_ci.ocs import constants
-from tests.manage.mcg import helpers
+from tests.helpers import (
+    retrieve_test_objects_to_pod, sync_object_directory,
+    craft_s3_command
+)
 from tests.helpers import retrieve_anon_s3_resource
 from tests.helpers import verify_s3_object_integrity
 
@@ -33,17 +36,17 @@ class TestObjectIntegrity(ManageTest):
         # Retrieve a list of all objects on the test-objects bucket and
         # downloads them to the pod
         full_object_path = f"s3://{bucketname}"
-        downloaded_files = helpers.retrieve_test_objects_to_pod(
+        downloaded_files = retrieve_test_objects_to_pod(
             awscli_pod, original_dir
         )
         # Write all downloaded objects to the new bucket
-        helpers.sync_object_directory(
+        sync_object_directory(
             awscli_pod, original_dir, full_object_path, mcg_obj
         )
 
         # Retrieve all objects from MCG bucket to result dir in Pod
         logger.info('Downloading all objects from MCG bucket to awscli pod')
-        helpers.sync_object_directory(
+        sync_object_directory(
             awscli_pod, full_object_path, result_dir, mcg_obj
         )
 
@@ -115,7 +118,7 @@ class TestObjectIntegrity(ManageTest):
             )
             download_obj_cmd = f'cp s3://{public_bucket}/{obj["Key"]} {original_dir}'
             awscli_pod.exec_cmd_on_pod(
-                command=helpers.craft_s3_command(download_obj_cmd),
+                command=craft_s3_command(download_obj_cmd),
                 out_yaml_format=False
             )
             download_files.append(obj['Key'].split('/')[-1])
@@ -125,13 +128,13 @@ class TestObjectIntegrity(ManageTest):
         base_path = f"s3://{bucketname}"
         for i in range(amount):
             full_object_path = base_path + f"/{i}/"
-            helpers.sync_object_directory(
+            sync_object_directory(
                 awscli_pod, original_dir, full_object_path, mcg_obj
             )
 
             # Retrieve all objects from MCG bucket to result dir in Pod
             logger.info('Downloading objects from MCG bucket to awscli pod')
-            helpers.sync_object_directory(
+            sync_object_directory(
                 awscli_pod, full_object_path, result_dir, mcg_obj
             )
 
@@ -167,13 +170,13 @@ class TestObjectIntegrity(ManageTest):
             sh='sh'
         )
         # Write all empty objects to the new bucket
-        helpers.sync_object_directory(
+        sync_object_directory(
             awscli_pod, original_dir, full_object_path, mcg_obj
         )
 
         # Retrieve all objects from MCG bucket to result dir in Pod
         logger.info('Downloading objects from MCG bucket to awscli pod')
-        helpers.sync_object_directory(
+        sync_object_directory(
             awscli_pod, full_object_path, result_dir, mcg_obj
         )
 

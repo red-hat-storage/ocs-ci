@@ -10,8 +10,12 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import MCG_S3Bucket, BUCKET_MAP
-from tests.helpers import create_unique_resource_name
-from tests.manage.mcg import helpers
+from tests.helpers import (
+    retrieve_test_objects_to_pod,
+    sync_object_directory,
+    create_unique_resource_name,
+    rm_object_recursive
+)
 
 logger = logging.getLogger(__name__)
 ERRATIC_TIMEOUTS_SKIP_REASON = 'Skipped because of erratic timeouts'
@@ -108,8 +112,8 @@ class TestBucketDeletion:
             logger.info(f"aws region is {mcg_obj.region}")
             data_dir = '/data'
             full_object_path = f"s3://{bucketname}"
-            helpers.retrieve_test_objects_to_pod(awscli_pod, data_dir)
-            helpers.sync_object_directory(
+            retrieve_test_objects_to_pod(awscli_pod, data_dir)
+            sync_object_directory(
                 awscli_pod, data_dir, full_object_path, mcg_obj
             )
 
@@ -198,7 +202,7 @@ class TestBucketDeletion:
             logger.info(f"aws s3 endpoint is {mcg_obj.s3_endpoint}")
             logger.info(f"aws region is {mcg_obj.region}")
             data_dir = '/data'
-            helpers.retrieve_test_objects_to_pod(awscli_pod, data_dir)
+            retrieve_test_objects_to_pod(awscli_pod, data_dir)
 
             # Sync downloaded objects dir to the new bucket, sync to 3175
             # virtual dirs. With each dir around 315MB, and 3175 dirs will
@@ -206,7 +210,7 @@ class TestBucketDeletion:
             logger.info('Writing objects to bucket')
             for i in range(3175):
                 full_object_path = f"s3://{bucketname}/{i}/"
-                helpers.sync_object_directory(
+                sync_object_directory(
                     awscli_pod, data_dir, full_object_path, mcg_obj
                 )
 
@@ -214,7 +218,7 @@ class TestBucketDeletion:
             # The object_versions.delete function does not work with objects
             # exceeds 1000.
             start = timeit.default_timer()
-            helpers.rm_object_recursive(awscli_pod, bucketname, mcg_obj)
+            rm_object_recursive(awscli_pod, bucketname, mcg_obj)
             bucket.delete()
             stop = timeit.default_timer()
             gap = (stop - start) // 60 % 60
@@ -222,5 +226,5 @@ class TestBucketDeletion:
                 assert False, "Failed to delete s3 bucket within 10 minutes"
         finally:
             if mcg_obj.s3_verify_bucket_exists(bucketname):
-                helpers.rm_object_recursive(awscli_pod, bucketname, mcg_obj)
+                rm_object_recursive(awscli_pod, bucketname, mcg_obj)
                 mcg_obj.s3_resource.Bucket(bucketname).delete()
