@@ -3,7 +3,6 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, tier1
 from tests import helpers
@@ -55,6 +54,11 @@ class TestPvcExpand(ManageTest):
 
         self.pods = pods_cephfs + pods_rbd
 
+        # Set volume mode on PVC objects
+        for pvc_obj in self.pvcs_cephfs+self.pvcs_rbd:
+            pvc_info = pvc_obj.get()
+            setattr(pvc_obj, 'volume_mode', pvc_info['spec']['volumeMode'])
+
     def expand_and_verify(self, pvc_size_new):
         """
         Modify size of PVC and verify the change
@@ -73,7 +77,7 @@ class TestPvcExpand(ManageTest):
 
         log.info(f"Verifying new size on pods.")
         for pod_obj in self.pods:
-            if pod_obj.pvc.get()['spec']['volumeMode'] == 'Block':
+            if pod_obj.pvc.volume_mode == 'Block':
                 log.info(
                     f"Skipping check on pod {pod_obj.name} as volume "
                     f"mode is Block."
@@ -120,9 +124,8 @@ class TestPvcExpand(ManageTest):
 
         """
         for pod_obj in self.pods:
-            pvc_info = pod_obj.pvc.get()
             storage_type = (
-                'block' if pvc_info['spec']['volumeMode'] == 'Block' else 'fs'
+                'block' if pod_obj.pvc.volume_mode == 'Block' else 'fs'
             )
 
             # Split file size and write from two pods if access mode is RWX
@@ -165,8 +168,7 @@ class TestPvcExpand(ManageTest):
         log.info("Setting up pods for running IO.")
         for pod_obj in self.pods:
             log.info(f"Setting up pod {pod_obj.name} for running IO")
-            pvc_info = pod_obj.pvc.get()
-            if pvc_info['spec']['volumeMode'] == 'Block':
+            if pod_obj.pvc.volume_mode == 'Block':
                 storage_type = 'block'
             else:
                 storage_type = 'fs'
@@ -206,24 +208,5 @@ class TestPvcExpand(ManageTest):
 
         # Run IO and verify
         log.info("Starting post-second-expand IO on all pods.")
-        self.run_io_and_verify(5, 'post_expand')
+        self.run_io_and_verify(6, 'post_expand')
         log.info("Verified post-second-expand IO result on pods.")
-
-        # Run IO with file size larger than remaining space. IO should fail
-        log.info(
-            "Starting IO on all pods with file size larger than "
-            "remaining space."
-        )
-        self.run_io_and_verify(15, 'failure_expected', False)
-        fio_errors = ["No space left on device", "Disk quota exceeded"]
-        for pod_obj in self.pods:
-            try:
-                pod_obj.get_fio_results()
-                raise UnexpectedBehaviour(
-                    f"fio did not fail on pod {pod_obj.name} as expected when"
-                    f" file size is larger than available space."
-                )
-            except CommandFailed as exe:
-                if not any(exp_err in str(exe) for exp_err in fio_errors):
-                    raise
-                log.info(f"Expected: fio failed on pod {pod_obj.name}")
