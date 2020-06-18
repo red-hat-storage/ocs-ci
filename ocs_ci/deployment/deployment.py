@@ -488,6 +488,22 @@ class Deployment(object):
             selector='app=rook-ceph-tools', resource_count=1, timeout=600
         )
 
+        # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1847098
+        if config.DEPLOYMENT.get('local_storage'):
+            tools_pod = run_cmd(
+                f"oc -n {self.namespace} get pod -l 'app=rook-ceph-tools' "
+                f"-o jsonpath='{{.items[0].metadata.name}}'"
+            )
+            pgs_to_autoscale = [
+                'ocs-storagecluster-cephblockpool',
+                'ocs-storagecluster-cephfilesystem-data0'
+            ]
+            for pg in pgs_to_autoscale:
+                run_cmd(
+                    f"oc -n {self.namespace} exec {tools_pod} -- "
+                    f"ceph osd pool set {pg} pg_autoscale_mode on"
+                )
+
         # Check for CephFilesystem creation in ocp
         cfs_data = cfs.get()
         cfs_name = cfs_data['items'][0]['metadata']['name']
