@@ -1414,10 +1414,13 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
     """
     ct_pod = pod.get_ceph_tools_pod()
     if interface == constants.CEPHBLOCKPOOL:
-        valid_error = f"error opening image csi-vol-{image_uuid}"
+        valid_error = [f"error opening image csi-vol-{image_uuid}"]
         cmd = f"rbd info -p {pool_name} csi-vol-{image_uuid}"
     if interface == constants.CEPHFILESYSTEM:
-        valid_error = f"Subvolume 'csi-vol-{image_uuid}' not found"
+        valid_error = [
+            f"Subvolume 'csi-vol-{image_uuid}' not found",
+            f"subvolume 'csi-vol-{image_uuid}' does not exist"
+        ]
         cmd = (
             f"ceph fs subvolume getpath {defaults.CEPHFILESYSTEM_NAME}"
             f" csi-vol-{image_uuid} csi"
@@ -1431,7 +1434,7 @@ def is_volume_present_in_backend(interface, image_uuid, pool_name=None):
         )
         return True
     except CommandFailed as ecf:
-        assert valid_error in str(ecf), (
+        assert any([error in str(ecf) for error in valid_error]), (
             f"Error occurred while verifying volume is present in backend: "
             f"{str(ecf)} ImageUUID: {image_uuid}. Interface type: {interface}"
         )
@@ -1483,7 +1486,7 @@ def verify_volume_deleted_in_backend(
         )
         # Log 'ceph progress' and 'ceph rbd task list' for debugging purpose
         ct_pod = pod.get_ceph_tools_pod()
-        ct_pod.exec_ceph_cmd('ceph progress')
+        ct_pod.exec_ceph_cmd('ceph progress json', format=None)
         ct_pod.exec_ceph_cmd('ceph rbd task list')
         return False
 

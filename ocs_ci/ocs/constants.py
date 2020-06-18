@@ -142,6 +142,7 @@ CRITICAL_ERRORS = [
     "core dumped", "oom_reaper"
 ]
 must_gather_pod_label = "must-gather"
+drain_canary_pod_label = "rook-ceph-drain-canary"
 
 # AMQ
 AMQ_NAMESPACE = "myproject"
@@ -203,6 +204,7 @@ LOCAL_STORAGE_OPERATOR_LABEL = "name=local-storage-operator"
 NOOBAA_APP_LABEL = "app=noobaa"
 NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
 NOOBAA_OPERATOR_POD_LABEL = "noobaa-operator=deployment"
+NOOBAA_DB_LABEL = "noobaa-db=noobaa"
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
