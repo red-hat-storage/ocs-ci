@@ -2,7 +2,7 @@ import logging
 
 import pytest
 from tests.helpers import (
-    retrieve_test_objects_to_pod, sync_object_directory, 
+    retrieve_test_objects_to_pod, sync_object_directory,
     verify_s3_object_integrity
 )
 
