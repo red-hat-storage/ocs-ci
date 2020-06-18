@@ -612,6 +612,12 @@ def get_compute_node_names():
             compute_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL]
             for compute_obj in compute_node_objs
         ]
+    elif platform == constants.BAREMETAL_PLATFORM:
+        compute_node_objs = get_typed_nodes()
+        return [
+            compute_obj.get()['metadata']['labels'][constants.HOSTNAME_LABEL].replace('.', '-')
+            for compute_obj in compute_node_objs
+        ]
     else:
         raise NotImplementedError
 

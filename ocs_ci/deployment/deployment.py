@@ -829,7 +829,8 @@ def get_device_paths(worker_names):
         pattern = 'nvme-Amazon_EC2_NVMe_Instance_Storage'
     elif platform == 'vsphere':
         pattern = 'wwn'
-    # TODO: add patterns bare metal
+    elif platform == 'baremetal':
+        pattern = config.ENV_DATA.get('disk_pattern')
     else:
         raise UnsupportedPlatformError(
             'LSO deployment is not supported for platform: %s', platform

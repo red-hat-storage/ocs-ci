@@ -1,4 +1,6 @@
 ---
+DEPLOYMENT:
+  local_storage: true
 ENV_DATA:
   platform: 'baremetal'
   deployment_type: 'upi'
@@ -7,3 +9,4 @@ ENV_DATA:
   mon_type: 'hostpath'
   osd_type: 'nvme'
   rhel_workers: true
+  disk_pattern: 'nvme-INTEL'
