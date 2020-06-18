@@ -59,18 +59,14 @@ class OBC(object):
             secret_obc_obj.get('data').get('AWS_SECRET_ACCESS_KEY')
         ).decode('utf-8')
 
-        if self.obc_account:
-            self.s3_resource = boto3.resource(
-                's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
-                aws_access_key_id=self.access_key_id,
-                aws_secret_access_key=self.access_key
-            )
+        self.s3_resource = boto3.resource(
+            's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH,
+            endpoint_url=self.s3_endpoint,
+            aws_access_key_id=self.access_key_id,
+            aws_secret_access_key=self.access_key
+        )
 
-            self.s3_client = boto3.client(
-                's3', verify=constants.DEFAULT_INGRESS_CRT_LOCAL_PATH, endpoint_url=self.s3_endpoint,
-                aws_access_key_id=self.access_key_id,
-                aws_secret_access_key=self.access_key
-            )
+        self.s3_client = self.s3_resource.meta.client
 
 
 class ObjectBucket(ABC):
