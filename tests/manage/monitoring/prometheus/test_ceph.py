@@ -12,7 +12,6 @@ log = logging.getLogger(__name__)
 @tier4
 @tier4a
 @pytest.mark.polarion_id("OCS-903")
-@pytest.mark.skip(reason="measure_corrupt_pg fixture makes current test runs unstable")
 def test_corrupt_pg_alerts(measure_corrupt_pg):
     """
     Test that there are appropriate alerts when Placement group
@@ -57,7 +56,6 @@ def test_corrupt_pg_alerts(measure_corrupt_pg):
 @tier4
 @tier4a
 @pytest.mark.polarion_id("OCS-898")
-@pytest.mark.skip(reason="measure_corrupt_pg fixture makes current test runs unstable")
 def test_ceph_health(measure_stop_ceph_mon, measure_corrupt_pg):
     """
     Test that there are appropriate alerts for Ceph health triggered.
