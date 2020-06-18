@@ -820,11 +820,7 @@ def get_device_paths(worker_names):
         )
     for worker in worker_names:
         logger.info("Retrieving device path for node: %s", worker)
-        cmd = (
-            f"oc debug nodes/{worker} "
-            f"-- chroot /host ls -la /dev/disk/by-id/"
-        )
-        out = run_cmd(cmd)
+        out = _get_disk_by_id(worker)
         out_lines = out.split('\n')
         nvme_lines = [
             line for line in out_lines if (
@@ -839,3 +835,22 @@ def get_device_paths(worker_names):
             device_paths.append(f'/dev/disk/by-id/{device_path}')
 
     return device_paths
+
+
+@retry(CommandFailed)
+def _get_disk_by_id(worker):
+    """
+    Retrieve disk by-id on a worker node using the debug pod
+
+    Args:
+        worker: worker node to get disks by-id for
+
+    Returns:
+        str: stdout of disk by-id command
+
+    """
+    cmd = (
+        f"oc debug nodes/{worker} "
+        f"-- chroot /host ls -la /dev/disk/by-id/"
+    )
+    return run_cmd(cmd)
