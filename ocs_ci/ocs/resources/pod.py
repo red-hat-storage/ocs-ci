@@ -1246,6 +1246,55 @@ def download_file_from_pod(pod_name, remotepath, localpath, namespace=None):
     run_cmd(cmd)
 
 
+def verify_pods_status(
+    namespace=None,
+    selector=None,
+    selector_label=None,
+    exclude_selector=False,
+    status_list=None
+):
+    """
+    Verify status of pods.
+
+    Args:
+        namespace (str): Name of the namespace
+            If namespace is None - get all pods
+        selector (list) : List of the resource selector to search with.
+            Example: ['alertmanager','prometheus']
+        selector_label (str): Label of selector (default: app)
+        exclude_selector (bool): If list of the resource selector not to search
+            with
+        status_list (list): List of statuses that pods should have.
+            If None is provided then ['Running', 'Completed'] is used
+
+    Returns:
+        bool: If pods were in correct status
+
+    """
+    status_list = status_list or [constants.STATUS_RUNNING, constants.STATUS_SUCCEEDED]
+    pods = get_all_pods(
+        namespace=namespace,
+        selector=selector,
+        selector_label=selector_label,
+        exclude_selector=exclude_selector
+    )
+    logger.info(
+        f"Checking that pods {[pod.name for pod in pods]} "
+        f"are in correct states: {status_list}"
+    )
+    correct_status = True
+    for pod in pods:
+        if pod.pod_data['status']['phase'] in status_list:
+            logger.info(f"Status of {pod.name}: {pod.pod_data['status']['phase']}")
+        else:
+            correct_status = False
+            logger.error(f"Status of {pod.name}: {pod.pod_data['status']['phase']}")
+            logger.debug(pod.pod_data)
+
+    return correct_status
+
+
+
 def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
     """
     Verify that all pods do not have old image.
