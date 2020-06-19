@@ -1107,8 +1107,14 @@ def cluster_load(
     Run IO during the test execution
     """
     cl_load_obj = None
-    if config.RUN.get('io_in_bg'):
-        io_load = int(config.RUN.get('io_load')) * 0.01
+    io_in_bg = config.RUN.get('io_in_bg')
+    log_utilization = config.RUN.get('log_utilization')
+    io_load = config.RUN.get('io_load')
+
+    # IO load should not happen during deployment
+    deployment_test = True if 'deployment' in request.node.items[0].location[0] else False
+    if io_in_bg and not deployment_test:
+        io_load = int(io_load) * 0.01
         log.info(
             "\n===================================================\n"
             "Tests will be running while IO is in the background\n"
@@ -1130,7 +1136,7 @@ def cluster_load(
         )
         cl_load_obj.reach_cluster_load_percentage()
 
-    if config.RUN.get('log_utilization') or config.RUN.get('io_in_bg'):
+    if (log_utilization or io_in_bg) and not deployment_test:
         if not cl_load_obj:
             cl_load_obj = ClusterLoad()
 
@@ -1150,7 +1156,7 @@ def cluster_load(
 
         def finalizer():
             """
-            Stop the thread that executed keep_io_running()
+            Stop the thread that executed watch_load()
             """
             set_test_status('finished')
             if thread:
@@ -1170,7 +1176,7 @@ def cluster_load(
             while get_test_status() == 'running':
                 try:
                     cl_load_obj.print_metrics()
-                    if config.RUN.get('io_in_bg'):
+                    if io_in_bg:
                         latency = cl_load_obj.calc_trim_metric_mean(
                             constants.LATENCY_QUERY
                         )

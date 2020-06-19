@@ -48,7 +48,6 @@ class ClusterLoad:
         self.cluster_limit = None
         self.dc_objs = list()
         self.pvc_objs = list()
-        self.name_suffix = 1
         self.pvc_size = int(get_osd_pods_memory_sum() * 0.5)
         self.io_file_size = f"{self.pvc_size * 1000 - 200}M"
         self.sleep_time = 35
@@ -84,7 +83,6 @@ class ClusterLoad:
         ]
         new_args.append(f"--filesize={self.io_file_size}")
         new_args.append(f"--rate={rate}")
-        self.name_suffix += 1
         dc_obj = self.pod_factory(
             pvc=pvc_obj, pod_dict_path=constants.FIO_DC_YAML,
             raw_block_pv=True, deployment_config=True,
@@ -126,7 +124,7 @@ class ClusterLoad:
         Reach the cluster limit and then drop to the given target percentage.
         The number of pods needed for the desired target percentage is determined by
         creating pods one by one, while examining the cluster latency. Once the latency
-        is greater than 200 ms and it is growing exponentially, it means that
+        is greater than 250 ms and it is growing exponentially, it means that
         the cluster limit has been reached.
         Then, dropping to the target percentage by deleting all pods and re-creating
         ones with smaller value of FIO 'rate' param.
@@ -134,6 +132,9 @@ class ClusterLoad:
         be around the desired percentage.
 
         """
+        if not self.target_percentage:
+            logger.warning(f"The target percentage was not provided. Breaking")
+            return
         if not 0.1 < self.target_percentage < 0.95:
             logger.warning(
                 f"The target percentage is {self.target_percentage * 100}% which is "
