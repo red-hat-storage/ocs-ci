@@ -1282,6 +1282,7 @@ def verify_pods_status(
         f"Checking that pods {[pod.name for pod in pods]} "
         f"are in correct states: {status_list}"
     )
+
     correct_status = True
     for pod in pods:
         if pod.pod_data['status']['phase'] in status_list:
@@ -1292,7 +1293,6 @@ def verify_pods_status(
             logger.debug(pod.pod_data)
 
     return correct_status
-
 
 
 def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
