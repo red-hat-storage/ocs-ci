@@ -79,6 +79,8 @@ class Deployment(object):
 
     def add_volume(self):
         """
+        Add a new volume to all workers.
+
         Implement add_volume in child class which is specific to
         platform
         """

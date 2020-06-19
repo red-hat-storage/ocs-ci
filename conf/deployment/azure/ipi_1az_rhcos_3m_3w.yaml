@@ -2,6 +2,8 @@
 ENV_DATA:
   platform: 'azure'
   deployment_type: 'ipi'
+  region: 'eastus'
+  base_domain: 'azure.qe.rh-ocs.com'
   worker_replicas: 3
   master_replicas: 3
   master_instance_type: 'Standard_D8s_v3'

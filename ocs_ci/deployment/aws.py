@@ -27,7 +27,8 @@ from ocs_ci.utility.utils import (
     TimeoutSampler, get_ocp_version
 )
 from semantic_version import Version
-from .deployment import Deployment
+from .cloud import CloudDeploymentBase
+from .cloud import CloudIPIOCPDeployment
 
 logger = logging.getLogger(__name__)
 
@@ -35,22 +36,19 @@ logger = logging.getLogger(__name__)
 __all__ = ['AWSIPI', 'AWSUPI']
 
 
-class AWSBase(Deployment):
+class AWSBase(CloudDeploymentBase):
+
     def __init__(self):
         """
         This would be base for both IPI and UPI deployment
         """
         super(AWSBase, self).__init__()
-        self.region = config.ENV_DATA['region']
         self.aws = AWSUtil(self.region)
-        if config.ENV_DATA.get('cluster_name'):
-            self.cluster_name = config.ENV_DATA['cluster_name']
-        else:
-            self.cluster_name = get_cluster_name(self.cluster_path)
 
-    def create_ebs_volumes(self, worker_pattern, size=100):
+    def _create_cloud_volumes(self, worker_pattern, size=100):
         """
-        Add new ebs volumes to the workers
+        Add new ebs volumes to the workers. This private method is called from
+        ``CloudDeploymentBase.add_volume()`` only.
 
         Args:
             worker_pattern (str):  Worker name pattern e.g.:
@@ -73,18 +71,6 @@ class AWSBase(Deployment):
                     name=f"{worker['name']}_extra_volume",
                     size=size,
                 )
-
-    def add_volume(self, size=100):
-        """
-        Add a new volume to all the workers
-
-        Args:
-            size (int): Size of volume in GB (default: 100)
-        """
-        cluster_id = get_infra_id(self.cluster_path)
-        worker_pattern = f'{cluster_id}-worker*'
-        logger.info(f'Worker pattern: {worker_pattern}')
-        self.create_ebs_volumes(worker_pattern, size)
 
     def host_network_update(self):
         """
@@ -195,53 +181,12 @@ class AWSIPI(AWSBase):
     """
     A class to handle AWS IPI specific deployment
     """
+
+    OCPDeployment = CloudIPIOCPDeployment
+
     def __init__(self):
         self.name = self.__class__.__name__
         super(AWSIPI, self).__init__()
-
-    class OCPDeployment(BaseOCPDeployment):
-        def __init__(self):
-            super(AWSIPI.OCPDeployment, self).__init__()
-
-        def deploy_prereq(self):
-            """
-            Overriding deploy_prereq from parent. Perform all necessary
-            prerequisites for AWSIPI here.
-            """
-            super(AWSIPI.OCPDeployment, self).deploy_prereq()
-            if config.DEPLOYMENT['preserve_bootstrap_node']:
-                logger.info("Setting ENV VAR to preserve bootstrap node")
-                os.environ['OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP'] = 'True'
-                assert os.getenv(
-                    'OPENSHIFT_INSTALL_PRESERVE_BOOTSTRAP') == 'True'
-
-        def deploy(self, log_cli_level='DEBUG'):
-            """
-            Deployment specific to OCP cluster on this platform
-
-            Args:
-                log_cli_level (str): openshift installer's log level
-                    (default: "DEBUG")
-            """
-            logger.info("Deploying OCP cluster")
-            logger.info(
-                f"Openshift-installer will be using loglevel:{log_cli_level}"
-            )
-            try:
-                run_cmd(
-                    f"{self.installer} create cluster "
-                    f"--dir {self.cluster_path} "
-                    f"--log-level {log_cli_level}",
-                    timeout=3600
-                )
-            except exceptions.CommandFailed as e:
-                if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
-                    try:
-                        gather_bootstrap()
-                    except Exception as ex:
-                        logger.error(ex)
-                raise e
-            self.test_cluster()
 
     def deploy_ocp(self, log_cli_level='DEBUG'):
         """
@@ -251,6 +196,7 @@ class AWSIPI(AWSBase):
             log_cli_level (str): openshift installer's log level
                 (default: "DEBUG")
         """
+        # TODO: move this check somewhere else! maybe cloud base?
         if not config.DEPLOYMENT.get('force_deploy_multiple_clusters'):
             cluster_name = config.ENV_DATA['cluster_name']
             cluster_name_parts = cluster_name.split("-")
