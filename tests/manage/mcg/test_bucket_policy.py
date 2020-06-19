@@ -35,7 +35,7 @@ class TestS3BucketPolicy(ManageTest):
         """
         # Creating obc and obc object to get account details, keys etc
         obc_name = bucket_factory(amount=1, interface='OC')[0].name
-        obc_obj = OBC(mcg_obj, obc=obc_name)
+        obc_obj = OBC(obc_name)
 
         bucket_policy_generated = gen_bucket_policy(
             user_list=obc_obj.obc_account,
@@ -133,7 +133,7 @@ class TestS3BucketPolicy(ManageTest):
         """
         # Creating obc and obc object to get account details, keys etc
         obc_name = bucket_factory(amount=1, interface='OC')[0].name
-        obc_obj = OBC(mcg_obj, obc=obc_name)
+        obc_obj = OBC(obc_name)
 
         bucket_policy_generated = gen_bucket_policy(
             user_list=obc_obj.obc_account,
@@ -191,7 +191,7 @@ class TestS3BucketPolicy(ManageTest):
 
         # Creating multiple obc users (accounts)
         obc = bucket_factory(amount=1, interface='OC')
-        obc_obj = OBC(mcg_obj, obc=obc[0].name)
+        obc_obj = OBC(obc[0].name)
 
         # Admin sets policy on obc bucket with obc account principal
         bucket_policy_generated = gen_bucket_policy(
@@ -332,7 +332,7 @@ class TestS3BucketPolicy(ManageTest):
         """
         # Creating a OBC (account)
         obc = bucket_factory(amount=1, interface='OC')
-        obc_obj = OBC(mcg_obj, obc=obc[0].name)
+        obc_obj = OBC(obc[0].name)
 
         # Admin sets policy with Put/Get bucket website actions
         bucket_policy_generated = gen_bucket_policy(
@@ -415,7 +415,7 @@ class TestS3BucketPolicy(ManageTest):
 
         # Creating a OBC user (Account)
         obc = bucket_factory(amount=1, interface='OC')
-        obc_obj = OBC(mcg_obj, obc=obc[0].name)
+        obc_obj = OBC(obc[0].name)
 
         # Admin sets a policy on OBC bucket to allow versioning related actions
         bucket_policy_generated = gen_bucket_policy(
@@ -521,7 +521,7 @@ class TestS3BucketPolicy(ManageTest):
 
         # Creating multiple obc user (account)
         obc = bucket_factory(amount=1, interface='OC')
-        obc_obj = OBC(mcg_obj, obc=obc[0].name)
+        obc_obj = OBC(obc[0].name)
 
         # Admin writes an object to bucket
         logger.info(f'Writing an object on bucket: {obc_obj.bucket_name} by Admin')
@@ -598,7 +598,7 @@ class TestS3BucketPolicy(ManageTest):
 
         # Creating OBC (account) and Noobaa user account
         obc = bucket_factory(amount=1, interface='OC')
-        obc_obj = OBC(mcg_obj, obc=obc[0].name)
+        obc_obj = OBC(obc[0].name)
         noobaa_user = NoobaaAccount(mcg_obj, name=user_name, email=email, buckets=[obc_obj.bucket_name])
         accounts = [obc_obj, noobaa_user]
 
@@ -687,7 +687,7 @@ class TestS3BucketPolicy(ManageTest):
         """
         # Creating a OBC (Account)
         obc = bucket_factory(amount=1, interface='OC')
-        obc_obj = OBC(mcg_obj, obc=obc[0].name)
+        obc_obj = OBC(obc[0].name)
 
         # Policy tests invalid/non-existent principal. ie: test-user
         if policy_name == "invalid_principal":
