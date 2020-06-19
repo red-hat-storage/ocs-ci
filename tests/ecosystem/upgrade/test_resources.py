@@ -7,9 +7,24 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import ocp
+from ocs_ci.ocs.resources.pod import verify_pods_status
 from tests import helpers
 
 log = logging.getLogger(__name__)
+
+
+@post_upgrade
+@pytest.mark.polarion_id("OCS-2220")
+def test_storage_pods_running():
+    """
+    Test that all pods from openshift-storage namespace have status Running
+    or Completed after upgrade is completed.
+
+    """
+    assert verify_pods_status(), (
+        'Some pods were not in expected Phase. Look into DEBUG messages in '
+        'logs for details of failed pods.'
+    )
 
 
 @pre_upgrade
