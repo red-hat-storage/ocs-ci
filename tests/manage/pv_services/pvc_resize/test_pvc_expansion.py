@@ -12,7 +12,6 @@ log = logging.getLogger(__name__)
 
 
 @tier1
-@acceptance
 @skipif_ocs_version('<4.5')
 class TestPvcExpand(ManageTest):
     """
@@ -114,6 +113,7 @@ class TestPvcExpand(ManageTest):
             f"on all pods."
         )
 
+    @acceptance
     @pytest.mark.polarion_id('OCS-2219')
     def test_pvc_expansion(self):
         """
