@@ -55,7 +55,7 @@ class TestPvcExpand(ManageTest):
         self.pods = pods_cephfs + pods_rbd
 
         # Set volume mode on PVC objects
-        for pvc_obj in self.pvcs_cephfs+self.pvcs_rbd:
+        for pvc_obj in self.pvcs_cephfs + self.pvcs_rbd:
             pvc_info = pvc_obj.get()
             setattr(pvc_obj, 'volume_mode', pvc_info['spec']['volumeMode'])
 
@@ -75,7 +75,7 @@ class TestPvcExpand(ManageTest):
 
         log.info(f"Verified: Size of all PVCs are expanded to {pvc_size_new}G")
 
-        log.info(f"Verifying new size on pods.")
+        log.info("Verifying new size on pods.")
         for pod_obj in self.pods:
             if pod_obj.pvc.volume_mode == 'Block':
                 log.info(
