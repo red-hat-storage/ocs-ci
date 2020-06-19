@@ -48,6 +48,7 @@ class PlatformNodesFactory:
         self.cls_map = {
             'AWS': AWSNodes,
             'vsphere': VMWareNodes,
+            'azure': NodesBase,
             'aws': AWSNodes,
             'baremetal': BaremetalNodes
         }
