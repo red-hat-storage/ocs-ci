@@ -14,7 +14,7 @@ setup(
     author_email='ocs-ci@redhat.com',
     license='MIT',
     install_requires=[
-        'apache-libcloud',
+        'apache-libcloud==3.1.0',
         'docopt==0.6.2',
         'gevent==1.4.0',
         'reportportal-client==3.2.3',
@@ -22,34 +22,34 @@ setup(
         'paramiko==2.4.2',
         'pyyaml>=4.2b1',
         'jinja2==2.10.1',
-        'openshift',
-        'boto3',
-        'munch',
+        'openshift==0.11.2',
+        'boto3==1.14.7',
+        'munch==2.5.0',
         'pytest==5.3.5',
         'pytest-reportportal==1.10.0',
-        'pytest-logger',
-        'dataclasses',  # For compatibility with python 3.6
-        'pytest-html',
-        'bs4',
-        'gspread',
-        'oauth2client',
+        'pytest-logger==0.5.1',
+        'dataclasses==0.6',  # For compatibility with python 3.6
+        'pytest-html==2.1.1',
+        'bs4==0.0.1',
+        'gspread==3.6.0',
+        'oauth2client==4.1.3',
         'pytest_marker_bugzilla>=0.9.3',
-        'pyvmomi',
-        'pyhcl',
+        'pyvmomi==7.0',
+        'pyhcl==0.4.4',
         # issue opened for botocore
         # https://github.com/boto/botocore/issues/1872
         # till above issue fixed, manually pointing python-dateutil to 2.8.0
         'python-dateutil==2.8.0',
-        'pytest-ordering',
-        'funcy',
-        'semantic-version',
+        'pytest-ordering==0.6',
+        'funcy==1.14',
+        'semantic-version==2.8.5',
         'jsonschema>=3.2.0',
-        'google-cloud-storage',
-        'elasticsearch',
-        'numpy',
-        'python-ipmi',
-        'scipy',
-        'PrettyTable'
+        'google-cloud-storage==1.29.0',
+        'elasticsearch==7.8.0',
+        'numpy==1.18.5',
+        'python-ipmi==0.4.2',
+        'scipy==1.4.1',
+        'PrettyTable==0.7.2'
     ],
     entry_points={
         'console_scripts': [
