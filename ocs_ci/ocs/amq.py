@@ -452,7 +452,7 @@ class AMQ(object):
     def run_amq_benchmark(
         self, benchmark_pod_name="benchmark", kafka_namespace=constants.AMQ_NAMESPACE,
         tiller_namespace=AMQ_BENCHMARK_NAMESPACE,
-        num_of_clients=8, worker=None, timeout=1800,
+        num_of_clients=8, worker=None, timeout=3600,
         amq_workload_yaml=None
     ):
         """
@@ -481,7 +481,7 @@ class AMQ(object):
                 :test_duration_minutes (int): Time to run the workloads
 
         Return:
-            result (dict): Returns the dict output on success, Otherwise none
+            result (str): Returns benchmark run information
 
         """
 
@@ -561,6 +561,8 @@ class AMQ(object):
         cmd = f'cp {yaml_file} {benchmark_pod_name}-driver:/'
         self.pod_obj.exec_oc_cmd(cmd)
 
+        self.benchmark = True
+
         # Run the benchmark
         if worker:
             cmd = f"bin/benchmark --drivers /driver_kafka --workers {worker} /amq_workload.yaml"
@@ -570,22 +572,20 @@ class AMQ(object):
         pod_obj = get_pod_obj(name=f"{benchmark_pod_name}-driver", namespace=tiller_namespace)
         result = pod_obj.exec_cmd_on_pod(command=cmd, out_yaml_format=False, timeout=timeout)
 
-        self.benchmark = True
+        return result
 
-        # Parse the json output
-        return self.validate_amq_benchmark(benchmark_pod_name, result, amq_workload_yaml)
-
-    def validate_amq_benchmark(self, benchmark_pod_name, result, amq_workload_yaml):
+    def validate_amq_benchmark(self, result, amq_workload_yaml, benchmark_pod_name="benchmark"):
         """
         Validates amq benchmark run
 
         Args:
-            benchmark_pod_name (str): Name of the benchmark pod
             result (str): Benchmark run information
             amq_workload_yaml (dict): AMQ workload information
+            benchmark_pod_name (str): Name of the benchmark pod
 
         Returns:
             res_dict (dict): Returns the dict output on success, Otherwise none
+
         """
         res_dict = {}
         res_dict['topic'] = amq_workload_yaml['topics']
@@ -597,7 +597,7 @@ class AMQ(object):
         res_dict['consumerPerSubscription'] = amq_workload_yaml['consumerPerSubscription']
         res_dict['producerRate'] = amq_workload_yaml['producerRate']
 
-        # Parse the json file
+        # Validate amq benchmark is completed
         for part in result.split():
             if '.json' in part:
                 workload_json_file = part
@@ -605,6 +605,7 @@ class AMQ(object):
         if workload_json_file:
             cmd = f'rsync {benchmark_pod_name}-driver:{workload_json_file} {self.dir} -n {AMQ_BENCHMARK_NAMESPACE}'
             self.pod_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
+            # Parse the json file
             with open(f'{self.dir}/{workload_json_file}') as json_file:
                 data = json.load(json_file)
             res_dict['AvgpublishRate'] = sum(data.get('publishRate')) / len(data.get('publishRate'))
@@ -679,8 +680,10 @@ class AMQ(object):
         self.amq_is_setup = True
         return self
 
-    def cleanup(self, kafka_namespace=constants.AMQ_NAMESPACE,
-                tiller_namespace=AMQ_BENCHMARK_NAMESPACE):
+    def cleanup(
+        self, kafka_namespace=constants.AMQ_NAMESPACE,
+        tiller_namespace=AMQ_BENCHMARK_NAMESPACE
+    ):
         """
         Clean up function,
         will start to delete from amq cluster operator
@@ -689,6 +692,7 @@ class AMQ(object):
         Args:
             kafka_namespace (str): Created namespace for amq
             tiller_namespace (str): Created namespace for benchmark
+
         """
         if self.amq_is_setup:
             if self.messaging:

@@ -50,6 +50,7 @@ class TestAMQBasics(E2ETest):
         amq_workload_dict = templating.load_yaml(constants.AMQ_WORKLOAD_YAML)
         amq_workload_dict['producersPerTopic'] = 3
         amq_workload_dict['consumerPerSubscription'] = 3
-        assert test_fixture_amq.run_amq_benchmark(amq_workload_yaml=amq_workload_dict) is not None, (
-            "Failed to run amq benchmark pod"
+        result = test_fixture_amq.run_amq_benchmark(amq_workload_yaml=amq_workload_dict)
+        assert test_fixture_amq.validate_amq_benchmark(result, amq_workload_dict) is not None, (
+            "Benchmark did not completely run or might failed in between"
         )
