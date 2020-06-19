@@ -358,7 +358,6 @@ class Postgresql(RipSaw):
             resource=app_pod, state=constants.STATUS_RUNNING, timeout=300
         )
 
-<<<<<<< HEAD
     def get_pgbech_pod_status_table(self, pgbench_pods):
         """
         Get pgbench pod data and print results on a table
@@ -384,9 +383,7 @@ class Postgresql(RipSaw):
                     ])
         log.info(f'\n{pgbench_pod_table}\n')
 
-=======
->>>>>>> fix flake8
-    def export_pgoutput_to_googlesheet(self, pg_output, sheet_index):
+    def export_pgoutput_to_googlesheet(self, pg_output, sheet_name, sheet_index):
         """
         Collect pgbench output to google spreadsheet
 
@@ -398,7 +395,7 @@ class Postgresql(RipSaw):
         """
         # Collect data and export to Google doc spreadsheet
         g_sheet = GoogleSpreadSheetAPI(
-            sheet_name='E2E Workloads', sheet_index=sheet_index
+            sheet_name=sheet_name, sheet_index=sheet_index
         )
         log.info("Exporting pgoutput data to google spreadsheet")
         for i in range(len(pg_output)):
@@ -406,15 +403,20 @@ class Postgresql(RipSaw):
                 run_id = list(pg_output[i][j].keys())[0]
                 lat_avg = pg_output[i][j][run_id]['latency_avg']
                 lat_stddev = pg_output[i][j][run_id]['lat_stddev']
-                tps_incl = pg_output[i][j][run_id]['tps_incl']
+                tps_incl = pg_output[i][j][run_id]['lat_stddev']
                 tps_excl = pg_output[i][j][run_id]['tps_excl']
                 g_sheet.insert_row(
-                    [int(lat_avg),
+                    [f"Pgbench-pod{i}-run-{run_id}",
+                     int(lat_avg),
                      int(lat_stddev),
                      int(tps_incl),
                      int(tps_excl)], 2
                 )
-            g_sheet.insert_row([f"Pgbench-pod{i}"], 2)
+        g_sheet.insert_row(["",
+                            "latency_avg",
+                            "lat_stddev",
+                            "lat_stddev",
+                            "tps_excl"], 2)
 
         # Capturing versions(OCP, OCS and Ceph) and test run name
         g_sheet.insert_row(

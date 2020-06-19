@@ -65,5 +65,5 @@ class TestPgSQLWorkload(E2ETest):
 
         # Export pgdata to google  google spreadsheet
         pgsql.export_pgoutput_to_googlesheet(
-            pg_output=pg_out, sheet_index=0
+            pg_output=pg_out, sheet_name='E2E Workloads', sheet_index=0
         )
