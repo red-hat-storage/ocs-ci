@@ -25,6 +25,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     deployment, ignore_leftovers, tier_marks, ignore_leftover_label
 )
 from ocs_ci.ocs import constants, ocp, defaults, node, platform_nodes
+from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CephHealthException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
@@ -52,7 +53,7 @@ from ocs_ci.utility.utils import (
 )
 from tests import helpers
 from tests.helpers import create_unique_resource_name
-from tests.helpers import (
+from ocs_ci.ocs.bucket_utils import (
     oc_create_aws_backingstore, oc_create_google_backingstore, oc_create_azure_backingstore,
     oc_create_s3comp_backingstore, oc_create_pv_backingstore, cli_create_aws_backingstore,
     cli_create_google_backingstore, cli_create_azure_backingstore, cli_create_s3comp_backingstore,
@@ -1586,7 +1587,6 @@ def rgw_obj_fixture(request):
     Returns:
         RGW: An RGW resource
     """
-
     return RGW()
 
 
@@ -1760,7 +1760,7 @@ def uploaded_objects_fixture(
         for uploaded_filename in uploaded_objects_paths:
             log.info(f'Deleting object {uploaded_filename}')
             awscli_pod.exec_cmd_on_pod(
-                command=helpers.craft_s3_command(
+                command=craft_s3_command(
                     "rm " + uploaded_filename, mcg_obj
                 ),
                 secrets=[
@@ -1876,7 +1876,13 @@ def bucket_factory_fixture(request, mcg_obj, rgw_obj):
     def bucket_cleanup():
         for bucket in created_buckets:
             log.info(f'Cleaning up bucket {bucket.name}')
-            assert bucket.delete()
+            try:
+                bucket.delete()
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'NoSuchBucket':
+                    log.warn(f'{bucket.name} could not be found in cleanup')
+                else:
+                    raise
 
     request.addfinalizer(bucket_cleanup)
 

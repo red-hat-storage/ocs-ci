@@ -10,8 +10,10 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import BS_AUTH_FAILED, BS_OPTIMAL
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
-from tests.helpers import retrieve_test_objects_to_pod, sync_object_directory
-from tests.helpers import verify_s3_object_integrity
+from ocs_ci.ocs.bucket_utils import (
+    retrieve_test_objects_to_pod, sync_object_directory,
+    verify_s3_object_integrity
+)
 
 logger = logging.getLogger(__name__)
 

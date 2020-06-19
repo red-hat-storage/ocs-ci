@@ -26,7 +26,7 @@ class TestRGWBucketCreation:
     )
     def test_bucket_creation(self, rgw_bucket_factory, amount, interface):
         """
-        Test bucket creation using the S3 SDK, OC command or MCG CLI.
+        Test RGW OBC creation using the OC command.
         The factory checks the bucket's health by default.
         """
         obc = rgw_bucket_factory(amount, interface)[0]
@@ -45,8 +45,7 @@ class TestRGWBucketCreation:
         self, rgw_obj, rgw_bucket_factory, amount, interface
     ):
         """
-        Negative test with duplicate bucket creation using the S3 SDK, OC
-        command or MCG CLI
+        Negative test with duplicate bucket creation using OC commands
         """
         expected_err = "BucketAlready|Already ?Exists"
         bucket_set = set(

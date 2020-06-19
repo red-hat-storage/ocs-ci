@@ -5,7 +5,7 @@ import uuid
 from ocs_ci.framework.testlib import (
     ManageTest, tier1
 )
-from tests.helpers import (
+from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity, abort_all_multipart_upload,
     create_multipart_upload, list_multipart_upload,
     upload_parts, list_uploaded_parts, complete_multipart_upload,

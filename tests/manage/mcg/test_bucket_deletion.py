@@ -10,12 +10,12 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import MCG_S3Bucket, BUCKET_MAP
-from tests.helpers import (
+from ocs_ci.ocs.bucket_utils import (
     retrieve_test_objects_to_pod,
     sync_object_directory,
-    create_unique_resource_name,
     rm_object_recursive
 )
+from tests.helpers import create_unique_resource_name
 
 logger = logging.getLogger(__name__)
 ERRATIC_TIMEOUTS_SKIP_REASON = 'Skipped because of erratic timeouts'

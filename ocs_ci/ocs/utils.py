@@ -885,6 +885,6 @@ def oc_get_all_obc_names():
     all_obcs_in_namespace = OCP(
         namespace=ocsci_config.ENV_DATA['cluster_namespace'], kind='obc'
     ).get().get('items')
-    return {obc.get('spec').get('bucketName')
-            for obc
-            in all_obcs_in_namespace}
+    return {
+        obc.get('spec').get('bucketName') for obc in all_obcs_in_namespace
+    }

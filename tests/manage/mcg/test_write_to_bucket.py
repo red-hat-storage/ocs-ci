@@ -10,9 +10,10 @@ from ocs_ci.framework.testlib import (
     ManageTest, tier1, tier2, tier3, acceptance
 )
 from ocs_ci.ocs import constants
-from tests.helpers import sync_object_directory, retrieve_test_objects_to_pod
-from tests.helpers import retrieve_anon_s3_resource
-from tests.helpers import craft_s3_command
+from ocs_ci.ocs.bucket_utils import (
+    sync_object_directory, retrieve_test_objects_to_pod,
+    retrieve_anon_s3_resource, craft_s3_command
+)
 
 logger = logging.getLogger(__name__)
 

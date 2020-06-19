@@ -1,17 +1,17 @@
+import base64
 import logging
 from abc import ABC, abstractmethod
 
+import boto3
 from tests.helpers import create_resource, create_unique_resource_name
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
-import base64
-import boto3
-from ocs_ci.ocs.utils import oc_get_all_obc_names
 
 logger = logging.getLogger(name=__file__)
 
@@ -214,7 +214,8 @@ class MCG_CLIBucket(ObjectBucket):
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.mcg.exec_mcg_cmd(f'obc create --exact {self.name}')
+        bc = f" --bucketclass={kwargs['bucketclass']}" if 'bucketclass' in kwargs else ''
+        self.mcg.exec_mcg_cmd(f'obc create --exact {self.name}{bc}')
 
     def internal_delete(self):
         """
@@ -244,11 +245,12 @@ class MCG_CLIBucket(ObjectBucket):
         return (
             all(
                 healthy_mark in self.status.stdout.replace(' ', '') for healthy_mark
-                in [constants.HEALTHY_OB_CLI_MODE, constants.HEALTHY_OBC_CLI_PHASE])
+                in [constants.HEALTHY_OB_CLI_MODE, constants.HEALTHY_OBC_CLI_PHASE]
+            )
         )
 
     def internal_verify_deletion(self):
-        assert self.name not in self.mcg.cli_get_all_bucket_names()
+        return self.name not in self.mcg.cli_get_all_bucket_names()
 
 
 class MCG_S3Bucket(ObjectBucket):
@@ -342,7 +344,9 @@ class MCG_OCBucket(OCBucket):
         obc_data['spec']['storageClassName'] = self.namespace + '.noobaa.io'
         obc_data['metadata']['namespace'] = self.namespace
         if 'bucketclass' in kwargs:
-            obc_data['spec']['additionalConfig']['bucketclass'] = kwargs['bucketclass']
+            obc_data.setdefault('spec', {}).setdefault('additionalConfig', {}).setdefault(
+                'bucketclass', kwargs['bucketclass']
+            )
         create_resource(**obc_data)
 
 

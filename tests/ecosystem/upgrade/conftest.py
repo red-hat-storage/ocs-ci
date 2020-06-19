@@ -5,10 +5,12 @@ import textwrap
 import pytest
 
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.resources.pod import Pod
 from tests import helpers
+
 
 log = logging.getLogger(__name__)
 
@@ -563,7 +565,7 @@ def upgrade_buckets(
     )
     for i in range(1, 7):
         awscli_pod_session.exec_cmd_on_pod(
-            helpers.craft_s3_command(
+            craft_s3_command(
                 f"cp /tmp/testfile s3://{buckets[0].name}/testfile{i}",
                 mcg_obj_session
             ),

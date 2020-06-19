@@ -9,7 +9,7 @@ from ocs_ci.ocs.exceptions import NoBucketPolicyResponse, InvalidStatusCode, Une
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2, tier3, skipif_ocs_version
 from ocs_ci.ocs.resources.bucket_policy import NoobaaAccount, HttpResponseParser, gen_bucket_policy
 from ocs_ci.ocs.resources.objectbucket import OBC
-from tests.helpers import (
+from ocs_ci.ocs.bucket_utils import (
     put_bucket_policy, get_bucket_policy, s3_put_object,
     delete_bucket_policy, s3_get_object, s3_delete_object,
     create_multipart_upload, s3_put_bucket_website,

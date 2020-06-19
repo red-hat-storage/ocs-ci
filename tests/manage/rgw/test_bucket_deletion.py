@@ -2,7 +2,9 @@ import logging
 
 import botocore
 import pytest
-from tests import helpers
+from ocs_ci.ocs.bucket_utils import (
+    retrieve_test_objects_to_pod, sync_object_directory
+)
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -17,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class TestBucketDeletion:
     """
-    Test bucket Creation Deletion of buckets
+    Test deletion of RGW buckets
     """
     @pytest.mark.parametrize(
         argnames="amount,interface",
@@ -30,7 +32,7 @@ class TestBucketDeletion:
     )
     def test_bucket_delete(self, rgw_bucket_factory, amount, interface):
         """
-        Test deletion of bucket using the S3 SDK, MCG CLI and OC
+        Test deletion of buckets using OC commands
         """
         for bucket in rgw_bucket_factory(amount, interface):
             logger.info(f"Deleting bucket: {bucket.name}")
@@ -55,8 +57,8 @@ class TestBucketDeletion:
         try:
             data_dir = '/data'
             full_object_path = f"s3://{bucketname}"
-            helpers.retrieve_test_objects_to_pod(awscli_pod, data_dir)
-            helpers.sync_object_directory(
+            retrieve_test_objects_to_pod(awscli_pod, data_dir)
+            sync_object_directory(
                 awscli_pod, data_dir, full_object_path, obc_obj
             )
 
@@ -88,7 +90,7 @@ class TestBucketDeletion:
     )
     def test_nonexist_bucket_delete(self, interface):
         """
-        Negative test with deletion of non-exist OBC.
+        Negative test with deletion of a non-existent OBC.
         """
         name = "test_nonexist_bucket_name"
         if interface == "RGW-OC":

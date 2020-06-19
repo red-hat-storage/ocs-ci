@@ -8,6 +8,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.fiojob import workload_fio_storageutilization
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.objectbucket import MCG_S3Bucket
@@ -618,7 +619,7 @@ def measure_noobaa_exceed_bucket_quota(
         )
         for i in range(1, 6):
             awscli_pod.exec_cmd_on_pod(
-                helpers.craft_s3_command(
+                craft_s3_command(
                     f"cp /tmp/testfile s3://{bucket_name}/testfile{i}",
                     mcg_obj
                 ),
@@ -647,7 +648,7 @@ def measure_noobaa_exceed_bucket_quota(
     logger.info(f"Deleting data from bucket {bucket_name}")
     for i in range(1, 6):
         awscli_pod.exec_cmd_on_pod(
-            helpers.craft_s3_command(
+            craft_s3_command(
                 f"rm s3://{bucket_name}/testfile{i}",
                 mcg_obj
             ),
