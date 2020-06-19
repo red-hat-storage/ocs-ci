@@ -71,6 +71,7 @@ STATUS_TERMINATING = 'Terminating'
 STATUS_BOUND = 'Bound'
 STATUS_RELEASED = 'Released'
 STATUS_COMPLETED = 'Completed'
+STATUS_SUCCEEDED = 'Succeeded'
 STATUS_ERROR = 'Error'
 STATUS_CLBO = 'CrashLoopBackOff'
 
