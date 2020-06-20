@@ -90,7 +90,7 @@ class ElasticSearch(object):
         """
 
         log.info('Deploying the ECK environment for the ES cluster')
-        self.ocp.apply(self.eck_file)
+        self.ocp.apply(f'{self.dir}/{self.eck_file}')
 
         for es_pod in TimeoutSampler(
             300, 10, get_pod_name_by_pattern, 'elastic-operator', self.namespace
