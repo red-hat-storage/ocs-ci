@@ -134,7 +134,7 @@ class ClusterLoad:
 
         """
         if not self.target_percentage:
-            logger.warning(f"The target percentage was not provided. Breaking")
+            logger.warning("The target percentage was not provided. Breaking")
             return
         if not 0.1 < self.target_percentage < 0.95:
             logger.warning(
