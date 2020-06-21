@@ -33,11 +33,12 @@ class ClusterLoad:
         Initializer for ClusterLoad
 
         Args:
+            project_factory (function): A call to project_factory function
             pvc_factory (function): A call to pvc_factory function
             sa_factory (function): A call to service_account_factory function
             pod_factory (function): A call to pod_factory function
             target_percentage (float): The percentage of cluster load that is
-                required. The value should be greater than 0 and smaller than 1
+                required. The value should be greater than 0.1 and smaller than 0.95
 
         """
         self.prometheus_api = PrometheusAPI()
