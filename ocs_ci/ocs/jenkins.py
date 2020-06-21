@@ -30,7 +30,8 @@ class Jenkins(object):
         Initializer function
 
         """
-        self.ocp = OCP(namespace=constants.JENKINS_NAMESPACE)
+        self.ocp = None
+        self.create_namespace()
         self.build_completed = []
 
     def create_ocs_jenkins_template(self):
@@ -50,7 +51,9 @@ class Jenkins(object):
         """
         create namespace for Jenkins
         """
-        self.ocp.new_project(constants.JENKINS_NAMESPACE)
+        if self.ocp is None:
+            self.ocp = OCP(namespace=constants.JENKINS_NAMESPACE)
+            self.ocp.new_project(constants.JENKINS_NAMESPACE)
 
     def setup_jenkins_build_config(self):
         """
@@ -100,8 +103,7 @@ class Jenkins(object):
 
         """
         timeout = timeout if timeout else 600
-        # Wait for jenkins-deploy pods to reached and running
-        log.info(f"Waiting build to be reach {status} state")
+        log.info(f"Waiting for the build to reach {status} state")
         jenkins_builds = self.get_builds_obj()
         for jenkins_build in jenkins_builds:
             if jenkins_build.name not in self.build_completed:
@@ -111,8 +113,10 @@ class Jenkins(object):
                     )
                     self.build_completed.append(jenkins_build.name)
                 except ResourceWrongStatusException:
-                    error_msg = f'{jenkins_build.name} did not reach to ' \
-                                f'{status} state after {timeout} sec\n'
+                    error_msg = (
+                        f'{jenkins_build.name} did not reach to '
+                        f'{status} state after {timeout} sec\n'
+                    )
                     log.error(error_msg)
                     raise UnexpectedBehaviour(error_msg)
 
@@ -182,7 +186,6 @@ class Jenkins(object):
 
         """
         self.create_ocs_jenkins_template()
-        self.create_namespace()
         self.create_jenkins_pvc()
         self.create_app_jenkins()
         self.setup_jenkins_build_config()
