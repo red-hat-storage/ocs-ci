@@ -55,9 +55,7 @@ class Test_Elasticsearch():
         curl_cmd = 'curl "http://'
 
         log.info(f'Going to run : {curl_cmd}{con_string}{server_string}')
-        log.info(run(f'{curl_cmd}{con_string}{server_string}',
-                     shell=True,
-                     capture_output=True))
+        log.info(run(f'{curl_cmd}{con_string}{server_string}', shell=True))
 
     def test_elasticsearch(self, es):
         """
