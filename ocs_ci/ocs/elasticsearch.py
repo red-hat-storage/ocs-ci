@@ -34,6 +34,7 @@ class ElasticSearch(object):
         self.eck_file = "all-in-one.yaml"
         self.pvc = "ocs_ci/templates/app-pods/es-pvc.yaml"
         self.crd = "ocs_ci/templates/app-pods/esq.yaml"
+        self.lspid = None
 
         # Creating some different types of OCP objects
         self.ocp = OCP(
@@ -192,7 +193,9 @@ class ElasticSearch(object):
         outside the open-shift cluster into the Elasticsearch server.
 
         """
-        cmd = f'oc port-forward service/quickstart-es-http {self.get_port()}'
+        cmd = f'oc -n {self.namespace } '
+        cmd += f'port-forward service/quickstart-es-http {self.get_port()}'
+        log.info(f'Going to run : {cmd}')
         proc = subprocess.Popen(cmd, shell=True)
         log.info(f'Starting LocalServer with PID of {proc.pid}')
         self.lspid = proc.pid

@@ -7,7 +7,7 @@ import pytest
 import time
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from elasticsearch import (Elasticsearch, exceptions as esexp)
-
+from subprocess import run
 log = logging.getLogger(__name__)
 
 
@@ -24,6 +24,40 @@ def es(request):
 
 
 class Test_Elasticsearch():
+
+    def curl_run(self, es, auth=True):
+
+        if auth:
+            con_string = f'elastic:{es.get_password()}@'
+            msg = 'with authentication'
+        else:
+            con_string = ''
+            msg = 'without authentication'
+
+        log.info(f"\nTesting the Local server Connecting {msg}")
+
+        try:
+            if auth:
+                test_es = Elasticsearch([{'host': 'localhost',
+                                          'port': es.get_port()}],
+                                        http_auth=('elastic', es.get_password()))
+            else:
+                test_es = Elasticsearch([{'host': 'localhost',
+                                          'port': es.get_port()}])
+        except esexp.ConnectionError:
+            log.error(
+                'can not connect to ES server {}:{} {}'.format(
+                    es.get_ip, es.get_port, msg))
+            raise
+
+        log.info(f'testing ES object is {test_es}')
+        server_string = f'localhost:{es.get_port()}"'
+        curl_cmd = 'curl "http://'
+
+        log.info(f'Going to run : {curl_cmd}{con_string}{server_string}')
+        log.info(run(f'{curl_cmd}{con_string}{server_string}',
+                     shell=True,
+                     capture_output=True))
 
     def test_elasticsearch(self, es):
         """
@@ -54,31 +88,9 @@ class Test_Elasticsearch():
             log.info(f'The Password to connect is {es.get_password()}')
             log.info(f'The local server PID is {es.lspid}')
 
-            con_string = f'elastic:{es.get_password()}'
-            server_string = f'localhost:{es.get_port()}"'
-            curl_cmd = 'curl "http://'
+            self.curl_run(es, auth=True)
 
-            log.info("\nTesting the Local server Connecting with authentication")
-            log.info(f'Going to run : {curl_cmd}{con_string}@{server_string}')
-            try:
-                test_es = Elasticsearch([{'host': 'localhost',
-                                          'port': es.get_port()}],
-                                        http_auth=('elastic', es.get_password))
-            except esexp.ConnectionError:
-                log.error('can not connect to ES server :{} with authentication'.format(
-                    es.get_ip, es.get_port))
-                raise
+            self.curl_run(es, auth=False)
 
-            log.info(f'Testing elasticsearch objet is {test_es}')
-
-            log.info("\nTesting the Local server Connecting without authentication")
-            log.info(f'Going to run : {curl_cmd}{server_string}')
-            try:
-                test_es = Elasticsearch([{'host': 'localhost',
-                                          'port': es.get_port()}])
-            except esexp.ConnectionError:
-                log.error('can not connect to ES server :{} without authentication'.format(
-                    es.get_ip, es.get_port))
-                raise
-
-            log.info(f'Testing elasticsearch objet is {test_es}')
+        else:
+            assert False, ('The Elasticsearch module is not ready !')
