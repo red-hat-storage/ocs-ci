@@ -1360,3 +1360,23 @@ def delete_deploymentconfig_pods(pod_obj):
                 dc_ocp_obj.wait_for_delete(
                     resource_name=pod_obj.get_labels().get('name')
                 )
+
+
+def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
+    status_options = ['Init:1/4', 'Init:2/4', 'Init:3/4', 'PodInitializing', 'Running']
+    try:
+        for osd_pods in TimeoutSampler(
+            timeout=180, sleep=3, func=get_osd_pods
+        ):
+            # Check if the new osd pods has started to come up
+            if len(osd_pods) > number_of_osd_pods_before:
+                # Get the 3 new osd pods
+                new_osd_pods = osd_pods[-3:]
+                new_osd_pods_come_up = [pod.status() in status_options for pod in new_osd_pods]
+                if any(new_osd_pods_come_up):
+                    logging.info("One or more of the new osd pods has reached the desired status")
+                    break
+    except TimeoutExpiredError:
+        logging.warning(
+            "None of the new osd pods reached the desired status"
+        )

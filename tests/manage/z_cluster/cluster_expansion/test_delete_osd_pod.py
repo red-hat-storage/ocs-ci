@@ -1,6 +1,5 @@
 import pytest
 import logging
-import time
 
 
 from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4a, bugzilla
@@ -56,8 +55,7 @@ class TestAddCapacityWithOSDPodDelete(ManageTest):
 
         # OSD number go down by one and then gradually go up by 1
         # and finally the OSD number will be storagedeviceset_count*3
-        time_to_wait_before_delete_osd_pod = 20
-        time.sleep(time_to_wait_before_delete_osd_pod)
+        pod_helpers.wait_for_new_osd_pods_to_come_up()
         logging.info("Delete an osd pod while storage capacity is getting increased")
         d.delete_resource(1)
 
